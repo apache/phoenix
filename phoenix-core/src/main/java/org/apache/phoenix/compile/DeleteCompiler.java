@@ -64,7 +64,6 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.MetaDataEntityNotFoundException;
 import org.apache.phoenix.schema.PColumn;
-import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PRow;
@@ -75,6 +74,7 @@ import org.apache.phoenix.schema.ReadOnlyTableException;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.ScanUtil;
 
@@ -483,7 +483,7 @@ public class DeleteCompiler {
                     public MutationState execute() throws SQLException {
                         // TODO: share this block of code with UPSERT SELECT
                         ImmutableBytesWritable ptr = context.getTempPtr();
-                        tableRef.getTable().getIndexMaintainers(ptr);
+                        tableRef.getTable().getIndexMaintainers(ptr, context.getConnection());
                         ServerCache cache = null;
                         try {
                             if (ptr.getLength() > 0) {
@@ -495,7 +495,7 @@ public class DeleteCompiler {
                             ResultIterator iterator = aggPlan.iterator();
                             try {
                                 Tuple row = iterator.next();
-                                final long mutationCount = (Long)projector.getColumnProjector(0).getValue(row, PDataType.LONG, ptr);
+                                final long mutationCount = (Long)projector.getColumnProjector(0).getValue(row, PLong.INSTANCE, ptr);
                                 return new MutationState(maxSize, connection) {
                                     @Override
                                     public long getUpdateCount() {
@@ -554,7 +554,7 @@ public class DeleteCompiler {
                             long totalRowCount = 0;
                             while ((tuple=iterator.next()) != null) {// Runs query
                                 Cell kv = tuple.getValue(0);
-                                totalRowCount += PDataType.LONG.getCodec().decodeLong(kv.getValueArray(), kv.getValueOffset(), SortOrder.getDefault());
+                                totalRowCount += PLong.INSTANCE.getCodec().decodeLong(kv.getValueArray(), kv.getValueOffset(), SortOrder.getDefault());
                             }
                             // Return total number of rows that have been delete. In the case of auto commit being off
                             // the mutations will all be in the mutation state of the current connection.

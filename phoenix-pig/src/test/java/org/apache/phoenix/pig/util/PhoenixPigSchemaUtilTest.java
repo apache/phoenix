@@ -29,8 +29,10 @@ import java.sql.SQLException;
 import java.sql.Types;
 import java.util.List;
 
-import org.apache.phoenix.pig.PhoenixPigConfiguration;
-import org.apache.phoenix.pig.util.PhoenixPigSchemaUtil;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.phoenix.mapreduce.util.ColumnInfoToStringEncoderDecoder;
+import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
+import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.SchemaType;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.util.ColumnInfo;
 import org.apache.pig.ResourceSchema;
@@ -54,9 +56,11 @@ public class PhoenixPigSchemaUtilTest {
     @Test
     public void testSchema() throws SQLException, IOException {
         
-        final PhoenixPigConfiguration configuration = mock(PhoenixPigConfiguration.class);
+        final Configuration configuration = mock(Configuration.class);
         final List<ColumnInfo> columnInfos = ImmutableList.of(ID_COLUMN,NAME_COLUMN);
-        when(configuration.getSelectColumnMetadataList()).thenReturn(columnInfos);
+        final String encodedColumnInfos = ColumnInfoToStringEncoderDecoder.encode(columnInfos);
+        when(configuration.get(PhoenixConfigurationUtil.SELECT_COLUMN_INFO_KEY)).thenReturn(encodedColumnInfos);
+        when(configuration.get(PhoenixConfigurationUtil.SCHEMA_TYPE)).thenReturn(SchemaType.TABLE.name());
         final ResourceSchema actual = PhoenixPigSchemaUtil.getResourceSchema(configuration);
         
         // expected schema.
@@ -75,9 +79,10 @@ public class PhoenixPigSchemaUtilTest {
     @Test(expected=IllegalDataException.class)
     public void testUnSupportedTypes() throws SQLException, IOException {
         
-        final PhoenixPigConfiguration configuration = mock(PhoenixPigConfiguration.class);
+        final Configuration configuration = mock(Configuration.class);
         final List<ColumnInfo> columnInfos = ImmutableList.of(ID_COLUMN,LOCATION_COLUMN);
-        when(configuration.getSelectColumnMetadataList()).thenReturn(columnInfos);
+        final String encodedColumnInfos = ColumnInfoToStringEncoderDecoder.encode(columnInfos);
+        when(configuration.get(PhoenixConfigurationUtil.SELECT_COLUMN_INFO_KEY)).thenReturn(encodedColumnInfos);
         PhoenixPigSchemaUtil.getResourceSchema(configuration);
         fail("We currently don't support Array type yet. WIP!!");
     }

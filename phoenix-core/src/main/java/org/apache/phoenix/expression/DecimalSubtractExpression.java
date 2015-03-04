@@ -22,9 +22,11 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.exception.ValueTypeIncompatibleException;
-import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.util.NumberUtil;
 
 
@@ -67,11 +69,11 @@ public class DecimalSubtractExpression extends SubtractExpression {
             }
             
             PDataType childType = childExpr.getDataType();
-            boolean isDate = childType.isCoercibleTo(PDataType.DATE);
+            boolean isDate = childType.isCoercibleTo(PDate.INSTANCE);
             SortOrder childSortOrder = childExpr.getSortOrder();
             BigDecimal bd = isDate ?
                     BigDecimal.valueOf(childType.getCodec().decodeLong(ptr, childSortOrder)) :
-                    (BigDecimal)PDataType.DECIMAL.toObject(ptr, childType, childSortOrder);
+                    (BigDecimal) PDecimal.INSTANCE.toObject(ptr, childType, childSortOrder);
             
             if (result == null) {
                 result = bd;
@@ -90,15 +92,15 @@ public class DecimalSubtractExpression extends SubtractExpression {
             result = NumberUtil.setDecimalWidthAndScale(result, maxLength, scale);
         }
         if (result == null) {
-            throw new ValueTypeIncompatibleException(PDataType.DECIMAL, maxLength, scale);
+            throw new ValueTypeIncompatibleException(PDecimal.INSTANCE, maxLength, scale);
         }
-        ptr.set(PDataType.DECIMAL.toBytes(result));
+        ptr.set(PDecimal.INSTANCE.toBytes(result));
         return true;
     }
 
     @Override
     public PDataType getDataType() {
-        return PDataType.DECIMAL;
+        return PDecimal.INSTANCE;
     }
 
     @Override
@@ -109,5 +111,10 @@ public class DecimalSubtractExpression extends SubtractExpression {
     @Override
     public Integer getMaxLength() {
         return maxLength;
+    }
+
+    @Override
+    public ArithmeticExpression clone(List<Expression> children) {
+        return new DecimalSubtractExpression(children);
     }
 }

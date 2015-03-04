@@ -63,9 +63,9 @@ import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
+import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.KeyValueUtil;
@@ -123,44 +123,45 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                         .getAttribute(BaseScannerRegionObserver.AGGREGATORS), c
                         .getEnvironment().getConfiguration());
 
-        final TupleProjector p = TupleProjector.deserializeProjectorFromScan(scan);
-        final HashJoinInfo j = HashJoinInfo.deserializeHashJoinFromScan(scan);
-        long limit = Long.MAX_VALUE;
-        byte[] limitBytes = scan.getAttribute(GROUP_BY_LIMIT);
-        if (limitBytes != null) {
-            limit = PDataType.INTEGER.getCodec().decodeInt(limitBytes, 0, SortOrder.getDefault());
-        }
-
         RegionScanner innerScanner = s;
-        if (p != null || j != null) {
-            innerScanner =
-                    new HashJoinRegionScanner(s, p, j, ScanUtil.getTenantId(scan),
-                            c.getEnvironment());
-        }
+        
         byte[] localIndexBytes = scan.getAttribute(LOCAL_INDEX_BUILD);
         List<IndexMaintainer> indexMaintainers = localIndexBytes == null ? null : IndexMaintainer.deserialize(localIndexBytes);
-        boolean localIndexScan = ScanUtil.isLocalIndex(scan);
         TupleProjector tupleProjector = null;
         HRegion dataRegion = null;
         byte[][] viewConstants = null;
         ColumnReference[] dataColumns = IndexUtil.deserializeDataTableColumnsToJoin(scan);
-        if (ScanUtil.isLocalIndex(scan)) {
+
+        final TupleProjector p = TupleProjector.deserializeProjectorFromScan(scan);
+        final HashJoinInfo j = HashJoinInfo.deserializeHashJoinFromScan(scan);
+        if (ScanUtil.isLocalIndex(scan) || (j == null && p != null)) {
             if (dataColumns != null) {
                 tupleProjector = IndexUtil.getTupleProjector(scan, dataColumns);
                 dataRegion = IndexUtil.getDataRegion(c.getEnvironment());
                 viewConstants = IndexUtil.deserializeViewConstantsFromScan(scan);
             }
+            ImmutableBytesWritable tempPtr = new ImmutableBytesWritable();
+            innerScanner =
+                    getWrappedScanner(c, innerScanner, offset, scan, dataColumns, tupleProjector, 
+                            dataRegion, indexMaintainers == null ? null : indexMaintainers.get(0), viewConstants, p, tempPtr);
         } 
 
+        if (j != null) {
+            innerScanner =
+                    new HashJoinRegionScanner(innerScanner, p, j, ScanUtil.getTenantId(scan),
+                            c.getEnvironment());
+        }
+
+        long limit = Long.MAX_VALUE;
+        byte[] limitBytes = scan.getAttribute(GROUP_BY_LIMIT);
+        if (limitBytes != null) {
+            limit = PInteger.INSTANCE.getCodec().decodeInt(limitBytes, 0, SortOrder.getDefault());
+        }
         if (keyOrdered) { // Optimize by taking advantage that the rows are
                           // already in the required group by key order
-            return scanOrdered(c, scan, innerScanner, expressions, aggregators, limit, offset,
-                localIndexScan, dataColumns, tupleProjector, indexMaintainers, dataRegion,
-                viewConstants);
+            return scanOrdered(c, scan, innerScanner, expressions, aggregators, limit);
         } else { // Otherwse, collect them all up in an in memory map
-            return scanUnordered(c, scan, innerScanner, expressions, aggregators, limit, offset,
-                localIndexScan, dataColumns, tupleProjector, indexMaintainers, dataRegion,
-                viewConstants);
+            return scanUnordered(c, scan, innerScanner, expressions, aggregators, limit);
         }
     }
 
@@ -375,11 +376,8 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
      * @param limit TODO
      */
     private RegionScanner scanUnordered(ObserverContext<RegionCoprocessorEnvironment> c, Scan scan,
-            final RegionScanner s, final List<Expression> expressions,
-            final ServerAggregators aggregators, long limit, int offset, boolean localIndexScan,
-            ColumnReference[] dataColumns, TupleProjector tupleProjector,
-            List<IndexMaintainer> indexMaintainers, HRegion dataRegion, byte[][] viewConstants)
-            throws IOException {
+            final RegionScanner scanner, final List<Expression> expressions,
+            final ServerAggregators aggregators, long limit) throws IOException {
         if (logger.isDebugEnabled()) {
             logger.debug(LogUtil.addCustomAnnotations("Grouped aggregation over unordered rows with scan " + scan
                     + ", group by " + expressions + ", aggregators " + aggregators, ScanUtil.getCustomAnnotations(scan)));
@@ -401,7 +399,6 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                 GroupByCacheFactory.INSTANCE.newCache(
                         env, ScanUtil.getTenantId(scan), ScanUtil.getCustomAnnotations(scan),
                         aggregators, estDistVals);
-        ImmutableBytesWritable tempPtr = new ImmutableBytesWritable();
         boolean success = false;
         try {
             boolean hasMore;
@@ -414,33 +411,30 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
             HRegion region = c.getEnvironment().getRegion();
             region.startRegionOperation();
             try {
-                do {
-                    List<Cell> results = new ArrayList<Cell>();
-                    // Results are potentially returned even when the return
-                    // value of s.next is false
-                    // since this is an indication of whether or not there are
-                    // more values after the
-                    // ones returned
-                    hasMore = s.nextRaw(results);
-                    if (!results.isEmpty()) {
-                        if (localIndexScan) {
-                            IndexUtil.wrapResultUsingOffset(results, offset, dataColumns, tupleProjector,
-                                dataRegion, indexMaintainers == null ? null : indexMaintainers.get(0),
-                                viewConstants, tempPtr);
-                        }
-                        result.setKeyValues(results);
-                        ImmutableBytesWritable key =
+                synchronized (scanner) {
+                    do {
+                        List<Cell> results = new ArrayList<Cell>();
+                        // Results are potentially returned even when the return
+                        // value of s.next is false
+                        // since this is an indication of whether or not there are
+                        // more values after the
+                        // ones returned
+                        hasMore = scanner.nextRaw(results);
+                        if (!results.isEmpty()) {
+                            result.setKeyValues(results);
+                            ImmutableBytesWritable key =
                                 TupleUtil.getConcatenatedValue(result, expressions);
-                        Aggregator[] rowAggregators = groupByCache.cache(key);
-                        // Aggregate values here
-                        aggregators.aggregate(rowAggregators, result);
-                    }
-                } while (hasMore && groupByCache.size() < limit);
+                            Aggregator[] rowAggregators = groupByCache.cache(key);
+                            // Aggregate values here
+                            aggregators.aggregate(rowAggregators, result);
+                        }
+                    } while (hasMore && groupByCache.size() < limit);
+                }
             } finally {
                 region.closeRegionOperation();
             }
 
-            RegionScanner regionScanner = groupByCache.getScanner(s);
+            RegionScanner regionScanner = groupByCache.getScanner(scanner);
 
             // Do not sort here, but sort back on the client instead
             // The reason is that if the scan ever extends beyond a region
@@ -462,29 +456,25 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
      * @throws IOException 
      */
     private RegionScanner scanOrdered(final ObserverContext<RegionCoprocessorEnvironment> c,
-            final Scan scan, final RegionScanner s, final List<Expression> expressions,
-            final ServerAggregators aggregators, final long limit, final int offset,
-            final boolean localIndexScan, final ColumnReference[] dataColumns,
-            final TupleProjector tupleProjector, final List<IndexMaintainer> indexMaintainers,
-            final HRegion dataRegion, final byte[][] viewConstants) throws IOException {
+            final Scan scan, final RegionScanner scanner, final List<Expression> expressions,
+            final ServerAggregators aggregators, final long limit) throws IOException {
 
         if (logger.isDebugEnabled()) {
             logger.debug(LogUtil.addCustomAnnotations("Grouped aggregation over ordered rows with scan " + scan + ", group by "
                     + expressions + ", aggregators " + aggregators, ScanUtil.getCustomAnnotations(scan)));
         }
-        final ImmutableBytesWritable tempPtr = new ImmutableBytesWritable();
         return new BaseRegionScanner() {
             private long rowCount = 0;
             private ImmutableBytesWritable currentKey = null;
 
             @Override
             public HRegionInfo getRegionInfo() {
-                return s.getRegionInfo();
+                return scanner.getRegionInfo();
             }
 
             @Override
             public void close() throws IOException {
-                s.close();
+                scanner.close();
             }
 
             @Override
@@ -501,37 +491,36 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                 HRegion region = c.getEnvironment().getRegion();
                 region.startRegionOperation();
                 try {
-                    do {
-                        List<Cell> kvs = new ArrayList<Cell>();
-                        // Results are potentially returned even when the return
-                        // value of s.next is false
-                        // since this is an indication of whether or not there
-                        // are more values after the
-                        // ones returned
-                        hasMore = s.nextRaw(kvs);
-                        if (!kvs.isEmpty()) {
-                            if (localIndexScan) {
-                                IndexUtil.wrapResultUsingOffset(kvs, offset, dataColumns, tupleProjector,
-                                    dataRegion, indexMaintainers == null ? null : indexMaintainers.get(0),
-                                    viewConstants, tempPtr);
-                            }
-                            result.setKeyValues(kvs);
-                            key = TupleUtil.getConcatenatedValue(result, expressions);
-                            aggBoundary = currentKey != null && currentKey.compareTo(key) != 0;
-                            if (!aggBoundary) {
-                                aggregators.aggregate(rowAggregators, result);
-                                if (logger.isDebugEnabled()) {
-                                    logger.debug(LogUtil.addCustomAnnotations("Row passed filters: " + kvs
+                    synchronized (scanner) {
+                        do {
+                            List<Cell> kvs = new ArrayList<Cell>();
+                            // Results are potentially returned even when the return
+                            // value of s.next is false
+                            // since this is an indication of whether or not there
+                            // are more values after the
+                            // ones returned
+                            hasMore = scanner.nextRaw(kvs);
+                            if (!kvs.isEmpty()) {
+                                result.setKeyValues(kvs);
+                                key = TupleUtil.getConcatenatedValue(result, expressions);
+                                aggBoundary = currentKey != null && currentKey.compareTo(key) != 0;
+                                if (!aggBoundary) {
+                                    aggregators.aggregate(rowAggregators, result);
+                                    if (logger.isDebugEnabled()) {
+                                        logger.debug(LogUtil.addCustomAnnotations(
+                                            "Row passed filters: " + kvs
                                             + ", aggregated values: "
-                                            + Arrays.asList(rowAggregators), ScanUtil.getCustomAnnotations(scan)));
+                                            + Arrays.asList(rowAggregators),
+                                            ScanUtil.getCustomAnnotations(scan)));
+                                    }
+                                    currentKey = key;
                                 }
-                                currentKey = key;
                             }
-                        }
-                        atLimit = rowCount + countOffset >= limit;
-                        // Do rowCount + 1 b/c we don't have to wait for a complete
-                        // row in the case of a DISTINCT with a LIMIT
-                    } while (hasMore && !aggBoundary && !atLimit);
+                            atLimit = rowCount + countOffset >= limit;
+                            // Do rowCount + 1 b/c we don't have to wait for a complete
+                            // row in the case of a DISTINCT with a LIMIT
+                        } while (hasMore && !aggBoundary && !atLimit);
+                    }
                 } finally {
                     region.closeRegionOperation();
                 }
@@ -573,7 +562,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
             
             @Override
             public long getMaxResultSize() {
-                return s.getMaxResultSize();
+                return scanner.getMaxResultSize();
             }
         };
     }

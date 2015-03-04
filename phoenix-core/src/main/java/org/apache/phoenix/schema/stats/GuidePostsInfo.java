@@ -1,19 +1,3 @@
-package org.apache.phoenix.schema.stats;
-
-import java.io.ByteArrayInputStream;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.IOException;
-import java.util.Collections;
-import java.util.List;
-
-import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.io.WritableUtils;
-import org.apache.phoenix.util.TrustedByteArrayOutputStream;
-
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Iterators;
-import com.google.common.collect.Lists;
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -31,26 +15,118 @@ import com.google.common.collect.Lists;
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.phoenix.schema.stats;
+
+import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+
+import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.io.WritableUtils;
+import org.apache.phoenix.util.TrustedByteArrayOutputStream;
+
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 /**
- *  A simple POJO class that holds the information related to GuidePosts serDe.
+ *  A class that holds the guidePosts of a region and also allows combining the 
+ *  guidePosts of different regions when the GuidePostsInfo is formed for a table.
  */
 public class GuidePostsInfo {
-	public static final GuidePostsInfo EMPTY_GUIDE_POSTS_INFO = new GuidePostsInfo(0L, Collections.<byte[]>emptyList());
-	
-    private long byteCount; // Number of bytes traversed in the region
-    private long keyByteSize; // Total number of bytes in keys stored in guidePosts
-    private List<byte[]> guidePosts;
 
-    public GuidePostsInfo(long byteCount, List<byte[]> guidePosts) {
-        this.byteCount = byteCount;
+    /**
+     * the total number of guidePosts for the table combining all the guidePosts per region per cf.
+     */
+    private List<byte[]> guidePosts;
+    /**
+     * The bytecount that is flattened across the total number of guide posts.
+     */
+    private long byteCount = 0;
+    
+    /**
+     * The rowCount that is flattened across the total number of guide posts.
+     */
+    private long rowCount = 0;
+    
+    private long keyByteSize; // Total number of bytes in keys stored in guidePosts
+
+    /**
+     * Constructor that creates GuidePostsInfo per region
+     * @param byteCount
+     * @param guidePosts
+     * @param rowCount
+     */
+    public GuidePostsInfo(long byteCount, List<byte[]> guidePosts, long rowCount) {
         this.guidePosts = ImmutableList.copyOf(guidePosts);
         int size = 0;
         for (byte[] key : guidePosts) {
             size += key.length;
         }
         this.keyByteSize = size;
+        this.byteCount = byteCount;
+        this.rowCount = rowCount;
+    }
+    
+    public long getByteCount() {
+        return byteCount;
     }
 
+    public List<byte[]> getGuidePosts() {
+        return guidePosts;
+    }
+
+    public long getRowCount() {
+        return this.rowCount;
+    }
+    
+    public void incrementRowCount() {
+        this.rowCount++;
+    }
+    
+    /**
+     * Combines the GuidePosts per region into one.
+     * @param oldInfo
+     */
+    public void combine(GuidePostsInfo oldInfo) {
+        if (!oldInfo.getGuidePosts().isEmpty()) {
+            byte[] newFirstKey = oldInfo.getGuidePosts().get(0);
+            byte[] existingLastKey;
+            if (!this.getGuidePosts().isEmpty()) {
+                existingLastKey = this.getGuidePosts().get(this.getGuidePosts().size() - 1);
+            } else {
+                existingLastKey = HConstants.EMPTY_BYTE_ARRAY;
+            }
+            int size = oldInfo.getGuidePosts().size();
+            // If the existing guidePosts is lesser than the new RegionInfo that we are combining
+            // then add the new Region info to the end of the current GuidePosts.
+            // If the new region info is smaller than the existing guideposts then add the existing
+            // guide posts after the new guideposts.
+            List<byte[]> newTotalGuidePosts = new ArrayList<byte[]>(this.getGuidePosts().size() + size);
+            if (Bytes.compareTo(existingLastKey, newFirstKey) <= 0) {
+                newTotalGuidePosts.addAll(this.getGuidePosts());
+                newTotalGuidePosts.addAll(oldInfo.getGuidePosts());
+            } else {
+                newTotalGuidePosts.addAll(oldInfo.getGuidePosts());
+                newTotalGuidePosts.addAll(this.getGuidePosts());
+            }
+            this.guidePosts = ImmutableList.copyOf(newTotalGuidePosts);
+        }
+        this.byteCount += oldInfo.getByteCount();
+        this.keyByteSize += oldInfo.keyByteSize;
+        this.rowCount += oldInfo.getRowCount();
+    }
+    
+    /**
+     * The guide posts, rowCount and byteCount are accumulated every time a guidePosts depth is
+     * reached while collecting stats.
+     * @param row
+     * @param byteCount
+     * @param rowCount
+     * @return
+     */
     public boolean addGuidePost(byte[] row, long byteCount) {
         if (guidePosts.isEmpty() || Bytes.compareTo(row, guidePosts.get(guidePosts.size() - 1)) > 0) {
             List<byte[]> newGuidePosts = Lists.newArrayListWithExpectedSize(this.getGuidePosts().size() + 1);
@@ -64,23 +140,14 @@ public class GuidePostsInfo {
         return false;
     }
     
-    public void combine(GuidePostsInfo oldInfo) {
-        // FIXME: I don't think we need to do a merge sort here, as the keys won't be interleaved.
-        // We just need to concatenate them in the correct way.
-        this.guidePosts = ImmutableList.copyOf(Iterators.mergeSorted(ImmutableList.of(this.getGuidePosts().iterator(), oldInfo.getGuidePosts().iterator()), Bytes.BYTES_COMPARATOR));
-        this.byteCount += oldInfo.getByteCount();
-        this.keyByteSize += oldInfo.keyByteSize;
-    }
-    
-    public long getByteCount() {
-        return byteCount;
-    }
-
-    public List<byte[]> getGuidePosts() {
-        return guidePosts;
-    }
-
-    public static GuidePostsInfo fromBytes(byte[] buf, int offset, int l) {
+    /**
+     * Deserializes the per row guidePosts info from the value part of each cell in the SYSTEM.STATS table
+     * @param buf
+     * @param offset
+     * @param l
+     * @return
+     */
+    public static GuidePostsInfo deserializeGuidePostsInfo(byte[] buf, int offset, int l, long rowCount) {
         try {
             ByteArrayInputStream bytesIn = new ByteArrayInputStream(buf, offset, l);
             try {
@@ -99,7 +166,7 @@ public class GuidePostsInfo {
                             }
                         }
                     }
-                    return new GuidePostsInfo(byteCount, guidePosts);
+                    return new GuidePostsInfo(byteCount, guidePosts, rowCount);
                 } catch (IOException e) {
                     throw new RuntimeException(e); // not possible
                 } finally {
@@ -116,18 +183,29 @@ public class GuidePostsInfo {
             throw new RuntimeException(e); // not possible
         }
     }
-    
-    public byte[] toBytes() {
+
+    /**
+     * Serailizes the guidePosts info as value in the SYSTEM.STATS table.
+     * <br>
+     * The format is,
+     * <br>
+     *  - number of bytes traversed
+     * <br>
+     *  - number of key bytes in the region
+     * <br>
+     *  - number of guideposts for that family
+     * <br> u
+     *  - [guidepostSize][guidePostsArray],[guidePostsSize][guidePostArray]
+     * @return the byte[] to be serialized in the cell
+     */
+    public byte[] serializeGuidePostsInfo() {
         int size = guidePosts.size();
-        // Serialize the number of bytes traversed, number of key bytes in the region,
-        // number of guideposts for that family, <<guidepostSize><guidePostsArray>,<guidePostsSize> <guidePostArray>>
         // We will lose precision here?
-        TrustedByteArrayOutputStream bs = new TrustedByteArrayOutputStream(
-                (int)(Bytes.SIZEOF_LONG + Bytes.SIZEOF_LONG + Bytes.SIZEOF_INT + this.keyByteSize + (WritableUtils
-                        .getVIntSize(size) * size)));
+        TrustedByteArrayOutputStream bs = new TrustedByteArrayOutputStream((int)(Bytes.SIZEOF_LONG + Bytes.SIZEOF_LONG
+                + Bytes.SIZEOF_INT + this.keyByteSize + (WritableUtils.getVIntSize(size) * size)));
         DataOutputStream os = new DataOutputStream(bs);
         try {
-            os.writeLong(this.getByteCount());
+            os.writeLong(byteCount);
             os.writeInt(size);
             for (byte[] element : guidePosts) {
                 WritableUtils.writeVInt(os, element.length);

@@ -19,7 +19,7 @@ package org.apache.phoenix.util;
 
 import java.math.BigDecimal;
 
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PDataType;
 
 /**
  * Utility methods for numbers like decimal, long, etc.

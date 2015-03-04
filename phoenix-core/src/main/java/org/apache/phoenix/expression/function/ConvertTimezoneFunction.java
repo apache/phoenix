@@ -26,7 +26,9 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.schema.IllegalDataException;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 /**
@@ -35,9 +37,9 @@ import org.apache.phoenix.schema.tuple.Tuple;
  *
  */
 @FunctionParseNode.BuiltInFunction(name = ConvertTimezoneFunction.NAME, args = {
-    @FunctionParseNode.Argument(allowedTypes = {PDataType.DATE}),
-    @FunctionParseNode.Argument(allowedTypes = {PDataType.VARCHAR}),
-    @FunctionParseNode.Argument(allowedTypes = {PDataType.VARCHAR})})
+    @FunctionParseNode.Argument(allowedTypes = { PDate.class }),
+    @FunctionParseNode.Argument(allowedTypes = { PVarchar.class }),
+    @FunctionParseNode.Argument(allowedTypes = { PVarchar.class })})
 public class ConvertTimezoneFunction extends ScalarFunction {
 
     public static final String NAME = "CONVERT_TZ";
@@ -61,7 +63,7 @@ public class ConvertTimezoneFunction extends ScalarFunction {
             return false;
         }
 
-        Date dateo = (Date) PDataType.DATE.toObject(ptr, children.get(0).getSortOrder());
+        Date dateo = (Date) PDate.INSTANCE.toObject(ptr, children.get(0).getSortOrder());
         Long date = dateo.getTime();
 
         if (!children.get(1).evaluate(tuple, ptr)) {
@@ -77,7 +79,7 @@ public class ConvertTimezoneFunction extends ScalarFunction {
         long dateInUtc = date - timezoneFrom.getOffset(date);
         long dateInTo = dateInUtc + timezoneTo.getOffset(dateInUtc);
 
-        ptr.set(PDataType.DATE.toBytes(new Date(dateInTo)));
+        ptr.set(PDate.INSTANCE.toBytes(new Date(dateInTo)));
 
         return true;
     }
@@ -96,6 +98,6 @@ public class ConvertTimezoneFunction extends ScalarFunction {
 
     @Override
     public PDataType getDataType() {
-        return PDataType.DATE;
+        return PDate.INSTANCE;
     }
 }

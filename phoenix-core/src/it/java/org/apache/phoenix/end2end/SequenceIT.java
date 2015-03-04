@@ -653,6 +653,7 @@ public class SequenceIT extends BaseClientManagedTimeIT {
         conn = null; // So that call to nextConnection doesn't close it
         ResultSet rs = conn2.createStatement().executeQuery("EXPLAIN SELECT NEXT VALUE FOR bar FROM foo");
         assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER FOO\n" + 
+                "    SERVER FILTER BY FIRST KEY ONLY\n" +
         		"CLIENT RESERVE VALUES FROM 1 SEQUENCE", QueryUtil.getExplainPlan(rs));
         
         nextConnection();

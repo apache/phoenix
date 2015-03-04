@@ -22,15 +22,12 @@ package org.apache.phoenix.pig.util;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.SQLException;
 
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.util.Pair;
-import org.apache.phoenix.pig.PhoenixPigConfiguration;
-import org.apache.phoenix.pig.util.QuerySchemaParserFunction;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
-import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mockito;
@@ -44,16 +41,14 @@ import com.google.common.base.Joiner;
  */
 public class QuerySchemaParserFunctionTest extends BaseConnectionlessQueryTest {
 
-    private PhoenixPigConfiguration phoenixConfiguration;
-    private Connection conn;
+    private Configuration configuration;
     private QuerySchemaParserFunction function;
     
     @Before
     public void setUp() throws SQLException {
-        phoenixConfiguration = Mockito.mock(PhoenixPigConfiguration.class);
-        conn = DriverManager.getConnection(getUrl());
-        Mockito.when(phoenixConfiguration.getConnection()).thenReturn(conn);
-        function = new QuerySchemaParserFunction(phoenixConfiguration);
+        configuration = Mockito.mock(Configuration.class);
+        Mockito.when(configuration.get(HConstants.ZOOKEEPER_QUORUM)).thenReturn(getUrl());
+        function = new QuerySchemaParserFunction(configuration);
     }
     
     @Test(expected=RuntimeException.class)
@@ -100,10 +95,5 @@ public class QuerySchemaParserFunctionTest extends BaseConnectionlessQueryTest {
         final String selectQuery = "SELECT MAX(ID) FROM EMPLOYEE";
         function.apply(selectQuery);
         fail(" Function call successful despite passing an aggreagate query");
-    }
-
-    @After
-    public void tearDown() throws SQLException {
-        conn.close();
     }
 }

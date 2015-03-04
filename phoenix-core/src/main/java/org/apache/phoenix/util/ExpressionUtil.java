@@ -19,7 +19,7 @@ import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.function.CurrentDateFunction;
 import org.apache.phoenix.expression.function.CurrentTimeFunction;
 import org.apache.phoenix.expression.function.FunctionExpression;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PDataType;
 
 import com.google.common.collect.Lists;
 

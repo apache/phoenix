@@ -29,14 +29,22 @@ import java.util.List;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
-import org.apache.phoenix.expression.function.InlineArrayElemRefExpression;
+import org.apache.phoenix.expression.function.ArrayElemRefExpression;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
-import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PBoolean;
+import org.apache.phoenix.schema.types.PChar;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.schema.types.PUnsignedInt;
+import org.apache.phoenix.schema.types.PUnsignedLong;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ExpressionUtil;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.StringUtil;
 
 import com.google.common.collect.Lists;
@@ -50,21 +58,12 @@ import com.google.common.collect.Lists;
  */
 public class ComparisonExpression extends BaseCompoundExpression {
     private CompareOp op;
-    private static final String[] CompareOpString = new String[CompareOp.values().length];
-    static {
-        CompareOpString[CompareOp.EQUAL.ordinal()] = " = ";
-        CompareOpString[CompareOp.NOT_EQUAL.ordinal()] = " != ";
-        CompareOpString[CompareOp.GREATER.ordinal()] = " > ";
-        CompareOpString[CompareOp.LESS.ordinal()] = " < ";
-        CompareOpString[CompareOp.GREATER_OR_EQUAL.ordinal()] = " >= ";
-        CompareOpString[CompareOp.LESS_OR_EQUAL.ordinal()] = " <= ";
-    }
     
     private static void addEqualityExpression(Expression lhs, Expression rhs, List<Expression> andNodes, ImmutableBytesWritable ptr) throws SQLException {
         boolean isLHSNull = ExpressionUtil.isNull(lhs, ptr);
         boolean isRHSNull = ExpressionUtil.isNull(rhs, ptr);
         if (isLHSNull && isRHSNull) { // null == null will end up making the query degenerate
-            andNodes.add(LiteralExpression.newConstant(false, PDataType.BOOLEAN));
+            andNodes.add(LiteralExpression.newConstant(false, PBoolean.INSTANCE));
         } else if (isLHSNull) { // AND rhs IS NULL
             andNodes.add(IsNullExpression.create(rhs, false, ptr));
         } else if (isRHSNull) { // AND lhs IS NULL
@@ -113,7 +112,7 @@ public class ComparisonExpression extends BaseCompoundExpression {
         PDataType lhsExprDataType = lhsExpr.getDataType();
         PDataType rhsExprDataType = rhsExpr.getDataType();
         
-        if ((lhsExpr instanceof RowValueConstructorExpression || rhsExpr instanceof RowValueConstructorExpression) && !(lhsExpr instanceof InlineArrayElemRefExpression) && !(rhsExpr instanceof InlineArrayElemRefExpression)) {
+        if ((lhsExpr instanceof RowValueConstructorExpression || rhsExpr instanceof RowValueConstructorExpression) && !(lhsExpr instanceof ArrayElemRefExpression) && !(rhsExpr instanceof ArrayElemRefExpression)) {
             if (op == CompareOp.EQUAL || op == CompareOp.NOT_EQUAL) {
                 List<Expression> andNodes = Lists.<Expression>newArrayListWithExpectedSize(Math.max(lhsExpr.getChildren().size(), rhsExpr.getChildren().size()));
                 rewriteRVCAsEqualityExpression(lhsExpr, rhsExpr, andNodes, ptr);
@@ -131,7 +130,8 @@ public class ComparisonExpression extends BaseCompoundExpression {
             }
             children = Arrays.asList(lhsExpr, rhsExpr);
         } else if(lhsExprDataType != null && rhsExprDataType != null && !lhsExprDataType.isComparableTo(rhsExprDataType)) {
-            throw TypeMismatchException.newException(lhsExprDataType, rhsExprDataType, toString(op, children));
+            throw TypeMismatchException.newException(lhsExprDataType, rhsExprDataType,
+                toString(op, children));
         }
         Determinism determinism =  lhsExpr.getDeterminism().combine(rhsExpr.getDeterminism());
         
@@ -142,7 +142,7 @@ public class ComparisonExpression extends BaseCompoundExpression {
         if (lhsExpr instanceof LiteralExpression) {
             lhsValue = ((LiteralExpression)lhsExpr).getValue();
             if (lhsValue == null) {
-                return LiteralExpression.newConstant(false, PDataType.BOOLEAN, lhsExpr.getDeterminism());
+                return LiteralExpression.newConstant(false, PBoolean.INSTANCE, lhsExpr.getDeterminism());
             }
         }
         Object rhsValue = null;
@@ -150,7 +150,7 @@ public class ComparisonExpression extends BaseCompoundExpression {
         if (rhsExpr instanceof LiteralExpression) {
             rhsValue = ((LiteralExpression)rhsExpr).getValue();
             if (rhsValue == null) {
-                return LiteralExpression.newConstant(false, PDataType.BOOLEAN, rhsExpr.getDeterminism());
+                return LiteralExpression.newConstant(false, PBoolean.INSTANCE, rhsExpr.getDeterminism());
             }
         }
         if (lhsValue != null && rhsValue != null) {
@@ -170,77 +170,74 @@ public class ComparisonExpression extends BaseCompoundExpression {
                     children = Arrays.asList(children.get(0), LiteralExpression.newConstant(rhsValue, lhsExprDataType, 
                             lhsExpr.getMaxLength(), null, lhsExpr.getSortOrder(), determinism));
                 } else if (op == CompareOp.EQUAL) {
-                    return LiteralExpression.newConstant(false, PDataType.BOOLEAN, Determinism.ALWAYS);
+                    return LiteralExpression.newConstant(false, PBoolean.INSTANCE, Determinism.ALWAYS);
                 } else if (op == CompareOp.NOT_EQUAL) {
-                    return LiteralExpression.newConstant(true, PDataType.BOOLEAN, Determinism.ALWAYS);
+                    return LiteralExpression.newConstant(true, PBoolean.INSTANCE, Determinism.ALWAYS);
                 } else { // TODO: generalize this with PDataType.getMinValue(), PDataTypeType.getMaxValue() methods
-                    switch(rhsExprDataType) {
-                    case DECIMAL:
+                  if (rhsExprDataType == PDecimal.INSTANCE) {
                         /*
                          * We're comparing an int/long to a constant decimal with a fraction part.
                          * We need the types to match in case this is used to form a key. To form the start/stop key,
                          * we need to adjust the decimal by truncating it or taking its ceiling, depending on the comparison
                          * operator, to get a whole number.
                          */
-                        int increment = 0;
-                        switch (op) {
-                        case GREATER_OR_EQUAL: 
-                        case LESS: // get next whole number
-                            increment = 1;
-                        default: // Else, we truncate the value
-                            BigDecimal bd = (BigDecimal)rhsValue;
-                            rhsValue = bd.longValue() + increment;
-                            children = Arrays.asList(lhsExpr, LiteralExpression.newConstant(rhsValue, lhsExprDataType, lhsExpr.getSortOrder(), rhsExpr.getDeterminism()));
-                            break;
-                        }
-                        break;
-                    case LONG:
+                    int increment = 0;
+                    switch (op) {
+                    case GREATER_OR_EQUAL:
+                    case LESS: // get next whole number
+                      increment = 1;
+                    default: // Else, we truncate the value
+                      BigDecimal bd = (BigDecimal)rhsValue;
+                      rhsValue = bd.longValue() + increment;
+                      children = Arrays.asList(lhsExpr, LiteralExpression.newConstant(rhsValue, lhsExprDataType, lhsExpr.getSortOrder(), rhsExpr.getDeterminism()));
+                      break;
+                    }
+                  } else if (rhsExprDataType == PLong.INSTANCE) {
                         /*
                          * We are comparing an int, unsigned_int to a long, or an unsigned_long to a negative long.
                          * int has range of -2147483648 to 2147483647, and unsigned_int has a value range of 0 to 4294967295.
-                         * 
-                         * If lhs is int or unsigned_int, since we already determined that we cannot coerce the rhs 
+                         *
+                         * If lhs is int or unsigned_int, since we already determined that we cannot coerce the rhs
                          * to become the lhs, we know the value on the rhs is greater than lhs if it's positive, or smaller than
                          * lhs if it's negative.
-                         * 
+                         *
                          * If lhs is an unsigned_long, then we know the rhs is definitely a negative long. rhs in this case
                          * will always be bigger than rhs.
                          */
-                        if (lhsExprDataType == PDataType.INTEGER || 
-                        lhsExprDataType == PDataType.UNSIGNED_INT) {
-                            switch (op) {
-                            case LESS:
-                            case LESS_OR_EQUAL:
-                                if ((Long)rhsValue > 0) {
-                                    return LiteralExpression.newConstant(true, PDataType.BOOLEAN, determinism);
-                                } else {
-                                    return LiteralExpression.newConstant(false, PDataType.BOOLEAN, determinism);
-                                }
-                            case GREATER:
-                            case GREATER_OR_EQUAL:
-                                if ((Long)rhsValue > 0) {
-                                    return LiteralExpression.newConstant(false, PDataType.BOOLEAN, determinism);
-                                } else {
-                                    return LiteralExpression.newConstant(true, PDataType.BOOLEAN, determinism);
-                                }
-                            default:
-                                break;
-                            }
-                        } else if (lhsExprDataType == PDataType.UNSIGNED_LONG) {
-                            switch (op) {
-                            case LESS:
-                            case LESS_OR_EQUAL:
-                                return LiteralExpression.newConstant(false, PDataType.BOOLEAN, determinism);
-                            case GREATER:
-                            case GREATER_OR_EQUAL:
-                                return LiteralExpression.newConstant(true, PDataType.BOOLEAN, determinism);
-                            default:
-                                break;
-                            }
+                    if (lhsExprDataType == PInteger.INSTANCE ||
+                        lhsExprDataType == PUnsignedInt.INSTANCE) {
+                      switch (op) {
+                      case LESS:
+                      case LESS_OR_EQUAL:
+                        if ((Long)rhsValue > 0) {
+                          return LiteralExpression.newConstant(true, PBoolean.INSTANCE, determinism);
+                        } else {
+                          return LiteralExpression.newConstant(false, PBoolean.INSTANCE, determinism);
                         }
-                        children = Arrays.asList(lhsExpr, LiteralExpression.newConstant(rhsValue, rhsExprDataType, lhsExpr.getSortOrder(), determinism));
+                      case GREATER:
+                      case GREATER_OR_EQUAL:
+                        if ((Long)rhsValue > 0) {
+                          return LiteralExpression.newConstant(false, PBoolean.INSTANCE, determinism);
+                        } else {
+                          return LiteralExpression.newConstant(true, PBoolean.INSTANCE, determinism);
+                        }
+                      default:
                         break;
+                      }
+                    } else if (lhsExprDataType == PUnsignedLong.INSTANCE) {
+                      switch (op) {
+                      case LESS:
+                      case LESS_OR_EQUAL:
+                        return LiteralExpression.newConstant(false, PBoolean.INSTANCE, determinism);
+                      case GREATER:
+                      case GREATER_OR_EQUAL:
+                        return LiteralExpression.newConstant(true, PBoolean.INSTANCE, determinism);
+                      default:
+                        break;
+                      }
                     }
+                    children = Arrays.asList(lhsExpr, LiteralExpression.newConstant(rhsValue, rhsExprDataType, lhsExpr.getSortOrder(), determinism));
+                  }
                 }
             }
 
@@ -249,21 +246,21 @@ public class ComparisonExpression extends BaseCompoundExpression {
             if (children.get(1).getMaxLength() != null && lhsExpr.getMaxLength() != null && lhsExpr.getMaxLength() < children.get(1).getMaxLength()) {
                 switch (op) {
                 case EQUAL:
-                    return LiteralExpression.newConstant(false, PDataType.BOOLEAN, determinism);
+                    return LiteralExpression.newConstant(false, PBoolean.INSTANCE, determinism);
                 case NOT_EQUAL:
-                    return LiteralExpression.newConstant(true, PDataType.BOOLEAN, determinism);
+                    return LiteralExpression.newConstant(true, PBoolean.INSTANCE, determinism);
                 default:
                     break;
                 }
             }
         }
-        return new ComparisonExpression(op, children);
+        return new ComparisonExpression(children, op);
     }
     
     public ComparisonExpression() {
     }
 
-    public ComparisonExpression(CompareOp op, List<Expression> children) {
+    public ComparisonExpression(List<Expression> children, CompareOp op) {
         super(children);
         if (op == null) {
             throw new NullPointerException();
@@ -271,6 +268,10 @@ public class ComparisonExpression extends BaseCompoundExpression {
         this.op = op;
     }
 
+    public ComparisonExpression clone(List<Expression> children) {
+        return new ComparisonExpression(children, this.getFilterOp());
+    }
+    
     @Override
     public int hashCode() {
         final int prime = 31;
@@ -291,7 +292,7 @@ public class ComparisonExpression extends BaseCompoundExpression {
 
     @Override
     public PDataType getDataType() {
-        return PDataType.BOOLEAN;
+        return PBoolean.INSTANCE;
     }
 
     @Override
@@ -320,10 +321,10 @@ public class ComparisonExpression extends BaseCompoundExpression {
         int rhsLength = ptr.getLength();
         PDataType rhsDataType = children.get(1).getDataType();
         SortOrder rhsSortOrder = children.get(1).getSortOrder();   
-        if (rhsDataType == PDataType.CHAR) {
+        if (rhsDataType == PChar.INSTANCE) {
             rhsLength = StringUtil.getUnpaddedCharLength(rhsBytes, rhsOffset, rhsLength, rhsSortOrder);
         }
-        if (lhsDataType == PDataType.CHAR) {
+        if (lhsDataType == PChar.INSTANCE) {
             lhsLength = StringUtil.getUnpaddedCharLength(lhsBytes, lhsOffset, lhsLength, lhsSortOrder);
         }
         
@@ -361,7 +362,7 @@ public class ComparisonExpression extends BaseCompoundExpression {
     }
     
     public static String toString(CompareOp op, List<Expression> children) {
-        return (children.get(0) + CompareOpString[op.ordinal()] + children.get(1));
+        return (children.get(0) + " " + QueryUtil.toSQL(op) + " " + children.get(1));
     }
     
     @Override

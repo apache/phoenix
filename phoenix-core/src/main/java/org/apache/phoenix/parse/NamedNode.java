@@ -28,7 +28,7 @@ public class NamedNode {
         return new NamedNode(name,true);
     }
     
-    private NamedNode(String name, boolean isCaseSensitive) {
+    NamedNode(String name, boolean isCaseSensitive) {
         this.name = name;
         this.isCaseSensitive = isCaseSensitive;
     }
@@ -59,5 +59,9 @@ public class NamedNode {
         NamedNode other = (NamedNode)obj;
         return name.equals(other.name);
     }
-
+    
+    @Override
+    public String toString() {
+        return (isCaseSensitive ? "\"" : "" ) + name + (isCaseSensitive ? "\"" : "" );
+    }
 }

@@ -40,6 +40,7 @@
       <unpack>true</unpack>
       <includes>
         <include>org.apache.phoenix:phoenix-*</include>
+        <include>org.iq80.snappy:snappy</include>
       </includes>
       <excludes>
         <exclude>org.apache.phoenix:phoenix-flume</exclude>

@@ -36,8 +36,8 @@ import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
-import org.apache.phoenix.schema.PArrayDataType;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PArrayDataType;
 import org.apache.phoenix.util.CSVCommonsLoader;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -639,8 +639,49 @@ public class CSVCommonsLoaderIT extends BaseHBaseManagedTimeIT {
             assertTrue(phoenixResultSet.next());
             assertEquals(1L, phoenixResultSet.getLong(1));
             assertEquals(
-                    PArrayDataType.instantiatePhoenixArray(PDataType.INTEGER, new Integer[]{2, 3, 4}),
+                    PArrayDataType.instantiatePhoenixArray(PInteger.INSTANCE, new Integer[]{2, 3, 4}),
                     phoenixResultSet.getArray(2));
+            assertFalse(phoenixResultSet.next());
+        } finally {
+            if (parser != null)
+                parser.close();
+            if (conn != null)
+                conn.close();
+        }
+    }
+
+    @Test
+    public void testCSVCommonsUpsert_WithTimestamp() throws Exception {
+        CSVParser parser = null;
+        PhoenixConnection conn = null;
+        try {
+
+            // Create table
+            String statements = "CREATE TABLE IF NOT EXISTS TS_TABLE "
+                    + "(ID BIGINT NOT NULL PRIMARY KEY, TS TIMESTAMP);";
+            conn = DriverManager.getConnection(getUrl()).unwrap(
+                    PhoenixConnection.class);
+            PhoenixRuntime.executeStatements(conn,
+                    new StringReader(statements), null);
+
+            // Upsert CSV file
+            CSVCommonsLoader csvUtil = new CSVCommonsLoader(conn, "TS_TABLE",
+                    null, true, ',', '"', null, "!");
+            csvUtil.upsert(
+                    new StringReader("ID,TS\n"
+                            + "1,1970-01-01 00:00:10\n"
+                            + "2,1970-01-01 00:00:10.123\n"));
+
+            // Compare Phoenix ResultSet with CSV file content
+            PreparedStatement statement = conn
+                    .prepareStatement("SELECT ID, TS FROM TS_TABLE ORDER BY ID");
+            ResultSet phoenixResultSet = statement.executeQuery();
+            assertTrue(phoenixResultSet.next());
+            assertEquals(1L, phoenixResultSet.getLong(1));
+            assertEquals(10000L, phoenixResultSet.getTimestamp(2).getTime());
+            assertTrue(phoenixResultSet.next());
+            assertEquals(2L, phoenixResultSet.getLong(1));
+            assertEquals(10123L, phoenixResultSet.getTimestamp(2).getTime());
             assertFalse(phoenixResultSet.next());
         } finally {
             if (parser != null)

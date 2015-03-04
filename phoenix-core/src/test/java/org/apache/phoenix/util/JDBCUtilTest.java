@@ -20,6 +20,7 @@ package org.apache.phoenix.util;
 import static org.apache.phoenix.util.PhoenixRuntime.ANNOTATION_ATTRIB_PREFIX;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.util.Map;
@@ -64,5 +65,40 @@ public class JDBCUtilTest {
         assertEquals("localhost;foo=bar", JDBCUtil.removeProperty("localhost;TenantId=abc;foo=bar", TENANT_ID_ATTRIB));
         assertEquals("localhost;TenantId=abc", JDBCUtil.removeProperty("localhost;TenantId=abc;foo=bar", "foo"));
         assertEquals("localhost;TenantId=abc;foo=bar", JDBCUtil.removeProperty("localhost;TenantId=abc;foo=bar", "bar"));
+    }
+
+    @Test
+    public void testGetAutoCommit_NotSpecified_DefaultTrue() {
+        assertTrue(JDBCUtil.getAutoCommit("localhost", new Properties(), true));
+    }
+
+
+    @Test
+    public void testGetAutoCommit_NotSpecified_DefaultFalse() {
+        assertFalse(JDBCUtil.getAutoCommit("localhost", new Properties(), false));
+    }
+
+    @Test
+    public void testGetAutoCommit_TrueInUrl() {
+        assertTrue(JDBCUtil.getAutoCommit("localhost;AutoCommit=TrUe", new Properties(), false));
+    }
+
+    @Test
+    public void testGetAutoCommit_FalseInUrl() {
+        assertFalse(JDBCUtil.getAutoCommit("localhost;AutoCommit=FaLse", new Properties(), false));
+    }
+
+    @Test
+    public void testGetAutoCommit_TrueInProperties() {
+        Properties props = new Properties();
+        props.setProperty("AutoCommit", "true");
+        assertTrue(JDBCUtil.getAutoCommit("localhost", props, false));
+    }
+
+    @Test
+    public void testGetAutoCommit_FalseInProperties() {
+        Properties props = new Properties();
+        props.setProperty("AutoCommit", "false");
+        assertFalse(JDBCUtil.getAutoCommit("localhost", props, false));
     }
 }

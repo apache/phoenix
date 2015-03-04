@@ -40,6 +40,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
 import java.util.Collection;
@@ -88,7 +89,7 @@ public class SortMergeJoinIT extends BaseHBaseManagedTimeIT {
     
     @Before
     public void initTable() throws Exception {
-        initTableValues();
+        initJoinTableValues(getUrl(), null, null);
         if (indexDDL != null && indexDDL.length > 0) {
             Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -112,14 +113,22 @@ public class SortMergeJoinIT extends BaseHBaseManagedTimeIT {
                 "AND\n" +
                 "    SORT-MERGE-JOIN (INNER) TABLES\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
-                "            SERVER SORTED BY [I.item_id]\n" +
+                "            SERVER SORTED BY [\"I.item_id\"]\n" +
                 "        CLIENT MERGE SORT\n" +
                 "    AND (SKIP MERGE)\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
                 "            SERVER FILTER BY QUANTITY < 5000\n" +
-                "            SERVER SORTED BY [O.item_id]\n" +
+                "            SERVER SORTED BY [\"O.item_id\"]\n" +
                 "        CLIENT MERGE SORT\n" +
-                "    CLIENT SORTED BY [I.supplier_id]",
+                "    CLIENT SORTED BY [\"I.supplier_id\"]",
+                
+                "SORT-MERGE-JOIN (INNER) TABLES\n" +
+                "    CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
+                "AND\n" +
+                "    CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
+                "        SERVER SORTED BY [\"O.item_id\"]\n" +
+                "    CLIENT MERGE SORT\n" +
+                "CLIENT 4 ROW LIMIT",
                 }});
         testCases.add(new String[][] {
                 {
@@ -129,19 +138,31 @@ public class SortMergeJoinIT extends BaseHBaseManagedTimeIT {
                 }, {
                 "SORT-MERGE-JOIN (LEFT) TABLES\n" +
                 "    CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_supplier\n" +
-                "        SERVER SORTED BY [S.:supplier_id]\n" +
+                "        SERVER FILTER BY FIRST KEY ONLY\n" + 
+                "        SERVER SORTED BY [\"S.:supplier_id\"]\n" +
                 "    CLIENT MERGE SORT\n" +
                 "AND\n" +
                 "    SORT-MERGE-JOIN (INNER) TABLES\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_item\n" +
-                "            SERVER SORTED BY [I.:item_id]\n" +
+                "            SERVER SORTED BY [\"I.:item_id\"]\n" +
                 "        CLIENT MERGE SORT\n" +
                 "    AND (SKIP MERGE)\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
                 "            SERVER FILTER BY QUANTITY < 5000\n" +
-                "            SERVER SORTED BY [O.item_id]\n" +
+                "            SERVER SORTED BY [\"O.item_id\"]\n" +
                 "        CLIENT MERGE SORT\n" +
-                "    CLIENT SORTED BY [I.0:supplier_id]"
+                "    CLIENT SORTED BY [\"I.0:supplier_id\"]",
+                
+                "SORT-MERGE-JOIN (INNER) TABLES\n" +
+                "    CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_item\n" +
+                "        SERVER FILTER BY FIRST KEY ONLY\n" +
+                "        SERVER SORTED BY [\"I.:item_id\"]\n" +
+                "    CLIENT MERGE SORT\n" +
+                "AND\n" +
+                "    CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
+                "        SERVER SORTED BY [\"O.item_id\"]\n" +
+                "    CLIENT MERGE SORT\n" +
+                "CLIENT 4 ROW LIMIT",
                 }});
         testCases.add(new String[][] {
                 {
@@ -151,272 +172,35 @@ public class SortMergeJoinIT extends BaseHBaseManagedTimeIT {
                 }, {
                 "SORT-MERGE-JOIN (LEFT) TABLES\n" +
                 "    CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + JOIN_SUPPLIER_TABLE_DISPLAY_NAME + " [-32768]\n" +
-                "        SERVER SORTED BY [S.:supplier_id]\n" +
+                "        SERVER FILTER BY FIRST KEY ONLY\n" + 
+                "        SERVER SORTED BY [\"S.:supplier_id\"]\n" +
                 "    CLIENT MERGE SORT\n" +
                 "AND\n" +
                 "    SORT-MERGE-JOIN (INNER) TABLES\n" +
                 "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + JOIN_ITEM_TABLE_DISPLAY_NAME + " [-32768]\n" +
-                "            SERVER SORTED BY [I.:item_id]\n" +
+                "            SERVER SORTED BY [\"I.:item_id\"]\n" +
                 "        CLIENT MERGE SORT\n" +
                 "    AND (SKIP MERGE)\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
                 "            SERVER FILTER BY QUANTITY < 5000\n" +
-                "            SERVER SORTED BY [O.item_id]\n" +
+                "            SERVER SORTED BY [\"O.item_id\"]\n" +
                 "        CLIENT MERGE SORT\n" +
-                "    CLIENT SORTED BY [I.0:supplier_id]"
+                "    CLIENT SORTED BY [\"I.0:supplier_id\"]",
+                
+                "SORT-MERGE-JOIN (INNER) TABLES\n" +
+                "    CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + JOIN_ITEM_TABLE_DISPLAY_NAME + " [-32768]\n" +
+                "        SERVER FILTER BY FIRST KEY ONLY\n" +
+                "        SERVER SORTED BY [\"I.:item_id\"]\n" +
+                "    CLIENT MERGE SORT\n" +
+                "AND\n" +
+                "    CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
+                "        SERVER SORTED BY [\"O.item_id\"]\n" +
+                "    CLIENT MERGE SORT\n" +
+                "CLIENT 4 ROW LIMIT",
                 }});
         return testCases;
     }
     
-    
-    protected void initTableValues() throws Exception {
-        ensureTableCreated(getUrl(), JOIN_CUSTOMER_TABLE_FULL_NAME);
-        ensureTableCreated(getUrl(), JOIN_ITEM_TABLE_FULL_NAME);
-        ensureTableCreated(getUrl(), JOIN_SUPPLIER_TABLE_FULL_NAME);
-        ensureTableCreated(getUrl(), JOIN_ORDER_TABLE_FULL_NAME);
-        
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        try {
-            conn.createStatement().execute("CREATE SEQUENCE my.seq");
-            // Insert into customer table
-            PreparedStatement stmt = conn.prepareStatement(
-                    "upsert into " + JOIN_CUSTOMER_TABLE_FULL_NAME +
-                    "   (\"customer_id\", " +
-                    "    NAME, " +
-                    "    PHONE, " +
-                    "    ADDRESS, " +
-                    "    LOC_ID, " +
-                    "    DATE) " +
-                    "values (?, ?, ?, ?, ?, ?)");
-            stmt.setString(1, "0000000001");
-            stmt.setString(2, "C1");
-            stmt.setString(3, "999-999-1111");
-            stmt.setString(4, "101 XXX Street");
-            stmt.setString(5, "10001");
-            stmt.setDate(6, new Date(format.parse("2013-11-01 10:20:36").getTime()));
-            stmt.execute();
-                
-            stmt.setString(1, "0000000002");
-            stmt.setString(2, "C2");
-            stmt.setString(3, "999-999-2222");
-            stmt.setString(4, "202 XXX Street");
-            stmt.setString(5, null);
-            stmt.setDate(6, new Date(format.parse("2013-11-25 16:45:07").getTime()));
-            stmt.execute();
-
-            stmt.setString(1, "0000000003");
-            stmt.setString(2, "C3");
-            stmt.setString(3, "999-999-3333");
-            stmt.setString(4, "303 XXX Street");
-            stmt.setString(5, null);
-            stmt.setDate(6, new Date(format.parse("2013-11-25 10:06:29").getTime()));
-            stmt.execute();
-
-            stmt.setString(1, "0000000004");
-            stmt.setString(2, "C4");
-            stmt.setString(3, "999-999-4444");
-            stmt.setString(4, "404 XXX Street");
-            stmt.setString(5, "10004");
-            stmt.setDate(6, new Date(format.parse("2013-11-22 14:22:56").getTime()));
-            stmt.execute();
-
-            stmt.setString(1, "0000000005");
-            stmt.setString(2, "C5");
-            stmt.setString(3, "999-999-5555");
-            stmt.setString(4, "505 XXX Street");
-            stmt.setString(5, "10005");
-            stmt.setDate(6, new Date(format.parse("2013-11-27 09:37:50").getTime()));
-            stmt.execute();
-
-            stmt.setString(1, "0000000006");
-            stmt.setString(2, "C6");
-            stmt.setString(3, "999-999-6666");
-            stmt.setString(4, "606 XXX Street");
-            stmt.setString(5, "10001");
-            stmt.setDate(6, new Date(format.parse("2013-11-01 10:20:36").getTime()));
-            stmt.execute();
-            
-            // Insert into item table
-            stmt = conn.prepareStatement(
-                    "upsert into " + JOIN_ITEM_TABLE_FULL_NAME +
-                    "   (\"item_id\", " +
-                    "    NAME, " +
-                    "    PRICE, " +
-                    "    DISCOUNT1, " +
-                    "    DISCOUNT2, " +
-                    "    \"supplier_id\", " +
-                    "    DESCRIPTION) " +
-                    "values (?, ?, ?, ?, ?, ?, ?)");
-            stmt.setString(1, "0000000001");
-            stmt.setString(2, "T1");
-            stmt.setInt(3, 100);
-            stmt.setInt(4, 5);
-            stmt.setInt(5, 10);
-            stmt.setString(6, "0000000001");
-            stmt.setString(7, "Item T1");
-            stmt.execute();
-
-            stmt.setString(1, "0000000002");
-            stmt.setString(2, "T2");
-            stmt.setInt(3, 200);
-            stmt.setInt(4, 5);
-            stmt.setInt(5, 8);
-            stmt.setString(6, "0000000001");
-            stmt.setString(7, "Item T2");
-            stmt.execute();
-
-            stmt.setString(1, "0000000003");
-            stmt.setString(2, "T3");
-            stmt.setInt(3, 300);
-            stmt.setInt(4, 8);
-            stmt.setInt(5, 12);
-            stmt.setString(6, "0000000002");
-            stmt.setString(7, "Item T3");
-            stmt.execute();
-
-            stmt.setString(1, "0000000004");
-            stmt.setString(2, "T4");
-            stmt.setInt(3, 400);
-            stmt.setInt(4, 6);
-            stmt.setInt(5, 10);
-            stmt.setString(6, "0000000002");
-            stmt.setString(7, "Item T4");
-            stmt.execute();
-
-            stmt.setString(1, "0000000005");
-            stmt.setString(2, "T5");
-            stmt.setInt(3, 500);
-            stmt.setInt(4, 8);
-            stmt.setInt(5, 15);
-            stmt.setString(6, "0000000005");
-            stmt.setString(7, "Item T5");
-            stmt.execute();
-
-            stmt.setString(1, "0000000006");
-            stmt.setString(2, "T6");
-            stmt.setInt(3, 600);
-            stmt.setInt(4, 8);
-            stmt.setInt(5, 15);
-            stmt.setString(6, "0000000006");
-            stmt.setString(7, "Item T6");
-            stmt.execute();
-            
-            stmt.setString(1, "invalid001");
-            stmt.setString(2, "INVALID-1");
-            stmt.setInt(3, 0);
-            stmt.setInt(4, 0);
-            stmt.setInt(5, 0);
-            stmt.setString(6, "0000000000");
-            stmt.setString(7, "Invalid item for join test");
-            stmt.execute();
-
-            // Insert into supplier table
-            stmt = conn.prepareStatement(
-                    "upsert into " + JOIN_SUPPLIER_TABLE_FULL_NAME +
-                    "   (\"supplier_id\", " +
-                    "    NAME, " +
-                    "    PHONE, " +
-                    "    ADDRESS, " +
-                    "    LOC_ID) " +
-                    "values (?, ?, ?, ?, ?)");
-            stmt.setString(1, "0000000001");
-            stmt.setString(2, "S1");
-            stmt.setString(3, "888-888-1111");
-            stmt.setString(4, "101 YYY Street");
-            stmt.setString(5, "10001");
-            stmt.execute();
-                
-            stmt.setString(1, "0000000002");
-            stmt.setString(2, "S2");
-            stmt.setString(3, "888-888-2222");
-            stmt.setString(4, "202 YYY Street");
-            stmt.setString(5, "10002");
-            stmt.execute();
-
-            stmt.setString(1, "0000000003");
-            stmt.setString(2, "S3");
-            stmt.setString(3, "888-888-3333");
-            stmt.setString(4, "303 YYY Street");
-            stmt.setString(5, null);
-            stmt.execute();
-
-            stmt.setString(1, "0000000004");
-            stmt.setString(2, "S4");
-            stmt.setString(3, "888-888-4444");
-            stmt.setString(4, "404 YYY Street");
-            stmt.setString(5, null);
-            stmt.execute();
-
-            stmt.setString(1, "0000000005");
-            stmt.setString(2, "S5");
-            stmt.setString(3, "888-888-5555");
-            stmt.setString(4, "505 YYY Street");
-            stmt.setString(5, "10005");
-            stmt.execute();
-
-            stmt.setString(1, "0000000006");
-            stmt.setString(2, "S6");
-            stmt.setString(3, "888-888-6666");
-            stmt.setString(4, "606 YYY Street");
-            stmt.setString(5, "10006");
-            stmt.execute();
-
-            // Insert into order table
-            stmt = conn.prepareStatement(
-                    "upsert into " + JOIN_ORDER_TABLE_FULL_NAME +
-                    "   (\"order_id\", " +
-                    "    \"customer_id\", " +
-                    "    \"item_id\", " +
-                    "    PRICE, " +
-                    "    QUANTITY," +
-                    "    DATE) " +
-                    "values (?, ?, ?, ?, ?, ?)");
-            stmt.setString(1, "000000000000001");
-            stmt.setString(2, "0000000004");
-            stmt.setString(3, "0000000001");
-            stmt.setInt(4, 100);
-            stmt.setInt(5, 1000);
-            stmt.setTimestamp(6, new Timestamp(format.parse("2013-11-22 14:22:56").getTime()));
-            stmt.execute();
-
-            stmt.setString(1, "000000000000002");
-            stmt.setString(2, "0000000003");
-            stmt.setString(3, "0000000006");
-            stmt.setInt(4, 552);
-            stmt.setInt(5, 2000);
-            stmt.setTimestamp(6, new Timestamp(format.parse("2013-11-25 10:06:29").getTime()));
-            stmt.execute();
-
-            stmt.setString(1, "000000000000003");
-            stmt.setString(2, "0000000002");
-            stmt.setString(3, "0000000002");
-            stmt.setInt(4, 190);
-            stmt.setInt(5, 3000);
-            stmt.setTimestamp(6, new Timestamp(format.parse("2013-11-25 16:45:07").getTime()));
-            stmt.execute();
-
-            stmt.setString(1, "000000000000004");
-            stmt.setString(2, "0000000004");
-            stmt.setString(3, "0000000006");
-            stmt.setInt(4, 510);
-            stmt.setInt(5, 4000);
-            stmt.setTimestamp(6, new Timestamp(format.parse("2013-11-26 13:26:04").getTime()));
-            stmt.execute();
-
-            stmt.setString(1, "000000000000005");
-            stmt.setString(2, "0000000005");
-            stmt.setString(3, "0000000003");
-            stmt.setInt(4, 264);
-            stmt.setInt(5, 5000);
-            stmt.setTimestamp(6, new Timestamp(format.parse("2013-11-27 09:37:50").getTime()));
-            stmt.execute();
-
-            conn.commit();
-        } finally {
-            conn.close();
-        }
-    }
 
     @Test
     public void testDefaultJoin() throws Exception {
@@ -2052,6 +1836,20 @@ public class SortMergeJoinIT extends BaseHBaseManagedTimeIT {
                             + "GROUP BY t1.TID, t1.A, t2.A");
             upsertStmt.execute();
             conn.commit();            
+
+            rs = statement.executeQuery("SELECT * FROM " + joinTable);
+            assertTrue(rs.next());
+            assertEquals(rs.getString(1), "1");
+            assertEquals(rs.getInt(2), 1);
+            assertEquals(rs.getInt(3), 2);
+            assertEquals(rs.getInt(4), 2);
+            assertTrue(rs.next());
+            assertEquals(rs.getString(1), "1");
+            assertEquals(rs.getInt(2), 2);
+            assertEquals(rs.getInt(3), 1);
+            assertEquals(rs.getInt(4), 2);
+
+            assertFalse(rs.next());
         } finally {
             conn.close();
         }
@@ -2811,6 +2609,49 @@ public class SortMergeJoinIT extends BaseHBaseManagedTimeIT {
                 fail("Should have got SQLException.");
             } catch (SQLException e) {
                 assertEquals(SQLExceptionCode.AMBIGUOUS_JOIN_CONDITION.getErrorCode(), e.getErrorCode());
+            }
+        } finally {
+            conn.close();
+        }
+    }
+
+    @Test
+    public void testJoinWithSetMaxRows() throws Exception {
+        String [] queries = new String[2];
+        queries[0] = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", i.name, quantity FROM " + JOIN_ITEM_TABLE_FULL_NAME + " i JOIN "
+                + JOIN_ORDER_TABLE_FULL_NAME + " o ON o.\"item_id\" = i.\"item_id\"";
+        queries[1] = "SELECT /*+ USE_SORT_MERGE_JOIN*/ o.\"order_id\", i.name, o.quantity FROM " + JOIN_ITEM_TABLE_FULL_NAME + " i JOIN " 
+                + "(SELECT \"order_id\", \"item_id\", quantity FROM " + JOIN_ORDER_TABLE_FULL_NAME + ") o " 
+                + "ON o.\"item_id\" = i.\"item_id\"";
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            for (int i = 0; i < queries.length; i++) {
+                String query = queries[i];
+                Statement statement = conn.createStatement();
+                statement.setMaxRows(4);
+                ResultSet rs = statement.executeQuery(query);
+                assertTrue (rs.next());
+                assertEquals(rs.getString(1), "000000000000001");
+                assertEquals(rs.getString(2), "T1");
+                assertEquals(rs.getInt(3), 1000);
+                assertTrue (rs.next());
+                assertEquals(rs.getString(1), "000000000000003");
+                assertEquals(rs.getString(2), "T2");
+                assertEquals(rs.getInt(3), 3000);
+                assertTrue (rs.next());
+                assertEquals(rs.getString(1), "000000000000005");
+                assertEquals(rs.getString(2), "T3");
+                assertEquals(rs.getInt(3), 5000);
+                assertTrue (rs.next());
+                assertTrue(rs.getString(1).equals("000000000000002") || rs.getString(1).equals("000000000000004"));
+                assertEquals(rs.getString(2), "T6");
+                assertTrue(rs.getInt(3) == 2000 || rs.getInt(3) == 4000);
+
+                assertFalse(rs.next());
+                
+                rs = statement.executeQuery("EXPLAIN " + query);
+                assertEquals(i == 0 ? plans[1] : plans[1].replaceFirst("O\\.item_id", "item_id"), QueryUtil.getExplainPlan(rs));
             }
         } finally {
             conn.close();

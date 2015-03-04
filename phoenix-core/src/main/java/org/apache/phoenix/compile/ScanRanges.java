@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.compile;
 
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.STARTKEY_OFFSET;
+
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Iterator;
@@ -356,7 +358,10 @@ public class ScanRanges {
         }
         newScan.setStartRow(scanStartKey);
         newScan.setStopRow(scanStopKey);
-        
+        if(keyOffset > 0) {
+            newScan.setAttribute(STARTKEY_OFFSET, Bytes.toBytes(keyOffset));
+        }
+
         return newScan;
     }
 

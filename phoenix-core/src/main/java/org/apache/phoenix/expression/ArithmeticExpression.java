@@ -19,7 +19,7 @@ package org.apache.phoenix.expression;
 
 import java.util.List;
 
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PDataType;
 
 public abstract class ArithmeticExpression extends BaseCompoundExpression {
 
@@ -30,6 +30,8 @@ public abstract class ArithmeticExpression extends BaseCompoundExpression {
         super(children);
     }
 
+    abstract public ArithmeticExpression clone(List<Expression> children);
+    
     @Override
     public String toString() {
         StringBuilder buf = new StringBuilder("(");

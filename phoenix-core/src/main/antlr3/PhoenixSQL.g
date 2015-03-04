@@ -33,6 +33,7 @@ tokens
     AS='as';
     OUTER='outer';
     ON='on';
+    OFF='off';
     IN='in';
     GROUP='group';
     HAVING='having';
@@ -107,6 +108,7 @@ tokens
     UPDATE='update';
     STATISTICS='statistics';    
     COLUMNS='columns';
+    TRACE='trace';
 }
 
 
@@ -147,13 +149,20 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.IllegalDataException;
-import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.stats.StatisticsCollectionScope;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.schema.types.PTime;
+import org.apache.phoenix.schema.types.PTimestamp;
+import org.apache.phoenix.schema.types.PUnsignedDate;
+import org.apache.phoenix.schema.types.PUnsignedTime;
+import org.apache.phoenix.schema.types.PUnsignedTimestamp;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.parse.LikeParseNode.LikeType;
+import org.apache.phoenix.trace.util.Tracing;
 }
 
 @lexer::header {
@@ -359,11 +368,13 @@ non_select_node returns [BindableStatement ret]
     |   s=drop_index_node
     |   s=alter_index_node
     |   s=alter_table_node
+    |   s=trace_node
     |	s=create_sequence_node
     |	s=drop_sequence_node
     |   s=update_statistics_node
-    |   s=explain_node) { contextStack.pop();  $ret = s; }
+    |   s=explain_node) { $ret = s; }
     ;
+finally{ contextStack.pop(); }
     
 explain_node returns [BindableStatement ret]
     :   EXPLAIN q=oneStatement {$ret=factory.explain(q);}
@@ -392,11 +403,11 @@ create_view_node returns [CreateTableStatement ret]
 // Parse a create index statement.
 create_index_node returns [CreateIndexStatement ret]
     :   CREATE l=LOCAL? INDEX (IF NOT ex=EXISTS)? i=index_name ON t=from_table_name
-        (LPAREN pk=index_pk_constraint RPAREN)
+        (LPAREN ik=ik_constraint RPAREN)
         (INCLUDE (LPAREN icrefs=column_names RPAREN))?
         (p=fam_properties)?
         (SPLIT ON v=value_expression_list)?
-        {ret = factory.createIndex(i, factory.namedTable(null,t), pk, icrefs, v, p, ex!=null, l==null ? IndexType.getDefault() : IndexType.LOCAL, getBindCount()); }
+        {ret = factory.createIndex(i, factory.namedTable(null,t), ik, icrefs, v, p, ex!=null, l==null ? IndexType.getDefault() : IndexType.LOCAL, getBindCount()); }
     ;
 
 // Parse a create sequence statement.
@@ -435,17 +446,17 @@ col_name_with_sort_order returns [Pair<ColumnName, SortOrder> ret]
     :   f=identifier (order=ASC|order=DESC)? {$ret = Pair.newPair(factory.columnName(f), order == null ? SortOrder.getDefault() : SortOrder.fromDDLValue(order.getText()));}
 ;
 
-index_pk_constraint returns [PrimaryKeyConstraint ret]
-    :   cols = col_def_name_with_sort_order_list {$ret = factory.primaryKey(null, cols); }
-    ;
-
-col_def_name_with_sort_order_list returns [List<Pair<ColumnName, SortOrder>> ret]
-@init{ret = new ArrayList<Pair<ColumnName, SortOrder>>(); }
-    :   p=col_def_name_with_sort_order {$ret.add(p);}  (COMMA p = col_def_name_with_sort_order {$ret.add(p);} )*
+ik_constraint returns [IndexKeyConstraint ret]
+    :   x = expression_with_sort_order_list {$ret = factory.indexKey(x); }
 ;
 
-col_def_name_with_sort_order returns [Pair<ColumnName, SortOrder> ret]
-    :   c=column_name (order=ASC|order=DESC)? {$ret = Pair.newPair(c, order == null ? SortOrder.getDefault() : SortOrder.fromDDLValue(order.getText()));}
+expression_with_sort_order_list returns [List<Pair<ParseNode, SortOrder>> ret]
+@init{ret = new ArrayList<Pair<ParseNode, SortOrder>>(); }
+    :   p=expression_with_sort_order {$ret.add(p);}  (COMMA p = expression_with_sort_order {$ret.add(p);} )*
+;
+
+expression_with_sort_order returns [Pair<ParseNode, SortOrder> ret]
+    :   (x=expression) (order=ASC|order=DESC)? {$ret = Pair.newPair(x, order == null ? SortOrder.getDefault() : SortOrder.fromDDLValue(order.getText()));}
 ;
 
 fam_properties returns [ListMultimap<String,Pair<String,Object>> ret]
@@ -491,10 +502,16 @@ alter_index_node returns [AlterIndexStatement ret]
       {ret = factory.alterIndex(factory.namedTable(null, TableName.create(t.getSchemaName(), i.getName())), t.getTableName(), ex!=null, PIndexState.valueOf(SchemaUtil.normalizeIdentifier(s.getText()))); }
     ;
 
+// Parse a trace statement.
+trace_node returns [TraceStatement ret]
+    :   TRACE (flag = ON| flag = OFF)
+       {ret = factory.trace(Tracing.isTraceOn(flag.getText()));}
+    ;
+
 // Parse an alter table statement.
 alter_table_node returns [AlterTableStatement ret]
     :   ALTER (TABLE | v=VIEW) t=from_table_name
-        ( (DROP COLUMN (IF ex=EXISTS)? c=column_names) | (ADD (IF NOT ex=EXISTS)? (d=column_defs) (p=properties)?) | (SET (p=properties)) )
+        ( (DROP COLUMN (IF ex=EXISTS)? c=column_names) | (ADD (IF NOT ex=EXISTS)? (d=column_defs) (p=fam_properties)?) | (SET (p=fam_properties)) )
         { PTableType tt = v==null ? (QueryConstants.SYSTEM_SCHEMA_NAME.equals(t.getSchemaName()) ? PTableType.SYSTEM : PTableType.TABLE) : PTableType.VIEW; ret = ( c == null ? factory.addColumn(factory.namedTable(null,t), tt, d, ex!=null, p) : factory.dropColumn(factory.namedTable(null,t), tt, c, ex!=null) ); }
     ;
 
@@ -567,8 +584,9 @@ select_node returns [SelectStatement ret]
         (HAVING having=expression)?
         (ORDER BY order=order_by)?
         (LIMIT l=limit)?
-        { ParseContext context = contextStack.pop(); $ret = factory.select(from, null, d!=null, sel, where, group, having, order, l, getBindCount(), context.isAggregate(), context.hasSequences()); }
+        { ParseContext context = contextStack.peek(); $ret = factory.select(from, null, d!=null, sel, where, group, having, order, l, getBindCount(), context.isAggregate(), context.hasSequences()); }
     ;
+finally{ contextStack.pop(); }
 
 // Parse a full select expression structure.
 hinted_select_node returns [SelectStatement ret]
@@ -716,7 +734,7 @@ boolean_expression returns [ParseNode ret]
                       |        (ILIKE r=value_expression {$ret = factory.like(l,r,n!=null,LikeType.CASE_INSENSITIVE); } )
                       |        (BETWEEN r1=value_expression AND r2=value_expression {$ret = factory.between(l,r1,r2,n!=null); } )
                       |        ((IN ((r=bind_expression {$ret = factory.inList(Arrays.asList(l,r),n!=null);} )
-                                | (LPAREN r=subquery_expression RPAREN {$ret = factory.in(l,r,n!=null);} )
+                                | (LPAREN r=subquery_expression RPAREN {$ret = factory.in(l,r,n!=null,false);} )
                                 | (LPAREN v=one_or_more_expressions RPAREN {List<ParseNode> il = new ArrayList<ParseNode>(v.size() + 1); il.add(l); il.addAll(v); $ret = factory.inList(il,n!=null);})
                                 )))
                       ))
@@ -778,7 +796,9 @@ term returns [ParseNode ret]
     |   field=identifier LPAREN l=zero_or_more_expressions RPAREN wg=(WITHIN GROUP LPAREN ORDER BY l2=one_or_more_expressions (a=ASC | DESC) RPAREN)?
         {
             FunctionParseNode f = wg==null ? factory.function(field, l) : factory.function(field,l,l2,a!=null);
-            contextStack.peek().setAggregate(f.isAggregate());
+            if (!contextStack.isEmpty()) {
+            	contextStack.peek().setAggregate(f.isAggregate());
+            }
             $ret = f;
         } 
     |   field=identifier LPAREN t=ASTERISK RPAREN 
@@ -787,13 +807,17 @@ term returns [ParseNode ret]
                 throwRecognitionException(t); 
             }
             FunctionParseNode f = factory.function(field, LiteralParseNode.STAR);
-            contextStack.peek().setAggregate(f.isAggregate()); 
+            if (!contextStack.isEmpty()) {
+            	contextStack.peek().setAggregate(f.isAggregate());
+            }
             $ret = f;
         } 
     |   field=identifier LPAREN t=DISTINCT l=zero_or_more_expressions RPAREN 
         {
             FunctionParseNode f = factory.functionDistinct(field, l);
-            contextStack.peek().setAggregate(f.isAggregate());
+            if (!contextStack.isEmpty()) {
+            	contextStack.peek().setAggregate(f.isAggregate());
+            }
             $ret = f;
         }
     |   e=case_statement { $ret = e; }
@@ -856,7 +880,9 @@ literal_or_bind returns [ParseNode ret]
 
 // Get a string, integer, double, date, boolean, or NULL value.
 literal returns [LiteralParseNode ret]
-    :   t=STRING_LITERAL { ret = factory.literal(t.getText()); }
+    :   t=STRING_LITERAL {
+            ret = factory.literal(t.getText()); 
+        }
     |   l=int_literal { ret = l; }
     |   l=long_literal { ret = l; }
     |   l=double_literal { ret = l; }
@@ -870,6 +896,13 @@ literal returns [LiteralParseNode ret]
     |   NULL {ret = factory.literal(null);}
     |   TRUE {ret = factory.literal(Boolean.TRUE);} 
     |   FALSE {ret = factory.literal(Boolean.FALSE);}
+    |   dt=identifier t=STRING_LITERAL { 
+            try {
+                ret = factory.literal(t.getText(), dt);
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+        }
     ;
     
 int_literal returns [LiteralParseNode ret]

@@ -43,8 +43,10 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.TimeKeeper;
@@ -58,11 +60,6 @@ public class StatisticsWriter implements Closeable {
     /**
      * @param tableName TODO
      * @param clientTimeStamp TODO
-     * @param guidepostDepth 
-     * @param Configuration
-     *            Configruation to update the stats table.
-     * @param primaryTableName
-     *            name of the primary table on which we should collect stats
      * @return the {@link StatisticsWriter} for the given primary table.
      * @throws IOException
      *             if the table cannot be created due to an underlying HTable creation error
@@ -103,49 +100,73 @@ public class StatisticsWriter implements Closeable {
         statsWriterTable.close();
     }
 
-    public void splitStats(HRegion p, HRegion l, HRegion r, StatisticsCollector tracker, ImmutableBytesPtr cfKey, List<Mutation> mutations) throws IOException {
+    public void splitStats(HRegion p, HRegion l, HRegion r, StatisticsCollector tracker, ImmutableBytesPtr cfKey,
+            List<Mutation> mutations) throws IOException {
         if (tracker == null) { return; }
         boolean useMaxTimeStamp = clientTimeStamp == StatisticsCollector.NO_TIMESTAMP;
         if (!useMaxTimeStamp) {
             mutations.add(getLastStatsUpdatedTimePut(clientTimeStamp));
         }
         long readTimeStamp = useMaxTimeStamp ? HConstants.LATEST_TIMESTAMP : clientTimeStamp;
-        Result result = StatisticsUtil.readRegionStatistics(statsReaderTable, tableName, cfKey, p.getRegionName(), readTimeStamp);
+        Result result = StatisticsUtil.readRegionStatistics(statsReaderTable, tableName, cfKey, p.getRegionName(),
+                readTimeStamp);
         if (result != null && !result.isEmpty()) {
         	Cell cell = result.getColumnLatestCell(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_BYTES);
-
+        	Cell rowCountCell = result.getColumnLatestCell(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_ROW_COUNT_BYTES);
+            long rowCount = 0;
         	if (cell != null) {
                 long writeTimeStamp = useMaxTimeStamp ? cell.getTimestamp() : clientTimeStamp;
 
-                GuidePostsInfo guidePosts = GuidePostsInfo.fromBytes(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength());
+                GuidePostsInfo guidePostsRegionInfo = GuidePostsInfo.deserializeGuidePostsInfo(cell.getValueArray(),
+                        cell.getValueOffset(), cell.getValueLength(), rowCount);
                 byte[] pPrefix = StatisticsUtil.getRowKey(tableName, cfKey, p.getRegionName());
                 mutations.add(new Delete(pPrefix, writeTimeStamp));
                 
 	        	long byteSize = 0;
-	        	Cell byteSizeCell = result.getColumnLatestCell(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH_BYTES);
-	        	if (byteSizeCell != null) {
-	        		byteSize = PDataType.LONG.getCodec().decodeLong(byteSizeCell.getValueArray(), byteSizeCell.getValueOffset(), SortOrder.getDefault()) / 2;
-	        	}
-	        	int midEndIndex, midStartIndex;
-	            int index = Collections.binarySearch(guidePosts.getGuidePosts(), r.getStartKey(), Bytes.BYTES_COMPARATOR);
-	            if (index < 0) {
-	                midEndIndex = midStartIndex = -(index + 1);
-	            } else {
-	                // For an exact match, we want to get rid of the exact match guidepost,
-	                // since it's replaced by the region boundary.
-	                midEndIndex = index;
-	                midStartIndex = index + 1;
-	            }
+                Cell byteSizeCell = result.getColumnLatestCell(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
+                        PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH_BYTES);
+                int index = Collections.binarySearch(guidePostsRegionInfo.getGuidePosts(), r.getStartKey(),
+                        Bytes.BYTES_COMPARATOR);
+                int size = guidePostsRegionInfo.getGuidePosts().size();
+                int midEndIndex, midStartIndex;
+                if (index < 0) {
+                    midEndIndex = midStartIndex = -(index + 1);
+                } else {
+                    // For an exact match, we want to get rid of the exact match guidepost,
+                    // since it's replaced by the region boundary.
+                    midEndIndex = index;
+                    midStartIndex = index + 1;
+                }
+                double per = (double)(midEndIndex) / size;
+                long leftRowCount = 0;
+                long rightRowCount = 0;
+                long leftByteCount = 0;
+                long rightByteCount = 0;
+                if (rowCountCell != null) {
+                    rowCount = PLong.INSTANCE.getCodec().decodeLong(rowCountCell.getValueArray(),
+                            rowCountCell.getValueOffset(), SortOrder.getDefault());
+                    leftRowCount = (long)(per * rowCount);
+                    rightRowCount = (long)((1 - per) * rowCount);
+                }
+                if (byteSizeCell != null) {
+                    byteSize = PLong.INSTANCE.getCodec().decodeLong(byteSizeCell.getValueArray(),
+                            byteSizeCell.getValueOffset(), SortOrder.getDefault());
+                    leftByteCount = (long)(per * byteSize);
+                    rightByteCount = (long)((1 - per) * byteSize);
+                }
 	            if (midEndIndex > 0) {
-	                GuidePostsInfo lguidePosts = new GuidePostsInfo(byteSize, guidePosts.getGuidePosts().subList(0, midEndIndex));
-	                tracker.clear();
-	                tracker.addGuidePost(cfKey, lguidePosts, byteSize, cell.getTimestamp());
+	                GuidePostsInfo lguidePosts = new GuidePostsInfo(leftByteCount, guidePostsRegionInfo
+                            .getGuidePosts().subList(0, midEndIndex), leftRowCount);
+                    tracker.clear();
+	                tracker.addGuidePost(cfKey, lguidePosts, leftByteCount, cell.getTimestamp());
 	                addStats(l.getRegionName(), tracker, cfKey, mutations);
 	            }
-	            if (midStartIndex < guidePosts.getGuidePosts().size()) {
-	                GuidePostsInfo rguidePosts = new GuidePostsInfo(byteSize, guidePosts.getGuidePosts().subList(midStartIndex, guidePosts.getGuidePosts().size()));
+	            if (midStartIndex < size) {
+	                GuidePostsInfo rguidePosts = new GuidePostsInfo(rightByteCount, guidePostsRegionInfo
+                            .getGuidePosts().subList(midStartIndex, size),
+                            rightRowCount);
 	                tracker.clear();
-	                tracker.addGuidePost(cfKey, rguidePosts, byteSize, cell.getTimestamp());
+	                tracker.addGuidePost(cfKey, rguidePosts, rightByteCount, cell.getTimestamp());
 	                addStats(r.getRegionName(), tracker, cfKey, mutations);
 	            }
         	}
@@ -153,21 +174,18 @@ public class StatisticsWriter implements Closeable {
     }
     
     /**
-     * Update a list of statistics for a given region.  If the ANALYZE <tablename> query is issued
+     * Update a list of statistics for a given region.  If the UPDATE STATISTICS <tablename> query is issued
      * then we use Upsert queries to update the table
      * If the region gets splitted or the major compaction happens we update using HTable.put()
      * @param tracker - the statistics tracker
      * @param cfKey -  the family for which the stats is getting collected.
      * @param mutations - list of mutations that collects all the mutations to commit in a batch
-     * @param tablekey - The table name
-     * @param schemaName - the schema name associated with the table          
-     * @param region name -  the region of the table for which the stats are collected
-     * @param split - if the updation is caused due to a split
      * @throws IOException
      *             if we fail to do any of the puts. Any single failure will prevent any future attempts for the remaining list of stats to
      *             update
      */
-    public void addStats(byte[] regionName, StatisticsCollector tracker, ImmutableBytesPtr cfKey, List<Mutation> mutations) throws IOException {
+    public void addStats(byte[] regionName, StatisticsCollector tracker, ImmutableBytesPtr cfKey,
+            List<Mutation> mutations) throws IOException {
         if (tracker == null) { return; }
         boolean useMaxTimeStamp = clientTimeStamp == StatisticsCollector.NO_TIMESTAMP;
         long timeStamp = clientTimeStamp;
@@ -180,15 +198,18 @@ public class StatisticsWriter implements Closeable {
         GuidePostsInfo gp = tracker.getGuidePosts(cfKey);
         if (gp != null) {
             put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_COUNT_BYTES,
-                    timeStamp, PDataType.LONG.toBytes((gp.getGuidePosts().size())));
-            put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_BYTES,
-                    timeStamp, PDataType.VARBINARY.toBytes(gp.toBytes()));
+                    timeStamp, PLong.INSTANCE.toBytes((gp.getGuidePosts().size())));
+            put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_BYTES, timeStamp,
+                    PVarbinary.INSTANCE.toBytes(gp.serializeGuidePostsInfo()));
             put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH_BYTES,
-                    timeStamp, PDataType.LONG.toBytes(gp.getByteCount()));
+                    timeStamp, PLong.INSTANCE.toBytes(gp.getByteCount()));
+            // Write as long_array
+            put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_ROW_COUNT_BYTES,
+                    timeStamp, PLong.INSTANCE.toBytes(gp.getRowCount()));
         }
         // Add our empty column value so queries behave correctly
-        put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES,
-                timeStamp, ByteUtil.EMPTY_BYTE_ARRAY);
+        put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES, timeStamp,
+                ByteUtil.EMPTY_BYTE_ARRAY);
         mutations.add(put);
     }
 
@@ -225,8 +246,9 @@ public class StatisticsWriter implements Closeable {
         long currentTime = TimeKeeper.SYSTEM.getCurrentTime();
         byte[] prefix = tableName;
         Put put = new Put(prefix);
-        put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.LAST_STATS_UPDATE_TIME_BYTES, timeStamp,
-                PDataType.DATE.toBytes(new Date(currentTime)));
+        put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
+            PhoenixDatabaseMetaData.LAST_STATS_UPDATE_TIME_BYTES, timeStamp,
+            PDate.INSTANCE.toBytes(new Date(currentTime)));
         return put;
     }
 

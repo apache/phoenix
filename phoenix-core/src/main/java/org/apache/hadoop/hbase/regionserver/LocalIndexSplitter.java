@@ -25,23 +25,21 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.catalog.MetaEditor;
+import org.apache.hadoop.hbase.catalog.MetaReader;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.regionserver.HRegion;
-import org.apache.hadoop.hbase.regionserver.HRegionServer;
-import org.apache.hadoop.hbase.regionserver.RegionServerServices;
-import org.apache.hadoop.hbase.regionserver.IndexSplitTransaction;
 import org.apache.hadoop.hbase.util.PairOfSameType;
+import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.parse.AlterIndexStatement;
 import org.apache.phoenix.parse.ParseNodeFactory;
-import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.schema.MetaDataClient;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
@@ -55,27 +53,46 @@ public class LocalIndexSplitter extends BaseRegionObserver {
 
     private static final Log LOG = LogFactory.getLog(LocalIndexSplitter.class);
 
-    private IndexSplitTransaction st = null;
+    private SplitTransaction st = null;
     private PairOfSameType<HRegion> daughterRegions = null;
     private static final ParseNodeFactory FACTORY = new ParseNodeFactory();
+    private static final int SPLIT_TXN_MINIMUM_SUPPORTED_VERSION = VersionUtil
+            .encodeVersion("0.98.9");
 
     @Override
     public void preSplitBeforePONR(ObserverContext<RegionCoprocessorEnvironment> ctx,
             byte[] splitKey, List<Mutation> metaEntries) throws IOException {
         RegionCoprocessorEnvironment environment = ctx.getEnvironment();
         HTableDescriptor tableDesc = ctx.getEnvironment().getRegion().getTableDesc();
-        if (SchemaUtil.isMetaTable(tableDesc.getName())
-                || SchemaUtil.isSequenceTable(tableDesc.getName())) {
+        if (SchemaUtil.isSystemTable(tableDesc.getName())) {
             return;
         }
         RegionServerServices rss = ctx.getEnvironment().getRegionServerServices();
         if (tableDesc.getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES) == null
-                || !Boolean.TRUE.equals(PDataType.BOOLEAN.toObject(tableDesc
+                || !Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(tableDesc
                         .getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES)))) {
+            TableName indexTable =
+                    TableName.valueOf(MetaDataUtil.getLocalIndexPhysicalName(tableDesc.getName()));
+            if (!MetaReader.tableExists(rss.getCatalogTracker(), indexTable)) return;
+
             HRegion indexRegion = IndexUtil.getIndexRegion(environment);
-            if (indexRegion == null) return;
+            if (indexRegion == null) {
+                LOG.warn("Index region corresponindg to data region " + environment.getRegion()
+                        + " not in the same server. So skipping the split.");
+                ctx.bypass();
+                return;
+            }
             try {
-                st = new IndexSplitTransaction(indexRegion, splitKey);
+                int encodedVersion = VersionUtil.encodeVersion(environment.getHBaseVersion());
+                if(encodedVersion >= SPLIT_TXN_MINIMUM_SUPPORTED_VERSION) {
+                    st = new SplitTransaction(indexRegion, splitKey);
+                    st.useZKForAssignment =
+                            environment.getConfiguration().getBoolean("hbase.assignment.usezk",
+                                true);
+                } else {
+                    st = new IndexSplitTransaction(indexRegion, splitKey);
+                }
+
                 if (!st.prepare()) {
                     LOG.error("Prepare for the table " + indexRegion.getTableDesc().getNameAsString()
                         + " failed. So returning null. ");
@@ -102,6 +119,7 @@ public class LocalIndexSplitter extends BaseRegionObserver {
                 metaEntries.add(putB);
             } catch (Exception e) {
                 ctx.bypass();
+                LOG.warn("index region splitting failed with the exception ", e);
                 if (st != null){
                     st.rollback(rss, rss);
                     st = null;
@@ -127,7 +145,7 @@ public class LocalIndexSplitter extends BaseRegionObserver {
             for (PTable index : indexes) {
                 if (index.getIndexType() == IndexType.LOCAL) {
                     AlterIndexStatement indexStatement = FACTORY.alterIndex(FACTORY.namedTable(null,
-                        TableName.create(index.getSchemaName().getString(), index.getTableName().getString())),
+                        org.apache.phoenix.parse.TableName.create(index.getSchemaName().getString(), index.getTableName().getString())),
                         dataTable.getTableName().getString(), false, PIndexState.INACTIVE);
                     client.alterIndex(indexStatement);
                 }
@@ -161,8 +179,7 @@ public class LocalIndexSplitter extends BaseRegionObserver {
             }
         } catch (Exception e) {
             if (st != null) {
-                LOG.error("Error while rolling back the split failure for index region "
-                    + st.getParent(), e);
+                LOG.error("Error while rolling back the split failure for index region", e);
             }
             rs.abort("Abort; we got an error during rollback of index");
         }

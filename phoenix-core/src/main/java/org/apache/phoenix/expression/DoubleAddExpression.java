@@ -20,9 +20,9 @@ package org.apache.phoenix.expression;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
-import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDouble;
 
 public class DoubleAddExpression extends AddExpression {
 
@@ -62,7 +62,12 @@ public class DoubleAddExpression extends AddExpression {
 
     @Override
     public PDataType getDataType() {
-        return PDataType.DOUBLE;
+        return PDouble.INSTANCE;
+    }
+
+    @Override
+    public ArithmeticExpression clone(List<Expression> children) {
+        return new DoubleAddExpression(children);
     }
 
 }

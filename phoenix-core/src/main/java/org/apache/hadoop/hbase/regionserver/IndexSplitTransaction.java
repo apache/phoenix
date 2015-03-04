@@ -89,7 +89,7 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
  * one thread only.
  */
 @InterfaceAudience.Private
-public class IndexSplitTransaction {
+public class IndexSplitTransaction extends SplitTransaction {
   private static final Log LOG = LogFactory.getLog(IndexSplitTransaction.class);
 
   /*
@@ -155,6 +155,7 @@ public class IndexSplitTransaction {
    * @param splitrow Row to split around
    */
   public IndexSplitTransaction(final HRegion r, final byte [] splitrow) {
+    super(r , splitrow);
     this.parent = r;
     this.splitrow = splitrow;
   }
@@ -783,8 +784,7 @@ public class IndexSplitTransaction {
             boolean top, HRegionFileSystem fs) throws IOException {
         f.closeReader(true);
         Path splitDir =
-                new Path(new Path(new Path(fs.getRegionDir(), HRegionFileSystem.REGION_SPLITS_DIR),
-                        hri.getEncodedName()), familyName);
+                new Path(fs.getSplitsDir(hri), familyName);
         // A reference to the bottom half of the hsf store file.
         Reference r =
                 top ? Reference.createTopReference(splitRow) : Reference

@@ -18,6 +18,7 @@
 package org.apache.phoenix.exception;
 
 import java.sql.SQLException;
+import java.sql.SQLTimeoutException;
 import java.util.Map;
 
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
@@ -28,7 +29,6 @@ import org.apache.phoenix.schema.ColumnAlreadyExistsException;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ConcurrentTableMutationException;
-import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.ReadOnlyTableException;
 import org.apache.phoenix.schema.SequenceAlreadyExistsException;
 import org.apache.phoenix.schema.SequenceNotFoundException;
@@ -36,6 +36,7 @@ import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TypeMismatchException;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.MetaDataUtil;
 
 import com.google.common.collect.Maps;
@@ -149,6 +150,13 @@ public enum SQLExceptionCode {
      READ_ONLY_CONNECTION(518,"25502","Mutations are not permitted for a read-only connection."),
  
      VARBINARY_ARRAY_NOT_SUPPORTED(519, "42896", "VARBINARY ARRAY is not supported"),
+    
+     /**
+      *  Expression Index exceptions.
+      */
+     AGGREGATE_EXPRESSION_NOT_ALLOWED_IN_INDEX(520, "42897", "Aggreagaate expression not allowed in an index"),
+     NON_DETERMINISTIC_EXPRESSION_NOT_ALLOWED_IN_INDEX(521, "42898", "Non-deterministic expression not allowed in an index"),
+     STATELESS_EXPRESSION_NOT_ALLOWED_IN_INDEX(522, "42899", "Stateless expression not allowed in an index"),
 
      /** 
      * HBase and Phoenix specific implementation defined sub-classes.
@@ -204,8 +212,8 @@ public enum SQLExceptionCode {
     // Table properties exception.
     INVALID_BUCKET_NUM(1021, "42Y80", "Salt bucket numbers should be with 1 and 256."),
     NO_SPLITS_ON_SALTED_TABLE(1022, "42Y81", "Should not specify split points on salted table with default row key order."),
-    SALT_ONLY_ON_CREATE_TABLE(1024, "42Y83", "Salt bucket number may only be specified when creating a table."),
-    SET_UNSUPPORTED_PROP_ON_ALTER_TABLE(1025, "42Y84", "Unsupported property set in ALTER TABLE command."),
+    SALT_ONLY_ON_CREATE_TABLE(1024, "42Y82", "Salt bucket number may only be specified when creating a table."),
+    SET_UNSUPPORTED_PROP_ON_ALTER_TABLE(1025, "42Y83", "Unsupported property set in ALTER TABLE command."),
     CANNOT_ADD_NOT_NULLABLE_COLUMN(1038, "42Y84", "Only nullable columns may be added for a pre-existing table."),
     NO_MUTABLE_INDEXES(1026, "42Y85", "Mutable secondary indexes are only supported for HBase version " + MetaDataUtil.decodeHBaseVersionAsString(PhoenixDatabaseMetaData.MUTABLE_SI_VERSION_THRESHOLD) + " and above."),
     INVALID_FILTER_ON_IMMUTABLE_ROWS(1027, "42Y86", "All columns referenced in a WHERE clause must be available in every index for a table with immutable rows."),
@@ -222,8 +230,17 @@ public enum SQLExceptionCode {
     VIEW_WHERE_IS_CONSTANT(1045, "43A02", "WHERE clause in VIEW should not evaluate to a constant."),
     CANNOT_UPDATE_VIEW_COLUMN(1046, "43A03", "Column updated in VIEW may not differ from value specified in WHERE clause."),
     TOO_MANY_INDEXES(1047, "43A04", "Too many indexes have already been created on the physical table."),
-    NO_LOCAL_INDEX_ON_TABLE_WITH_IMMUTABLE_ROWS(1048,"43A04","Local indexes aren't allowed on tables with immutable rows."),
-        
+    NO_LOCAL_INDEX_ON_TABLE_WITH_IMMUTABLE_ROWS(1048,"43A05","Local indexes aren't allowed on tables with immutable rows."),
+    COLUMN_FAMILY_NOT_ALLOWED_TABLE_PROPERTY(1049, "43A06", "Column family not allowed for table properties."),
+    COLUMN_FAMILY_NOT_ALLOWED_FOR_TTL(1050, "43A07", "Setting TTL for a column family not supported. You can only have TTL for the entire table."),
+    CANNOT_ALTER_PROPERTY(1051, "43A08", "Property can be specified or changed only when creating a table"),
+    CANNOT_SET_PROPERTY_FOR_COLUMN_NOT_ADDED(1052, "43A09", "Property cannot be specified for a column family that is not being added or modified"),
+    CANNOT_SET_TABLE_PROPERTY_ADD_COLUMN(1053, "43A10", "Table level property cannot be set when adding a column"),
+    
+    NO_LOCAL_INDEXES(1054, "43A11", "Local secondary indexes are not supported for HBase versions " + 
+        MetaDataUtil.decodeHBaseVersionAsString(PhoenixDatabaseMetaData.MIN_LOCAL_SI_VERSION_DISALLOW) + " through " + MetaDataUtil.decodeHBaseVersionAsString(PhoenixDatabaseMetaData.MAX_LOCAL_SI_VERSION_DISALLOW) + " inclusive."),
+    UNALLOWED_LOCAL_INDEXES(1055, "43A12", "Local secondary indexes are configured to not be allowed."),
+
     /** Sequence related */
     SEQUENCE_ALREADY_EXIST(1200, "42Z00", "Sequence already exists.", new Factory() {
         @Override
@@ -265,18 +282,18 @@ public enum SQLExceptionCode {
     RESULTSET_CLOSED(1101, "XCL01", "ResultSet is closed."),
     GET_TABLE_REGIONS_FAIL(1102, "XCL02", "Cannot get all table regions"),
     EXECUTE_QUERY_NOT_APPLICABLE(1103, "XCL03", "executeQuery may not be used."),
-    EXECUTE_UPDATE_NOT_APPLICABLE(1104, "XCL03", "executeUpdate may not be used."),
-    SPLIT_POINT_NOT_CONSTANT(1105, "XCL04", "Split points must be constants."),
-    BATCH_EXCEPTION(1106, "XCL05", "Exception while executing batch."),
-    EXECUTE_UPDATE_WITH_NON_EMPTY_BATCH(1107, "XCL06", "An executeUpdate is prohibited when the batch is not empty. Use clearBatch to empty the batch first."),
-    STALE_REGION_BOUNDARY_CACHE(1108, "XCL07", "Cache of region boundaries are out of date.", new Factory() {
+    EXECUTE_UPDATE_NOT_APPLICABLE(1104, "XCL04", "executeUpdate may not be used."),
+    SPLIT_POINT_NOT_CONSTANT(1105, "XCL05", "Split points must be constants."),
+    BATCH_EXCEPTION(1106, "XCL06", "Exception while executing batch."),
+    EXECUTE_UPDATE_WITH_NON_EMPTY_BATCH(1107, "XCL07", "An executeUpdate is prohibited when the batch is not empty. Use clearBatch to empty the batch first."),
+    STALE_REGION_BOUNDARY_CACHE(1108, "XCL08", "Cache of region boundaries are out of date.", new Factory() {
         @Override
         public SQLException newException(SQLExceptionInfo info) {
             return new StaleRegionBoundaryCacheException(info.getSchemaName(), info.getTableName());
         }
     }),
-    CANNOT_SPLIT_LOCAL_INDEX(1109,"XCL08", "Local index may not be pre-split"),
-    CANNOT_SALT_LOCAL_INDEX(1110,"XCL09", "Local index may not be salted"),
+    CANNOT_SPLIT_LOCAL_INDEX(1109,"XCL09", "Local index may not be pre-split"),
+    CANNOT_SALT_LOCAL_INDEX(1110,"XCL10", "Local index may not be salted"),
     
     /**
      * Implementation defined class. Phoenix internal error. (errorcode 20, sqlstate INT).
@@ -290,7 +307,13 @@ public enum SQLExceptionCode {
     OUTDATED_JARS(2007, "INT09", "Outdated jars."),
     INDEX_METADATA_NOT_FOUND(2008, "INT10", "Unable to find cached index metadata. "),
     UNKNOWN_ERROR_CODE(2009, "INT11", "Unknown error code"),
-    OPERATION_TIMED_OUT(6000, "TIM01", "Operation timed out")
+    OPERATION_TIMED_OUT(6000, "TIM01", "Operation timed out", new Factory() {
+        @Override
+        public SQLException newException(SQLExceptionInfo info) {
+            return new SQLTimeoutException(OPERATION_TIMED_OUT.getMessage(),
+                    OPERATION_TIMED_OUT.getSQLState(), OPERATION_TIMED_OUT.getErrorCode());
+        }
+    })
     ;
 
     private final int errorCode;

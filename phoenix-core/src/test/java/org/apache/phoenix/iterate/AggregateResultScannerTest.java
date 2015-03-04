@@ -45,7 +45,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.query.KeyRange;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.PLongColumn;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.SortOrder;
@@ -64,17 +64,17 @@ public class AggregateResultScannerTest extends BaseConnectionlessQueryTest {
     @Test
     public void testAggregatingMergeSort() throws Throwable {
         Tuple[] results1 = new Tuple[] {
-                new SingleKeyValueTuple(new KeyValue(A, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, PDataType.LONG.toBytes(1L))),
+                new SingleKeyValueTuple(new KeyValue(A, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, PLong.INSTANCE.toBytes(1L))),
             };
         Tuple[] results2 = new Tuple[] {
-                new SingleKeyValueTuple(new KeyValue(B, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, PDataType.LONG.toBytes(1L)))
+                new SingleKeyValueTuple(new KeyValue(B, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, PLong.INSTANCE.toBytes(1L)))
             };
         Tuple[] results3 = new Tuple[] {
-                new SingleKeyValueTuple(new KeyValue(A, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, PDataType.LONG.toBytes(1L))),
-                new SingleKeyValueTuple(new KeyValue(B, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, PDataType.LONG.toBytes(1L))),
+                new SingleKeyValueTuple(new KeyValue(A, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, PLong.INSTANCE.toBytes(1L))),
+                new SingleKeyValueTuple(new KeyValue(B, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, PLong.INSTANCE.toBytes(1L))),
             };
         Tuple[] results4 = new Tuple[] {
-                new SingleKeyValueTuple(new KeyValue(A, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, PDataType.LONG.toBytes(1L))),
+                new SingleKeyValueTuple(new KeyValue(A, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, PLong.INSTANCE.toBytes(1L))),
             };
         final List<PeekingResultIterator>results = new ArrayList<PeekingResultIterator>(Arrays.asList(new PeekingResultIterator[] {
                 new MaterializedResultIterator(Arrays.asList(results1)), 
@@ -83,8 +83,8 @@ public class AggregateResultScannerTest extends BaseConnectionlessQueryTest {
                 new MaterializedResultIterator(Arrays.asList(results4))}));
 
         Tuple[] expectedResults = new Tuple[] {
-                new SingleKeyValueTuple(new KeyValue(A, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, PDataType.LONG.toBytes(3L))),
-                new SingleKeyValueTuple(new KeyValue(B, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, PDataType.LONG.toBytes(2L))),
+                new SingleKeyValueTuple(new KeyValue(A, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, PLong.INSTANCE.toBytes(3L))),
+                new SingleKeyValueTuple(new KeyValue(B, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, PLong.INSTANCE.toBytes(2L))),
             };
 
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
@@ -123,6 +123,11 @@ public class AggregateResultScannerTest extends BaseConnectionlessQueryTest {
             @Override
             public boolean isViewReferenced() {
                 return false;
+            }
+            
+            @Override
+            public String getExpressionStr() {
+                return null;
             }
         })), null);
         aggregationManager.setAggregators(new ClientAggregators(Collections.<SingleAggregateFunction>singletonList(func), 1));

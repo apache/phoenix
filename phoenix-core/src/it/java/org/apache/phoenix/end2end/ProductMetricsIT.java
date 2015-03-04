@@ -31,8 +31,6 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Types;
-import java.text.Format;
-import java.text.ParseException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
@@ -43,7 +41,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -57,7 +55,6 @@ import com.google.common.collect.Ordering;
 
 
 public class ProductMetricsIT extends BaseClientManagedTimeIT {
-    private static Format format = DateUtil.getDateParser(DateUtil.DEFAULT_DATE_FORMAT);
     private static final String PRODUCT_METRICS_NAME = "PRODUCT_METRICS";
     private static final String PRODUCT_METRICS_SCHEMA_NAME = "";
     private static final String DS1 = "1970-01-01 00:58:00";
@@ -82,17 +79,13 @@ public class ProductMetricsIT extends BaseClientManagedTimeIT {
     
     private static byte[][] getSplits(String tenantId) {
         return new byte[][] { 
-            ByteUtil.concat(Bytes.toBytes(tenantId), PDataType.DATE.toBytes(D3)),
-            ByteUtil.concat(Bytes.toBytes(tenantId), PDataType.DATE.toBytes(D5)),
+            ByteUtil.concat(Bytes.toBytes(tenantId), PDate.INSTANCE.toBytes(D3)),
+            ByteUtil.concat(Bytes.toBytes(tenantId), PDate.INSTANCE.toBytes(D5)),
             };
     }
     
     private static Date toDate(String dateString) {
-        try {
-            return (Date)format.parseObject(dateString);
-        } catch (ParseException e) {
-            throw new RuntimeException(e);
-        }
+        return DateUtil.parseDate(dateString);
     }
     
     private static void initTable(byte[][] splits, long ts) throws Exception {

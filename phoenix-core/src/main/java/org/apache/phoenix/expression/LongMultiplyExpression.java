@@ -20,9 +20,9 @@ package org.apache.phoenix.expression;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
-import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PLong;
 
 
 public class LongMultiplyExpression extends MultiplyExpression {
@@ -57,7 +57,12 @@ public class LongMultiplyExpression extends MultiplyExpression {
 
     @Override
     public final PDataType getDataType() {
-        return PDataType.LONG;
+        return PLong.INSTANCE;
+    }
+
+    @Override
+    public ArithmeticExpression clone(List<Expression> children) {
+        return new LongMultiplyExpression(children);
     }
 
 }

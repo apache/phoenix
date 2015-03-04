@@ -46,6 +46,7 @@ import org.apache.phoenix.expression.aggregator.ClientAggregators;
 import org.apache.phoenix.expression.aggregator.ServerAggregators;
 import org.apache.phoenix.expression.function.ArrayIndexFunction;
 import org.apache.phoenix.expression.function.SingleAggregateFunction;
+import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.expression.visitor.KeyValueExpressionVisitor;
 import org.apache.phoenix.expression.visitor.SingleAggregateFunctionVisitor;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -61,19 +62,20 @@ import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.parse.TableWildcardParseNode;
 import org.apache.phoenix.parse.WildcardParseNode;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ArgumentTypeMismatchException;
+import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.KeyValueSchema;
 import org.apache.phoenix.schema.KeyValueSchema.KeyValueSchemaBuilder;
-import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.LocalIndexDataColumnRef;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
-import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableKey;
@@ -82,6 +84,7 @@ import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -142,14 +145,21 @@ public class ProjectionCompiler {
             }
             ColumnRef ref = new ColumnRef(tableRef,i);
             String colName = ref.getColumn().getName().getString();
+            String tableAlias = tableRef.getTableAlias();
             if (resolveColumn) {
-                if (tableRef.getTableAlias() != null) {
-                    ref = resolver.resolveColumn(null, tableRef.getTableAlias(), colName);
-                    colName = SchemaUtil.getColumnName(tableRef.getTableAlias(), colName);
-                } else {
-                    String schemaName = table.getSchemaName().getString();
-                    ref = resolver.resolveColumn(schemaName.length() == 0 ? null : schemaName, table.getTableName().getString(), colName);
-                    colName = SchemaUtil.getColumnName(table.getName().getString(), colName);
+                try {
+                    if (tableAlias != null) {
+                        ref = resolver.resolveColumn(null, tableAlias, colName);
+                    } else {
+                        String schemaName = table.getSchemaName().getString();
+                        ref = resolver.resolveColumn(schemaName.length() == 0 ? null : schemaName, table.getTableName().getString(), colName);
+                    }
+                } catch (AmbiguousColumnException e) {
+                    if (column.getFamilyName() != null) {
+                        ref = resolver.resolveColumn(tableAlias != null ? tableAlias : table.getTableName().getString(), column.getFamilyName().getString(), colName);
+                    } else {
+                        throw e;
+                    }
                 }
             }
             Expression expression = ref.newColumnExpression();
@@ -160,7 +170,7 @@ public class ProjectionCompiler {
             }
             projectedExpressions.add(expression);
             boolean isCaseSensitive = !SchemaUtil.normalizeIdentifier(colName).equals(colName);
-            projectedColumns.add(new ExpressionProjector(colName, table.getName().getString(), expression, isCaseSensitive));
+            projectedColumns.add(new ExpressionProjector(colName, tableRef.getTableAlias() == null ? table.getName().getString() : tableRef.getTableAlias(), expression, isCaseSensitive));
         }
     }
     
@@ -171,24 +181,35 @@ public class ProjectionCompiler {
         PhoenixConnection conn = context.getConnection();
         PName tenantId = conn.getTenantId();
         String tableName = index.getParentName().getString();
-        PTable table = conn.getMetaDataCache().getTable(new PTableKey(tenantId, tableName));
-        int tableOffset = table.getBucketNum() == null ? 0 : 1;
-        int minTablePKOffset = getMinPKOffset(table, tenantId);
+        PTable dataTable = null;
+        try {
+        	dataTable = conn.getMetaDataCache().getTable(new PTableKey(tenantId, tableName));
+        } catch (TableNotFoundException e) {
+            if (tenantId != null) { 
+            	// Check with null tenantId 
+            	dataTable = conn.getMetaDataCache().getTable(new PTableKey(null, tableName));
+            }
+            else {
+            	throw e;
+            }
+        }
+        int tableOffset = dataTable.getBucketNum() == null ? 0 : 1;
+        int minTablePKOffset = getMinPKOffset(dataTable, tenantId);
         int minIndexPKOffset = getMinPKOffset(index, tenantId);
         if (index.getIndexType() != IndexType.LOCAL) {
-            if (index.getColumns().size()-minIndexPKOffset != table.getColumns().size()-minTablePKOffset) {
+            if (index.getColumns().size()-minIndexPKOffset != dataTable.getColumns().size()-minTablePKOffset) {
                 // We'll end up not using this by the optimizer, so just throw
                 throw new ColumnNotFoundException(WildcardParseNode.INSTANCE.toString());
             }
         }
-        for (int i = tableOffset, j = tableOffset; i < table.getColumns().size(); i++) {
-            PColumn column = table.getColumns().get(i);
+        for (int i = tableOffset, j = tableOffset; i < dataTable.getColumns().size(); i++) {
+            PColumn column = dataTable.getColumns().get(i);
             // Skip tenant ID column (which may not be the first column, but is the first PK column)
             if (SchemaUtil.isPKColumn(column) && j++ < minTablePKOffset) {
                 tableOffset++;
                 continue;
             }
-            PColumn tableColumn = table.getColumns().get(i);
+            PColumn tableColumn = dataTable.getColumns().get(i);
             String indexColName = IndexUtil.getIndexColumnName(tableColumn);
             PColumn indexColumn = null;
             ColumnRef ref = null;
@@ -208,14 +229,21 @@ public class ProjectionCompiler {
                 }
             }
             String colName = tableColumn.getName().getString();
+            String tableAlias = tableRef.getTableAlias();
             if (resolveColumn) {
-                if (tableRef.getTableAlias() != null) {
-                    ref = resolver.resolveColumn(null, tableRef.getTableAlias(), indexColName);
-                    colName = SchemaUtil.getColumnName(tableRef.getTableAlias(), colName);
-                } else {
-                    String schemaName = index.getSchemaName().getString();
-                    ref = resolver.resolveColumn(schemaName.length() == 0 ? null : schemaName, index.getTableName().getString(), indexColName);
-                    colName = SchemaUtil.getColumnName(table.getName().getString(), colName);
+                try {
+                    if (tableAlias != null) {
+                        ref = resolver.resolveColumn(null, tableAlias, indexColName);
+                    } else {
+                        String schemaName = index.getSchemaName().getString();
+                        ref = resolver.resolveColumn(schemaName.length() == 0 ? null : schemaName, index.getTableName().getString(), indexColName);
+                    }
+                } catch (AmbiguousColumnException e) {
+                    if (indexColumn.getFamilyName() != null) {
+                        ref = resolver.resolveColumn(tableAlias != null ? tableAlias : index.getTableName().getString(), indexColumn.getFamilyName().getString(), indexColName);
+                    } else {
+                        throw e;
+                    }
                 }
             }
             Expression expression = ref.newColumnExpression();
@@ -224,26 +252,29 @@ public class ProjectionCompiler {
             // appear as a column in an index
             projectedExpressions.add(expression);
             boolean isCaseSensitive = !SchemaUtil.normalizeIdentifier(colName).equals(colName);
-            ExpressionProjector projector = new ExpressionProjector(colName, table.getName().getString(), expression, isCaseSensitive);
+            ExpressionProjector projector = new ExpressionProjector(colName, tableRef.getTableAlias() == null ? dataTable.getName().getString() : tableRef.getTableAlias(), expression, isCaseSensitive);
             projectedColumns.add(projector);
         }
     }
     
-    private static void projectTableColumnFamily(StatementContext context, String cfName, TableRef tableRef, List<Expression> projectedExpressions, List<ExpressionProjector> projectedColumns) throws SQLException {
+    private static void projectTableColumnFamily(StatementContext context, String cfName, TableRef tableRef, boolean resolveColumn, List<Expression> projectedExpressions, List<ExpressionProjector> projectedColumns) throws SQLException {
         PTable table = tableRef.getTable();
         PColumnFamily pfamily = table.getColumnFamily(cfName);
         for (PColumn column : pfamily.getColumns()) {
             ColumnRef ref = new ColumnRef(tableRef, column.getPosition());
+            if (resolveColumn) {
+                ref = context.getResolver().resolveColumn(table.getTableName().getString(), cfName, column.getName().getString());
+            }
             Expression expression = ref.newColumnExpression();
             projectedExpressions.add(expression);
             String colName = column.getName().toString();
             boolean isCaseSensitive = !SchemaUtil.normalizeIdentifier(colName).equals(colName);
-            projectedColumns.add(new ExpressionProjector(colName, table.getName()
-                    .getString(), expression, isCaseSensitive));
+            projectedColumns.add(new ExpressionProjector(colName, tableRef.getTableAlias() == null ? 
+                    table.getName().getString() : tableRef.getTableAlias(), expression, isCaseSensitive));
         }
     }
 
-    private static void projectIndexColumnFamily(StatementContext context, String cfName, TableRef tableRef, List<Expression> projectedExpressions, List<ExpressionProjector> projectedColumns) throws SQLException {
+    private static void projectIndexColumnFamily(StatementContext context, String cfName, TableRef tableRef, boolean resolveColumn, List<Expression> projectedExpressions, List<ExpressionProjector> projectedColumns) throws SQLException {
         PTable index = tableRef.getTable();
         PhoenixConnection conn = context.getConnection();
         String tableName = index.getParentName().getString();
@@ -268,12 +299,15 @@ public class ProjectionCompiler {
                     throw e;
                 }
             }
+            if (resolveColumn) {
+                ref = context.getResolver().resolveColumn(index.getTableName().getString(), indexColumn.getFamilyName() == null ? null : indexColumn.getFamilyName().getString(), indexColName);
+            }
             Expression expression = ref.newColumnExpression();
             projectedExpressions.add(expression);
             String colName = column.getName().toString();
             boolean isCaseSensitive = !SchemaUtil.normalizeIdentifier(colName).equals(colName);
             projectedColumns.add(new ExpressionProjector(colName, 
-                    table.getName().getString(), expression, isCaseSensitive));
+                    tableRef.getTableAlias() == null ? table.getName().getString() : tableRef.getTableAlias(), expression, isCaseSensitive));
         }
     }
     
@@ -313,6 +347,7 @@ public class ProjectionCompiler {
         ColumnResolver resolver = context.getResolver();
         TableRef tableRef = context.getCurrentTable();
         PTable table = tableRef.getTable();
+        boolean resolveColumn = !tableRef.equals(resolver.getTables().get(0));
         boolean isWildcard = false;
         Scan scan = context.getScan();
         int index = 0;
@@ -327,9 +362,9 @@ public class ProjectionCompiler {
                 }
                 isWildcard = true;
                 if (tableRef.getTable().getType() == PTableType.INDEX && ((WildcardParseNode)node).isRewrite()) {
-                	projectAllIndexColumns(context, tableRef, false, projectedExpressions, projectedColumns, targetColumns);
+                	projectAllIndexColumns(context, tableRef, resolveColumn, projectedExpressions, projectedColumns, targetColumns);
                 } else {
-                    projectAllTableColumns(context, tableRef, false, projectedExpressions, projectedColumns, targetColumns);
+                    projectAllTableColumns(context, tableRef, resolveColumn, projectedExpressions, projectedColumns, targetColumns);
                 }
             } else if (node instanceof TableWildcardParseNode) {
                 TableName tName = ((TableWildcardParseNode) node).getTableName();
@@ -353,9 +388,9 @@ public class ProjectionCompiler {
                 // columns are projected (which is currently true, but could change).
                 projectedFamilies.add(Bytes.toBytes(cfName));
                 if (tableRef.getTable().getType() == PTableType.INDEX && ((FamilyWildcardParseNode)node).isRewrite()) {
-                    projectIndexColumnFamily(context, cfName, tableRef, projectedExpressions, projectedColumns);
+                    projectIndexColumnFamily(context, cfName, tableRef, resolveColumn, projectedExpressions, projectedColumns);
                 } else {
-                    projectTableColumnFamily(context, cfName, tableRef, projectedExpressions, projectedColumns);
+                    projectTableColumnFamily(context, cfName, tableRef, resolveColumn, projectedExpressions, projectedColumns);
                 }
             } else {
                 Expression expression = node.accept(selectVisitor);
@@ -372,7 +407,7 @@ public class ProjectionCompiler {
                 String columnAlias = aliasedNode.getAlias() != null ? aliasedNode.getAlias() : SchemaUtil.normalizeIdentifier(aliasedNode.getNode().getAlias());
                 boolean isCaseSensitive = aliasedNode.getAlias() != null ? aliasedNode.isCaseSensitve() : (columnAlias != null ? SchemaUtil.isCaseSensitive(aliasedNode.getNode().getAlias()) : selectVisitor.isCaseSensitive);
                 String name = columnAlias == null ? expression.toString() : columnAlias;
-                projectedColumns.add(new ExpressionProjector(name, table.getName().getString(), expression, isCaseSensitive));
+                projectedColumns.add(new ExpressionProjector(name, tableRef.getTableAlias() == null ? table.getName().getString() : tableRef.getTableAlias(), expression, isCaseSensitive));
             }
             if(arrayKVFuncs.size() > 0 && arrayKVRefs.size() > 0) {
                 serailizeArrayIndexInformationAndSetInScan(context, arrayKVFuncs, arrayKVRefs);
@@ -464,6 +499,12 @@ public class ProjectionCompiler {
         @Override
         public PDataType getDataType() {
             return this.type;
+        }
+
+        @Override
+        public <T> T accept(ExpressionVisitor<T> visitor) {
+            // TODO Auto-generated method stub
+            return null;
         }
     }
     private static void serailizeArrayIndexInformationAndSetInScan(StatementContext context, List<Expression> arrayKVFuncs,

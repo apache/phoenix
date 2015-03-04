@@ -33,6 +33,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
+import java.sql.Date;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -40,16 +41,22 @@ import java.sql.Statement;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.ReadOnlyProps;
+import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 
 
 @RunWith(Parameterized.class)
@@ -62,6 +69,14 @@ public class GroupByIT extends BaseQueryIT {
     @Parameters(name="{0}")
     public static Collection<Object> data() {
         return QueryIT.data();
+    }
+    
+    @BeforeClass
+    @Shadower(classBeingShadowed = BaseQueryIT.class)
+    public static void doSetup() throws Exception {
+    	Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
+    	props.put(QueryServices.DEFAULT_KEEP_DELETED_CELLS_ATTRIB, "true");
+    	BaseQueryIT.doSetup(props);
     }
     
     @SuppressWarnings("unchecked")

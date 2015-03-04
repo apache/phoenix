@@ -49,8 +49,11 @@ import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PBoolean;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.PName;
+import org.apache.phoenix.schema.types.PSmallint;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SequenceKey;
@@ -159,7 +162,7 @@ public class MetaDataUtil {
         if (kvs != null) {
             for (Cell kv : kvs) { // list is not ordered, so search. TODO: we could potentially assume the position
                 if (Bytes.compareTo(kv.getQualifierArray(), kv.getQualifierOffset(), kv.getQualifierLength(), PhoenixDatabaseMetaData.TABLE_SEQ_NUM_BYTES, 0, PhoenixDatabaseMetaData.TABLE_SEQ_NUM_BYTES.length) == 0) {
-                    return PDataType.LONG.getCodec().decodeLong(kv.getValueArray(), kv.getValueOffset(), SortOrder.getDefault());
+                    return PLong.INSTANCE.getCodec().decodeLong(kv.getValueArray(), kv.getValueOffset(), SortOrder.getDefault());
                 }
             }
         }
@@ -251,7 +254,7 @@ public class MetaDataUtil {
     
     public static boolean isMultiTenant(Mutation m, KeyValueBuilder builder, ImmutableBytesWritable ptr) {
         if (getMutationValue(m, PhoenixDatabaseMetaData.MULTI_TENANT_BYTES, builder, ptr)) {
-            return Boolean.TRUE.equals(PDataType.BOOLEAN.toObject(ptr));
+            return Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(ptr));
         }
         return false;
     }
@@ -307,7 +310,7 @@ public class MetaDataUtil {
     }
 
     public static PDataType getViewIndexIdDataType() {
-        return PDataType.SMALLINT;
+        return PSmallint.INSTANCE;
     }
 
     public static String getViewIndexIdColumnName() {
@@ -326,7 +329,7 @@ public class MetaDataUtil {
         byte[] physicalIndexName = MetaDataUtil.getViewIndexPhysicalName(physicalTableName);
         try {
             HTableDescriptor desc = connection.getQueryServices().getTableDescriptor(physicalIndexName);
-            return desc != null && Boolean.TRUE.equals(PDataType.BOOLEAN.toObject(desc.getValue(IS_VIEW_INDEX_TABLE_PROP_BYTES)));
+            return desc != null && Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(desc.getValue(IS_VIEW_INDEX_TABLE_PROP_BYTES)));
         } catch (TableNotFoundException e) {
             return false;
         }
@@ -344,7 +347,7 @@ public class MetaDataUtil {
         byte[] physicalIndexName = MetaDataUtil.getLocalIndexPhysicalName(physicalTableName);
         try {
             HTableDescriptor desc = connection.getQueryServices().getTableDescriptor(physicalIndexName);
-            return desc != null && Boolean.TRUE.equals(PDataType.BOOLEAN.toObject(desc.getValue(IS_LOCAL_INDEX_TABLE_PROP_BYTES)));
+            return desc != null && Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(desc.getValue(IS_LOCAL_INDEX_TABLE_PROP_BYTES)));
         } catch (TableNotFoundException e) {
             return false;
         }

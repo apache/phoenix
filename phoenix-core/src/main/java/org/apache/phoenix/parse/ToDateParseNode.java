@@ -18,7 +18,6 @@
 package org.apache.phoenix.parse;
 
 import java.sql.SQLException;
-import java.text.Format;
 import java.util.List;
 
 import org.apache.phoenix.compile.StatementContext;
@@ -26,24 +25,24 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.function.FunctionExpression;
 import org.apache.phoenix.expression.function.ToDateFunction;
-import org.apache.phoenix.util.DateUtil;
 
 
 public class ToDateParseNode extends FunctionParseNode {
+
     public ToDateParseNode(String name, List<ParseNode> children, BuiltInFunctionInfo info) {
         super(name, children, info);
     }
 
     @Override
     public FunctionExpression create(List<Expression> children, StatementContext context) throws SQLException {
-        Format dateParser;
-        String dateFormat = (String)((LiteralExpression)children.get(1)).getValue();
+        String dateFormat = (String) ((LiteralExpression) children.get(1)).getValue();
+        String timeZoneId = (String) ((LiteralExpression) children.get(2)).getValue();
         if (dateFormat == null) {
             dateFormat = context.getDateFormat();
-            dateParser = context.getDateParser();
-        } else {
-            dateParser = DateUtil.getDateParser(dateFormat);
         }
-        return new ToDateFunction(children, dateFormat, dateParser);
+        if (timeZoneId == null) {
+            timeZoneId = context.getDateFormatTimeZone().getID();
+        }
+        return new ToDateFunction(children, dateFormat, timeZoneId);
     }
 }

@@ -20,6 +20,8 @@ package org.apache.phoenix.parse;
 
 import java.sql.SQLException;
 
+import org.apache.phoenix.compile.ColumnResolver;
+
 /**
  * 
  * Node representing the selection of all columns of a family (cf.*) in the SELECT clause of SQL
@@ -48,6 +50,34 @@ public class FamilyWildcardParseNode extends NamedParseNode {
 
     public boolean isRewrite() {
         return isRewrite;
+    }
+
+	@Override
+	public int hashCode() {
+		final int prime = 31;
+		int result = super.hashCode();
+		result = prime * result + (isRewrite ? 1231 : 1237);
+		return result;
+	}
+
+	@Override
+	public boolean equals(Object obj) {
+		if (this == obj)
+			return true;
+		if (!super.equals(obj))
+			return false;
+		if (getClass() != obj.getClass())
+			return false;
+		FamilyWildcardParseNode other = (FamilyWildcardParseNode) obj;
+		if (isRewrite != other.isRewrite)
+			return false;
+		return true;
+	}
+	
+    @Override
+    public void toSQL(ColumnResolver resolver, StringBuilder buf) {
+        toSQL(buf);
+        buf.append(".*");
     }
 }
 

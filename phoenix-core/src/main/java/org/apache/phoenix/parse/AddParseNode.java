@@ -31,7 +31,13 @@ import java.util.List;
  * @since 0.1
  */
 public class AddParseNode extends ArithmeticParseNode {
+    public static final String OPERATOR = "+";
 
+    @Override
+    public String getOperator() {
+        return OPERATOR;
+    }
+    
     AddParseNode(List<ParseNode> children) {
         super(children);
     }

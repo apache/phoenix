@@ -29,8 +29,10 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
 
 import org.apache.hadoop.hbase.HRegionInfo;
@@ -53,10 +55,12 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
+import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.hbase.index.IndexRegionSplitPolicy;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
-import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
@@ -75,12 +79,13 @@ import org.junit.Test;
 
 import com.google.common.collect.Maps;
 
-public class LocalIndexIT extends BaseIndexIT {
+public class LocalIndexIT extends BaseHBaseManagedTimeIT {
 
     private static CountDownLatch latch1 = new CountDownLatch(1);
     private static CountDownLatch latch2 = new CountDownLatch(1);
 
     @BeforeClass 
+    @Shadower(classBeingShadowed = BaseHBaseManagedTimeIT.class)
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
         // Drop the HBase table metadata for this test
@@ -97,7 +102,7 @@ public class LocalIndexIT extends BaseIndexIT {
                 "k3 INTEGER,\n" +
                 "v1 VARCHAR,\n" +
                 "CONSTRAINT pk PRIMARY KEY (t_id, k1, k2))\n"
-                        + (saltBuckets != null && splits == null ? (",salt_buckets=" + saltBuckets) : "" 
+                        + (saltBuckets != null && splits == null ? (" salt_buckets=" + saltBuckets) : ""
                         + (saltBuckets == null && splits != null ? (" split on " + splits) : ""));
         conn.createStatement().execute(ddl);
         conn.close();
@@ -105,59 +110,59 @@ public class LocalIndexIT extends BaseIndexIT {
     
     @Test
     public void testLocalIndexRoundTrip() throws Exception {
-        createBaseTable(DATA_TABLE_NAME, null, null);
+        createBaseTable(TestUtil.DEFAULT_DATA_TABLE_NAME, null, null);
         Connection conn1 = DriverManager.getConnection(getUrl());
-        conn1.createStatement().execute("CREATE LOCAL INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_NAME + "(v1)");
-        conn1.createStatement().executeQuery("SELECT * FROM " + DATA_TABLE_FULL_NAME).next();
-        PTable localIndex = conn1.unwrap(PhoenixConnection.class).getMetaDataCache().getTable(new PTableKey(null,INDEX_TABLE_NAME));
+        conn1.createStatement().execute("CREATE LOCAL INDEX " + TestUtil.DEFAULT_INDEX_TABLE_NAME + " ON " + TestUtil.DEFAULT_DATA_TABLE_NAME + "(v1)");
+        conn1.createStatement().executeQuery("SELECT * FROM " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME).next();
+        PTable localIndex = conn1.unwrap(PhoenixConnection.class).getMetaDataCache().getTable(new PTableKey(null,TestUtil.DEFAULT_INDEX_TABLE_NAME));
         assertEquals(IndexType.LOCAL, localIndex.getIndexType());
         assertNotNull(localIndex.getViewIndexId());
     }
     
     @Test
     public void testLocalIndexCreationWithSplitsShouldFail() throws Exception {
-        createBaseTable(DATA_TABLE_NAME, null, null);
+        createBaseTable(TestUtil.DEFAULT_DATA_TABLE_NAME, null, null);
         Connection conn1 = DriverManager.getConnection(getUrl());
         Connection conn2 = DriverManager.getConnection(getUrl());
         try {
-            conn1.createStatement().execute("CREATE LOCAL INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_NAME + "(v1)"+" split on (1,2,3)");
+            conn1.createStatement().execute("CREATE LOCAL INDEX " + TestUtil.DEFAULT_INDEX_TABLE_NAME + " ON " + TestUtil.DEFAULT_DATA_TABLE_NAME + "(v1)"+" split on (1,2,3)");
             fail("Local index cannot be pre-split");
         } catch (SQLException e) { }
         try {
-            conn2.createStatement().executeQuery("SELECT * FROM " + DATA_TABLE_FULL_NAME).next();
-            conn2.unwrap(PhoenixConnection.class).getMetaDataCache().getTable(new PTableKey(null,INDEX_TABLE_NAME));
+            conn2.createStatement().executeQuery("SELECT * FROM " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME).next();
+            conn2.unwrap(PhoenixConnection.class).getMetaDataCache().getTable(new PTableKey(null,TestUtil.DEFAULT_INDEX_TABLE_NAME));
             fail("Local index should not be created.");
         } catch (TableNotFoundException e) { }
     }
 
     @Test
     public void testLocalIndexCreationWithSaltingShouldFail() throws Exception {
-        createBaseTable(DATA_TABLE_NAME, null, null);
+        createBaseTable(TestUtil.DEFAULT_DATA_TABLE_NAME, null, null);
         Connection conn1 = DriverManager.getConnection(getUrl());
         Connection conn2 = DriverManager.getConnection(getUrl());
         try {
-            conn1.createStatement().execute("CREATE LOCAL INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_NAME + "(v1)"+" salt_buckets=16");
+            conn1.createStatement().execute("CREATE LOCAL INDEX " + TestUtil.DEFAULT_INDEX_TABLE_NAME + " ON " + TestUtil.DEFAULT_DATA_TABLE_NAME + "(v1)"+" salt_buckets=16");
             fail("Local index cannot be salted.");
         } catch (SQLException e) { }
         try {
-            conn2.createStatement().executeQuery("SELECT * FROM " + DATA_TABLE_FULL_NAME).next();
-            conn2.unwrap(PhoenixConnection.class).getMetaDataCache().getTable(new PTableKey(null,INDEX_TABLE_NAME));
+            conn2.createStatement().executeQuery("SELECT * FROM " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME).next();
+            conn2.unwrap(PhoenixConnection.class).getMetaDataCache().getTable(new PTableKey(null,TestUtil.DEFAULT_INDEX_TABLE_NAME));
             fail("Local index should not be created.");
         } catch (TableNotFoundException e) { }
     }
 
     @Test
     public void testLocalIndexTableRegionSplitPolicyAndSplitKeys() throws Exception {
-        createBaseTable(DATA_TABLE_NAME, null,"('e','i','o')");
+        createBaseTable(TestUtil.DEFAULT_DATA_TABLE_NAME, null,"('e','i','o')");
         Connection conn1 = DriverManager.getConnection(getUrl());
         Connection conn2 = DriverManager.getConnection(getUrl());
-        conn1.createStatement().execute("CREATE LOCAL INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_NAME + "(v1)");
-        conn2.createStatement().executeQuery("SELECT * FROM " + DATA_TABLE_FULL_NAME).next();
+        conn1.createStatement().execute("CREATE LOCAL INDEX " + TestUtil.DEFAULT_INDEX_TABLE_NAME + " ON " + TestUtil.DEFAULT_DATA_TABLE_NAME + "(v1)");
+        conn2.createStatement().executeQuery("SELECT * FROM " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME).next();
         HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-        HTableDescriptor htd = admin.getTableDescriptor(TableName.valueOf(MetaDataUtil.getLocalIndexTableName(DATA_TABLE_NAME)));
+        HTableDescriptor htd = admin.getTableDescriptor(TableName.valueOf(MetaDataUtil.getLocalIndexTableName(TestUtil.DEFAULT_DATA_TABLE_NAME)));
         assertEquals(IndexRegionSplitPolicy.class.getName(), htd.getValue(HTableDescriptor.SPLIT_POLICY));
-        try (HTable userTable = new HTable(admin.getConfiguration(),TableName.valueOf(DATA_TABLE_NAME))) {
-            try (HTable indexTable = new HTable(admin.getConfiguration(),TableName.valueOf(MetaDataUtil.getLocalIndexTableName(DATA_TABLE_NAME)))) {
+        try (HTable userTable = new HTable(admin.getConfiguration(),TableName.valueOf(TestUtil.DEFAULT_DATA_TABLE_NAME))) {
+            try (HTable indexTable = new HTable(admin.getConfiguration(),TableName.valueOf(MetaDataUtil.getLocalIndexTableName(TestUtil.DEFAULT_DATA_TABLE_NAME)))) {
                 assertArrayEquals("Both user table and index table should have same split keys.", userTable.getStartKeys(), indexTable.getStartKeys());
             }
         }
@@ -165,16 +170,16 @@ public class LocalIndexIT extends BaseIndexIT {
 
     @Test
     public void testDropLocalIndexTable() throws Exception {
-        createBaseTable(DATA_TABLE_NAME, null, null);
+        createBaseTable(TestUtil.DEFAULT_DATA_TABLE_NAME, null, null);
         Connection conn1 = DriverManager.getConnection(getUrl());
         Connection conn2 = DriverManager.getConnection(getUrl());
-        conn1.createStatement().execute("CREATE LOCAL INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_NAME + "(v1)");
-        conn2.createStatement().executeQuery("SELECT * FROM " + DATA_TABLE_FULL_NAME).next();
+        conn1.createStatement().execute("CREATE LOCAL INDEX " + TestUtil.DEFAULT_INDEX_TABLE_NAME + " ON " + TestUtil.DEFAULT_DATA_TABLE_NAME + "(v1)");
+        conn2.createStatement().executeQuery("SELECT * FROM " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME).next();
         HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-        assertTrue("Local index table should be present.", admin.tableExists(TableName.valueOf(MetaDataUtil.getLocalIndexTableName(DATA_TABLE_NAME))));
-        conn1.createStatement().execute("DROP TABLE "+ DATA_TABLE_NAME);
+        assertTrue("Local index table should be present.", admin.tableExists(TableName.valueOf(MetaDataUtil.getLocalIndexTableName(TestUtil.DEFAULT_DATA_TABLE_NAME))));
+        conn1.createStatement().execute("DROP TABLE "+ TestUtil.DEFAULT_DATA_TABLE_NAME);
         admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-        assertFalse("Local index table should be deleted.", admin.tableExists(TableName.valueOf(MetaDataUtil.getLocalIndexTableName(DATA_TABLE_NAME))));
+        assertFalse("Local index table should be deleted.", admin.tableExists(TableName.valueOf(MetaDataUtil.getLocalIndexTableName(TestUtil.DEFAULT_DATA_TABLE_NAME))));
         ResultSet rs = conn2.createStatement().executeQuery("SELECT "
                 + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + ","
                 + PhoenixDatabaseMetaData.SEQUENCE_NAME
@@ -184,19 +189,19 @@ public class LocalIndexIT extends BaseIndexIT {
     
     @Test
     public void testPutsToLocalIndexTable() throws Exception {
-        createBaseTable(DATA_TABLE_NAME, null, "('e','i','o')");
+        createBaseTable(TestUtil.DEFAULT_DATA_TABLE_NAME, null, "('e','i','o')");
         Connection conn1 = DriverManager.getConnection(getUrl());
-        conn1.createStatement().execute("CREATE LOCAL INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_NAME + "(v1)");
-        conn1.createStatement().execute("UPSERT INTO "+DATA_TABLE_NAME+" values('b',1,2,4,'z')");
-        conn1.createStatement().execute("UPSERT INTO "+DATA_TABLE_NAME+" values('f',1,2,3,'z')");
-        conn1.createStatement().execute("UPSERT INTO "+DATA_TABLE_NAME+" values('j',2,4,2,'a')");
-        conn1.createStatement().execute("UPSERT INTO "+DATA_TABLE_NAME+" values('q',3,1,1,'c')");
+        conn1.createStatement().execute("CREATE LOCAL INDEX " + TestUtil.DEFAULT_INDEX_TABLE_NAME + " ON " + TestUtil.DEFAULT_DATA_TABLE_NAME + "(v1)");
+        conn1.createStatement().execute("UPSERT INTO "+TestUtil.DEFAULT_DATA_TABLE_NAME+" values('b',1,2,4,'z')");
+        conn1.createStatement().execute("UPSERT INTO "+TestUtil.DEFAULT_DATA_TABLE_NAME+" values('f',1,2,3,'z')");
+        conn1.createStatement().execute("UPSERT INTO "+TestUtil.DEFAULT_DATA_TABLE_NAME+" values('j',2,4,2,'a')");
+        conn1.createStatement().execute("UPSERT INTO "+TestUtil.DEFAULT_DATA_TABLE_NAME+" values('q',3,1,1,'c')");
         conn1.commit();
-        ResultSet rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM " + INDEX_TABLE_NAME);
+        ResultSet rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM " + TestUtil.DEFAULT_INDEX_TABLE_NAME);
         assertTrue(rs.next());
         assertEquals(4, rs.getInt(1));
         HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-        HTable indexTable = new HTable(admin.getConfiguration() ,TableName.valueOf(MetaDataUtil.getLocalIndexTableName(DATA_TABLE_NAME)));
+        HTable indexTable = new HTable(admin.getConfiguration() ,TableName.valueOf(MetaDataUtil.getLocalIndexTableName(TestUtil.DEFAULT_DATA_TABLE_NAME)));
         Pair<byte[][], byte[][]> startEndKeys = indexTable.getStartEndKeys();
         byte[][] startKeys = startEndKeys.getFirst();
         byte[][] endKeys = startEndKeys.getSecond();
@@ -217,19 +222,19 @@ public class LocalIndexIT extends BaseIndexIT {
     
     @Test
     public void testBuildIndexWhenUserTableAlreadyHasData() throws Exception {
-        createBaseTable(DATA_TABLE_NAME, null, "('e','i','o')");
+        createBaseTable(TestUtil.DEFAULT_DATA_TABLE_NAME, null, "('e','i','o')");
         Connection conn1 = DriverManager.getConnection(getUrl());
-        conn1.createStatement().execute("UPSERT INTO "+DATA_TABLE_NAME+" values('b',1,2,4,'z')");
-        conn1.createStatement().execute("UPSERT INTO "+DATA_TABLE_NAME+" values('f',1,2,3,'z')");
-        conn1.createStatement().execute("UPSERT INTO "+DATA_TABLE_NAME+" values('j',2,4,2,'a')");
-        conn1.createStatement().execute("UPSERT INTO "+DATA_TABLE_NAME+" values('q',3,1,1,'c')");
+        conn1.createStatement().execute("UPSERT INTO "+TestUtil.DEFAULT_DATA_TABLE_NAME+" values('b',1,2,4,'z')");
+        conn1.createStatement().execute("UPSERT INTO "+TestUtil.DEFAULT_DATA_TABLE_NAME+" values('f',1,2,3,'z')");
+        conn1.createStatement().execute("UPSERT INTO "+TestUtil.DEFAULT_DATA_TABLE_NAME+" values('j',2,4,2,'a')");
+        conn1.createStatement().execute("UPSERT INTO "+TestUtil.DEFAULT_DATA_TABLE_NAME+" values('q',3,1,1,'c')");
         conn1.commit();
-        conn1.createStatement().execute("CREATE LOCAL INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_NAME + "(v1)");
-        ResultSet rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM " + INDEX_TABLE_NAME);
+        conn1.createStatement().execute("CREATE LOCAL INDEX " + TestUtil.DEFAULT_INDEX_TABLE_NAME + " ON " + TestUtil.DEFAULT_DATA_TABLE_NAME + "(v1)");
+        ResultSet rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM " + TestUtil.DEFAULT_INDEX_TABLE_NAME);
         assertTrue(rs.next());
         assertEquals(4, rs.getInt(1));
         HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-        HTable indexTable = new HTable(admin.getConfiguration() ,TableName.valueOf(MetaDataUtil.getLocalIndexTableName(DATA_TABLE_NAME)));
+        HTable indexTable = new HTable(admin.getConfiguration() ,TableName.valueOf(MetaDataUtil.getLocalIndexTableName(TestUtil.DEFAULT_DATA_TABLE_NAME)));
         Pair<byte[][], byte[][]> startEndKeys = indexTable.getStartEndKeys();
         byte[][] startKeys = startEndKeys.getFirst();
         byte[][] endKeys = startEndKeys.getSecond();
@@ -250,30 +255,32 @@ public class LocalIndexIT extends BaseIndexIT {
 
     @Test
     public void testLocalIndexScan() throws Exception {
-        createBaseTable(DATA_TABLE_NAME, null, "('e','i','o')");
+        createBaseTable(TestUtil.DEFAULT_DATA_TABLE_NAME, null, "('e','i','o')");
         Connection conn1 = DriverManager.getConnection(getUrl());
         try{
-            conn1.createStatement().execute("UPSERT INTO " + DATA_TABLE_NAME + " values('a',1,2,5,'y')");
-            conn1.createStatement().execute("UPSERT INTO " + DATA_TABLE_NAME + " values('b',1,2,4,'z')");
-            conn1.createStatement().execute("UPSERT INTO " + DATA_TABLE_NAME + " values('f',1,2,3,'a')");
-            conn1.createStatement().execute("UPSERT INTO " + DATA_TABLE_NAME + " values('e',1,2,3,'b')");
-            conn1.createStatement().execute("UPSERT INTO " + DATA_TABLE_NAME + " values('j',2,4,2,'a')");
-            conn1.createStatement().execute("UPSERT INTO " + DATA_TABLE_NAME + " values('q',3,1,1,'c')");
+            conn1.createStatement().execute("UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_NAME + " values('a',1,2,5,'y')");
+            conn1.createStatement().execute("UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_NAME + " values('b',1,2,4,'z')");
+            conn1.createStatement().execute("UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_NAME + " values('f',1,2,3,'a')");
+            conn1.createStatement().execute("UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_NAME + " values('e',1,2,3,'b')");
+            conn1.createStatement().execute("UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_NAME + " values('j',2,4,2,'a')");
+            conn1.createStatement().execute("UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_NAME + " values('q',3,1,1,'c')");
             conn1.commit();
-            conn1.createStatement().execute("CREATE LOCAL INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_NAME + "(v1)");
+            conn1.createStatement().execute("CREATE LOCAL INDEX " + TestUtil.DEFAULT_INDEX_TABLE_NAME + " ON " + TestUtil.DEFAULT_DATA_TABLE_NAME + "(v1)");
             
-            ResultSet rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM " + INDEX_TABLE_NAME);
+            ResultSet rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM " + TestUtil.DEFAULT_INDEX_TABLE_NAME);
             assertTrue(rs.next());
             
             HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-            int numRegions = admin.getTableRegions(TableName.valueOf(DATA_TABLE_NAME)).size();
+            int numRegions = admin.getTableRegions(TableName.valueOf(TestUtil.DEFAULT_DATA_TABLE_NAME)).size();
             
-            String query = "SELECT * FROM " + DATA_TABLE_NAME +" where v1 like 'a%'";
+            String query = "SELECT * FROM " + TestUtil.DEFAULT_DATA_TABLE_NAME +" where v1 like 'a%'";
             rs = conn1.createStatement().executeQuery("EXPLAIN "+ query);
             
             assertEquals(
                 "CLIENT PARALLEL " + numRegions + "-WAY RANGE SCAN OVER "
-                        + MetaDataUtil.getLocalIndexTableName(DATA_TABLE_NAME) + " [-32768,'a'] - [-32768,'b']\nCLIENT MERGE SORT",
+                        + MetaDataUtil.getLocalIndexTableName(TestUtil.DEFAULT_DATA_TABLE_NAME) + " [-32768,'a'] - [-32768,'b']\n"
+                                + "    SERVER FILTER BY FIRST KEY ONLY\n"
+                                + "CLIENT MERGE SORT",
                         QueryUtil.getExplainPlan(rs));
             
             rs = conn1.createStatement().executeQuery(query);
@@ -290,12 +297,14 @@ public class LocalIndexIT extends BaseIndexIT {
             assertEquals("a", rs.getString("v1"));
             assertEquals(2, rs.getInt("k3"));
             assertFalse(rs.next());
-            query = "SELECT t_id, k1, k2,V1 FROM " + DATA_TABLE_NAME +" where v1='a'";
+            query = "SELECT t_id, k1, k2,V1 FROM " + TestUtil.DEFAULT_DATA_TABLE_NAME +" where v1='a'";
             rs = conn1.createStatement().executeQuery("EXPLAIN "+ query);
             
             assertEquals(
                 "CLIENT PARALLEL " + numRegions + "-WAY RANGE SCAN OVER "
-                        + MetaDataUtil.getLocalIndexTableName(DATA_TABLE_NAME) + " [-32768,'a']\nCLIENT MERGE SORT",
+                        + MetaDataUtil.getLocalIndexTableName(TestUtil.DEFAULT_DATA_TABLE_NAME) + " [-32768,'a']\n"
+                        + "    SERVER FILTER BY FIRST KEY ONLY\n"
+                        + "CLIENT MERGE SORT",
                         QueryUtil.getExplainPlan(rs));
             
             rs = conn1.createStatement().executeQuery(query);
@@ -308,12 +317,13 @@ public class LocalIndexIT extends BaseIndexIT {
             assertEquals(2, rs.getInt("k1"));
             assertEquals(4, rs.getInt("k2"));
             assertFalse(rs.next());
-            query = "SELECT t_id, k1, k2,V1, k3 FROM " + DATA_TABLE_NAME +" where v1<='z' order by k3";
+            query = "SELECT t_id, k1, k2,V1, k3 FROM " + TestUtil.DEFAULT_DATA_TABLE_NAME +" where v1<='z' order by k3";
             rs = conn1.createStatement().executeQuery("EXPLAIN "+ query);
             
             assertEquals(
-                "CLIENT PARALLEL " + numRegions + "-WAY RANGE SCAN OVER " + MetaDataUtil.getLocalIndexTableName(DATA_TABLE_NAME) + " [-32768,*] - [-32768,'z']\n" + 
-                "    SERVER SORTED BY [K3]\n" +
+                  "CLIENT PARALLEL " + numRegions + "-WAY RANGE SCAN OVER " + MetaDataUtil.getLocalIndexTableName(TestUtil.DEFAULT_DATA_TABLE_NAME) + " [-32768,*] - [-32768,'z']\n"
+                + "    SERVER FILTER BY FIRST KEY ONLY\n"
+                + "    SERVER SORTED BY [\"K3\"]\n" +
                 "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
  
             rs = conn1.createStatement().executeQuery(query);
@@ -331,12 +341,14 @@ public class LocalIndexIT extends BaseIndexIT {
             assertEquals(5, rs.getInt("k3"));
             assertFalse(rs.next());
             
-            query = "SELECT t_id, k1, k2,v1 from " + DATA_TABLE_FULL_NAME + " order by V1,t_id";
+            query = "SELECT t_id, k1, k2,v1 from " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME + " order by V1,t_id";
             rs = conn1.createStatement().executeQuery("EXPLAIN " + query);
             
             assertEquals(
                 "CLIENT PARALLEL " + numRegions + "-WAY RANGE SCAN OVER "
-                        + MetaDataUtil.getLocalIndexTableName(DATA_TABLE_NAME)+" [-32768]\nCLIENT MERGE SORT",
+                        + MetaDataUtil.getLocalIndexTableName(TestUtil.DEFAULT_DATA_TABLE_NAME)+" [-32768]\n"
+                        + "    SERVER FILTER BY FIRST KEY ONLY\n"
+                        + "CLIENT MERGE SORT",
                 QueryUtil.getExplainPlan(rs));
             
             rs = conn1.createStatement().executeQuery(query);
@@ -377,28 +389,30 @@ public class LocalIndexIT extends BaseIndexIT {
 
     @Test
     public void testLocalIndexScanJoinColumnsFromDataTable() throws Exception {
-        createBaseTable(DATA_TABLE_NAME, null, "('e','i','o')");
+        createBaseTable(TestUtil.DEFAULT_DATA_TABLE_NAME, null, "('e','i','o')");
         Connection conn1 = DriverManager.getConnection(getUrl());
         try{
-            conn1.createStatement().execute("UPSERT INTO " + DATA_TABLE_NAME + " values('b',1,2,4,'z')");
-            conn1.createStatement().execute("UPSERT INTO " + DATA_TABLE_NAME + " values('f',1,2,3,'a')");
-            conn1.createStatement().execute("UPSERT INTO " + DATA_TABLE_NAME + " values('j',2,4,2,'a')");
-            conn1.createStatement().execute("UPSERT INTO " + DATA_TABLE_NAME + " values('q',3,1,1,'c')");
+            conn1.createStatement().execute("UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_NAME + " values('b',1,2,4,'z')");
+            conn1.createStatement().execute("UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_NAME + " values('f',1,2,3,'a')");
+            conn1.createStatement().execute("UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_NAME + " values('j',2,4,2,'a')");
+            conn1.createStatement().execute("UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_NAME + " values('q',3,1,1,'c')");
             conn1.commit();
-            conn1.createStatement().execute("CREATE LOCAL INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_NAME + "(v1)");
+            conn1.createStatement().execute("CREATE LOCAL INDEX " + TestUtil.DEFAULT_INDEX_TABLE_NAME + " ON " + TestUtil.DEFAULT_DATA_TABLE_NAME + "(v1)");
             
-            ResultSet rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM " + INDEX_TABLE_NAME);
+            ResultSet rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM " + TestUtil.DEFAULT_INDEX_TABLE_NAME);
             assertTrue(rs.next());
             
             HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-            int numRegions = admin.getTableRegions(TableName.valueOf(DATA_TABLE_NAME)).size();
+            int numRegions = admin.getTableRegions(TableName.valueOf(TestUtil.DEFAULT_DATA_TABLE_NAME)).size();
             
-            String query = "SELECT t_id, k1, k2, k3, V1 FROM " + DATA_TABLE_NAME +" where v1='a'";
+            String query = "SELECT t_id, k1, k2, k3, V1 FROM " + TestUtil.DEFAULT_DATA_TABLE_NAME +" where v1='a'";
             rs = conn1.createStatement().executeQuery("EXPLAIN "+ query);
             
             assertEquals(
                 "CLIENT PARALLEL " + numRegions + "-WAY RANGE SCAN OVER "
-                        + MetaDataUtil.getLocalIndexTableName(DATA_TABLE_NAME) + " [-32768,'a']\nCLIENT MERGE SORT",
+                        + MetaDataUtil.getLocalIndexTableName(TestUtil.DEFAULT_DATA_TABLE_NAME) + " [-32768,'a']\n"
+                                + "    SERVER FILTER BY FIRST KEY ONLY\n"
+                                + "CLIENT MERGE SORT",
                         QueryUtil.getExplainPlan(rs));
             
             rs = conn1.createStatement().executeQuery(query);
@@ -414,12 +428,14 @@ public class LocalIndexIT extends BaseIndexIT {
             assertEquals(2, rs.getInt("k3"));
             assertFalse(rs.next());
             
-            query = "SELECT t_id, k1, k2, k3, V1 from " + DATA_TABLE_FULL_NAME + "  where v1<='z' order by V1,t_id";
+            query = "SELECT t_id, k1, k2, k3, V1 from " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME + "  where v1<='z' order by V1,t_id";
             rs = conn1.createStatement().executeQuery("EXPLAIN " + query);
             
             assertEquals(
                 "CLIENT PARALLEL " + numRegions + "-WAY RANGE SCAN OVER "
-                        + MetaDataUtil.getLocalIndexTableName(DATA_TABLE_NAME)+" [-32768,*] - [-32768,'z']\nCLIENT MERGE SORT",
+                        + MetaDataUtil.getLocalIndexTableName(TestUtil.DEFAULT_DATA_TABLE_NAME)+" [-32768,*] - [-32768,'z']\n"
+                        + "    SERVER FILTER BY FIRST KEY ONLY\n"
+                         + "CLIENT MERGE SORT",
                 QueryUtil.getExplainPlan(rs));
             
             rs = conn1.createStatement().executeQuery(query);
@@ -448,13 +464,14 @@ public class LocalIndexIT extends BaseIndexIT {
             assertEquals(4, rs.getInt("k3"));
             assertEquals("z", rs.getString("V1"));
             
-            query = "SELECT t_id, V1, k3 from " + DATA_TABLE_FULL_NAME + "  where v1 <='z' group by v1,t_id, k3";
+            query = "SELECT t_id, V1, k3 from " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME + "  where v1 <='z' group by v1,t_id, k3";
             rs = conn1.createStatement().executeQuery("EXPLAIN " + query);
             
             assertEquals(
                 "CLIENT PARALLEL " + numRegions + "-WAY RANGE SCAN OVER "
-                        + MetaDataUtil.getLocalIndexTableName(DATA_TABLE_NAME)+" [-32768,*] - [-32768,'z']\n"
-                        + "    SERVER AGGREGATE INTO DISTINCT ROWS BY [V1, T_ID, K3]\n" + "CLIENT MERGE SORT",
+                        + MetaDataUtil.getLocalIndexTableName(TestUtil.DEFAULT_DATA_TABLE_NAME)+" [-32768,*] - [-32768,'z']\n"
+                        + "    SERVER FILTER BY FIRST KEY ONLY\n"
+                        + "    SERVER AGGREGATE INTO DISTINCT ROWS BY [\"V1\", \"T_ID\", \"K3\"]\n" + "CLIENT MERGE SORT",
                 QueryUtil.getExplainPlan(rs));
             
             rs = conn1.createStatement().executeQuery(query);
@@ -475,20 +492,21 @@ public class LocalIndexIT extends BaseIndexIT {
             assertEquals(4, rs.getInt("k3"));
             assertEquals("z", rs.getString("V1"));
             
-            query = "SELECT v1,sum(k3) from " + DATA_TABLE_FULL_NAME + " where v1 <='z'  group by v1 order by v1";
-            PhoenixPreparedStatement statement = conn1.prepareStatement(query).unwrap(PhoenixPreparedStatement.class);
-            QueryPlan plan = statement.compileQuery("EXPLAIN " + query);
-            assertTrue(query, plan.getContext().getScan().getAttribute(BaseScannerRegionObserver.KEY_ORDERED_GROUP_BY_EXPRESSIONS) == null);
-            assertTrue(query, plan.getContext().getScan().getAttribute(BaseScannerRegionObserver.UNORDERED_GROUP_BY_EXPRESSIONS) != null);
+            query = "SELECT v1,sum(k3) from " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME + " where v1 <='z'  group by v1 order by v1";
             
             rs = conn1.createStatement().executeQuery("EXPLAIN " + query);
             assertEquals(
                 "CLIENT PARALLEL " + numRegions + "-WAY RANGE SCAN OVER "
-                        + MetaDataUtil.getLocalIndexTableName(DATA_TABLE_NAME)+" [-32768,*] - [-32768,'z']\n"
-                        + "    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [V1]\nCLIENT MERGE SORT",
+                        + MetaDataUtil.getLocalIndexTableName(TestUtil.DEFAULT_DATA_TABLE_NAME)+" [-32768,*] - [-32768,'z']\n"
+                        + "    SERVER FILTER BY FIRST KEY ONLY\n"
+                        + "    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [\"V1\"]\nCLIENT MERGE SORT",
                 QueryUtil.getExplainPlan(rs));
             
-            rs = conn1.createStatement().executeQuery(query);
+            PhoenixStatement stmt = conn1.createStatement().unwrap(PhoenixStatement.class);
+            rs = stmt.executeQuery(query);
+            QueryPlan plan = stmt.getQueryPlan();
+            assertEquals(TestUtil.DEFAULT_INDEX_TABLE_NAME, plan.getContext().getCurrentTable().getTable().getName().getString());
+            assertEquals(BaseScannerRegionObserver.KEY_ORDERED_GROUP_BY_EXPRESSIONS, plan.getGroupBy().getScanAttribName());
             assertTrue(rs.next());
             assertEquals("a", rs.getString(1));
             assertEquals(5, rs.getInt(2));
@@ -505,35 +523,36 @@ public class LocalIndexIT extends BaseIndexIT {
 
     @Test
     public void testIndexPlanSelectionIfBothGlobalAndLocalIndexesHasSameColumnsAndOrder() throws Exception {
-        createBaseTable(DATA_TABLE_NAME, null, "('e','i','o')");
+        createBaseTable(TestUtil.DEFAULT_DATA_TABLE_NAME, null, "('e','i','o')");
         Connection conn1 = DriverManager.getConnection(getUrl());
-        conn1.createStatement().execute("UPSERT INTO "+DATA_TABLE_NAME+" values('b',1,2,4,'z')");
-        conn1.createStatement().execute("UPSERT INTO "+DATA_TABLE_NAME+" values('f',1,2,3,'a')");
-        conn1.createStatement().execute("UPSERT INTO "+DATA_TABLE_NAME+" values('j',2,4,3,'a')");
-        conn1.createStatement().execute("UPSERT INTO "+DATA_TABLE_NAME+" values('q',3,1,1,'c')");
+        conn1.createStatement().execute("UPSERT INTO "+TestUtil.DEFAULT_DATA_TABLE_NAME+" values('b',1,2,4,'z')");
+        conn1.createStatement().execute("UPSERT INTO "+TestUtil.DEFAULT_DATA_TABLE_NAME+" values('f',1,2,3,'a')");
+        conn1.createStatement().execute("UPSERT INTO "+TestUtil.DEFAULT_DATA_TABLE_NAME+" values('j',2,4,3,'a')");
+        conn1.createStatement().execute("UPSERT INTO "+TestUtil.DEFAULT_DATA_TABLE_NAME+" values('q',3,1,1,'c')");
         conn1.commit();
-        conn1.createStatement().execute("CREATE LOCAL INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_NAME + "(v1)");
-        conn1.createStatement().execute("CREATE INDEX " + INDEX_TABLE_NAME + "2" + " ON " + DATA_TABLE_NAME + "(v1)");
-        String query = "SELECT t_id, k1, k2,V1 FROM " + DATA_TABLE_NAME +" where v1='a'";
+        conn1.createStatement().execute("CREATE LOCAL INDEX " + TestUtil.DEFAULT_INDEX_TABLE_NAME + " ON " + TestUtil.DEFAULT_DATA_TABLE_NAME + "(v1)");
+        conn1.createStatement().execute("CREATE INDEX " + TestUtil.DEFAULT_INDEX_TABLE_NAME + "2" + " ON " + TestUtil.DEFAULT_DATA_TABLE_NAME + "(v1)");
+        String query = "SELECT t_id, k1, k2,V1 FROM " + TestUtil.DEFAULT_DATA_TABLE_NAME +" where v1='a'";
         ResultSet rs1 = conn1.createStatement().executeQuery("EXPLAIN "+ query);
-        assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + INDEX_TABLE_NAME + "2" + " ['a']",QueryUtil.getExplainPlan(rs1));
+        assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + TestUtil.DEFAULT_INDEX_TABLE_NAME + "2" + " ['a']\n"
+                + "    SERVER FILTER BY FIRST KEY ONLY",QueryUtil.getExplainPlan(rs1));
         conn1.close();
     }
 
     @Test
     public void testDropLocalIndexShouldDeleteDataFromLocalIndexTable() throws Exception {
-        createBaseTable(DATA_TABLE_NAME, null, "('e','i','o')");
+        createBaseTable(TestUtil.DEFAULT_DATA_TABLE_NAME, null, "('e','i','o')");
         Connection conn1 = DriverManager.getConnection(getUrl());
         try {
-            conn1.createStatement().execute("UPSERT INTO " + DATA_TABLE_NAME + " values('b',1,2,4,'z')");
-            conn1.createStatement().execute("UPSERT INTO " + DATA_TABLE_NAME + " values('f',1,2,3,'a')");
-            conn1.createStatement().execute("UPSERT INTO " + DATA_TABLE_NAME + " values('j',2,4,2,'a')");
-            conn1.createStatement().execute("UPSERT INTO " + DATA_TABLE_NAME + " values('q',3,1,1,'c')");
+            conn1.createStatement().execute("UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_NAME + " values('b',1,2,4,'z')");
+            conn1.createStatement().execute("UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_NAME + " values('f',1,2,3,'a')");
+            conn1.createStatement().execute("UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_NAME + " values('j',2,4,2,'a')");
+            conn1.createStatement().execute("UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_NAME + " values('q',3,1,1,'c')");
             conn1.commit();
-            conn1.createStatement().execute("CREATE LOCAL INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_NAME + "(v1)");
-            conn1.createStatement().execute("DROP INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_NAME);
+            conn1.createStatement().execute("CREATE LOCAL INDEX " + TestUtil.DEFAULT_INDEX_TABLE_NAME + " ON " + TestUtil.DEFAULT_DATA_TABLE_NAME + "(v1)");
+            conn1.createStatement().execute("DROP INDEX " + TestUtil.DEFAULT_INDEX_TABLE_NAME + " ON " + TestUtil.DEFAULT_DATA_TABLE_NAME);
             HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-            HTable indexTable = new HTable(admin.getConfiguration() ,TableName.valueOf(MetaDataUtil.getLocalIndexTableName(DATA_TABLE_NAME)));
+            HTable indexTable = new HTable(admin.getConfiguration() ,TableName.valueOf(MetaDataUtil.getLocalIndexTableName(TestUtil.DEFAULT_DATA_TABLE_NAME)));
             Pair<byte[][], byte[][]> startEndKeys = indexTable.getStartEndKeys();
             byte[][] startKeys = startEndKeys.getFirst();
             byte[][] endKeys = startEndKeys.getSecond();
@@ -558,19 +577,19 @@ public class LocalIndexIT extends BaseIndexIT {
 
     @Test
     public void testLocalIndexRowsShouldBeDeletedWhenUserTableRowsDeleted() throws Exception {
-        createBaseTable(DATA_TABLE_NAME, null, "('e','i','o')");
+        createBaseTable(TestUtil.DEFAULT_DATA_TABLE_NAME, null, "('e','i','o')");
         Connection conn1 = DriverManager.getConnection(getUrl());
         try {
-            conn1.createStatement().execute("UPSERT INTO " + DATA_TABLE_NAME + " values('b',1,2,4,'z')");
-            conn1.createStatement().execute("UPSERT INTO " + DATA_TABLE_NAME + " values('f',1,2,3,'a')");
-            conn1.createStatement().execute("UPSERT INTO " + DATA_TABLE_NAME + " values('j',2,4,2,'a')");
-            conn1.createStatement().execute("UPSERT INTO " + DATA_TABLE_NAME + " values('q',3,1,1,'c')");
+            conn1.createStatement().execute("UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_NAME + " values('b',1,2,4,'z')");
+            conn1.createStatement().execute("UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_NAME + " values('f',1,2,3,'a')");
+            conn1.createStatement().execute("UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_NAME + " values('j',2,4,2,'a')");
+            conn1.createStatement().execute("UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_NAME + " values('q',3,1,1,'c')");
             conn1.commit();
-            conn1.createStatement().execute("CREATE LOCAL INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_NAME + "(v1)");
-            conn1.createStatement().execute("DELETE FROM " + DATA_TABLE_NAME + " where v1='a'");
+            conn1.createStatement().execute("CREATE LOCAL INDEX " + TestUtil.DEFAULT_INDEX_TABLE_NAME + " ON " + TestUtil.DEFAULT_DATA_TABLE_NAME + "(v1)");
+            conn1.createStatement().execute("DELETE FROM " + TestUtil.DEFAULT_DATA_TABLE_NAME + " where v1='a'");
             conn1.commit();
             conn1 = DriverManager.getConnection(getUrl());
-            ResultSet rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM " + INDEX_TABLE_NAME);
+            ResultSet rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM " + TestUtil.DEFAULT_INDEX_TABLE_NAME);
             assertTrue(rs.next());
             assertEquals(2, rs.getInt(1));
         } finally {
@@ -580,19 +599,19 @@ public class LocalIndexIT extends BaseIndexIT {
     
     @Test
     public void testScanWhenATableHasMultipleLocalIndexes() throws Exception {
-        createBaseTable(DATA_TABLE_NAME, null, "('e','i','o')");
+        createBaseTable(TestUtil.DEFAULT_DATA_TABLE_NAME, null, "('e','i','o')");
         Connection conn1 = DriverManager.getConnection(getUrl());
         try {
-            conn1.createStatement().execute("UPSERT INTO " + DATA_TABLE_NAME + " values('b',1,2,4,'z')");
-            conn1.createStatement().execute("UPSERT INTO " + DATA_TABLE_NAME + " values('f',1,2,3,'a')");
-            conn1.createStatement().execute("UPSERT INTO " + DATA_TABLE_NAME + " values('j',2,4,2,'a')");
-            conn1.createStatement().execute("UPSERT INTO " + DATA_TABLE_NAME + " values('q',3,1,1,'c')");
+            conn1.createStatement().execute("UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_NAME + " values('b',1,2,4,'z')");
+            conn1.createStatement().execute("UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_NAME + " values('f',1,2,3,'a')");
+            conn1.createStatement().execute("UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_NAME + " values('j',2,4,2,'a')");
+            conn1.createStatement().execute("UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_NAME + " values('q',3,1,1,'c')");
             conn1.commit();
-            conn1.createStatement().execute("CREATE LOCAL INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_NAME + "(v1)");
-            conn1.createStatement().execute("CREATE LOCAL INDEX " + INDEX_TABLE_NAME + "2 ON " + DATA_TABLE_NAME + "(k3)");
+            conn1.createStatement().execute("CREATE LOCAL INDEX " + TestUtil.DEFAULT_INDEX_TABLE_NAME + " ON " + TestUtil.DEFAULT_DATA_TABLE_NAME + "(v1)");
+            conn1.createStatement().execute("CREATE LOCAL INDEX " + TestUtil.DEFAULT_INDEX_TABLE_NAME + "2 ON " + TestUtil.DEFAULT_DATA_TABLE_NAME + "(k3)");
             conn1.commit();
             conn1 = DriverManager.getConnection(getUrl());
-            ResultSet rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM " + DATA_TABLE_NAME);
+            ResultSet rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM " + TestUtil.DEFAULT_DATA_TABLE_NAME);
             assertTrue(rs.next());
             assertEquals(4, rs.getInt(1));
         } finally {
@@ -602,23 +621,23 @@ public class LocalIndexIT extends BaseIndexIT {
 
     @Test
     public void testLocalIndexesOnTableWithImmutableRows() throws Exception {
-        createBaseTable(DATA_TABLE_NAME, null, "('e','i','o')");
+        createBaseTable(TestUtil.DEFAULT_DATA_TABLE_NAME, null, "('e','i','o')");
         Connection conn1 = DriverManager.getConnection(getUrl());
         try {
-            conn1.createStatement().execute("ALTER TABLE "+ DATA_TABLE_NAME + " SET IMMUTABLE_ROWS=true");
-            conn1.createStatement().execute("CREATE LOCAL INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_NAME + "(v1)");
-            conn1.createStatement().execute("CREATE INDEX " + INDEX_TABLE_NAME + "2 ON " + DATA_TABLE_NAME + "(k3)");
+            conn1.createStatement().execute("ALTER TABLE "+ TestUtil.DEFAULT_DATA_TABLE_NAME + " SET IMMUTABLE_ROWS=true");
+            conn1.createStatement().execute("CREATE LOCAL INDEX " + TestUtil.DEFAULT_INDEX_TABLE_NAME + " ON " + TestUtil.DEFAULT_DATA_TABLE_NAME + "(v1)");
+            conn1.createStatement().execute("CREATE INDEX " + TestUtil.DEFAULT_INDEX_TABLE_NAME + "2 ON " + TestUtil.DEFAULT_DATA_TABLE_NAME + "(k3)");
             conn1.commit();
-            conn1.createStatement().execute("UPSERT INTO " + DATA_TABLE_NAME + " values('b',1,2,4,'z')");
-            conn1.createStatement().execute("UPSERT INTO " + DATA_TABLE_NAME + " values('f',1,2,3,'a')");
-            conn1.createStatement().execute("UPSERT INTO " + DATA_TABLE_NAME + " values('j',2,4,2,'a')");
-            conn1.createStatement().execute("UPSERT INTO " + DATA_TABLE_NAME + " values('q',3,1,1,'c')");
+            conn1.createStatement().execute("UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_NAME + " values('b',1,2,4,'z')");
+            conn1.createStatement().execute("UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_NAME + " values('f',1,2,3,'a')");
+            conn1.createStatement().execute("UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_NAME + " values('j',2,4,2,'a')");
+            conn1.createStatement().execute("UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_NAME + " values('q',3,1,1,'c')");
             conn1.commit();
             conn1 = DriverManager.getConnection(getUrl());
-            ResultSet rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM " + DATA_TABLE_NAME);
+            ResultSet rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM " + TestUtil.DEFAULT_DATA_TABLE_NAME);
             assertTrue(rs.next());
             assertEquals(4, rs.getInt(1));
-            rs = conn1.createStatement().executeQuery("SELECT v1 FROM " + DATA_TABLE_NAME);
+            rs = conn1.createStatement().executeQuery("SELECT v1 FROM " + TestUtil.DEFAULT_DATA_TABLE_NAME);
             assertTrue(rs.next());
             assertEquals("a", rs.getString("v1"));
             assertTrue(rs.next());
@@ -628,7 +647,7 @@ public class LocalIndexIT extends BaseIndexIT {
             assertTrue(rs.next());
             assertEquals("z", rs.getString("v1"));
             assertFalse(rs.next());
-            rs = conn1.createStatement().executeQuery("SELECT k3 FROM " + DATA_TABLE_NAME);
+            rs = conn1.createStatement().executeQuery("SELECT k3 FROM " + TestUtil.DEFAULT_DATA_TABLE_NAME);
             assertTrue(rs.next());
             assertEquals(1, rs.getInt("k3"));
             assertTrue(rs.next());
@@ -645,20 +664,20 @@ public class LocalIndexIT extends BaseIndexIT {
 
     @Test
     public void testLocalIndexScanWithInList() throws Exception {
-        createBaseTable(DATA_TABLE_NAME, null, "('e','i','o')");
+        createBaseTable(TestUtil.DEFAULT_DATA_TABLE_NAME, null, "('e','i','o')");
         Connection conn1 = DriverManager.getConnection(getUrl());
         try{
-            conn1.createStatement().execute("UPSERT INTO " + DATA_TABLE_NAME + " values('b',1,2,4,'z')");
-            conn1.createStatement().execute("UPSERT INTO " + DATA_TABLE_NAME + " values('f',1,2,3,'a')");
-            conn1.createStatement().execute("UPSERT INTO " + DATA_TABLE_NAME + " values('j',2,4,2,'a')");
-            conn1.createStatement().execute("UPSERT INTO " + DATA_TABLE_NAME + " values('q',3,1,1,'c')");
+            conn1.createStatement().execute("UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_NAME + " values('b',1,2,4,'z')");
+            conn1.createStatement().execute("UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_NAME + " values('f',1,2,3,'a')");
+            conn1.createStatement().execute("UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_NAME + " values('j',2,4,2,'a')");
+            conn1.createStatement().execute("UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_NAME + " values('q',3,1,1,'c')");
             conn1.commit();
-            conn1.createStatement().execute("CREATE LOCAL INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_NAME + "(v1) include (k3)");
+            conn1.createStatement().execute("CREATE LOCAL INDEX " + TestUtil.DEFAULT_INDEX_TABLE_NAME + " ON " + TestUtil.DEFAULT_DATA_TABLE_NAME + "(v1) include (k3)");
             
-            ResultSet rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM " + INDEX_TABLE_NAME);
+            ResultSet rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM " + TestUtil.DEFAULT_INDEX_TABLE_NAME);
             assertTrue(rs.next());
             
-            String query = "SELECT t_id FROM " + DATA_TABLE_NAME +" where (v1,k3) IN (('z',4),('a',2))";
+            String query = "SELECT t_id FROM " + TestUtil.DEFAULT_DATA_TABLE_NAME +" where (v1,k3) IN (('z',4),('a',2))";
             rs = conn1.createStatement().executeQuery(query);
             assertTrue(rs.next());
             assertEquals("j", rs.getString("t_id"));
@@ -671,37 +690,55 @@ public class LocalIndexIT extends BaseIndexIT {
     }
 
     @Test
+    public void testLocalIndexCreationWithDefaultFamilyOption() throws Exception {
+        Connection conn1 = DriverManager.getConnection(getUrl());
+        try{
+            Statement statement = conn1.createStatement();
+            statement.execute("create table example (id integer not null,fn varchar,"
+                    + "ln varchar constraint pk primary key(id)) DEFAULT_COLUMN_FAMILY='F'");
+            statement.execute("upsert into example values(1,'fn','ln')");
+            statement
+                    .execute("create local index my_idx on example (fn)");
+            statement.execute("upsert into example values(2,'fn1','ln1')");
+            ResultSet rs = statement.executeQuery("SELECT COUNT(*) FROM my_idx");
+            assertTrue(rs.next());
+       } finally {
+            conn1.close();
+        }
+    }
+
+    @Test
     public void testLocalIndexScanAfterRegionSplit() throws Exception {
-        createBaseTable(DATA_TABLE_NAME, null, "('e','j','o')");
+        createBaseTable(TestUtil.DEFAULT_DATA_TABLE_NAME, null, "('e','j','o')");
         Connection conn1 = DriverManager.getConnection(getUrl());
         try{
             String[] strings = {"a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z"};
             for (int i = 0; i < 26; i++) {
                 conn1.createStatement().execute(
-                    "UPSERT INTO " + DATA_TABLE_NAME + " values('"+strings[i]+"'," + i + ","
+                    "UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_NAME + " values('"+strings[i]+"'," + i + ","
                             + (i + 1) + "," + (i + 2) + ",'" + strings[25 - i] + "')");
             }
             conn1.commit();
-            conn1.createStatement().execute("CREATE LOCAL INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_NAME + "(v1)");
-            conn1.createStatement().execute("CREATE LOCAL INDEX " + INDEX_TABLE_NAME + "_2 ON " + DATA_TABLE_NAME + "(k3)");
+            conn1.createStatement().execute("CREATE LOCAL INDEX " + TestUtil.DEFAULT_INDEX_TABLE_NAME + " ON " + TestUtil.DEFAULT_DATA_TABLE_NAME + "(v1)");
+            conn1.createStatement().execute("CREATE LOCAL INDEX " + TestUtil.DEFAULT_INDEX_TABLE_NAME + "_2 ON " + TestUtil.DEFAULT_DATA_TABLE_NAME + "(k3)");
 
-            ResultSet rs = conn1.createStatement().executeQuery("SELECT * FROM " + DATA_TABLE_NAME);
+            ResultSet rs = conn1.createStatement().executeQuery("SELECT * FROM " + TestUtil.DEFAULT_DATA_TABLE_NAME);
             assertTrue(rs.next());
             
             HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
             for (int i = 1; i < 5; i++) {
                 CatalogTracker ct = new CatalogTracker(admin.getConfiguration());
-                admin.split(Bytes.toBytes(DATA_TABLE_NAME), ByteUtil.concat(Bytes.toBytes(strings[3*i])));
+                admin.split(Bytes.toBytes(TestUtil.DEFAULT_DATA_TABLE_NAME), ByteUtil.concat(Bytes.toBytes(strings[3*i])));
                 List<HRegionInfo> regionsOfUserTable =
-                        MetaReader.getTableRegions(ct, TableName.valueOf(DATA_TABLE_NAME), false);
+                        MetaReader.getTableRegions(ct, TableName.valueOf(TestUtil.DEFAULT_DATA_TABLE_NAME), false);
 
                 while (regionsOfUserTable.size() != (4+i)) {
                     Thread.sleep(100);
-                    regionsOfUserTable = MetaReader.getTableRegions(ct, TableName.valueOf(DATA_TABLE_NAME), false);
+                    regionsOfUserTable = MetaReader.getTableRegions(ct, TableName.valueOf(TestUtil.DEFAULT_DATA_TABLE_NAME), false);
                 }
                 assertEquals(4+i, regionsOfUserTable.size());
                 TableName indexTable =
-                        TableName.valueOf(MetaDataUtil.getLocalIndexTableName(DATA_TABLE_NAME));
+                        TableName.valueOf(MetaDataUtil.getLocalIndexTableName(TestUtil.DEFAULT_DATA_TABLE_NAME));
                 List<HRegionInfo> regionsOfIndexTable =
                         MetaReader.getTableRegions(ct, indexTable, false);
 
@@ -710,7 +747,7 @@ public class LocalIndexIT extends BaseIndexIT {
                     regionsOfIndexTable = MetaReader.getTableRegions(ct, indexTable, false);
                 }
                 assertEquals(4 + i, regionsOfIndexTable.size());
-                String query = "SELECT t_id,k1,v1 FROM " + DATA_TABLE_NAME;
+                String query = "SELECT t_id,k1,v1 FROM " + TestUtil.DEFAULT_DATA_TABLE_NAME;
                 rs = conn1.createStatement().executeQuery(query);
                 Thread.sleep(1000);
                 for (int j = 0; j < 26; j++) {
@@ -722,16 +759,18 @@ public class LocalIndexIT extends BaseIndexIT {
                 rs = conn1.createStatement().executeQuery("EXPLAIN " + query);
                 assertEquals(
                         "CLIENT PARALLEL " + (4 + i) + "-WAY RANGE SCAN OVER "
-                                + MetaDataUtil.getLocalIndexTableName(DATA_TABLE_NAME) + " [-32768]\n"
+                                + MetaDataUtil.getLocalIndexTableName(TestUtil.DEFAULT_DATA_TABLE_NAME) + " [-32768]\n"
+                                        + "    SERVER FILTER BY FIRST KEY ONLY\n"
                                 + "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
                 
-                query = "SELECT t_id,k1,k3 FROM " + DATA_TABLE_NAME;
+                query = "SELECT t_id,k1,k3 FROM " + TestUtil.DEFAULT_DATA_TABLE_NAME;
                 rs = conn1.createStatement().executeQuery("EXPLAIN "+query);
                 assertEquals(
                     "CLIENT PARALLEL "
                             + ((strings[3 * i].compareTo("j") < 0) ? (4 + i) : (4 + i - 1))
                             + "-WAY RANGE SCAN OVER "
-                            + MetaDataUtil.getLocalIndexTableName(DATA_TABLE_NAME) + " [-32767]\n"
+                            + MetaDataUtil.getLocalIndexTableName(TestUtil.DEFAULT_DATA_TABLE_NAME) + " [-32767]\n"
+                                    + "    SERVER FILTER BY FIRST KEY ONLY\n"
                             + "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
                 rs = conn1.createStatement().executeQuery(query);
                 Thread.sleep(1000);
@@ -748,24 +787,150 @@ public class LocalIndexIT extends BaseIndexIT {
     }
 
     @Test
-    public void testLocalIndexStateWhenSplittingInProgress() throws Exception {
-        createBaseTable(DATA_TABLE_NAME+"2", null, "('e','j','o')");
+    public void testLocalIndexScanWithSmallChunks() throws Exception {
+        createBaseTable(TestUtil.DEFAULT_DATA_TABLE_NAME, 3, null);
+        Properties props = new Properties();
+        props.setProperty(QueryServices.SCAN_RESULT_CHUNK_SIZE, "2");
+        Connection conn1 = DriverManager.getConnection(getUrl(), props);
+        try{
+            String[] strings = {"a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z"};
+            for (int i = 0; i < 26; i++) {
+               conn1.createStatement().execute(
+                    "UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_NAME + " values('"+strings[i]+"'," + i + ","
+                            + (i + 1) + "," + (i + 2) + ",'" + strings[25 - i] + "')");
+            }
+            conn1.commit();
+            conn1.createStatement().execute("CREATE LOCAL INDEX " + TestUtil.DEFAULT_INDEX_TABLE_NAME + " ON " + TestUtil.DEFAULT_DATA_TABLE_NAME + "(v1)");
+            conn1.createStatement().execute("CREATE LOCAL INDEX " + TestUtil.DEFAULT_INDEX_TABLE_NAME + "_2 ON " + TestUtil.DEFAULT_DATA_TABLE_NAME + "(k3)");
+
+            ResultSet rs = conn1.createStatement().executeQuery("SELECT * FROM " + TestUtil.DEFAULT_DATA_TABLE_NAME);
+            assertTrue(rs.next());
+
+            String query = "SELECT t_id,k1,v1 FROM " + TestUtil.DEFAULT_DATA_TABLE_NAME;
+            rs = conn1.createStatement().executeQuery(query);
+            for (int j = 0; j < 26; j++) {
+                assertTrue(rs.next());
+                assertEquals(strings[25 - j], rs.getString("t_id"));
+                assertEquals(25 - j, rs.getInt("k1"));
+                assertEquals(strings[j], rs.getString("V1"));
+            }
+            query = "SELECT t_id,k1,k3 FROM " + TestUtil.DEFAULT_DATA_TABLE_NAME;
+            rs = conn1.createStatement().executeQuery(query);
+            Thread.sleep(1000);
+            for (int j = 0; j < 26; j++) {
+                assertTrue(rs.next());
+                assertEquals(strings[j], rs.getString("t_id"));
+                assertEquals(j, rs.getInt("k1"));
+                assertEquals(j + 2, rs.getInt("k3"));
+            }
+       } finally {
+            conn1.close();
+        }
+    }
+
+    @Test
+    public void testLocalIndexScanAfterRegionsMerge() throws Exception {
+        createBaseTable(TestUtil.DEFAULT_DATA_TABLE_NAME, null, "('e','j','o')");
         Connection conn1 = DriverManager.getConnection(getUrl());
         try{
             String[] strings = {"a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z"};
             for (int i = 0; i < 26; i++) {
                 conn1.createStatement().execute(
-                    "UPSERT INTO " + DATA_TABLE_NAME+"2" + " values('"+strings[i]+"'," + i + ","
+                    "UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_NAME + " values('"+strings[i]+"'," + i + ","
                             + (i + 1) + "," + (i + 2) + ",'" + strings[25 - i] + "')");
             }
             conn1.commit();
-            conn1.createStatement().execute("CREATE LOCAL INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_NAME+"2" + "(v1)");
-            conn1.createStatement().execute("CREATE LOCAL INDEX " + INDEX_TABLE_NAME + "_2 ON " + DATA_TABLE_NAME+"2" + "(k3)");
+            conn1.createStatement().execute("CREATE LOCAL INDEX " + TestUtil.DEFAULT_INDEX_TABLE_NAME + " ON " + TestUtil.DEFAULT_DATA_TABLE_NAME + "(v1)");
+            conn1.createStatement().execute("CREATE LOCAL INDEX " + TestUtil.DEFAULT_INDEX_TABLE_NAME + "_2 ON " + TestUtil.DEFAULT_DATA_TABLE_NAME + "(k3)");
 
-            ResultSet rs = conn1.createStatement().executeQuery("SELECT * FROM " + DATA_TABLE_NAME+"2");
+            ResultSet rs = conn1.createStatement().executeQuery("SELECT * FROM " + TestUtil.DEFAULT_DATA_TABLE_NAME);
+            assertTrue(rs.next());
+
+            HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+            CatalogTracker ct = new CatalogTracker(admin.getConfiguration());
+            List<HRegionInfo> regionsOfUserTable =
+                    MetaReader.getTableRegions(ct,
+                        TableName.valueOf(TestUtil.DEFAULT_DATA_TABLE_NAME), false);
+            admin.mergeRegions(regionsOfUserTable.get(0).getEncodedNameAsBytes(),
+                regionsOfUserTable.get(1).getEncodedNameAsBytes(), false);
+            regionsOfUserTable =
+                    MetaReader.getTableRegions(ct,
+                        TableName.valueOf(TestUtil.DEFAULT_DATA_TABLE_NAME), false);
+
+            while (regionsOfUserTable.size() != 3) {
+                Thread.sleep(100);
+                regionsOfUserTable =
+                        MetaReader.getTableRegions(ct,
+                            TableName.valueOf(TestUtil.DEFAULT_DATA_TABLE_NAME), false);
+            }
+            assertEquals(3, regionsOfUserTable.size());
+            TableName indexTable =
+                    TableName.valueOf(MetaDataUtil
+                            .getLocalIndexTableName(TestUtil.DEFAULT_DATA_TABLE_NAME));
+            List<HRegionInfo> regionsOfIndexTable =
+                    MetaReader.getTableRegions(ct, indexTable, false);
+
+            while (regionsOfIndexTable.size() != 3) {
+                Thread.sleep(100);
+                regionsOfIndexTable = MetaReader.getTableRegions(ct, indexTable, false);
+            }
+            assertEquals(3, regionsOfIndexTable.size());
+            String query = "SELECT t_id,k1,v1 FROM " + TestUtil.DEFAULT_DATA_TABLE_NAME;
+            rs = conn1.createStatement().executeQuery(query);
+            Thread.sleep(1000);
+            for (int j = 0; j < 26; j++) {
+                assertTrue(rs.next());
+                assertEquals(strings[25 - j], rs.getString("t_id"));
+                assertEquals(25 - j, rs.getInt("k1"));
+                assertEquals(strings[j], rs.getString("V1"));
+            }
+            rs = conn1.createStatement().executeQuery("EXPLAIN " + query);
+            assertEquals(
+                "CLIENT PARALLEL " + 3 + "-WAY RANGE SCAN OVER "
+                        + MetaDataUtil.getLocalIndexTableName(TestUtil.DEFAULT_DATA_TABLE_NAME)
+                        + " [-32768]\n" + "    SERVER FILTER BY FIRST KEY ONLY\n"
+                        + "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
+
+            query = "SELECT t_id,k1,k3 FROM " + TestUtil.DEFAULT_DATA_TABLE_NAME;
+            rs = conn1.createStatement().executeQuery("EXPLAIN " + query);
+            assertEquals(
+                "CLIENT PARALLEL " + 3 + "-WAY RANGE SCAN OVER "
+                        + MetaDataUtil.getLocalIndexTableName(TestUtil.DEFAULT_DATA_TABLE_NAME)
+                        + " [-32767]\n" + "    SERVER FILTER BY FIRST KEY ONLY\n"
+                        + "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
+
+            rs = conn1.createStatement().executeQuery(query);
+            Thread.sleep(1000);
+            for (int j = 0; j < 26; j++) {
+                assertTrue(rs.next());
+                assertEquals(strings[j], rs.getString("t_id"));
+                assertEquals(j, rs.getInt("k1"));
+                assertEquals(j + 2, rs.getInt("k3"));
+            }
+       } finally {
+            conn1.close();
+        }
+    }
+
+    @Test
+    public void testLocalIndexStateWhenSplittingInProgress() throws Exception {
+        createBaseTable(TestUtil.DEFAULT_DATA_TABLE_NAME+"2", null, "('e','j','o')");
+        Connection conn1 = DriverManager.getConnection(getUrl());
+        try{
+            String[] strings = {"a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z"};
+            for (int i = 0; i < 26; i++) {
+                conn1.createStatement().execute(
+                    "UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_NAME+"2" + " values('"+strings[i]+"'," + i + ","
+                            + (i + 1) + "," + (i + 2) + ",'" + strings[25 - i] + "')");
+            }
+            conn1.commit();
+            conn1.createStatement().execute("CREATE LOCAL INDEX " + TestUtil.DEFAULT_INDEX_TABLE_NAME + " ON " + TestUtil.DEFAULT_DATA_TABLE_NAME+"2" + "(v1)");
+            conn1.createStatement().execute("CREATE LOCAL INDEX " + TestUtil.DEFAULT_INDEX_TABLE_NAME + "_2 ON " + TestUtil.DEFAULT_DATA_TABLE_NAME+"2" + "(k3)");
+
+            ResultSet rs = conn1.createStatement().executeQuery("SELECT * FROM " + TestUtil.DEFAULT_DATA_TABLE_NAME+"2");
             assertTrue(rs.next());
             HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-            HTableDescriptor tableDesc = admin.getTableDescriptor(TableName.valueOf(DATA_TABLE_NAME+"2"));
+            HTableDescriptor tableDesc = admin.getTableDescriptor(TableName.valueOf(TestUtil.DEFAULT_DATA_TABLE_NAME+"2"));
             tableDesc.removeCoprocessor(LocalIndexSplitter.class.getName());
             tableDesc.addCoprocessor(MockedLocalIndexSplitter.class.getName(), null,
                 1, null);
@@ -773,7 +938,7 @@ public class LocalIndexIT extends BaseIndexIT {
             admin.modifyTable(tableDesc.getTableName(), tableDesc);
             admin.enableTable(tableDesc.getTableName());
             TableName indexTable =
-                    TableName.valueOf(MetaDataUtil.getLocalIndexTableName(DATA_TABLE_NAME+"2"));
+                    TableName.valueOf(MetaDataUtil.getLocalIndexTableName(TestUtil.DEFAULT_DATA_TABLE_NAME+"2"));
             HTableDescriptor indexTableDesc = admin.getTableDescriptor(indexTable);
             indexTableDesc.removeCoprocessor(IndexHalfStoreFileReaderGenerator.class.getName());
             indexTableDesc.addCoprocessor(MockedIndexHalfStoreFileReaderGenerator.class.getName(), null,
@@ -782,13 +947,13 @@ public class LocalIndexIT extends BaseIndexIT {
             admin.modifyTable(indexTable, indexTableDesc);
             admin.enableTable(indexTable);
 
-            admin.split(Bytes.toBytes(DATA_TABLE_NAME+"2"), ByteUtil.concat(Bytes.toBytes(strings[3])));
+            admin.split(Bytes.toBytes(TestUtil.DEFAULT_DATA_TABLE_NAME+"2"), ByteUtil.concat(Bytes.toBytes(strings[3])));
             List<HRegionInfo> regionsOfUserTable =
-                    admin.getTableRegions(TableName.valueOf(DATA_TABLE_NAME+"2"));
+                    admin.getTableRegions(TableName.valueOf(TestUtil.DEFAULT_DATA_TABLE_NAME+"2"));
 
             while (regionsOfUserTable.size() != 5) {
                 Thread.sleep(100);
-                regionsOfUserTable = admin.getTableRegions(TableName.valueOf(DATA_TABLE_NAME+"2"));
+                regionsOfUserTable = admin.getTableRegions(TableName.valueOf(TestUtil.DEFAULT_DATA_TABLE_NAME+"2"));
             }
             assertEquals(5, regionsOfUserTable.size());
 
@@ -802,22 +967,22 @@ public class LocalIndexIT extends BaseIndexIT {
             assertEquals(5, regionsOfIndexTable.size());
             latch1.await();
             // Verify the metadata for index is correct.
-            rs = conn1.getMetaData().getTables(null, StringUtil.escapeLike(SCHEMA_NAME), INDEX_TABLE_NAME,
+            rs = conn1.getMetaData().getTables(null, StringUtil.escapeLike(TestUtil.DEFAULT_SCHEMA_NAME), TestUtil.DEFAULT_INDEX_TABLE_NAME,
                     new String[] { PTableType.INDEX.toString() });
             assertTrue(rs.next());
-            assertEquals(INDEX_TABLE_NAME, rs.getString(3));
+            assertEquals(TestUtil.DEFAULT_INDEX_TABLE_NAME, rs.getString(3));
             assertEquals(PIndexState.INACTIVE.toString(), rs.getString("INDEX_STATE"));
             assertFalse(rs.next());
-            rs = conn1.getMetaData().getTables(null, StringUtil.escapeLike(SCHEMA_NAME), INDEX_TABLE_NAME+"_2",
+            rs = conn1.getMetaData().getTables(null, StringUtil.escapeLike(TestUtil.DEFAULT_SCHEMA_NAME), TestUtil.DEFAULT_INDEX_TABLE_NAME+"_2",
                 new String[] { PTableType.INDEX.toString() });
             assertTrue(rs.next());
-            assertEquals(INDEX_TABLE_NAME+"_2", rs.getString(3));
+            assertEquals(TestUtil.DEFAULT_INDEX_TABLE_NAME+"_2", rs.getString(3));
             assertEquals(PIndexState.INACTIVE.toString(), rs.getString("INDEX_STATE"));
             assertFalse(rs.next());
 
-            String query = "SELECT t_id,k1,v1 FROM " + DATA_TABLE_NAME+"2";
+            String query = "SELECT t_id,k1,v1 FROM " + TestUtil.DEFAULT_DATA_TABLE_NAME+"2";
             rs = conn1.createStatement().executeQuery("EXPLAIN " + query);
-            assertEquals("CLIENT PARALLEL " + 1 + "-WAY FULL SCAN OVER " + DATA_TABLE_NAME+"2",
+            assertEquals("CLIENT PARALLEL " + 1 + "-WAY FULL SCAN OVER " + TestUtil.DEFAULT_DATA_TABLE_NAME+"2",
                 QueryUtil.getExplainPlan(rs));
             latch2.countDown();
        } finally {

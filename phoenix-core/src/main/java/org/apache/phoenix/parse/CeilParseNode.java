@@ -26,7 +26,11 @@ import org.apache.phoenix.expression.function.CeilDateExpression;
 import org.apache.phoenix.expression.function.CeilDecimalExpression;
 import org.apache.phoenix.expression.function.CeilFunction;
 import org.apache.phoenix.expression.function.CeilTimestampExpression;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PTimestamp;
+import org.apache.phoenix.schema.types.PUnsignedTimestamp;
 import org.apache.phoenix.schema.TypeMismatchException;
 
 /**
@@ -52,11 +56,11 @@ public class CeilParseNode extends FunctionParseNode {
     public static Expression getCeilExpression(List<Expression> children) throws SQLException {
         final Expression firstChild = children.get(0);
         final PDataType firstChildDataType = firstChild.getDataType();
-        if(firstChildDataType.isCoercibleTo(PDataType.DATE)) {
+        if(firstChildDataType.isCoercibleTo(PDate.INSTANCE)) {
             return CeilDateExpression.create(children);
-        } else if (firstChildDataType == PDataType.TIMESTAMP || firstChildDataType == PDataType.UNSIGNED_TIMESTAMP) {
+        } else if (firstChildDataType == PTimestamp.INSTANCE || firstChildDataType == PUnsignedTimestamp.INSTANCE) {
             return CeilTimestampExpression.create(children);
-        } else if(firstChildDataType.isCoercibleTo(PDataType.DECIMAL)) {
+        } else if(firstChildDataType.isCoercibleTo(PDecimal.INSTANCE)) {
             return CeilDecimalExpression.create(children);
         } else {
             throw TypeMismatchException.newException(firstChildDataType, "1");

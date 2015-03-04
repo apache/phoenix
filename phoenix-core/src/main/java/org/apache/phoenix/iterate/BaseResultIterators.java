@@ -69,7 +69,6 @@ import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.PTableStats;
 import org.apache.phoenix.util.LogUtil;
-import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -92,7 +91,6 @@ import com.google.common.collect.Lists;
  */
 public abstract class BaseResultIterators extends ExplainTable implements ResultIterators {
 	private static final Logger logger = LoggerFactory.getLogger(BaseResultIterators.class);
-    private static final int DEFAULT_THREAD_TIMEOUT_MS = 60000; // 1min
     private static final int ESTIMATED_GUIDEPOSTS_PER_REGION = 20;
 
     private final List<List<Scan>> scans;
@@ -145,8 +143,9 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         Scan scan = context.getScan();
         // Used to tie all the scans together during logging
         scanId = UUID.randomUUID().toString();
+        Map<byte [], NavigableSet<byte []>> familyMap = scan.getFamilyMap();
+        boolean keyOnlyFilter = familyMap.isEmpty() && context.getWhereCoditionColumns().isEmpty();
         if (projector.isProjectEmptyKeyValue()) {
-            Map<byte [], NavigableSet<byte []>> familyMap = scan.getFamilyMap();
             // If nothing projected into scan and we only have one column family, just allow everything
             // to be projected and use a FirstKeyOnlyFilter to skip from row to row. This turns out to
             // be quite a bit faster.
@@ -157,7 +156,6 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 // Project the one column family. We must project a column family since it's possible
                 // that there are other non declared column families that we need to ignore.
                 scan.addFamily(table.getColumnFamilies().get(0).getName().getBytes());
-                ScanUtil.andFilterAtBeginning(scan, new FirstKeyOnlyFilter());
             } else {
                 byte[] ecf = SchemaUtil.getEmptyColumnFamily(table);
                 // Project empty key value unless the column family containing it has
@@ -172,6 +170,10 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             for (PColumnFamily family : table.getColumnFamilies()) {
                 scan.addFamily(family.getName().getBytes());
             }
+        }
+        // Add FirstKeyOnlyFilter if there are no references to key value columns
+        if (keyOnlyFilter) {
+            ScanUtil.andFilterAtBeginning(scan, new FirstKeyOnlyFilter());
         }
         
         // TODO adding all CFs here is not correct. It should be done only after ColumnProjectionOptimization.
@@ -506,7 +508,6 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         boolean isReverse = ScanUtil.isReversed(scan);
         boolean isLocalIndex = getTable().getIndexType() == IndexType.LOCAL;
         final ConnectionQueryServices services = context.getConnection().getQueryServices();
-        ReadOnlyProps props = services.getProps();
         int numScans = size();
         // Capture all iterators so that if something goes wrong, we close them all
         // The iterators list is based on the submission of work, so it may not
@@ -516,7 +517,8 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         final List<List<Pair<Scan,Future<PeekingResultIterator>>>> futures = Lists.newArrayListWithExpectedSize(numScans);
         allFutures.add(futures);
         SQLException toThrow = null;
-        int queryTimeOut = props.getInt(QueryServices.THREAD_TIMEOUT_MS_ATTRIB, DEFAULT_THREAD_TIMEOUT_MS);
+        // Get query time out from Statement and convert from seconds back to milliseconds
+        int queryTimeOut = context.getStatement().getQueryTimeout() * 1000;
         long maxQueryEndTime = System.currentTimeMillis() + queryTimeOut;
         try {
             submitWork(scans, futures, allIterators, splits.size());

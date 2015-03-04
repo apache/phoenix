@@ -22,9 +22,10 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
-import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PBoolean;
+import org.apache.phoenix.schema.types.PDataType;
 
 
 /**
@@ -38,14 +39,14 @@ import org.apache.phoenix.schema.tuple.Tuple;
 public class NotExpression extends BaseSingleExpression {
 
     public static Expression create(Expression child, ImmutableBytesWritable ptr) throws SQLException {
-        if (child.getDataType() != PDataType.BOOLEAN) {
-            throw TypeMismatchException.newException(child.getDataType(), PDataType.BOOLEAN, "NOT");
+        if (child.getDataType() != PBoolean.INSTANCE) {
+            throw TypeMismatchException.newException(child.getDataType(), PBoolean.INSTANCE, "NOT");
         }
         if (child.isStateless()) {
             if (!child.evaluate(null, ptr) || ptr.getLength() == 0) {
-                return LiteralExpression.newConstant(null, PDataType.BOOLEAN, child.getDeterminism());
+                return LiteralExpression.newConstant(null, PBoolean.INSTANCE, child.getDeterminism());
             }
-            return LiteralExpression.newConstant(!(Boolean)PDataType.BOOLEAN.toObject(ptr), PDataType.BOOLEAN, child.getDeterminism());
+            return LiteralExpression.newConstant(!(Boolean) PBoolean.INSTANCE.toObject(ptr), PBoolean.INSTANCE, child.getDeterminism());
         }
         return new NotExpression(child);
     }
@@ -57,6 +58,10 @@ public class NotExpression extends BaseSingleExpression {
         super(expression);
     }
 
+    public NotExpression(List<Expression> l) {
+        super(l);
+    }
+
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
         if (!getChild().evaluate(tuple, ptr)) {
@@ -66,13 +71,13 @@ public class NotExpression extends BaseSingleExpression {
             return true;
         }
         
-        ptr.set(Boolean.TRUE.equals(PDataType.BOOLEAN.toObject(ptr)) ? PDataType.FALSE_BYTES : PDataType.TRUE_BYTES);
+        ptr.set(Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(ptr)) ? PDataType.FALSE_BYTES : PDataType.TRUE_BYTES);
         return true;
     }
 
     @Override
     public PDataType getDataType() {
-        return PDataType.BOOLEAN;
+        return PBoolean.INSTANCE;
     }
     
     @Override

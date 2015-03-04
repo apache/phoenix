@@ -49,12 +49,12 @@ import org.apache.phoenix.parse.SubqueryParseNode;
 import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
-import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.TypeMismatchException;
+import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -127,12 +127,12 @@ public class WhereCompiler {
         
         Set<Expression> extractedNodes = Sets.<Expression>newHashSet();
         WhereExpressionCompiler whereCompiler = new WhereExpressionCompiler(context);
-        Expression expression = where == null ? LiteralExpression.newConstant(true,PDataType.BOOLEAN,Determinism.ALWAYS) : where.accept(whereCompiler);
+        Expression expression = where == null ? LiteralExpression.newConstant(true, PBoolean.INSTANCE,Determinism.ALWAYS) : where.accept(whereCompiler);
         if (whereCompiler.isAggregate()) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.AGGREGATE_IN_WHERE).build().buildException();
         }
-        if (expression.getDataType() != PDataType.BOOLEAN) {
-            throw TypeMismatchException.newException(PDataType.BOOLEAN, expression.getDataType(), expression.toString());
+        if (expression.getDataType() != PBoolean.INSTANCE) {
+            throw TypeMismatchException.newException(PBoolean.INSTANCE, expression.getDataType(), expression.toString());
         }
         if (viewWhere != null) {
             WhereExpressionCompiler viewWhereCompiler = new WhereExpressionCompiler(context, true);
@@ -145,7 +145,7 @@ public class WhereCompiler {
             expression = AndExpression.create(filters);
         }
         
-        if (context.getCurrentTable().getTable().getType() != PTableType.JOIN && context.getCurrentTable().getTable().getType() != PTableType.SUBQUERY) {
+        if (context.getCurrentTable().getTable().getType() != PTableType.PROJECTED && context.getCurrentTable().getTable().getType() != PTableType.SUBQUERY) {
             expression = WhereOptimizer.pushKeyExpressionsToScan(context, statement, expression, extractedNodes);
         }
         setScanFilter(context, statement, expression, whereCompiler.disambiguateWithFamily, hashJoinOptimization);
@@ -173,7 +173,7 @@ public class WhereCompiler {
                 context.addWhereCoditionColumn(ref.getColumn().getFamilyName().getBytes(), ref.getColumn().getName()
                         .getBytes());
             }
-            return ref.newColumnExpression();
+            return ref.newColumnExpression(node.isTableNameCaseSensitive(), node.isCaseSensitive());
         }
 
         @Override

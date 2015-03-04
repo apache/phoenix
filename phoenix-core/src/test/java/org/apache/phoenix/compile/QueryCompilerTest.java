@@ -38,6 +38,7 @@ import java.util.List;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -428,6 +429,11 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     }
 
     private Scan compileQuery(String query, List<Object> binds) throws SQLException {
+        QueryPlan plan = getQueryPlan(query, binds);
+        return plan.getContext().getScan();
+    }
+    
+    private QueryPlan getQueryPlan(String query, List<Object> binds) throws SQLException {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -435,8 +441,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             for (Object bind : binds) {
                 statement.setObject(1, bind);
             }
-            QueryPlan plan = statement.compileQuery(query);
-            return plan.getContext().getScan();
+            return statement.compileQuery(query);
         } finally {
             conn.close();
         }
@@ -455,9 +460,8 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         };
         List<Object> binds = Collections.emptyList();
         for (String query : queries) {
-            Scan scan = compileQuery(query, binds);
-            assertTrue(query, scan.getAttribute(BaseScannerRegionObserver.KEY_ORDERED_GROUP_BY_EXPRESSIONS) != null);
-            assertTrue(query, scan.getAttribute(BaseScannerRegionObserver.UNORDERED_GROUP_BY_EXPRESSIONS) == null);
+            QueryPlan plan = getQueryPlan(query, binds);
+            assertEquals(plan.getGroupBy().getScanAttribName(), BaseScannerRegionObserver.KEY_ORDERED_GROUP_BY_EXPRESSIONS);
         }
     }
 
@@ -638,9 +642,8 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         };
         List<Object> binds = Collections.emptyList();
         for (String query : queries) {
-            Scan scan = compileQuery(query, binds);
-            assertTrue(query, scan.getAttribute(BaseScannerRegionObserver.KEY_ORDERED_GROUP_BY_EXPRESSIONS) == null);
-            assertTrue(query, scan.getAttribute(BaseScannerRegionObserver.UNORDERED_GROUP_BY_EXPRESSIONS) != null);
+            QueryPlan plan = getQueryPlan(query, binds);
+            assertEquals(plan.getGroupBy().getScanAttribName(), BaseScannerRegionObserver.UNORDERED_GROUP_BY_EXPRESSIONS);
         }
     }
     
@@ -945,15 +948,21 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     @Test
     public void testSetSaltBucketOnAlterTable() throws Exception {
         long ts = nextTimestamp();
-        String query = "ALTER TABLE atable ADD xyz INTEGER SALT_BUCKETS=4";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Connection conn = DriverManager.getConnection(url);
         try {
-            PreparedStatement statement = conn.prepareStatement(query);
+            PreparedStatement statement = conn.prepareStatement("ALTER TABLE atable ADD xyz INTEGER SALT_BUCKETS=4");
             statement.execute();
             fail();
         } catch (SQLException e) { // expected
-            assertTrue(e.getErrorCode() == SQLExceptionCode.SALT_ONLY_ON_CREATE_TABLE.getErrorCode());
+            assertEquals(SQLExceptionCode.SALT_ONLY_ON_CREATE_TABLE.getErrorCode(), e.getErrorCode());
+        }
+        try {
+            PreparedStatement statement = conn.prepareStatement("ALTER TABLE atable SET SALT_BUCKETS=4");
+            statement.execute();
+            fail();
+        } catch (SQLException e) { // expected
+            assertEquals(SQLExceptionCode.SALT_ONLY_ON_CREATE_TABLE.getErrorCode(), e.getErrorCode());
         }
     }
 
@@ -1368,7 +1377,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         }
         conn.close();
         try {
-            PreparedStatement stmt = conn.prepareStatement("SELECT * FROM atable");
+            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO atable VALUES('000000000000000','000000000000000')");
             stmt.addBatch();
             stmt.executeUpdate();
             fail();
@@ -1452,4 +1461,109 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             assertFalse("Did not expected to find GROUP BY limit optimization in: " + query, QueryUtil.getExplainPlan(rs).contains(" LIMIT 3 GROUPS"));
         }
     }
+    
+    @Test
+    public void testLocalIndexCreationWithDefaultFamilyOption() throws Exception {
+        Connection conn1 = DriverManager.getConnection(getUrl());
+        try{
+            Statement statement = conn1.createStatement();
+            statement.execute("create table example (id integer not null,fn varchar,"
+                    + "ln varchar constraint pk primary key(id)) DEFAULT_COLUMN_FAMILY='F'");
+            try {
+                statement.execute("create local index my_idx on example (fn) DEFAULT_COLUMN_FAMILY='F'");
+                fail();
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.VIEW_WITH_PROPERTIES.getErrorCode(),e.getErrorCode());
+            }
+            statement.execute("create local index my_idx on example (fn)");
+       } finally {
+            conn1.close();
+        }
+    }
+
+    @Test
+    public void testMultiCFProjection() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String ddl = "CREATE TABLE multiCF (k integer primary key, a.a varchar, b.b varchar)";
+        conn.createStatement().execute(ddl);
+        String query = "SELECT COUNT(*) FROM multiCF";
+        QueryPlan plan = getQueryPlan(query,Collections.emptyList());
+        plan.iterator();
+        Scan scan = plan.getContext().getScan();
+        assertTrue(scan.getFilter() instanceof FirstKeyOnlyFilter);
+        assertEquals(1, scan.getFamilyMap().size());
+    }
+    
+    @Test 
+    public void testNonDeterministicExpressionIndex() throws Exception {
+        String ddl = "CREATE TABLE t (k1 INTEGER PRIMARY KEY)";
+        Connection conn = DriverManager.getConnection(getUrl());
+        Statement stmt = null;
+        try {
+            stmt = conn.createStatement();
+            stmt.execute(ddl);
+            stmt.execute("CREATE INDEX i ON t (RAND())");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.NON_DETERMINISTIC_EXPRESSION_NOT_ALLOWED_IN_INDEX.getErrorCode(), e.getErrorCode());
+        }
+        finally {
+            stmt.close();
+        }
+    }
+    
+    @Test 
+    public void testStatelessExpressionIndex() throws Exception {
+        String ddl = "CREATE TABLE t (k1 INTEGER PRIMARY KEY)";
+        Connection conn = DriverManager.getConnection(getUrl());
+        Statement stmt = null;
+        try {
+            stmt = conn.createStatement();
+            stmt.execute(ddl);
+            stmt.execute("CREATE INDEX i ON t (2)");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.STATELESS_EXPRESSION_NOT_ALLOWED_IN_INDEX.getErrorCode(), e.getErrorCode());
+        }
+        finally {
+            stmt.close();
+        }
+    }
+    
+    @Test 
+    public void testAggregateExpressionIndex() throws Exception {
+        String ddl = "CREATE TABLE t (k1 INTEGER PRIMARY KEY)";
+        Connection conn = DriverManager.getConnection(getUrl());
+        Statement stmt = null;
+        try {
+            stmt = conn.createStatement();
+            stmt.execute(ddl);
+            stmt.execute("CREATE INDEX i ON t (SUM(k1))");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.AGGREGATE_EXPRESSION_NOT_ALLOWED_IN_INDEX.getErrorCode(), e.getErrorCode());
+        }
+        finally {
+            stmt.close();
+        }
+    }
+    
+    @Test 
+    public void testDivideByZeroExpressionIndex() throws Exception {
+        String ddl = "CREATE TABLE t (k1 INTEGER PRIMARY KEY)";
+        Connection conn = DriverManager.getConnection(getUrl());
+        Statement stmt = null;
+        try {
+            stmt = conn.createStatement();
+            stmt.execute(ddl);
+            stmt.execute("CREATE INDEX i ON t (k1/0)");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.DIVIDE_BY_ZERO.getErrorCode(), e.getErrorCode());
+        }
+        finally {
+            stmt.close();
+        }
+    }
+
 }

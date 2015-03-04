@@ -29,8 +29,11 @@ import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
-import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PBoolean;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.util.ExpressionUtil;
 
 
 /**
@@ -48,6 +51,19 @@ public class CaseExpression extends BaseCompoundExpression {
     private PDataType returnType;
    
     public CaseExpression() {
+    }
+    
+    public static Expression create(List<Expression> children) throws SQLException {
+        CaseExpression caseExpression = new CaseExpression(coerceIfNecessary(children));
+        if (ExpressionUtil.isConstant(caseExpression)) {
+            ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+            int index = caseExpression.evaluateIndexOf(null, ptr);
+            if (index < 0) {
+                return LiteralExpression.newConstant(null, caseExpression.getDeterminism());
+            }
+            return caseExpression.getChildren().get(index);
+        }
+        return caseExpression;
     }
     
     private static List<Expression> coerceIfNecessary(List<Expression> children) throws SQLException {
@@ -73,8 +89,8 @@ public class CaseExpression extends BaseCompoundExpression {
         }
         // If we found an "unknown" child type and the return type is a number
         // make the return type be the most general number type of DECIMAL.
-        if (isChildTypeUnknown && returnType != null && returnType.isCoercibleTo(PDataType.DECIMAL)) {
-            returnType = PDataType.DECIMAL;
+        if (isChildTypeUnknown && returnType != null && returnType.isCoercibleTo(PDecimal.INSTANCE)) {
+            returnType = PDecimal.INSTANCE;
         }
         List<Expression> newChildren = children;
         for (int i = 0; i < children.size(); i+=2) {
@@ -96,8 +112,8 @@ public class CaseExpression extends BaseCompoundExpression {
      * @throws SQLException if return type of case expressions do not match and cannot
      *  be coerced to a common type
      */
-    public CaseExpression(List<Expression> expressions) throws SQLException {
-        super(coerceIfNecessary(expressions));
+    public CaseExpression(List<Expression> children) {
+        super(children);
         returnType = children.get(0).getDataType();
     }
     
@@ -156,7 +172,7 @@ public class CaseExpression extends BaseCompoundExpression {
             // If we get null, we have to re-evaluate from that point (special case this in filter, like is null)
             // We may only run this when we're done/have all values
             boolean evaluated = children.get(i+1).evaluate(tuple, ptr);
-            if (evaluated && Boolean.TRUE.equals(PDataType.BOOLEAN.toObject(ptr))) {
+            if (evaluated && Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(ptr))) {
                 if (isPartiallyEvaluating()) {
                     foundIndex = true;
                 }

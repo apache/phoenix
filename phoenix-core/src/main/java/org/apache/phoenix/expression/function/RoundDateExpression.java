@@ -33,9 +33,11 @@ import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.PColumn;
-import org.apache.phoenix.schema.PDataType;
-import org.apache.phoenix.schema.PDataType.PDataCodec;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDataType.PDataCodec;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
@@ -47,7 +49,7 @@ import com.google.common.collect.Lists;
  * an even increment.  Usage:
  * ROUND(<date/time col ref>,<'day'|'hour'|'minute'|'second'|'millisecond'>,<optional integer multiplier>)
  * The integer multiplier is optional and is used to do rollups to a partial time unit (i.e. 10 minute rollup)
- * The function returns a {@link org.apache.phoenix.schema.PDataType#DATE}
+ * The function returns a {@link org.apache.phoenix.schema.types.PDate}
 
  * 
  * @since 0.1
@@ -93,11 +95,11 @@ public class RoundDateExpression extends ScalarFunction {
     }
     
     static Expression getTimeUnitExpr(TimeUnit timeUnit) throws SQLException {
-        return LiteralExpression.newConstant(timeUnit.name(), PDataType.VARCHAR, Determinism.ALWAYS);
+        return LiteralExpression.newConstant(timeUnit.name(), PVarchar.INSTANCE, Determinism.ALWAYS);
     }
     
     static Expression getMultiplierExpr(int multiplier) throws SQLException {
-        return LiteralExpression.newConstant(multiplier, PDataType.INTEGER, Determinism.ALWAYS);
+        return LiteralExpression.newConstant(multiplier, PInteger.INSTANCE, Determinism.ALWAYS);
     }
     
     RoundDateExpression(List<Expression> children) {

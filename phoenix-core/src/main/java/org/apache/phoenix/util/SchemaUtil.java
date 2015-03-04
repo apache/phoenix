@@ -48,7 +48,6 @@ import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
-import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PMetaData;
 import org.apache.phoenix.schema.PName;
@@ -58,6 +57,9 @@ import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
 import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.ValueSchema.Field;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.schema.types.PVarchar;
 
 import com.google.common.base.Preconditions;
 
@@ -82,7 +84,7 @@ public class SchemaUtil {
     
         @Override
         public PDataType getDataType() {
-            return PDataType.VARBINARY;
+            return PVarbinary.INSTANCE;
         }
     
         @Override
@@ -172,7 +174,7 @@ public class SchemaUtil {
     }
 
     public static boolean isCaseSensitive(String name) {
-        return name.length() > 0 && name.charAt(0)=='"';
+        return name!=null && name.length() > 0 && name.charAt(0)=='"';
     }
     
     public static <T> List<T> concat(List<T> l1, List<T> l2) {
@@ -204,14 +206,16 @@ public class SchemaUtil {
     }
 
     public static String getTableName(String schemaName, String tableName) {
-        return getName(schemaName,tableName);
+        return getName(schemaName,tableName, false);
     }
 
-    private static String getName(String optionalQualifier, String name) {
+    private static String getName(String optionalQualifier, String name, boolean caseSensitive) {
+        String cq = caseSensitive ? "\"" + name + "\"" : name;
         if (optionalQualifier == null || optionalQualifier.isEmpty()) {
-            return name;
+            return cq;
         }
-        return optionalQualifier + QueryConstants.NAME_SEPARATOR + name;
+        String cf = caseSensitive ? "\"" + optionalQualifier + "\"" : optionalQualifier;
+        return cf + QueryConstants.NAME_SEPARATOR + cq;
     }
 
     public static String getTableName(byte[] schemaName, byte[] tableName) {
@@ -223,21 +227,25 @@ public class SchemaUtil {
     }
 
     public static String getColumnDisplayName(String cf, String cq) {
-        return getName(cf == null || cf.isEmpty() ? null : cf, cq);
+        return getName(cf == null || cf.isEmpty() ? null : cf, cq, false);
+    }
+    
+    public static String getCaseSensitiveColumnDisplayName(String cf, String cq) {
+        return getName(cf == null || cf.isEmpty() ? null : cf, cq, true);
     }
 
     public static String getMetaDataEntityName(String schemaName, String tableName, String familyName, String columnName) {
         if ((schemaName == null || schemaName.isEmpty()) && (tableName == null || tableName.isEmpty())) {
-            return getName(familyName, columnName);
+            return getName(familyName, columnName, false);
         }
         if ((familyName == null || familyName.isEmpty()) && (columnName == null || columnName.isEmpty())) {
-            return getName(schemaName, tableName);
+            return getName(schemaName, tableName, false);
         }
-        return getName(getName(schemaName, tableName), getName(familyName, columnName));
+        return getName(getName(schemaName, tableName, false), getName(familyName, columnName, false), false);
     }
 
     public static String getColumnName(String familyName, String columnName) {
-        return getName(familyName, columnName);
+        return getName(familyName, columnName, false);
     }
 
     public static byte[] getTableNameAsBytes(String schemaName, String tableName) {
@@ -343,7 +351,7 @@ public class SchemaUtil {
     }
 
     public static String toString(PDataType type, byte[] value) {
-        boolean isString = type.isCoercibleTo(PDataType.VARCHAR);
+        boolean isString = type.isCoercibleTo(PVarchar.INSTANCE);
         return isString ? ("'" + type.toObject(value).toString() + "'") : type.toObject(value).toString();
     }
 
@@ -374,6 +382,10 @@ public class SchemaUtil {
         return Bytes.compareTo(tableName, PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_BYTES) == 0;
     }
 
+    public static boolean isSequenceTable(PTable table) {
+        return PhoenixDatabaseMetaData.SEQUENCE_FULLNAME.equals(table.getName().getString());
+    }
+
     public static boolean isMetaTable(PTable table) {
         return PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA.equals(table.getSchemaName().getString()) && PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE.equals(table.getTableName().getString());
     }
@@ -384,6 +396,12 @@ public class SchemaUtil {
     
     public static boolean isMetaTable(String schemaName, String tableName) {
         return PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA.equals(schemaName) && PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE.equals(tableName);
+    }
+
+    public static boolean isSystemTable(byte[] fullTableName) {
+        String schemaName = SchemaUtil.getSchemaNameFromFullName(fullTableName);
+        if (QueryConstants.SYSTEM_SCHEMA_NAME.equals(schemaName)) return true;
+        return false;
     }
 
     // Given the splits and the rowKeySchema, find out the keys that 

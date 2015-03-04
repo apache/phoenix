@@ -30,7 +30,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Pair;
@@ -56,6 +55,7 @@ import org.apache.phoenix.compile.StatementNormalizer;
 import org.apache.phoenix.compile.StatementPlan;
 import org.apache.phoenix.compile.SubqueryRewriter;
 import org.apache.phoenix.compile.SubselectRewriter;
+import org.apache.phoenix.compile.TraceQueryPlan;
 import org.apache.phoenix.compile.UpsertCompiler;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.exception.BatchUpdateExecution;
@@ -82,6 +82,7 @@ import org.apache.phoenix.parse.DropTableStatement;
 import org.apache.phoenix.parse.ExplainStatement;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.HintNode;
+import org.apache.phoenix.parse.IndexKeyConstraint;
 import org.apache.phoenix.parse.LimitNode;
 import org.apache.phoenix.parse.NamedNode;
 import org.apache.phoenix.parse.NamedTableNode;
@@ -93,6 +94,7 @@ import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.parse.TableNode;
+import org.apache.phoenix.parse.TraceStatement;
 import org.apache.phoenix.parse.UpdateStatisticsStatement;
 import org.apache.phoenix.parse.UpsertStatement;
 import org.apache.phoenix.query.KeyRange;
@@ -102,7 +104,6 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.ExecuteQueryNotApplicableException;
 import org.apache.phoenix.schema.ExecuteUpdateNotApplicableException;
 import org.apache.phoenix.schema.MetaDataClient;
-import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable.IndexType;
@@ -114,6 +115,8 @@ import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.stats.StatisticsCollectionScope;
 import org.apache.phoenix.schema.tuple.SingleKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.KeyValueUtil;
@@ -123,6 +126,8 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.ServerUtil;
+import org.cloudera.htrace.Sampler;
+import org.cloudera.htrace.TraceScope;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -184,11 +189,19 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
     private boolean isClosed = false;
     private int maxRows;
     private int fetchSize = -1;
+    private int queryTimeout;
     
     public PhoenixStatement(PhoenixConnection connection) {
         this.connection = connection;
+        this.queryTimeout = getDefaultQueryTimeout();
     }
     
+    private int getDefaultQueryTimeout() {
+        // Convert milliseconds to seconds by taking the CEIL up to the next second
+        return (connection.getQueryServices().getProps().getInt(QueryServices.THREAD_TIMEOUT_MS_ATTRIB, 
+            QueryServicesOptions.DEFAULT_THREAD_TIMEOUT_MS) + 999) / 1000;
+    }
+
     protected List<PhoenixResultSet> getResultSets() {
         return resultSets;
     }
@@ -326,7 +339,7 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
     }
     
     private static final byte[] EXPLAIN_PLAN_FAMILY = QueryConstants.SINGLE_COLUMN_FAMILY;
-    private static final byte[] EXPLAIN_PLAN_COLUMN = PDataType.VARCHAR.toBytes("Plan");
+    private static final byte[] EXPLAIN_PLAN_COLUMN = PVarchar.INSTANCE.toBytes("Plan");
     private static final String EXPLAIN_PLAN_ALIAS = "PLAN";
     private static final String EXPLAIN_PLAN_TABLE_NAME = "PLAN_TABLE";
     private static final PDatum EXPLAIN_PLAN_DATUM = new PDatum() {
@@ -336,7 +349,7 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         }
         @Override
         public PDataType getDataType() {
-            return PDataType.VARCHAR;
+            return PVarchar.INSTANCE;
         }
         @Override
         public Integer getMaxLength() {
@@ -381,7 +394,7 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
             List<String> planSteps = plan.getExplainPlan().getPlanSteps();
             List<Tuple> tuples = Lists.newArrayListWithExpectedSize(planSteps.size());
             for (String planStep : planSteps) {
-                Tuple tuple = new SingleKeyValueTuple(KeyValueUtil.newKeyValue(PDataType.VARCHAR.toBytes(planStep), EXPLAIN_PLAN_FAMILY, EXPLAIN_PLAN_COLUMN, MetaDataProtocol.MIN_TABLE_TIMESTAMP, ByteUtil.EMPTY_BYTE_ARRAY));
+                Tuple tuple = new SingleKeyValueTuple(KeyValueUtil.newKeyValue(PVarchar.INSTANCE.toBytes(planStep), EXPLAIN_PLAN_FAMILY, EXPLAIN_PLAN_COLUMN, MetaDataProtocol.MIN_TABLE_TIMESTAMP, ByteUtil.EMPTY_BYTE_ARRAY));
                 tuples.add(tuple);
             }
             final ResultIterator iterator = new MaterializedResultIterator(tuples);
@@ -513,9 +526,9 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
 
     private static class ExecutableCreateIndexStatement extends CreateIndexStatement implements CompilableStatement {
 
-        public ExecutableCreateIndexStatement(NamedNode indexName, NamedTableNode dataTable, PrimaryKeyConstraint pkConstraint, List<ColumnName> includeColumns, List<ParseNode> splits,
+        public ExecutableCreateIndexStatement(NamedNode indexName, NamedTableNode dataTable, IndexKeyConstraint ikConstraint, List<ColumnName> includeColumns, List<ParseNode> splits,
                 ListMultimap<String,Pair<String,Object>> props, boolean ifNotExists, IndexType indexType, int bindCount) {
-            super(indexName, dataTable, pkConstraint, includeColumns, splits, props, ifNotExists, indexType, bindCount);
+            super(indexName, dataTable, ikConstraint, includeColumns, splits, props, ifNotExists, indexType, bindCount);
         }
 
         @SuppressWarnings("unchecked")
@@ -681,6 +694,19 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         }
     }
     
+    private static class ExecutableTraceStatement extends TraceStatement implements CompilableStatement {
+
+        public ExecutableTraceStatement(boolean isTraceOn) {
+            super(isTraceOn);
+        }
+
+        @SuppressWarnings("unchecked")
+        @Override
+        public QueryPlan compilePlan(final PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
+            return new TraceQueryPlan(this, stmt);
+        }
+    }
+
     private static class ExecutableUpdateStatisticsStatement extends UpdateStatisticsStatement implements
             CompilableStatement {
         public ExecutableUpdateStatisticsStatement(NamedTableNode table, StatisticsCollectionScope scope) {
@@ -725,7 +751,7 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
 
     private static class ExecutableAddColumnStatement extends AddColumnStatement implements CompilableStatement {
 
-        ExecutableAddColumnStatement(NamedTableNode table, PTableType tableType, List<ColumnDef> columnDefs, boolean ifNotExists, Map<String, Object> props) {
+        ExecutableAddColumnStatement(NamedTableNode table, PTableType tableType, List<ColumnDef> columnDefs, boolean ifNotExists, ListMultimap<String,Pair<String,Object>> props) {
             super(table, tableType, columnDefs, ifNotExists, props);
         }
 
@@ -844,13 +870,13 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         }
         
         @Override
-        public CreateIndexStatement createIndex(NamedNode indexName, NamedTableNode dataTable, PrimaryKeyConstraint pkConstraint, List<ColumnName> includeColumns, List<ParseNode> splits,
+        public CreateIndexStatement createIndex(NamedNode indexName, NamedTableNode dataTable, IndexKeyConstraint ikConstraint, List<ColumnName> includeColumns, List<ParseNode> splits,
                 ListMultimap<String,Pair<String,Object>> props, boolean ifNotExists, IndexType indexType, int bindCount) {
-            return new ExecutableCreateIndexStatement(indexName, dataTable, pkConstraint, includeColumns, splits, props, ifNotExists, indexType, bindCount);
+            return new ExecutableCreateIndexStatement(indexName, dataTable, ikConstraint, includeColumns, splits, props, ifNotExists, indexType, bindCount);
         }
         
         @Override
-        public AddColumnStatement addColumn(NamedTableNode table,  PTableType tableType, List<ColumnDef> columnDefs, boolean ifNotExists, Map<String,Object> props) {
+        public AddColumnStatement addColumn(NamedTableNode table,  PTableType tableType, List<ColumnDef> columnDefs, boolean ifNotExists, ListMultimap<String,Pair<String,Object>> props) {
             return new ExecutableAddColumnStatement(table, tableType, columnDefs, ifNotExists, props);
         }
         
@@ -873,7 +899,12 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         public AlterIndexStatement alterIndex(NamedTableNode indexTableNode, String dataTableName, boolean ifExists, PIndexState state) {
             return new ExecutableAlterIndexStatement(indexTableNode, dataTableName, ifExists, state);
         }
-        
+
+        @Override
+        public TraceStatement trace(boolean isTraceOn) {
+            return new ExecutableTraceStatement(isTraceOn);
+        }
+
         @Override
         public ExplainStatement explain(BindableStatement statement) {
             return new ExecutableExplainStatement(statement);
@@ -1131,11 +1162,6 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         return false;
     }
 
-    @Override
-    public int getQueryTimeout() throws SQLException {
-        return connection.getQueryServices().getProps().getInt(QueryServices.KEEP_ALIVE_MS_ATTRIB, 0) / 1000;
-    }
-
     // For testing
     public QueryPlan getQueryPlan() {
         return getLastQueryPlan();
@@ -1235,8 +1261,18 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
 
     @Override
     public void setQueryTimeout(int seconds) throws SQLException {
-        // The Phoenix setting for this is shared across all connections currently
-        throw new SQLFeatureNotSupportedException();
+        if (seconds < 0) {
+            this.queryTimeout = getDefaultQueryTimeout();
+        } else if (seconds == 0) {
+            this.queryTimeout = Integer.MAX_VALUE;
+        } else {
+            this.queryTimeout = seconds;
+        }
+    }
+
+    @Override
+    public int getQueryTimeout() throws SQLException {
+        return queryTimeout;
     }
 
     @Override

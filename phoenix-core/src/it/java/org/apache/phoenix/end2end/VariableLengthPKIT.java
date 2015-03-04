@@ -38,7 +38,6 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Types;
 import java.text.Format;
-import java.text.ParseException;
 import java.util.Properties;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -51,16 +50,11 @@ import org.junit.Test;
 
 
 public class VariableLengthPKIT extends BaseClientManagedTimeIT {
-    private static Format format = DateUtil.getDateParser(DateUtil.DEFAULT_DATE_FORMAT);
     private static final String DS1 = "1970-01-01 00:58:00";
     private static final Date D1 = toDate(DS1);
 
     private static Date toDate(String dateString) {
-        try {
-            return (Date)format.parseObject(dateString);
-        } catch (ParseException e) {
-            throw new RuntimeException(e);
-        }
+        return DateUtil.parseDate(dateString);
     }
 
     protected static void initGroupByRowKeyColumns(long ts) throws Exception {
@@ -266,7 +260,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
     @Test
     public void testSkipScan() throws Exception {
         long ts = nextTimestamp();
-        String query = "SELECT HOST FROM PTSDB WHERE INST='abc' AND DATE>=TO_DATE('1970-01-01 00:00:00') AND DATE <TO_DATE('2015-01-01 00:00:00')";
+        String query = "SELECT HOST FROM PTSDB WHERE INST='abc' AND DATE>=TO_DATE('1970-01-01 00:00:00') AND DATE <TO_DATE('2171-01-01 00:00:00')";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
@@ -776,7 +770,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         }
         conn.commit();
         conn.close();
-        
+
         // Query at a time after the upsert to confirm they took place
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+1));
         conn = DriverManager.getConnection(getUrl(), props);
@@ -1378,7 +1372,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         String ddl = "create table t (k INTEGER NOT NULL PRIMARY KEY, name VARCHAR)";
         conn.createStatement().execute(ddl);
         conn.close();
-        
+
         String dml = "upsert into t values(?,?)";
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+2));
         conn = DriverManager.getConnection(url, props);
@@ -1391,7 +1385,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         }
         conn.commit();
         conn.close();
-        
+
         // This matches what Oracle returns for regexp_substr, even through
         // it seems oke for "satax", it should return null.
         String query = "select regexp_substr(name,'[^s]+',1) from t limit 5";

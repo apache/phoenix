@@ -26,11 +26,13 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.query.KeyRange;
-import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.types.PChar;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -90,84 +92,145 @@ public class SkipScanFilterIntersectTest {
     @Parameters(name="{0} {4}")
     public static Collection<Object> data() {
         List<Object> testCases = Lists.newArrayList();
-        // Causes increment of slot 2 to increment slot 1
+        // Both ranges in second slot are required b/c first slot contains range and upper/lower
+        // values differ in this slot position.
         testCases.addAll(foreach(
                 new KeyRange[][] {{
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("e"), false),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("j"), true, Bytes.toBytes("m"), false),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("e"), false),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("j"), true, Bytes.toBytes("m"), false),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("4"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("4"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
                 }},
                 new int[] {1,1,1},
                 Bytes.toBytes("j3A"),
                 Bytes.toBytes("k4C"),
                 new KeyRange[][] {{
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("j"), true, Bytes.toBytes("m"), false),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("j"), true, Bytes.toBytes("m"), false),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("4"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("4"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
                 }}));
+        // Only second range in second slot is required b/c though first slot contains range,
+        // upper/lower values do not differ in this slot position.
+        testCases.addAll(foreach(
+                new KeyRange[][] {{
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("e"), false),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("j"), true, Bytes.toBytes("m"), false),
+                    }, {
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("4"), true),
+                    }, {
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
+                }},
+                new int[] {1,1,1},
+                Bytes.toBytes("j3A"),
+                Bytes.toBytes("j4C"),
+                new KeyRange[][] {{
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("j"), true, Bytes.toBytes("m"), false),
+                    }, {
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("4"), true),
+                    }, {
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
+                }}));
+        // Test case exercising repositioning multiple times (initially to slot #2 and then again
+        // to slot #4). Because there's a range for slot #4 and the lower/upper values are different,
+        // all slot #5 ranges are part of the intersection.
+        testCases.addAll(foreach(
+                new KeyRange[][] {{
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("d"), true, Bytes.toBytes("d"), true),
+                    }, {
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("j"), true, Bytes.toBytes("m"), false),
+                    }, {
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("C"), true),
+                    }, {
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("m"), true, Bytes.toBytes("u"), false),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("z"), true, Bytes.toBytes("z"), true),
+                    }, {
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("A"), true, Bytes.toBytes("A"), true),                        
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("D"), true, Bytes.toBytes("D"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("M"), true, Bytes.toBytes("M"), true),                        
+                    }
+                },
+                new int[] {1,1,1,1,1},
+                Bytes.toBytes("bkCpM"),
+                Bytes.toBytes("bkCtD"),
+                new KeyRange[][] {{
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
+                    }, {
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("j"), true, Bytes.toBytes("m"), false),
+                    }, {
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("C"), true),
+                    }, {
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("m"), true, Bytes.toBytes("u"), false),
+                    }, {
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("A"), true, Bytes.toBytes("A"), true),                        
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("D"), true, Bytes.toBytes("D"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("M"), true, Bytes.toBytes("M"), true),                        
+                    }
+                }));
         // Single matching in the first 2 slots.
         testCases.addAll(foreach(
                 new KeyRange[][] {{
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true), 
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("d"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("d"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("3"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("3"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("D"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("D"), true),
                 }},
                 new int[] {1,1,1},
                 Bytes.toBytes("b1B"),
                 Bytes.toBytes("b1C"),
                 new KeyRange[][] {{
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
                 }}));
         // Single matching in the first slot.
         testCases.addAll(foreach(
                 new KeyRange[][] {{
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true), 
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("e"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("e"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("4"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("4"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("E"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("E"), true),
                 }},
                 new int[] {1,1,1},
                 Bytes.toBytes("b1Z"),
                 Bytes.toBytes("b3Z"),
                 new KeyRange[][] {{
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("4"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("4"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("E"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("E"), true),
                 }}));
         // No overlap
         testCases.addAll(foreach(
                 new KeyRange[][]{{
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
                     },{
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("2"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("2"), true),
                     },{
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("A"), true, Bytes.toBytes("A"), true),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("D"), true),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("G"), true, Bytes.toBytes("G"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("A"), true, Bytes.toBytes("A"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("D"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("G"), true, Bytes.toBytes("G"), true),
                 }},
                 new int[] {1,1,1}, 
                 Bytes.toBytes("a1I"), 
@@ -175,14 +238,14 @@ public class SkipScanFilterIntersectTest {
                 null));
         testCases.addAll(foreach(
                 new KeyRange[][] {{
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true), 
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("d"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("d"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("3"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("3"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("D"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("D"), true),
                 }},
                 new int[] {1,1,1},
                 Bytes.toBytes("a0A"),
@@ -190,277 +253,277 @@ public class SkipScanFilterIntersectTest {
                 null));
         testCases.addAll(foreach(
                 new KeyRange[][] {{
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true), 
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("d"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("d"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("3"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("3"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("D"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("D"), true),
                 }},
                 new int[] {1,1,1},
                 Bytes.toBytes("a0A"),
                 Bytes.toBytes("b1C"),
                 new KeyRange[][] {{
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
                 }}));
         testCases.addAll(foreach(
                 new KeyRange[][] {{
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true), 
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("d"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("d"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("3"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("3"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("D"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("D"), true),
                 }},
                 new int[] {1,1,1},
                 Bytes.toBytes("a0A"),
                 Bytes.toBytes("b1D"),
                 new KeyRange[][] {{
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("D"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("D"), true),
                 }}));
         testCases.addAll(foreach(
                 new KeyRange[][] {{
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true), 
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("d"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("d"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("3"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("3"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("D"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("D"), true),
                 }},
                 new int[] {1,1,1},
                 Bytes.toBytes("a0A"),
                 Bytes.toBytes("b1D"),
                 new KeyRange[][] {{
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("D"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("D"), true),
                 }}));
         testCases.addAll(foreach(
                 new KeyRange[][] {{
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true), 
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("d"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("d"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("3"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("3"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("D"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("D"), true),
                 }},
                 new int[] {1,1,1},
                 Bytes.toBytes("b1B"),
                 Bytes.toBytes("b1D"),
                 new KeyRange[][] {{
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("D"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("D"), true),
                 }}));
         testCases.addAll(foreach(
                 new KeyRange[][] {{
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true), 
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("d"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("d"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("3"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("3"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("D"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("D"), true),
                 }},
                 new int[] {1,1,1},
                 Bytes.toBytes("a0A"),
                 Bytes.toBytes("b1F"),
                 new KeyRange[][] {{
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("D"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("D"), true),
                 }}));
         testCases.addAll(foreach(
                 new KeyRange[][] {{
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true), 
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("e"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("e"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("4"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("4"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("E"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("E"), true),
                 }},
                 new int[] {1,1,1},
                 Bytes.toBytes("a0Z"),
                 Bytes.toBytes("b3Z"),
                 new KeyRange[][] {{
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("4"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("4"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("E"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("E"), true),
                 }}));
         testCases.addAll(foreach(
                 new KeyRange[][] {{
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true), 
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("e"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("e"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("4"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("4"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("E"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("E"), true),
                 }},
                 new int[] {1,1,1},
                 Bytes.toBytes("a0Z"),
                 Bytes.toBytes("b9Z"),
                 new KeyRange[][] {{
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("4"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("4"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("E"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("E"), true),
                 }}));
         // Multiple matching in all slot.
         testCases.addAll(foreach(
                 new KeyRange[][] {{
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true), 
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("e"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("e"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("4"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("4"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("E"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("E"), true),
                 }},
                 new int[] {1,1,1},
                 Bytes.toBytes("a0Z"),
                 Bytes.toBytes("c3Z"),
                 new KeyRange[][] {{
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true), 
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("e"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("e"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("4"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("4"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("E"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("E"), true),
                 }}));
         testCases.addAll(foreach(
                 new KeyRange[][] {{
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true), 
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("e"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("e"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("4"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("4"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("E"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("E"), true),
                 }},
                 new int[] {1,1,1},
                 Bytes.toBytes("a0A"),
                 Bytes.toBytes("f4F"),
                 new KeyRange[][] {{
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true), 
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("e"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("e"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("4"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("4"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("E"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("E"), true),
                 }}));
         // VARCHAR as the last column, various cases.
         testCases.addAll(foreach(
                 new KeyRange[][] {{
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true), 
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("e"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("e"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("4"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("4"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("E"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("E"), true),
                 }},
                 new int[] {1,1,-1},
                 Bytes.toBytes("d3AA"),
                 Bytes.toBytes("d4FF"),
                 new KeyRange[][] {{
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("e"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("e"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("4"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("4"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("E"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("E"), true),
                 }}));
         testCases.addAll(foreach(
                 new KeyRange[][] {{
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true), 
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("e"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("e"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("4"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("4"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("E"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("E"), true),
                 }},
                 new int[] {1,1,-1},
                 Bytes.toBytes("d0AA"),
                 Bytes.toBytes("d4FF"),
                 new KeyRange[][] {{
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("e"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("e"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("4"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("4"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("E"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("E"), true),
                 }}));
         testCases.addAll(foreach(
                 new KeyRange[][] {{
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true), 
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("e"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("e"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("4"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("4"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("E"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("E"), true),
                 }},
                 new int[] {1,1,-1},
                 Bytes.toBytes("a0AA"),
                 Bytes.toBytes("f4FF"),
                 new KeyRange[][] {{
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true), 
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("e"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("e"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("4"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("4"), true),
                     }, {
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
-                    PDataType.CHAR.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("E"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("E"), true),
                 }}));
         return testCases;
     }
@@ -479,7 +542,7 @@ public class SkipScanFilterIntersectTest {
                         }
                         @Override
                         public PDataType getDataType() {
-                            return width <= 0 ? PDataType.VARCHAR : PDataType.CHAR;
+                            return width <= 0 ? PVarchar.INSTANCE : PChar.INSTANCE;
                         }
                        @Override
                         public Integer getMaxLength() {

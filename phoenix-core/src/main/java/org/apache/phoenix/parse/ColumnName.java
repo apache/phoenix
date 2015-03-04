@@ -73,7 +73,7 @@ public class ColumnName {
 
     @Override
     public String toString() {
-        return SchemaUtil.getColumnName(getFamilyName(),getColumnName());
+		return SchemaUtil.getColumnName(getFamilyName(),getColumnName());
     }
     
     @Override

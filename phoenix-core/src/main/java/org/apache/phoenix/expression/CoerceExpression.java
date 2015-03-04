@@ -26,11 +26,12 @@ import java.util.List;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
-import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PDataType;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 
 
 public class CoerceExpression extends BaseSingleExpression {
@@ -61,13 +62,21 @@ public class CoerceExpression extends BaseSingleExpression {
     }
     
     CoerceExpression(Expression expression, PDataType toType, SortOrder toSortOrder, Integer maxLength) {
-        super(expression);
+        this(ImmutableList.of(expression), toType, toSortOrder, maxLength);
+    }
+
+    public CoerceExpression(List<Expression> children, PDataType toType, SortOrder toSortOrder, Integer maxLength) {
+        super(children);
         Preconditions.checkNotNull(toSortOrder);
         this.toType = toType;
         this.toSortOrder = toSortOrder;
         this.maxLength = maxLength;
     }
-
+    
+    public CoerceExpression clone(List<Expression> children) {
+        return new CoerceExpression(children, this.getDataType(), this.getSortOrder(), this.getMaxLength());
+    }
+    
     @Override
     public Integer getMaxLength() {
         return maxLength;
@@ -76,7 +85,7 @@ public class CoerceExpression extends BaseSingleExpression {
     @Override
     public int hashCode() {
         final int prime = 31;
-        int result = 1;
+        int result = super.hashCode();
         result = prime * result + ((maxLength == null) ? 0 : maxLength.hashCode());
         result = prime * result + ((toSortOrder == null) ? 0 : toSortOrder.hashCode());
         result = prime * result + ((toType == null) ? 0 : toType.hashCode());
@@ -86,14 +95,16 @@ public class CoerceExpression extends BaseSingleExpression {
     @Override
     public boolean equals(Object obj) {
         if (this == obj) return true;
-        if (obj == null) return false;
+        if (!super.equals(obj)) return false;
         if (getClass() != obj.getClass()) return false;
         CoerceExpression other = (CoerceExpression)obj;
         if (maxLength == null) {
             if (other.maxLength != null) return false;
         } else if (!maxLength.equals(other.maxLength)) return false;
         if (toSortOrder != other.toSortOrder) return false;
-        if (toType != other.toType) return false;
+        if (toType == null) {
+            if (other.toType != null) return false;
+        } else if (!toType.equals(other.toType)) return false;
         return true;
     }
 
@@ -113,7 +124,7 @@ public class CoerceExpression extends BaseSingleExpression {
         WritableUtils.writeVInt(output, toSortOrder.getSystemValue());
         WritableUtils.writeVInt(output, maxLength == null ? -1 : maxLength);
     }
-
+    
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
         if (getChild().evaluate(tuple, ptr)) {

@@ -38,7 +38,7 @@ import org.apache.phoenix.expression.IsNullExpression;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
-import org.apache.phoenix.expression.visitor.TraverseNoExpressionVisitor;
+import org.apache.phoenix.expression.visitor.StatelessTraverseNoExpressionVisitor;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.ColumnParseNode;
@@ -106,7 +106,9 @@ public class CreateTableCompiler {
                 Expression where = whereNode.accept(expressionCompiler);
                 if (where != null && !LiteralExpression.isTrue(where)) {
                     TableName baseTableName = create.getBaseTableName();
-                    viewStatementToBe = QueryUtil.getViewStatement(baseTableName.getSchemaName(), baseTableName.getTableName(), where);
+                    StringBuilder buf = new StringBuilder();
+                    whereNode.toSQL(resolver, buf);
+                    viewStatementToBe = QueryUtil.getViewStatement(baseTableName.getSchemaName(), baseTableName.getTableName(), buf.toString());
                 }
                 if (viewTypeToBe != ViewType.MAPPED) {
                     Long scn = connection.getSCN();
@@ -213,7 +215,7 @@ public class CreateTableCompiler {
         }
     }
     
-    private static class ViewWhereExpressionVisitor extends TraverseNoExpressionVisitor<Boolean> {
+    private static class ViewWhereExpressionVisitor extends StatelessTraverseNoExpressionVisitor<Boolean> {
         private boolean isUpdatable = true;
         private final PTable table;
         private int position;

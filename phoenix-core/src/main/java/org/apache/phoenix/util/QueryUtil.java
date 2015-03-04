@@ -34,9 +34,9 @@ import javax.annotation.Nullable;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.util.Addressing;
 import org.apache.hadoop.hbase.zookeeper.ZKConfig;
-import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.parse.WildcardParseNode;
@@ -76,6 +76,19 @@ public final class QueryUtil {
     private static final String SELECT = "SELECT";
     private static final String FROM = "FROM";
     private static final String WHERE = "WHERE";
+    private static final String[] CompareOpString = new String[CompareOp.values().length];
+    static {
+        CompareOpString[CompareOp.EQUAL.ordinal()] = "=";
+        CompareOpString[CompareOp.NOT_EQUAL.ordinal()] = "!=";
+        CompareOpString[CompareOp.GREATER.ordinal()] = ">";
+        CompareOpString[CompareOp.LESS.ordinal()] = "<";
+        CompareOpString[CompareOp.GREATER_OR_EQUAL.ordinal()] = ">=";
+        CompareOpString[CompareOp.LESS_OR_EQUAL.ordinal()] = "<=";
+    }
+
+    public static String toSQL(CompareOp op) {
+        return CompareOpString[op.ordinal()];
+    }
     
     /**
      * Private constructor
@@ -144,29 +157,33 @@ public final class QueryUtil {
      * 
      * @param fullTableName name of the table for which the select statement needs to be created.
      * @param columnInfos  list of columns to be projected in the select statement.
+     * @param conditions   The condition clause to be added to the WHERE condition
      * @return Select Query 
      */
-    public static String constructSelectStatement(String fullTableName, List<ColumnInfo> columnInfos) {
+    public static String constructSelectStatement(String fullTableName, List<ColumnInfo> columnInfos,final String conditions) {
         Preconditions.checkNotNull(fullTableName,"Table name cannot be null");
         if(columnInfos == null || columnInfos.isEmpty()) {
              throw new IllegalArgumentException("At least one column must be provided");
         }
         // escape the table name to ensure it is case sensitive.
         final String escapedFullTableName = SchemaUtil.getEscapedFullTableName(fullTableName);
-        StringBuilder sb = new StringBuilder();
-        sb.append("SELECT ");
+        StringBuilder query = new StringBuilder();
+        query.append("SELECT ");
         for (ColumnInfo cinfo : columnInfos) {
             if (cinfo != null) {
                 String fullColumnName = getEscapedFullColumnName(cinfo.getColumnName());
-                sb.append(fullColumnName);
-                sb.append(",");
+                query.append(fullColumnName);
+                query.append(",");
              }
          }
         // Remove the trailing comma
-        sb.setLength(sb.length() - 1);
-        sb.append(" FROM ");
-        sb.append(escapedFullTableName);
-        return sb.toString();
+        query.setLength(query.length() - 1);
+        query.append(" FROM ");
+        query.append(escapedFullTableName);
+        if(conditions != null && conditions.length() > 0) {
+            query.append(" WHERE (").append(conditions).append(")");
+        }
+        return query.toString();
     }
 
     public static String getUrl(String server) {
@@ -258,11 +275,11 @@ public final class QueryUtil {
         return getUrl(server, port);
     }
     
-    public static String getViewStatement(String schemaName, String tableName, Expression whereClause) {
+    public static String getViewStatement(String schemaName, String tableName, String where) {
         // Only form we currently support for VIEWs: SELECT * FROM t WHERE ...
         return SELECT + " " + WildcardParseNode.NAME + " " + FROM + " " +
                 (schemaName == null || schemaName.length() == 0 ? "" : ("\"" + schemaName + "\".")) +
                 ("\"" + tableName + "\" ") +
-                (WHERE + " " + whereClause.toString());
+                (WHERE + " " + where);
     }
 }

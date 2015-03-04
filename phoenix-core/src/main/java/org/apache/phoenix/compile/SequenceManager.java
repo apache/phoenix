@@ -24,21 +24,16 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.phoenix.expression.BaseTerminalExpression;
-import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.SequenceValueParseNode;
 import org.apache.phoenix.parse.SequenceValueParseNode.Op;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.query.ConnectionQueryServices;
-import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.tuple.DelegateTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
-import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -172,54 +167,5 @@ public class SequenceManager {
         long timestamp = scn == null ? HConstants.LATEST_TIMESTAMP : scn;
         services.validateSequences(nextSequences, timestamp, srcSequenceValues, sqlExceptions, action);
         setSequenceValues(srcSequenceValues, dstSequenceValues, sqlExceptions);
-    }
-    
-    private class SequenceValueExpression extends BaseTerminalExpression {
-        private final SequenceKey key;
-        private final Op op;
-        private final int index;
-
-        private SequenceValueExpression(SequenceKey key, Op op, int index) {
-            this.key = key;
-            this.op = op;
-            this.index = index;
-        }
-
-        public int getIndex() {
-            return index;
-        }
-        
-        @Override
-        public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-        		byte[] valueBuffer = new byte[PDataType.LONG.getByteSize()];
-            PDataType.LONG.getCodec().encodeLong(tuple.getSequenceValue(index), valueBuffer, 0);
-            ptr.set(valueBuffer);
-            return true;
-        }
-
-        @Override
-        public PDataType getDataType() {
-            return PDataType.LONG;
-        }
-        
-        @Override
-        public boolean isNullable() {
-            return false;
-        }
-        
-        @Override
-        public Determinism getDeterminism() {
-            return Determinism.PER_ROW;
-        }
-        
-        @Override
-        public boolean isStateless() {
-            return true;
-        }
-
-        @Override
-        public String toString() {
-            return op.getName() + " VALUE FOR " + SchemaUtil.getTableName(key.getSchemaName(),key.getSequenceName());
-        }
     }
 }

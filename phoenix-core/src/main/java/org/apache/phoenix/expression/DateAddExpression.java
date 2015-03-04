@@ -21,11 +21,14 @@ import java.math.BigDecimal;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.schema.types.PDouble;
+import org.apache.phoenix.schema.types.PLong;
 
 
 public class DateAddExpression extends AddExpression {
@@ -52,12 +55,12 @@ public class DateAddExpression extends AddExpression {
             long value;
             PDataType type = children.get(i).getDataType();
             SortOrder sortOrder = children.get(i).getSortOrder();
-            if (type == PDataType.DECIMAL) {
-                BigDecimal bd = (BigDecimal)PDataType.DECIMAL.toObject(ptr, sortOrder);
+            if (type == PDecimal.INSTANCE) {
+                BigDecimal bd = (BigDecimal) PDecimal.INSTANCE.toObject(ptr, sortOrder);
                 value = bd.multiply(BD_MILLIS_IN_DAY).longValue();
-            } else if (type.isCoercibleTo(PDataType.LONG)) {
+            } else if (type.isCoercibleTo(PLong.INSTANCE)) {
                 value = type.getCodec().decodeLong(ptr, sortOrder) * QueryConstants.MILLIS_IN_DAY;
-            } else if (type.isCoercibleTo(PDataType.DOUBLE)) {
+            } else if (type.isCoercibleTo(PDouble.INSTANCE)) {
                 value = (long)(type.getCodec().decodeDouble(ptr, sortOrder) * QueryConstants.MILLIS_IN_DAY);
             } else {
                 value = type.getCodec().decodeLong(ptr, sortOrder);
@@ -72,7 +75,12 @@ public class DateAddExpression extends AddExpression {
 
     @Override
     public final PDataType getDataType() {
-        return PDataType.DATE;
+        return PDate.INSTANCE;
+    }
+
+    @Override
+    public ArithmeticExpression clone(List<Expression> children) {
+        return new DateAddExpression(children);
     }
 
 }

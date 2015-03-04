@@ -22,6 +22,8 @@ import java.util.Collections;
 import java.util.List;
 
 import org.apache.hadoop.hbase.filter.CompareFilter;
+import org.apache.phoenix.compile.ColumnResolver;
+import org.apache.phoenix.util.QueryUtil;
 
 /**
  * 
@@ -54,4 +56,12 @@ public abstract class ComparisonParseNode extends BinaryParseNode {
      * Return the inverted operator for the CompareOp
      */
     public abstract CompareFilter.CompareOp getInvertFilterOp();
+    
+    @Override
+    public void toSQL(ColumnResolver resolver, StringBuilder buf) {
+        List<ParseNode> children = getChildren();
+        children.get(0).toSQL(resolver, buf);
+        buf.append(" " + QueryUtil.toSQL(getFilterOp()) + " ");
+        children.get(1).toSQL(resolver, buf);
+    }
 }

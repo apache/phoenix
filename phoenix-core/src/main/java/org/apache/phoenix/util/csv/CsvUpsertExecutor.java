@@ -17,23 +17,31 @@
  */
 package org.apache.phoenix.util.csv;
 
-import com.google.common.base.Function;
-import com.google.common.collect.Lists;
-import org.apache.commons.csv.CSVRecord;
-import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.schema.PDataType;
-import org.apache.phoenix.util.ColumnInfo;
-import org.apache.phoenix.util.QueryUtil;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import javax.annotation.Nullable;
 import java.io.Closeable;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.sql.Types;
 import java.util.List;
+import java.util.Properties;
+
+import javax.annotation.Nullable;
+
+import org.apache.commons.csv.CSVRecord;
+import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PTimestamp;
+import org.apache.phoenix.util.ColumnInfo;
+import org.apache.phoenix.util.DateUtil;
+import org.apache.phoenix.util.QueryUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.google.common.base.Function;
+import com.google.common.collect.Lists;
 
 /**
  * Executes upsert statements on a provided {@code PreparedStatement} based on incoming CSV records, notifying a
@@ -175,24 +183,57 @@ public class CsvUpsertExecutor implements Closeable {
                             arrayElementSeparator,
                             PDataType.fromTypeId(dataType.getSqlType() - PDataType.ARRAY_TYPE_BASE)));
         } else {
-            return new SimpleDatatypeConversionFunction(dataType);
+            return new SimpleDatatypeConversionFunction(dataType, this.conn);
         }
     }
 
     /**
      * Performs typed conversion from String values to a given column value type.
      */
-    private static class SimpleDatatypeConversionFunction implements Function<String, Object> {
+    static class SimpleDatatypeConversionFunction implements Function<String, Object> {
 
         private final PDataType dataType;
+        private final DateUtil.DateTimeParser dateTimeParser;
 
-        private SimpleDatatypeConversionFunction(PDataType dataType) {
+        SimpleDatatypeConversionFunction(PDataType dataType, Connection conn) {
+            Properties props = null;
+            try {
+                props = conn.getClientInfo();
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
             this.dataType = dataType;
+            if(dataType.isCoercibleTo(PTimestamp.INSTANCE)) {
+                // TODO: move to DateUtil
+                String dateFormat;
+                int dateSqlType = dataType.getResultSetSqlType();
+                if (dateSqlType == Types.DATE) {
+                    dateFormat = props.getProperty(QueryServices.DATE_FORMAT_ATTRIB,
+                            DateUtil.DEFAULT_DATE_FORMAT);
+                } else if (dateSqlType == Types.TIME) {
+                    dateFormat = props.getProperty(QueryServices.TIME_FORMAT_ATTRIB,
+                            DateUtil.DEFAULT_TIME_FORMAT);
+                } else {
+                    dateFormat = props.getProperty(QueryServices.TIMESTAMP_FORMAT_ATTRIB,
+                            DateUtil.DEFAULT_TIMESTAMP_FORMAT);                    
+                }
+                String timeZoneId = props.getProperty(QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB,
+                        QueryServicesOptions.DEFAULT_DATE_FORMAT_TIMEZONE);
+                this.dateTimeParser = DateUtil.getDateTimeParser(dateFormat, dataType, timeZoneId);
+            } else {
+                this.dateTimeParser = null;
+            }
         }
 
         @Nullable
         @Override
         public Object apply(@Nullable String input) {
+            if(dateTimeParser != null) {
+                long epochTime = dateTimeParser.parseDateTime(input);
+                byte[] byteValue = new byte[dataType.getByteSize()];
+                dataType.getCodec().encodeLong(epochTime, byteValue, 0);
+                return dataType.toObject(byteValue);
+            }
             return dataType.toObject(input);
         }
     }

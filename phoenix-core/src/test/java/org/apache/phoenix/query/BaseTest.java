@@ -95,7 +95,9 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.sql.Types;
+import java.text.SimpleDateFormat;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
@@ -114,7 +116,9 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.IntegrationTestingUtility;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.coprocessor.RegionServerObserver;
 import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
+import org.apache.hadoop.hbase.regionserver.LocalIndexMerger;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.BaseClientManagedTimeIT;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
@@ -131,6 +135,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -371,39 +376,45 @@ public abstract class BaseTest {
                 "    kv bigint)\n");
         builder.put(INDEX_DATA_TABLE, "create table " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE + "(" +
                 "   varchar_pk VARCHAR NOT NULL, " +
-                "   char_pk CHAR(5) NOT NULL, " +
+                "   char_pk CHAR(6) NOT NULL, " +
                 "   int_pk INTEGER NOT NULL, "+ 
                 "   long_pk BIGINT NOT NULL, " +
                 "   decimal_pk DECIMAL(31, 10) NOT NULL, " +
+                "   date_pk DATE NOT NULL, " +
                 "   a.varchar_col1 VARCHAR, " +
-                "   a.char_col1 CHAR(5), " +
+                "   a.char_col1 CHAR(10), " +
                 "   a.int_col1 INTEGER, " +
                 "   a.long_col1 BIGINT, " +
                 "   a.decimal_col1 DECIMAL(31, 10), " +
+                "   a.date1 DATE, " +
                 "   b.varchar_col2 VARCHAR, " +
-                "   b.char_col2 CHAR(5), " +
+                "   b.char_col2 CHAR(10), " +
                 "   b.int_col2 INTEGER, " +
                 "   b.long_col2 BIGINT, " +
-                "   b.decimal_col2 DECIMAL(31, 10) " +
-                "   CONSTRAINT pk PRIMARY KEY (varchar_pk, char_pk, int_pk, long_pk DESC, decimal_pk)) " +
+                "   b.decimal_col2 DECIMAL(31, 10), " +
+                "   b.date2 DATE " +
+                "   CONSTRAINT pk PRIMARY KEY (varchar_pk, char_pk, int_pk, long_pk DESC, decimal_pk, date_pk)) " +
                 "IMMUTABLE_ROWS=true");
         builder.put(MUTABLE_INDEX_DATA_TABLE, "create table " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + MUTABLE_INDEX_DATA_TABLE + "(" +
                 "   varchar_pk VARCHAR NOT NULL, " +
-                "   char_pk CHAR(5) NOT NULL, " +
+                "   char_pk CHAR(6) NOT NULL, " +
                 "   int_pk INTEGER NOT NULL, "+ 
                 "   long_pk BIGINT NOT NULL, " +
                 "   decimal_pk DECIMAL(31, 10) NOT NULL, " +
+                "   date_pk DATE NOT NULL, " +
                 "   a.varchar_col1 VARCHAR, " +
-                "   a.char_col1 CHAR(5), " +
+                "   a.char_col1 CHAR(10), " +
                 "   a.int_col1 INTEGER, " +
                 "   a.long_col1 BIGINT, " +
                 "   a.decimal_col1 DECIMAL(31, 10), " +
+                "   a.date1 DATE, " +
                 "   b.varchar_col2 VARCHAR, " +
-                "   b.char_col2 CHAR(5), " +
+                "   b.char_col2 CHAR(10), " +
                 "   b.int_col2 INTEGER, " +
                 "   b.long_col2 BIGINT, " +
-                "   b.decimal_col2 DECIMAL(31, 10) " +
-                "   CONSTRAINT pk PRIMARY KEY (varchar_pk, char_pk, int_pk, long_pk DESC, decimal_pk)) "
+                "   b.decimal_col2 DECIMAL(31, 10), " +
+                "   b.date2 DATE " +
+                "   CONSTRAINT pk PRIMARY KEY (varchar_pk, char_pk, int_pk, long_pk DESC, decimal_pk, date_pk)) "
                 );
         builder.put("SumDoubleTest","create table SumDoubleTest" +
                 "   (id varchar not null primary key, d DOUBLE, f FLOAT, ud UNSIGNED_DOUBLE, uf UNSIGNED_FLOAT, i integer, de decimal)");
@@ -622,6 +633,8 @@ public abstract class BaseTest {
         conf.setInt(HConstants.REGION_SERVER_HANDLER_COUNT, 5);
         conf.setInt(HConstants.REGION_SERVER_META_HANDLER_COUNT, 2);
         conf.setInt(HConstants.MASTER_HANDLER_COUNT, 2);
+        conf.setClass("hbase.coprocessor.regionserver.classes", LocalIndexMerger.class,
+            RegionServerObserver.class);
         conf.setInt("dfs.namenode.handler.count", 2);
         conf.setInt("dfs.namenode.service.handler.count", 2);
         conf.setInt("dfs.datanode.handler.count", 2);
@@ -808,14 +821,28 @@ public abstract class BaseTest {
         }
     }
     
-    private static void deletePriorSequences(long ts, Connection conn) throws Exception {
+    private static void deletePriorSequences(long ts, Connection globalConn) throws Exception {
         // TODO: drop tenant-specific sequences too
-        ResultSet rs = conn.createStatement().executeQuery("SELECT " 
+        ResultSet rs = globalConn.createStatement().executeQuery("SELECT " 
+                + PhoenixDatabaseMetaData.TENANT_ID + ","
                 + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + "," 
                 + PhoenixDatabaseMetaData.SEQUENCE_NAME 
                 + " FROM " + PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_ESCAPED);
+        String lastTenantId = null;
+        Connection conn = globalConn;
         while (rs.next()) {
-            conn.createStatement().execute("DROP SEQUENCE " + SchemaUtil.getEscapedTableName(rs.getString(1), rs.getString(2)));
+            String tenantId = rs.getString(1);
+            if (tenantId != null && !tenantId.equals(lastTenantId))  {
+                if (lastTenantId != null) {
+                    conn.close();
+                }
+                // Open tenant-specific connection when we find a new one
+                Properties props = new Properties(globalConn.getClientInfo());
+                props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+                conn = DriverManager.getConnection(url, props);
+                lastTenantId = tenantId;
+            }
+            conn.createStatement().execute("DROP SEQUENCE " + SchemaUtil.getEscapedTableName(rs.getString(2), rs.getString(3)));
         }
     }
     
@@ -1319,6 +1346,266 @@ public abstract class BaseTest {
         }
     }
     
+    protected static void initJoinTableValues(String url, byte[][] splits, Long ts) throws Exception {
+        if (ts == null) {
+            ensureTableCreated(url, JOIN_CUSTOMER_TABLE_FULL_NAME, splits);
+            ensureTableCreated(url, JOIN_ITEM_TABLE_FULL_NAME, splits);
+            ensureTableCreated(url, JOIN_SUPPLIER_TABLE_FULL_NAME, splits);
+            ensureTableCreated(url, JOIN_ORDER_TABLE_FULL_NAME, splits);
+        } else {
+            ensureTableCreated(url, JOIN_CUSTOMER_TABLE_FULL_NAME, splits, ts - 2);
+            ensureTableCreated(url, JOIN_ITEM_TABLE_FULL_NAME, splits, ts - 2);
+            ensureTableCreated(url, JOIN_SUPPLIER_TABLE_FULL_NAME, splits, ts - 2);
+            ensureTableCreated(url, JOIN_ORDER_TABLE_FULL_NAME, splits, ts - 2);
+        }
+        
+        SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        if (ts != null) {
+            props.setProperty(CURRENT_SCN_ATTRIB, ts.toString());
+        }
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            conn.createStatement().execute("CREATE SEQUENCE my.seq");
+            // Insert into customer table
+            PreparedStatement stmt = conn.prepareStatement(
+                    "upsert into " + JOIN_CUSTOMER_TABLE_FULL_NAME +
+                    "   (\"customer_id\", " +
+                    "    NAME, " +
+                    "    PHONE, " +
+                    "    ADDRESS, " +
+                    "    LOC_ID, " +
+                    "    DATE) " +
+                    "values (?, ?, ?, ?, ?, ?)");
+            stmt.setString(1, "0000000001");
+            stmt.setString(2, "C1");
+            stmt.setString(3, "999-999-1111");
+            stmt.setString(4, "101 XXX Street");
+            stmt.setString(5, "10001");
+            stmt.setDate(6, new Date(format.parse("2013-11-01 10:20:36").getTime()));
+            stmt.execute();
+                
+            stmt.setString(1, "0000000002");
+            stmt.setString(2, "C2");
+            stmt.setString(3, "999-999-2222");
+            stmt.setString(4, "202 XXX Street");
+            stmt.setString(5, null);
+            stmt.setDate(6, new Date(format.parse("2013-11-25 16:45:07").getTime()));
+            stmt.execute();
+
+            stmt.setString(1, "0000000003");
+            stmt.setString(2, "C3");
+            stmt.setString(3, "999-999-3333");
+            stmt.setString(4, "303 XXX Street");
+            stmt.setString(5, null);
+            stmt.setDate(6, new Date(format.parse("2013-11-25 10:06:29").getTime()));
+            stmt.execute();
+
+            stmt.setString(1, "0000000004");
+            stmt.setString(2, "C4");
+            stmt.setString(3, "999-999-4444");
+            stmt.setString(4, "404 XXX Street");
+            stmt.setString(5, "10004");
+            stmt.setDate(6, new Date(format.parse("2013-11-22 14:22:56").getTime()));
+            stmt.execute();
+
+            stmt.setString(1, "0000000005");
+            stmt.setString(2, "C5");
+            stmt.setString(3, "999-999-5555");
+            stmt.setString(4, "505 XXX Street");
+            stmt.setString(5, "10005");
+            stmt.setDate(6, new Date(format.parse("2013-11-27 09:37:50").getTime()));
+            stmt.execute();
+
+            stmt.setString(1, "0000000006");
+            stmt.setString(2, "C6");
+            stmt.setString(3, "999-999-6666");
+            stmt.setString(4, "606 XXX Street");
+            stmt.setString(5, "10001");
+            stmt.setDate(6, new Date(format.parse("2013-11-01 10:20:36").getTime()));
+            stmt.execute();
+            
+            // Insert into item table
+            stmt = conn.prepareStatement(
+                    "upsert into " + JOIN_ITEM_TABLE_FULL_NAME +
+                    "   (\"item_id\", " +
+                    "    NAME, " +
+                    "    PRICE, " +
+                    "    DISCOUNT1, " +
+                    "    DISCOUNT2, " +
+                    "    \"supplier_id\", " +
+                    "    DESCRIPTION) " +
+                    "values (?, ?, ?, ?, ?, ?, ?)");
+            stmt.setString(1, "0000000001");
+            stmt.setString(2, "T1");
+            stmt.setInt(3, 100);
+            stmt.setInt(4, 5);
+            stmt.setInt(5, 10);
+            stmt.setString(6, "0000000001");
+            stmt.setString(7, "Item T1");
+            stmt.execute();
+
+            stmt.setString(1, "0000000002");
+            stmt.setString(2, "T2");
+            stmt.setInt(3, 200);
+            stmt.setInt(4, 5);
+            stmt.setInt(5, 8);
+            stmt.setString(6, "0000000001");
+            stmt.setString(7, "Item T2");
+            stmt.execute();
+
+            stmt.setString(1, "0000000003");
+            stmt.setString(2, "T3");
+            stmt.setInt(3, 300);
+            stmt.setInt(4, 8);
+            stmt.setInt(5, 12);
+            stmt.setString(6, "0000000002");
+            stmt.setString(7, "Item T3");
+            stmt.execute();
+
+            stmt.setString(1, "0000000004");
+            stmt.setString(2, "T4");
+            stmt.setInt(3, 400);
+            stmt.setInt(4, 6);
+            stmt.setInt(5, 10);
+            stmt.setString(6, "0000000002");
+            stmt.setString(7, "Item T4");
+            stmt.execute();
+
+            stmt.setString(1, "0000000005");
+            stmt.setString(2, "T5");
+            stmt.setInt(3, 500);
+            stmt.setInt(4, 8);
+            stmt.setInt(5, 15);
+            stmt.setString(6, "0000000005");
+            stmt.setString(7, "Item T5");
+            stmt.execute();
+
+            stmt.setString(1, "0000000006");
+            stmt.setString(2, "T6");
+            stmt.setInt(3, 600);
+            stmt.setInt(4, 8);
+            stmt.setInt(5, 15);
+            stmt.setString(6, "0000000006");
+            stmt.setString(7, "Item T6");
+            stmt.execute();
+            
+            stmt.setString(1, "invalid001");
+            stmt.setString(2, "INVALID-1");
+            stmt.setInt(3, 0);
+            stmt.setInt(4, 0);
+            stmt.setInt(5, 0);
+            stmt.setString(6, "0000000000");
+            stmt.setString(7, "Invalid item for join test");
+            stmt.execute();
+
+            // Insert into supplier table
+            stmt = conn.prepareStatement(
+                    "upsert into " + JOIN_SUPPLIER_TABLE_FULL_NAME +
+                    "   (\"supplier_id\", " +
+                    "    NAME, " +
+                    "    PHONE, " +
+                    "    ADDRESS, " +
+                    "    LOC_ID) " +
+                    "values (?, ?, ?, ?, ?)");
+            stmt.setString(1, "0000000001");
+            stmt.setString(2, "S1");
+            stmt.setString(3, "888-888-1111");
+            stmt.setString(4, "101 YYY Street");
+            stmt.setString(5, "10001");
+            stmt.execute();
+                
+            stmt.setString(1, "0000000002");
+            stmt.setString(2, "S2");
+            stmt.setString(3, "888-888-2222");
+            stmt.setString(4, "202 YYY Street");
+            stmt.setString(5, "10002");
+            stmt.execute();
+
+            stmt.setString(1, "0000000003");
+            stmt.setString(2, "S3");
+            stmt.setString(3, "888-888-3333");
+            stmt.setString(4, "303 YYY Street");
+            stmt.setString(5, null);
+            stmt.execute();
+
+            stmt.setString(1, "0000000004");
+            stmt.setString(2, "S4");
+            stmt.setString(3, "888-888-4444");
+            stmt.setString(4, "404 YYY Street");
+            stmt.setString(5, null);
+            stmt.execute();
+
+            stmt.setString(1, "0000000005");
+            stmt.setString(2, "S5");
+            stmt.setString(3, "888-888-5555");
+            stmt.setString(4, "505 YYY Street");
+            stmt.setString(5, "10005");
+            stmt.execute();
+
+            stmt.setString(1, "0000000006");
+            stmt.setString(2, "S6");
+            stmt.setString(3, "888-888-6666");
+            stmt.setString(4, "606 YYY Street");
+            stmt.setString(5, "10006");
+            stmt.execute();
+
+            // Insert into order table
+            stmt = conn.prepareStatement(
+                    "upsert into " + JOIN_ORDER_TABLE_FULL_NAME +
+                    "   (\"order_id\", " +
+                    "    \"customer_id\", " +
+                    "    \"item_id\", " +
+                    "    PRICE, " +
+                    "    QUANTITY," +
+                    "    DATE) " +
+                    "values (?, ?, ?, ?, ?, ?)");
+            stmt.setString(1, "000000000000001");
+            stmt.setString(2, "0000000004");
+            stmt.setString(3, "0000000001");
+            stmt.setInt(4, 100);
+            stmt.setInt(5, 1000);
+            stmt.setTimestamp(6, new Timestamp(format.parse("2013-11-22 14:22:56").getTime()));
+            stmt.execute();
+
+            stmt.setString(1, "000000000000002");
+            stmt.setString(2, "0000000003");
+            stmt.setString(3, "0000000006");
+            stmt.setInt(4, 552);
+            stmt.setInt(5, 2000);
+            stmt.setTimestamp(6, new Timestamp(format.parse("2013-11-25 10:06:29").getTime()));
+            stmt.execute();
+
+            stmt.setString(1, "000000000000003");
+            stmt.setString(2, "0000000002");
+            stmt.setString(3, "0000000002");
+            stmt.setInt(4, 190);
+            stmt.setInt(5, 3000);
+            stmt.setTimestamp(6, new Timestamp(format.parse("2013-11-25 16:45:07").getTime()));
+            stmt.execute();
+
+            stmt.setString(1, "000000000000004");
+            stmt.setString(2, "0000000004");
+            stmt.setString(3, "0000000006");
+            stmt.setInt(4, 510);
+            stmt.setInt(5, 4000);
+            stmt.setTimestamp(6, new Timestamp(format.parse("2013-11-26 13:26:04").getTime()));
+            stmt.execute();
+
+            stmt.setString(1, "000000000000005");
+            stmt.setString(2, "0000000005");
+            stmt.setString(3, "0000000003");
+            stmt.setInt(4, 264);
+            stmt.setInt(5, 5000);
+            stmt.setTimestamp(6, new Timestamp(format.parse("2013-11-27 09:37:50").getTime()));
+            stmt.execute();
+
+            conn.commit();
+        } finally {
+            conn.close();
+        }
+    }
+    
     /**
      * Disable and drop all the tables except SYSTEM.CATALOG and SYSTEM.SEQUENCE
      */
@@ -1389,4 +1676,102 @@ public abstract class BaseTest {
     public HBaseTestingUtility getUtility() {
         return utility;
     }
+
+    protected static void createMultiCFTestTable(String tableName) throws SQLException {
+        String ddl = "create table if not exists " + tableName + "(" +
+                "   varchar_pk VARCHAR NOT NULL, " +
+                "   char_pk CHAR(5) NOT NULL, " +
+                "   int_pk INTEGER NOT NULL, "+ 
+                "   long_pk BIGINT NOT NULL, " +
+                "   decimal_pk DECIMAL(31, 10) NOT NULL, " +
+                "   a.varchar_col1 VARCHAR, " +
+                "   a.char_col1 CHAR(5), " +
+                "   a.int_col1 INTEGER, " +
+                "   a.long_col1 BIGINT, " +
+                "   a.decimal_col1 DECIMAL(31, 10), " +
+                "   b.varchar_col2 VARCHAR, " +
+                "   b.char_col2 CHAR(5), " +
+                "   b.int_col2 INTEGER, " +
+                "   b.long_col2 BIGINT, " +
+                "   b.decimal_col2 DECIMAL, " +
+                "   b.date_col DATE " + 
+                "   CONSTRAINT pk PRIMARY KEY (varchar_pk, char_pk, int_pk, long_pk DESC, decimal_pk))";
+            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+            Connection conn = DriverManager.getConnection(getUrl(), props);
+            conn.createStatement().execute(ddl);
+            conn.close();
+    }
+    
+    // Populate the test table with data.
+    protected static void populateMultiCFTestTable(String tableName) throws SQLException {
+        populateMultiCFTestTable(tableName, null);
+    }
+    
+    // Populate the test table with data.
+    protected static void populateMultiCFTestTable(String tableName, Date date) throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            String upsert = "UPSERT INTO " + tableName
+                    + " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            PreparedStatement stmt = conn.prepareStatement(upsert);
+            stmt.setString(1, "varchar1");
+            stmt.setString(2, "char1");
+            stmt.setInt(3, 1);
+            stmt.setLong(4, 1L);
+            stmt.setBigDecimal(5, new BigDecimal("1.1"));
+            stmt.setString(6, "varchar_a");
+            stmt.setString(7, "chara");
+            stmt.setInt(8, 2);
+            stmt.setLong(9, 2L);
+            stmt.setBigDecimal(10, new BigDecimal("2.1"));
+            stmt.setString(11, "varchar_b");
+            stmt.setString(12, "charb");
+            stmt.setInt(13, 3);
+            stmt.setLong(14, 3L);
+            stmt.setBigDecimal(15, new BigDecimal("3.1"));
+            stmt.setDate(16, date == null ? null : new Date(date.getTime() + TestUtil.MILLIS_IN_DAY));
+            stmt.executeUpdate();
+            
+            stmt.setString(1, "varchar2");
+            stmt.setString(2, "char2");
+            stmt.setInt(3, 2);
+            stmt.setLong(4, 2L);
+            stmt.setBigDecimal(5, new BigDecimal("2.2"));
+            stmt.setString(6, "varchar_a");
+            stmt.setString(7, "chara");
+            stmt.setInt(8, 3);
+            stmt.setLong(9, 3L);
+            stmt.setBigDecimal(10, new BigDecimal("3.2"));
+            stmt.setString(11, "varchar_b");
+            stmt.setString(12, "charb");
+            stmt.setInt(13, 4);
+            stmt.setLong(14, 4L);
+            stmt.setBigDecimal(15, new BigDecimal("4.2"));
+            stmt.setDate(16, date);
+            stmt.executeUpdate();
+            
+            stmt.setString(1, "varchar3");
+            stmt.setString(2, "char3");
+            stmt.setInt(3, 3);
+            stmt.setLong(4, 3L);
+            stmt.setBigDecimal(5, new BigDecimal("3.3"));
+            stmt.setString(6, "varchar_a");
+            stmt.setString(7, "chara");
+            stmt.setInt(8, 4);
+            stmt.setLong(9, 4L);
+            stmt.setBigDecimal(10, new BigDecimal("4.3"));
+            stmt.setString(11, "varchar_b");
+            stmt.setString(12, "charb");
+            stmt.setInt(13, 5);
+            stmt.setLong(14, 5L);
+            stmt.setBigDecimal(15, new BigDecimal("5.3"));
+            stmt.setDate(16, date == null ? null : new Date(date.getTime() + 2 * TestUtil.MILLIS_IN_DAY));
+            stmt.executeUpdate();
+            
+            conn.commit();
+        } finally {
+            conn.close();
+        }
+    }  
 }

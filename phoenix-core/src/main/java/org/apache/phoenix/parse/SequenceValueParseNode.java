@@ -20,6 +20,8 @@ package org.apache.phoenix.parse;
 
 import java.sql.SQLException;
 
+import org.apache.phoenix.compile.ColumnResolver;
+
 
 public class SequenceValueParseNode extends TerminalParseNode {
     public enum Op {
@@ -59,5 +61,42 @@ public class SequenceValueParseNode extends TerminalParseNode {
 
     public Op getOp() {
         return op;
+    }
+
+	@Override
+	public int hashCode() {
+		final int prime = 31;
+		int result = 1;
+		result = prime * result + ((op == null) ? 0 : op.hashCode());
+		result = prime * result
+				+ ((tableName == null) ? 0 : tableName.hashCode());
+		return result;
+	}
+
+	@Override
+	public boolean equals(Object obj) {
+		if (this == obj)
+			return true;
+		if (obj == null)
+			return false;
+		if (getClass() != obj.getClass())
+			return false;
+		SequenceValueParseNode other = (SequenceValueParseNode) obj;
+		if (op != other.op)
+			return false;
+		if (tableName == null) {
+			if (other.tableName != null)
+				return false;
+		} else if (!tableName.equals(other.tableName))
+			return false;
+		return true;
+	}
+
+    @Override
+    public void toSQL(ColumnResolver resolver, StringBuilder buf) {
+        buf.append(' ');
+        buf.append(op.getName());
+        buf.append(" VALUE FOR ");
+        buf.append(tableName);
     }
 }

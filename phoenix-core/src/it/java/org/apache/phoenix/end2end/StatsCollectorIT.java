@@ -1,11 +1,27 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.getAllSplits;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
 import java.io.IOException;
 import java.sql.Array;
@@ -19,26 +35,22 @@ import java.util.Map;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.HColumnDescriptor;
-import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
-import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import com.google.common.collect.Maps;
 
 
-public class StatsCollectorIT extends BaseOwnClusterHBaseManagedTimeIT {
+public class StatsCollectorIT extends StatsCollectorAbstractIT {
     private static final String STATS_TEST_TABLE_NAME = "S";
-    private static final byte[] STATS_TEST_TABLE_BYTES = Bytes.toBytes(STATS_TEST_TABLE_NAME);
         
     @BeforeClass
     public static void doSetup() throws Exception {
@@ -211,86 +223,39 @@ public class StatsCollectorIT extends BaseOwnClusterHBaseManagedTimeIT {
         return stmt;
     }
 
-    private void compactTable(Connection conn) throws IOException, InterruptedException, SQLException {
+    private void compactTable(Connection conn, String tableName) throws IOException, InterruptedException, SQLException {
         ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
         HBaseAdmin admin = services.getAdmin();
         try {
-            admin.flush(STATS_TEST_TABLE_NAME);
-            admin.majorCompact(STATS_TEST_TABLE_NAME);
+            admin.flush(tableName);
+            admin.majorCompact(tableName);
             Thread.sleep(10000); // FIXME: how do we know when compaction is done?
         } finally {
             admin.close();
         }
-        services.clearCache();
     }
     
     @Test
     public void testCompactUpdatesStats() throws Exception {
-        int nRows = 10;
-        Connection conn;
-        PreparedStatement stmt;
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        conn = DriverManager.getConnection(getUrl(), props);
-        conn.createStatement().execute("CREATE TABLE " + STATS_TEST_TABLE_NAME + "(k CHAR(1) PRIMARY KEY, v INTEGER) " + HColumnDescriptor.KEEP_DELETED_CELLS + "=" + Boolean.FALSE);
-        stmt = conn.prepareStatement("UPSERT INTO " + STATS_TEST_TABLE_NAME + " VALUES(?,?)");
-        for (int i = 0; i < nRows; i++) {
-            stmt.setString(1, Character.toString((char) ('a' + i)));
-            stmt.setInt(2, i);
-            stmt.executeUpdate();
-        }
-        conn.commit();
-        
-        compactTable(conn);
-        conn = DriverManager.getConnection(getUrl(), props);
-        List<KeyRange>keyRanges = getAllSplits(conn, STATS_TEST_TABLE_NAME);
-        assertEquals(nRows+1, keyRanges.size());
-        
-        int nDeletedRows = conn.createStatement().executeUpdate("DELETE FROM " + STATS_TEST_TABLE_NAME + " WHERE V < 5");
-        conn.commit();
-        assertEquals(5, nDeletedRows);
-        
-        compactTable(conn);
-        
-        keyRanges = getAllSplits(conn, STATS_TEST_TABLE_NAME);
-        assertEquals(nRows/2+1, keyRanges.size());
-        
-    }
-
-
-    private void splitTable(Connection conn, byte[] splitPoint) throws IOException, InterruptedException, SQLException {
-        ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
-        int nRegionsNow = services.getAllTableRegions(STATS_TEST_TABLE_BYTES).size();
-        HBaseAdmin admin = services.getAdmin();
-        try {
-            admin.split(STATS_TEST_TABLE_BYTES, splitPoint);
-            int nTries = 0;
-            int nRegions;
-            do {
-                Thread.sleep(2000);
-                services.clearTableRegionCache(STATS_TEST_TABLE_BYTES);
-                nRegions = services.getAllTableRegions(STATS_TEST_TABLE_BYTES).size();
-                nTries++;
-            } while (nRegions == nRegionsNow && nTries < 10);
-            if (nRegions == nRegionsNow) {
-                fail();
-            }
-            // FIXME: I see the commit of the stats finishing before this with a lower timestamp that the scan timestamp,
-            // yet without this sleep, the query finds the old data. Seems like an HBase bug and a potentially serious one.
-            Thread.sleep(8000);
-        } finally {
-            admin.close();
-        }
+        testCompactUpdatesStats(null, STATS_TEST_TABLE_NAME + 1);
     }
     
     @Test
-    public void testSplitUpdatesStats() throws Exception {
+    public void testCompactUpdatesStatsWithMinStatsUpdateFreq() throws Exception {
+        testCompactUpdatesStats(QueryServicesOptions.DEFAULT_STATS_UPDATE_FREQ_MS, STATS_TEST_TABLE_NAME + 2);
+    }
+    
+    private void testCompactUpdatesStats(Integer minStatsUpdateFreq, String tableName) throws Exception {
         int nRows = 10;
         Connection conn;
         PreparedStatement stmt;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        if (minStatsUpdateFreq != null) {
+            props.setProperty(QueryServices.MIN_STATS_UPDATE_FREQ_MS_ATTRIB, minStatsUpdateFreq.toString());
+        }
         conn = DriverManager.getConnection(getUrl(), props);
-        conn.createStatement().execute("CREATE TABLE " + STATS_TEST_TABLE_NAME + "(k VARCHAR PRIMARY KEY, v INTEGER) " + HColumnDescriptor.KEEP_DELETED_CELLS + "=" + Boolean.FALSE);
-        stmt = conn.prepareStatement("UPSERT INTO " + STATS_TEST_TABLE_NAME + " VALUES(?,?)");
+        conn.createStatement().execute("CREATE TABLE " + tableName + "(k CHAR(1) PRIMARY KEY, v INTEGER) " + HColumnDescriptor.KEEP_DELETED_CELLS + "=" + Boolean.FALSE);
+        stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES(?,?)");
         for (int i = 0; i < nRows; i++) {
             stmt.setString(1, Character.toString((char) ('a' + i)));
             stmt.setInt(2, i);
@@ -298,60 +263,42 @@ public class StatsCollectorIT extends BaseOwnClusterHBaseManagedTimeIT {
         }
         conn.commit();
         
-        ResultSet rs;
-        TestUtil.analyzeTable(conn, STATS_TEST_TABLE_NAME);
-        List<KeyRange>keyRanges = getAllSplits(conn, STATS_TEST_TABLE_NAME);
+        compactTable(conn, tableName);
+        if (minStatsUpdateFreq == null) {
+            conn.unwrap(PhoenixConnection.class).getQueryServices().clearCache();
+        }
+        // Confirm that when we have a non zero MIN_STATS_UPDATE_FREQ_MS_ATTRIB, after we run
+        // UPDATATE STATISTICS, the new statistics are faulted in as expected.
+        if (minStatsUpdateFreq != null) {
+            List<KeyRange>keyRanges = getAllSplits(conn, tableName);
+            assertNotEquals(nRows+1, keyRanges.size());
+            // If we've set MIN_STATS_UPDATE_FREQ_MS_ATTRIB, an UPDATE STATISTICS will invalidate the cache
+            // and forcing the new stats to be pulled over.
+            int rowCount = conn.createStatement().executeUpdate("UPDATE STATISTICS " + tableName);
+            assertEquals(0, rowCount);
+        }
+        List<KeyRange>keyRanges = getAllSplits(conn, tableName);
         assertEquals(nRows+1, keyRanges.size());
-        rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + STATS_TEST_TABLE_NAME);
-        assertEquals("CLIENT " + (nRows+1) + "-CHUNK " + "PARALLEL 1-WAY FULL SCAN OVER " + STATS_TEST_TABLE_NAME, QueryUtil.getExplainPlan(rs));
-
-        ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
-        List<HRegionLocation> regions = services.getAllTableRegions(STATS_TEST_TABLE_BYTES);
-        assertEquals(1, regions.size());
- 
-        rs = conn.createStatement().executeQuery("SELECT GUIDE_POSTS_COUNT, REGION_NAME FROM SYSTEM.STATS WHERE PHYSICAL_NAME='"+STATS_TEST_TABLE_NAME+"' AND REGION_NAME IS NOT NULL");
-        assertTrue(rs.next());
-        assertEquals(nRows, rs.getLong(1));
-        assertEquals(regions.get(0).getRegionInfo().getRegionNameAsString(), rs.getString(2));
-        assertFalse(rs.next());
-
-        byte[] midPoint = Bytes.toBytes(Character.toString((char) ('a' + (nRows/2))));
-        splitTable(conn, midPoint);
         
-        keyRanges = getAllSplits(conn, STATS_TEST_TABLE_NAME);
-        assertEquals(nRows+1, keyRanges.size()); // Same number as before because split was at guidepost
+        int nDeletedRows = conn.createStatement().executeUpdate("DELETE FROM " + tableName + " WHERE V < 5");
+        conn.commit();
+        assertEquals(5, nDeletedRows);
         
-        regions = services.getAllTableRegions(STATS_TEST_TABLE_BYTES);
-        assertEquals(2, regions.size());
-        rs = conn.createStatement().executeQuery("SELECT GUIDE_POSTS_COUNT, REGION_NAME FROM SYSTEM.STATS WHERE PHYSICAL_NAME='"+STATS_TEST_TABLE_NAME+"' AND REGION_NAME IS NOT NULL");
-        assertTrue(rs.next());
-        assertEquals(nRows/2, rs.getLong(1));
-        assertEquals(regions.get(0).getRegionInfo().getRegionNameAsString(), rs.getString(2));
-        assertTrue(rs.next());
-        assertEquals(nRows/2 - 1, rs.getLong(1));
-        assertEquals(regions.get(1).getRegionInfo().getRegionNameAsString(), rs.getString(2));
-        assertFalse(rs.next());
-
-        byte[] midPoint2 = Bytes.toBytes("cj");
-        splitTable(conn, midPoint2);
+        compactTable(conn, tableName);
+        if (minStatsUpdateFreq == null) {
+            conn.unwrap(PhoenixConnection.class).getQueryServices().clearCache();
+        }
         
-        keyRanges = getAllSplits(conn, STATS_TEST_TABLE_NAME);
-        assertEquals(nRows+2, keyRanges.size()); // One extra due to split between guideposts
+        keyRanges = getAllSplits(conn, tableName);
+        if (minStatsUpdateFreq != null) {
+            assertEquals(nRows+1, keyRanges.size());
+            // If we've set MIN_STATS_UPDATE_FREQ_MS_ATTRIB, an UPDATE STATISTICS will invalidate the cache
+            // and force us to pull over the new stats
+            int rowCount = conn.createStatement().executeUpdate("UPDATE STATISTICS " + tableName);
+            assertEquals(0, rowCount);
+            keyRanges = getAllSplits(conn, tableName);
+        }
+        assertEquals(nRows/2+1, keyRanges.size());
         
-        regions = services.getAllTableRegions(STATS_TEST_TABLE_BYTES);
-        assertEquals(3, regions.size());
-        rs = conn.createStatement().executeQuery("SELECT GUIDE_POSTS_COUNT, REGION_NAME FROM SYSTEM.STATS WHERE PHYSICAL_NAME='"+STATS_TEST_TABLE_NAME+"' AND REGION_NAME IS NOT NULL");
-        assertTrue(rs.next());
-        assertEquals(3, rs.getLong(1));
-        assertEquals(regions.get(0).getRegionInfo().getRegionNameAsString(), rs.getString(2));
-        assertTrue(rs.next());
-        assertEquals(2, rs.getLong(1));
-        assertEquals(regions.get(1).getRegionInfo().getRegionNameAsString(), rs.getString(2));
-        assertTrue(rs.next());
-        assertEquals(nRows/2 - 1, rs.getLong(1));
-        assertEquals(regions.get(2).getRegionInfo().getRegionNameAsString(), rs.getString(2));
-        assertFalse(rs.next());
-        
-        conn.close();
     }
 }

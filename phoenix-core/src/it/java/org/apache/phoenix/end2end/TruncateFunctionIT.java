@@ -32,7 +32,6 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Timestamp;
-import java.text.Format;
 import java.text.ParseException;
 import java.util.Properties;
 
@@ -42,17 +41,16 @@ import org.junit.Test;
 
 
 public class TruncateFunctionIT extends BaseClientManagedTimeIT {
-    private static Format format = DateUtil.getDateParser(DateUtil.DEFAULT_MS_DATE_FORMAT);
     private static final String DS1 = "1970-01-10 00:58:01.587";
     private static final String DS2 = "1970-01-20 01:02:45.906";
     private static final String DS3 = "1970-01-30 01:30:24.353";
     
     private static Date toDate(String s) throws ParseException {
-        return (Date) (format.parseObject(s));
+        return DateUtil.parseDate(s);
     }
     
     private static Timestamp toTimestamp(String s) throws ParseException {
-        return new Timestamp(((Date) (format.parseObject(s))).getTime());
+        return DateUtil.parseTimestamp(s);
     }
     
     @Test

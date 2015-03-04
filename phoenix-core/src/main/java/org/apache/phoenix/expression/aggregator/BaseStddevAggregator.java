@@ -24,8 +24,10 @@ import java.util.Map.Entry;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.schema.types.PDouble;
 import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 /**
@@ -52,7 +54,7 @@ public abstract class BaseStddevAggregator extends DistinctValueWithCountClientA
         if (buffer == null) {
             initBuffer();
         }
-        buffer = PDataType.DECIMAL.toBytes(cachedResult);
+        buffer = PDecimal.INSTANCE.toBytes(cachedResult);
         ptr.set(buffer);
         return true;
     }
@@ -63,7 +65,7 @@ public abstract class BaseStddevAggregator extends DistinctValueWithCountClientA
         double m = mean();
         double result = 0.0;
         for (Entry<ImmutableBytesPtr, Integer> entry : valueVsCount.entrySet()) {
-            double colValue = (Double)PDataType.DOUBLE.toObject(entry.getKey(), this.stdDevColExp.getDataType());
+            double colValue = (Double) PDouble.INSTANCE.toObject(entry.getKey(), this.stdDevColExp.getDataType());
             double delta = colValue - m;
             result += (delta * delta) * entry.getValue();
         }
@@ -73,7 +75,7 @@ public abstract class BaseStddevAggregator extends DistinctValueWithCountClientA
     private double mean() {
         double sum = 0.0;
         for (Entry<ImmutableBytesPtr, Integer> entry : valueVsCount.entrySet()) {
-            double colValue = (Double)PDataType.DOUBLE.toObject(entry.getKey(), this.stdDevColExp.getDataType());
+            double colValue = (Double) PDouble.INSTANCE.toObject(entry.getKey(), this.stdDevColExp.getDataType());
             sum += colValue * entry.getValue();
         }
         return sum / totalCount;
@@ -81,6 +83,6 @@ public abstract class BaseStddevAggregator extends DistinctValueWithCountClientA
     
     @Override
     protected PDataType getResultDataType() {
-        return PDataType.DECIMAL;
+        return PDecimal.INSTANCE;
     }
 }

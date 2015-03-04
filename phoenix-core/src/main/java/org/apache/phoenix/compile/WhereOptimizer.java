@@ -48,20 +48,23 @@ import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.expression.RowValueConstructorExpression;
 import org.apache.phoenix.expression.function.FunctionExpression.OrderPreserving;
 import org.apache.phoenix.expression.function.ScalarFunction;
-import org.apache.phoenix.expression.visitor.TraverseNoExpressionVisitor;
+import org.apache.phoenix.expression.visitor.ExpressionVisitor;
+import org.apache.phoenix.expression.visitor.StatelessTraverseNoExpressionVisitor;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.parse.LikeParseNode.LikeType;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PColumn;
-import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PChar;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.ScanUtil;
@@ -84,7 +87,7 @@ import com.google.common.collect.Sets;
  */
 public class WhereOptimizer {
     private static final List<KeyRange> EVERYTHING_RANGES = Collections.<KeyRange>singletonList(KeyRange.EVERYTHING_RANGE);
-    private static final List<KeyRange> SALT_PLACEHOLDER = Collections.singletonList(PDataType.CHAR.getKeyRange(QueryConstants.SEPARATOR_BYTE_ARRAY));
+    private static final List<KeyRange> SALT_PLACEHOLDER = Collections.singletonList(PChar.INSTANCE.getKeyRange(QueryConstants.SEPARATOR_BYTE_ARRAY));
     
     private WhereOptimizer() {
     }
@@ -340,9 +343,9 @@ public class WhereOptimizer {
                 }
                 if (minPkPos != Integer.MAX_VALUE) {
                     candidateIndexes.add(i);
+                    pkPositions.add(minPkPos);
                 }
             }
-            pkPositions.add(minPkPos);
         }
         
         if (candidateIndexes.isEmpty())
@@ -378,6 +381,10 @@ public class WhereOptimizer {
             Expression secondRhs = count == 0 ? sampleValues.get(1).get(0) : new RowValueConstructorExpression(sampleValues.get(1).subList(0, count + 1), true);
             Expression testExpression = InListExpression.create(Lists.newArrayList(lhs, firstRhs, secondRhs), false, context.getTempPtr());
             remaining = pushKeyExpressionsToScan(context, statement, testExpression);
+            if (context.getScanRanges().isPointLookup()) {
+                count++;
+                break; // found the best match
+            }
             int pkSpan = context.getScanRanges().getPkColumnSpan();
             if (pkSpan <= maxPkSpan) {
                 break;
@@ -393,7 +400,7 @@ public class WhereOptimizer {
                 && (remaining == null || remaining.equals(LiteralExpression.newConstant(true, Determinism.ALWAYS)));
     }
 
-    private static class RemoveExtractedNodesVisitor extends TraverseNoExpressionVisitor<Expression> {
+    private static class RemoveExtractedNodesVisitor extends StatelessTraverseNoExpressionVisitor<Expression> {
         private final Set<Expression> nodesToRemove;
 
         private RemoveExtractedNodesVisitor(Set<Expression> nodesToRemove) {
@@ -440,7 +447,7 @@ public class WhereOptimizer {
      * Currently the first case would not be optimized. This includes other arithmetic
      * operators, CASE statements, and string concatenation.
      */
-    public static class KeyExpressionVisitor extends TraverseNoExpressionVisitor<KeyExpressionVisitor.KeySlots> {
+    public static class KeyExpressionVisitor extends StatelessTraverseNoExpressionVisitor<KeyExpressionVisitor.KeySlots> {
         private static final KeySlots EMPTY_KEY_SLOTS = new KeySlots() {
             @Override
             public Iterator<KeySlot> iterator() {
@@ -935,7 +942,7 @@ public class WhereOptimizer {
             KeySlots childSlots = childParts.get(0);
             KeySlot childSlot = childSlots.iterator().next();
             final String startsWith = node.getLiteralPrefix();
-            byte[] key = PDataType.CHAR.toBytes(startsWith, node.getChildren().get(0).getSortOrder());
+            byte[] key = PChar.INSTANCE.toBytes(startsWith, node.getChildren().get(0).getSortOrder());
             // If the expression is an equality expression against a fixed length column
             // and the key length doesn't match the column length, the expression can
             // never be true.
@@ -1363,6 +1370,11 @@ public class WhereOptimizer {
                                 public SortOrder getSortOrder() {
                                     return childPart.getColumn().getSortOrder();
                                 }
+
+                                @Override
+                                public <T> T accept(ExpressionVisitor<T> visitor) {
+                                    return null;
+                                }
                             };
                         }
                         
@@ -1375,7 +1387,7 @@ public class WhereOptimizer {
                     return null; 
                 }
                 byte[] key = ByteUtil.copyKeyBytesIfNecessary(ptr);
-                return ByteUtil.getKeyRange(key, op, PDataType.VARBINARY);
+                return ByteUtil.getKeyRange(key, op, PVarbinary.INSTANCE);
             }
 
         }

@@ -28,7 +28,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 
-import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Result;
@@ -52,7 +51,6 @@ import org.apache.phoenix.iterate.DelegateResultIterator;
 import org.apache.phoenix.iterate.MaterializedResultIterator;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable.LinkType;
@@ -62,6 +60,8 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.SingleKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -71,7 +71,7 @@ import com.google.common.collect.Lists;
 
 
 /**
- * 
+ *
  * JDBC DatabaseMetaData implementation of Phoenix reflecting read-only nature of driver.
  * Supported metadata methods include:
  * {@link #getTables(String, String, String, String[])}
@@ -93,8 +93,8 @@ import com.google.common.collect.Lists;
  * {@link #getSuperTables(String, String, String)}
  * {@link #getCatalogs()}
  * Other ResultSet methods return an empty result set.
- * 
- * 
+ *
+ *
  * @since 0.1
  */
 public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.phoenix.jdbc.Jdbc7Shim.DatabaseMetaData {
@@ -115,7 +115,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
     public static final String SYSTEM_STATS_TABLE = "STATS";
     public static final String SYSTEM_STATS_NAME = SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA, SYSTEM_STATS_TABLE);
     public static final byte[] SYSTEM_STATS_NAME_BYTES = Bytes.toBytes(SYSTEM_STATS_NAME);
-    
+
     public static final String SYSTEM_CATALOG_ALIAS = "\"SYSTEM.TABLE\"";
 
     public static final String TABLE_NAME = "TABLE_NAME";
@@ -124,7 +124,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
     public static final byte[] TABLE_TYPE_BYTES = Bytes.toBytes(TABLE_TYPE);
     public static final String PHYSICAL_NAME = "PHYSICAL_NAME";
     public static final byte[] PHYSICAL_NAME_BYTES = Bytes.toBytes(PHYSICAL_NAME);
-    
+
     public static final String COLUMN_FAMILY = "COLUMN_FAMILY";
     public static final String TABLE_CAT = "TABLE_CAT";
     public static final String TABLE_CATALOG = "TABLE_CATALOG";
@@ -141,7 +141,9 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
     public static final byte[] COLUMN_COUNT_BYTES = Bytes.toBytes(COLUMN_COUNT);
     public static final String SALT_BUCKETS = "SALT_BUCKETS";
     public static final byte[] SALT_BUCKETS_BYTES = Bytes.toBytes(SALT_BUCKETS);
- 
+    public static final String STORE_NULLS = "STORE_NULLS";
+    public static final byte[] STORE_NULLS_BYTES = Bytes.toBytes(STORE_NULLS);
+
     public static final String DATA_TABLE_NAME = "DATA_TABLE_NAME";
     public static final byte[] DATA_TABLE_NAME_BYTES = Bytes.toBytes(DATA_TABLE_NAME);
     public static final String INDEX_STATE = "INDEX_STATE";
@@ -149,7 +151,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
 
     public static final String TENANT_ID = "TENANT_ID";
     public static final byte[] TENANT_ID_BYTES = Bytes.toBytes(TENANT_ID);
-    
+
     public static final String COLUMN_NAME = "COLUMN_NAME";
     public static final String DATA_TYPE = "DATA_TYPE";
     public static final byte[] DATA_TYPE_BYTES = Bytes.toBytes(DATA_TYPE);
@@ -163,6 +165,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
     public static final String NULLABLE = "NULLABLE";
     public static final byte[] NULLABLE_BYTES = Bytes.toBytes(NULLABLE);
     public static final String COLUMN_DEF = "COLUMN_DEF";
+    public static final byte[] COLUMN_DEF_BYTES = Bytes.toBytes(COLUMN_DEF);
     public static final String SQL_DATA_TYPE = "SQL_DATA_TYPE";
     public static final String SQL_DATETIME_SUB = "SQL_DATETIME_SUB";
     public static final String CHAR_OCTET_LENGTH = "CHAR_OCTET_LENGTH";
@@ -203,7 +206,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
 
     public static final String TABLE_FAMILY = QueryConstants.DEFAULT_COLUMN_FAMILY;
     public static final byte[] TABLE_FAMILY_BYTES = QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
-    
+
     public static final String TYPE_SEQUENCE = "SEQUENCE";
     public static final byte[] SEQUENCE_FAMILY_BYTES = QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
     public static final String SEQUENCE_SCHEMA_NAME = SYSTEM_CATALOG_SCHEMA;
@@ -235,11 +238,11 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
     public static final String KEY_SEQ = "KEY_SEQ";
     public static final byte[] KEY_SEQ_BYTES = Bytes.toBytes(KEY_SEQ);
     public static final String SUPERTABLE_NAME = "SUPERTABLE_NAME";
-    
+
     public static final String TYPE_ID = "TYPE_ID";
     public static final String INDEX_DISABLE_TIMESTAMP = "INDEX_DISABLE_TIMESTAMP";
     public static final byte[] INDEX_DISABLE_TIMESTAMP_BYTES = Bytes.toBytes(INDEX_DISABLE_TIMESTAMP);
-    
+
     public static final String REGION_NAME = "REGION_NAME";
     public static final byte[] REGION_NAME_BYTES = Bytes.toBytes(REGION_NAME);
     public static final String GUIDE_POSTS = "GUIDE_POSTS";
@@ -248,6 +251,8 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
     public static final byte[] GUIDE_POSTS_COUNT_BYTES = Bytes.toBytes(GUIDE_POSTS_COUNT);
     public static final String GUIDE_POSTS_WIDTH = "GUIDE_POSTS_WIDTH";
     public static final byte[] GUIDE_POSTS_WIDTH_BYTES = Bytes.toBytes(GUIDE_POSTS_WIDTH);
+    public static final String GUIDE_POSTS_ROW_COUNT = "GUIDE_POSTS_ROW_COUNT";
+    public static final byte[] GUIDE_POSTS_ROW_COUNT_BYTES = Bytes.toBytes(GUIDE_POSTS_ROW_COUNT);
     public static final String MIN_KEY = "MIN_KEY";
     public static final byte[] MIN_KEY_BYTES = Bytes.toBytes(MIN_KEY);
     public static final String MAX_KEY = "MAX_KEY";
@@ -257,12 +262,14 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
 
     public static final String PARENT_TENANT_ID = "PARENT_TENANT_ID";
     public static final byte[] PARENT_TENANT_ID_BYTES = Bytes.toBytes(PARENT_TENANT_ID);
-        
+
     private static final String TENANT_POS_SHIFT = "TENANT_POS_SHIFT";
     private static final byte[] TENANT_POS_SHIFT_BYTES = Bytes.toBytes(TENANT_POS_SHIFT);
-    
+
     private final PhoenixConnection connection;
     private final ResultSet emptyResultSet;
+    public static final int MAX_LOCAL_SI_VERSION_DISALLOW = VersionUtil.encodeVersion("0", "98", "8");
+    public static final int MIN_LOCAL_SI_VERSION_DISALLOW = VersionUtil.encodeVersion("0", "98", "6");
 
     // Version below which we should turn off essential column family.
     public static final int ESSENTIAL_FAMILY_VERSION_THRESHOLD = VersionUtil.encodeVersion("0", "94", "7");
@@ -357,29 +364,25 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
             throws SQLException {
         return emptyResultSet;
     }
-    
-    private static String escapePattern(String pattern) {
-        return StringEscapeUtils.escapeSql(pattern); // Need to escape double quotes
-    }
-    
+
     public static final String GLOBAL_TENANANTS_ONLY = "null";
-    
+
     private void addTenantIdFilter(StringBuilder buf, String tenantIdPattern) {
         PName tenantId = connection.getTenantId();
         if (tenantIdPattern == null) {
             if (tenantId != null) {
                 appendConjunction(buf);
-                buf.append(" (" + TENANT_ID + " IS NULL " + 
-                        " OR " + TENANT_ID + " = '" + escapePattern(tenantId.getString()) + "') ");
+                buf.append(" (" + TENANT_ID + " IS NULL " +
+                        " OR " + TENANT_ID + " = '" + StringUtil.escapeStringConstant(tenantId.getString()) + "') ");
             }
         } else if (tenantIdPattern.length() == 0) {
                 appendConjunction(buf);
                 buf.append(TENANT_ID + " IS NULL ");
         } else {
             appendConjunction(buf);
-            buf.append(" TENANT_ID LIKE '" + escapePattern(tenantIdPattern) + "' ");
+            buf.append(" TENANT_ID LIKE '" + StringUtil.escapeStringConstant(tenantIdPattern) + "' ");
             if (tenantId != null) {
-                buf.append(" and TENANT_ID + = '" + escapePattern(tenantId.getString()) + "' ");
+                buf.append(" and TENANT_ID + = '" + StringUtil.escapeStringConstant(tenantId.getString()) + "' ");
             }
         }
     }
@@ -387,7 +390,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
     private static void appendConjunction(StringBuilder buf) {
         buf.append(buf.length() == 0 ? "" : " and ");
     }
-    
+
     @Override
     public ResultSet getColumns(String catalog, String schemaPattern, String tableNamePattern, String columnNamePattern)
             throws SQLException {
@@ -413,7 +416,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
                 SCOPE_SCHEMA + "," +
                 SCOPE_TABLE + "," +
                 SOURCE_DATA_TYPE + "," +
-                IS_AUTOINCREMENT + "," + 
+                IS_AUTOINCREMENT + "," +
                 ARRAY_SIZE + "," +
                 COLUMN_FAMILY + "," +
                 DATA_TYPE + " " + TYPE_ID + "," +// raw type id for potential internal consumption
@@ -425,11 +428,11 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
         addTenantIdFilter(where, catalog);
         if (schemaPattern != null) {
             appendConjunction(where);
-            where.append(TABLE_SCHEM + (schemaPattern.length() == 0 ? " is null" : " like '" + escapePattern(schemaPattern) + "'" ));
+            where.append(TABLE_SCHEM + (schemaPattern.length() == 0 ? " is null" : " like '" + StringUtil.escapeStringConstant(schemaPattern) + "'" ));
         }
         if (tableNamePattern != null && tableNamePattern.length() > 0) {
             appendConjunction(where);
-            where.append(TABLE_NAME + " like '" + escapePattern(tableNamePattern) + "'" );
+            where.append(TABLE_NAME + " like '" + StringUtil.escapeStringConstant(tableNamePattern) + "'" );
         }
         // Allow a "." in columnNamePattern for column family match
         String colPattern = null;
@@ -447,11 +450,11 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
             if (cfPattern != null && cfPattern.length() > 0) { // if null or empty, will pick up all columns
                 // Will pick up only KV columns
                 appendConjunction(where);
-                where.append(COLUMN_FAMILY + " like '" + escapePattern(cfPattern) + "'" );
+                where.append(COLUMN_FAMILY + " like '" + StringUtil.escapeStringConstant(cfPattern) + "'" );
             }
             if (colPattern != null && colPattern.length() > 0) {
                 appendConjunction(where);
-                where.append(COLUMN_NAME + " like '" + escapePattern(colPattern) + "'" );
+                where.append(COLUMN_NAME + " like '" + StringUtil.escapeStringConstant(colPattern) + "'" );
             }
         }
         if (colPattern == null) {
@@ -656,7 +659,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
                 "true NON_UNIQUE,\n" +
                 "null INDEX_QUALIFIER,\n" +
                 TABLE_NAME + " INDEX_NAME,\n" +
-                DatabaseMetaData.tableIndexOther + " TYPE,\n" + 
+                DatabaseMetaData.tableIndexOther + " TYPE,\n" +
                 ORDINAL_POSITION + ",\n" +
                 COLUMN_NAME + ",\n" +
                 "CASE WHEN " + COLUMN_FAMILY + " IS NOT NULL THEN null WHEN " + SORT_ORDER + " = " + (SortOrder.DESC.getSystemValue()) + " THEN 'D' ELSE 'A' END ASC_OR_DESC,\n" +
@@ -666,14 +669,14 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
                 // Include data type info, though not in spec
                 ExternalSqlTypeIdFunction.NAME + "(" + DATA_TYPE + ") AS " + DATA_TYPE + ",\n" +
                 SqlTypeNameFunction.NAME + "(" + DATA_TYPE + ") AS " + TYPE_NAME + ",\n" +
-                DATA_TYPE + " " + TYPE_ID + ",\n" + 
+                DATA_TYPE + " " + TYPE_ID + ",\n" +
                 COLUMN_FAMILY + ",\n" +
                 COLUMN_SIZE + ",\n" +
                 ARRAY_SIZE +
-                "\nfrom " + SYSTEM_CATALOG + 
+                "\nfrom " + SYSTEM_CATALOG +
                 "\nwhere ");
-        buf.append(TABLE_SCHEM + (schema == null || schema.length() == 0 ? " is null" : " = '" + escapePattern(schema) + "'" ));
-        buf.append("\nand " + DATA_TABLE_NAME + " = '" + escapePattern(table) + "'" );
+        buf.append(TABLE_SCHEM + (schema == null || schema.length() == 0 ? " is null" : " = '" + StringUtil.escapeStringConstant(schema) + "'" ));
+        buf.append("\nand " + DATA_TABLE_NAME + " = '" + StringUtil.escapeStringConstant(table) + "'" );
         buf.append("\nand " + COLUMN_NAME + " is not null" );
         addTenantIdFilter(buf, catalog);
         buf.append("\norder by INDEX_NAME," + ORDINAL_POSITION);
@@ -814,11 +817,11 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
                 SqlTypeNameFunction.NAME + "(" + DATA_TYPE + ") AS " + TYPE_NAME + "," +
                 COLUMN_SIZE + "," +
                 DATA_TYPE + " " + TYPE_ID + "," + // raw type id
-                VIEW_CONSTANT + 
+                VIEW_CONSTANT +
                 " from " + SYSTEM_CATALOG + " " + SYSTEM_CATALOG_ALIAS +
                 " where ");
-        buf.append(TABLE_SCHEM + (schema == null || schema.length() == 0 ? " is null" : " = '" + escapePattern(schema) + "'" ));
-        buf.append(" and " + TABLE_NAME + " = '" + escapePattern(table) + "'" );
+        buf.append(TABLE_SCHEM + (schema == null || schema.length() == 0 ? " is null" : " = '" + StringUtil.escapeStringConstant(schema) + "'" ));
+        buf.append(" and " + TABLE_NAME + " = '" + StringUtil.escapeStringConstant(table) + "'" );
         buf.append(" and " + COLUMN_NAME + " is not null");
         buf.append(" and " + COLUMN_FAMILY + " is null");
         addTenantIdFilter(buf, catalog);
@@ -883,7 +886,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
                 " where " + COLUMN_NAME + " is null");
         this.addTenantIdFilter(buf, catalog);
         if (schemaPattern != null) {
-            buf.append(" and " + TABLE_SCHEM + " like '" + escapePattern(schemaPattern) + "'");
+            buf.append(" and " + TABLE_SCHEM + " like '" + StringUtil.escapeStringConstant(schemaPattern) + "'");
         }
         Statement stmt = connection.createStatement();
         return stmt.executeQuery(buf.toString());
@@ -905,22 +908,22 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
                 TENANT_ID + " " + TABLE_CAT + "," + // Use tenantId for catalog
                 TABLE_SCHEM + "," +
                 TABLE_NAME + "," +
-                COLUMN_FAMILY + " " + SUPERTABLE_NAME + 
+                COLUMN_FAMILY + " " + SUPERTABLE_NAME +
                 " from " + SYSTEM_CATALOG + " " + SYSTEM_CATALOG_ALIAS +
                 " where " + COLUMN_NAME + " is null" +
                 " and " + LINK_TYPE + " = " + LinkType.PHYSICAL_TABLE.getSerializedValue());
         addTenantIdFilter(buf, catalog);
         if (schemaPattern != null) {
-            buf.append(" and " + TABLE_SCHEM + (schemaPattern.length() == 0 ? " is null" : " like '" + escapePattern(schemaPattern) + "'" ));
+            buf.append(" and " + TABLE_SCHEM + (schemaPattern.length() == 0 ? " is null" : " like '" + StringUtil.escapeStringConstant(schemaPattern) + "'" ));
         }
         if (tableNamePattern != null) {
-            buf.append(" and " + TABLE_NAME + " like '" + escapePattern(tableNamePattern) + "'" );
+            buf.append(" and " + TABLE_NAME + " like '" + StringUtil.escapeStringConstant(tableNamePattern) + "'" );
         }
         buf.append(" order by " + TENANT_ID + "," + TABLE_SCHEM + "," +TABLE_NAME + "," + SUPERTABLE_NAME);
         Statement stmt = connection.createStatement();
         return stmt.executeQuery(buf.toString());
     }
-    
+
     @Override
     public ResultSet getSuperTypes(String catalog, String schemaPattern, String typeNamePattern) throws SQLException {
         return emptyResultSet;
@@ -944,7 +947,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
         }
         @Override
         public PDataType getDataType() {
-            return PDataType.VARCHAR;
+            return PVarchar.INSTANCE;
         }
         @Override
         public Integer getMaxLength() {
@@ -960,7 +963,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
 		}
     };
     private static final RowProjector TABLE_TYPE_ROW_PROJECTOR = new RowProjector(Arrays.<ColumnProjector>asList(
-            new ExpressionProjector(TABLE_TYPE, SYSTEM_CATALOG, 
+            new ExpressionProjector(TABLE_TYPE, SYSTEM_CATALOG,
                     new RowKeyColumnExpression(TABLE_TYPE_DATUM,
                             new RowKeyValueAccessor(Collections.<PDatum>singletonList(TABLE_TYPE_DATUM), 0)), false)
             ), 0, true);
@@ -1009,10 +1012,10 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
                 " and " + COLUMN_FAMILY + " is null");
         addTenantIdFilter(buf, catalog);
         if (schemaPattern != null) {
-            buf.append(" and " + TABLE_SCHEM + (schemaPattern.length() == 0 ? " is null" : " like '" + escapePattern(schemaPattern) + "'" ));
+            buf.append(" and " + TABLE_SCHEM + (schemaPattern.length() == 0 ? " is null" : " like '" + StringUtil.escapeStringConstant(schemaPattern) + "'" ));
         }
         if (tableNamePattern != null) {
-            buf.append(" and " + TABLE_NAME + " like '" + escapePattern(tableNamePattern) + "'" );
+            buf.append(" and " + TABLE_NAME + " like '" + StringUtil.escapeStringConstant(tableNamePattern) + "'" );
         }
         if (types != null && types.length > 0) {
             buf.append(" and " + TABLE_TYPE + " IN (");

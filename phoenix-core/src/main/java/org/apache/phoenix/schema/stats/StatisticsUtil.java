@@ -38,6 +38,8 @@ import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 /**
@@ -50,6 +52,7 @@ public class StatisticsUtil {
 
     /** Number of parts in our complex key */
     protected static final int NUM_KEY_PARTS = 3;
+    
 
     public static byte[] getRowKey(byte[] table, ImmutableBytesPtr fam, byte[] region) {
         // always starts with the source table
@@ -76,6 +79,7 @@ public class StatisticsUtil {
         get.setTimeRange(MetaDataProtocol.MIN_TABLE_TIMESTAMP, clientTimeStamp);
         get.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH_BYTES);
         get.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_BYTES);
+        get.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_ROW_COUNT_BYTES);
         return statsHTable.get(get);
     }
     
@@ -84,27 +88,52 @@ public class StatisticsUtil {
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         Scan s = MetaDataUtil.newTableRowsScan(tableNameBytes, MetaDataProtocol.MIN_TABLE_TIMESTAMP, clientTimeStamp);
         s.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_BYTES);
+        s.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_ROW_COUNT_BYTES);
         ResultScanner scanner = statsHTable.getScanner(s);
         Result result = null;
         long timeStamp = MetaDataProtocol.MIN_TABLE_TIMESTAMP;
-        TreeMap<byte[], GuidePostsInfo> guidePostsPerCf = new TreeMap<byte[], GuidePostsInfo>(Bytes.BYTES_COMPARATOR);
+        TreeMap<byte[], GuidePostsInfo> guidePostsPerCf = new TreeMap<byte[], GuidePostsInfo>(
+                Bytes.BYTES_COMPARATOR);
         while ((result = scanner.next()) != null) {
             CellScanner cellScanner = result.cellScanner();
+            long rowCount = 0;
+            ImmutableBytesPtr valuePtr = new ImmutableBytesPtr(HConstants.EMPTY_BYTE_ARRAY);
+            byte[] cfName = null;
+            int tableNameLength;
+            int cfOffset;
+            int cfLength;
+            boolean valuesSet = false;
+            // Only the two cells with quals GUIDE_POSTS_ROW_COUNT_BYTES and GUIDE_POSTS_BYTES would be retrieved
             while (cellScanner.advance()) {
                 Cell current = cellScanner.current();
-                int tableNameLength = tableNameBytes.length + 1;
-                int cfOffset = current.getRowOffset() + tableNameLength;
-                int cfLength = getVarCharLength(current.getRowArray(), cfOffset, current.getRowLength()
-                        - tableNameLength);
-                ptr.set(current.getRowArray(), cfOffset, cfLength);
-                byte[] cfName = ByteUtil.copyKeyBytesIfNecessary(ptr);
-                GuidePostsInfo newInfo = GuidePostsInfo.fromBytes(current.getValueArray(), current.getValueOffset(), current.getValueLength());
-                GuidePostsInfo oldInfo = guidePostsPerCf.put(cfName, newInfo);
-                if (oldInfo != null) {
-                    newInfo.combine(oldInfo);
+                if (!valuesSet) {
+                    tableNameLength = tableNameBytes.length + 1;
+                    cfOffset = current.getRowOffset() + tableNameLength;
+                    cfLength = getVarCharLength(current.getRowArray(), cfOffset, current.getRowLength()
+                            - tableNameLength);
+                    ptr.set(current.getRowArray(), cfOffset, cfLength);
+                    valuesSet = true;
+                }
+                cfName = ByteUtil.copyKeyBytesIfNecessary(ptr);
+                if (Bytes.equals(current.getQualifierArray(), current.getQualifierOffset(),
+                        current.getQualifierLength(), PhoenixDatabaseMetaData.GUIDE_POSTS_ROW_COUNT_BYTES, 0,
+                        PhoenixDatabaseMetaData.GUIDE_POSTS_ROW_COUNT_BYTES.length)) {
+                    rowCount = PLong.INSTANCE.getCodec().decodeLong(current.getValueArray(),
+                            current.getValueOffset(), SortOrder.getDefault());
+                } else {
+                    valuePtr.set(current.getValueArray(), current.getValueOffset(),
+                        current.getValueLength());
                 }
                 if (current.getTimestamp() > timeStamp) {
                     timeStamp = current.getTimestamp();
+                }
+            }
+            if (cfName != null) {
+                GuidePostsInfo newGPInfo = GuidePostsInfo.deserializeGuidePostsInfo(
+                        valuePtr.get(), valuePtr.getOffset(), valuePtr.getLength(), rowCount);
+                GuidePostsInfo oldInfo = guidePostsPerCf.put(cfName, newGPInfo);
+                if (oldInfo != null) {
+                    newGPInfo.combine(oldInfo);
                 }
             }
         }

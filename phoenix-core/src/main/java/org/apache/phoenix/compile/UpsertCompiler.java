@@ -73,7 +73,6 @@ import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.MetaDataEntityNotFoundException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnImpl;
-import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.ViewType;
@@ -84,6 +83,7 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
@@ -186,11 +186,13 @@ public class UpsertCompiler {
 
         @Override
         protected MutationState mutate(StatementContext context, ResultIterator iterator, PhoenixConnection connection) throws SQLException {
-            PhoenixStatement statement = new PhoenixStatement(connection);
             if (context.getSequenceManager().getSequenceCount() > 0) {
                 throw new IllegalStateException("Cannot pipeline upsert when sequence is referenced");
             }
-            return upsertSelect(statement, tableRef, projector, iterator, columnIndexes, pkSlotIndexes);
+            PhoenixStatement statement = new PhoenixStatement(connection);
+            // Clone the row projector as it's not thread safe and would be used simultaneously by
+            // multiple threads otherwise.
+            return upsertSelect(statement, tableRef, projector.cloneIfNecessary(), iterator, columnIndexes, pkSlotIndexes);
         }
         
         public void setRowProjector(RowProjector projector) {
@@ -417,11 +419,11 @@ public class UpsertCompiler {
                     // Pass scan through if same table in upsert and select so that projection is computed correctly
                     // Use optimizer to choose the best plan
                     try {
-                        QueryCompiler compiler = new QueryCompiler(statement, select, selectResolver, targetColumns, parallelIteratorFactoryToBe, new SequenceManager(statement));
+                        QueryCompiler compiler = new QueryCompiler(statement, select, selectResolver, targetColumns, parallelIteratorFactoryToBe, new SequenceManager(statement), false);
                         queryPlanToBe = compiler.compile();
                         // This is post-fix: if the tableRef is a projected table, this means there are post-processing 
                         // steps and parallelIteratorFactory did not take effect.
-                        if (queryPlanToBe.getTableRef().getTable().getType() == PTableType.JOIN || queryPlanToBe.getTableRef().getTable().getType() == PTableType.SUBQUERY) {
+                        if (queryPlanToBe.getTableRef().getTable().getType() == PTableType.PROJECTED || queryPlanToBe.getTableRef().getTable().getType() == PTableType.SUBQUERY) {
                             parallelIteratorFactoryToBe = null;
                         }
                     } catch (MetaDataEntityNotFoundException e) {
@@ -601,7 +603,7 @@ public class UpsertCompiler {
                         @Override
                         public MutationState execute() throws SQLException {
                             ImmutableBytesWritable ptr = context.getTempPtr();
-                            tableRef.getTable().getIndexMaintainers(ptr);
+                            tableRef.getTable().getIndexMaintainers(ptr, context.getConnection());
                             ServerCache cache = null;
                             try {
                                 if (ptr.getLength() > 0) {
@@ -613,7 +615,7 @@ public class UpsertCompiler {
                                 ResultIterator iterator = aggPlan.iterator();
                                 try {
                                     Tuple row = iterator.next();
-                                    final long mutationCount = (Long)aggProjector.getColumnProjector(0).getValue(row, PDataType.LONG, ptr);
+                                    final long mutationCount = (Long)aggProjector.getColumnProjector(0).getValue(row, PLong.INSTANCE, ptr);
                                     return new MutationState(maxSize, connection) {
                                         @Override
                                         public long getUpdateCount() {
@@ -668,18 +670,22 @@ public class UpsertCompiler {
                     if (parallelIteratorFactory == null) {
                         return upsertSelect(statement, tableRef, projector, iterator, columnIndexes, pkSlotIndexes);
                     }
-                    parallelIteratorFactory.setRowProjector(projector);
-                    parallelIteratorFactory.setColumnIndexes(columnIndexes);
-                    parallelIteratorFactory.setPkSlotIndexes(pkSlotIndexes);
-                    Tuple tuple;
-                    long totalRowCount = 0;
-                    while ((tuple=iterator.next()) != null) {// Runs query
-                        Cell kv = tuple.getValue(0);
-                        totalRowCount += PDataType.LONG.getCodec().decodeLong(kv.getValueArray(), kv.getValueOffset(), SortOrder.getDefault());
+                    try {
+                        parallelIteratorFactory.setRowProjector(projector);
+                        parallelIteratorFactory.setColumnIndexes(columnIndexes);
+                        parallelIteratorFactory.setPkSlotIndexes(pkSlotIndexes);
+                        Tuple tuple;
+                        long totalRowCount = 0;
+                        while ((tuple=iterator.next()) != null) {// Runs query
+                            Cell kv = tuple.getValue(0);
+                            totalRowCount += PLong.INSTANCE.getCodec().decodeLong(kv.getValueArray(), kv.getValueOffset(), SortOrder.getDefault());
+                        }
+                        // Return total number of rows that have been updated. In the case of auto commit being off
+                        // the mutations will all be in the mutation state of the current connection.
+                        return new MutationState(maxSize, statement.getConnection(), totalRowCount);
+                    } finally {
+                        iterator.close();
                     }
-                    // Return total number of rows that have been updated. In the case of auto commit being off
-                    // the mutations will all be in the mutation state of the current connection.
-                    return new MutationState(maxSize, statement.getConnection(), totalRowCount);
                 }
 
                 @Override

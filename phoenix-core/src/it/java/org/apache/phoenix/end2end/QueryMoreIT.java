@@ -18,6 +18,8 @@
 package org.apache.phoenix.end2end;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
 import java.sql.Date;
@@ -33,6 +35,7 @@ import java.util.Properties;
 import org.apache.hadoop.hbase.util.Base64;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
 import com.google.common.collect.Lists;
@@ -313,5 +316,16 @@ public class QueryMoreIT extends BaseHBaseManagedTimeIT {
         }
         sb.append(")");
         return sb.toString();
+    }
+    
+    @Test // see - https://issues.apache.org/jira/browse/PHOENIX-1696
+    public void testSelectColumnMoreThanOnce() throws Exception {
+        Date date = new Date(System.currentTimeMillis());
+        initEntityHistoryTableValues("abcd", getDefaultSplits("abcd"), date, 100l);
+        String query = "SELECT NEW_VALUE, NEW_VALUE FROM " + TestUtil.ENTITY_HISTORY_TABLE_NAME + " LIMIT 1";
+        ResultSet rs = DriverManager.getConnection(getUrl()).createStatement().executeQuery(query);
+        assertTrue(rs.next());
+        rs.getObject("NEW_VALUE");
+        assertFalse(rs.next());
     }
 }

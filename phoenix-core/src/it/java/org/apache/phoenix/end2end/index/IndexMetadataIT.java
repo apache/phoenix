@@ -100,7 +100,7 @@ public class IndexMetadataIT extends BaseHBaseManagedTimeIT {
         String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
         conn.createStatement().executeQuery("SELECT count(*) FROM " + fullTableName).next(); // client side cache will update
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        pconn.getMetaDataCache().getTable(new PTableKey(pconn.getTenantId(), fullTableName)).getIndexMaintainers(ptr);
+        pconn.getMetaDataCache().getTable(new PTableKey(pconn.getTenantId(), fullTableName)).getIndexMaintainers(ptr, pconn);
         assertTrue(ptr.getLength() > 0);
     }
     
@@ -109,7 +109,7 @@ public class IndexMetadataIT extends BaseHBaseManagedTimeIT {
         String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
         conn.createStatement().executeQuery("SELECT count(*) FROM " + fullTableName).next(); // client side cache will update
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        pconn.getMetaDataCache().getTable(new PTableKey(pconn.getTenantId(), fullTableName)).getIndexMaintainers(ptr);
+        pconn.getMetaDataCache().getTable(new PTableKey(pconn.getTenantId(), fullTableName)).getIndexMaintainers(ptr, pconn);
         assertTrue(ptr.getLength() == 0);
     }
     
@@ -135,8 +135,9 @@ public class IndexMetadataIT extends BaseHBaseManagedTimeIT {
             assertIndexInfoMetadata(rs, INDEX_DATA_SCHEMA, MUTABLE_INDEX_DATA_TABLE, "IDX", 5, ":CHAR_PK", Order.ASC);
             assertIndexInfoMetadata(rs, INDEX_DATA_SCHEMA, MUTABLE_INDEX_DATA_TABLE, "IDX", 6, ":LONG_PK", Order.DESC);
             assertIndexInfoMetadata(rs, INDEX_DATA_SCHEMA, MUTABLE_INDEX_DATA_TABLE, "IDX", 7, ":DECIMAL_PK", Order.ASC);
-            assertIndexInfoMetadata(rs, INDEX_DATA_SCHEMA, MUTABLE_INDEX_DATA_TABLE, "IDX", 8, "A:INT_COL1", null);
-            assertIndexInfoMetadata(rs, INDEX_DATA_SCHEMA, MUTABLE_INDEX_DATA_TABLE, "IDX", 9, "B:INT_COL2", null);
+            assertIndexInfoMetadata(rs, INDEX_DATA_SCHEMA, MUTABLE_INDEX_DATA_TABLE, "IDX", 8, ":DATE_PK", Order.ASC);
+            assertIndexInfoMetadata(rs, INDEX_DATA_SCHEMA, MUTABLE_INDEX_DATA_TABLE, "IDX", 9, "A:INT_COL1", null);
+            assertIndexInfoMetadata(rs, INDEX_DATA_SCHEMA, MUTABLE_INDEX_DATA_TABLE, "IDX", 10, "B:INT_COL2", null);
             assertFalse(rs.next());
             
             rs = conn.getMetaData().getTables(null, StringUtil.escapeLike(INDEX_DATA_SCHEMA), StringUtil.escapeLike("IDX"), new String[] {PTableType.INDEX.getValue().getString() });
@@ -245,8 +246,9 @@ public class IndexMetadataIT extends BaseHBaseManagedTimeIT {
             assertIndexInfoMetadata(rs, INDEX_DATA_SCHEMA, MUTABLE_INDEX_DATA_TABLE, "IDX1", 5, ":CHAR_PK", Order.ASC);
             assertIndexInfoMetadata(rs, INDEX_DATA_SCHEMA, MUTABLE_INDEX_DATA_TABLE, "IDX1", 6, ":LONG_PK", Order.DESC);
             assertIndexInfoMetadata(rs, INDEX_DATA_SCHEMA, MUTABLE_INDEX_DATA_TABLE, "IDX1", 7, ":DECIMAL_PK", Order.ASC);
-            assertIndexInfoMetadata(rs, INDEX_DATA_SCHEMA, MUTABLE_INDEX_DATA_TABLE, "IDX1", 8, "A:INT_COL1", null);
-            assertIndexInfoMetadata(rs, INDEX_DATA_SCHEMA, MUTABLE_INDEX_DATA_TABLE, "IDX1", 9, "B:INT_COL2", null);
+            assertIndexInfoMetadata(rs, INDEX_DATA_SCHEMA, MUTABLE_INDEX_DATA_TABLE, "IDX1", 8, ":DATE_PK", Order.ASC);
+            assertIndexInfoMetadata(rs, INDEX_DATA_SCHEMA, MUTABLE_INDEX_DATA_TABLE, "IDX1", 9, "A:INT_COL1", null);
+            assertIndexInfoMetadata(rs, INDEX_DATA_SCHEMA, MUTABLE_INDEX_DATA_TABLE, "IDX1", 10, "B:INT_COL2", null);
 
             assertIndexInfoMetadata(rs, INDEX_DATA_SCHEMA, MUTABLE_INDEX_DATA_TABLE, "IDX2", 1, "A:VARCHAR_COL1", Order.ASC);
             assertIndexInfoMetadata(rs, INDEX_DATA_SCHEMA, MUTABLE_INDEX_DATA_TABLE, "IDX2", 2, "B:VARCHAR_COL2", Order.ASC);
@@ -255,7 +257,8 @@ public class IndexMetadataIT extends BaseHBaseManagedTimeIT {
             assertIndexInfoMetadata(rs, INDEX_DATA_SCHEMA, MUTABLE_INDEX_DATA_TABLE, "IDX2", 5, ":CHAR_PK", Order.ASC);
             assertIndexInfoMetadata(rs, INDEX_DATA_SCHEMA, MUTABLE_INDEX_DATA_TABLE, "IDX2", 6, ":LONG_PK", Order.DESC);
             assertIndexInfoMetadata(rs, INDEX_DATA_SCHEMA, MUTABLE_INDEX_DATA_TABLE, "IDX2", 7, ":DECIMAL_PK", Order.ASC);
-            assertIndexInfoMetadata(rs, INDEX_DATA_SCHEMA, MUTABLE_INDEX_DATA_TABLE, "IDX2", 8, "B:INT_COL2", null);
+            assertIndexInfoMetadata(rs, INDEX_DATA_SCHEMA, MUTABLE_INDEX_DATA_TABLE, "IDX2", 8, ":DATE_PK", Order.ASC);
+            assertIndexInfoMetadata(rs, INDEX_DATA_SCHEMA, MUTABLE_INDEX_DATA_TABLE, "IDX2", 9, "B:INT_COL2", null);
             assertFalse(rs.next());
             
             // Create another table in the same schema
@@ -307,7 +310,8 @@ public class IndexMetadataIT extends BaseHBaseManagedTimeIT {
             assertIndexInfoMetadata(rs, INDEX_DATA_SCHEMA, INDEX_DATA_TABLE, "IDX", 6, ":INT_PK", Order.ASC);
             assertIndexInfoMetadata(rs, INDEX_DATA_SCHEMA, INDEX_DATA_TABLE, "IDX", 7, ":LONG_PK", Order.DESC);
             assertIndexInfoMetadata(rs, INDEX_DATA_SCHEMA, INDEX_DATA_TABLE, "IDX", 8, ":DECIMAL_PK", Order.ASC);
-            assertIndexInfoMetadata(rs, INDEX_DATA_SCHEMA, INDEX_DATA_TABLE, "IDX", 9, "A:INT_COL1", null);
+            assertIndexInfoMetadata(rs, INDEX_DATA_SCHEMA, INDEX_DATA_TABLE, "IDX", 9, ":DATE_PK", Order.ASC);
+            assertIndexInfoMetadata(rs, INDEX_DATA_SCHEMA, INDEX_DATA_TABLE, "IDX", 10, "A:INT_COL1", null);
             assertFalse(rs.next());
             
             rs = IndexTestUtil.readDataTableIndexRow(conn, INDEX_DATA_SCHEMA, INDEX_DATA_TABLE, "IDX");
@@ -417,6 +421,51 @@ public class IndexMetadataIT extends BaseHBaseManagedTimeIT {
             fail("Should have caught exception");
         } catch (AmbiguousColumnException e) {
             assertEquals(SQLExceptionCode.AMBIGUOUS_COLUMN.getErrorCode(), e.getErrorCode());
+        } finally {
+            conn.close();
+        }
+    }
+    
+    @Test
+    public void testBinaryNonnullableIndex() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        try {
+            String ddl =
+                    "CREATE TABLE test_table ( "
+                    + "v1 BINARY(64) NOT NULL, "
+                    + "v2 VARCHAR, "
+                    + "v3 BINARY(64), "
+                    + "v4 VARCHAR "
+                    + "CONSTRAINT PK PRIMARY KEY (v1))";
+            conn.createStatement().execute(ddl);
+            conn.commit();
+
+            try {
+                conn.createStatement().execute("CREATE INDEX idx ON test_table (v3) INCLUDE (v4)");
+                fail("Should have seen SQLExceptionCode.VARBINARY_IN_ROW_KEY");
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.VARBINARY_IN_ROW_KEY.getErrorCode(), e.getErrorCode());
+            }
+
+            try {
+                conn.createStatement().execute("CREATE INDEX idx3 ON test_table (v2, v3) INCLUDE (v4)");
+                fail("Should have seen SQLExceptionCode.VARBINARY_IN_ROW_KEY");
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.VARBINARY_IN_ROW_KEY.getErrorCode(), e.getErrorCode());
+            }
+            conn.createStatement().execute("CREATE INDEX idx4 ON test_table (v4) INCLUDE (v2)");
+            conn.commit();
+
+            conn.createStatement().execute("CREATE INDEX varbinLastInRow ON test_table (v1, v3)");
+            conn.commit();
+
+            conn.createStatement().execute( "CREATE INDEX idx5 ON test_table (v2) INCLUDE (v4, v3, v1)");
+            conn.commit();
+
+            conn.createStatement().executeQuery(
+                "select v1,v2,v3,v4 FROM test_table where v2 = 'abc' and v3 != 'a'");
+
+
         } finally {
             conn.close();
         }

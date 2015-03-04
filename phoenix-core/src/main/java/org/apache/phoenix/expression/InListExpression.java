@@ -33,9 +33,10 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
-import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PBoolean;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ExpressionUtil;
 
@@ -60,7 +61,7 @@ public class InListExpression extends BaseSingleExpression {
         Expression firstChild = children.get(0);
         
         if (firstChild.isStateless() && (!firstChild.evaluate(null, ptr) || ptr.getLength() == 0)) {
-            return LiteralExpression.newConstant(null, PDataType.BOOLEAN, firstChild.getDeterminism());
+            return LiteralExpression.newConstant(null, PBoolean.INSTANCE, firstChild.getDeterminism());
         }
         if (children.size() == 2) {
             return ComparisonExpression.create(isNegate ? CompareOp.NOT_EQUAL : CompareOp.EQUAL, children, ptr);
@@ -86,7 +87,7 @@ public class InListExpression extends BaseSingleExpression {
             throw sqlE;
         }
         if (coercedKeyExpressions.size() == 2 && addedNull) {
-            return LiteralExpression.newConstant(null, PDataType.BOOLEAN, Determinism.ALWAYS);
+            return LiteralExpression.newConstant(null, PBoolean.INSTANCE, Determinism.ALWAYS);
         }
         Expression expression = new InListExpression(coercedKeyExpressions);
         if (isNegate) { 
@@ -101,7 +102,7 @@ public class InListExpression extends BaseSingleExpression {
     public InListExpression() {
     }
 
-    private InListExpression(List<Expression> keyExpressions) throws SQLException {
+    public InListExpression(List<Expression> keyExpressions) {
         super(keyExpressions.get(0));
         this.keyExpressions = keyExpressions.subList(1, keyExpressions.size());
         Set<ImmutableBytesPtr> values = Sets.newHashSetWithExpectedSize(keyExpressions.size()-1);
@@ -178,7 +179,7 @@ public class InListExpression extends BaseSingleExpression {
 
     @Override
     public PDataType getDataType() {
-        return PDataType.BOOLEAN;
+        return PBoolean.INSTANCE;
     }
 
     private int readValue(DataInput input, byte[] valuesBytes, int offset, ImmutableBytesPtr ptr) throws IOException {

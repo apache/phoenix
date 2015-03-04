@@ -24,6 +24,8 @@ option java_generic_services = true;
 option java_generate_equals_and_hash = true;
 option optimize_for = SPEED;
 
+import "PGuidePosts.proto";
+
 enum PTableType {
   SYSTEM = 0;
   USER = 1;
@@ -35,7 +37,7 @@ enum PTableType {
 message PColumn {
   required bytes columnNameBytes = 1;
   optional bytes familyNameBytes = 2;
-  required string dataType = 3; 
+  required string dataType = 3;
   optional int32 maxLength = 4;
   optional int32 scale = 5;
   required bool nullable = 6;
@@ -44,6 +46,7 @@ message PColumn {
   optional int32 arraySize = 9;
   optional bytes viewConstant = 10;
   optional bool viewReferenced = 11;
+  optional string expression = 12;
 }
 
 message PTableStats {
@@ -52,6 +55,7 @@ message PTableStats {
   optional int64 guidePostsByteCount = 3;
   optional int64 keyBytesCount = 4;
   optional int32 guidePostsCount = 5;
+  optional PGuidePosts pGuidePosts = 6;
 }
 
 message PTable {
@@ -78,4 +82,5 @@ message PTable {
   optional int32 viewIndexId = 21;
   optional bytes indexType = 22;
   optional int64 statsTimeStamp = 23;
+  optional bool storeNulls = 24;
 }

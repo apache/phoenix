@@ -35,6 +35,7 @@ import static org.apache.phoenix.util.TestUtil.TABLE_WITH_SALTING;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -47,6 +48,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Arrays;
+import java.util.Map;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.HColumnDescriptor;
@@ -65,21 +67,35 @@ import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.ColumnNotFoundException;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.ReadOnlyTableException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 
 public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
+	
+    @BeforeClass
+    @Shadower(classBeingShadowed = BaseClientManagedTimeIT.class)
+    public static void doSetup() throws Exception {
+        Map<String,String> props = getDefaultProps();
+        props.put(QueryServices.DEFAULT_KEEP_DELETED_CELLS_ATTRIB, "true");
+        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+    }
 
     @Test
     public void testTableMetadataScan() throws SQLException {
@@ -201,7 +217,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         assertEquals(null, rs.getString("TABLE_CAT"));
         assertEquals(SchemaUtil.normalizeIdentifier("id"), rs.getString("COLUMN_NAME"));
         assertEquals(DatabaseMetaData.attributeNoNulls, rs.getShort("NULLABLE"));
-        assertEquals(PDataType.CHAR.getSqlType(), rs.getInt("DATA_TYPE"));
+        assertEquals(PChar.INSTANCE.getSqlType(), rs.getInt("DATA_TYPE"));
         assertEquals(1, rs.getInt("ORDINAL_POSITION"));
         assertEquals(1, rs.getInt("COLUMN_SIZE"));
         assertEquals(0, rs.getInt("DECIMAL_DIGITS"));
@@ -212,7 +228,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         assertEquals(SchemaUtil.normalizeIdentifier("a"), rs.getString("COLUMN_FAMILY"));
         assertEquals(SchemaUtil.normalizeIdentifier("col1"), rs.getString("COLUMN_NAME"));
         assertEquals(DatabaseMetaData.attributeNullable, rs.getShort("NULLABLE"));
-        assertEquals(PDataType.INTEGER.getSqlType(), rs.getInt("DATA_TYPE"));
+        assertEquals(PInteger.INSTANCE.getSqlType(), rs.getInt("DATA_TYPE"));
         assertEquals(2, rs.getInt("ORDINAL_POSITION"));
         assertEquals(0, rs.getInt("COLUMN_SIZE"));
         assertTrue(rs.wasNull());
@@ -225,7 +241,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("COLUMN_FAMILY"));
         assertEquals(SchemaUtil.normalizeIdentifier("col2"), rs.getString("COLUMN_NAME"));
         assertEquals(DatabaseMetaData.attributeNullable, rs.getShort("NULLABLE"));
-        assertEquals(PDataType.LONG.getSqlType(), rs.getInt("DATA_TYPE"));
+        assertEquals(PLong.INSTANCE.getSqlType(), rs.getInt("DATA_TYPE"));
         assertEquals(3, rs.getInt("ORDINAL_POSITION"));
         assertEquals(0, rs.getInt("COLUMN_SIZE"));
         assertTrue(rs.wasNull());
@@ -238,7 +254,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("COLUMN_FAMILY"));
         assertEquals(SchemaUtil.normalizeIdentifier("col3"), rs.getString("COLUMN_NAME"));
         assertEquals(DatabaseMetaData.attributeNullable, rs.getShort("NULLABLE"));
-        assertEquals(PDataType.DECIMAL.getSqlType(), rs.getInt("DATA_TYPE"));
+        assertEquals(PDecimal.INSTANCE.getSqlType(), rs.getInt("DATA_TYPE"));
         assertEquals(4, rs.getInt("ORDINAL_POSITION"));
         assertEquals(0, rs.getInt("COLUMN_SIZE"));
         assertTrue(rs.wasNull());
@@ -251,7 +267,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("COLUMN_FAMILY"));
         assertEquals(SchemaUtil.normalizeIdentifier("col4"), rs.getString("COLUMN_NAME"));
         assertEquals(DatabaseMetaData.attributeNullable, rs.getShort("NULLABLE"));
-        assertEquals(PDataType.DECIMAL.getSqlType(), rs.getInt("DATA_TYPE"));
+        assertEquals(PDecimal.INSTANCE.getSqlType(), rs.getInt("DATA_TYPE"));
         assertEquals(5, rs.getInt("ORDINAL_POSITION"));
         assertEquals(5, rs.getInt("COLUMN_SIZE"));
         assertEquals(0, rs.getInt("DECIMAL_DIGITS"));
@@ -262,7 +278,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("COLUMN_FAMILY"));
         assertEquals(SchemaUtil.normalizeIdentifier("col5"), rs.getString("COLUMN_NAME"));
         assertEquals(DatabaseMetaData.attributeNullable, rs.getShort("NULLABLE"));
-        assertEquals(PDataType.DECIMAL.getSqlType(), rs.getInt("DATA_TYPE"));
+        assertEquals(PDecimal.INSTANCE.getSqlType(), rs.getInt("DATA_TYPE"));
         assertEquals(6, rs.getInt("ORDINAL_POSITION"));
         assertEquals(6, rs.getInt("COLUMN_SIZE"));
         assertEquals(3, rs.getInt("DECIMAL_DIGITS"));
@@ -277,7 +293,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         assertEquals(SchemaUtil.normalizeIdentifier("a"), rs.getString("COLUMN_FAMILY"));
         assertEquals(SchemaUtil.normalizeIdentifier("col1"), rs.getString("COLUMN_NAME"));
         assertEquals(DatabaseMetaData.attributeNullable, rs.getShort("NULLABLE"));
-        assertEquals(PDataType.INTEGER.getSqlType(), rs.getInt("DATA_TYPE"));
+        assertEquals(PInteger.INSTANCE.getSqlType(), rs.getInt("DATA_TYPE"));
         assertEquals(2, rs.getInt("ORDINAL_POSITION"));
         assertEquals(0, rs.getInt("COLUMN_SIZE"));
         assertTrue(rs.wasNull());
@@ -294,7 +310,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         assertEquals(SchemaUtil.normalizeIdentifier("a"), rs.getString("COLUMN_FAMILY"));
         assertEquals(SchemaUtil.normalizeIdentifier("col1"), rs.getString("COLUMN_NAME"));
         assertEquals(DatabaseMetaData.attributeNullable, rs.getShort("NULLABLE"));
-        assertEquals(PDataType.INTEGER.getSqlType(), rs.getInt("DATA_TYPE"));
+        assertEquals(PInteger.INSTANCE.getSqlType(), rs.getInt("DATA_TYPE"));
         assertEquals(2, rs.getInt("ORDINAL_POSITION"));
         assertEquals(0, rs.getInt("COLUMN_SIZE"));
         assertTrue(rs.wasNull());
@@ -307,7 +323,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("COLUMN_FAMILY"));
         assertEquals(SchemaUtil.normalizeIdentifier("col2"), rs.getString("COLUMN_NAME"));
         assertEquals(DatabaseMetaData.attributeNullable, rs.getShort("NULLABLE"));
-        assertEquals(PDataType.LONG.getSqlType(), rs.getInt("DATA_TYPE"));
+        assertEquals(PLong.INSTANCE.getSqlType(), rs.getInt("DATA_TYPE"));
         assertEquals(3, rs.getInt("ORDINAL_POSITION"));
         assertEquals(0, rs.getInt("COLUMN_SIZE"));
         assertTrue(rs.wasNull());
@@ -320,7 +336,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("COLUMN_FAMILY"));
         assertEquals(SchemaUtil.normalizeIdentifier("col3"), rs.getString("COLUMN_NAME"));
         assertEquals(DatabaseMetaData.attributeNullable, rs.getShort("NULLABLE"));
-        assertEquals(PDataType.DECIMAL.getSqlType(), rs.getInt("DATA_TYPE"));
+        assertEquals(PDecimal.INSTANCE.getSqlType(), rs.getInt("DATA_TYPE"));
         assertEquals(4, rs.getInt("ORDINAL_POSITION"));
         assertEquals(0, rs.getInt("COLUMN_SIZE"));
         assertTrue(rs.wasNull());
@@ -333,7 +349,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("COLUMN_FAMILY"));
         assertEquals(SchemaUtil.normalizeIdentifier("col4"), rs.getString("COLUMN_NAME"));
         assertEquals(DatabaseMetaData.attributeNullable, rs.getShort("NULLABLE"));
-        assertEquals(PDataType.DECIMAL.getSqlType(), rs.getInt("DATA_TYPE"));
+        assertEquals(PDecimal.INSTANCE.getSqlType(), rs.getInt("DATA_TYPE"));
         assertEquals(5, rs.getInt("ORDINAL_POSITION"));
         assertEquals(5, rs.getInt("COLUMN_SIZE"));
         assertEquals(0, rs.getInt("DECIMAL_DIGITS"));
@@ -345,7 +361,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("COLUMN_FAMILY"));
         assertEquals(SchemaUtil.normalizeIdentifier("col5"), rs.getString("COLUMN_NAME"));
         assertEquals(DatabaseMetaData.attributeNullable, rs.getShort("NULLABLE"));
-        assertEquals(PDataType.DECIMAL.getSqlType(), rs.getInt("DATA_TYPE"));
+        assertEquals(PDecimal.INSTANCE.getSqlType(), rs.getInt("DATA_TYPE"));
         assertEquals(6, rs.getInt("ORDINAL_POSITION"));
         assertEquals(6, rs.getInt("COLUMN_SIZE"));
         assertEquals(3, rs.getInt("DECIMAL_DIGITS"));
@@ -595,16 +611,17 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         descriptor = admin.getTableDescriptor(htableName);
         assertEquals(3,descriptor.getColumnFamilies().length);
         HColumnDescriptor cdA = descriptor.getFamily(cfA);
-        assertTrue(cdA.getKeepDeletedCells());
+        assertNotEquals(HColumnDescriptor.DEFAULT_KEEP_DELETED, cdA.getKeepDeletedCells());
         assertEquals(DataBlockEncoding.NONE, cdA.getDataBlockEncoding()); // Overriden using WITH
         assertEquals(1,cdA.getMaxVersions());// Overriden using WITH
         HColumnDescriptor cdB = descriptor.getFamily(cfB);
-        assertFalse(cdB.getKeepDeletedCells()); // Allow KEEP_DELETED_CELLS to be false for VEIW
+        // Allow KEEP_DELETED_CELLS to be false for VIEW
+        assertEquals(HColumnDescriptor.DEFAULT_KEEP_DELETED, cdB.getKeepDeletedCells());
         assertEquals(DataBlockEncoding.NONE, cdB.getDataBlockEncoding()); // Should keep the original value.
         // CF c should stay the same since it's not a Phoenix cf.
         HColumnDescriptor cdC = descriptor.getFamily(cfC);
         assertNotNull("Column family not found", cdC);
-        assertFalse(cdC.getKeepDeletedCells());
+        assertEquals(HColumnDescriptor.DEFAULT_KEEP_DELETED, cdC.getKeepDeletedCells());
         assertFalse(SchemaUtil.DEFAULT_DATA_BLOCK_ENCODING == cdC.getDataBlockEncoding());
         assertTrue(descriptor.hasCoprocessor(UngroupedAggregateRegionObserver.class.getName()));
         assertTrue(descriptor.hasCoprocessor(GroupedAggregateRegionObserver.class.getName()));
@@ -641,7 +658,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         assertFalse(rs.next());
         conn2.close();
     }
-    
+
     @SuppressWarnings("deprecation")
     @Test
     public void testCreateViewOnExistingTable() throws Exception {
@@ -747,8 +764,8 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
             
             HTableInterface htable = conn2.getQueryServices().getTable(SchemaUtil.getTableNameAsBytes(MDTEST_SCHEMA_NAME,MDTEST_NAME));
             Put put = new Put(Bytes.toBytes("0"));
-            put.add(cfB, Bytes.toBytes("COL1"), ts+6, PDataType.INTEGER.toBytes(1));
-            put.add(cfC, Bytes.toBytes("COL2"), ts+6, PDataType.LONG.toBytes(2));
+            put.add(cfB, Bytes.toBytes("COL1"), ts+6, PInteger.INSTANCE.toBytes(1));
+            put.add(cfC, Bytes.toBytes("COL2"), ts+6, PLong.INSTANCE.toBytes(2));
             htable.put(put);
             conn2.close();
             
@@ -812,8 +829,8 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
             conn92.close();
             
             put = new Put(Bytes.toBytes("1"));
-            put.add(cfB, Bytes.toBytes("COL1"), ts+39, PDataType.INTEGER.toBytes(3));
-            put.add(cfC, Bytes.toBytes("COL2"), ts+39, PDataType.LONG.toBytes(4));
+            put.add(cfB, Bytes.toBytes("COL1"), ts+39, PInteger.INSTANCE.toBytes(3));
+            put.add(cfC, Bytes.toBytes("COL2"), ts+39, PLong.INSTANCE.toBytes(4));
             htable.put(put);
 
             props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));

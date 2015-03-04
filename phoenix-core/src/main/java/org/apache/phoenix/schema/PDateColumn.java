@@ -17,9 +17,12 @@
  */
 package org.apache.phoenix.schema;
 
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDate;
+
 abstract public class PDateColumn extends PBaseColumn {
     @Override
     public PDataType getDataType() {
-        return PDataType.DATE;
+        return PDate.INSTANCE;
     }
 }

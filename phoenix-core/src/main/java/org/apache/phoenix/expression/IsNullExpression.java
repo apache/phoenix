@@ -25,8 +25,9 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
-import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PBoolean;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.ExpressionUtil;
 
 
@@ -34,19 +35,17 @@ import org.apache.phoenix.util.ExpressionUtil;
  * 
  * Implementation of IS NULL and IS NOT NULL expression
  *
- * 
- * @since 0.1
  */
 public class IsNullExpression extends BaseSingleExpression {
     private boolean isNegate;
 
     public static Expression create(Expression child, boolean negate, ImmutableBytesWritable ptr) throws SQLException {
         if (!child.isNullable()) {
-            return LiteralExpression.newConstant(negate, PDataType.BOOLEAN, child.getDeterminism());
+            return LiteralExpression.newConstant(negate, PBoolean.INSTANCE, child.getDeterminism());
         }
         if (ExpressionUtil.isConstant(child)) {
             boolean evaluated = child.evaluate(null, ptr);
-            return LiteralExpression.newConstant(negate ^ (!evaluated || ptr.getLength() == 0), PDataType.BOOLEAN, child.getDeterminism());
+            return LiteralExpression.newConstant(negate ^ (!evaluated || ptr.getLength() == 0), PBoolean.INSTANCE, child.getDeterminism());
         }
         return new IsNullExpression(child, negate);
     }
@@ -59,6 +58,15 @@ public class IsNullExpression extends BaseSingleExpression {
         this.isNegate = negate;
     }
 
+    public IsNullExpression(List<Expression> children, boolean negate) {
+        super(children);
+        this.isNegate = negate;
+    }
+
+    public IsNullExpression clone(List<Expression> children) {
+        return new IsNullExpression(children, this.isNegate());
+    }
+    
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
         boolean evaluated = getChild().evaluate(tuple, ptr);
@@ -92,7 +100,7 @@ public class IsNullExpression extends BaseSingleExpression {
 
     @Override
     public PDataType getDataType() {
-        return PDataType.BOOLEAN;
+        return PBoolean.INSTANCE;
     }
     
     @Override

@@ -45,6 +45,7 @@ import java.sql.Struct;
 import java.text.Format;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -67,14 +68,21 @@ import org.apache.phoenix.query.MetaDataMutated;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.schema.PArrayDataType;
 import org.apache.phoenix.schema.PColumn;
-import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PMetaData;
 import org.apache.phoenix.schema.PMetaData.Pruner;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.types.PArrayDataType;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.schema.types.PTime;
+import org.apache.phoenix.schema.types.PTimestamp;
+import org.apache.phoenix.schema.types.PUnsignedDate;
+import org.apache.phoenix.schema.types.PUnsignedTime;
+import org.apache.phoenix.schema.types.PUnsignedTimestamp;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.JDBCUtil;
@@ -85,6 +93,7 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
 import org.cloudera.htrace.Sampler;
+import org.cloudera.htrace.TraceScope;
 
 import com.google.common.base.Objects;
 import com.google.common.base.Strings;
@@ -112,7 +121,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     private final ConnectionQueryServices services;
     private final Properties info;
     private List<SQLCloseable> statements = new ArrayList<SQLCloseable>();
-    private final Format[] formatters = new Format[PDataType.values().length];
+    private final Map<PDataType<?>, Format> formatters = new HashMap<>();
     private final MutationState mutationState;
     private final int mutateBatchSize;
     private final Long scn;
@@ -120,6 +129,9 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     private PMetaData metaData;
     private final PName tenantId;
     private final String datePattern;
+    private final String timePattern;
+    private final String timestampPattern;
+    private TraceScope traceScope = null;
     
     private boolean isClosed = false;
     private Sampler<?> sampler;
@@ -188,19 +200,28 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
             };
         }
         this.scn = JDBCUtil.getCurrentSCN(url, this.info);
+        this.isAutoCommit = JDBCUtil.getAutoCommit(
+                url, this.info,
+                this.services.getProps().getBoolean(
+                        QueryServices.AUTO_COMMIT_ATTRIB,
+                        QueryServicesOptions.DEFAULT_AUTO_COMMIT));
         this.tenantId = tenantId;
         this.mutateBatchSize = JDBCUtil.getMutateBatchSize(url, this.info, this.services.getProps());
         datePattern = this.services.getProps().get(QueryServices.DATE_FORMAT_ATTRIB, DateUtil.DEFAULT_DATE_FORMAT);
+        timePattern = this.services.getProps().get(QueryServices.TIME_FORMAT_ATTRIB, DateUtil.DEFAULT_TIME_FORMAT);
+        timestampPattern = this.services.getProps().get(QueryServices.TIMESTAMP_FORMAT_ATTRIB, DateUtil.DEFAULT_TIMESTAMP_FORMAT);
         String numberPattern = this.services.getProps().get(QueryServices.NUMBER_FORMAT_ATTRIB, NumberUtil.DEFAULT_NUMBER_FORMAT);
         int maxSize = this.services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_ATTRIB,QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE);
-        Format dateTimeFormat = DateUtil.getDateFormatter(datePattern);
-        formatters[PDataType.DATE.ordinal()] = dateTimeFormat;
-        formatters[PDataType.TIME.ordinal()] = dateTimeFormat;
-        formatters[PDataType.TIMESTAMP.ordinal()] = dateTimeFormat;
-        formatters[PDataType.UNSIGNED_DATE.ordinal()] = dateTimeFormat;
-        formatters[PDataType.UNSIGNED_TIME.ordinal()] = dateTimeFormat;
-        formatters[PDataType.UNSIGNED_TIMESTAMP.ordinal()] = dateTimeFormat;
-        formatters[PDataType.DECIMAL.ordinal()] = FunctionArgumentType.NUMERIC.getFormatter(numberPattern);
+        Format dateFormat = DateUtil.getDateFormatter(datePattern);
+        Format timeFormat = DateUtil.getDateFormatter(timePattern);
+        Format timestampFormat = DateUtil.getDateFormatter(timestampPattern);
+        formatters.put(PDate.INSTANCE, dateFormat);
+        formatters.put(PTime.INSTANCE, timeFormat);
+        formatters.put(PTimestamp.INSTANCE, timestampFormat);
+        formatters.put(PUnsignedDate.INSTANCE, dateFormat);
+        formatters.put(PUnsignedTime.INSTANCE, timeFormat);
+        formatters.put(PUnsignedTimestamp.INSTANCE, timestampFormat);
+        formatters.put(PDecimal.INSTANCE, FunctionArgumentType.NUMERIC.getFormatter(numberPattern));
         // We do not limit the metaData on a connection less than the global one,
         // as there's not much that will be cached here.
         this.metaData = metaData.pruneTables(new Pruner() {
@@ -238,6 +259,10 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         return this.sampler;
     }
     
+    public void setSampler(Sampler<?> sampler) throws SQLException {
+        this.sampler = sampler;
+    }
+
     public Map<String, String> getCustomTracingAnnotations() {
         return customTracingAnnotations;
     }
@@ -351,7 +376,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     }
     
     public Format getFormatter(PDataType type) {
-        return formatters[type.ordinal()];
+        return formatters.get(type);
     }
     
     public String getURL() {
@@ -389,6 +414,9 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         }
         try {
             try {
+                if (traceScope != null) {
+                    traceScope.close();
+                }
                 closeStatements();
             } finally {
                 services.removeConnection(this);
@@ -725,11 +753,11 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     }
 
     @Override
-    public PMetaData addColumn(PName tenantId, String tableName, List<PColumn> columns, long tableTimeStamp, long tableSeqNum, boolean isImmutableRows)
+    public PMetaData addColumn(PName tenantId, String tableName, List<PColumn> columns, long tableTimeStamp, long tableSeqNum, boolean isImmutableRows, boolean isWalDisabled, boolean isMultitenant, boolean storeNulls)
             throws SQLException {
-        metaData = metaData.addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows);
+        metaData = metaData.addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows, isWalDisabled, isMultitenant, storeNulls);
         //Cascade through to connectionQueryServices too
-        getQueryServices().addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows);
+        getQueryServices().addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows, isWalDisabled, isMultitenant, storeNulls);
         return metaData;
     }
 
@@ -756,5 +784,13 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
 
     public KeyValueBuilder getKeyValueBuilder() {
         return this.services.getKeyValueBuilder();
+    }
+
+    public TraceScope getTraceScope() {
+        return traceScope;
+    }
+
+    public void setTraceScope(TraceScope traceScope) {
+        this.traceScope = traceScope;
     }
 }

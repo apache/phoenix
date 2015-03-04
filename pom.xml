@@ -74,7 +74,7 @@
     <test.output.tofile>true</test.output.tofile>
 
     <!-- Hadoop Versions -->
-    <hbase.version>0.98.4-hadoop2</hbase.version>
+    <hbase.version>0.98.9-hadoop2</hbase.version>
     <hadoop-two.version>2.2.0</hadoop-two.version>
 
     <!-- Dependency versions -->
@@ -91,7 +91,7 @@
     <commons-lang.version>2.5</commons-lang.version>
     <commons-logging.version>1.1.1</commons-logging.version>
     <commons-csv.version>1.0</commons-csv.version>
-    <sqlline.version>1.1.2</sqlline.version>
+    <sqlline.version>1.1.8</sqlline.version>
     <guava.version>12.0.1</guava.version>
     <jackson.version>1.8.8</jackson.version>
     <flume.version>1.4.0</flume.version>

@@ -22,9 +22,10 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.exception.ValueTypeIncompatibleException;
-import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.util.NumberUtil;
 
 
@@ -51,7 +52,7 @@ public class DecimalDivideExpression extends DivideExpression {
             
             PDataType childType = childExpr.getDataType();
             SortOrder childSortOrder = childExpr.getSortOrder();
-            BigDecimal bd= (BigDecimal)PDataType.DECIMAL.toObject(ptr, childType, childSortOrder);
+            BigDecimal bd= (BigDecimal) PDecimal.INSTANCE.toObject(ptr, childType, childSortOrder);
             
             if (result == null) {
                 result = bd;
@@ -63,14 +64,19 @@ public class DecimalDivideExpression extends DivideExpression {
             result = NumberUtil.setDecimalWidthAndScale(result, getMaxLength(), getScale());
         }
         if (result == null) {
-            throw new ValueTypeIncompatibleException(PDataType.DECIMAL, getMaxLength(), getScale());
+            throw new ValueTypeIncompatibleException(PDecimal.INSTANCE, getMaxLength(), getScale());
         }
-        ptr.set(PDataType.DECIMAL.toBytes(result));
+        ptr.set(PDecimal.INSTANCE.toBytes(result));
         return true;
     }
 
     @Override
     public PDataType getDataType() {
-        return PDataType.DECIMAL;
+        return PDecimal.INSTANCE;
+    }
+
+    @Override
+    public ArithmeticExpression clone(List<Expression> children) {
+        return new DecimalDivideExpression(children);
     }
 }

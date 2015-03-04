@@ -21,8 +21,13 @@ import java.sql.SQLException;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
-import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.types.PBinary;
+import org.apache.phoenix.schema.types.PChar;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.base.Preconditions;
@@ -31,7 +36,7 @@ import com.google.common.base.Preconditions;
 /**
  * 
  * Represents a column definition during DDL
- *
+ * 
  * 
  * @since 0.1
  */
@@ -45,9 +50,10 @@ public class ColumnDef {
     private final SortOrder sortOrder;
     private final boolean isArray;
     private final Integer arrSize;
+    private final String expressionStr;
  
     ColumnDef(ColumnName columnDefName, String sqlTypeName, boolean isArray, Integer arrSize, Boolean isNull, Integer maxLength,
-    		            Integer scale, boolean isPK, SortOrder sortOrder) {
+    		            Integer scale, boolean isPK, SortOrder sortOrder, String expressionStr) {
    	 try {
          Preconditions.checkNotNull(sortOrder);
    	     PDataType localType = null;
@@ -61,7 +67,7 @@ public class ColumnDef {
         	 localType = sqlTypeName == null ? null : PDataType.fromTypeId(PDataType.sqlArrayType(SchemaUtil.normalizeIdentifier(sqlTypeName)));
         	 this.dataType = sqlTypeName == null ? null : PDataType.fromSqlTypeName(SchemaUtil.normalizeIdentifier(sqlTypeName));
              this.arrSize = arrSize; // Can only be non negative based on parsing
-             if (this.dataType == PDataType.VARBINARY) {
+             if (this.dataType == PVarbinary.INSTANCE) {
                  throw new SQLExceptionInfo.Builder(SQLExceptionCode.VARBINARY_ARRAY_NOT_SUPPORTED)
                  .setColumnName(columnDefName.getColumnName()).build().buildException();
              }
@@ -71,7 +77,7 @@ public class ColumnDef {
          }
          
          this.isNull = isNull;
-         if (this.dataType == PDataType.CHAR) {
+         if (this.dataType == PChar.INSTANCE) {
              if (maxLength == null) {
                  throw new SQLExceptionInfo.Builder(SQLExceptionCode.MISSING_CHAR_LENGTH)
                      .setColumnName(columnDefName.getColumnName()).build().buildException();
@@ -81,13 +87,13 @@ public class ColumnDef {
                      .setColumnName(columnDefName.getColumnName()).build().buildException();
              }
              scale = null;
-         } else if (this.dataType == PDataType.VARCHAR) {
+         } else if (this.dataType == PVarchar.INSTANCE) {
              if (maxLength != null && maxLength < 1) {
                  throw new SQLExceptionInfo.Builder(SQLExceptionCode.NONPOSITIVE_CHAR_LENGTH)
                      .setColumnName(columnDefName.getColumnName()).build().buildException(); 
              }
              scale = null;
-         } else if (this.dataType == PDataType.DECIMAL) {
+         } else if (this.dataType == PDecimal.INSTANCE) {
              // for deciaml, 1 <= maxLength <= PDataType.MAX_PRECISION;
              if (maxLength != null) {
                  if (maxLength < 1 || maxLength > PDataType.MAX_PRECISION) {
@@ -106,7 +112,7 @@ public class ColumnDef {
                  // ignored. All decimal are stored with as much decimal points as possible.
                  scale = scale == null ? PDataType.DEFAULT_SCALE : scale > maxLength ? maxLength : scale; 
              }
-         } else if (this.dataType == PDataType.BINARY) {
+         } else if (this.dataType == PBinary.INSTANCE) {
              if (maxLength == null) {
                  throw new SQLExceptionInfo.Builder(SQLExceptionCode.MISSING_BINARY_LENGTH)
                      .setColumnName(columnDefName.getColumnName()).build().buildException();
@@ -128,13 +134,14 @@ public class ColumnDef {
          if(this.isArray) {
              this.dataType = localType;
          }
+         this.expressionStr = expressionStr;
      } catch (SQLException e) {
          throw new ParseException(e);
      }
     }
     ColumnDef(ColumnName columnDefName, String sqlTypeName, Boolean isNull, Integer maxLength,
-            Integer scale, boolean isPK, SortOrder sortOrder) {
-    	this(columnDefName, sqlTypeName, false, 0, isNull, maxLength, scale, isPK, sortOrder);
+            Integer scale, boolean isPK, SortOrder sortOrder, String expressionStr) {
+    	this(columnDefName, sqlTypeName, false, 0, isNull, maxLength, scale, isPK, sortOrder, expressionStr);
     }
 
     public ColumnName getColumnDefName() {
@@ -177,5 +184,31 @@ public class ColumnDef {
 
 	public Integer getArraySize() {
 		return arrSize;
+	}
+
+	public String getExpression() {
+		return expressionStr;
+	}
+	
+	@Override
+    public String toString() {
+	    StringBuilder buf = new StringBuilder(columnDefName.getColumnNode().toString());
+	    buf.append(' ');
+        buf.append(dataType.getSqlTypeName());
+        if (maxLength != null) {
+            buf.append('(');
+            buf.append(maxLength);
+            if (scale != null) {
+              buf.append(',');
+              buf.append(scale); // has both max length and scale. For ex- decimal(10,2)
+            }       
+            buf.append(')');
+       }
+        if (isArray) {
+            buf.append(' ');
+            buf.append(PDataType.ARRAY_TYPE_SUFFIX);
+            buf.append(' ');
+        }
+	    return buf.toString();
 	}
 }

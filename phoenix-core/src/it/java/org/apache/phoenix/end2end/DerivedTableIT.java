@@ -92,15 +92,15 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
                 "CREATE INDEX ATABLE_DERIVED_IDX ON aTable (a_byte) INCLUDE (A_STRING, B_STRING)" 
                 }, {
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER ATABLE_DERIVED_IDX\n" +
-                "    SERVER AGGREGATE INTO DISTINCT ROWS BY [A_STRING, B_STRING]\n" +
+                "    SERVER AGGREGATE INTO DISTINCT ROWS BY [\"A_STRING\", \"B_STRING\"]\n" +
                 "CLIENT MERGE SORT\n" +
-                "CLIENT SORTED BY [B_STRING]\n" +
+                "CLIENT SORTED BY [\"B_STRING\"]\n" +
                 "CLIENT SORTED BY [A]\n" +
                 "CLIENT AGGREGATE INTO DISTINCT ROWS BY [A]\n" +
                 "CLIENT SORTED BY [A DESC]",
                 
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER ATABLE_DERIVED_IDX\n" +
-                "    SERVER AGGREGATE INTO DISTINCT ROWS BY [A_STRING, B_STRING]\n" +
+                "    SERVER AGGREGATE INTO DISTINCT ROWS BY [\"A_STRING\", \"B_STRING\"]\n" +
                 "CLIENT MERGE SORT\n" +
                 "CLIENT AGGREGATE INTO DISTINCT ROWS BY [A]\n" +
                 "CLIENT DISTINCT ON [COLLECTDISTINCT(B)]"}});
@@ -665,6 +665,15 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
             rs = statement.executeQuery();
             assertTrue (rs.next());
             assertEquals(2,rs.getInt(1));
+
+            assertFalse(rs.next());
+            
+            // count (subquery)
+            query = "SELECT count(*) FROM (SELECT * FROM aTable WHERE (organization_id, entity_id) in (SELECT organization_id, entity_id FROM aTable WHERE a_byte != 8)) AS t";
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(8,rs.getInt(1));
 
             assertFalse(rs.next());
         } finally {

@@ -22,14 +22,17 @@ import java.util.List;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.http.annotation.Immutable;
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.ByteUtil;
 
 
 /**
  * 
- * Simple flat schema over a byte array where fields may be any of {@link PDataType}.
+ * Simple flat schema over a byte array where fields may be any of {@link org.apache.phoenix.schema.types.PDataType}.
  * Optimized for positional access by index.
  *
  * 
@@ -202,12 +205,14 @@ public class KeyValueSchema extends ValueSchema {
         ptr.set(ptr.get(), ptr.getOffset() + ptr.getLength(), 0);
         if (!isNull(position, valueSet)) {
             Field field = this.getField(position);
-            if (field.getDataType().isFixedWidth()) {
-                ptr.set(ptr.get(),ptr.getOffset(), field.getByteSize());
-            } else {
-                int length = ByteUtil.vintFromBytes(ptr);
-                ptr.set(ptr.get(),ptr.getOffset(),length);
+            int length = field.getDataType().isFixedWidth() ? 
+                    field.getByteSize() : ByteUtil.vintFromBytes(ptr);
+            if (ptr.getOffset() + length > maxOffset) {
+                throw new RuntimeException(new SQLExceptionInfo.Builder(SQLExceptionCode.ILLEGAL_DATA)
+                    .setMessage("Expected length of at least " + length + " bytes, but had " + (maxOffset
+                                    - ptr.getOffset())).build().buildException());
             }
+            ptr.set(ptr.get(),ptr.getOffset(),length);
             return ptr.getLength() > 0;
         }
         return false;

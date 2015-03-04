@@ -32,7 +32,7 @@ import org.apache.phoenix.expression.function.SingleAggregateFunction;
  * 
  * @since 0.1
  */
-public abstract class SingleAggregateFunctionVisitor extends TraverseAllExpressionVisitor<Void> {
+public abstract class SingleAggregateFunctionVisitor extends StatelessTraverseAllExpressionVisitor<Void> {
     @Override
     abstract public Iterator<Expression> visitEnter(SingleAggregateFunction node);
 }

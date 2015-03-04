@@ -29,7 +29,7 @@ import com.google.common.collect.ListMultimap;
 
 public class CreateIndexStatement extends SingleTableStatement {
     private final TableName indexTableName;
-    private final PrimaryKeyConstraint indexConstraint;
+    private final IndexKeyConstraint indexKeyConstraint;
     private final List<ColumnName> includeColumns;
     private final List<ParseNode> splitNodes;
     private final ListMultimap<String,Pair<String,Object>> props;
@@ -37,11 +37,11 @@ public class CreateIndexStatement extends SingleTableStatement {
     private final IndexType indexType;
 
     public CreateIndexStatement(NamedNode indexTableName, NamedTableNode dataTable, 
-            PrimaryKeyConstraint indexConstraint, List<ColumnName> includeColumns, List<ParseNode> splits,
+            IndexKeyConstraint indexKeyConstraint, List<ColumnName> includeColumns, List<ParseNode> splits,
             ListMultimap<String,Pair<String,Object>> props, boolean ifNotExists, IndexType indexType, int bindCount) {
         super(dataTable, bindCount);
         this.indexTableName =TableName.create(dataTable.getName().getSchemaName(),indexTableName.getName());
-        this.indexConstraint = indexConstraint == null ? PrimaryKeyConstraint.EMPTY : indexConstraint;
+        this.indexKeyConstraint = indexKeyConstraint == null ? IndexKeyConstraint.EMPTY : indexKeyConstraint;
         this.includeColumns = includeColumns == null ? Collections.<ColumnName>emptyList() : includeColumns;
         this.splitNodes = splits == null ? Collections.<ParseNode>emptyList() : splits;
         this.props = props == null ? ArrayListMultimap.<String,Pair<String,Object>>create() : props;
@@ -49,8 +49,8 @@ public class CreateIndexStatement extends SingleTableStatement {
         this.indexType = indexType;
     }
 
-    public PrimaryKeyConstraint getIndexConstraint() {
-        return indexConstraint;
+    public IndexKeyConstraint getIndexConstraint() {
+        return indexKeyConstraint;
     }
 
     public List<ColumnName> getIncludeColumns() {

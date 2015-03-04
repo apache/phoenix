@@ -258,7 +258,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
             }
         }
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-        IndexMaintainer.serialize(dataTable, ptr, indexes);
+        IndexMaintainer.serialize(dataTable, ptr, indexes, context.getConnection());
         scan.setAttribute(BaseScannerRegionObserver.LOCAL_INDEX_BUILD, ByteUtil.copyKeyBytesIfNecessary(ptr));
     }
 
@@ -380,8 +380,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
         
         // Optimize here when getting explain plan, as queries don't get optimized until after compilation
         QueryPlan plan = context.getConnection().getQueryServices().getOptimizer().optimize(context.getStatement(), this);
-        ResultIterator iterator = plan.iterator();
-        return new ExplainPlan(getPlanSteps(iterator));
+        return plan instanceof BaseQueryPlan ? new ExplainPlan(getPlanSteps(plan.iterator())) : plan.getExplainPlan();
     }
 
     private List<String> getPlanSteps(ResultIterator iterator){

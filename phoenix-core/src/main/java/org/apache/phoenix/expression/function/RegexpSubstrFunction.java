@@ -28,7 +28,9 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
-import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
 
@@ -46,9 +48,9 @@ import org.apache.phoenix.util.ByteUtil;
  * @since 0.1
  */
 @BuiltInFunction(name=RegexpSubstrFunction.NAME, args={
-    @Argument(allowedTypes={PDataType.VARCHAR}),
-    @Argument(allowedTypes={PDataType.VARCHAR}),
-    @Argument(allowedTypes={PDataType.LONG}, defaultValue="1")} )
+    @Argument(allowedTypes={PVarchar.class}),
+    @Argument(allowedTypes={PVarchar.class}),
+    @Argument(allowedTypes={PLong.class}, defaultValue="1")} )
 public class RegexpSubstrFunction extends PrefixFunction {
     public static final String NAME = "REGEXP_SUBSTR";
 
@@ -96,7 +98,7 @@ public class RegexpSubstrFunction extends PrefixFunction {
         if (!getSourceStrExpression().evaluate(tuple, ptr)) {
             return false;
         }
-        String sourceStr = (String)PDataType.VARCHAR.toObject(ptr, getSourceStrExpression().getSortOrder());
+        String sourceStr = (String) PVarchar.INSTANCE.toObject(ptr, getSourceStrExpression().getSortOrder());
         if (sourceStr == null) {
             return false;
         }
@@ -124,7 +126,7 @@ public class RegexpSubstrFunction extends PrefixFunction {
             return true;
         }
         String subString = matcher.group();
-        ptr.set(PDataType.VARCHAR.toBytes(subString));
+        ptr.set(PVarchar.INSTANCE.toBytes(subString));
         return true;
     }
 
@@ -171,7 +173,7 @@ public class RegexpSubstrFunction extends PrefixFunction {
     public PDataType getDataType() {
         // ALways VARCHAR since we do not know in advanced how long the 
         // matched string will be.
-        return PDataType.VARCHAR;
+        return PVarchar.INSTANCE;
     }
 
     @Override

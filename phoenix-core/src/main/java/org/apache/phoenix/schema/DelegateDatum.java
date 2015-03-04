@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.schema;
 
+import org.apache.phoenix.schema.types.PDataType;
+
 public class DelegateDatum implements PDatum {
     private final PDatum delegate;
     

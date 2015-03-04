@@ -195,7 +195,7 @@ public class SkipScanFilter extends FilterBase implements Writable {
         Arrays.fill(position, 0);
     }
     
-    private boolean intersect(byte[] lowerInclusiveKey, byte[] upperExclusiveKey, List<List<KeyRange>> newSlots) {
+    private boolean intersect(final byte[] lowerInclusiveKey, final byte[] upperExclusiveKey, List<List<KeyRange>> newSlots) {
         resetState();
         boolean lowerUnbound = (lowerInclusiveKey.length == 0);
         int startPos = 0;
@@ -262,6 +262,9 @@ public class SkipScanFilter extends FilterBase implements Writable {
         }
         int[] lowerPosition = Arrays.copyOf(position, position.length);
         // Navigate to the upperExclusiveKey, but not past it
+        // TODO: We're including everything between the lowerPosition and end position, which is
+        // more than we need. We can optimize this by tracking whether each range in each slot position
+        // intersects.
         ReturnCode endCode = navigate(upperExclusiveKey, 0, upperExclusiveKey.length, Terminate.AT);
         if (endCode == ReturnCode.INCLUDE) {
             setStartKey();
@@ -286,6 +289,11 @@ public class SkipScanFilter extends FilterBase implements Writable {
                 position[i] = slots.get(i).size() - 1;
             }
         }
+        int prevRowKeyPos = -1;
+        ImmutableBytesWritable lowerPtr = new ImmutableBytesWritable();
+        ImmutableBytesWritable upperPtr = new ImmutableBytesWritable();
+        schema.iterator(lowerInclusiveKey, lowerPtr);
+        schema.iterator(upperExclusiveKey, upperPtr);
         // Copy inclusive all positions 
         for (int i = 0; i <= lastSlot; i++) {
             List<KeyRange> newRanges = slots.get(i).subList(lowerPosition[i], Math.min(position[i] + 1, slots.get(i).size()));
@@ -295,11 +303,32 @@ public class SkipScanFilter extends FilterBase implements Writable {
             if (newSlots != null) {
                 newSlots.add(newRanges);
             }
+            // Must include all "less-significant" slot values if:
+            // 1) a more-significant slot was incremented
             if (position[i] > lowerPosition[i]) {
                 if (newSlots != null) {
                     newSlots.addAll(slots.subList(i+1, slots.size()));
                 }
                 break;
+            }
+            // 2) we're at a slot containing a range and the values differ between the lower and upper range,
+            //    since less-significant slots may be lower after traversal than where they started.
+            if (!slots.get(i).get(position[i]).isSingleKey()) {
+                int rowKeyPos = ScanUtil.getRowKeyPosition(slotSpan, i);
+                // Position lowerPtr/upperPtr within lowerInclusiveKey/upperExclusiveKey at value for slot i
+                // The reposition method will do this incrementally, where we we're initially have prevRowKeyPos = -1. 
+                schema.reposition(lowerPtr, prevRowKeyPos, rowKeyPos, 0, lowerInclusiveKey.length, slotSpan[i]);
+                schema.reposition(upperPtr, prevRowKeyPos, rowKeyPos, 0, upperExclusiveKey.length, slotSpan[i]);
+                // If we have a range and the values differ, we must include all slots that are less significant.
+                // For example: [A-D][1,23], the lower/upper keys could be B5/C2, where the C is in range and the
+                // next slot value of 2 is less than the next corresponding slot value of the 5.
+                if (lowerPtr.compareTo(upperPtr) != 0) {
+                    if (newSlots != null) {
+                        newSlots.addAll(slots.subList(i+1, slots.size()));
+                    }
+                    break;
+                }
+                prevRowKeyPos = rowKeyPos;
             }
         }
         return true;

@@ -34,8 +34,8 @@ import org.apache.phoenix.parse.TableWildcardParseNode;
 import org.apache.phoenix.parse.WildcardParseNode;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.PColumn;
-import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.IndexUtil;
 
 public class IndexStatementRewriter extends ParseNodeRewriter {
@@ -47,6 +47,18 @@ public class IndexStatementRewriter extends ParseNodeRewriter {
     public IndexStatementRewriter(ColumnResolver dataResolver, Map<TableRef, TableRef> multiTableRewriteMap) {
         super(dataResolver);
         this.multiTableRewriteMap = multiTableRewriteMap;
+    }
+    
+    /**
+     * Rewrite the parse node by translating all data table column references to
+     * references to the corresponding index column.
+     * @param node the parse node
+     * @param dataResolver the column resolver
+     * @return new parse node or the same one if nothing was rewritten.
+     * @throws SQLException 
+     */
+    public static ParseNode translate(ParseNode node, ColumnResolver dataResolver) throws SQLException {
+        return rewrite(node, new IndexStatementRewriter(dataResolver, null));
     }
     
     /**
@@ -95,8 +107,7 @@ public class IndexStatementRewriter extends ParseNodeRewriter {
             return node;
 
         String indexColName = IndexUtil.getIndexColumnName(dataCol);
-        // FIXME: why isn't this always case sensitive?
-        ParseNode indexColNode = new ColumnParseNode(tName, node.isCaseSensitive() ? '"' + indexColName + '"' : indexColName, node.getAlias());
+        ParseNode indexColNode = new ColumnParseNode(tName, '"' + indexColName + '"', node.getAlias());
         PDataType indexColType = IndexUtil.getIndexColumnDataType(dataCol);
         PDataType dataColType = dataColRef.getColumn().getDataType();
 

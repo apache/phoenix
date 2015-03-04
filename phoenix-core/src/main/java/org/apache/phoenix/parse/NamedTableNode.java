@@ -21,6 +21,8 @@ import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
 
+import org.apache.phoenix.compile.ColumnResolver;
+
 import com.google.common.collect.ImmutableList;
 
 /**
@@ -58,6 +60,42 @@ public class NamedTableNode extends ConcreteTableNode {
 
     public List<ColumnDef> getDynamicColumns() {
         return dynColumns;
+    }
+    
+    @Override
+    public void toSQL(ColumnResolver resolver, StringBuilder buf) {
+        buf.append(this.getName().toString());
+        if (!dynColumns.isEmpty()) {
+            buf.append('(');
+            for (ColumnDef def : dynColumns) {
+                buf.append(def);
+                buf.append(',');
+            }
+            buf.setLength(buf.length()-1);
+            buf.append(')');
+        }
+        if (this.getAlias() != null) buf.append(" " + this.getAlias());
+        buf.append(' ');
+    }
+
+    @Override
+    public int hashCode() {
+        final int prime = 31;
+        int result = super.hashCode();
+        result = prime * result + ((dynColumns == null) ? 0 : dynColumns.hashCode());
+        return result;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) return true;
+        if (!super.equals(obj)) return false;
+        if (getClass() != obj.getClass()) return false;
+        NamedTableNode other = (NamedTableNode)obj;
+        if (dynColumns == null) {
+            if (other.dynColumns != null) return false;
+        } else if (!dynColumns.equals(other.dynColumns)) return false;
+        return true;
     }
 }
 
