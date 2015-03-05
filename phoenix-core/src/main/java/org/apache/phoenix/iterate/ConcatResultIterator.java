@@ -40,7 +40,7 @@ public class ConcatResultIterator implements PeekingResultIterator {
         this.resultIterators = iterators;
     }
     
-    private ConcatResultIterator(List<PeekingResultIterator> iterators) {
+    public ConcatResultIterator(List<PeekingResultIterator> iterators) {
         this.resultIterators = null;
         this.iterators = iterators;
     }
@@ -114,7 +114,16 @@ public class ConcatResultIterator implements PeekingResultIterator {
 
     @Override
     public Tuple next() throws SQLException {
-        Tuple next = currentIterator().next();
+        PeekingResultIterator currentIterator = currentIterator();
+        Tuple next = currentIterator.next();
+        /*   if (currentIterator instanceof LookAheadResultIterator && next instanceof SingleKeyValueTuple) {
+            boolean isUnionQuery = ((LookAheadResultIterator)currentIterator).isUnionQuery();
+            if (isUnionQuery) {
+                RowProjector proj = ((LookAheadResultIterator)currentIterator).getRowProjector();
+                ((SingleKeyValueTuple)next).setRowProjector(proj);
+                ((SingleKeyValueTuple)next).setUnionQuery(true);
+            }
+        } */
         if (next == null) {
             close(); // Close underlying ResultIterators to free resources sooner rather than later
         }

@@ -51,9 +51,7 @@ import org.apache.phoenix.jdbc.PhoenixParameterMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.SelectStatement;
-import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.ColumnRef;
-import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
@@ -61,6 +59,8 @@ import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.types.PChar;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ScanUtil;
@@ -409,6 +409,11 @@ public class ParallelIteratorsSplitTest extends BaseConnectionlessQueryTest {
 
             @Override
             public List<List<Scan>> getScans() {
+                return null;
+            }
+            
+            @Override
+            public List<QueryPlan> getPlans() {
                 return null;
             }
             

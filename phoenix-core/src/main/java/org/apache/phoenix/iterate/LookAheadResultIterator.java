@@ -20,6 +20,7 @@ package org.apache.phoenix.iterate;
 import java.sql.SQLException;
 import java.util.List;
 
+import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 
@@ -29,7 +30,7 @@ abstract public class LookAheadResultIterator implements PeekingResultIterator {
         if (iterator instanceof PeekingResultIterator) {
             return (PeekingResultIterator) iterator;
         }
-        
+
         return new LookAheadResultIterator() {
 
             @Override
@@ -46,12 +47,16 @@ abstract public class LookAheadResultIterator implements PeekingResultIterator {
             protected Tuple advance() throws SQLException {
                 return iterator.next();
             }
+            
         };
     }
     
     private final static Tuple UNINITIALIZED = new ResultTuple();
     private Tuple next = UNINITIALIZED;
-    
+    private ResultIterator iterator;
+    private RowProjector rowProjector;
+    private boolean isUnionQuery = false;
+
     abstract protected Tuple advance() throws SQLException;
     
     private void init() throws SQLException {
@@ -73,4 +78,30 @@ abstract public class LookAheadResultIterator implements PeekingResultIterator {
         init();
         return next;
     }
+
+    public ResultIterator getIterator() {
+        return iterator;
+    }
+
+    public void setIterator(ResultIterator iterator) {
+        this.iterator = iterator;
+    }
+
+    public RowProjector getRowProjector() {
+        return rowProjector;
+    }
+
+    public void setRowProjector(RowProjector rowProjector) {
+        this.rowProjector = rowProjector;
+    }
+
+    public boolean isUnionQuery() {
+        return isUnionQuery;
+    }
+
+    public void setUnionQuery(boolean isUnionQuery) {
+        this.isUnionQuery = isUnionQuery;
+    }
+   
 }
+ 

@@ -22,6 +22,7 @@ import java.util.List;
 
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.iterate.DelegateResultIterator;
 import org.apache.phoenix.iterate.FilterResultIterator;
@@ -33,6 +34,7 @@ import com.google.common.collect.Lists;
 public class TupleProjectionPlan extends DelegateQueryPlan {
     private final TupleProjector tupleProjector;
     private final Expression postFilter;
+    private RowProjector rowProjector;
 
     public TupleProjectionPlan(QueryPlan plan, TupleProjector tupleProjector, Expression postFilter) {
         super(plan);
@@ -75,5 +77,13 @@ public class TupleProjectionPlan extends DelegateQueryPlan {
         }
         
         return iterator;
+    }
+
+    public void setRowProjector(RowProjector rowProjector) {
+        this.rowProjector = rowProjector;
+    }
+
+    public RowProjector getRowProjector() {
+        return rowProjector;
     }
 }

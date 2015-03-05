@@ -217,4 +217,9 @@ public class TraceQueryPlan implements QueryPlan {
     public boolean isRowKeyOrdered() {
         return false;
     }
+
+    @Override
+    public List<QueryPlan> getPlans() {
+        return null;
+    }
 }

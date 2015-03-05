@@ -18,6 +18,7 @@
 package org.apache.phoenix.compile;
 
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.hadoop.hbase.client.Scan;
@@ -69,4 +70,6 @@ public interface QueryPlan extends StatementPlan {
     public boolean isDegenerate();
     
     public boolean isRowKeyOrdered();
+
+    List<QueryPlan> getPlans();
 }

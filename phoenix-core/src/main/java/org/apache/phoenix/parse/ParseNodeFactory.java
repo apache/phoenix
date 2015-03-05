@@ -607,12 +607,21 @@ public class ParseNodeFactory {
 
 
     public SelectStatement select(TableNode from, HintNode hint, boolean isDistinct, List<AliasedNode> select, ParseNode where,
-            List<ParseNode> groupBy, ParseNode having, List<OrderByNode> orderBy, LimitNode limit, int bindCount, boolean isAggregate, boolean hasSequence) {
+            List<ParseNode> groupBy, ParseNode having, List<OrderByNode> orderBy, LimitNode limit, int bindCount, boolean isAggregate, 
+            boolean hasSequence, List<SelectStatement> selects, boolean isUnion) {
 
         return new SelectStatement(from, hint, isDistinct, select, where, groupBy == null ? Collections.<ParseNode>emptyList() : groupBy, having,
-                orderBy == null ? Collections.<OrderByNode>emptyList() : orderBy, limit, bindCount, isAggregate, hasSequence);
+                orderBy == null ? Collections.<OrderByNode>emptyList() : orderBy, limit, bindCount, isAggregate, hasSequence, selects, isUnion);
     }
 
+    public SelectStatement select(TableNode from, HintNode hint, boolean isDistinct, List<AliasedNode> select, ParseNode where,
+            List<ParseNode> groupBy, ParseNode having, List<OrderByNode> orderBy, LimitNode limit, int bindCount, boolean isAggregate, boolean hasSequence) {
+
+        return select(from, hint, isDistinct, select, where, groupBy == null ? Collections.<ParseNode>emptyList() : groupBy, having,
+                orderBy == null ? Collections.<OrderByNode>emptyList() : orderBy, limit, bindCount, isAggregate, hasSequence, 
+                		Collections.<SelectStatement>emptyList(), false);
+    }
+    
     public UpsertStatement upsert(NamedTableNode table, HintNode hint, List<ColumnName> columns, List<ParseNode> values, SelectStatement select, int bindCount) {
         return new UpsertStatement(table, hint, columns, values, select, bindCount);
     }
@@ -690,6 +699,12 @@ public class ParseNodeFactory {
                 statement.getBindCount(), statement.isAggregate(), statement.hasSequence());
     }
 
+    public SelectStatement select(SelectStatement statement, List<SelectStatement> selects,  boolean isUnion) {
+    	return select(statement.getFrom(), statement.getHint(), statement.isDistinct(), statement.getSelect(), statement.getWhere(), statement.getGroupBy(),
+    			statement.getHaving(), statement.getOrderBy(), statement.getLimit(), statement.getBindCount(), statement.isAggregate(),
+    			statement.hasSequence(), selects, isUnion);
+    }
+    
     public SubqueryParseNode subquery(SelectStatement select, boolean expectSingleRow) {
         return new SubqueryParseNode(select, expectSingleRow);
     }

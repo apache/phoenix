@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.parse;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -88,12 +89,14 @@ public class SelectStatement implements FilterableStatement {
     private final ParseNode where;
     private final List<ParseNode> groupBy;
     private final ParseNode having;
-    private final List<OrderByNode> orderBy;
+    private List<OrderByNode> orderBy;
     private final LimitNode limit;
     private final int bindCount;
     private final boolean isAggregate;
     private final boolean hasSequence;
-    
+    private final List<SelectStatement> selects = new ArrayList<SelectStatement>();
+    private final boolean isUnion;
+
     @Override
     public final String toString() {
         StringBuilder buf = new StringBuilder();
@@ -203,21 +206,32 @@ public class SelectStatement implements FilterableStatement {
         return count;
     }
     
-    protected SelectStatement(TableNode from, HintNode hint, boolean isDistinct, List<AliasedNode> select,
-            ParseNode where, List<ParseNode> groupBy, ParseNode having, List<OrderByNode> orderBy, LimitNode limit,
-            int bindCount, boolean isAggregate, boolean hasSequence) {
-        this.fromTable = from;
-        this.hint = hint == null ? HintNode.EMPTY_HINT_NODE : hint;
-        this.isDistinct = isDistinct;
-        this.select = Collections.unmodifiableList(select);
-        this.where = where;
-        this.groupBy = Collections.unmodifiableList(groupBy);
-        this.having = having;
-        this.orderBy = Collections.unmodifiableList(orderBy);
-        this.limit = limit;
-        this.bindCount = bindCount;
-        this.isAggregate = isAggregate || groupBy.size() != countConstants(groupBy) || this.having != null;
-        this.hasSequence = hasSequence;
+    public SelectStatement(TableNode from, HintNode hint, boolean isDistinct, List<AliasedNode> select,
+    		ParseNode where, List<ParseNode> groupBy, ParseNode having, List<OrderByNode> orderBy, LimitNode limit,
+    		int bindCount, boolean isAggregate, boolean hasSequence) {
+    	this(from, hint, isDistinct, select, where, groupBy, having, orderBy, limit, bindCount, isAggregate, hasSequence, 
+    			Collections.<SelectStatement>emptyList(), false);
+    }
+
+    public SelectStatement(TableNode from, HintNode hint, boolean isDistinct, List<AliasedNode> select,
+    		ParseNode where, List<ParseNode> groupBy, ParseNode having, List<OrderByNode> orderBy, LimitNode limit,
+    		int bindCount, boolean isAggregate, boolean hasSequence, List<SelectStatement> selects, boolean isUnion) {
+    	this.fromTable = from;
+    	this.hint = hint == null ? HintNode.EMPTY_HINT_NODE : hint;
+    	this.isDistinct = isDistinct;
+    	this.select = Collections.unmodifiableList(select);
+    	this.where = where;
+    	this.groupBy = Collections.unmodifiableList(groupBy);
+    	this.having = having;
+    	this.orderBy = Collections.unmodifiableList(orderBy);
+    	this.limit = limit;
+    	this.bindCount = bindCount;
+    	this.isAggregate = isAggregate || groupBy.size() != countConstants(groupBy) || this.having != null;
+    	this.hasSequence = hasSequence;
+    	if (!selects.isEmpty()) {
+    		this.selects.addAll(selects);
+    	}
+    	this.isUnion = isUnion;
     }
     
     @Override
@@ -298,4 +312,16 @@ public class SelectStatement implements FilterableStatement {
         
         return ((DerivedTableNode) fromTable).getSelect();
     }
+
+	public List<SelectStatement> getSelects() {
+		return selects;
+	}
+
+	public boolean isUnion() {
+	    return isUnion;
+	}
+
+	public void removeOrderBy() {
+	    this.orderBy = Collections.<OrderByNode>emptyList();
+	}
 }
