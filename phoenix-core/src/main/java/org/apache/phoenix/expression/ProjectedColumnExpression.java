@@ -56,6 +56,15 @@ public class ProjectedColumnExpression extends ColumnExpression {
         this.displayName = displayName;
     }
     
+    public ProjectedColumnExpression(KeyValueSchema schema, int position, String displayName) {
+        super(schema.getField(position));
+        this.columns = Collections.emptyList();
+        this.schema = schema;
+        this.bitSet = ValueBitSet.newInstance(schema);
+        this.position = position;
+        this.displayName = displayName;
+    }
+    
     public static KeyValueSchema buildSchema(Collection<PColumn> columns) {
         KeyValueSchemaBuilder builder = new KeyValueSchemaBuilder(0);
         for (PColumn column : columns) {
