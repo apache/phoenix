@@ -1,3 +1,12 @@
+Release Notes - Phoenix - Version 4.3.1
+
+** Bug
+    * [PHOENIX-1078] - Unable to run pig script with Phoenix in a secure HBase cluster
+    * [PHOENIX-1672] - RegionScanner.nextRaw contract not implemented correctly
+    * [PHOENIX-1690] - IndexOutOfBoundsException during SkipScanFilter interesect
+    * [PHOENIX-1696] - Selecting column more than once fails
+
+
 Release Notes - Phoenix - Version 4.3
 
 ** New Feature
