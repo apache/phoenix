@@ -29,9 +29,6 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Splitter;
-import com.google.common.collect.Lists;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.HelpFormatter;
@@ -57,9 +54,13 @@ import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.job.JobManager;
+import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.util.CSVCommonsLoader;
@@ -70,6 +71,10 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Splitter;
+import com.google.common.collect.Lists;
 
 /**
  * Base tool for running MapReduce-based ingests of data.
@@ -236,7 +241,13 @@ public class CsvBulkLoadTool extends Configured implements Tool {
         }
         
         List<Future<Boolean>> runningJobs = new ArrayList<Future<Boolean>>();
-        ExecutorService executor =  JobManager.createThreadPoolExec(Integer.MAX_VALUE, 5, 20);
+        boolean useInstrumentedPool = conn
+                .unwrap(PhoenixConnection.class)
+                .getQueryServices()
+                .getProps()
+                .getBoolean(QueryServices.METRICS_ENABLED,
+                        QueryServicesOptions.DEFAULT_IS_METRICS_ENABLED);
+        ExecutorService executor =  JobManager.createThreadPoolExec(Integer.MAX_VALUE, 5, 20, useInstrumentedPool);
         try{
 	        for (TargetTableRef table : tablesToBeLoaded) {
 	        	Path tablePath = new Path(outputPath, table.getPhysicalName());
