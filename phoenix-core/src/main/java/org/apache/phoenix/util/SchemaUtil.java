@@ -632,6 +632,9 @@ public class SchemaUtil {
     }
     
     public static String getEscapedFullColumnName(String fullColumnName) {
+        if(fullColumnName.startsWith(ESCAPE_CHARACTER)) {
+            return fullColumnName;
+        }
         int index = fullColumnName.indexOf(QueryConstants.NAME_SEPARATOR);
         if (index < 0) {
             return getEscapedArgument(fullColumnName); 

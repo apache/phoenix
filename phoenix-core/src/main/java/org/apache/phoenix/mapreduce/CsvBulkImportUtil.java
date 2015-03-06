@@ -19,9 +19,11 @@ package org.apache.phoenix.mapreduce;
 
 import java.util.List;
 
-import com.google.common.base.Preconditions;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.util.ColumnInfo;
+
+import com.google.common.base.Preconditions;
 
 /**
  * Collection of utility methods for setting up bulk import jobs.
@@ -65,7 +67,7 @@ public class CsvBulkImportUtil {
      */
     public static void configurePreUpsertProcessor(Configuration conf,
             Class<? extends ImportPreUpsertKeyValueProcessor> processorClass) {
-        conf.setClass(CsvToKeyValueMapper.UPSERT_HOOK_CLASS_CONFKEY, processorClass,
+        conf.setClass(PhoenixConfigurationUtil.UPSERT_HOOK_CLASS_CONFKEY, processorClass,
                 ImportPreUpsertKeyValueProcessor.class);
     }
 }

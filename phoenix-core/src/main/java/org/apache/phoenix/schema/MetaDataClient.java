@@ -1128,6 +1128,11 @@ public class MetaDataClient {
             return new MutationState(0,connection);
         }
 
+        // In async process, we return immediately as the MR job needs to be triggered .
+        if(statement.isAsync()) {
+            return new MutationState(0, connection);
+        }
+        
         // If our connection is at a fixed point-in-time, we need to open a new
         // connection so that our new index table is visible.
         if (connection.getSCN() != null) {

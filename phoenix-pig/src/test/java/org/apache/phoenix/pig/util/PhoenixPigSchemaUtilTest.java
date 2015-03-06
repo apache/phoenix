@@ -35,6 +35,7 @@ import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.SchemaType;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.util.ColumnInfo;
+import org.apache.phoenix.util.SchemaUtil;
 import org.apache.pig.ResourceSchema;
 import org.apache.pig.ResourceSchema.ResourceFieldSchema;
 import org.apache.pig.data.DataType;
@@ -65,10 +66,10 @@ public class PhoenixPigSchemaUtilTest {
         
         // expected schema.
         final ResourceFieldSchema[] fields = new ResourceFieldSchema[2];
-        fields[0] = new ResourceFieldSchema().setName("ID")
+        fields[0] = new ResourceFieldSchema().setName(SchemaUtil.getEscapedFullColumnName("ID"))
                                                 .setType(DataType.LONG);
 
-        fields[1] = new ResourceFieldSchema().setName("NAME")
+        fields[1] = new ResourceFieldSchema().setName(SchemaUtil.getEscapedFullColumnName("NAME"))
                                                 .setType(DataType.CHARARRAY);
         final ResourceSchema expected = new ResourceSchema().setFields(fields);
         

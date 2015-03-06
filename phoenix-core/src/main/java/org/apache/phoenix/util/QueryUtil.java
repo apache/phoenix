@@ -39,6 +39,8 @@ import org.apache.hadoop.hbase.util.Addressing;
 import org.apache.hadoop.hbase.zookeeper.ZKConfig;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixDriver;
+import org.apache.phoenix.parse.HintNode;
+import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.parse.WildcardParseNode;
 import org.apache.phoenix.query.QueryServices;
 
@@ -110,21 +112,53 @@ public final class QueryUtil {
             throw new IllegalArgumentException("At least one column must be provided for upserts");
         }
 
+        final List<String> columnNames = Lists.transform(columnInfos, new Function<ColumnInfo,String>() {
+            @Override
+            public String apply(ColumnInfo columnInfo) {
+                return columnInfo.getColumnName();
+            }
+        });
+        return constructUpsertStatement(tableName, columnNames, null);
+
+    }
+    
+    /**
+     * Generate an upsert statement based on a list of {@code ColumnInfo}s with parameter markers. The list of
+     * {@code ColumnInfo}s must contain at least one element.
+     *
+     * @param tableName name of the table for which the upsert statement is to be created
+     * @param columns list of columns to be included in the upsert statement
+     * @param Hint hint to be added to the UPSERT statement.
+     * @return the created {@code UPSERT} statement
+     */
+    public static String constructUpsertStatement(String tableName, List<String> columns, Hint hint) {
+
+        if (columns.isEmpty()) {
+            throw new IllegalArgumentException("At least one column must be provided for upserts");
+        }
+        
+        String hintStr = "";
+        if(hint != null) {
+           final HintNode node = new HintNode(hint.name());
+           hintStr = node.toString();
+        }
+        
         List<String> parameterList = Lists.newArrayList();
-        for (int i = 0; i < columnInfos.size(); i++) {
+        for (int i = 0; i < columns.size(); i++) {
             parameterList.add("?");
         }
         return String.format(
-                "UPSERT INTO %s (%s) VALUES (%s)",
+                "UPSERT %s INTO %s (%s) VALUES (%s)",
+                hintStr,
                 tableName,
                 Joiner.on(", ").join(
                         Iterables.transform(
-                                columnInfos,
-                                new Function<ColumnInfo, String>() {
+                               columns,
+                                new Function<String, String>() {
                                     @Nullable
                                     @Override
-                                    public String apply(@Nullable ColumnInfo columnInfo) {
-                                        return getEscapedFullColumnName(columnInfo.getColumnName());
+                                    public String apply(@Nullable String columnName) {
+                                        return getEscapedFullColumnName(columnName);
                                     }
                                 })),
                 Joiner.on(", ").join(parameterList));
