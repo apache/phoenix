@@ -42,6 +42,8 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ResultUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.TupleUtil;
+import static org.apache.phoenix.monitoring.PhoenixMetrics.CountMetric.NUM_SPOOL_FILE;
+import static org.apache.phoenix.monitoring.PhoenixMetrics.SizeMetric.SPOOL_FILE_SIZE;
 
 
 
@@ -115,6 +117,8 @@ public class SpoolingResultIterator implements PeekingResultIterator {
                 chunk.resize(data.length);
                 spoolFrom = new InMemoryResultIterator(data, chunk);
             } else {
+                NUM_SPOOL_FILE.increment();
+                SPOOL_FILE_SIZE.update(spoolTo.getFile().length());
                 spoolFrom = new OnDiskResultIterator(spoolTo.getFile());
             }
             success = true;

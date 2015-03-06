@@ -17,21 +17,24 @@
  */
 package org.apache.phoenix.iterate;
 
+import static org.apache.phoenix.monitoring.PhoenixMetrics.SizeMetric.SCAN_BYTES;
+
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.List;
 
+import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
-
+import org.apache.phoenix.monitoring.PhoenixMetrics;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ServerUtil;
 
-
 public class ScanningResultIterator implements ResultIterator {
     private final ResultScanner scanner;
-    
     public ScanningResultIterator(ResultScanner scanner) {
         this.scanner = scanner;
     }
@@ -45,6 +48,7 @@ public class ScanningResultIterator implements ResultIterator {
     public Tuple next() throws SQLException {
         try {
             Result result = scanner.next();
+            calculateScanSize(result);
             // TODO: use ResultTuple.setResult(result)
             // Need to create a new one if holding on to it (i.e. OrderedResultIterator)
             return result == null ? null : new ResultTuple(result);
@@ -60,5 +64,19 @@ public class ScanningResultIterator implements ResultIterator {
 	@Override
 	public String toString() {
 		return "ScanningResultIterator [scanner=" + scanner + "]";
+	}
+	
+	private static void calculateScanSize(Result result) {
+	    if (PhoenixMetrics.isMetricsEnabled()) {
+	        if (result != null) {
+	            Cell[] cells = result.rawCells();
+	            long scanResultSize = 0;
+	            for (Cell cell : cells) {
+	                KeyValue kv = KeyValueUtil.ensureKeyValue(cell);
+	                scanResultSize += kv.heapSize();
+	            }
+	            SCAN_BYTES.update(scanResultSize);
+	        }
+	    }
 	}
 }
