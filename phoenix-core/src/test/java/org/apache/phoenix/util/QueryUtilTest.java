@@ -38,7 +38,7 @@ public class QueryUtilTest {
     @Test
     public void testConstructUpsertStatement_ColumnInfos() {
         assertEquals(
-                "UPSERT INTO MYTAB (\"ID\", \"NAME\") VALUES (?, ?)",
+                "UPSERT  INTO MYTAB (\"ID\", \"NAME\") VALUES (?, ?)",
                 QueryUtil.constructUpsertStatement("MYTAB", ImmutableList.of(ID_COLUMN, NAME_COLUMN)));
 
     }
