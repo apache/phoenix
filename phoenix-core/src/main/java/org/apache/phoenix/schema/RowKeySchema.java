@@ -23,7 +23,6 @@ import java.util.Collections;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
 import org.apache.phoenix.query.QueryConstants;
 
 
@@ -111,17 +110,23 @@ public class RowKeySchema extends ValueSchema {
     // navigation methods that "select" different chunks of the row key held in a bytes ptr
 
     /**
-     * Move the bytes ptr to the next position in the row key relative to its current position
+     * Move the bytes ptr to the next position in the row key relative to its current position. You
+     * must have a complete row key. Use @link {@link #position(ImmutableBytesWritable, int, int)}
+     * if you have a partial row key.
      * @param ptr bytes pointer pointing to the value at the positional index provided.
      * @param position zero-based index of the next field in the value schema
      * @param maxOffset max possible offset value when iterating
      * @return true if a value was found and ptr was set, false if the value is null and ptr was not
      * set, and null if the value is null and there are no more values
       */
+    public Boolean next(ImmutableBytesWritable ptr, int position, int maxOffset) {
+        return next(ptr, position, maxOffset, false);
+    }
+
     @edu.umd.cs.findbugs.annotations.SuppressWarnings(
             value="NP_BOOLEAN_RETURN_NULL", 
             justification="Designed to return null.")
-    public Boolean next(ImmutableBytesWritable ptr, int position, int maxOffset) {
+    private Boolean next(ImmutableBytesWritable ptr, int position, int maxOffset, boolean isFirst) {
         if (ptr.getOffset() + ptr.getLength() >= maxOffset) {
             ptr.set(ptr.get(), maxOffset, 0);
             return null;
@@ -134,7 +139,9 @@ public class RowKeySchema extends ValueSchema {
         // backing byte array.
         ptr.set(ptr.get(), ptr.getOffset() + ptr.getLength(), 0);
         // If positioned at SEPARATOR_BYTE, skip it.
-        if (position > 0 && !getField(position-1).getDataType().isFixedWidth()) {
+        // Don't look back at previous fields if this is our first next call, as
+        // we may have a partial key for RVCs that doesn't include the leading field.
+        if (position > 0 && !isFirst && !getField(position-1).getDataType().isFixedWidth()) {
             ptr.set(ptr.get(), ptr.getOffset()+ptr.getLength()+1, 0);
         }
         Field field = this.getField(position);
@@ -270,6 +277,30 @@ public class RowKeySchema extends ValueSchema {
         readExtraFields(ptr, newPosition + 1, maxOffset, extraSpan);
         return returnValue;
     }
+    
+
+    /**
+     * Positions ptr at the part of the row key for the field at endPosition, 
+     * starting from the field at position.
+     * @param ptr bytes pointer that points to row key being traversed.
+     * @param position the starting field position
+     * @param endPosition the ending field position
+     * @return true if the row key has a value at endPosition with ptr pointing to
+     * that value and false otherwise with ptr not necessarily set.
+     */
+    public boolean position(ImmutableBytesWritable ptr, int position, int endPosition) {
+        int maxOffset = ptr.getLength();
+        this.iterator(ptr); // initialize for iteration
+        boolean isFirst = true;
+        while (position <= endPosition) {
+            if (this.next(ptr, position++, maxOffset, isFirst) == null) {
+                return false;
+            }
+            isFirst = false;
+        }
+        return true;
+    }
+
 
     /**
      * Extends the boundaries of the {@code ptr} to contain the next {@code extraSpan} fields in the row key.

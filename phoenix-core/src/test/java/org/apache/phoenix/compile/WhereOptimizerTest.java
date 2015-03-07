@@ -1781,4 +1781,41 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         assertArrayEquals(Bytes.toBytes("a"), scan.getStartRow());
         assertArrayEquals(ByteUtil.concat(Bytes.toBytes("a"), QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes("b"), QueryConstants.SEPARATOR_BYTE_ARRAY), scan.getStopRow());
     }
+    
+    @Test
+    public void testAndWithRVC() throws Exception {
+        String ddl;
+        String query;
+        StatementContext context;        
+        Connection conn = DriverManager.getConnection(getUrl());
+        
+        ddl = "create table t (a integer not null, b integer not null, c integer constraint pk primary key (a,b))";
+        conn.createStatement().execute(ddl);
+        conn.close();
+        
+        query = "select c from t where (a,b) in ( (1,2) , (1,3) ) and b = 4";
+        context = compileStatement(query, Collections.<Object>emptyList());
+        assertDegenerate(context.getScan());
+        
+        query = "select c from t where a in (1,2) and b = 3 and (a,b) in ( (1,2) , (1,3))";
+        context = compileStatement(query, Collections.<Object>emptyList());
+        assertArrayEquals(ByteUtil.concat(PDataType.INTEGER.toBytes(1), PDataType.INTEGER.toBytes(3)), context.getScan().getStartRow());
+        assertArrayEquals(ByteUtil.concat(PDataType.INTEGER.toBytes(1), ByteUtil.nextKey(PDataType.INTEGER.toBytes(3))), context.getScan().getStopRow());
+
+        query = "select c from t where a = 1 and b = 3 and (a,b) in ( (1,2) , (1,3))";
+        context = compileStatement(query, Collections.<Object>emptyList());
+        assertArrayEquals(ByteUtil.concat(PDataType.INTEGER.toBytes(1), PDataType.INTEGER.toBytes(3)), context.getScan().getStartRow());
+        assertArrayEquals(ByteUtil.concat(PDataType.INTEGER.toBytes(1), ByteUtil.nextKey(PDataType.INTEGER.toBytes(3))), context.getScan().getStopRow());
+
+        // Test with RVC occurring later in the PK
+        ddl = "create table t1 (d varchar, e char(3) not null, a integer not null, b integer not null, c integer constraint pk primary key (d, e, a,b))";
+        conn.createStatement().execute(ddl);
+        conn.close();
+        
+        query = "select c from t1 where d = 'a' and e = 'foo' and a in (1,2) and b = 3 and (a,b) in ( (1,2) , (1,3))";
+        context = compileStatement(query, Collections.<Object>emptyList());
+        assertArrayEquals(ByteUtil.concat(PDataType.VARCHAR.toBytes("a"), QueryConstants.SEPARATOR_BYTE_ARRAY, PDataType.CHAR.toBytes("foo"), PDataType.INTEGER.toBytes(1), PDataType.INTEGER.toBytes(3)), context.getScan().getStartRow());
+        assertArrayEquals(ByteUtil.concat(PDataType.VARCHAR.toBytes("a"), QueryConstants.SEPARATOR_BYTE_ARRAY, PDataType.CHAR.toBytes("foo"), PDataType.INTEGER.toBytes(1), ByteUtil.nextKey(PDataType.INTEGER.toBytes(3))), context.getScan().getStopRow());
+    }
+    
 }
