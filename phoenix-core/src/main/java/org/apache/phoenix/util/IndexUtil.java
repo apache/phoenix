@@ -199,8 +199,12 @@ public class IndexUtil {
 
     private static boolean isEmptyKeyValue(PTable table, ColumnReference ref) {
         byte[] emptyKeyValueCF = SchemaUtil.getEmptyColumnFamily(table);
-        return (Bytes.compareTo(emptyKeyValueCF, ref.getFamily()) == 0 &&
-                Bytes.compareTo(QueryConstants.EMPTY_COLUMN_BYTES, ref.getQualifier()) == 0);
+        return (Bytes.compareTo(emptyKeyValueCF, 0, emptyKeyValueCF.length, ref.getFamilyWritable()
+                .get(), ref.getFamilyWritable().getOffset(), ref.getFamilyWritable().getLength()) == 0 && Bytes
+                .compareTo(QueryConstants.EMPTY_COLUMN_BYTES, 0,
+                    QueryConstants.EMPTY_COLUMN_BYTES.length, ref.getQualifierWritable().get(), ref
+                            .getQualifierWritable().getOffset(), ref.getQualifierWritable()
+                            .getLength()) == 0);
     }
 
     public static List<Mutation> generateIndexData(final PTable table, PTable index,
