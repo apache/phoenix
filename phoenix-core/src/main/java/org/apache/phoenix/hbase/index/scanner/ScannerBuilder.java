@@ -101,7 +101,7 @@ public class ScannerBuilder {
       getAllFamilies(Collection<? extends ColumnReference> columns) {
     Set<ImmutableBytesPtr> families = new HashSet<ImmutableBytesPtr>();
     for (ColumnReference ref : columns) {
-      families.add(new ImmutableBytesPtr(ref.getFamily()));
+      families.add(ref.getFamilyWritable());
     }
     return families;
   }

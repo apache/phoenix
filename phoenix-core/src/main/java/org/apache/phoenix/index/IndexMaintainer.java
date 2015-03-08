@@ -54,7 +54,6 @@ import org.apache.phoenix.expression.visitor.KeyValueExpressionVisitor;
 import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
-import org.apache.phoenix.hbase.index.util.IndexManagementUtil.ReferencingColumn;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -1048,9 +1047,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         }
         size += WritableUtils.getVIntSize(coveredColumns.size());
         for (ColumnReference ref : coveredColumns) {
-            size += WritableUtils.getVIntSize(ref.getFamily().length);
+            size += WritableUtils.getVIntSize(ref.getFamilyWritable().getSize());
             size += ref.getFamily().length;
-            size += WritableUtils.getVIntSize(ref.getQualifier().length);
+            size += WritableUtils.getVIntSize(ref.getQualifierWritable().getSize());
             size += ref.getQualifier().length;
         }
         size += indexTableName.length + WritableUtils.getVIntSize(indexTableName.length);
@@ -1301,20 +1300,20 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     }
 
     public ValueGetter createGetterFromKeyValues(final byte[] rowKey, Collection<? extends Cell> pendingUpdates) {
-        final Map<ReferencingColumn, ImmutableBytesPtr> valueMap = Maps.newHashMapWithExpectedSize(pendingUpdates
+        final Map<ColumnReference, ImmutableBytesPtr> valueMap = Maps.newHashMapWithExpectedSize(pendingUpdates
                 .size());
         for (Cell kv : pendingUpdates) {
             // create new pointers to each part of the kv
             ImmutableBytesPtr family = new ImmutableBytesPtr(kv.getRowArray(),kv.getFamilyOffset(),kv.getFamilyLength());
             ImmutableBytesPtr qual = new ImmutableBytesPtr(kv.getRowArray(), kv.getQualifierOffset(), kv.getQualifierLength());
             ImmutableBytesPtr value = new ImmutableBytesPtr(kv.getValueArray(), kv.getValueOffset(), kv.getValueLength());
-            valueMap.put(new ReferencingColumn(family, qual), value);
+            valueMap.put(new ColumnReference(kv.getRowArray(), kv.getFamilyOffset(), kv.getFamilyLength(), kv.getRowArray(), kv.getQualifierOffset(), kv.getQualifierLength()), value);
         }
         return new ValueGetter() {
             @Override
             public ImmutableBytesPtr getLatestValue(ColumnReference ref) {
                 if(ref.equals(dataEmptyKeyValueRef)) return null;
-                return valueMap.get(ReferencingColumn.wrap(ref));
+                return valueMap.get(ref);
             }
             @Override
             public byte[] getRowKey() {
