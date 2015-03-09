@@ -33,14 +33,6 @@
             <name>GENERAL_CHAR</name>
         </column>
         <column>
-            <type>CHAR</type>
-            <userDefined>true</userDefined>
-            <dataSequence>SEQUENTIAL</dataSequence>
-            <length>15</length>
-            <prefix>1HA</prefix>
-            <name>FIELD_HISTORY_ARCHIVE_ID</name>
-        </column>
-        <column>
             <type>DATE</type>
             <!--SEQUENTIAL is unsupported for DATE -->
             <dataSequence>RANDOM</dataSequence>
@@ -80,168 +72,9 @@
         <column>
             <type>CHAR</type>
             <userDefined>true</userDefined>
-            <dataSequence>LIST</dataSequence>
-            <length>15</length>
-            <name>PARENT_ID</name>
-            <valuelist>
-                <datavalue distribution="2">
-                    <value>001xx000003DGQW</value>
-                </datavalue>
-                <datavalue distribution="2">
-                    <value>001xx000003DGQX</value>
-                </datavalue>
-                <datavalue distribution="2">
-                    <value>001xx000003DGQY</value>
-                </datavalue>
-                <datavalue distribution="2">
-                    <value>001xx000003DGQZ</value>
-                </datavalue>
-                <datavalue distribution="2">
-                    <value>001xx000003DGPa</value>
-                </datavalue>
-                <datavalue distribution="2">
-                    <value>001xx000003DGPb</value>
-                </datavalue>
-                <datavalue distribution="2">
-                    <value>001xx000003DGPc</value>
-                </datavalue>
-                <datavalue distribution="2">
-                    <value>001xx000003DGPd</value>
-                </datavalue>
-                <datavalue distribution="2">
-                    <value>001xx000003DGPe</value>
-                </datavalue>
-                <datavalue distribution="2">
-                    <value>001xx000003DGPf</value>
-                </datavalue>
-                <datavalue distribution="2">
-                    <value>003xx000003DGQW</value>
-                </datavalue>
-                <datavalue distribution="2">
-                    <value>003xx000003DGQX</value>
-                </datavalue>
-                <datavalue distribution="2">
-                    <value>003xx000003DGQY</value>
-                </datavalue>
-                <datavalue distribution="2">
-                    <value>003xx000003DGQZ</value>
-                </datavalue>
-                <datavalue distribution="2">
-                    <value>003xx000003DGPa</value>
-                </datavalue>
-                <datavalue distribution="2">
-                    <value>003xx000003DGPb</value>
-                </datavalue>
-                <datavalue distribution="2">
-                    <value>003xx000003DGPc</value>
-                </datavalue>
-                <datavalue distribution="2">
-                    <value>003xx000003DGPd</value>
-                </datavalue>
-                <datavalue distribution="2">
-                    <value>003xx000003DGPe</value>
-                </datavalue>
-                <datavalue distribution="2">
-                    <value>003xx000003DGPf</value>
-                </datavalue>
-                <datavalue distribution="2">
-                    <value>a01xx000003DGQW</value>
-                </datavalue>
-                <datavalue distribution="2">
-                    <value>a01xx000003DGQX</value>
-                </datavalue>
-                <datavalue distribution="2">
-                    <value>a01xx000003DGQY</value>
-                </datavalue>
-                <datavalue distribution="2">
-                    <value>a01xx000003DGQZ</value>
-                </datavalue>
-                <datavalue distribution="2">
-                    <value>a01xx000003DGPa</value>
-                </datavalue>
-                <datavalue distribution="2">
-                    <value>a01xx000003DGPb</value>
-                </datavalue>
-                <datavalue distribution="2">
-                    <value>a01xx000003DGPc</value>
-                </datavalue>
-                <datavalue distribution="2">
-                    <value>a01xx000003DGPd</value>
-                </datavalue>
-                <datavalue distribution="2">
-                    <value>a01xx000003DGPe</value>
-                </datavalue>
-                <datavalue distribution="2">
-                    <value>a01xx000003DGPf</value>
-                </datavalue>
-                <datavalue distribution="2">
-                    <value>006xx000003DGQW</value>
-                </datavalue>
-                <datavalue distribution="2">
-                    <value>006xx000003DGQX</value>
-                </datavalue>
-                <datavalue distribution="2">
-                    <value>006xx000003DGQY</value>
-                </datavalue>
-                <datavalue distribution="2">
-                    <value>006xx000003DGQZ</value>
-                </datavalue>
-                <datavalue distribution="2">
-                    <value>006xx000003DGPa</value>
-                </datavalue>
-                <datavalue distribution="2">
-                    <value>006xx000003DGPb</value>
-                </datavalue>
-                <datavalue distribution="2">
-                    <value>006xx000003DGPc</value>
-                </datavalue>
-                <datavalue distribution="2">
-                    <value>006xx000003DGPd</value>
-                </datavalue>
-                <datavalue distribution="2">
-                    <value>006xx000003DGPe</value>
-                </datavalue>
-                <datavalue distribution="2">
-                    <value>00Qxx000003DGPf</value>
-                </datavalue>
-                <datavalue distribution="2">
-                    <value>00Qxx000003DGQW</value>
-                </datavalue>
-                <datavalue distribution="2">
-                    <value>00Qxx000003DGQX</value>
-                </datavalue>
-                <datavalue distribution="2">
-                    <value>500xx000003DGQY</value>
-                </datavalue>
-                <datavalue distribution="2">
-                    <value>500xx000003DGQZ</value>
-                </datavalue>
-                <datavalue distribution="2">
-                    <value>500xx000003DGPa</value>
-                </datavalue>
-                <datavalue distribution="2">
-                    <value>a02xx000003DGPb</value>
-                </datavalue>
-                <datavalue distribution="2">
-                    <value>a03xx000003DGPc</value>
-                </datavalue>
-                <datavalue distribution="2">
-                    <value>a04xx000003DGPd</value>
-                </datavalue>
-                <datavalue distribution="2">
-                    <value>a05xx000003DGPe</value>
-                </datavalue>
-                <datavalue distribution="2">
-                    <value>a06xx000003DGPf</value>
-                </datavalue>
-            </valuelist>
-        </column>
-        <column>
-            <type>CHAR</type>
-            <userDefined>true</userDefined>
             <dataSequence>LIST</dataSequence>ID
             <length>15</length>
-            <name>ORGANIZATION_ID</name>
+            <name>TENANT_ID</name>
             <valuelist>
                 <datavalue distribution="40">
                     <value>00Dxx0000001gER</value>
@@ -259,22 +92,6 @@
                     <value>00Dxx0000001gEV</value>
                 </datavalue>
             </valuelist>
-        </column>
-        <column>
-            <type>CHAR</type>
-            <userDefined>true</userDefined>
-            <dataSequence>SEQUENTIAL</dataSequence>
-            <length>12</length>
-            <name>ENTITY_HISTORY_ID</name>
-            <prefix>017</prefix>
-        </column>
-        <column>
-            <type>CHAR</type>
-            <userDefined>true</userDefined>
-            <dataSequence>SEQUENTIAL</dataSequence>
-            <length>12</length>
-            <name>FIELD_HISTORY_ARCHIVE_ID</name>
-            <prefix>1HA</prefix>
         </column>
         <column>
             <type>DATE</type>
@@ -506,7 +323,7 @@
                             <value>00Dxx0000001gET</value>
                         </datavalue>
                     </valueList>
-                    <name>ORGANIZATION_ID</name>
+                    <name>TENANT_ID</name>
                 </column>
             </dataOverride>
             <!--Minimum of executionDurationInMs or numberOfExecutions. Which ever is reached first -->
