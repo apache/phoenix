@@ -79,13 +79,13 @@ executed to a minimum of 10 times or 10 seconds (whichever comes first). QuerySe
 <scenarios>
     <!--Minimum of executionDurationInMs or numberOfExecutions. Which ever is reached first -->
     <querySet concurrency="1-4" executionType="PARALLEL" executionDurationInMs="10000" numberOfExecutions="10">
-        <query id="q1" verifyRowCount="false" statement="select count(*) from ARCHIVE.FIELD_HISTORY_ARCHIVE"/>
+        <query id="q1" verifyRowCount="false" statement="select count(*) from PHERF.TEST_TABLE"/>
         <query id="q2" tenantId="1234567890" ddl="create view if not exists 
         myview(mypk varchar not null primary key, mycol varchar)" statement="upsert select ..."/>
     </querySet>
     <querySet concurrency="3" executionType="SERIAL" executionDurationInMs="20000" numberOfExecutions="100">
-        <query id="q3" verifyRowCount="false" statement="select count(*) from ARCHIVE.FIELD_HISTORY_ARCHIVE"/>
-        <query id="q4" statement="select count(*) from ARCHIVE.FIELD_HISTORY_ARCHIVE WHERE ORGANIZATION_ID='00D000000000062'"/>
+        <query id="q3" verifyRowCount="false" statement="select count(*) from PHERF.TEST_TABLE"/>
+        <query id="q4" statement="select count(*) from PHERF.TEST_TABLE WHERE TENANT_ID='00D000000000062'"/>
     </querySet>
 </scenario>
         
@@ -99,7 +99,7 @@ visualization.
 Default quorum is localhost. If you want to override set the system variable.
 
 Run unit tests: `mvn test -DZK_QUORUM=localhost`<br />
-Run a specific method: `mvn -Dtest=ResourceTest#testPropertyFiles test` <br />
-To test on a real cluster: `./pherf.sh -l -r 194 -z blitzhbase01-mnds2-1-crd.eng.sfdc.net --schemaFile .*create_prod_test_unsalted_194.sql --scenarioFile .*prod_test_unsalted_scenario.xml`
+Run a specific method: `mvn -Dtest=ClassName#methodName test` <br />
+To test on a real cluster: `./pherf.sh -drop all -l -q -z localhost -schemaFile .*user_defined_schema.sql -scenarioFile .*user_defined_scenario.xml`
 
 More to come...
