@@ -17,11 +17,12 @@
  */
 package org.apache.phoenix.schema.types;
 
-import com.google.common.base.Preconditions;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.schema.SortOrder;
 
-public class PUnsignedTinyint extends PDataType<Byte> {
+import com.google.common.base.Preconditions;
+
+public class PUnsignedTinyint extends PWholeNumber<Byte> {
 
   public static final PUnsignedTinyint INSTANCE = new PUnsignedTinyint();
 

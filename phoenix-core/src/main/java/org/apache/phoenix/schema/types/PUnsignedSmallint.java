@@ -17,11 +17,12 @@
  */
 package org.apache.phoenix.schema.types;
 
-import com.google.common.base.Preconditions;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.schema.SortOrder;
 
-public class PUnsignedSmallint extends PDataType<Short> {
+import com.google.common.base.Preconditions;
+
+public class PUnsignedSmallint extends PWholeNumber<Short> {
 
   public static final PUnsignedSmallint INSTANCE = new PUnsignedSmallint();
 
