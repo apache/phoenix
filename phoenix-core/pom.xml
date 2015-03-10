@@ -220,6 +220,23 @@
   </build>
 
   <dependencies>
+    <!-- Transaction dependencies -->
+    <dependency>
+      <groupId>co.cask.tephra</groupId>
+      <artifactId>tephra-api</artifactId>
+      <version>0.3.5-SNAPSHOT</version>
+    </dependency>
+    <dependency>
+      <groupId>co.cask.tephra</groupId>
+      <artifactId>tephra-core</artifactId>
+      <version>0.3.5-SNAPSHOT</version>
+    </dependency>
+    <dependency>
+      <groupId>co.cask.tephra</groupId>
+      <artifactId>tephra-hbase-compat-0.98</artifactId>
+      <version>0.3.5-SNAPSHOT</version>
+    </dependency>
+  
     <!-- Make sure we have all the antlr dependencies -->
     <dependency>
       <groupId>org.antlr</groupId>

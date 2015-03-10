@@ -95,6 +95,9 @@ import org.apache.phoenix.util.SQLCloseables;
 import org.cloudera.htrace.Sampler;
 import org.cloudera.htrace.TraceScope;
 
+//import co.cask.tephra.TransactionContext;
+//import co.cask.tephra.TransactionFailureException;
+
 import com.google.common.base.Objects;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
@@ -123,6 +126,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     private List<SQLCloseable> statements = new ArrayList<SQLCloseable>();
     private final Map<PDataType<?>, Format> formatters = new HashMap<>();
     private final MutationState mutationState;
+//    private TransactionContext transactionContext;
     private final int mutateBatchSize;
     private final Long scn;
     private boolean isAutoCommit = false;
@@ -432,6 +436,11 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
             @Override
             public Void call() throws SQLException {
                 mutationState.commit();
+//                try {
+//					transactionContext.finish();
+//				} catch (TransactionFailureException e) {
+//					throw new SQLException(e);
+//				}
                 return null;
             }
         }, Tracing.withTracing(this, "committing mutations"));
@@ -635,6 +644,11 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     @Override
     public void rollback() throws SQLException {
         mutationState.rollback(this);
+//        try {
+//			transactionContext.abort();
+//		} catch (TransactionFailureException e) {
+//			throw new SQLException(e);
+//		}
     }
 
     @Override
