@@ -66,11 +66,7 @@ class PhoenixRelImplementorImpl implements PhoenixRel.Implementor {
 		PhoenixStatement stmt = new PhoenixStatement(conn);
         ColumnResolver resolver;
 		try {
-			resolver = FromCompiler.getResolver(
-			        NamedTableNode.create(
-			            null,
-			            TableName.create(tableRef.getTable().getSchemaName().getString(), tableRef.getTable().getTableName().getString()),
-			            ImmutableList.<ColumnDef>of()), conn);
+			resolver = FromCompiler.getResolver(tableRef);
 	        this.context = new StatementContext(stmt, resolver, new Scan(), new SequenceManager(stmt));
 	        this.select = SelectStatement.SELECT_STAR;
 	        if (filter != null) {

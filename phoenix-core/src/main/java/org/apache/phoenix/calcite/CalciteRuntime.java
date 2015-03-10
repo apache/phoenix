@@ -35,7 +35,7 @@ public class CalciteRuntime {
 
     public static Enumerator<Object[]> toEnumerator(final ResultIterator iterator, final RowProjector rowProjector) {
         return new Enumerator<Object[]>() {
-            Object[] current = new Object[rowProjector.getColumnCount()];
+            Object[] current;
             private final ImmutableBytesWritable ptr = new ImmutableBytesWritable();
 
             @Override
@@ -51,7 +51,9 @@ public class CalciteRuntime {
                         current = null;
                         return false;
                     }
-                    for (int i = 0; i < current.length; i++) {
+                    int count = rowProjector.getColumnCount();
+                    current = new Object[count];
+                    for (int i = 0; i < count; i++) {
                         ColumnProjector projector = rowProjector.getColumnProjector(i);
                     	current[i] = projector.getValue(tuple, projector.getExpression().getDataType(), ptr);
                     }

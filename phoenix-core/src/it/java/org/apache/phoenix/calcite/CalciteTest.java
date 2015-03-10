@@ -183,9 +183,25 @@ public class CalciteTest extends BaseClientManagedTimeIT {
         calciteConnection.setSchema("phoenix");
         final Statement statement = calciteConnection.createStatement();
         final ResultSet resultSet = statement.executeQuery("select entity_id, a_string, organization_id from aTable where a_string = 'a'");
-        while (resultSet.next()) {
-            System.out.println("org_id=" + resultSet.getObject(3) + ",entity_id=" + resultSet.getObject(1) + ",a_string=" + resultSet.getObject("A_STRING"));
-        }
+
+        assertTrue(resultSet.next());
+        assertEquals("00D300000000XHP", resultSet.getObject(3));
+        assertEquals("00A123122312312", resultSet.getObject(1));
+        assertEquals("a", resultSet.getString("A_STRING"));
+        assertTrue(resultSet.next());
+        assertEquals("00D300000000XHP", resultSet.getObject(3));
+        assertEquals("00A223122312312", resultSet.getObject(1));
+        assertEquals("a", resultSet.getString("A_STRING"));
+        assertTrue(resultSet.next());
+        assertEquals("00D300000000XHP", resultSet.getObject(3));
+        assertEquals("00A323122312312", resultSet.getObject(1));
+        assertEquals("a", resultSet.getString("A_STRING"));
+        assertTrue(resultSet.next());
+        assertEquals("00D300000000XHP", resultSet.getObject(3));
+        assertEquals("00A423122312312", resultSet.getObject(1));
+        assertEquals("a", resultSet.getString("A_STRING"));
+        assertFalse(resultSet.next());
+        
         resultSet.close();
         statement.close();
         connection.close();
