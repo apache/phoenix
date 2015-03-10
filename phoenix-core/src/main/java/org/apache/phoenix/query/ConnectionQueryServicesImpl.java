@@ -42,6 +42,8 @@ import java.util.concurrent.TimeoutException;
 
 import javax.annotation.concurrent.GuardedBy;
 
+import co.cask.tephra.hbase98.coprocessor.TransactionProcessor;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
@@ -152,6 +154,7 @@ import org.apache.phoenix.util.UpgradeUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.common.base.Objects;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Throwables;
 import com.google.common.cache.Cache;
@@ -292,9 +295,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         try {
             return HBaseFactoryProvider.getHTableFactory().getTable(tableName, connection, getExecutor());
         } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
-            byte[][] schemaAndTableName = new byte[2][];
-            SchemaUtil.getVarChars(tableName, schemaAndTableName);
-            throw new TableNotFoundException(Bytes.toString(schemaAndTableName[0]), Bytes.toString(schemaAndTableName[1]));
+            throw new TableNotFoundException(SchemaUtil.getSchemaNameFromFullName(tableName), SchemaUtil.getTableNameFromFullName(tableName));
         } catch (IOException e) {
         	throw new SQLException(e);
         }
@@ -703,6 +704,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     descriptor.addCoprocessor(SequenceRegionObserver.class.getName(), null, priority, null);
                 }
             }
+            
+            if (SchemaUtil.isTransactional(descriptor) && !descriptor.hasCoprocessor(TransactionProcessor.class.getName())) {
+                descriptor.addCoprocessor(TransactionProcessor.class.getName(), null, priority - 10, null);
+            }
         } catch (IOException e) {
             throw ServerUtil.parseServerException(e);
         }
@@ -862,6 +867,17 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     return existingDesc;
                 }
 
+                // Don't allow TRANSACTIONAL attribute to change, as we may have issued
+                // a CREATE TABLE IF NOT EXISTS and be updating the metadata.
+                String existingTxnal = existingDesc.getValue(PhoenixDatabaseMetaData.TRANSACTIONAL);
+                String newTxnal = newDesc.getValue(PhoenixDatabaseMetaData.TRANSACTIONAL);
+                if (!Objects.equal(existingTxnal, newTxnal)) {
+                    if (existingTxnal == null) {
+                        newDesc.remove(PhoenixDatabaseMetaData.TRANSACTIONAL);
+                    } else {
+                        newDesc.setValue(PhoenixDatabaseMetaData.TRANSACTIONAL, existingTxnal);
+                    }
+                }
                 modifyTable(tableName, newDesc, true);
                 return newDesc;
             }
@@ -1188,10 +1204,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         byte[] tableName = physicalTableName != null ? physicalTableName : SchemaUtil.getTableNameAsBytes(schemaBytes, tableBytes);
         boolean localIndexTable = Boolean.TRUE.equals(tableProps.remove(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_NAME));
 
+        HTableDescriptor tableDescriptor = null;
         if ((tableType == PTableType.VIEW && physicalTableName != null) || (tableType != PTableType.VIEW && physicalTableName == null)) {
             // For views this will ensure that metadata already exists
             // For tables and indexes, this will create the metadata if it doesn't already exist
-            ensureTableCreated(tableName, tableType, tableProps, families, splits, true);
+            tableDescriptor = ensureTableCreated(tableName, tableType, tableProps, families, splits, true);
         }
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         if (tableType == PTableType.INDEX) { // Index on view
@@ -1246,6 +1263,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         return rpcCallback.get();
                     }
         });
+        // This means the HTable already existed and is transactional which is an
+        // error case unless IF NOT EXISTS was supplied (which the caller will check).
+        Object isTransactional = tableProps.get(PhoenixDatabaseMetaData.TRANSACTIONAL);
+        if (tableDescriptor != null && Boolean.TRUE.equals(isTransactional) != SchemaUtil.isTransactional(tableDescriptor)) {
+            return new MetaDataMutationResult(MutationCode.TABLE_ALREADY_EXISTS, result.getMutationTime(), result.getTable());
+        }
         return result;
     }
 
@@ -1447,6 +1470,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         SQLException sqlE = null;
         if (tableDescriptor != null) {
             try {
+                if (SchemaUtil.hasTransactional(tableDescriptor)) {
+                   throw new SQLExceptionInfo.Builder(
+                                        SQLExceptionCode.SET_UNSUPPORTED_PROP_ON_ALTER_TABLE)
+                                        .setMessage(PhoenixDatabaseMetaData.TRANSACTIONAL)
+                                        .setSchemaName(table.getSchemaName().getString())
+                                        .setTableName(table.getTableName().getString()).build().buildException();                
+                }
                 boolean pollingNotNeeded = (!tableProps.isEmpty() && families.isEmpty() && colFamiliesForPColumnsToBeAdded.isEmpty());
                 modifyTable(table.getPhysicalName().getBytes(), tableDescriptor, !pollingNotNeeded);
             } catch (IOException e) {
@@ -1988,6 +2018,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     
     @Override
     public MutationState updateData(MutationPlan plan) throws SQLException {
+        PTable table = plan.getContext().getCurrentTable().getTable();
+        HTableDescriptor desc = this.getTableDescriptor(table.getPhysicalName().getBytes());
+        if (SchemaUtil.isTransactional(desc)) {
+            return new MutationState(1, plan.getConnection());
+        }
+
         return plan.execute();
     }
 

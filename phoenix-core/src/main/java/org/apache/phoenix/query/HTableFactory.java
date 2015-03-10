@@ -20,8 +20,11 @@ package org.apache.phoenix.query;
 import java.io.IOException;
 import java.util.concurrent.ExecutorService;
 
+import co.cask.tephra.hbase98.TransactionAwareHTable;
+
 import org.apache.hadoop.hbase.client.HConnection;
 import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.phoenix.util.SchemaUtil;
 
 /**
  * Creates clients to access HBase tables.
@@ -47,7 +50,11 @@ public interface HTableFactory {
     static class HTableFactoryImpl implements HTableFactory {
         @Override
         public HTableInterface getTable(byte[] tableName, HConnection connection, ExecutorService pool) throws IOException {
-            return connection.getTable(tableName, pool);
+            HTableInterface htable = connection.getTable(tableName, pool);
+            if (SchemaUtil.isTransactional(htable.getTableDescriptor())) {
+                return new TransactionAwareHTable(htable);
+            }
+            return htable;
         }
     }
 }

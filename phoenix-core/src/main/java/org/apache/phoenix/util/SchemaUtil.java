@@ -33,6 +33,7 @@ import java.util.Properties;
 
 import javax.annotation.Nullable;
 
+import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -370,6 +371,16 @@ public class SchemaUtil {
                 .getName().getBytesPtr();
     }
 
+    public static boolean isTransactional(HTableDescriptor descriptor) {
+        byte[] isTransactional = descriptor.getValue(PhoenixDatabaseMetaData.TRANSACTIONAL_BYTES);
+        return (isTransactional != null && Boolean.TRUE.toString().equalsIgnoreCase(Bytes.toString(isTransactional)));
+    }
+        
+    public static boolean hasTransactional(HTableDescriptor descriptor) {
+        byte[] isTransactional = descriptor.getValue(PhoenixDatabaseMetaData.TRANSACTIONAL_BYTES);
+        return (isTransactional != null);
+    }
+        
     public static boolean isMetaTable(byte[] tableName) {
         return Bytes.compareTo(tableName, SYSTEM_CATALOG_NAME_BYTES) == 0;
     }

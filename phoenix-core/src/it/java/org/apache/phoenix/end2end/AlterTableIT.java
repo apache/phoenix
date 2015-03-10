@@ -38,10 +38,15 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.Properties;
 
+import co.cask.tephra.hbase98.TransactionAwareHTable;
+import co.cask.tephra.hbase98.coprocessor.TransactionProcessor;
+
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeepDeletedCells;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -50,6 +55,7 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -1987,5 +1993,54 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         } finally {
             conn.close();
         }
+    }
+    
+    @Test
+    public void testAlterTableToBeTransactional() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String ddl = "CREATE TABLE test_table (k varchar primary key)";
+        createTestTable(getUrl(), ddl);
+
+        try {
+            ddl = "ALTER TABLE test_table SET transactional=true";
+            conn.createStatement().execute(ddl);
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.SET_UNSUPPORTED_PROP_ON_ALTER_TABLE.getErrorCode(),e.getErrorCode());
+        }
+    }
+
+    
+    @Test
+    public void testCreateTableToBeTransactional() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String ddl = "CREATE TABLE TEST_TRANSACTIONAL_TABLE (k varchar primary key) transactional=true";
+        conn.createStatement().execute(ddl);
+        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        HTableInterface htable = pconn.getQueryServices().getTable(Bytes.toBytes("TEST_TRANSACTIONAL_TABLE"));
+        assertTrue(SchemaUtil.isTransactional(htable.getTableDescriptor()));
+        assertTrue(htable instanceof TransactionAwareHTable);
+        assertTrue(htable.getTableDescriptor().getCoprocessors().contains(TransactionProcessor.class.getName()));
+        
+        HBaseAdmin admin = pconn.getQueryServices().getAdmin();
+        HTableDescriptor desc = new HTableDescriptor(TableName.valueOf("TXN_TEST_EXISTING"));
+        desc.addFamily(new HColumnDescriptor(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES));
+        admin.createTable(desc);
+        try {
+            ddl = "CREATE TABLE TXN_TEST_EXISTING (k varchar primary key) transactional=true";
+            conn.createStatement().execute(ddl);
+            fail();
+        } catch (TableAlreadyExistsException e) {
+        }
+        // stays transactional
+        ddl = "CREATE TABLE IF NOT EXISTS TEST_TRANSACTIONAL_TABLE (k varchar primary key)"; 
+        conn.createStatement().execute(ddl);
+        assertTrue(SchemaUtil.isTransactional(pconn.getQueryServices().getTable(Bytes.toBytes("TEST_TRANSACTIONAL_TABLE")).getTableDescriptor()));
+        // stays non transactional
+        ddl = "CREATE TABLE IF NOT EXISTS TXN_TEST_EXISTING (k varchar primary key) transactional=true"; 
+        conn.createStatement().execute(ddl);
+        assertFalse(SchemaUtil.isTransactional(pconn.getQueryServices().getTable(Bytes.toBytes("TXN_TEST_EXISTING")).getTableDescriptor()));
     }
 }
