@@ -179,6 +179,9 @@ public class TimezoneOffsetFunctionIT extends BaseHBaseManagedTimeIT {
         ResultSet rs = conn.createStatement().executeQuery(query);
         rs.next();
         assertEquals(new Timestamp(time), rs.getTimestamp(1));
+        assertEquals(new Timestamp(time), rs.getTimestamp("V"));
+        assertEquals(new Timestamp(time), rs.getTimestamp(1, cal));
+        assertEquals(new Timestamp(time), rs.getTimestamp("V", cal));
     }
 
 }
