@@ -56,11 +56,12 @@ public class ColumnInfo {
      * @return
      */
     public String getDisplayName() {
-        int index = columnName.indexOf(QueryConstants.NAME_SEPARATOR);
+    	final String unescapedColumnName = SchemaUtil.getUnEscapedFullColumnName(columnName);
+        int index = unescapedColumnName.indexOf(QueryConstants.NAME_SEPARATOR);
         if (index < 0) {
-            return columnName; 
+            return unescapedColumnName; 
         }
-        return columnName.substring(index+1);
+        return unescapedColumnName.substring(index+1).trim();
     }
 
     @Override

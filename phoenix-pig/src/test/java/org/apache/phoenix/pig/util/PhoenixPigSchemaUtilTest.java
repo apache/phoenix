@@ -66,10 +66,10 @@ public class PhoenixPigSchemaUtilTest {
         
         // expected schema.
         final ResourceFieldSchema[] fields = new ResourceFieldSchema[2];
-        fields[0] = new ResourceFieldSchema().setName(SchemaUtil.getEscapedFullColumnName("ID"))
+        fields[0] = new ResourceFieldSchema().setName("ID")
                                                 .setType(DataType.LONG);
 
-        fields[1] = new ResourceFieldSchema().setName(SchemaUtil.getEscapedFullColumnName("NAME"))
+        fields[1] = new ResourceFieldSchema().setName("NAME")
                                                 .setType(DataType.CHARARRAY);
         final ResourceSchema expected = new ResourceSchema().setFields(fields);
         
