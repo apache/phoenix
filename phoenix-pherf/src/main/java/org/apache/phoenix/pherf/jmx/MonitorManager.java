@@ -41,17 +41,14 @@ import java.util.*;
  */
 public class MonitorManager implements Runnable {
     // List of MonitorDetails for all the running monitors.
-    private static final List<MonitorDetails> MONITOR_DETAILS_LIST;
+    // TODO Move this out to config. Possible use Guice and use IOC to inject it in.
+    private static final List<MonitorDetails> MONITOR_DETAILS_LIST =
+            Arrays.asList(MonitorDetails.values());
     private final ResultHandler resultHandler;
     private final long monitorFrequency;
     private volatile long rowCount;
     private volatile boolean shouldStop = false;
     private volatile boolean isRunning = false;
-
-    static {
-        // TODO Move this out to config. Possible use Guice and use IOC to inject it in.
-        MONITOR_DETAILS_LIST = Arrays.asList(MonitorDetails.values());
-    }
 
     public MonitorManager() throws Exception {
         this(PherfConstants.MONITOR_FREQUENCY);
@@ -109,6 +106,7 @@ public class MonitorManager implements Runnable {
                     try {
                         Thread.sleep(getMonitorFrequency());
                     } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
                         e.printStackTrace();
                     }
                 }
