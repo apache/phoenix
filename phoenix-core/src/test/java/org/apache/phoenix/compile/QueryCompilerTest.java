@@ -1473,7 +1473,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
                 statement.execute("create local index my_idx on example (fn) DEFAULT_COLUMN_FAMILY='F'");
                 fail();
             } catch (SQLException e) {
-                assertEquals(SQLExceptionCode.VIEW_WITH_PROPERTIES.getErrorCode(),e.getErrorCode());
+                assertEquals(SQLExceptionCode.DEFAULT_COLUMN_FAMILY_ON_SHARED_TABLE.getErrorCode(),e.getErrorCode());
             }
             statement.execute("create local index my_idx on example (fn)");
        } finally {

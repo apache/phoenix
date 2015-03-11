@@ -314,6 +314,7 @@ public interface PTable {
     boolean isWALDisabled();
     boolean isMultiTenant();
     boolean getStoreNulls();
+    boolean isTransactional();
 
     ViewType getViewType();
     String getViewStatement();

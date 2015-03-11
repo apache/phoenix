@@ -38,7 +38,6 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.Properties;
 
-import co.cask.tephra.hbase98.TransactionAwareHTable;
 import co.cask.tephra.hbase98.coprocessor.TransactionProcessor;
 
 import org.apache.hadoop.hbase.HColumnDescriptor;
@@ -55,7 +54,6 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
-import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -2019,9 +2017,9 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         String ddl = "CREATE TABLE TEST_TRANSACTIONAL_TABLE (k varchar primary key) transactional=true";
         conn.createStatement().execute(ddl);
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        PTable table = pconn.getMetaDataCache().getTable(new PTableKey(null, "TEST_TRANSACTIONAL_TABLE"));
         HTableInterface htable = pconn.getQueryServices().getTable(Bytes.toBytes("TEST_TRANSACTIONAL_TABLE"));
-        assertTrue(SchemaUtil.isTransactional(htable.getTableDescriptor()));
-        assertTrue(htable instanceof TransactionAwareHTable);
+        assertTrue(table.isTransactional());
         assertTrue(htable.getTableDescriptor().getCoprocessors().contains(TransactionProcessor.class.getName()));
         
         HBaseAdmin admin = pconn.getQueryServices().getAdmin();
@@ -2032,15 +2030,15 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             ddl = "CREATE TABLE TXN_TEST_EXISTING (k varchar primary key) transactional=true";
             conn.createStatement().execute(ddl);
             fail();
-        } catch (TableAlreadyExistsException e) {
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.MAY_NOT_MAP_TO_EXISTING_TABLE_AS_TRANSACTIONAL.getErrorCode(), e.getErrorCode());
         }
-        // stays transactional
+        // Should be ok, as HBase metadata should match existing metadata.
         ddl = "CREATE TABLE IF NOT EXISTS TEST_TRANSACTIONAL_TABLE (k varchar primary key)"; 
         conn.createStatement().execute(ddl);
-        assertTrue(SchemaUtil.isTransactional(pconn.getQueryServices().getTable(Bytes.toBytes("TEST_TRANSACTIONAL_TABLE")).getTableDescriptor()));
-        // stays non transactional
-        ddl = "CREATE TABLE IF NOT EXISTS TXN_TEST_EXISTING (k varchar primary key) transactional=true"; 
-        conn.createStatement().execute(ddl);
-        assertFalse(SchemaUtil.isTransactional(pconn.getQueryServices().getTable(Bytes.toBytes("TXN_TEST_EXISTING")).getTableDescriptor()));
+        table = pconn.getMetaDataCache().getTable(new PTableKey(null, "TEST_TRANSACTIONAL_TABLE"));
+        htable = pconn.getQueryServices().getTable(Bytes.toBytes("TEST_TRANSACTIONAL_TABLE"));
+        assertTrue(table.isTransactional());
+        assertTrue(htable.getTableDescriptor().getCoprocessors().contains(TransactionProcessor.class.getName()));
     }
 }

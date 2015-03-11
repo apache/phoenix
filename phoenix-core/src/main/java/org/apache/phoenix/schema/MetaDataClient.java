@@ -58,6 +58,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SEQ_NUM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTIONAL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_CONSTANT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_STATEMENT;
@@ -198,8 +199,9 @@ public class MetaDataClient {
             VIEW_TYPE + "," +
             VIEW_INDEX_ID + "," +
             INDEX_TYPE + "," +
-            STORE_NULLS +
-            ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            STORE_NULLS + "," +
+            TRANSACTIONAL +
+            ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
     private static final String CREATE_LINK =
             "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " +
             TENANT_ID + "," +
@@ -1204,54 +1206,58 @@ public class MetaDataClient {
             String tenantIdStr = tenantId == null ? null : connection.getTenantId().getString();
             boolean multiTenant = false;
             boolean storeNulls = false;
+            boolean transactional = false;
             Integer saltBucketNum = null;
             String defaultFamilyName = null;
             boolean isImmutableRows = false;
             List<PName> physicalNames = Collections.emptyList();
             boolean addSaltColumn = false;
-            if (parent != null && tableType == PTableType.INDEX) {
-                // Index on view
-                // TODO: Can we support a multi-tenant index directly on a multi-tenant
-                // table instead of only a view? We don't have anywhere to put the link
-                // from the table to the index, though.
-                if (indexType == IndexType.LOCAL || (parent.getType() == PTableType.VIEW && parent.getViewType() != ViewType.MAPPED)) {
-                    PName physicalName = parent.getPhysicalName();
-                    saltBucketNum = parent.getBucketNum();
-                    addSaltColumn = (saltBucketNum != null && indexType != IndexType.LOCAL);
-                    defaultFamilyName = parent.getDefaultFamilyName() == null ? null : parent.getDefaultFamilyName().getString();
-                    if (indexType == IndexType.LOCAL) {
-                        saltBucketNum = null;
-                        // Set physical name of local index table
-                        physicalNames = Collections.singletonList(PNameFactory.newName(MetaDataUtil.getLocalIndexPhysicalName(physicalName.getBytes())));
-                    } else {
-                        // Set physical name of view index table
-                        physicalNames = Collections.singletonList(PNameFactory.newName(MetaDataUtil.getViewIndexPhysicalName(physicalName.getBytes())));
-                    }
-                }
-
-                multiTenant = parent.isMultiTenant();
+            if (parent != null) {
+                transactional = parent.isTransactional();
                 storeNulls = parent.getStoreNulls();
-                parentTableName = parent.getTableName().getString();
-                // Pass through data table sequence number so we can check it hasn't changed
-                PreparedStatement incrementStatement = connection.prepareStatement(INCREMENT_SEQ_NUM);
-                incrementStatement.setString(1, connection.getTenantId() == null ? null : connection.getTenantId().getString());
-                incrementStatement.setString(2, schemaName);
-                incrementStatement.setString(3, parentTableName);
-                incrementStatement.setLong(4, parent.getSequenceNumber());
-                incrementStatement.execute();
-                // Get list of mutations and add to table meta data that will be passed to server
-                // to guarantee order. This row will always end up last
-                tableMetaData.addAll(connection.getMutationState().toMutations().next().getSecond());
-                connection.rollback();
-
-                // Add row linking from data table row to index table row
-                PreparedStatement linkStatement = connection.prepareStatement(CREATE_LINK);
-                linkStatement.setString(1, connection.getTenantId() == null ? null : connection.getTenantId().getString());
-                linkStatement.setString(2, schemaName);
-                linkStatement.setString(3, parentTableName);
-                linkStatement.setString(4, tableName);
-                linkStatement.setByte(5, LinkType.INDEX_TABLE.getSerializedValue());
-                linkStatement.execute();
+                if (tableType == PTableType.INDEX) {
+                    // Index on view
+                    // TODO: Can we support a multi-tenant index directly on a multi-tenant
+                    // table instead of only a view? We don't have anywhere to put the link
+                    // from the table to the index, though.
+                    if (indexType == IndexType.LOCAL || (parent.getType() == PTableType.VIEW && parent.getViewType() != ViewType.MAPPED)) {
+                        PName physicalName = parent.getPhysicalName();
+                        saltBucketNum = parent.getBucketNum();
+                        addSaltColumn = (saltBucketNum != null && indexType != IndexType.LOCAL);
+                        defaultFamilyName = parent.getDefaultFamilyName() == null ? null : parent.getDefaultFamilyName().getString();
+                        if (indexType == IndexType.LOCAL) {
+                            saltBucketNum = null;
+                            // Set physical name of local index table
+                            physicalNames = Collections.singletonList(PNameFactory.newName(MetaDataUtil.getLocalIndexPhysicalName(physicalName.getBytes())));
+                        } else {
+                            // Set physical name of view index table
+                            physicalNames = Collections.singletonList(PNameFactory.newName(MetaDataUtil.getViewIndexPhysicalName(physicalName.getBytes())));
+                        }
+                    }
+    
+                    multiTenant = parent.isMultiTenant();
+                    parentTableName = parent.getTableName().getString();
+                    // Pass through data table sequence number so we can check it hasn't changed
+                    PreparedStatement incrementStatement = connection.prepareStatement(INCREMENT_SEQ_NUM);
+                    incrementStatement.setString(1, connection.getTenantId() == null ? null : connection.getTenantId().getString());
+                    incrementStatement.setString(2, schemaName);
+                    incrementStatement.setString(3, parentTableName);
+                    incrementStatement.setLong(4, parent.getSequenceNumber());
+                    incrementStatement.execute();
+                    // Get list of mutations and add to table meta data that will be passed to server
+                    // to guarantee order. This row will always end up last
+                    tableMetaData.addAll(connection.getMutationState().toMutations().next().getSecond());
+                    connection.rollback();
+    
+                    // Add row linking from data table row to index table row
+                    PreparedStatement linkStatement = connection.prepareStatement(CREATE_LINK);
+                    linkStatement.setString(1, connection.getTenantId() == null ? null : connection.getTenantId().getString());
+                    linkStatement.setString(2, schemaName);
+                    linkStatement.setString(3, parentTableName);
+                    linkStatement.setString(4, tableName);
+                    linkStatement.setByte(5, LinkType.INDEX_TABLE.getSerializedValue());
+                    linkStatement.execute();
+                }
             }
 
             PrimaryKeyConstraint pkConstraint = statement.getPrimaryKeyConstraint();
@@ -1284,7 +1290,7 @@ public class MetaDataClient {
             // Although unusual, it's possible to set a mapped VIEW as having immutable rows.
             // This tells Phoenix that you're managing the index maintenance yourself.
             if (tableType != PTableType.INDEX && (tableType != PTableType.VIEW || viewType == ViewType.MAPPED)) {
-                Boolean isImmutableRowsProp = (Boolean) tableProps.remove(PTable.IS_IMMUTABLE_ROWS_PROP_NAME);
+                Boolean isImmutableRowsProp = (Boolean) tableProps.get(PTable.IS_IMMUTABLE_ROWS_PROP_NAME);
                 if (isImmutableRowsProp == null) {
                     isImmutableRows = connection.getQueryServices().getProps().getBoolean(QueryServices.IMMUTABLE_ROWS_ATTRIB, QueryServicesOptions.DEFAULT_IMMUTABLE_ROWS);
                 } else {
@@ -1294,7 +1300,7 @@ public class MetaDataClient {
 
             // Can't set any of these on views or shared indexes on views
             if (tableType != PTableType.VIEW && indexId == null) {
-                saltBucketNum = (Integer) tableProps.remove(PhoenixDatabaseMetaData.SALT_BUCKETS);
+                saltBucketNum = (Integer) tableProps.get(PhoenixDatabaseMetaData.SALT_BUCKETS);
                 if (saltBucketNum != null) {
                     if (saltBucketNum < 0 || saltBucketNum > SaltingUtil.MAX_BUCKET_NUM) {
                         throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_BUCKET_NUM).build().buildException();
@@ -1311,35 +1317,56 @@ public class MetaDataClient {
                 addSaltColumn = (saltBucketNum != null);
             }
 
-            boolean removedProp = false;
             // Can't set MULTI_TENANT or DEFAULT_COLUMN_FAMILY_NAME on an INDEX or a non mapped VIEW
             if (tableType != PTableType.INDEX && (tableType != PTableType.VIEW || viewType == ViewType.MAPPED)) {
-                Boolean multiTenantProp = (Boolean) tableProps.remove(PhoenixDatabaseMetaData.MULTI_TENANT);
+                Boolean multiTenantProp = (Boolean) tableProps.get(PhoenixDatabaseMetaData.MULTI_TENANT);
                 multiTenant = Boolean.TRUE.equals(multiTenantProp);
-                defaultFamilyName = (String)tableProps.remove(PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAMILY_NAME);
-                removedProp = (defaultFamilyName != null);
+                defaultFamilyName = (String)tableProps.get(PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAMILY_NAME);
             }
 
             boolean disableWAL = false;
-            Boolean disableWALProp = (Boolean) tableProps.remove(PhoenixDatabaseMetaData.DISABLE_WAL);
+            Boolean disableWALProp = (Boolean) tableProps.get(PhoenixDatabaseMetaData.DISABLE_WAL);
             if (disableWALProp != null) {
                 disableWAL = disableWALProp;
             }
 
-            Boolean storeNullsProp = (Boolean) tableProps.remove(PhoenixDatabaseMetaData.STORE_NULLS);
-            storeNulls = storeNullsProp == null
-                    ? connection.getQueryServices().getProps().getBoolean(
-                            QueryServices.DEFAULT_STORE_NULLS_ATTRIB,
-                            QueryServicesOptions.DEFAULT_STORE_NULLS)
-                    : storeNullsProp;
+            Boolean storeNullsProp = (Boolean) tableProps.get(PhoenixDatabaseMetaData.STORE_NULLS);
+            if (storeNullsProp == null) {
+                if (parent == null) {
+                    storeNulls = connection.getQueryServices().getProps().getBoolean(
+                                    QueryServices.DEFAULT_STORE_NULLS_ATTRIB,
+                                    QueryServicesOptions.DEFAULT_STORE_NULLS);
+                }
+            } else {
+                storeNulls = storeNullsProp;
+            }
+            Boolean transactionalProp = (Boolean) tableProps.get(PhoenixDatabaseMetaData.TRANSACTIONAL);
+            if (transactionalProp != null && parent != null) {
+                throw new SQLExceptionInfo.Builder(SQLExceptionCode.ONLY_TABLE_MAY_BE_DECLARED_TRANSACTIONAL)
+                .setSchemaName(schemaName).setTableName(tableName)
+                .build().buildException();
+            }
+            if (parent == null) {
+                if (transactionalProp == null) {
+                    transactional = connection.getQueryServices().getProps().getBoolean(
+                                    QueryServices.DEFAULT_TRANSACTIONAL_ATTRIB,
+                                    QueryServicesOptions.DEFAULT_TRANSACTIONAL);
+                } else {
+                    transactional = transactionalProp;
+                }
+            }
 
             // Delay this check as it is supported to have IMMUTABLE_ROWS and SALT_BUCKETS defined on views
-            if ((statement.getTableType() == PTableType.VIEW || indexId != null) && !tableProps.isEmpty()) {
-                throw new SQLExceptionInfo.Builder(SQLExceptionCode.VIEW_WITH_PROPERTIES).build()
-                        .buildException();
-            }
-            if (removedProp) {
-                tableProps.put(PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAMILY_NAME, defaultFamilyName);
+            if (statement.getTableType() == PTableType.VIEW || indexId != null) {
+                if (tableProps.get(PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAMILY_NAME) != null) {
+                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.DEFAULT_COLUMN_FAMILY_ON_SHARED_TABLE)
+                    .setSchemaName(schemaName).setTableName(tableName)
+                    .build().buildException();
+                }
+                if (SchemaUtil.hasHTableDescriptorProps(tableProps)) {
+                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.VIEW_WITH_PROPERTIES).build()
+                            .buildException();
+                }
             }
 
             List<ColumnDef> colDefs = statement.getColumnDefs();
@@ -1561,7 +1588,7 @@ public class MetaDataClient {
                         Collections.<PTable>emptyList(), isImmutableRows,
                         Collections.<PName>emptyList(), defaultFamilyName == null ? null :
                                 PNameFactory.newName(defaultFamilyName), null,
-                        Boolean.TRUE.equals(disableWAL), false, false, null, indexId, indexType);
+                        Boolean.TRUE.equals(disableWAL), false, false, null, indexId, indexType, false);
                 connection.addTable(table);
             } else if (tableType == PTableType.INDEX && indexId == null) {
                 if (tableProps.get(HTableDescriptor.MAX_FILESIZE) == null) {
@@ -1658,6 +1685,7 @@ public class MetaDataClient {
                 tableUpsert.setByte(18, indexType.getSerializedValue());
             }
             tableUpsert.setBoolean(19, storeNulls);
+            tableUpsert.setBoolean(20, transactional);
             tableUpsert.execute();
 
             tableMetaData.addAll(connection.getMutationState().toMutations().next().getSecond());
@@ -1712,7 +1740,7 @@ public class MetaDataClient {
                         PTable.INITIAL_SEQ_NUM, pkName == null ? null : PNameFactory.newName(pkName), saltBucketNum, columns,
                         dataTableName == null ? null : newSchemaName, dataTableName == null ? null : PNameFactory.newName(dataTableName), Collections.<PTable>emptyList(), isImmutableRows,
                         physicalNames, defaultFamilyName == null ? null : PNameFactory.newName(defaultFamilyName), viewStatement, Boolean.TRUE.equals(disableWAL), multiTenant, storeNulls, viewType,
-                        indexId, indexType);
+                        indexId, indexType, transactional);
                 result = new MetaDataMutationResult(code, result.getMutationTime(), table, true);
                 addTableToCache(result);
                 return table;

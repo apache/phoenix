@@ -21,9 +21,12 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.List;
 
+import co.cask.tephra.hbase98.TransactionAwareHTable;
+
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.Closeables;
@@ -80,7 +83,12 @@ public class TableResultIterator extends ExplainTable implements ResultIterator 
     public TableResultIterator(StatementContext context, TableRef tableRef, Scan scan, ScannerCreation creationMode) throws SQLException {
         super(context, tableRef);
         this.scan = scan;
-        htable = context.getConnection().getQueryServices().getTable(tableRef.getTable().getPhysicalName().getBytes());
+        PTable table = tableRef.getTable();
+        HTableInterface htable = context.getConnection().getQueryServices().getTable(table.getPhysicalName().getBytes());
+        if (table.isTransactional()) {
+            htable = new TransactionAwareHTable(htable);
+        }
+        this.htable = htable;
         if (creationMode == ScannerCreation.IMMEDIATE) {
         	getDelegate(false);
         }

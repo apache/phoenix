@@ -29,11 +29,11 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 
 import javax.annotation.Nullable;
 
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -57,6 +57,7 @@ import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
 import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.TableProperty;
 import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
@@ -371,16 +372,6 @@ public class SchemaUtil {
                 .getName().getBytesPtr();
     }
 
-    public static boolean isTransactional(HTableDescriptor descriptor) {
-        byte[] isTransactional = descriptor.getValue(PhoenixDatabaseMetaData.TRANSACTIONAL_BYTES);
-        return (isTransactional != null && Boolean.TRUE.toString().equalsIgnoreCase(Bytes.toString(isTransactional)));
-    }
-        
-    public static boolean hasTransactional(HTableDescriptor descriptor) {
-        byte[] isTransactional = descriptor.getValue(PhoenixDatabaseMetaData.TRANSACTIONAL_BYTES);
-        return (isTransactional != null);
-    }
-        
     public static boolean isMetaTable(byte[] tableName) {
         return Bytes.compareTo(tableName, SYSTEM_CATALOG_NAME_BYTES) == 0;
     }
@@ -688,5 +679,15 @@ public class SchemaUtil {
     public static String getQuotedFullColumnName(@Nullable String columnFamilyName, String columnName) {
         checkArgument(!isNullOrEmpty(columnName), "Column name cannot be null or empty");
         return columnFamilyName == null ? ("\"" + columnName + "\"") : ("\"" + columnFamilyName + "\"" + QueryConstants.NAME_SEPARATOR + "\"" + columnName + "\"");
+    }
+
+    public static boolean hasHTableDescriptorProps(Map<String, Object> tableProps) {
+        int pTablePropCount = 0;
+        for (String prop : tableProps.keySet()) {
+            if (TableProperty.isPhoenixTableProperty(prop)) {
+                pTablePropCount++;
+            }
+        }
+        return tableProps.size() - pTablePropCount > 0;
     }
 }
