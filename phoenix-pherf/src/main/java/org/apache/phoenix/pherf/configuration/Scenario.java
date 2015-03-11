@@ -18,130 +18,146 @@
 
 package org.apache.phoenix.pherf.configuration;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import org.apache.commons.lang.builder.HashCodeBuilder;
+import org.apache.phoenix.pherf.util.PhoenixUtil;
 
 import javax.xml.bind.annotation.XmlAttribute;
 import javax.xml.bind.annotation.XmlElement;
 import javax.xml.bind.annotation.XmlRootElement;
-
-import org.apache.phoenix.pherf.util.PhoenixUtil;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
 @XmlRootElement(namespace = "org.apache.phoenix.pherf.configuration.DataModel")
 public class Scenario {
-	private String tableName;
-	private int rowCount;
-    private Map<String,String> phoenixProperties;
+    private String tableName;
+    private int rowCount;
+    private Map<String, String> phoenixProperties;
     private DataOverride dataOverride;
-	private List<QuerySet> querySet = new ArrayList<QuerySet>();
-	private String name;
-    
+    private List<QuerySet> querySet = new ArrayList<QuerySet>();
+    private String name;
+
     public Scenario() {
     }
 
     /**
      * Scenarios have to have unique table names
+     *
      * @param object
      * @return
      */
     @Override
     public boolean equals(Object object) {
-        Scenario scenario = (Scenario)object;
+        Scenario scenario = (Scenario) object;
         return (this.tableName.equals(scenario.getTableName()));
+    }
+
+    @Override
+    public int hashCode() {
+        return new HashCodeBuilder(11, 38).appendSuper(super.hashCode())
+                .append(tableName)
+                .toHashCode();
     }
 
     /**
      * Table name for a scenario
+     *
      * @return
      */
     @XmlAttribute()
-	public String getTableName() {
-		return tableName;
-	}
+    public String getTableName() {
+        return tableName;
+    }
 
-	public void setTableName(String tableName) {
-		this.tableName = tableName;
-	}
+    public void setTableName(String tableName) {
+        this.tableName = tableName;
+    }
 
-	/**
-	 * Row count for a table
-	 * @return
-	 */
-	@XmlAttribute()
-	public int getRowCount() {
-		return PhoenixUtil.getRowCountOverride() == 0 ? 
-				rowCount : PhoenixUtil.getRowCountOverride();
-	}
+    /**
+     * Row count for a table
+     *
+     * @return
+     */
+    @XmlAttribute()
+    public int getRowCount() {
+        return PhoenixUtil.getRowCountOverride() == 0 ?
+                rowCount : PhoenixUtil.getRowCountOverride();
+    }
 
-	public void setRowCount(int rowCount) {
-		this.rowCount = rowCount;
-	}
+    public void setRowCount(int rowCount) {
+        this.rowCount = rowCount;
+    }
 
-	/**
-	 * Phoenix properties
-	 * @return
-	 */
-	public Map<String,String> getPhoenixProperties() {
-		return phoenixProperties;
-	}
+    /**
+     * Phoenix properties
+     *
+     * @return
+     */
+    public Map<String, String> getPhoenixProperties() {
+        return phoenixProperties;
+    }
 
-	public void setPhoenixProperties(Map<String,String> phoenixProperty) {
-		this.phoenixProperties = phoenixProperty;
-	}
-	
-	/**
-	 * Data override
-	 * @return
-	 */
-	@XmlElement()
-	public DataOverride getDataOverride() {
-		return dataOverride;
-	}
+    public void setPhoenixProperties(Map<String, String> phoenixProperty) {
+        this.phoenixProperties = phoenixProperty;
+    }
 
-	public void setDataOverride(DataOverride dataOverride) {
-		this.dataOverride = dataOverride;
-	}
+    /**
+     * Data override
+     *
+     * @return
+     */
+    @XmlElement()
+    public DataOverride getDataOverride() {
+        return dataOverride;
+    }
 
-	/**
-	 * List of Query Set
-	 * @return
-	 */
-	public List<QuerySet> getQuerySet() {
-		return querySet;
-	}
+    public void setDataOverride(DataOverride dataOverride) {
+        this.dataOverride = dataOverride;
+    }
 
-	public void setQuerySet(List<QuerySet> querySet) {
-		this.querySet = querySet;
-	}
-	
-	/**
-	 * Extract schema name from table name
-	 * @return
-	 */
-	public String getSchemaName() {
-		return XMLConfigParser.parseSchemaName(this.tableName);
-	}
-	
-	/**
-	 * Extract table name without schema name
-	 * @return
-	 */
-	public String getTableNameWithoutSchemaName() {
-		return XMLConfigParser.parseTableName(this.tableName);
-	}
+    /**
+     * List of Query Set
+     *
+     * @return
+     */
+    public List<QuerySet> getQuerySet() {
+        return querySet;
+    }
 
-	/**
-	 * Name of scenario
-	 * @return
-	 */
-	@XmlAttribute()
-	public String getName() {
-		return name;
-	}
+    public void setQuerySet(List<QuerySet> querySet) {
+        this.querySet = querySet;
+    }
 
-	public void setName(String name) {
-		this.name = name;
-	}
+    /**
+     * Extract schema name from table name
+     *
+     * @return
+     */
+    public String getSchemaName() {
+        return XMLConfigParser.parseSchemaName(this.tableName);
+    }
+
+    /**
+     * Extract table name without schema name
+     *
+     * @return
+     */
+    public String getTableNameWithoutSchemaName() {
+        return XMLConfigParser.parseTableName(this.tableName);
+    }
+
+    /**
+     * Name of scenario
+     *
+     * @return
+     */
+    @XmlAttribute()
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
 
 }
