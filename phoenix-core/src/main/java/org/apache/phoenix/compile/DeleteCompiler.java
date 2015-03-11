@@ -303,7 +303,9 @@ public class DeleteCompiler {
                 immutableIndex = getNonDisabledImmutableIndexes(tableRefToBe);
                 boolean mayHaveImmutableIndexes = !immutableIndex.isEmpty();
                 noQueryReqd = !hasLimit;
-                runOnServer = isAutoCommit && noQueryReqd;
+                // Can't run on same server for transactional data, as we need the row keys for the data
+                // that is being upserted for conflict detection purposes.
+                runOnServer = isAutoCommit && noQueryReqd && !table.isTransactional();
                 HintNode hint = delete.getHint();
                 if (runOnServer && !delete.getHint().hasHint(Hint.USE_INDEX_OVER_DATA_TABLE)) {
                     hint = HintNode.create(hint, Hint.USE_DATA_OVER_INDEX_TABLE);

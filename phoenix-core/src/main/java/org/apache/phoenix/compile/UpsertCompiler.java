@@ -404,7 +404,9 @@ public class UpsertCompiler {
                         parallelIteratorFactoryToBe = new UpsertingParallelIteratorFactory(connection, tableRefToBe);
                         // If we're in the else, then it's not an aggregate, distinct, limted, or sequence using query,
                         // so we might be able to run it entirely on the server side.
-                        runOnServer = sameTable && isAutoCommit && !(table.isImmutableRows() && !table.getIndexes().isEmpty());
+                        // Can't run on same server for transactional data, as we need the row keys for the data
+                        // that is being upserted for conflict detection purposes.
+                        runOnServer = sameTable && isAutoCommit && !table.isTransactional() && !(table.isImmutableRows() && !table.getIndexes().isEmpty());
                     }
                     // If we may be able to run on the server, add a hint that favors using the data table
                     // if all else is equal.
