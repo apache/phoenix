@@ -109,6 +109,7 @@ tokens
     STATISTICS='statistics';    
     COLUMNS='columns';
     TRACE='trace';
+    UNION='union';
 }
 
 
@@ -352,7 +353,14 @@ query returns [SelectStatement ret]
 
 // Parses a single SQL statement (expects an EOF after the select statement).
 oneStatement returns [BindableStatement ret]
-    :   (SELECT s=hinted_select_node {$ret=s;} 
+scope {
+List<SelectStatement> alist;
+Boolean isUnionAll;
+SelectStatement select;
+}
+@init{ $oneStatement::alist = new ArrayList<SelectStatement>(); $oneStatement::isUnionAll=false; } 
+    :   ((SELECT s=hinted_select_node {$oneStatement::alist.add(s);} {$oneStatement::select=s;}) ((UNION)=> UNION ALL SELECT s=select_node { $oneStatement::isUnionAll=true;} {$oneStatement::alist.add(s);} )*
+    { if ($oneStatement::isUnionAll==false) {$ret=$oneStatement::select;} else {$oneStatement::select=$oneStatement::alist.remove(0); $ret=factory.select($oneStatement::select, $oneStatement::alist, false);}}
     |    ns=non_select_node {$ret=ns;}
         )
     ;

@@ -53,11 +53,11 @@ import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.KeyValueSchema;
+import org.apache.phoenix.schema.KeyValueSchema.KeyValueSchemaBuilder;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.ValueBitSet;
-import org.apache.phoenix.schema.KeyValueSchema.KeyValueSchemaBuilder;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ResultUtil;
@@ -197,6 +197,11 @@ public class SortMergeJoinPlan implements QueryPlan {
     @Override
     public boolean isRowKeyOrdered() {
         return false;
+    }
+    
+    @Override
+    public List<QueryPlan> getPlans() {
+        return null;
     }
     
     private class BasicJoinIterator implements ResultIterator {

@@ -101,5 +101,10 @@ public abstract class DelegateQueryPlan implements QueryPlan {
     public boolean isRowKeyOrdered() {
         return delegate.isRowKeyOrdered();
     }
+    
+    @Override
+    public List<QueryPlan> getPlans() {
+        return null;
+    }
 
 }

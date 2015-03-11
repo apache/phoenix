@@ -20,13 +20,16 @@ package org.apache.phoenix.schema.tuple;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compile.RowProjector;
 
 
 public class SingleKeyValueTuple extends BaseTuple {
     private static final byte[] UNITIALIZED_KEY_BUFFER = new byte[0];
     private KeyValue keyValue;
     private ImmutableBytesWritable keyPtr = new ImmutableBytesWritable(UNITIALIZED_KEY_BUFFER);
-    
+    private RowProjector rowProjector;
+    private boolean isUnionQuery = false;
+
     public SingleKeyValueTuple() {
     }
     
@@ -107,5 +110,21 @@ public class SingleKeyValueTuple extends BaseTuple {
             return false;
         ptr.set(keyValue.getBuffer(), keyValue.getValueOffset(), keyValue.getValueLength());
         return true;
+    }
+
+    public RowProjector getRowProjector() {
+        return rowProjector;
+    }
+
+    public void setRowProjector(RowProjector rowProjector) {
+        this.rowProjector = rowProjector;
+    }
+
+    public boolean isUnionQuery() {
+        return isUnionQuery;
+    }
+
+    public void setUnionQuery(boolean isUnionQuery) {
+        this.isUnionQuery = isUnionQuery;
     }
 }

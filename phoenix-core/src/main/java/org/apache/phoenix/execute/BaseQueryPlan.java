@@ -22,6 +22,7 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.sql.ParameterMetaData;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
@@ -92,11 +93,12 @@ public abstract class BaseQueryPlan implements QueryPlan {
     protected final OrderBy orderBy;
     protected final GroupBy groupBy;
     protected final ParallelIteratorFactory parallelIteratorFactory;
+    protected final List<QueryPlan> plans = new ArrayList<QueryPlan>();
 
     protected BaseQueryPlan(
             StatementContext context, FilterableStatement statement, TableRef table,
             RowProjector projection, ParameterMetaData paramMetaData, Integer limit, OrderBy orderBy,
-            GroupBy groupBy, ParallelIteratorFactory parallelIteratorFactory) {
+            GroupBy groupBy, ParallelIteratorFactory parallelIteratorFactory, List<QueryPlan> plans) {
         this.context = context;
         this.statement = statement;
         this.tableRef = table;
@@ -106,8 +108,19 @@ public abstract class BaseQueryPlan implements QueryPlan {
         this.orderBy = orderBy;
         this.groupBy = groupBy;
         this.parallelIteratorFactory = parallelIteratorFactory;
+        if (!plans.isEmpty()) {
+            this.plans.addAll(plans);
+        }
     }
 
+    protected BaseQueryPlan(
+            StatementContext context, FilterableStatement statement, TableRef table,
+            RowProjector projection, ParameterMetaData paramMetaData, Integer limit, OrderBy orderBy,
+            GroupBy groupBy, ParallelIteratorFactory parallelIteratorFactory) {
+        this(context, statement, table, projection, paramMetaData, limit, orderBy, groupBy, parallelIteratorFactory,
+            Collections.<QueryPlan>emptyList());
+    }
+    
     @Override
     public boolean isDegenerate() {
         return context.getScanRanges() == ScanRanges.NOTHING;
@@ -392,5 +405,10 @@ public abstract class BaseQueryPlan implements QueryPlan {
     @Override
     public boolean isRowKeyOrdered() {
         return groupBy.isEmpty() ? orderBy.getOrderByExpressions().isEmpty() : groupBy.isOrderPreserving();
+    }
+    
+    @Override
+    public List<QueryPlan> getPlans() {
+        return this.plans;
     }
 }

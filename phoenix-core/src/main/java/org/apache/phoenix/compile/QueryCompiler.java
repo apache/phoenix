@@ -19,10 +19,12 @@ package org.apache.phoenix.compile;
 
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
@@ -30,6 +32,8 @@ import org.apache.phoenix.compile.JoinCompiler.JoinSpec;
 import org.apache.phoenix.compile.JoinCompiler.JoinTable;
 import org.apache.phoenix.compile.JoinCompiler.Table;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.AggregatePlan;
 import org.apache.phoenix.execute.ClientAggregatePlan;
 import org.apache.phoenix.execute.ClientScanPlan;
@@ -40,8 +44,10 @@ import org.apache.phoenix.execute.ScanPlan;
 import org.apache.phoenix.execute.SortMergeJoinPlan;
 import org.apache.phoenix.execute.TupleProjectionPlan;
 import org.apache.phoenix.execute.TupleProjector;
+import org.apache.phoenix.execute.UnionPlan;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
+import org.apache.phoenix.expression.ProjectedColumnExpression;
 import org.apache.phoenix.expression.RowValueConstructorExpression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.iterate.ParallelIteratorFactory;
@@ -63,14 +69,20 @@ import org.apache.phoenix.parse.TableNode;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
+import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PColumnFamily;
+import org.apache.phoenix.schema.PColumnImpl;
 import org.apache.phoenix.schema.PDatum;
+import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableImpl;
+import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.ScanUtil;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-
 
 
 /**
@@ -100,6 +112,7 @@ public class QueryCompiler {
     private final boolean projectTuples;
     private final boolean useSortMergeJoin;
     private final boolean noChildParentJoinOptimization;
+    private final boolean isUnionAll;
 
     public QueryCompiler(PhoenixStatement statement, SelectStatement select, ColumnResolver resolver) throws SQLException {
         this(statement, select, resolver, Collections.<PDatum>emptyList(), null, new SequenceManager(statement), true);
@@ -133,9 +146,18 @@ public class QueryCompiler {
 
         scan.setCaching(statement.getFetchSize());
         this.originalScan = ScanUtil.newScan(scan);
+        if (!select.getSelects().isEmpty() && !select.isUnion()) {
+        	this.isUnionAll = true;
+        } else {
+        	this.isUnionAll = false;
+        }
     }
 
-    /**
+    public boolean isUnionAll() {
+		return isUnionAll;
+	}
+
+	/**
      * Builds an executable query plan from a parsed SQL statement
      * @return executable query plan
      * @throws SQLException if mismatched types are found, bind value do not match binds,
@@ -147,21 +169,146 @@ public class QueryCompiler {
      */
     public QueryPlan compile() throws SQLException{
         SelectStatement select = this.select;
-        List<Object> binds = statement.getParameters();
-        StatementContext context = new StatementContext(statement, resolver, scan, sequenceManager);
-        if (select.isJoin()) {
-            select = JoinCompiler.optimize(statement, select, resolver);
-            if (this.select != select) {
-                ColumnResolver resolver = FromCompiler.getResolverForQuery(select, statement.getConnection());
-                context = new StatementContext(statement, resolver, scan, sequenceManager);
-            }
-            JoinTable joinTable = JoinCompiler.compile(statement, select, context.getResolver());
-            return compileJoinQuery(context, binds, joinTable, false, false, null);
+        QueryPlan plan;
+        if (isUnionAll()) {
+            plan = compileUnionAll(select);
         } else {
-            return compileSingleQuery(context, select, binds, false, true);
+            plan = compileSelect(select);
+        }
+        return plan;
+    }
+
+    public QueryPlan compileSelect(SelectStatement select) throws SQLException{
+     //   SelectStatement select = this.select;
+    	List<Object> binds = statement.getParameters();
+    	StatementContext context = new StatementContext(statement, resolver, scan, sequenceManager);
+    	ColumnResolver resolver;
+    	if (isUnionAll()) {
+    		resolver = FromCompiler.getResolverForQuery(select, statement.getConnection());
+    		context = new StatementContext(statement, resolver, new Scan(), sequenceManager);
+    	} 
+    	if (select.isJoin()) {
+    		if (isUnionAll()) {
+    			resolver = FromCompiler.getResolverForQuery(select, statement.getConnection());
+    			select = JoinCompiler.optimize(statement, select, resolver);
+    		}
+    		else { 
+    		    select = JoinCompiler.optimize(statement, select, this.resolver);
+    		}
+    		if (this.select != select) {
+    		    ColumnResolver resolver1 = FromCompiler.getResolverForQuery(select, statement.getConnection());
+    		    context = new StatementContext(statement, resolver1, scan, sequenceManager);
+    		}
+    		JoinTable joinTable = JoinCompiler.compile(statement, select, context.getResolver());
+    		return compileJoinQuery(context, binds, joinTable, false, false, null);
+    	} else {
+    	    return compileSingleQuery(context, select, binds, false, true);
+    	}
+    }
+
+    private void checkForOrderByLimitInUnionAllSelect(SelectStatement select) throws SQLException {
+        if (select.getOrderBy() != null && !select.getOrderBy().isEmpty()) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.ORDER_BY_IN_UNIONALL_SELECT_NOT_SUPPORTED).setMessage(".").build().buildException();
+        }
+        if (select.getLimit() != null) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.LIMIT_IN_UNIONALL_SELECT_NOT_SUPPORTED).setMessage(".").build().buildException();
         }
     }
-    
+
+    private PTable createTempTableForUnionAllResultResolver(QueryPlan plan) throws SQLException {
+        List<PColumn> projectedColumns = new ArrayList<PColumn>();
+        Long scn = statement.getConnection().getSCN();
+        List<PColumnFamily> families = Collections.<PColumnFamily>emptyList(); // new ArrayList<PColumnFamily>();
+        PTable theTable = new PTableImpl(statement.getConnection().getTenantId(), "unionAllSchema", "unionAllTable", scn == null ? HConstants.LATEST_TIMESTAMP : scn, families);
+        PTable table = plan.getTableRef().getTable();
+        for (int i=0; i< plan.getProjector().getColumnCount(); i++) {
+            ColumnProjector colProj = plan.getProjector().getColumnProjector(i);
+            Expression sourceExpression = colProj.getExpression();
+            PColumnImpl projectedColumn = new PColumnImpl(PNameFactory.newName(colProj.getName().getBytes()), table.getDefaultFamilyName(),
+                    sourceExpression.getDataType(), sourceExpression.getMaxLength(), sourceExpression.getScale(), sourceExpression.isNullable(),
+                    i, sourceExpression.getSortOrder(), 50, new byte[0], true, sourceExpression.toString());
+            projectedColumns.add(projectedColumn);
+        }
+        PTable t = PTableImpl.makePTable(theTable, projectedColumns);
+        return t;
+    }
+
+    private QueryPlan buildTupleProjectPlan(QueryPlan plan) throws SQLException {
+        List<ExpressionProjector> projectedColumns = new ArrayList<ExpressionProjector>();
+        PTable tbl = createTempTableForUnionAllResultResolver(plan);
+        for (int i=0; i<tbl.getColumns().size(); i++) {
+            ProjectedColumnExpression expression = new ProjectedColumnExpression(tbl.getColumns().get(i), tbl.getColumns(), i, tbl.getColumns().get(i).getExpressionStr());
+            projectedColumns.add(new ExpressionProjector(tbl.getColumns().get(i).getName().getString(), tbl.getName().getString(), expression, true));
+        }
+        RowProjector rowProjector = new RowProjector(projectedColumns, 100, true);
+        TupleProjector tupleProjector = new TupleProjector(rowProjector);
+        plan = new TupleProjectionPlan(plan, tupleProjector, null);
+        return plan;
+    }
+    private boolean containOrderBy(SelectStatement select) {
+        if (select.getOrderBy() != null && !select.getOrderBy().isEmpty()) 
+            return true;
+        else
+            return false;
+    }
+
+    private QueryPlan compileUnionAll(SelectStatement select) throws SQLException { 
+        List<SelectStatement> unionAllSelects = select.getSelects();
+        List<QueryPlan> plans = new ArrayList<QueryPlan>();
+        StatementContext context = new StatementContext(statement, resolver, scan, sequenceManager);
+
+        checkForOrderByLimitInUnionAllSelect(select);
+        QueryPlan plan = compileSelect(select);
+        plan = buildTupleProjectPlan(plan);
+        plans.add(plan);
+        OrderBy orderBy = OrderBy.EMPTY_ORDER_BY;
+        boolean containOrderBy = false;
+        int numSelects = unionAllSelects.size();
+        for (int i=0; i < numSelects; i++ ) {
+            if (i < numSelects-1)
+                checkForOrderByLimitInUnionAllSelect(unionAllSelects.get(i));
+            else if (i == numSelects-1) {
+                containOrderBy = containOrderBy(unionAllSelects.get(i));
+            }
+            plan = compileSelect(unionAllSelects.get(i));
+            if (containOrderBy) {
+                orderBy = plan.getOrderBy();
+                unionAllSelects.get(i).removeOrderBy();
+                plan = compileSelect(unionAllSelects.get(i));
+            } 
+            plan = buildTupleProjectPlan(plan);
+            plans.add(plan);
+        }
+        checkProjectionNumAndTypes(plans);
+        plan =  new UnionPlan(context, plan.getStatement(), plan.getTableRef(), plan.getProjector(), plan.getLimit(), orderBy, parallelIteratorFactory, plan.getGroupBy(), plans);
+        return plan;
+    }
+
+    private List<QueryPlan> checkProjectionNumAndTypes(List<QueryPlan> selectPlans) throws SQLException {
+        QueryPlan plan = selectPlans.get(0);
+        int columnCount = plan.getProjector().getColumnCount();
+        List<? extends ColumnProjector> projectors = plan.getProjector().getColumnProjectors();
+        List<PDataType> selectTypes = new ArrayList<PDataType>();
+        for (ColumnProjector pro : projectors) {
+            selectTypes.add(pro.getExpression().getDataType());
+        }
+
+        for (int i = 1;  i < selectPlans.size(); i++) {     
+            plan = selectPlans.get(i);
+            if (columnCount !=plan.getProjector().getColumnCount()) {
+                throw new SQLExceptionInfo.Builder(SQLExceptionCode.SELECT_COLUMN_NUM_IN_UNIONALL_DIFFS).setMessage(".").build().buildException();
+            }
+            List<? extends ColumnProjector> pros=  plan.getProjector().getColumnProjectors();
+            for (int j = 0; j < columnCount; j++) {
+                PDataType type = pros.get(j).getExpression().getDataType();
+                if (!type.isCoercibleTo(selectTypes.get(j))) {
+                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.SELECT_COLUMN_TYPE_IN_UNIONALL_DIFFS).setMessage(".").build().buildException();
+                }
+            }
+        }
+        return selectPlans;
+    }
+
     /*
      * Call compileJoinQuery() for join queries recursively down to the leaf JoinTable nodes.
      * This matches the input JoinTable node against patterns in the following order:
@@ -446,6 +593,9 @@ public class QueryCompiler {
     protected QueryPlan compileSingleQuery(StatementContext context, SelectStatement select, List<Object> binds, boolean asSubquery, boolean allowPageFilter) throws SQLException{
         SelectStatement innerSelect = select.getInnerSelectStatement();
         if (innerSelect == null) {
+            if (isUnionAll()) {
+                return compileSingleFlatQuery(context, select, binds, asSubquery, allowPageFilter, null, null, false);
+            } 
             return compileSingleFlatQuery(context, select, binds, asSubquery, allowPageFilter, null, null, true);
         }
 
@@ -544,5 +694,3 @@ public class QueryCompiler {
         return plan;
     }
 }
-
-

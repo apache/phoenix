@@ -106,7 +106,7 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable, org.apache.pho
     private final static Tuple BEFORE_FIRST = new ResultTuple();
 
     private final ResultIterator scanner;
-    private final RowProjector rowProjector;
+    private RowProjector rowProjector;
     private final PhoenixStatement statement;
     private final ImmutableBytesWritable ptr = new ImmutableBytesWritable();
 
@@ -762,6 +762,11 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable, org.apache.pho
         checkOpen();
         try {
             currentRow = scanner.next();
+       /*     if (currentRow instanceof SingleKeyValueTuple) {
+                if (((SingleKeyValueTuple)currentRow).isUnionQuery()) {
+                    rowProjector = ((SingleKeyValueTuple)currentRow).getRowProjector();
+                }
+            } */
             rowProjector.reset();
         } catch (RuntimeException e) {
             // FIXME: Expression.evaluate does not throw SQLException
