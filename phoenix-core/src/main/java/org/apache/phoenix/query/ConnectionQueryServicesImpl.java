@@ -1881,29 +1881,32 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 long currentServerSideTableTimeStamp = e.getTable().getTimeStamp();
 
                                 String columnsToAdd = "";
-                                if(currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_3_0) {
-                                    // We know that we always need to add the STORE_NULLS column for 4.3 release
-                                    columnsToAdd = PhoenixDatabaseMetaData.STORE_NULLS + " " + PBoolean.INSTANCE.getSqlTypeName();
-                                    HBaseAdmin admin = null;
-                                    try {
-                                        admin = getAdmin();
-                                        HTableDescriptor[] localIndexTables = admin.listTables(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX+".*");
-                                        for (HTableDescriptor table : localIndexTables) {
-                                            if (table.getValue(MetaDataUtil.PARENT_TABLE_KEY) == null
-                                                    && table.getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_NAME) != null) {
-                                                table.setValue(MetaDataUtil.PARENT_TABLE_KEY,
-                                                    MetaDataUtil.getUserTableName(table
-                                                        .getNameAsString()));
-                                                // Explicitly disable, modify and enable the table to ensure co-location of data
-                                                // and index regions. If we just modify the table descriptor when online schema
-                                                // change enabled may reopen the region in same region server instead of following data region.
-                                                admin.disableTable(table.getTableName());
-                                                admin.modifyTable(table.getTableName(), table);
-                                                admin.enableTable(table.getTableName());
+                                if(currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_4_0) {
+                                    columnsToAdd = PhoenixDatabaseMetaData.TRANSACTIONAL + " " + PBoolean.INSTANCE.getSqlTypeName();
+                                    if(currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_3_0) {
+                                        // We know that we always need to add the STORE_NULLS column for 4.3 release
+                                        columnsToAdd += "," + PhoenixDatabaseMetaData.STORE_NULLS + " " + PBoolean.INSTANCE.getSqlTypeName();
+                                        HBaseAdmin admin = null;
+                                        try {
+                                            admin = getAdmin();
+                                            HTableDescriptor[] localIndexTables = admin.listTables(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX+".*");
+                                            for (HTableDescriptor table : localIndexTables) {
+                                                if (table.getValue(MetaDataUtil.PARENT_TABLE_KEY) == null
+                                                        && table.getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_NAME) != null) {
+                                                    table.setValue(MetaDataUtil.PARENT_TABLE_KEY,
+                                                        MetaDataUtil.getUserTableName(table
+                                                            .getNameAsString()));
+                                                    // Explicitly disable, modify and enable the table to ensure co-location of data
+                                                    // and index regions. If we just modify the table descriptor when online schema
+                                                    // change enabled may reopen the region in same region server instead of following data region.
+                                                    admin.disableTable(table.getTableName());
+                                                    admin.modifyTable(table.getTableName(), table);
+                                                    admin.enableTable(table.getTableName());
+                                                }
                                             }
+                                        } finally {
+                                            if (admin != null) admin.close();
                                         }
-                                    } finally {
-                                        if (admin != null) admin.close();
                                     }
                                 }
 
