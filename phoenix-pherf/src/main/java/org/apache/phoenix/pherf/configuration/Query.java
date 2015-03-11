@@ -23,72 +23,76 @@ import javax.xml.bind.annotation.XmlType;
 
 @XmlType
 public class Query {
-    
-	private String statement;
-	private Long expectedAggregateRowCount;
-	private String tenantId;
-	private String ddl;
+
+    private String statement;
+    private Long expectedAggregateRowCount;
+    private String tenantId;
+    private String ddl;
     private String queryGroup;
     private String id;
-	
-	/**
-	 * SQL statement
-	 * @return
-	 */
-	@XmlAttribute
-	public String getStatement() {
-		return statement;
-	}
 
-	public void setStatement(String statement) {
-	    // normalize statement - merge all consecutive spaces into one
-		this.statement = statement.replaceAll("\\s+", " ");
-	}
+    /**
+     * SQL statement
+     *
+     * @return
+     */
+    @XmlAttribute
+    public String getStatement() {
+        return statement;
+    }
 
-	/**
-	 * Tenant Id used by connection of this query
-	 * @return
-	 */
-	@XmlAttribute
-	public String getTenantId() {
-		return tenantId;
-	}
+    public void setStatement(String statement) {
+        // normalize statement - merge all consecutive spaces into one
+        this.statement = statement.replaceAll("\\s+", " ");
+    }
 
-	public void setTenantId(String tenantId) {
-		this.tenantId = tenantId;
-	}
+    /**
+     * Tenant Id used by connection of this query
+     *
+     * @return
+     */
+    @XmlAttribute
+    public String getTenantId() {
+        return tenantId;
+    }
 
-	/**
-	 * Expected aggregate row count is matched if specified
-	 * @return
-	 */
-	@XmlAttribute
-	public Long getExpectedAggregateRowCount() {
-		return expectedAggregateRowCount;
-	}
+    public void setTenantId(String tenantId) {
+        this.tenantId = tenantId;
+    }
 
-	public void setExpectedAggregateRowCount(Long expectedAggregateRowCount) {
-		this.expectedAggregateRowCount = expectedAggregateRowCount;
-	}
+    /**
+     * Expected aggregate row count is matched if specified
+     *
+     * @return
+     */
+    @XmlAttribute
+    public Long getExpectedAggregateRowCount() {
+        return expectedAggregateRowCount;
+    }
 
-	/**
-	 * DDL is executed only once. If tenantId is specified then DDL is executed with tenant
-	 * specific connection.
-	 * 
-	 * @return
-	 */
-	@XmlAttribute	
-	public String getDdl() {
-		return ddl;
-	}
+    public void setExpectedAggregateRowCount(Long expectedAggregateRowCount) {
+        this.expectedAggregateRowCount = expectedAggregateRowCount;
+    }
 
-	public void setDdl(String ddl) {
-		this.ddl = ddl;
-	}
+    /**
+     * DDL is executed only once. If tenantId is specified then DDL is executed with tenant
+     * specific connection.
+     *
+     * @return
+     */
+    @XmlAttribute
+    public String getDdl() {
+        return ddl;
+    }
+
+    public void setDdl(String ddl) {
+        this.ddl = ddl;
+    }
 
     /**
      * queryGroup attribute is just a string value to help correlate queries across sets or files.
      * This helps to make sense of reporting results.
+     *
      * @return the group id
      */
     @XmlAttribute
@@ -102,27 +106,31 @@ public class Query {
 
     /**
      * Set hint to query
+     *
      * @param queryHint
      */
     public void setHint(String queryHint) {
-    	if (null != queryHint) {
-    		this.statement = this.statement.toUpperCase().replace("SELECT ", "SELECT /*+ " + queryHint + "*/ ");
-    	}
+        if (null != queryHint) {
+            this.statement =
+                    this.statement.toUpperCase()
+                            .replace("SELECT ", "SELECT /*+ " + queryHint + "*/ ");
+        }
     }
-    
-    /***
+
+    /**
      * Query ID, Use UUID if none specified
+     *
      * @return
      */
-	@XmlAttribute	
-	public String getId() {
-		if (null == this.id) {
-			this.id = java.util.UUID.randomUUID().toString();
-		}
-		return id;
-	}
+    @XmlAttribute
+    public String getId() {
+        if (null == this.id) {
+            this.id = java.util.UUID.randomUUID().toString();
+        }
+        return id;
+    }
 
-	public void setId(String id) {
-		this.id = id;
-	}
+    public void setId(String id) {
+        this.id = id;
+    }
 }

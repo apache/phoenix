@@ -58,7 +58,6 @@ public class Pherf {
         options.addOption("h", "help", false, "Get help on using this utility.");
     }
 
-//    private final String release;
     private final String zookeeper;
     private final String scenarioFile;
     private final String schemaFile;

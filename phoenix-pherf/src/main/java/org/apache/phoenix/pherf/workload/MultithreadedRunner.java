@@ -88,7 +88,6 @@ class MultithreadedRunner implements Runnable {
                 synchronized (resultManager) {
                     timedQuery();
                     if ((System.currentTimeMillis() - lastResultWritten) > 1000) {
-//					resultUtil.writeResultToFile(dataModelResult, dataModelResult.getName(), RunMode.PERFORMANCE);
                         resultManager.write(dataModelResult);
                         lastResultWritten = System.currentTimeMillis();
                     }

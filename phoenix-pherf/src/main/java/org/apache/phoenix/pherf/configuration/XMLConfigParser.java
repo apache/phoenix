@@ -24,16 +24,16 @@ import org.apache.phoenix.pherf.util.ResourceList;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.OutputStream;
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-
 import javax.xml.bind.JAXBContext;
 import javax.xml.bind.JAXBException;
 import javax.xml.bind.Marshaller;
 import javax.xml.bind.Unmarshaller;
+import java.io.OutputStream;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
 
 public class XMLConfigParser {
 
@@ -42,9 +42,9 @@ public class XMLConfigParser {
     private List<DataModel> dataModels;
     private List<Scenario> scenarios = null;
     private ResourceList resourceList;
-    private Collection<Path> paths = null;            // Only populate once. It may be slow of CP is large.
+    private Collection<Path> paths = null;
 
-    public XMLConfigParser(String pattern) throws Exception{
+    public XMLConfigParser(String pattern) throws Exception {
         init(pattern);
     }
 
@@ -52,7 +52,7 @@ public class XMLConfigParser {
         return dataModels;
     }
 
-    public Collection<Path> getPaths(String strPattern) throws Exception{
+    public synchronized Collection<Path> getPaths(String strPattern) throws Exception {
         if (paths != null) {
             return paths;
         }
@@ -60,12 +60,12 @@ public class XMLConfigParser {
         return paths;
     }
 
-    public List<Scenario> getScenarios() throws Exception{
+    public synchronized List<Scenario> getScenarios() throws Exception {
         if (scenarios != null) {
             return scenarios;
         }
 
-        scenarios = new ArrayList<Scenario>();
+        scenarios = (List<Scenario>) Collections.synchronizedCollection(new ArrayList<Scenario>());
         for (Path path : getPaths(getFilePattern())) {
             try {
                 List<Scenario> scenarioList = XMLConfigParser.readDataModel(path).getScenarios();
@@ -79,21 +79,6 @@ public class XMLConfigParser {
         return scenarios;
     }
 
-    /**
-     *     TODO Move modelList from {@link org.apache.phoenix.pherf.rules.RulesApplier}
-     *     We should be able to get column rules from the parser.
-     */
-//    public Column getRuleForType(Column columnType) {
-//        return getRuleForType(0, columnType);
-//    }
-//
-//    public Column getRuleForType(int modelIndex,Column columnType) {
-//        Map<DataTypeMapping, List> ruleMap = dataModels.get(0);
-//        List<Column> ruleList = ruleMap.get(columnType.getType());
-//
-//        return null;
-//    }
-
     public String getFilePattern() {
         return filePattern;
     }
@@ -101,7 +86,7 @@ public class XMLConfigParser {
     /**
      * Unmarshall an XML data file
      *
-     * @param fileName
+     * @param file Name of File
      * @return
      * @throws JAXBException
      */
@@ -111,7 +96,8 @@ public class XMLConfigParser {
         Unmarshaller jaxbUnmarshaller = jaxbContext.createUnmarshaller();
         String fName = PherfConstants.RESOURCE_SCENARIO + "/" + file.getFileName().toString();
         logger.info("Open config file: " + fName);
-        return (DataModel) jaxbUnmarshaller.unmarshal(XMLConfigParser.class.getResourceAsStream(fName));
+        return (DataModel) jaxbUnmarshaller
+                .unmarshal(XMLConfigParser.class.getResourceAsStream(fName));
     }
 
     // TODO Remove static calls
@@ -154,7 +140,8 @@ public class XMLConfigParser {
         this.resourceList = new ResourceList(PherfConstants.RESOURCE_SCENARIO);
         this.paths = getResources(this.filePattern);
         if (this.paths.isEmpty()) {
-            throw new FileLoaderException("Could not load the resource files using the pattern: " + pattern);
+            throw new FileLoaderException(
+                    "Could not load the resource files using the pattern: " + pattern);
         }
         for (Path path : this.paths) {
             System.out.println("Adding model for path:" + path.toString());
