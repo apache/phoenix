@@ -681,4 +681,15 @@ public class SchemaUtil {
         checkArgument(!isNullOrEmpty(columnName), "Column name cannot be null or empty");
         return columnFamilyName == null ? ("\"" + columnName + "\"") : ("\"" + columnFamilyName + "\"" + QueryConstants.NAME_SEPARATOR + "\"" + columnName + "\"");
     }
+    
+    /**
+     * Replaces all occurrences of {@link #ESCAPE_CHARACTER} with an empty character. 
+     * @param fullColumnName
+     * @return 
+     */
+    public static String getUnEscapedFullColumnName(String fullColumnName) {
+        checkArgument(!isNullOrEmpty(fullColumnName), "Column name cannot be null or empty");
+        fullColumnName = fullColumnName.replaceAll(ESCAPE_CHARACTER, "");
+       	return fullColumnName.trim();
+    }
 }
