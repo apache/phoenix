@@ -121,8 +121,7 @@ public class DataLoader {
                     Info writeInfo = write.get();
                     sumRows += writeInfo.getRowCount();
                     sumDuration += writeInfo.getDuration();
-                    System.out
-                            .println("Executor writes complete with row count ("
+                    logger.info("Executor writes complete with row count ("
                                     + writeInfo.getRowCount()
                                     + ") in Ms ("
                                     + writeInfo.getDuration() + ")");

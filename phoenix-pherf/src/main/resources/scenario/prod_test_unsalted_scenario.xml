@@ -72,7 +72,7 @@
         <column>
             <type>CHAR</type>
             <userDefined>true</userDefined>
-            <dataSequence>LIST</dataSequence>ID
+            <dataSequence>LIST</dataSequence>
             <length>15</length>
             <name>TENANT_ID</name>
             <valuelist>

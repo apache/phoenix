@@ -149,10 +149,5 @@
             <groupId>org.apache.phoenix</groupId>
             <artifactId>phoenix-pig</artifactId>
         </dependency>
-        <!--<dependency>-->
-            <!--<groupId>org.apache.phoenix</groupId>-->
-            <!--<artifactId>phoenix-flume</artifactId>-->
-        <!--</dependency>-->
-
     </dependencies>
 </project>
