@@ -37,7 +37,6 @@ public class Pherf {
     private static final Options options = new Options();
 
     static {
-//        options.addOption("r", "release", true, "Required option. Release that you want to test. 190, 192, ...");
         options.addOption("m", "monitor", false, "Launch the stats profilers");
         options.addOption("monitorFrequency", true, "Override for frequency in Ms for which monitor should log stats. " +
                 "\n See pherf.default.monitorFrequency in pherf.properties");
@@ -98,7 +97,6 @@ public class Pherf {
         logger.debug("Monitor Frequency Ms:" + monitorFrequency);
         loadData = command.hasOption("l");
         executeQuerySets = command.hasOption("q");
-//        release = command.hasOption("r") ? command.getOptionValue("r") : null;
         zookeeper = command.getOptionValue("z", "localhost");
         queryHint = command.getOptionValue("hint", null);
         exportCSV = command.hasOption("export");

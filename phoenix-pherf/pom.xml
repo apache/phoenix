@@ -31,7 +31,6 @@
     <name>Phoenix - Pherf</name>
 
     <properties>
-        <phoenix.version>4.3.0</phoenix.version>
     </properties>
 
     <profiles>
