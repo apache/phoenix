@@ -251,11 +251,6 @@ public abstract class PhoenixEmbeddedDriver implements Driver, org.apache.phoeni
             return new ConnectionInfo(quorum,port,rootNode, principal, keytabFile);
         }
         
-        public static String getZookeeperConnectionString(String url) throws SQLException {
-        	ConnectionInfo connInfo = ConnectionInfo.create(url);
-    		return connInfo.getZookeeperQuorum()+":"+connInfo.getPort();
-        }
-        
         public ConnectionInfo normalize(ReadOnlyProps props) throws SQLException {
             String zookeeperQuorum = this.getZookeeperQuorum();
             Integer port = this.getPort();

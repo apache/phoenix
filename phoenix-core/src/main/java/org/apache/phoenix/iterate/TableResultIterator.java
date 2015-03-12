@@ -86,7 +86,9 @@ public class TableResultIterator extends ExplainTable implements ResultIterator 
         PTable table = tableRef.getTable();
         HTableInterface htable = context.getConnection().getQueryServices().getTable(table.getPhysicalName().getBytes());
         if (table.isTransactional()) {
-            htable = new TransactionAwareHTable(htable);
+            TransactionAwareHTable txnAware = new TransactionAwareHTable(htable);
+            context.getConnection().addTxParticipant(txnAware);
+            htable = txnAware;
         }
         this.htable = htable;
         if (creationMode == ScannerCreation.IMMEDIATE) {

@@ -42,6 +42,9 @@ import java.util.concurrent.TimeoutException;
 
 import javax.annotation.concurrent.GuardedBy;
 
+import co.cask.tephra.TransactionSystemClient;
+import co.cask.tephra.distributed.PooledClientProvider;
+import co.cask.tephra.distributed.TransactionServiceClient;
 import co.cask.tephra.hbase98.coprocessor.TransactionProcessor;
 
 import org.apache.hadoop.conf.Configuration;
@@ -151,6 +154,11 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.UpgradeUtil;
+import org.apache.twill.discovery.ZKDiscoveryService;
+import org.apache.twill.zookeeper.RetryStrategies;
+import org.apache.twill.zookeeper.ZKClientService;
+import org.apache.twill.zookeeper.ZKClientServices;
+import org.apache.twill.zookeeper.ZKClients;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -173,6 +181,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     // Max number of cached table stats for view or shared index physical tables
     private static final int MAX_TABLE_STATS_CACHE_ENTRIES = 512;
     protected final Configuration config;
+    private final ConnectionInfo connectionInfo;
     // Copy of config.getProps(), but read-only to prevent synchronization that we
     // don't need.
     private final ReadOnlyProps props;
@@ -194,6 +203,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private final Object connectionCountLock = new Object();
 
     private HConnection connection;
+    private TransactionServiceClient txServiceClient;
     private volatile boolean initialized;
     private volatile int nSequenceSaltBuckets;
 
@@ -245,6 +255,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         for (Entry<String,String> entry : connectionInfo.asProps()) {
             config.set(entry.getKey(), entry.getValue());
         }
+        this.connectionInfo = connectionInfo;
 
         // Without making a copy of the configuration we cons up, we lose some of our properties
         // on the server side during testing.
@@ -269,6 +280,30 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 .build();
     }
 
+    @Override
+    public TransactionSystemClient getTransactionSystemClient() {
+        return txServiceClient;
+    }
+    
+    private void initTxServiceClient() {
+        String zkQuorumServersString = connectionInfo.getZookeeperQuorum();
+        ZKClientService zkClientService = ZKClientServices.delegate(
+                  ZKClients.reWatchOnExpire(
+                    ZKClients.retryOnFailure(
+                      ZKClientService.Builder.of(zkQuorumServersString)
+                        .setSessionTimeout(config.getInt(HConstants.ZK_SESSION_TIMEOUT, HConstants.DEFAULT_ZK_SESSION_TIMEOUT))
+                        .build(),
+                      RetryStrategies.exponentialDelay(500, 2000, TimeUnit.MILLISECONDS)
+                    )
+                  )
+                );
+        zkClientService.startAndWait();
+        ZKDiscoveryService zkDiscoveryService = new ZKDiscoveryService(zkClientService);
+        PooledClientProvider pooledClientProvider = new PooledClientProvider(
+                config, zkDiscoveryService);
+        this.txServiceClient = new TransactionServiceClient(config,pooledClientProvider);
+    }
+    
     private void openConnection() throws SQLException {
         try {
             // check if we need to authenticate with kerberos
@@ -280,6 +315,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 User.login(config, HBASE_CLIENT_KEYTAB, HBASE_CLIENT_PRINCIPAL, null);
                 logger.info("Successfull login to secure cluster!!");
             }
+            initTxServiceClient();
             this.connection = HBaseFactoryProvider.getHConnectionFactory().createConnection(this.config);
         } catch (IOException e) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_ESTABLISH_CONNECTION)

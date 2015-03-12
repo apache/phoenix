@@ -35,7 +35,7 @@ import org.apache.phoenix.query.QueryServices;
 public class ConnectionQueryServicesTestImpl extends ConnectionQueryServicesImpl {
     protected int NUM_SLAVES_BASE = 1; // number of slaves for the cluster
     
-    public ConnectionQueryServicesTestImpl(QueryServices services, ConnectionInfo info) throws SQLException {
+    public ConnectionQueryServicesTestImpl(QueryServices services, ConnectionInfo info, Properties info2) throws SQLException {
         super(services, info, null);
     }
     

@@ -27,10 +27,7 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Set;
 
-import co.cask.tephra.TransactionAware;
 import co.cask.tephra.hbase98.TransactionAwareHTable;
 
 import org.apache.hadoop.hbase.HConstants;
@@ -89,8 +86,6 @@ public class MutationState implements SQLCloseable {
     //   rows - map from rowkey to columns
     //      columns - map from column to value
     private final Map<TableRef, Map<ImmutableBytesPtr,Map<PColumn,byte[]>>> mutations = Maps.newHashMapWithExpectedSize(3); // TODO: Sizing?
-    // map from table ref to htable (possibly a TransactionAwareHTable)
-    private Map<TableRef, HTableInterface> tableRefToHTableMap;
     private long sizeOffset;
     private int numRows = 0;
     
@@ -360,29 +355,6 @@ public class MutationState implements SQLCloseable {
         }
     }
     
-    /**
-     * Creates a map from table ref to htable which is used by {@link PhoenixConnection} 
-     * for transactions
-     * @return list of transaction aware htables
-     */
-    public List<TransactionAware> preSend() throws SQLException {
-    	List<TransactionAware> txAwareHTables = Lists.newArrayListWithExpectedSize(mutations.size());
-    	tableRefToHTableMap = Maps.newHashMapWithExpectedSize(mutations.size());
-    	for ( TableRef tableRef : this.mutations.keySet()) {
-    		PTable table = tableRef.getTable();
-    		byte[] hTableName = table.getPhysicalName().getBytes();
-    		HTableInterface hTable = connection.getQueryServices().getTable(hTableName);
-    		if (table.isTransactional()) {
-    			TransactionAwareHTable transactionAwareHTable = new TransactionAwareHTable(hTable);
-    	    	txAwareHTables.add(transactionAwareHTable);
-    	    	hTable = transactionAwareHTable;
-    		}
-    		tableRefToHTableMap.put(tableRef, hTable);
-    	}
-    	return txAwareHTables;
-    }
-    
-    
     @SuppressWarnings("deprecation")
     public void send() throws SQLException {
         int i = 0;
@@ -447,8 +419,15 @@ public class MutationState implements SQLCloseable {
                     }
                     
                     SQLException sqlE = null;
-                    HTableInterface hTable = tableRefToHTableMap.get(tableRef);
+                    HTableInterface hTable = connection.getQueryServices().getTable(table.getPhysicalName().getBytes());
                     try {
+                        // Don't add immutable indexes (those are the only ones that would participate
+                        // during a commit), as we don't need conflict detection for these.
+                        if (table.isTransactional() && table.getType() != PTableType.INDEX) {
+                            TransactionAwareHTable txnAware = new TransactionAwareHTable(hTable);
+                            connection.addTxParticipant(txnAware);
+                            hTable = txnAware;
+                        }
                         logMutationSize(hTable, mutations, connection);
                         MUTATION_BATCH_SIZE.update(mutations.size());
                         long startTime = System.currentTimeMillis();
@@ -489,6 +468,16 @@ public class MutationState implements SQLCloseable {
                                 cache.close();
                             }
                         } finally {
+                            try {
+                                hTable.close();
+                            } 
+                            catch (IOException e) {
+                                if (sqlE != null) {
+                                    sqlE.setNextException(ServerUtil.parseServerException(e));
+                                } else {
+                                    sqlE = ServerUtil.parseServerException(e);
+                                }
+                            } 
                             if (sqlE != null) {
                                 throw sqlE;
                             }
@@ -507,29 +496,7 @@ public class MutationState implements SQLCloseable {
         assert(this.mutations.isEmpty());
     }
     
-    public void postSend() throws SQLException {
-    	SQLException sqlE = null;
-		for (Entry<TableRef, HTableInterface> entry : tableRefToHTableMap.entrySet()) {
-			HTableInterface hTable = entry.getValue();
-			try {
-				hTable.close();
-			} 
-			catch (IOException e) {
-				if (sqlE != null) {
-					sqlE.setNextException(ServerUtil.parseServerException(e));
-				} else {
-					sqlE = ServerUtil.parseServerException(e);
-				}
-			} 
-			finally {
-				if (sqlE != null) {
-                    throw sqlE;
-                }
-			}
-		}
-    }
-    
-    public void clear(PhoenixConnection connection) throws SQLException {
+    public void clear() throws SQLException {
         this.mutations.clear();
         numRows = 0;
     }

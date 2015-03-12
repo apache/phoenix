@@ -236,9 +236,13 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
                         QueryPlan plan = stmt.compilePlan(PhoenixStatement.this, Sequence.ValueOp.RESERVE_SEQUENCE);
                         plan = connection.getQueryServices().getOptimizer().optimize(
                                 PhoenixStatement.this, plan);
+                        startTransaction(plan);
                          // this will create its own trace internally, so we don't wrap this
                          // whole thing in tracing
                         ResultIterator resultIterator = plan.iterator();
+                        if (connection.getAutoCommit()) {
+                            connection.commit(); // Forces new read point for next statement
+                        }
                         if (logger.isDebugEnabled()) {
                             String explainPlan = QueryUtil.getExplainPlan(resultIterator);
                             logger.debug(LogUtil.addCustomAnnotations("Explain plan: " + explainPlan, connection));
@@ -271,6 +275,15 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         }
     }
     
+    private void startTransaction(StatementPlan plan) throws SQLException {
+        for (TableRef ref : plan.getContext().getResolver().getTables()) {
+            if (ref.getTable().isTransactional()) {
+                connection.startTransaction();
+                break;
+            }
+        }
+    }
+    
     protected int executeMutation(final CompilableStatement stmt) throws SQLException {
 	 if (connection.isReadOnly()) {
             throw new SQLExceptionInfo.Builder(
@@ -289,6 +302,7 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
                             // the latest state
                             try {
                                 MutationPlan plan = stmt.compilePlan(PhoenixStatement.this, Sequence.ValueOp.RESERVE_SEQUENCE);
+                                startTransaction(plan);
                                 MutationState state = plan.execute();
                                 connection.getMutationState().join(state);
                                 if (connection.getAutoCommit()) {

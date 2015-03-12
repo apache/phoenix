@@ -23,9 +23,15 @@ import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Properties;
 import java.util.Set;
 
+import co.cask.tephra.TransactionManager;
+import co.cask.tephra.TransactionSystemClient;
+import co.cask.tephra.inmemory.InMemoryTxSystemClient;
+
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HRegionLocation;
@@ -95,17 +101,37 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     private PMetaData metaData;
     private final Map<SequenceKey, SequenceInfo> sequenceMap = Maps.newHashMap();
     private final String userName;
+    private final TransactionSystemClient txSystemClient;
     private KeyValueBuilder kvBuilder;
     private volatile boolean initialized;
     private volatile SQLException initializationException;
     private final Map<String, List<HRegionLocation>> tableSplits = Maps.newHashMap();
     
-    public ConnectionlessQueryServicesImpl(QueryServices queryServices, ConnectionInfo connInfo) {
-        super(queryServices);
+    public ConnectionlessQueryServicesImpl(QueryServices services, ConnectionInfo connInfo, Properties info) {
+        super(services);
         userName = connInfo.getPrincipal();
         metaData = newEmptyMetaData();
         // Use KeyValueBuilder that builds real KeyValues, as our test utils require this
         this.kvBuilder = GenericKeyValueBuilder.INSTANCE;
+        // TOOD: copy/paste from ConnectionQueryServicesImpl
+        Configuration config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
+        for (Entry<String,String> entry : services.getProps()) {
+            config.set(entry.getKey(), entry.getValue());
+        }
+        if (info != null) {
+            for (Object key : info.keySet()) {
+                config.set((String) key, info.getProperty((String) key));
+            }
+        }
+        for (Entry<String,String> entry : connInfo.asProps()) {
+            config.set(entry.getKey(), entry.getValue());
+        }
+
+        // Without making a copy of the configuration we cons up, we lose some of our properties
+        // on the server side during testing.
+        config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration(config);
+        TransactionManager txnManager = new TransactionManager(config);
+        this.txSystemClient = new InMemoryTxSystemClient(txnManager);
     }
 
     private PMetaData newEmptyMetaData() {
@@ -478,6 +504,11 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     public int getSequenceSaltBuckets() {
         return getProps().getInt(QueryServices.SEQUENCE_SALT_BUCKETS_ATTRIB,
                 QueryServicesOptions.DEFAULT_SEQUENCE_TABLE_SALT_BUCKETS);
+    }
+
+    @Override
+    public TransactionSystemClient getTransactionSystemClient() {
+        return txSystemClient;
     }
  
 }

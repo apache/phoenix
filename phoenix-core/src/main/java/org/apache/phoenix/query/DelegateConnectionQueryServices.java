@@ -23,6 +23,8 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 
+import co.cask.tephra.TransactionSystemClient;
+
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
@@ -249,5 +251,10 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     @Override
     public int getSequenceSaltBuckets() {
         return getDelegate().getSequenceSaltBuckets();
+    }
+
+    @Override
+    public TransactionSystemClient getTransactionSystemClient() {
+        return getDelegate().getTransactionSystemClient();
     }
 }

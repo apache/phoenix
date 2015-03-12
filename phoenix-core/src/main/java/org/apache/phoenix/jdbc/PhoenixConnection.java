@@ -57,7 +57,7 @@ import javax.annotation.Nullable;
 import co.cask.tephra.TransactionAware;
 import co.cask.tephra.TransactionContext;
 import co.cask.tephra.TransactionFailureException;
-import co.cask.tephra.distributed.TransactionServiceClient;
+import co.cask.tephra.TransactionSystemClient;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.call.CallRunner;
@@ -128,7 +128,6 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     private List<SQLCloseable> statements = new ArrayList<SQLCloseable>();
     private final Map<PDataType<?>, Format> formatters = new HashMap<>();
     private final MutationState mutationState;
-    private final TransactionServiceClient transactionServiceClient;
     private final int mutateBatchSize;
     private final Long scn;
     private boolean isAutoCommit = false;
@@ -139,6 +138,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     private final String timestampPattern;
     private TraceScope traceScope = null;
     
+    private TransactionContext txContext;
     private boolean isClosed = false;
     private Sampler<?> sampler;
     private boolean readOnly = false;
@@ -247,33 +247,10 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         // setup tracing, if its enabled
         this.sampler = Tracing.getConfiguredSampler(this);
         this.customTracingAnnotations = getImmutableCustomTracingAnnotations();
-        
-        //create a transaction service client
-        /* commenting out for now as this breaks many unit tests
-         * TODO: Move to ConnectionQueryServicesImpl 
-        Configuration config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
-        String zkQuorumServersString = ConnectionInfo.getZookeeperConnectionString(url);
-        ZKClientService zkClientService = ZKClientServices.delegate(
-        	      ZKClients.reWatchOnExpire(
-        	        ZKClients.retryOnFailure(
-        	          ZKClientService.Builder.of(zkQuorumServersString)
-        	            .setSessionTimeout(config.getInt(HConstants.ZK_SESSION_TIMEOUT, HConstants.DEFAULT_ZK_SESSION_TIMEOUT))
-        	            .build(),
-        	          RetryStrategies.exponentialDelay(500, 2000, TimeUnit.MILLISECONDS)
-        	        )
-        	      )
-        	    );
-        zkClientService.startAndWait();
-        ZKDiscoveryService zkDiscoveryService = new ZKDiscoveryService(zkClientService);
-        PooledClientProvider pooledClientProvider = new PooledClientProvider(
-        		config, zkDiscoveryService);
-        this.transactionServiceClient = new TransactionServiceClient(config,pooledClientProvider);
-        */
-        this.transactionServiceClient = null;
     }
     
     public TransactionContext getTransactionContext() {
-        return null; // TODO
+        return txContext;
     }
     
     private ImmutableMap<String, String> getImmutableCustomTracingAnnotations() {
@@ -430,7 +407,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         // from modifying this list.
         this.statements = Lists.newArrayList();
         try {
-            mutationState.clear(this);
+            mutationState.clear();
         } finally {
             try {
                 SQLCloseables.closeAll(statements);
@@ -459,24 +436,42 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         }
     }
 
+    public void startTransaction() throws SQLException {
+        if (txContext == null) {
+            try {
+                TransactionSystemClient txServiceClient = this.getQueryServices().getTransactionSystemClient();
+                this.txContext = new TransactionContext(txServiceClient);
+                txContext.start();
+            } catch (TransactionFailureException e) {
+                throw new SQLException(e); // TODO: error code
+            }
+        }
+    }
+    
+    public void addTxParticipant(TransactionAware txnAware) {
+        txContext.addTransactionAware(txnAware);
+    }
+    
+    private boolean isTransactionStarted() {
+        return txContext != null;
+    }
+    
+    private void endTransaction() {
+        txContext = null;
+    }
+    
     @Override
     public void commit() throws SQLException {
         CallRunner.run(new CallRunner.CallableThrowable<Void, SQLException>() {
             @Override
             public Void call() throws SQLException {
-            	List<TransactionAware> txAwareHTables = mutationState.preSend();
-				if (txAwareHTables.isEmpty()) {
-					mutationState.send();
-				} 
-				else {
-					TransactionContext transactionContext = new TransactionContext(transactionServiceClient, txAwareHTables);
+                mutationState.send();
+                if (isTransactionStarted()) {
 					try {
-						transactionContext.start();
-		                mutationState.send();
-						transactionContext.finish();
+						txContext.finish();
 					} catch (TransactionFailureException e) {
 						try {
-							transactionContext.abort();
+						    txContext.abort();
 							throw new SQLExceptionInfo.Builder(
 									SQLExceptionCode.TRANSACTION_FINISH_EXCEPTION)
 									.setRootCause(e).build().buildException();
@@ -485,12 +480,13 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
 									SQLExceptionCode.TRANSACTION_ABORT_EXCEPTION)
 									.setRootCause(e1).build().buildException();
 						}
+					} finally {
+					    endTransaction();
 					}
-				}
-				mutationState.postSend();
+                }
                 return null;
             }
-        }, Tracing.withTracing(this, "committing mutations"));
+        }, Tracing.withTracing(this, "sending mutations"));
     }
 
     @Override
@@ -690,7 +686,16 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
 
     @Override
     public void rollback() throws SQLException {
-        mutationState.clear(this);
+        mutationState.clear();
+        if (isTransactionStarted()) {
+            try {
+                txContext.abort();
+            } catch (TransactionFailureException e) {
+                throw new SQLException(e); // TODO: error code
+            } finally {
+                endTransaction();
+            }
+        }
     }
 
     @Override

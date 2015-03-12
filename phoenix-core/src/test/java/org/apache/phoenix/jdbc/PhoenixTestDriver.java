@@ -89,9 +89,9 @@ public class PhoenixTestDriver extends PhoenixEmbeddedDriver {
         if (connectionQueryServices != null) { return connectionQueryServices; }
         ConnectionInfo connInfo = ConnectionInfo.create(url);
         if (connInfo.isConnectionless()) {
-            connectionQueryServices = new ConnectionlessQueryServicesImpl(queryServices, connInfo);
+            connectionQueryServices = new ConnectionlessQueryServicesImpl(queryServices, connInfo, info);
         } else {
-            connectionQueryServices = new ConnectionQueryServicesTestImpl(queryServices, connInfo);
+            connectionQueryServices = new ConnectionQueryServicesTestImpl(queryServices, connInfo, info);
         }
         connectionQueryServices.init(url, info);
         return connectionQueryServices;
