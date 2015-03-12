@@ -51,9 +51,11 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Properties;
 import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
 
 import javax.annotation.Nullable;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.call.CallRunner;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -61,9 +63,11 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.expression.function.FunctionArgumentType;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
+import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.jdbc.PhoenixStatement.PhoenixStatementParser;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.DelegateConnectionQueryServices;
+import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.query.MetaDataMutated;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
@@ -92,8 +96,19 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
+import org.apache.twill.discovery.ZKDiscoveryService;
+import org.apache.twill.zookeeper.RetryStrategies;
+import org.apache.twill.zookeeper.ZKClientService;
+import org.apache.twill.zookeeper.ZKClientServices;
+import org.apache.twill.zookeeper.ZKClients;
 import org.cloudera.htrace.Sampler;
 import org.cloudera.htrace.TraceScope;
+
+import co.cask.tephra.TransactionAware;
+import co.cask.tephra.TransactionContext;
+import co.cask.tephra.TransactionFailureException;
+import co.cask.tephra.distributed.PooledClientProvider;
+import co.cask.tephra.distributed.TransactionServiceClient;
 
 import com.google.common.base.Objects;
 import com.google.common.base.Strings;
@@ -123,6 +138,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     private List<SQLCloseable> statements = new ArrayList<SQLCloseable>();
     private final Map<PDataType<?>, Format> formatters = new HashMap<>();
     private final MutationState mutationState;
+    private final TransactionServiceClient transactionServiceClient;
     private final int mutateBatchSize;
     private final Long scn;
     private boolean isAutoCommit = false;
@@ -241,7 +257,25 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         // setup tracing, if its enabled
         this.sampler = Tracing.getConfiguredSampler(this);
         this.customTracingAnnotations = getImmutableCustomTracingAnnotations();
-		
+        
+        //create a transaction service client
+        Configuration config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
+        String zkQuorumServersString = ConnectionInfo.getZookeeperConnectionString(url);
+        ZKClientService zkClientService = ZKClientServices.delegate(
+        	      ZKClients.reWatchOnExpire(
+        	        ZKClients.retryOnFailure(
+        	          ZKClientService.Builder.of(zkQuorumServersString)
+        	            .setSessionTimeout(config.getInt(HConstants.ZK_SESSION_TIMEOUT, HConstants.DEFAULT_ZK_SESSION_TIMEOUT))
+        	            .build(),
+        	          RetryStrategies.exponentialDelay(500, 2000, TimeUnit.MILLISECONDS)
+        	        )
+        	      )
+        	    );
+        zkClientService.startAndWait();
+        ZKDiscoveryService zkDiscoveryService = new ZKDiscoveryService(zkClientService);
+        PooledClientProvider pooledClientProvider = new PooledClientProvider(
+        		config, zkDiscoveryService);
+        this.transactionServiceClient = new TransactionServiceClient(config,pooledClientProvider);
     }
     
     private ImmutableMap<String, String> getImmutableCustomTracingAnnotations() {
@@ -398,7 +432,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         // from modifying this list.
         this.statements = Lists.newArrayList();
         try {
-            mutationState.rollback(this);
+            mutationState.clear(this);
         } finally {
             try {
                 SQLCloseables.closeAll(statements);
@@ -426,13 +460,36 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
             isClosed = true;
         }
     }
-    
+
     @Override
     public void commit() throws SQLException {
         CallRunner.run(new CallRunner.CallableThrowable<Void, SQLException>() {
             @Override
             public Void call() throws SQLException {
-                mutationState.commit();
+            	List<TransactionAware> txAwareHTables = mutationState.preSend();
+				if (txAwareHTables.isEmpty()) {
+					mutationState.send();
+				} 
+				else {
+					TransactionContext transactionContext = new TransactionContext(transactionServiceClient, txAwareHTables);
+					try {
+						transactionContext.start();
+		                mutationState.send();
+						transactionContext.finish();
+					} catch (TransactionFailureException e) {
+						try {
+							transactionContext.abort();
+							throw new SQLExceptionInfo.Builder(
+									SQLExceptionCode.TRANSACTION_FINISH_EXCEPTION)
+									.setRootCause(e).build().buildException();
+						} catch (TransactionFailureException e1) {
+							throw new SQLExceptionInfo.Builder(
+									SQLExceptionCode.TRANSACTION_ABORT_EXCEPTION)
+									.setRootCause(e1).build().buildException();
+						}
+					}
+				}
+				mutationState.postSend();
                 return null;
             }
         }, Tracing.withTracing(this, "committing mutations"));
@@ -635,7 +692,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
 
     @Override
     public void rollback() throws SQLException {
-        mutationState.rollback(this);
+        mutationState.clear(this);
     }
 
     @Override
