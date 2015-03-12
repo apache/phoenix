@@ -426,7 +426,7 @@ public class DeleteCompiler {
                     }
     
                     @Override
-                    public MutationState execute() {
+                    public MutationState execute() throws SQLException {
                         // We have a point lookup, so we know we have a simple set of fully qualified
                         // keys for our ranges
                         ScanRanges ranges = context.getScanRanges();

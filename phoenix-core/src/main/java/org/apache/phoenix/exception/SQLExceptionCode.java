@@ -157,6 +157,12 @@ public enum SQLExceptionCode {
      AGGREGATE_EXPRESSION_NOT_ALLOWED_IN_INDEX(520, "42897", "Aggreagaate expression not allowed in an index"),
      NON_DETERMINISTIC_EXPRESSION_NOT_ALLOWED_IN_INDEX(521, "42898", "Non-deterministic expression not allowed in an index"),
      STATELESS_EXPRESSION_NOT_ALLOWED_IN_INDEX(522, "42899", "Stateless expression not allowed in an index"),
+     
+     /**
+      *  Transaction exceptions.
+      */
+     TRANSACTION_FINISH_EXCEPTION(523, "42900", "Exception while finishing transaction"),
+     TRANSACTION_ABORT_EXCEPTION(524, "42901", "Exception while aborting transaction"),
 
      /** 
      * HBase and Phoenix specific implementation defined sub-classes.
