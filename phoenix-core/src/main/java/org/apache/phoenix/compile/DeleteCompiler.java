@@ -296,8 +296,13 @@ public class DeleteCompiler {
                 ColumnResolver resolver = FromCompiler.getResolverForMutation(delete, connection);
                 tableRefToBe = resolver.getTables().get(0);
                 PTable table = tableRefToBe.getTable();
-                if (table.getType() == PTableType.VIEW && table.getViewType().isReadOnly()) {
-                    throw new ReadOnlyTableException(table.getSchemaName().getString(),table.getTableName().getString());
+                // Cannot update:
+                // - read-only VIEW 
+                // - transactional table with a connection having an SCN
+                // TODO: SchemaUtil.isReadOnly(PTable, connection)?
+                if ( ( table.getType() == PTableType.VIEW && table.getViewType().isReadOnly() ) 
+                     || ( table.isTransactional() && connection.getSCN() != null ) ) {
+                    throw new ReadOnlyTableException(schemaName,tableName);
                 }
                 
                 immutableIndex = getNonDisabledImmutableIndexes(tableRefToBe);

@@ -51,11 +51,14 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Properties;
 import java.util.concurrent.Executor;
-import java.util.concurrent.TimeUnit;
 
 import javax.annotation.Nullable;
 
-import org.apache.hadoop.conf.Configuration;
+import co.cask.tephra.TransactionAware;
+import co.cask.tephra.TransactionContext;
+import co.cask.tephra.TransactionFailureException;
+import co.cask.tephra.distributed.TransactionServiceClient;
+
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.call.CallRunner;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -63,11 +66,9 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.expression.function.FunctionArgumentType;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
-import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.jdbc.PhoenixStatement.PhoenixStatementParser;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.DelegateConnectionQueryServices;
-import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.query.MetaDataMutated;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
@@ -96,19 +97,8 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
-import org.apache.twill.discovery.ZKDiscoveryService;
-import org.apache.twill.zookeeper.RetryStrategies;
-import org.apache.twill.zookeeper.ZKClientService;
-import org.apache.twill.zookeeper.ZKClientServices;
-import org.apache.twill.zookeeper.ZKClients;
 import org.cloudera.htrace.Sampler;
 import org.cloudera.htrace.TraceScope;
-
-import co.cask.tephra.TransactionAware;
-import co.cask.tephra.TransactionContext;
-import co.cask.tephra.TransactionFailureException;
-import co.cask.tephra.distributed.PooledClientProvider;
-import co.cask.tephra.distributed.TransactionServiceClient;
 
 import com.google.common.base.Objects;
 import com.google.common.base.Strings;
@@ -259,6 +249,8 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         this.customTracingAnnotations = getImmutableCustomTracingAnnotations();
         
         //create a transaction service client
+        /* commenting out for now as this breaks many unit tests
+         * TODO: Move to ConnectionQueryServicesImpl 
         Configuration config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
         String zkQuorumServersString = ConnectionInfo.getZookeeperConnectionString(url);
         ZKClientService zkClientService = ZKClientServices.delegate(
@@ -276,6 +268,12 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         PooledClientProvider pooledClientProvider = new PooledClientProvider(
         		config, zkDiscoveryService);
         this.transactionServiceClient = new TransactionServiceClient(config,pooledClientProvider);
+        */
+        this.transactionServiceClient = null;
+    }
+    
+    public TransactionContext getTransactionContext() {
+        return null; // TODO
     }
     
     private ImmutableMap<String, String> getImmutableCustomTracingAnnotations() {

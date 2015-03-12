@@ -248,10 +248,12 @@ public class UpsertCompiler {
                 resolver = FromCompiler.getResolverForMutation(upsert, connection);
                 tableRefToBe = resolver.getTables().get(0);
                 table = tableRefToBe.getTable();
-                if (table.getType() == PTableType.VIEW) {
-                    if (table.getViewType().isReadOnly()) {
-                        throw new ReadOnlyTableException(schemaName,tableName);
-                    }
+                // Cannot update:
+                // - read-only VIEW 
+                // - transactional table with a connection having an SCN 
+                if ( ( table.getType() == PTableType.VIEW && table.getViewType().isReadOnly() ) 
+                     || ( table.isTransactional() && connection.getSCN() != null )) {
+                    throw new ReadOnlyTableException(schemaName,tableName);
                 }
                 boolean isSalted = table.getBucketNum() != null;
                 isTenantSpecific = table.isMultiTenant() && connection.getTenantId() != null;
