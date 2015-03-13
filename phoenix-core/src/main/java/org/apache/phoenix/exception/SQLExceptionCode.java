@@ -161,8 +161,8 @@ public enum SQLExceptionCode {
      /**
       *  Transaction exceptions.
       */
-     TRANSACTION_FINISH_EXCEPTION(523, "42900", "Exception while finishing transaction"),
-     TRANSACTION_ABORT_EXCEPTION(524, "42901", "Exception while aborting transaction"),
+     TRANSACTION_CONFLICT_EXCEPTION(523, "42900", "Transaction aborted due to conflict with other mutations"),
+     TRANSACTION_EXCEPTION(524, "42901", "Transaction aborted due to error"),
 
      /** 
      * HBase and Phoenix specific implementation defined sub-classes.

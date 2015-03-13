@@ -22,6 +22,11 @@ import java.sql.SQLException;
 
 import co.cask.tephra.Transaction;
 import co.cask.tephra.TransactionCodec;
+import co.cask.tephra.TransactionConflictException;
+import co.cask.tephra.TransactionFailureException;
+
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.exception.SQLExceptionInfo;
 
 public class TransactionUtil {
     private TransactionUtil() {
@@ -43,5 +48,19 @@ public class TransactionUtil {
         } catch (IOException e) {
             throw new SQLException(e);
         }
+    }
+
+    public static SQLException getSQLException(TransactionFailureException e) {
+        if (e instanceof TransactionConflictException) { 
+            return new SQLExceptionInfo.Builder(SQLExceptionCode.TRANSACTION_CONFLICT_EXCEPTION)
+                .setMessage(e.getMessage())
+                .setRootCause(e)
+                .build().buildException();
+
+        }
+        return new SQLExceptionInfo.Builder(SQLExceptionCode.TRANSACTION_EXCEPTION)
+            .setMessage(e.getMessage())
+            .setRootCause(e)
+            .build().buildException();
     }
 }

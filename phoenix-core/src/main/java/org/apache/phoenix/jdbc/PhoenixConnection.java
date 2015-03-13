@@ -54,6 +54,11 @@ import java.util.concurrent.Executor;
 
 import javax.annotation.Nullable;
 
+import co.cask.tephra.TransactionAware;
+import co.cask.tephra.TransactionContext;
+import co.cask.tephra.TransactionFailureException;
+import co.cask.tephra.TransactionSystemClient;
+
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.call.CallRunner;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -92,13 +97,9 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
+import org.apache.phoenix.util.TransactionUtil;
 import org.cloudera.htrace.Sampler;
 import org.cloudera.htrace.TraceScope;
-
-import co.cask.tephra.TransactionAware;
-import co.cask.tephra.TransactionContext;
-import co.cask.tephra.TransactionFailureException;
-import co.cask.tephra.TransactionSystemClient;
 
 import com.google.common.base.Objects;
 import com.google.common.base.Strings;
@@ -472,13 +473,9 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
 					} catch (TransactionFailureException e) {
 						try {
 						    txContext.abort(e);
-							throw new SQLExceptionInfo.Builder(
-									SQLExceptionCode.TRANSACTION_FINISH_EXCEPTION)
-									.setRootCause(e).build().buildException();
+							throw TransactionUtil.getSQLException(e);
 						} catch (TransactionFailureException e1) {
-							throw new SQLExceptionInfo.Builder(
-									SQLExceptionCode.TRANSACTION_ABORT_EXCEPTION)
-									.setRootCause(e1).build().buildException();
+                            throw TransactionUtil.getSQLException(e);
 						}
 					} finally {
 					    endTransaction();

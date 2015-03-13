@@ -9,7 +9,10 @@
  */
 package org.apache.phoenix.transactions;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -17,6 +20,12 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.concurrent.TimeUnit;
+
+import co.cask.tephra.TransactionManager;
+import co.cask.tephra.TxConstants;
+import co.cask.tephra.distributed.TransactionService;
+import co.cask.tephra.metrics.TxMetricsCollector;
+import co.cask.tephra.persist.InMemoryTransactionStateStorage;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
@@ -30,12 +39,6 @@ import org.apache.twill.zookeeper.ZKClientServices;
 import org.apache.twill.zookeeper.ZKClients;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
-import co.cask.tephra.TransactionManager;
-import co.cask.tephra.TxConstants;
-import co.cask.tephra.distributed.TransactionService;
-import co.cask.tephra.metrics.TxMetricsCollector;
-import co.cask.tephra.persist.InMemoryTransactionStateStorage;
 
 public class TransactionIT extends BaseHBaseManagedTimeIT {
 
@@ -118,7 +121,7 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
  	 	        fail();
  	        }	
  	        catch (SQLException e) {
- 	        	assertEquals(e.getErrorCode(), SQLExceptionCode.TRANSACTION_FINISH_EXCEPTION.getErrorCode());
+ 	        	assertEquals(e.getErrorCode(), SQLExceptionCode.TRANSACTION_CONFLICT_EXCEPTION.getErrorCode());
  	        }
 		}
         finally {
@@ -153,7 +156,7 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
  	 	        fail();
  	        }	
  	        catch (SQLException e) {
- 	        	assertEquals(e.getErrorCode(), SQLExceptionCode.TRANSACTION_FINISH_EXCEPTION.getErrorCode());
+ 	        	assertEquals(e.getErrorCode(), SQLExceptionCode.TRANSACTION_CONFLICT_EXCEPTION.getErrorCode());
  	        }
 		}
         finally {
