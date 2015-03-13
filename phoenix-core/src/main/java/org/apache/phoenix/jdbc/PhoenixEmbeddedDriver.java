@@ -181,6 +181,10 @@ public abstract class PhoenixEmbeddedDriver implements Driver, org.apache.phoeni
             .setMessage(url).build().buildException();
         }
         
+		public String getZookeeperConnectionString() {
+			return getZookeeperQuorum() + ":" + getPort();
+		}
+        
         /**
          * Detect url with quorum:1,quorum:2 as HBase does not handle different port numbers
          * for different quorum hostnames.
@@ -199,7 +203,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, org.apache.phoeni
             return false;
         }
         
-        protected static ConnectionInfo create(String url) throws SQLException {
+        public static ConnectionInfo create(String url) throws SQLException {
             StringTokenizer tokenizer = new StringTokenizer(url == null ? "" : url.substring(PhoenixRuntime.JDBC_PROTOCOL.length()),DELIMITERS, true);
             int nTokens = 0;
             String[] tokens = new String[5];

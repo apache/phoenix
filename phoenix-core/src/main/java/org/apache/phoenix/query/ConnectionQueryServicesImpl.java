@@ -286,7 +286,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
     
     private void initTxServiceClient() {
-        String zkQuorumServersString = connectionInfo.getZookeeperQuorum();
+        String zkQuorumServersString = connectionInfo.getZookeeperQuorum()+":"+connectionInfo.getPort();
         ZKClientService zkClientService = ZKClientServices.delegate(
                   ZKClients.reWatchOnExpire(
                     ZKClients.retryOnFailure(
