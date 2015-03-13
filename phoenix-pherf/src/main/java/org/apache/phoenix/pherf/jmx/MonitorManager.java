@@ -31,6 +31,7 @@ import javax.management.*;
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * This class starts JMX stats for the configured monitors. Monitors should be configured in MonitorDetails Enum.
@@ -46,7 +47,7 @@ public class MonitorManager implements Runnable {
             Arrays.asList(MonitorDetails.values());
     private final ResultHandler resultHandler;
     private final long monitorFrequency;
-    private volatile long rowCount;
+    private AtomicLong rowCount;
     private volatile boolean shouldStop = false;
     private volatile boolean isRunning = false;
 
@@ -74,7 +75,7 @@ public class MonitorManager implements Runnable {
                 mbs.registerMBean(bean, monitorThreadStatName);
             }
         }
-        this.rowCount = 0;
+        rowCount = new AtomicLong(0);
         this.resultHandler = new CSVResultHandler(PherfConstants.MONITOR_FILE_NAME, ResultFileDetails.CSV);
     }
 
@@ -101,7 +102,7 @@ public class MonitorManager implements Runnable {
                         } catch (Exception e) {
                             throw new FileLoaderRuntimeException("Could not log monitor result.", e);
                         }
-                        rowCount++;
+                        rowCount.getAndIncrement();
                     }
                     try {
                         Thread.sleep(getMonitorFrequency());
@@ -139,7 +140,7 @@ public class MonitorManager implements Runnable {
     }
 
     public synchronized long getRowCount() {
-        return rowCount;
+        return rowCount.get();
     }
 
     public synchronized boolean isRunning() {
