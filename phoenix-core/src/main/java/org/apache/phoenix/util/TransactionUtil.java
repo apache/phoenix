@@ -24,7 +24,10 @@ import co.cask.tephra.Transaction;
 import co.cask.tephra.TransactionCodec;
 import co.cask.tephra.TransactionConflictException;
 import co.cask.tephra.TransactionFailureException;
+import co.cask.tephra.TxConstants;
+import co.cask.tephra.hbase98.TransactionAwareHTable;
 
+import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 
@@ -62,5 +65,9 @@ public class TransactionUtil {
             .setMessage(e.getMessage())
             .setRootCause(e)
             .build().buildException();
+    }
+    
+    public static TransactionAwareHTable getTransactionAwareHTable(HTableInterface htable) {
+    	return new TransactionAwareHTable(htable, TxConstants.ConflictDetection.ROW);
     }
 }

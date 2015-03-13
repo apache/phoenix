@@ -28,6 +28,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
+import co.cask.tephra.TxConstants;
 import co.cask.tephra.hbase98.TransactionAwareHTable;
 
 import org.apache.hadoop.hbase.HConstants;
@@ -60,6 +61,7 @@ import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.ServerUtil;
+import org.apache.phoenix.util.TransactionUtil;
 import org.cloudera.htrace.Span;
 import org.cloudera.htrace.TraceScope;
 import org.slf4j.Logger;
@@ -424,7 +426,7 @@ public class MutationState implements SQLCloseable {
                         // Don't add immutable indexes (those are the only ones that would participate
                         // during a commit), as we don't need conflict detection for these.
                         if (table.isTransactional() && table.getType() != PTableType.INDEX) {
-                            TransactionAwareHTable txnAware = new TransactionAwareHTable(hTable);
+                            TransactionAwareHTable txnAware = TransactionUtil.getTransactionAwareHTable(hTable);
                             connection.addTxParticipant(txnAware);
                             hTable = txnAware;
                         }

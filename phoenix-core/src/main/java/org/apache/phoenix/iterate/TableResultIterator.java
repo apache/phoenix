@@ -31,6 +31,7 @@ import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.ServerUtil;
+import org.apache.phoenix.util.TransactionUtil;
 
 
 /**
@@ -86,7 +87,7 @@ public class TableResultIterator extends ExplainTable implements ResultIterator 
         PTable table = tableRef.getTable();
         HTableInterface htable = context.getConnection().getQueryServices().getTable(table.getPhysicalName().getBytes());
         if (table.isTransactional()) {
-            TransactionAwareHTable txnAware = new TransactionAwareHTable(htable);
+            TransactionAwareHTable txnAware = TransactionUtil.getTransactionAwareHTable(htable);
             context.getConnection().addTxParticipant(txnAware);
             htable = txnAware;
         }
