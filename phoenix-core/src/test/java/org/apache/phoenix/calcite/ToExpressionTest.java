@@ -27,6 +27,7 @@ import org.apache.phoenix.parse.SubqueryParseNode;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.schema.TableRef;
 import org.junit.Test;
 
 
@@ -53,7 +54,7 @@ public class ToExpressionTest extends BaseConnectionlessQueryTest {
 		RexNode call = builder.makeCall(SqlStdOperatorTable.EQUALS, ref, lit);
 		
 		Implementor implementor = new PhoenixRelImplementorImpl();
-		implementor.setContext(conn.unwrap(PhoenixConnection.class), table, null);
+		implementor.setTableRef(new TableRef(table));
 		Expression e = CalciteUtils.toExpression(call, implementor);
 		assertEquals(where,e);
 	}

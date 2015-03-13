@@ -1,20 +1,16 @@
 package org.apache.phoenix.calcite;
 
-import com.google.common.collect.ImmutableSet;
+import java.util.Set;
 
-import org.apache.calcite.linq4j.Ord;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.rel.core.JoinRelType;
-import org.apache.calcite.rel.core.SetOp;
-import org.apache.calcite.rel.core.Union;
 import org.apache.calcite.rex.RexNode;
-import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.compile.QueryPlan;
 
-import java.util.List;
-import java.util.Set;
+import com.google.common.collect.ImmutableSet;
 
 /**
  * Implementation of {@link org.apache.calcite.rel.core.Join}
@@ -34,7 +30,7 @@ public class PhoenixJoin extends Join implements PhoenixRel {
     }
 
     @Override
-    public void implement(Implementor implementor, PhoenixConnection conn) {
+    public QueryPlan implement(Implementor implementor) {
         throw new UnsupportedOperationException();
     }
 }

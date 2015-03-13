@@ -1,14 +1,10 @@
 package org.apache.phoenix.calcite;
 
-import java.util.List;
-
 import org.apache.calcite.plan.Convention;
 import org.apache.calcite.rel.RelNode;
-import org.apache.calcite.rex.RexNode;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.expression.ColumnExpression;
-import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.TableRef;
 
 /**
  * Relational expression in Phoenix.
@@ -27,15 +23,28 @@ public interface PhoenixRel extends RelNode {
    */
   double PHOENIX_FACTOR = 0.5;
 
-  void implement(Implementor implementor, PhoenixConnection conn);
+  QueryPlan implement(Implementor implementor);
+  
+  class ImplementorContext {
+      private boolean retainPKColumns;
+      
+      public ImplementorContext(boolean retainPKColumns) {
+          this.retainPKColumns = retainPKColumns;
+      }
+      
+      public boolean isRetainPKColumns() {
+          return this.retainPKColumns;
+      }
+  }
 
   /** Holds context for an traversal over a tree of relational expressions
    * to convert it to an executable plan. */
   interface Implementor {
-    void visitInput(int i, PhoenixRel input);
+    QueryPlan visitInput(int i, PhoenixRel input);
     ColumnExpression newColumnExpression(int index);
-    void setProjects(List<? extends RexNode> projects);
-    void setContext(PhoenixConnection conn, PTable pTable, RexNode filter);
-    QueryPlan makePlan();
+    void setTableRef(TableRef tableRef);
+    void pushContext(ImplementorContext context);
+    ImplementorContext popContext();
+    ImplementorContext getCurrentContext();
   }
 }

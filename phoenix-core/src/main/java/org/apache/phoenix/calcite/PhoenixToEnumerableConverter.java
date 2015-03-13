@@ -1,15 +1,26 @@
 package org.apache.phoenix.calcite;
 
-import org.apache.calcite.DataContext;
-import org.apache.calcite.adapter.enumerable.*;
-import org.apache.calcite.linq4j.tree.*;
-import org.apache.calcite.plan.*;
+import java.util.List;
+
+import org.apache.calcite.adapter.enumerable.EnumerableRel;
+import org.apache.calcite.adapter.enumerable.EnumerableRelImplementor;
+import org.apache.calcite.adapter.enumerable.JavaRowFormat;
+import org.apache.calcite.adapter.enumerable.PhysType;
+import org.apache.calcite.adapter.enumerable.PhysTypeImpl;
+import org.apache.calcite.linq4j.tree.BlockBuilder;
+import org.apache.calcite.linq4j.tree.Expression;
+import org.apache.calcite.linq4j.tree.Expressions;
+import org.apache.calcite.linq4j.tree.MethodCallExpression;
+import org.apache.calcite.linq4j.tree.ParameterExpression;
+import org.apache.calcite.plan.ConventionTraitDef;
+import org.apache.calcite.plan.RelOptCluster;
+import org.apache.calcite.plan.RelOptCost;
+import org.apache.calcite.plan.RelOptPlanner;
+import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.convert.ConverterImpl;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.phoenix.compile.QueryPlan;
-
-import java.util.List;
 
 /**
  * Scan of a Phoenix table.
@@ -57,8 +68,7 @@ public class PhoenixToEnumerableConverter extends ConverterImpl implements Enume
     
     static QueryPlan makePlan(PhoenixRel rel) {
         final PhoenixRel.Implementor phoenixImplementor = new PhoenixRelImplementorImpl();
-        phoenixImplementor.visitInput(0, rel);
-        return phoenixImplementor.makePlan();
+        return phoenixImplementor.visitInput(0, rel);
     }
 
     static Expression stash(EnumerableRelImplementor implementor, Object o, Class clazz) {

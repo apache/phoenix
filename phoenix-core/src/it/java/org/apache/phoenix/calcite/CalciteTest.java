@@ -1,6 +1,7 @@
 package org.apache.phoenix.calcite;
 
 import com.google.common.collect.Lists;
+
 import org.apache.calcite.jdbc.CalciteConnection;
 import org.apache.phoenix.end2end.BaseClientManagedTimeIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -167,8 +168,8 @@ public class CalciteTest extends BaseClientManagedTimeIT {
         BaseTest.ensureTableCreated(url, ATABLE_NAME);
         return connection;
     }
-
-    @Test public void testConnect() throws Exception {
+    
+    private void testConnect(String query, Object[][] expectedValues) throws Exception {
         final Connection connection = DriverManager.getConnection("jdbc:calcite:");
         final CalciteConnection calciteConnection =
             connection.unwrap(CalciteConnection.class);
@@ -182,29 +183,36 @@ public class CalciteTest extends BaseClientManagedTimeIT {
             new PhoenixSchema(phoenixConnection));
         calciteConnection.setSchema("phoenix");
         final Statement statement = calciteConnection.createStatement();
-        final ResultSet resultSet = statement.executeQuery("select entity_id, a_string, organization_id from aTable where a_string = 'a'");
+        final ResultSet resultSet = statement.executeQuery(query);
 
-        assertTrue(resultSet.next());
-        assertEquals("00D300000000XHP", resultSet.getObject(3));
-        assertEquals("00A123122312312", resultSet.getObject(1));
-        assertEquals("a", resultSet.getString("A_STRING"));
-        assertTrue(resultSet.next());
-        assertEquals("00D300000000XHP", resultSet.getObject(3));
-        assertEquals("00A223122312312", resultSet.getObject(1));
-        assertEquals("a", resultSet.getString("A_STRING"));
-        assertTrue(resultSet.next());
-        assertEquals("00D300000000XHP", resultSet.getObject(3));
-        assertEquals("00A323122312312", resultSet.getObject(1));
-        assertEquals("a", resultSet.getString("A_STRING"));
-        assertTrue(resultSet.next());
-        assertEquals("00D300000000XHP", resultSet.getObject(3));
-        assertEquals("00A423122312312", resultSet.getObject(1));
-        assertEquals("a", resultSet.getString("A_STRING"));
+        for (int i = 0; i < expectedValues.length; i++) {
+            assertTrue(resultSet.next());
+            Object[] row = expectedValues[i];
+            for (int j = 0; j < row.length; j++) {
+                assertEquals(row[j], resultSet.getObject(j + 1));
+            }
+        }        
         assertFalse(resultSet.next());
         
         resultSet.close();
         statement.close();
         connection.close();
+    }
+    
+    @Test public void testTableScan() throws Exception {
+        testConnect("select * from aTable where a_string = 'a'", 
+                new Object[][] {{"00D300000000XHP", "00A123122312312", "a"}, 
+                                {"00D300000000XHP", "00A223122312312", "a"}, 
+                                {"00D300000000XHP", "00A323122312312", "a"}, 
+                                {"00D300000000XHP", "00A423122312312", "a"}});
+    }
+    
+    @Test public void testProject() throws Exception {
+        testConnect("select entity_id, a_string, organization_id from aTable where a_string = 'a'", 
+                new Object[][] {{"00A123122312312", "a", "00D300000000XHP"}, 
+                                {"00A223122312312", "a", "00D300000000XHP"}, 
+                                {"00A323122312312", "a", "00D300000000XHP"}, 
+                                {"00A423122312312", "a", "00D300000000XHP"}});
     }
 
     @Test public void testExplainPlanForSelectWhereQuery() {

@@ -7,8 +7,10 @@ import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Filter;
 import org.apache.calcite.rex.RexNode;
+import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
+import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.execute.ClientScanPlan;
 import org.apache.phoenix.expression.Expression;
-import org.apache.phoenix.jdbc.PhoenixConnection;
 
 /**
  * Implementation of {@link org.apache.calcite.rel.core.Filter}
@@ -30,11 +32,13 @@ public class PhoenixFilter extends Filter implements PhoenixRel {
         return super.computeSelfCost(planner).multiplyBy(PHOENIX_FACTOR);
     }
 
-    public void implement(Implementor implementor, PhoenixConnection conn) {
-        implementor.visitInput(0, (PhoenixRel) getInput());
+    public QueryPlan implement(Implementor implementor) {
+        QueryPlan plan = implementor.visitInput(0, (PhoenixRel) getInput());
         // TODO: what to do with the Expression?
         // Already determined this filter cannot be pushed down, so
         // this will be run 
         Expression expr = CalciteUtils.toExpression(condition, implementor);
+        return new ClientScanPlan(plan.getContext(), plan.getStatement(), plan.getTableRef(),
+                plan.getProjector(), null, expr, OrderBy.EMPTY_ORDER_BY, plan);
     }
 }

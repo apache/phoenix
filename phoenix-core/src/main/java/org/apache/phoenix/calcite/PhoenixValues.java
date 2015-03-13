@@ -1,6 +1,7 @@
 package org.apache.phoenix.calcite;
 
-import com.google.common.collect.ImmutableList;
+import java.util.List;
+
 import org.apache.calcite.plan.Convention;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelTraitSet;
@@ -8,9 +9,9 @@ import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Values;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rex.RexLiteral;
-import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.compile.QueryPlan;
 
-import java.util.List;
+import com.google.common.collect.ImmutableList;
 
 /**
  * Implementation of {@link org.apache.calcite.rel.core.Values}
@@ -30,7 +31,7 @@ public class PhoenixValues extends Values implements PhoenixRel {
     }
 
     @Override
-    public void implement(Implementor implementor, PhoenixConnection conn) {
+    public QueryPlan implement(Implementor implementor) {
         throw new UnsupportedOperationException();
     }
 }

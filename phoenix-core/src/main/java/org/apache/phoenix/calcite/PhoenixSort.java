@@ -6,7 +6,7 @@ import org.apache.calcite.rel.RelCollation;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Sort;
 import org.apache.calcite.rex.RexNode;
-import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.compile.QueryPlan;
 
 /**
  * Implementation of {@link org.apache.calcite.rel.core.Sort}
@@ -25,7 +25,7 @@ public class PhoenixSort extends Sort implements PhoenixRel {
     }
 
     @Override
-    public void implement(Implementor implementor, PhoenixConnection conn) {
+    public QueryPlan implement(Implementor implementor) {
         implementor.visitInput(0, (PhoenixRel) getInput());
         throw new UnsupportedOperationException();
     }

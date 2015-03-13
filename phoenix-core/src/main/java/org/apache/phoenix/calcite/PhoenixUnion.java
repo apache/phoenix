@@ -1,14 +1,13 @@
 package org.apache.phoenix.calcite;
 
+import java.util.List;
+
 import org.apache.calcite.linq4j.Ord;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
-import org.apache.calcite.rel.core.SetOp;
 import org.apache.calcite.rel.core.Union;
-import org.apache.phoenix.jdbc.PhoenixConnection;
-
-import java.util.List;
+import org.apache.phoenix.compile.QueryPlan;
 
 /**
  * Implementation of {@link org.apache.calcite.rel.core.Union}
@@ -30,7 +29,7 @@ public class PhoenixUnion extends Union implements PhoenixRel {
     }
 
     @Override
-    public void implement(Implementor implementor, PhoenixConnection conn) {
+    public QueryPlan implement(Implementor implementor) {
         for (Ord<RelNode> input : Ord.zip(inputs)) {
             implementor.visitInput(input.i, (PhoenixRel) input.e);
         }
