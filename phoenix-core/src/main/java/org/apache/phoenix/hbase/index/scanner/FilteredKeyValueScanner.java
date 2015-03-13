@@ -158,4 +158,11 @@ public class FilteredKeyValueScanner implements KeyValueScanner {
     public boolean seekToPreviousRow(KeyValue arg0) throws IOException {
         return this.delegate.seekToPreviousRow(arg0);
     }
+
+    // Added for compatibility with HBASE-13109
+    // Once we drop support for older versions, add an @override annotation here
+    // and figure out how to get the next indexed key
+    public byte[] getNextIndexedKey() {
+        return null; // indicate that we cannot use the optimization
+    }
 }
