@@ -33,6 +33,11 @@ class PhoenixRelImplementorImpl implements PhoenixRel.Implementor {
 	public void setTableRef(TableRef tableRef) {
 		this.tableRef = tableRef;
 	}
+    
+    @Override
+    public TableRef getTableRef() {
+        return this.tableRef;
+    }
 
     @Override
     public void pushContext(ImplementorContext context) {

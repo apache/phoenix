@@ -16,6 +16,8 @@ import java.sql.*;
 import java.util.Arrays;
 import java.util.List;
 
+import static org.apache.phoenix.util.TestUtil.JOIN_ITEM_TABLE_FULL_NAME;
+import static org.apache.phoenix.util.TestUtil.JOIN_SUPPLIER_TABLE_FULL_NAME;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.junit.Assert.*;
 
@@ -179,6 +181,9 @@ public class CalciteTest extends BaseClientManagedTimeIT {
             DriverManager.getConnection(url).unwrap(PhoenixConnection.class);
         ensureTableCreated(url, ATABLE_NAME);
         initATableValues(getOrganizationId(), null, url);
+        ensureTableCreated(url, JOIN_ITEM_TABLE_FULL_NAME);
+        ensureTableCreated(url, JOIN_SUPPLIER_TABLE_FULL_NAME);
+        initJoinTableValues(url, null, null);
         calciteConnection.getRootSchema().add("phoenix",
             new PhoenixSchema(phoenixConnection));
         calciteConnection.setSchema("phoenix");
@@ -213,6 +218,21 @@ public class CalciteTest extends BaseClientManagedTimeIT {
                                 {"00A223122312312", "a", "00D300000000XHP"}, 
                                 {"00A323122312312", "a", "00D300000000XHP"}, 
                                 {"00A423122312312", "a", "00D300000000XHP"}});
+    }
+    
+    @Test public void testJoin() throws Exception {
+        testConnect("select t1.entity_id, t2.a_string, t1.organization_id from aTable t1 join aTable t2 on t1.entity_id = t2.entity_id and t1.organization_id = t2.organization_id where t1.a_string = 'a'", 
+                new Object[][] {{"00A123122312312", "a", "00D300000000XHP"}, 
+                                {"00A223122312312", "a", "00D300000000XHP"}, 
+                                {"00A323122312312", "a", "00D300000000XHP"}, 
+                                {"00A423122312312", "a", "00D300000000XHP"}});
+//        testConnect("SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\"", 
+//                new Object[][] {{"0000000001", "T1", "0000000001", "S1"}, 
+//                                {"0000000002", "T2", "0000000001", "S1"}, 
+//                                {"0000000003", "T3", "0000000002", "S2"}, 
+//                                {"0000000004", "T4", "0000000002", "S2"},
+//                                {"0000000005", "T5", "0000000005", "S5"},
+//                                {"0000000006", "T6", "0000000006", "S6"}});
     }
 
     @Test public void testExplainPlanForSelectWhereQuery() {

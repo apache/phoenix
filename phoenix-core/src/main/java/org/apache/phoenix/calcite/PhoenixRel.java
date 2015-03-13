@@ -43,6 +43,7 @@ public interface PhoenixRel extends RelNode {
     QueryPlan visitInput(int i, PhoenixRel input);
     ColumnExpression newColumnExpression(int index);
     void setTableRef(TableRef tableRef);
+    TableRef getTableRef();
     void pushContext(ImplementorContext context);
     ImplementorContext popContext();
     ImplementorContext getCurrentContext();
