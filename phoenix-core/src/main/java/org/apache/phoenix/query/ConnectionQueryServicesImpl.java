@@ -2118,6 +2118,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             Append append = sequence.createSequence(startWith, incrementBy, cacheSize, timestamp, minValue, maxValue, cycle);
             HTableInterface htable =
                     this.getTable(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_BYTES);
+            htable.setAutoFlush(true);
             try {
                 Result result = htable.append(append);
                 return sequence.createSequence(result, minValue, maxValue, cycle);

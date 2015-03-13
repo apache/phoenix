@@ -55,7 +55,10 @@ public class JobManager<T> extends AbstractRoundRobinQueue<T> {
 
 	@Override
     protected Object extractProducer(T o) {
-        return ((JobFutureTask)o).getJobId();
+        if( o instanceof  JobFutureTask){
+            return ((JobFutureTask)o).getJobId();
+        }
+        return o;
     }        
 
     public static interface JobRunnable<T> extends Runnable {
