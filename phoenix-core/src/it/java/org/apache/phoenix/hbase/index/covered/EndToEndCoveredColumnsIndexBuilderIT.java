@@ -151,7 +151,7 @@ public class EndToEndCoveredColumnsIndexBuilderIT {
             ((LocalTableState) state).getIndexedColumnsTableState(Arrays.asList(columns)).getFirst();
 
         int count = 0;
-        KeyValue kv;
+        Cell kv;
         while ((kv = kvs.next()) != null) {
           Cell next = expectedKvs.get(count++);
           assertEquals(
