@@ -47,7 +47,6 @@ public class ImmutableIndexWithStatsIT extends BaseHBaseManagedTimeIT {
     @Shadower(classBeingShadowed = BaseHBaseManagedTimeIT.class)
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(5);
-        props.put(QueryServices.DROP_METADATA_ATTRIB, Boolean.toString(true));
         props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(1));
         props.put(QueryServices.EXPLAIN_CHUNK_COUNT_ATTRIB, Boolean.TRUE.toString());
         props.put(QueryServices.THREAD_POOL_SIZE_ATTRIB, Integer.toString(4));
@@ -63,12 +62,15 @@ public class ImmutableIndexWithStatsIT extends BaseHBaseManagedTimeIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
-        conn.createStatement().execute("CREATE TABLE " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME + " (k VARCHAR NOT NULL PRIMARY KEY, v VARCHAR) IMMUTABLE_ROWS=TRUE");
-        query = "SELECT * FROM " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME;
+        // Randomize table name to prevent using already created table
+        long rand = (long)(Math.random() * 1000000.0);
+        String tableName = TestUtil.DEFAULT_DATA_TABLE_FULL_NAME + rand;
+        conn.createStatement().execute("CREATE TABLE " + tableName + " (k VARCHAR NOT NULL PRIMARY KEY, v VARCHAR) IMMUTABLE_ROWS=TRUE");
+        query = "SELECT * FROM " + tableName;
         rs = conn.createStatement().executeQuery(query);
         assertFalse(rs.next());
 
-        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME + " VALUES(?,?)");
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES(?,?)");
         for (int i=0; i<6;i++) {
 	        stmt.setString(1,"k" + i);
 	        stmt.setString(2, "v" + i );
@@ -76,14 +78,15 @@ public class ImmutableIndexWithStatsIT extends BaseHBaseManagedTimeIT {
         }
         conn.commit();
         
-        conn.createStatement().execute("UPDATE STATISTICS " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME);
-        query = "SELECT COUNT(*) FROM " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME;
+        conn.createStatement().execute("UPDATE STATISTICS " + tableName);
+        query = "SELECT COUNT(*) FROM " + tableName;
         rs = conn.createStatement().executeQuery("EXPLAIN " + query);
         assertTrue(QueryUtil.getExplainPlan(rs).startsWith("CLIENT 7-CHUNK PARALLEL 1-WAY FULL SCAN"));
 
-        conn.createStatement().execute("CREATE INDEX " + TestUtil.DEFAULT_INDEX_TABLE_NAME + " ON " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME + " (v)");
+        String indexName = TestUtil.DEFAULT_INDEX_TABLE_NAME + rand;
+        conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName + " (v)");
         
-        query = "SELECT * FROM " + TestUtil.DEFAULT_INDEX_TABLE_FULL_NAME;
+        query = "SELECT * FROM " + indexName;
         rs = conn.createStatement().executeQuery(query);
         assertTrue(rs.next());
     }
