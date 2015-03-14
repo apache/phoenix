@@ -1366,7 +1366,7 @@ public abstract class BaseTest {
         }
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
-            conn.createStatement().execute("CREATE SEQUENCE my.seq");
+            conn.createStatement().execute("CREATE SEQUENCE IF NOT EXISTS my.seq");
             // Insert into customer table
             PreparedStatement stmt = conn.prepareStatement(
                     "upsert into " + JOIN_CUSTOMER_TABLE_FULL_NAME +

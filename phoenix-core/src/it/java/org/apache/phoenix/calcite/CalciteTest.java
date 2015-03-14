@@ -226,13 +226,13 @@ public class CalciteTest extends BaseClientManagedTimeIT {
                                 {"00A223122312312", "a", "00D300000000XHP"}, 
                                 {"00A323122312312", "a", "00D300000000XHP"}, 
                                 {"00A423122312312", "a", "00D300000000XHP"}});
-//        testConnect("SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\"", 
-//                new Object[][] {{"0000000001", "T1", "0000000001", "S1"}, 
-//                                {"0000000002", "T2", "0000000001", "S1"}, 
-//                                {"0000000003", "T3", "0000000002", "S2"}, 
-//                                {"0000000004", "T4", "0000000002", "S2"},
-//                                {"0000000005", "T5", "0000000005", "S5"},
-//                                {"0000000006", "T6", "0000000006", "S6"}});
+        testConnect("SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\"", 
+                new Object[][] {{"0000000001", "T1", "0000000001", "S1"}, 
+                                {"0000000002", "T2", "0000000001", "S1"}, 
+                                {"0000000003", "T3", "0000000002", "S2"}, 
+                                {"0000000004", "T4", "0000000002", "S2"},
+                                {"0000000005", "T5", "0000000005", "S5"},
+                                {"0000000006", "T6", "0000000006", "S6"}});
     }
 
     @Test public void testExplainPlanForSelectWhereQuery() {
