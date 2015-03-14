@@ -290,7 +290,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     @Override
     public HTableInterface getTable(byte[] tableName) throws SQLException {
         try {
-            return HBaseFactoryProvider.getHTableFactory().getTable(tableName, connection, getExecutor());
+            return HBaseFactoryProvider.getHTableFactory().getTable(tableName, connection, null);
         } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
             byte[][] schemaAndTableName = new byte[2][];
             SchemaUtil.getVarChars(tableName, schemaAndTableName);
