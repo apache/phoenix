@@ -48,7 +48,8 @@ public interface HTableFactory {
         @SuppressWarnings("deprecation")
         @Override
         public HTableInterface getTable(byte[] tableName, HConnection connection, ExecutorService pool) throws IOException {
-            return connection.getTable(tableName, pool);
+            // Let the HBase client manage the thread pool instead of passing ours through
+            return connection.getTable(tableName);
         }
     }
 }
