@@ -48,6 +48,7 @@ public interface QueryServices extends SQLCloseable {
     public static final String HBASE_CLIENT_PRINCIPAL = "hbase.myclient.principal";
     public static final String SPOOL_DIRECTORY = "phoenix.spool.directory";
     public static final String AUTO_COMMIT_ATTRIB = "phoenix.connection.autoCommit";
+    public static final String USE_BYTE_BASED_REGEX_ATTRIB = "phoenix.regex.byteBased";
 
     /**
 	 * max size to spool the the result into

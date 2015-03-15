@@ -58,35 +58,54 @@ public class RegexpSubstrFunctionIT extends BaseHBaseManagedTimeIT {
         id++;
     }
 
-    @Test
-    public void testGroupByScanWithRegexpSubstr() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+    private void testGroupByScanWithRegexpSubstr(Connection conn, Integer offset, String exceptedSubstr) throws Exception {
+        String cmd = "select REGEXP_SUBSTR(uri, '[^\\\\?]+'" + ((offset == null) ? "" : ", " + offset.intValue()) +") suburi, sum(appcpu) sumcpu from " + GROUPBYTEST_NAME + " group by suburi";
         Statement stmt = conn.createStatement();
-        ResultSet rs = stmt.executeQuery("select REGEXP_SUBSTR(uri, '[^\\\\?]+') suburi, sum(appcpu) sumcpu from " + GROUPBYTEST_NAME
-            + " group by suburi");
+        ResultSet rs = stmt.executeQuery(cmd);
         assertTrue(rs.next());
-        assertEquals(rs.getString("suburi"), "Report1");
+        assertEquals(rs.getString("suburi"), exceptedSubstr + "1");
         assertEquals(rs.getInt("sumcpu"), 20);
         assertTrue(rs.next());
-        assertEquals(rs.getString("suburi"), "Report2");
+        assertEquals(rs.getString("suburi"), exceptedSubstr + "2");
         assertEquals(rs.getInt("sumcpu"), 30);
         assertTrue(rs.next());
-        assertEquals(rs.getString("suburi"), "Report3");
+        assertEquals(rs.getString("suburi"), exceptedSubstr + "3");
         assertEquals(rs.getInt("sumcpu"), 30);
         assertFalse(rs.next());
-        conn.close();
     }
 
     @Test
-    public void testFilterWithRegexSubstr() throws Exception {
+    public void testGroupByScanWithRegexpSubstr() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        ResultSet rs = conn.createStatement().executeQuery(
-                "select id from " + GROUPBYTEST_NAME + " where REGEXP_SUBSTR(uri, '[^\\\\?]+') = 'Report1'");
+        // Default offset
+        testGroupByScanWithRegexpSubstr(conn, null, "Report");
+        // Positive offset
+        testGroupByScanWithRegexpSubstr(conn, Integer.valueOf(2), "eport");
+        // Negative offset
+        testGroupByScanWithRegexpSubstr(conn, Integer.valueOf(-5), "rt");
+        conn.close();
+    }
+
+    private void testFilterWithRegexSubstr(Connection conn, Integer offset, String exceptedSubstr) throws Exception {
+        String cmd = "select id from " + GROUPBYTEST_NAME + " where REGEXP_SUBSTR(uri, '[^\\\\?]+'"+ ((offset == null) ? "" : ", " + offset.intValue()) +") = '" + exceptedSubstr + "1'";
+        ResultSet rs = conn.createStatement().executeQuery(cmd);
         assertTrue(rs.next());
         assertEquals("id0", rs.getString(1));
         assertTrue(rs.next());
         assertEquals("id1", rs.getString(1));
         assertFalse(rs.next());
+    }
+
+    @Test
+    public void testFilterWithRegexSubstr() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        // Default offset
+        testFilterWithRegexSubstr(conn, null, "Report");
+        // Positive offset
+        testFilterWithRegexSubstr(conn, Integer.valueOf(2), "eport");
+        // Negative offset
+        testFilterWithRegexSubstr(conn, Integer.valueOf(-5), "rt");
+        conn.close();
     }
 
 }
