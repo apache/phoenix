@@ -21,9 +21,9 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
-import java.util.regex.Pattern;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.phoenix.expression.util.regex.AbstractBasePattern;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.parse.LikeParseNode.LikeType;
 import org.apache.phoenix.schema.tuple.Tuple;
@@ -49,7 +49,7 @@ import com.google.common.collect.Lists;
  * 
  * @since 0.1
  */
-public class LikeExpression extends BaseCompoundExpression {
+public abstract class LikeExpression extends BaseCompoundExpression {
     private static final Logger logger = LoggerFactory.getLogger(LikeExpression.class);
 
     private static final String ZERO_OR_MORE = "\\E.*\\Q";
@@ -195,10 +195,6 @@ public class LikeExpression extends BaseCompoundExpression {
 //        return sb.toString();
 //    }
 
-    public static LikeExpression create(List<Expression> children, LikeType likeType) {
-        return new LikeExpression(addLikeTypeChild(children,likeType));
-    }
-    
     private static final int LIKE_TYPE_INDEX = 2;
     private static final LiteralExpression[] LIKE_TYPE_LITERAL = new LiteralExpression[LikeType.values().length];
     static {
@@ -206,12 +202,12 @@ public class LikeExpression extends BaseCompoundExpression {
             LIKE_TYPE_LITERAL[likeType.ordinal()] = LiteralExpression.newConstant(likeType.name());
         }
     }
-    private Pattern pattern;
+    private AbstractBasePattern pattern;
 
     public LikeExpression() {
     }
 
-    private static List<Expression> addLikeTypeChild(List<Expression> children, LikeType likeType) {
+    protected static List<Expression> addLikeTypeChild(List<Expression> children, LikeType likeType) {
         List<Expression> newChildren = Lists.newArrayListWithExpectedSize(children.size()+1);
         newChildren.addAll(children);
         newChildren.add(LIKE_TYPE_LITERAL[likeType.ordinal()]);
@@ -247,11 +243,14 @@ public class LikeExpression extends BaseCompoundExpression {
         }
     }
 
-    protected Pattern compilePattern (String value) {
-        if (likeType == LikeType.CASE_SENSITIVE)
-            return Pattern.compile(toPattern(value));
-        else
-            return Pattern.compile("(?i)" + toPattern(value));
+    protected abstract AbstractBasePattern compilePatternSpec(String value);
+
+    protected AbstractBasePattern compilePattern(String value) {
+        if (likeType == LikeType.CASE_SENSITIVE) {
+            return compilePatternSpec(toPattern(value));
+        } else {
+            return compilePatternSpec("(?i)" + toPattern(value));
+        }
     }
 
     private Expression getStrExpression() {
@@ -264,7 +263,7 @@ public class LikeExpression extends BaseCompoundExpression {
 
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-        Pattern pattern = this.pattern;
+        AbstractBasePattern pattern = this.pattern;
         if (pattern == null) { // TODO: don't allow? this is going to be slooowwww
             if (!getPatternExpression().evaluate(tuple, ptr)) {
                 if (logger.isDebugEnabled()) {
@@ -289,8 +288,11 @@ public class LikeExpression extends BaseCompoundExpression {
             return true;
         }
 
-        String value = (String) PVarchar.INSTANCE.toObject(ptr, getStrExpression().getSortOrder());
-        boolean matched = pattern.matcher(value).matches();
+        String value = null;
+        if (logger.isDebugEnabled()) {
+            value = (String) PVarchar.INSTANCE.toObject(ptr, getStrExpression().getSortOrder());
+        }
+        boolean matched = pattern.macher(ptr, getStrExpression().getSortOrder()).matches();
         ptr.set(matched ? PDataType.TRUE_BYTES : PDataType.FALSE_BYTES);
         if (logger.isDebugEnabled()) {
             logger.debug("LIKE(value='" + value + "'pattern='" + pattern.pattern() + "' is " + matched);

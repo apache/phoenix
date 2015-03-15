@@ -730,7 +730,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         assertEquals(
                 rowKeyFilter(like(
                     ENTITY_ID,
-                    likeArg)),
+                    likeArg,
+                    context)),
                 filter);
 
         byte[] startRow = ByteUtil.concat(
@@ -756,7 +757,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         assertEquals(
                 rowKeyFilter(like(
                     ENTITY_ID,
-                    likeArg)),
+                    likeArg,
+                    context)),
                 filter);
 
         byte[] startRow = ByteUtil.concat(
@@ -782,7 +784,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         assertEquals(
                 rowKeyFilter(like(
                     substr(ENTITY_ID,1,10),
-                    likeArg)),
+                    likeArg,
+                    context)),
                 filter);
 
         byte[] startRow = ByteUtil.concat(
@@ -808,7 +811,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         assertEquals(
                 rowKeyFilter(like(
                     substr(ENTITY_ID,4,10),
-                    likeArg)),
+                    likeArg,
+                    context)),
                 filter);
 
         byte[] startRow = PVarchar.INSTANCE.toBytes(tenantId);
@@ -831,7 +835,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         assertEquals(
                 rowKeyFilter(like(
                     ENTITY_ID,
-                    likeArg)),
+                    likeArg,
+                    context)),
                 filter);
 
         byte[] startRow = PVarchar.INSTANCE.toBytes(tenantId);
@@ -854,7 +859,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         assertEquals(
                 rowKeyFilter(not(like(
                     ENTITY_ID,
-                    likeArg))),
+                    likeArg,
+                    context))),
                 filter);
 
         byte[] startRow = PVarchar.INSTANCE.toBytes(tenantId);
