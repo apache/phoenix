@@ -28,8 +28,7 @@ import java.sql.ResultSet;
 import java.util.Map;
 import java.util.Properties;
 
-import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
-import org.apache.phoenix.end2end.Shadower;
+import org.apache.phoenix.end2end.BaseOwnClusterHBaseManagedTimeIT;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
@@ -41,10 +40,9 @@ import org.junit.Test;
 import com.google.common.collect.Maps;
 
 
-public class ImmutableIndexWithStatsIT extends BaseHBaseManagedTimeIT {
+public class ImmutableIndexWithStatsIT extends BaseOwnClusterHBaseManagedTimeIT {
     
     @BeforeClass
-    @Shadower(classBeingShadowed = BaseHBaseManagedTimeIT.class)
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(5);
         props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(1));
@@ -62,9 +60,7 @@ public class ImmutableIndexWithStatsIT extends BaseHBaseManagedTimeIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
-        // Randomize table name to prevent using already created table
-        long rand = (long)(Math.random() * 1000000.0);
-        String tableName = TestUtil.DEFAULT_DATA_TABLE_FULL_NAME + rand;
+        String tableName = TestUtil.DEFAULT_DATA_TABLE_FULL_NAME;
         conn.createStatement().execute("CREATE TABLE " + tableName + " (k VARCHAR NOT NULL PRIMARY KEY, v VARCHAR) IMMUTABLE_ROWS=TRUE");
         query = "SELECT * FROM " + tableName;
         rs = conn.createStatement().executeQuery(query);
@@ -83,7 +79,7 @@ public class ImmutableIndexWithStatsIT extends BaseHBaseManagedTimeIT {
         rs = conn.createStatement().executeQuery("EXPLAIN " + query);
         assertTrue(QueryUtil.getExplainPlan(rs).startsWith("CLIENT 7-CHUNK PARALLEL 1-WAY FULL SCAN"));
 
-        String indexName = TestUtil.DEFAULT_INDEX_TABLE_NAME + rand;
+        String indexName = TestUtil.DEFAULT_INDEX_TABLE_NAME;
         conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName + " (v)");
         
         query = "SELECT * FROM " + indexName;
