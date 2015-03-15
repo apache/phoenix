@@ -3,6 +3,7 @@ package org.apache.phoenix.calcite;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexInputRef;
@@ -24,7 +25,13 @@ import com.google.common.collect.Maps;
  * Utilities for interacting with Calcite.
  */
 public class CalciteUtils {
-  private CalciteUtils() {}
+    private CalciteUtils() {}
+    
+    private static AtomicInteger tempAliasCounter = new AtomicInteger(0);
+  
+    public static String createTempAlias() {
+        return "$" + tempAliasCounter.incrementAndGet();
+    }
 
 	private static final Map<SqlKind, ExpressionFactory> EXPRESSION_MAP = Maps
 			.newHashMapWithExpectedSize(ExpressionType.values().length);

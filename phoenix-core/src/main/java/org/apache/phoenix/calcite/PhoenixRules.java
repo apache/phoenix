@@ -6,6 +6,7 @@ import org.apache.calcite.rel.InvalidRelException;
 import org.apache.calcite.rel.RelCollationImpl;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.convert.ConverterRule;
+import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.rel.core.Sort;
 import org.apache.calcite.rel.core.Union;
 import org.apache.calcite.rel.logical.LogicalAggregate;
@@ -32,6 +33,7 @@ public class PhoenixRules {
         PhoenixProjectRule.INSTANCE,
         PhoenixAggregateRule.INSTANCE,
         PhoenixUnionRule.INSTANCE,
+        PhoenixJoinRule.INSTANCE,
     };
 
     /** Base class for planner rules that convert a relational expression to
@@ -164,6 +166,31 @@ public class PhoenixRules {
             final RelTraitSet traitSet = union.getTraitSet().replace(out);
             return new PhoenixUnion(rel.getCluster(), traitSet, convertList(union.getInputs(), out),
                 union.all);
+        }
+    }
+
+    /**
+     * Rule to convert a {@link org.apache.calcite.rel.core.Sort} to a
+     * {@link PhoenixSort}.
+     */
+    private static class PhoenixJoinRule extends PhoenixConverterRule {
+        public static final PhoenixJoinRule INSTANCE = new PhoenixJoinRule();
+
+        private PhoenixJoinRule() {
+            super(Join.class, Convention.NONE, PhoenixRel.CONVENTION,
+                "PhoenixJoinRule");
+        }
+
+        public RelNode convert(RelNode rel) {
+            final Join join = (Join) rel;
+            final RelTraitSet traitSet =
+                join.getTraitSet().replace(out);
+            return new PhoenixJoin(rel.getCluster(), traitSet,
+                convert(join.getLeft(), traitSet),
+                convert(join.getRight(), traitSet),
+                join.getCondition(),
+                join.getJoinType(),
+                join.getVariablesStopped());
         }
     }
 

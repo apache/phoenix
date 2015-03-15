@@ -3,7 +3,9 @@ package org.apache.phoenix.calcite;
 import org.apache.calcite.plan.Convention;
 import org.apache.calcite.rel.RelNode;
 import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.expression.ColumnExpression;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableRef;
 
 /**
@@ -47,5 +49,7 @@ public interface PhoenixRel extends RelNode {
     void pushContext(ImplementorContext context);
     ImplementorContext popContext();
     ImplementorContext getCurrentContext();
+    PTable createProjectedTable();
+    RowProjector createRowProjector();
   }
 }

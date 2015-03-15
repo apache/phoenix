@@ -22,6 +22,7 @@ import java.util.List;
 
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.iterate.DelegateResultIterator;
 import org.apache.phoenix.iterate.FilterResultIterator;
@@ -33,12 +34,23 @@ import com.google.common.collect.Lists;
 public class TupleProjectionPlan extends DelegateQueryPlan {
     private final TupleProjector tupleProjector;
     private final Expression postFilter;
+    private final RowProjector rowProjector;
 
     public TupleProjectionPlan(QueryPlan plan, TupleProjector tupleProjector, Expression postFilter) {
+        this(plan, tupleProjector, postFilter, plan.getProjector());
+    }
+    
+    public TupleProjectionPlan(QueryPlan plan, TupleProjector tupleProjector, Expression postFilter, RowProjector rowProjector) {
         super(plan);
         if (tupleProjector == null) throw new IllegalArgumentException("tupleProjector is null");
         this.tupleProjector = tupleProjector;
         this.postFilter = postFilter;
+        this.rowProjector = rowProjector;
+    }
+    
+    @Override
+    public RowProjector getProjector() {
+        return this.rowProjector;
     }
 
     @Override

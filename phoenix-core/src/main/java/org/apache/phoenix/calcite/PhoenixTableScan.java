@@ -13,18 +13,17 @@ import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelWriter;
 import org.apache.calcite.rel.core.TableScan;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
+import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rex.RexNode;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
-import org.apache.phoenix.compile.ColumnProjector;
-import org.apache.phoenix.compile.ExpressionProjector;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.SequenceManager;
 import org.apache.phoenix.compile.StatementContext;
-import org.apache.phoenix.compile.TupleProjectionCompiler;
 import org.apache.phoenix.compile.WhereCompiler;
 import org.apache.phoenix.compile.WhereOptimizer;
 import org.apache.phoenix.execute.ScanPlan;
@@ -33,7 +32,6 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.iterate.ParallelIteratorFactory;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.SelectStatement;
-import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.KeyValueSchema.KeyValueSchemaBuilder;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
@@ -48,10 +46,15 @@ import com.google.common.collect.Lists;
  */
 public class PhoenixTableScan extends TableScan implements PhoenixRel {
     public final RexNode filter;
+    public final List<RexNode> projects;
 
-    protected PhoenixTableScan(RelOptCluster cluster, RelTraitSet traits, RelOptTable table, RexNode filter) {
+    protected PhoenixTableScan(RelOptCluster cluster, RelTraitSet traits, RelOptTable table, RexNode filter, List<RexNode> projects, RelDataType rowType) {
         super(cluster, traits, table);
         this.filter = filter;
+        this.projects = projects;
+        if (rowType != null) {
+            this.rowType = rowType;
+        }
     }
 
     @Override
@@ -67,12 +70,14 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
             planner.addRule(rule);
         }
         planner.addRule(PhoenixFilterScanMergeRule.INSTANCE);
+        planner.addRule(PhoenixProjectScanMergeRule.INSTANCE);
     }
 
     @Override
     public RelWriter explainTerms(RelWriter pw) {
         return super.explainTerms(pw)
-            .itemIf("filter", filter, filter != null);
+            .itemIf("filter", filter, filter != null)
+            .itemIf("project", projects, projects != null);
     }
 
     @Override
@@ -89,7 +94,7 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
     public QueryPlan implement(Implementor implementor) {
         final PhoenixTable phoenixTable = table.unwrap(PhoenixTable.class);
         PTable pTable = phoenixTable.getTable();
-        TableRef tableRef = new TableRef(pTable);
+        TableRef tableRef = new TableRef(CalciteUtils.createTempAlias(), pTable, HConstants.LATEST_TIMESTAMP, false);
         implementor.setTableRef(tableRef);
         try {
             PhoenixStatement stmt = new PhoenixStatement(phoenixTable.pc);
@@ -102,11 +107,16 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
                 WhereCompiler.setScanFilter(context, select, filterExpr, true, false);
             }
             projectAllColumnFamilies(context.getScan(), phoenixTable.getTable());
-            TupleProjector tupleProjector = createTupleProjector(implementor, phoenixTable.getTable());
+            TupleProjector tupleProjector;
+            if (projects == null) {
+                tupleProjector = createTupleProjector(implementor, phoenixTable.getTable());
+            } else {
+                tupleProjector = PhoenixProject.project(implementor, this.projects);
+            }
             TupleProjector.serializeProjectorIntoScan(context.getScan(), tupleProjector);
-            PTable projectedTable = createProjectedTable(tableRef, implementor.getCurrentContext().isRetainPKColumns());
+            PTable projectedTable = implementor.createProjectedTable();
             implementor.setTableRef(new TableRef(projectedTable));
-            RowProjector rowProjector = createRowProjector(implementor, pTable);
+            RowProjector rowProjector = implementor.createRowProjector();
             Integer limit = null;
             OrderBy orderBy = OrderBy.EMPTY_ORDER_BY;
             ParallelIteratorFactory iteratorFactory = null;
@@ -130,25 +140,7 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
         return new TupleProjector(builder.build(), exprs.toArray(new Expression[exprs.size()]));
     }
     
-    private PTable createProjectedTable(TableRef tableRef, boolean retainPKColumns) throws SQLException {
-        List<ColumnRef> sourceColumnRefs = Lists.<ColumnRef> newArrayList();
-        for (PColumn column : tableRef.getTable().getColumns()) {
-            sourceColumnRefs.add(new ColumnRef(tableRef, column.getPosition()));
-        }
-        
-        return TupleProjectionCompiler.createProjectedTable(tableRef, sourceColumnRefs, retainPKColumns);
-    }
-    
-    private RowProjector createRowProjector(Implementor implementor, PTable table) {
-        List<ColumnProjector> columnProjectors = Lists.<ColumnProjector>newArrayList();
-        for (PColumn column : table.getColumns()) {
-            Expression expr = implementor.newColumnExpression(column.getPosition());
-            columnProjectors.add(new ExpressionProjector(column.getName().getString(), table.getName().getString(), expr, false));
-        }
-        // TODO get estimate row size
-        return new RowProjector(columnProjectors, 0, false);        
-    }
-    
+    // TODO only project needed columns
     private void projectAllColumnFamilies(Scan scan, PTable table) {
         scan.getFamilyMap().clear();
         for (PColumnFamily family : table.getColumnFamilies()) {
