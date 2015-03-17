@@ -884,8 +884,8 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         try {
             stmt.execute("upsert into PTSDB(INST,HOST,VAL) VALUES ('abc', 'abc-def-ghi', 0.5)");
             fail();
-        } catch (ConstraintViolationException e) {
-            assertTrue(e.getMessage().contains("may not be null"));
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.CONSTRAINT_VIOLATION.getErrorCode(), e.getErrorCode());
         } finally {
             conn.close();
         }
