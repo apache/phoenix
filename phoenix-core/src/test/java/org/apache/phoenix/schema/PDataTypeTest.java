@@ -460,6 +460,8 @@ public class PDataTypeTest {
         Object doubleObj = PDataType.TINYINT.toObject(doubleValue, PDataType.DOUBLE);
         assertTrue(doubleObj instanceof Byte);
         assertEquals(100, ((Byte)doubleObj).byteValue());
+        
+        assertTrue(PDataType.TINYINT.isCoercibleTo(PDataType.TINYINT, (byte) -1));
     }
     
     @Test
