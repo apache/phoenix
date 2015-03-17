@@ -31,7 +31,7 @@ public class PUnsignedTimestamp extends PDataType<Timestamp> {
   public static final PUnsignedTimestamp INSTANCE = new PUnsignedTimestamp();
 
   private PUnsignedTimestamp() {
-    super("UNSIGNED_TIMESTAMP", 20, java.sql.Timestamp.class, null, 12);
+    super("UNSIGNED_TIMESTAMP", 20, java.sql.Timestamp.class, new PUnsignedDate.UnsignedDateCodec(), 12);
   }
 
   @Override
