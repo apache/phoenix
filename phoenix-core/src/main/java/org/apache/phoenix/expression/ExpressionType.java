@@ -42,6 +42,7 @@ import org.apache.phoenix.expression.function.FloorDecimalExpression;
 import org.apache.phoenix.expression.function.FloorFunction;
 import org.apache.phoenix.expression.function.HourFunction;
 import org.apache.phoenix.expression.function.IndexStateNameFunction;
+import org.apache.phoenix.expression.function.InstrFunction;
 import org.apache.phoenix.expression.function.InvertFunction;
 import org.apache.phoenix.expression.function.LTrimFunction;
 import org.apache.phoenix.expression.function.LastValueFunction;
@@ -205,7 +206,8 @@ public enum ExpressionType {
     SecondFunction(SecondFunction.class),
     WeekFunction(WeekFunction.class),
     HourFunction(HourFunction.class),
-    NowFunction(NowFunction.class)
+    NowFunction(NowFunction.class),
+    InstrFunction(InstrFunction.class)
     ;
 
     ExpressionType(Class<? extends Expression> clazz) {
