@@ -82,6 +82,7 @@ import org.apache.phoenix.expression.function.ToTimestampFunction;
 import org.apache.phoenix.expression.function.TrimFunction;
 import org.apache.phoenix.expression.function.TruncFunction;
 import org.apache.phoenix.expression.function.UpperFunction;
+import org.apache.phoenix.expression.function.YearFunction;
 
 import com.google.common.collect.Maps;
 
@@ -194,6 +195,7 @@ public enum ExpressionType {
     ToTimeFunction(ToTimeFunction.class),
     ToTimestampFunction(ToTimestampFunction.class),
     SignFunction(SignFunction.class),
+    YearFunction(YearFunction.class)
     ;
     
     ExpressionType(Class<? extends Expression> clazz) {
