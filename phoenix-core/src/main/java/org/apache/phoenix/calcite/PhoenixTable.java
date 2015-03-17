@@ -1,8 +1,16 @@
 package org.apache.phoenix.calcite;
 
+import java.util.Collections;
+import java.util.List;
+
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
+
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptTable;
+import org.apache.calcite.rel.RelCollation;
+import org.apache.calcite.rel.RelDistribution;
+import org.apache.calcite.rel.RelDistributions;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
@@ -10,7 +18,6 @@ import org.apache.calcite.schema.Statistic;
 import org.apache.calcite.schema.TranslatableTable;
 import org.apache.calcite.schema.impl.AbstractTable;
 import org.apache.calcite.sql.type.SqlTypeName;
-
 import org.apache.calcite.util.ImmutableBitSet;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.PColumn;
@@ -23,11 +30,17 @@ import org.apache.phoenix.schema.types.PDataType;
  */
 public class PhoenixTable extends AbstractTable implements TranslatableTable {
   public final PTable pTable;
+  public final ImmutableBitSet pkBitSet;
   public final PhoenixConnection pc;
 
   public PhoenixTable(PhoenixConnection pc, PTable pTable) {
       this.pc = Preconditions.checkNotNull(pc);
       this.pTable = Preconditions.checkNotNull(pTable);
+      List<Integer> pkPositions = Lists.<Integer> newArrayList();
+      for (PColumn column : pTable.getPKColumns()) {
+          pkPositions.add(column.getPosition());
+      }
+      this.pkBitSet = ImmutableBitSet.of(pkPositions);
     }
     
     public PTable getTable() {
@@ -70,7 +83,17 @@ public class PhoenixTable extends AbstractTable implements TranslatableTable {
 
             @Override
             public boolean isKey(ImmutableBitSet immutableBitSet) {
-                return false;
+                return immutableBitSet.contains(pkBitSet);
+            }
+
+            @Override
+            public List<RelCollation> getCollations() {
+                return Collections.<RelCollation> emptyList();
+            }
+
+            @Override
+            public RelDistribution getDistribution() {
+                return RelDistributions.RANDOM_DISTRIBUTED;
             }
         };
     }

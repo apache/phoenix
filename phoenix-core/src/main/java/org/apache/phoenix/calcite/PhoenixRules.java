@@ -68,7 +68,7 @@ public class PhoenixRules {
                 sort.getTraitSet().replace(out)
                     .replace(sort.getCollation());
             return new PhoenixSort(rel.getCluster(), traitSet,
-                convert(sort.getInput(), traitSet.replace(RelCollationImpl.EMPTY)),
+                convert(sort.getInput(), sort.getInput().getTraitSet().replace(RelCollationImpl.EMPTY)),
                 sort.getCollation(), sort.offset, sort.fetch);
         }
     }
@@ -91,7 +91,7 @@ public class PhoenixRules {
             return new PhoenixFilter(
                 rel.getCluster(),
                 traitSet,
-                convert(filter.getInput(), traitSet),
+                convert(filter.getInput(), filter.getInput().getTraitSet().replace(out)),
                 filter.getCondition());
         }
     }
@@ -112,7 +112,7 @@ public class PhoenixRules {
             final LogicalProject project = (LogicalProject) rel;
             final RelTraitSet traitSet = project.getTraitSet().replace(out);
             return new PhoenixProject(project.getCluster(), traitSet,
-                convert(project.getInput(), traitSet), project.getProjects(),
+                convert(project.getInput(), project.getInput().getTraitSet().replace(out)), project.getProjects(),
                 project.getRowType());
         }
     }
@@ -137,7 +137,7 @@ public class PhoenixRules {
                 return new PhoenixAggregate(
                     rel.getCluster(),
                     traitSet,
-                    convert(agg.getInput(), traitSet),
+                    convert(agg.getInput(), agg.getInput().getTraitSet().replace(out)),
                     agg.indicator,
                     agg.getGroupSet(),
                     agg.getGroupSets(),
@@ -186,8 +186,8 @@ public class PhoenixRules {
             final RelTraitSet traitSet =
                 join.getTraitSet().replace(out);
             return new PhoenixJoin(rel.getCluster(), traitSet,
-                convert(join.getLeft(), traitSet),
-                convert(join.getRight(), traitSet),
+                convert(join.getLeft(), join.getLeft().getTraitSet().replace(out)),
+                convert(join.getRight(), join.getRight().getTraitSet().replace(out)),
                 join.getCondition(),
                 join.getJoinType(),
                 join.getVariablesStopped());

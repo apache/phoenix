@@ -53,6 +53,10 @@
         <enabled>true</enabled>
       </snapshots>
     </repository>
+    <repository>
+      <id>apache calcite</id>
+      <url>https://repository.apache.org/content/repositories/orgapachecalcite-1006</url>
+    </repository>
   </repositories>
 
   <parent>
@@ -103,7 +107,7 @@
     <htrace.version>2.04</htrace.version>
     <collections.version>3.2.1</collections.version>
     <jodatime.version>2.3</jodatime.version>
-    <calcite.version>1.0.0-incubating-SNAPSHOT</calcite.version>
+    <calcite.version>1.1.0-incubating</calcite.version>
 
     <!-- Test Dependencies -->
     <mockito-all.version>1.8.5</mockito-all.version>
