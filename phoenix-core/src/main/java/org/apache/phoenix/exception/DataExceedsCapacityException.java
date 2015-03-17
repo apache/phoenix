@@ -21,12 +21,16 @@ import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.types.PDataType;
 
 
-public class ValueTypeIncompatibleException extends IllegalDataException {
+public class DataExceedsCapacityException extends IllegalDataException {
     private static final long serialVersionUID = 1L;
-    private static SQLExceptionCode code = SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY;
 
-    public ValueTypeIncompatibleException(PDataType type, Integer precision, Integer scale) {
-        super(new SQLExceptionInfo.Builder(code).setMessage(getTypeDisplayString(type, precision, scale))
+    public DataExceedsCapacityException(String message) {
+        super(new SQLExceptionInfo.Builder(
+                SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY).setMessage(message).build().buildException());
+    }
+    
+    public DataExceedsCapacityException(PDataType type, Integer precision, Integer scale) {
+        super(new SQLExceptionInfo.Builder(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY).setMessage(getTypeDisplayString(type, precision, scale))
                 .build().buildException());
     }
 

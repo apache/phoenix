@@ -37,7 +37,7 @@ public class ConstraintViolationException extends RuntimeException {
     
     public ConstraintViolationException(String message) {
         super(new SQLExceptionInfo.Builder(
-                SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY).setMessage(message).build().buildException());
+                SQLExceptionCode.CONSTRAINT_VIOLATION).setMessage(message).build().buildException());
     }
     
     public ConstraintViolationException(Throwable cause) {
