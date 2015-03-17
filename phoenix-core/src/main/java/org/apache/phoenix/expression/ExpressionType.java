@@ -41,6 +41,7 @@ import org.apache.phoenix.expression.function.FloorDateExpression;
 import org.apache.phoenix.expression.function.FloorDecimalExpression;
 import org.apache.phoenix.expression.function.FloorFunction;
 import org.apache.phoenix.expression.function.IndexStateNameFunction;
+import org.apache.phoenix.expression.function.InstrFunction;
 import org.apache.phoenix.expression.function.InvertFunction;
 import org.apache.phoenix.expression.function.LTrimFunction;
 import org.apache.phoenix.expression.function.LastValueFunction;
@@ -192,6 +193,7 @@ public enum ExpressionType {
     RandomFunction(RandomFunction.class),
     ToTimeFunction(ToTimeFunction.class),
     ToTimestampFunction(ToTimestampFunction.class),
+    InstrFunction(InstrFunction.class),
     ;
     
     ExpressionType(Class<? extends Expression> clazz) {
