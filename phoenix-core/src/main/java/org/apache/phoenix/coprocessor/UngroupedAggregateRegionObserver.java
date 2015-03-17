@@ -56,7 +56,7 @@ import org.apache.hadoop.hbase.regionserver.Store;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
-import org.apache.phoenix.exception.ValueTypeIncompatibleException;
+import org.apache.phoenix.exception.DataExceedsCapacityException;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.ExpressionType;
@@ -322,7 +322,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
                                                 column.getDataType(), expression.getMaxLength(),
                                                 expression.getScale(), column.getMaxLength(),
                                                 column.getScale())) {
-                                            throw new ValueTypeIncompatibleException(
+                                            throw new DataExceedsCapacityException(
                                                 column.getDataType(), column.getMaxLength(),
                                                 column.getScale());
                                         }

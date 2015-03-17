@@ -28,7 +28,7 @@ import java.util.Arrays;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.phoenix.exception.ValueTypeIncompatibleException;
+import org.apache.phoenix.exception.DataExceedsCapacityException;
 import org.apache.phoenix.expression.function.RandomFunction;
 import org.apache.phoenix.expression.visitor.CloneExpressionVisitor;
 import org.apache.phoenix.schema.types.PDataType;
@@ -68,7 +68,7 @@ public class ArithmeticOperationTest {
         try {
             e.evaluate(null, new ImmutableBytesWritable());
             fail("Evaluation should have failed");
-        } catch (ValueTypeIncompatibleException ex) {
+        } catch (DataExceedsCapacityException ex) {
         }
 
         // Pass since we roll out imposing precisioin and scale.
@@ -87,7 +87,7 @@ public class ArithmeticOperationTest {
         try {
             e.evaluate(null, new ImmutableBytesWritable());
             fail("Evaluation should have failed");
-        } catch (ValueTypeIncompatibleException ex) {
+        } catch (DataExceedsCapacityException ex) {
         }
         
         // Decimal with no precision and scale.
@@ -141,7 +141,7 @@ public class ArithmeticOperationTest {
         try {
             e.evaluate(null, new ImmutableBytesWritable());
             fail("Evaluation should have failed");
-        } catch (ValueTypeIncompatibleException ex) {
+        } catch (DataExceedsCapacityException ex) {
         }
 
         // Pass since we roll up precision and scale imposing.
@@ -160,7 +160,7 @@ public class ArithmeticOperationTest {
         try {
             e.evaluate(null, new ImmutableBytesWritable());
             fail("Evaluation should have failed");
-        } catch (ValueTypeIncompatibleException ex) {
+        } catch (DataExceedsCapacityException ex) {
         }
         
         // Decimal with no precision and scale.
@@ -194,7 +194,7 @@ public class ArithmeticOperationTest {
         try {
             e.evaluate(null, new ImmutableBytesWritable());
             fail("Evaluation should have failed");
-        } catch (ValueTypeIncompatibleException ex) {
+        } catch (DataExceedsCapacityException ex) {
         }
 
         // Values exceeds scale.
@@ -205,7 +205,7 @@ public class ArithmeticOperationTest {
         try {
             e.evaluate(null, new ImmutableBytesWritable());
             fail("Evaluation should have failed");
-        } catch (ValueTypeIncompatibleException ex) {
+        } catch (DataExceedsCapacityException ex) {
         }
         
         // Decimal with no precision and scale.
@@ -243,7 +243,7 @@ public class ArithmeticOperationTest {
         try {
             e.evaluate(null, new ImmutableBytesWritable());
             fail("Evaluation should have failed");
-        } catch (ValueTypeIncompatibleException ex) {
+        } catch (DataExceedsCapacityException ex) {
         }
         
         // Decimal with no precision and scale.

@@ -25,11 +25,12 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.Calendar;
 import java.util.TimeZone;
 
-import org.apache.phoenix.schema.IllegalDataException;
+import org.apache.phoenix.exception.SQLExceptionCode;
 import org.junit.Test;
 
 
@@ -74,12 +75,9 @@ public class TimezoneOffsetFunctionIT extends BaseHBaseManagedTimeIT {
 			rs.next();
 			assertEquals(0, rs.getInt(3));
 			fail();
-		} catch (IllegalDataException e) {
-			assertTrue(true);
-			return;
-		}
-		fail();
-
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.ILLEGAL_DATA.getErrorCode(), e.getErrorCode());
+        }
 	}
 
 	@Test
