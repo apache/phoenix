@@ -27,28 +27,14 @@ import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDecimal;
-import org.apache.phoenix.schema.types.PDouble;
-import org.apache.phoenix.schema.types.PFloat;
 import org.apache.phoenix.schema.types.PInteger;
-import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PNumericType;
-import org.apache.phoenix.schema.types.PSmallint;
-import org.apache.phoenix.schema.types.PTinyint;
-import org.apache.phoenix.schema.types.PUnsignedDouble;
-import org.apache.phoenix.schema.types.PUnsignedFloat;
-import org.apache.phoenix.schema.types.PUnsignedInt;
-import org.apache.phoenix.schema.types.PUnsignedLong;
-import org.apache.phoenix.schema.types.PUnsignedSmallint;
-import org.apache.phoenix.schema.types.PUnsignedTinyint;
 
 /**
  * Base class for built-in SIGN function.
  * @since 4.3.0
  */
-@BuiltInFunction(name = SignFunction.NAME, args = { @Argument(allowedTypes = { PFloat.class,
-        PDouble.class, PDecimal.class, PUnsignedFloat.class, PUnsignedDouble.class, PInteger.class,
-        PUnsignedInt.class, PLong.class, PUnsignedLong.class, PSmallint.class,
-        PUnsignedSmallint.class, PTinyint.class, PUnsignedTinyint.class }) })
+@BuiltInFunction(name = SignFunction.NAME, args = { @Argument(allowedTypes = { PDecimal.class }) })
 public class SignFunction extends ScalarFunction {
 
     public static final String NAME = "SIGN";
