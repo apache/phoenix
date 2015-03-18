@@ -292,7 +292,7 @@ public abstract class LikeExpression extends BaseCompoundExpression {
         if (logger.isDebugEnabled()) {
             value = (String) PVarchar.INSTANCE.toObject(ptr, getStrExpression().getSortOrder());
         }
-        boolean matched = pattern.macher(ptr, getStrExpression().getSortOrder()).matches();
+        boolean matched = pattern.matcher(ptr, getStrExpression().getSortOrder()).matches();
         ptr.set(matched ? PDataType.TRUE_BYTES : PDataType.FALSE_BYTES);
         if (logger.isDebugEnabled()) {
             logger.debug("LIKE(value='" + value + "'pattern='" + pattern.pattern() + "' is " + matched);

@@ -45,7 +45,7 @@ public class JavaRegexWrapper {
         }
 
         @Override
-        public AbstractBaseMatcher macher(ImmutableBytesWritable ptr, SortOrder sortOrder) {
+        public AbstractBaseMatcher matcher(ImmutableBytesWritable ptr, SortOrder sortOrder) {
             Preconditions.checkNotNull(ptr);
             Preconditions.checkNotNull(sortOrder);
             String matcherSourceStr = Utils.immutableBytesWritableToString(ptr, sortOrder);

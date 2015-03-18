@@ -136,7 +136,7 @@ public class JONIRegexWrapper {
         }
 
         @Override
-        public AbstractBaseMatcher macher(ImmutableBytesWritable ptr, SortOrder sortOrder) {
+        public AbstractBaseMatcher matcher(ImmutableBytesWritable ptr, SortOrder sortOrder) {
             Preconditions.checkNotNull(ptr);
             Preconditions.checkNotNull(sortOrder);
             byte[] matcherSourceBytes = Utils.immutableBytesWritableToBytes(ptr, sortOrder);
