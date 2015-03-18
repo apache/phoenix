@@ -22,6 +22,7 @@ import java.util.List;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.CellScannable;
 import org.apache.hadoop.hbase.CellScanner;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.ipc.DelegatingPayloadCarryingRpcController;
 import org.apache.hadoop.hbase.ipc.PayloadCarryingRpcController;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
@@ -57,7 +58,7 @@ public class IndexQosRpcControllerFactory extends RpcControllerFactory {
         return new IndexQosRpcController(delegate, conf);
     }
 
-    public class IndexQosRpcController extends DelegatingPayloadCarryingRpcController {
+    private class IndexQosRpcController extends DelegatingPayloadCarryingRpcController {
 
         private int priority;
 
@@ -67,7 +68,7 @@ public class IndexQosRpcControllerFactory extends RpcControllerFactory {
         }
         
         @Override
-        public void setPriority(final org.apache.hadoop.hbase.TableName tn) {
+        public void setPriority(final TableName tn) {
             // if its an index table, then we override to the index priority
             if (IndexQosCompat.isIndexTable(tn.getNameAsString())) {
                 setPriority(this.priority);
