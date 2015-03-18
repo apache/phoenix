@@ -17,82 +17,39 @@
  */
 package org.apache.phoenix.hbase.index;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
-import org.apache.phoenix.hbase.index.ipc.PhoenixIndexRpcSchedulerFactory;
+import java.util.Collections;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+
 
 /**
  * Helper class to avoid loading HBase 0.98.3+ classes in older HBase installations
  */
 public class IndexQosCompat {
-
-    private static final Log LOG = LogFactory.getLog(IndexQosCompat.class);
-
-    /**
-     * Full class name of the RpcControllerFactory. This is copied here so we don't need the static reference, so we can work with older versions of HBase 0.98, which don't have this class
-     */
-    private static final String HBASE_RPC_CONTROLLER_CLASS_NAME =
-            "org.apache.hadoop.hbase.ipc.RpcControllerFactory";
-    private static volatile boolean checked = false;
-    private static boolean rpcControllerExists = false;
+    
+    private static final Set<String> indexTableSet = Collections.newSetFromMap(new ConcurrentHashMap<String,Boolean>());
 
     private IndexQosCompat() {
         // private ctor for util class
     }
 
     /**
-     * @param tableName name of the index table
-     * @return configuration key for if a table should have Index QOS writes (its a target index
-     *         table)
-     */
-    public static String getTableIndexQosConfKey(String tableName) {
-        return "phoenix.index.table.qos._" + tableName;
-    }
-
-    /**
-     * Set the index rpc controller, if the rpc controller exists. No-op if there the RpcController
-     * is not on the classpath.
-     * @param conf to update
-     */
-    public static void setPhoenixIndexRpcController(Configuration conf) {
-        if (rpcControllerExists()) {
-            // then we can load the class just fine
-            conf.set(RpcControllerFactory.CUSTOM_CONTROLLER_CONF_KEY,
-                PhoenixIndexRpcSchedulerFactory.class.getName());
-        }
-    }
-
-    private static boolean rpcControllerExists() {
-        if (checked) {
-            synchronized (IndexQosCompat.class) {
-                if (!checked) {
-                    // try loading the class
-                    try {
-                        Class.forName(HBASE_RPC_CONTROLLER_CLASS_NAME);
-                        rpcControllerExists = true;
-                    } catch (ClassNotFoundException e) {
-                        LOG.warn("RpcControllerFactory doesn't exist, not setting custom index handler properties.");
-                        rpcControllerExists = false;
-                    }
-
-                    checked = true;
-                }
-            }
-        }
-        return rpcControllerExists;
-    }
-
-    /**
      * Ensure that the given table is enabled for index QOS handling
-     * @param conf configuration to read/update
      * @param tableName name of the table to configure for index handlers
      */
-    public static void enableIndexQosForTable(Configuration conf, String tableName) {
-        String confKey = IndexQosCompat.getTableIndexQosConfKey(tableName);
-        if (conf.get(confKey) == null) {
-            conf.setBoolean(confKey, true);
-        }
+    public static void enableIndexQosForTable(String tableName) {
+        indexTableSet.add(tableName);
+    }
+    
+    /**
+     * Disanle QOS handling for the given table
+     * @param tableName name of the table to configure for index handlers
+     */
+    public static void disableIndexQosForTable(String tableName) {
+        indexTableSet.remove(tableName);
+    }
+    
+    public static boolean isIndexTable(String tableName) {
+        return indexTableSet.contains(tableName);
     }
 }

@@ -22,7 +22,6 @@ import java.util.List;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.CellScannable;
 import org.apache.hadoop.hbase.CellScanner;
-import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.ipc.DelegatingPayloadCarryingRpcController;
 import org.apache.hadoop.hbase.ipc.PayloadCarryingRpcController;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
@@ -57,30 +56,51 @@ public class IndexQosRpcControllerFactory extends RpcControllerFactory {
         PayloadCarryingRpcController delegate = super.newController(cellIterables);
         return new IndexQosRpcController(delegate, conf);
     }
+    
+//    public static class Dependencies {
+//        public boolean isIndexTable(Configuration conf, org.apache.hadoop.hbase.TableName tn) {
+////          return tn.toString().equals("S.I");
+////          return conf.getBoolean(IndexQosCompat.getTableIndexQosConfKey(tn.getNameAsString()), false);
+//          HConnection connection = null;
+//          try {
+//              connection = HBaseFactoryProvider.getHConnectionFactory().createConnection(conf);
+//              if (connection.isClosed()) {
+//                  return false;
+//              }
+//              HTableDescriptor desc = connection.getHTableDescriptor(tn);
+//              return desc != null && Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(desc.getValue(MetaDataUtil.IS_INDEX_TABLE_PROP_NAME)));
+//          }
+//          catch (IOException e) {
+//              return false;
+//          }
+//          finally {
+//              if (connection!=null) try {
+//                  connection.close();
+//              } catch (IOException e) {
+//              }
+//          }
+//      }
+//    }
 
-    private class IndexQosRpcController extends DelegatingPayloadCarryingRpcController {
+    public class IndexQosRpcController extends DelegatingPayloadCarryingRpcController {
 
-        private Configuration conf;
         private int priority;
 
         public IndexQosRpcController(PayloadCarryingRpcController delegate, Configuration conf) {
             super(delegate);
-            this.conf = conf;
             this.priority = PhoenixIndexRpcSchedulerFactory.getMinPriority(conf);
         }
-
+        
         @Override
-        public void setPriority(final TableName tn) {
+        public void setPriority(final org.apache.hadoop.hbase.TableName tn) {
             // if its an index table, then we override to the index priority
-            if (isIndexTable(tn)) {
+            if (IndexQosCompat.isIndexTable(tn.getNameAsString())) {
                 setPriority(this.priority);
-            } else {
+            } 
+            else {
                 super.setPriority(tn);
             }
         }
 
-        private boolean isIndexTable(TableName tn) {
-            return conf.get(IndexQosCompat.getTableIndexQosConfKey(tn.getNameAsString())) == null;
-        }
     }
 }
