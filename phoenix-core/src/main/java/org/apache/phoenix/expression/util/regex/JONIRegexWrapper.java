@@ -24,6 +24,7 @@ import org.jcodings.specific.UTF8Encoding;
 import org.joni.Matcher;
 import org.joni.Option;
 import org.joni.Regex;
+import org.joni.Syntax;
 
 import com.google.common.base.Preconditions;
 
@@ -44,95 +45,12 @@ public class JONIRegexWrapper {
         JONIPattern(String patternString, int flags) {
             this.patternString = patternString;
             if (patternString != null) {
-                patternString = replacePatternQuote(patternString);
                 byte[] patternBytes = patternString.getBytes();
-                pattern = new Regex(patternBytes, 0, patternBytes.length, flags, PVARCHAR_ENCODING);
+                pattern = new Regex(patternBytes, 0, patternBytes.length, flags, PVARCHAR_ENCODING, Syntax.Java);
             } else {
                 pattern = null;
             }
             isLastMatcherStringNull = false;
-        }
-
-        public enum ReplaceQuoteMachine {
-            STOP, ZERO, ONE_BACKSLASH, IN_QUOTE, IN_QUOTE_ONE_BACKSLASH;
-
-            ReplaceQuoteMachine next(StringBuilder sb, char ch) {
-                switch (this) {
-                case ZERO:
-                    switch (ch) {
-                    case '\\':
-                        return ONE_BACKSLASH;
-                    default:
-                        sb.append(ch);
-                        return ZERO;
-                    }
-                case ONE_BACKSLASH:
-                    switch (ch) {
-                    case 'Q':
-                        return IN_QUOTE;
-                    default:
-                        sb.append('\\');
-                        return ZERO.next(sb, ch);
-                    }
-                case IN_QUOTE:
-                    // add backslashes for .^$*+?()[{\|
-                    switch (ch) {
-                    case '.':
-                    case '^':
-                    case '$':
-                    case '*':
-                    case '+':
-                    case '?':
-                    case '(':
-                    case ')':
-                    case '[':
-                    case '{':
-                    case '|':
-                        sb.append('\\').append(ch);
-                        return IN_QUOTE;
-                    case '\\':
-                        return IN_QUOTE_ONE_BACKSLASH;
-                    default:
-                        sb.append(ch);
-                        return IN_QUOTE;
-                    }
-                case IN_QUOTE_ONE_BACKSLASH:
-                    switch (ch) {
-                    case 'E':
-                        return ZERO;
-                    default:
-                        sb.append('\\');
-                        return IN_QUOTE.next(sb, ch);
-                    }
-                case STOP:
-                default:
-                    throw new IllegalArgumentException();
-                }
-            }
-
-            ReplaceQuoteMachine EOF(StringBuilder sb) {
-                switch (this) {
-                case ONE_BACKSLASH:
-                case IN_QUOTE_ONE_BACKSLASH:
-                    sb.append('\\');
-                case ZERO:
-                case IN_QUOTE:
-                    return STOP;
-                case STOP:
-                default:
-                    throw new IllegalArgumentException();
-                }
-            }
-        }
-
-        private String replacePatternQuote(String patternString) {
-            StringBuilder sb = new StringBuilder();
-            ReplaceQuoteMachine cur = ReplaceQuoteMachine.ZERO;
-            for (int i = 0; i < patternString.length(); ++i) {
-                cur = cur.next(sb, patternString.charAt(i));
-            }
-            cur = cur.EOF(sb);
-            return sb.toString();
         }
 
         @Override
