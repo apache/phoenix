@@ -67,11 +67,6 @@ public class JONIRegexWrapper {
         }
 
         @Override
-        public boolean isPatternStringNull() {
-            return pattern == null;
-        }
-
-        @Override
         public boolean isMatcherSourceStrNull() {
             return isLastMatcherStringNull;
         }

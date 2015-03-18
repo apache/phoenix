@@ -26,7 +26,5 @@ public abstract class AbstractBasePattern {
 
     public abstract String pattern();
 
-    public abstract boolean isPatternStringNull();
-
     public abstract boolean isMatcherSourceStrNull();
 }
