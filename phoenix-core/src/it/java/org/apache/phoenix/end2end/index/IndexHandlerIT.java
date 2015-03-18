@@ -1,11 +1,19 @@
 /**
- * Licensed to the Apache Software Foundation (ASF) under one or more contributor license agreements. See the NOTICE
- * file distributed with this work for additional information regarding copyright ownership. The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
- * License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0 Unless required by
- * applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language
- * governing permissions and limitations under the License.
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 package org.apache.phoenix.end2end.index;
 
@@ -71,7 +79,8 @@ public class IndexHandlerIT {
         }
     }
 
-    public static class CountingIndexClientRpcController extends DelegatingPayloadCarryingRpcController {
+    public static class CountingIndexClientRpcController extends
+            DelegatingPayloadCarryingRpcController {
 
         private static Map<Integer, Integer> priorityCounts = new HashMap<Integer, Integer>();
 
@@ -113,8 +122,9 @@ public class IndexHandlerIT {
 
     @Before
     public void setup() throws Exception {
-        HTableDescriptor desc = new HTableDescriptor(org.apache.hadoop.hbase.TableName.valueOf(TestTable
-                .getTableNameString()));
+        HTableDescriptor desc =
+                new HTableDescriptor(org.apache.hadoop.hbase.TableName.valueOf(TestTable
+                        .getTableNameString()));
         desc.addFamily(FAM1);
 
         // create the table
@@ -132,8 +142,12 @@ public class IndexHandlerIT {
     @Test
     public void testClientWritesWithPriority() throws Exception {
         Configuration conf = new Configuration(UTIL.getConfiguration());
-        conf.set(RpcControllerFactory.CUSTOM_CONTROLLER_CONF_KEY, CountingIndexClientRpcFactory.class.getName());
-        conf.setStrings(IndexQosRpcControllerFactory.INDEX_TABLE_NAMES_KEY, TestTable.getTableNameString());
+        // add the keys for our rpc factory
+        conf.set(RpcControllerFactory.CUSTOM_CONTROLLER_CONF_KEY,
+            CountingIndexClientRpcFactory.class.getName());
+        // and set the index table as the current table
+        conf.setStrings(IndexQosRpcControllerFactory.INDEX_TABLE_NAMES_KEY,
+            TestTable.getTableNameString());
         HTable table = new HTable(conf, TestTable.getTableName());
 
         // do a write to the table
@@ -144,8 +158,8 @@ public class IndexHandlerIT {
 
         // check the counts on the rpc controller
         assertEquals("Didn't get the expected number of index priority writes!", 1,
-                (int)CountingIndexClientRpcController.priorityCounts
-                        .get(QueryServicesOptions.DEFAULT_INDEX_MIN_PRIORITY));
+            (int) CountingIndexClientRpcController.priorityCounts
+                    .get(QueryServicesOptions.DEFAULT_INDEX_MIN_PRIORITY));
 
         table.close();
     }

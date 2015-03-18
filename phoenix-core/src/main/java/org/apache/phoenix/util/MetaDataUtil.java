@@ -49,16 +49,16 @@ import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.types.PBoolean;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.PName;
+import org.apache.phoenix.schema.types.PSmallint;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableNotFoundException;
-import org.apache.phoenix.schema.types.PBoolean;
-import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PLong;
-import org.apache.phoenix.schema.types.PSmallint;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -415,7 +415,7 @@ public class MetaDataUtil {
 
     public static final String IS_LOCAL_INDEX_TABLE_PROP_NAME = "IS_LOCAL_INDEX_TABLE";
     public static final byte[] IS_LOCAL_INDEX_TABLE_PROP_BYTES = Bytes.toBytes(IS_LOCAL_INDEX_TABLE_PROP_NAME);
-    
+
     public static Scan newTableRowsScan(byte[] key, long startTimeStamp, long stopTimeStamp)
             throws IOException {
         Scan scan = new Scan();

@@ -56,31 +56,6 @@ public class IndexQosRpcControllerFactory extends RpcControllerFactory {
         PayloadCarryingRpcController delegate = super.newController(cellIterables);
         return new IndexQosRpcController(delegate, conf);
     }
-    
-//    public static class Dependencies {
-//        public boolean isIndexTable(Configuration conf, org.apache.hadoop.hbase.TableName tn) {
-////          return tn.toString().equals("S.I");
-////          return conf.getBoolean(IndexQosCompat.getTableIndexQosConfKey(tn.getNameAsString()), false);
-//          HConnection connection = null;
-//          try {
-//              connection = HBaseFactoryProvider.getHConnectionFactory().createConnection(conf);
-//              if (connection.isClosed()) {
-//                  return false;
-//              }
-//              HTableDescriptor desc = connection.getHTableDescriptor(tn);
-//              return desc != null && Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(desc.getValue(MetaDataUtil.IS_INDEX_TABLE_PROP_NAME)));
-//          }
-//          catch (IOException e) {
-//              return false;
-//          }
-//          finally {
-//              if (connection!=null) try {
-//                  connection.close();
-//              } catch (IOException e) {
-//              }
-//          }
-//      }
-//    }
 
     public class IndexQosRpcController extends DelegatingPayloadCarryingRpcController {
 
