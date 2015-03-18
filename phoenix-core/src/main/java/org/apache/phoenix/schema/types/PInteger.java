@@ -86,6 +86,11 @@ public class PInteger extends PWholeNumber<Integer> {
     throwConstraintViolationException(actualType, this);
     return null;
   }
+  
+  @Override
+    public boolean isCastableTo(PDataType targetType) {
+      return super.isCastableTo(targetType) || targetType.isCoercibleTo(PTimestamp.INSTANCE);
+    }
 
   @Override
   public boolean isCoercibleTo(PDataType targetType, Object value) {
