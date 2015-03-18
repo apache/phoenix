@@ -111,6 +111,7 @@ tokens
     COLUMNS='columns';
     TRACE='trace';
     ASYNC='async';
+    SAMPLING='sampling';
 }
 
 
@@ -507,8 +508,8 @@ alter_index_node returns [AlterIndexStatement ret]
 
 // Parse a trace statement.
 trace_node returns [TraceStatement ret]
-    :   TRACE (flag = ON| flag = OFF)
-       {ret = factory.trace(Tracing.isTraceOn(flag.getText()));}
+    :   TRACE ((flag = ON  ( WITH SAMPLING s = sampling_rate)?) | flag = OFF)
+       {ret = factory.trace(Tracing.isTraceOn(flag.getText()), s == null ? Tracing.isTraceOn(flag.getText()) ? 1.0 : 0.0 : (((BigDecimal)s.getValue())).doubleValue());}
     ;
 
 // Parse an alter table statement.
@@ -626,6 +627,10 @@ limit returns [LimitNode ret]
     | l=int_literal { $ret = factory.limit(l); }
     ;
     
+sampling_rate returns [LiteralParseNode ret]
+    : l=literal { $ret = l; }
+    ;
+
 hintClause returns [HintNode ret]
     :  c=ML_HINT { $ret = factory.hint(c.getText()); }
     ;

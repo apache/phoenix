@@ -46,6 +46,7 @@ import org.cloudera.htrace.Span;
 import org.cloudera.htrace.SpanReceiver;
 import org.cloudera.htrace.Trace;
 import org.cloudera.htrace.TraceScope;
+import org.cloudera.htrace.impl.ProbabilitySampler;
 import org.junit.After;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -403,17 +404,43 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
             Statement statement = conn1.createStatement();
             ResultSet  rs = statement.executeQuery("TRACE ON");
             assertTrue(rs.next());
-            long traceId = ((PhoenixConnection) conn1).getTraceScope().getSpan()
-            .getTraceId();
-            assertEquals(rs.getLong(1), traceId);
-            assertEquals(rs.getLong("trace_id"), traceId);
+            PhoenixConnection pconn= (PhoenixConnection) conn1;
+            long traceId = pconn.getTraceScope().getSpan().getTraceId();
+            assertEquals(traceId, rs.getLong(1));
+            assertEquals(traceId, rs.getLong("trace_id"));
             assertFalse(rs.next());
+            assertEquals(Sampler.ALWAYS, pconn.getSampler());
 
             rs = statement.executeQuery("TRACE OFF");
             assertTrue(rs.next());
-            assertEquals(rs.getLong(1), traceId);
-            assertEquals(rs.getLong("trace_id"), traceId);
+            assertEquals(traceId, rs.getLong(1));
+            assertEquals(traceId, rs.getLong("trace_id"));
             assertFalse(rs.next());
+            assertEquals(Sampler.NEVER, pconn.getSampler());
+
+            rs = statement.executeQuery("TRACE OFF");
+            assertFalse(rs.next());
+
+            rs = statement.executeQuery("TRACE ON  WITH SAMPLING 0.5");
+            rs.next();
+            assertTrue(((PhoenixConnection) conn1).getSampler() instanceof ProbabilitySampler);
+
+            rs = statement.executeQuery("TRACE ON  WITH SAMPLING 1.0");
+            assertTrue(rs.next());
+            traceId = pconn.getTraceScope().getSpan()
+            .getTraceId();
+            assertEquals(traceId, rs.getLong(1));
+            assertEquals(traceId, rs.getLong("trace_id"));
+            assertFalse(rs.next());
+            assertEquals(Sampler.ALWAYS, pconn.getSampler());
+
+            rs = statement.executeQuery("TRACE ON  WITH SAMPLING 0.5");
+            rs.next();
+            assertTrue(((PhoenixConnection) conn1).getSampler() instanceof ProbabilitySampler);
+
+            rs = statement.executeQuery("TRACE ON WITH SAMPLING 0.0");
+            rs.next();
+            assertEquals(Sampler.NEVER, pconn.getSampler());
 
             rs = statement.executeQuery("TRACE OFF");
             assertFalse(rs.next());

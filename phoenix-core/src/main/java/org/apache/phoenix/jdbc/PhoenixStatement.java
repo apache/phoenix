@@ -704,8 +704,8 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
     
     private static class ExecutableTraceStatement extends TraceStatement implements CompilableStatement {
 
-        public ExecutableTraceStatement(boolean isTraceOn) {
-            super(isTraceOn);
+        public ExecutableTraceStatement(boolean isTraceOn, double samplingRate) {
+            super(isTraceOn, samplingRate);
         }
 
         @SuppressWarnings("unchecked")
@@ -909,8 +909,8 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         }
 
         @Override
-        public TraceStatement trace(boolean isTraceOn) {
-            return new ExecutableTraceStatement(isTraceOn);
+        public TraceStatement trace(boolean isTraceOn, double samplingRate) {
+            return new ExecutableTraceStatement(isTraceOn, samplingRate);
         }
 
         @Override
