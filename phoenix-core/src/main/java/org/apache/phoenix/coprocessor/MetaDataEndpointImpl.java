@@ -107,7 +107,6 @@ import org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionRequest
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.UpdateIndexStateRequest;
-import org.apache.phoenix.hbase.index.IndexQosCompat;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
@@ -908,7 +907,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         byte[] schemaName = null;
         byte[] tableName = null;
 
-        boolean dropTableSucceeded = true;
         try {
             List<Mutation> tableMetadata = ProtobufUtil.getMutations(request);
             MetaDataUtil.getTenantIdAndSchemaAndTableName(tableMetadata, rowKeyMetaData);
@@ -969,17 +967,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 region.releaseRowLocks(locks);
             }
         } catch (Throwable t) {
-            logger.error("dropTable failed", t);
+          logger.error("dropTable failed", t);
             ProtobufUtil.setControllerException(controller,
-                    ServerUtil.createIOException(SchemaUtil.getTableName(schemaName, tableName), t));
-            dropTableSucceeded = false;
-        } finally {
-            if (dropTableSucceeded) {
-                // Disable QOS for the index being dropped (in case a table is created with the same name later)
-                if (tableType.equals(PTableType.INDEX.getSerializedValue())) {
-                    IndexQosCompat.disableIndexQosForTable(SchemaUtil.getTableName(schemaName, tableName));
-                }
-            }
+                ServerUtil.createIOException(SchemaUtil.getTableName(schemaName, tableName), t));
         }
     }
 

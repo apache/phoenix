@@ -41,14 +41,6 @@ public class IndexQosCompat {
         indexTableSet.add(tableName);
     }
     
-    /**
-     * Disable QOS handling for the given table
-     * @param tableName name of the table to configure for index handlers
-     */
-    public static void disableIndexQosForTable(String tableName) {
-        indexTableSet.remove(tableName);
-    }
-    
     public static boolean isIndexTable(String tableName) {
         return indexTableSet.contains(tableName);
     }

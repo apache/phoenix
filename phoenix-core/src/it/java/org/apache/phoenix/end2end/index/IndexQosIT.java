@@ -23,7 +23,6 @@ import static org.junit.Assert.assertTrue;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.util.List;
 import java.util.Properties;
 
@@ -118,7 +117,7 @@ public class IndexQosIT extends BaseTest {
     }
     
     @Test
-    public void testIndexQosEnabledCorrectly() throws SQLException {
+    public void testIndexQosEnabledCorrectly() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = driver.connect(url, props);
         
@@ -130,7 +129,7 @@ public class IndexQosIT extends BaseTest {
         conn.createStatement().execute(
                 "CREATE INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_FULL_NAME + " (v1) INCLUDE (v2)");
         
-        // upsert single row
+        // upsert one row (which upserts a row to the data and index table)
         PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + DATA_TABLE_FULL_NAME + " VALUES(?,?,?)");
         stmt.setString(1, "k1");
         stmt.setString(2, "v1");
@@ -141,16 +140,6 @@ public class IndexQosIT extends BaseTest {
         // qos should only be enabled for index tables
         assertFalse(IndexQosCompat.isIndexTable(DATA_TABLE_FULL_NAME));
         assertTrue(IndexQosCompat.isIndexTable(INDEX_TABLE_FULL_NAME));
-        
-        // drop index table and verify that index qos is not enabled 
-        conn.createStatement().execute(
-                "DROP INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_FULL_NAME );
-        assertFalse(IndexQosCompat.isIndexTable(INDEX_TABLE_FULL_NAME));
-        
-        // create a data table with the same name as the index table and verify that index qos is not enabled 
-        conn.createStatement().execute(
-                "CREATE TABLE " + INDEX_TABLE_NAME + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
-        assertFalse(IndexQosCompat.isIndexTable(INDEX_TABLE_FULL_NAME));
     }
 
     @Test
@@ -240,8 +229,23 @@ public class IndexQosIT extends BaseTest {
         assertEquals("k1", rs.getString(1));
         assertEquals("v2", rs.getString(2));
         assertFalse(rs.next());
-
-        // verify that the scheduler uses the correct queue for index updates
+        
+        // drop index table 
+        conn.createStatement().execute(
+                "DROP INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_FULL_NAME );
+        // create a data table with the same name as the index table 
+        conn.createStatement().execute(
+                "CREATE TABLE " + INDEX_TABLE_FULL_NAME + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
+        
+        // upsert one row to the newly created table (which has the same table name as the previous index table)
+        stmt = conn.prepareStatement("UPSERT INTO " + INDEX_TABLE_FULL_NAME + " VALUES(?,?,?)");
+        stmt.setString(1, "k1");
+        stmt.setString(2, "v1");
+        stmt.setString(3, "v2");
+        stmt.execute();
+        conn.commit();
+        
+        // verify that that index queue is used only once (for the first upsert)
         Mockito.verify(spyRpcExecutor).dispatch(Mockito.any(CallRunner.class));
     }
 
