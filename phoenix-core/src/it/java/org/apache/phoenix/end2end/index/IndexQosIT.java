@@ -121,11 +121,11 @@ public class IndexQosIT extends BaseTest {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = driver.connect(url, props);
         
-        // create a data table and verify that index qos is not enabled
+        // create a data table
         conn.createStatement().execute(
                 "CREATE TABLE " + DATA_TABLE_FULL_NAME + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
         
-        // create an index table and verify that index qos is enabled
+        // create an index table
         conn.createStatement().execute(
                 "CREATE INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_FULL_NAME + " (v1) INCLUDE (v2)");
         
@@ -137,7 +137,7 @@ public class IndexQosIT extends BaseTest {
         stmt.execute();
         conn.commit();
         
-        // qos should only be enabled for index tables
+        // qos should only be enabled for index table
         assertFalse(IndexQosCompat.isIndexTable(DATA_TABLE_FULL_NAME));
         assertTrue(IndexQosCompat.isIndexTable(INDEX_TABLE_FULL_NAME));
     }
