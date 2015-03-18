@@ -22,6 +22,7 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.schema.SortOrder;
@@ -38,13 +39,23 @@ public class InstrFunction extends ScalarFunction{
     
     public static final String NAME = "INSTR";
     
-    private String strToSearch;
+    private String strToSearch = null;
     
     public InstrFunction() { }
     
-    public InstrFunction(List<Expression> children, String strToSearch) {
+    public InstrFunction(List<Expression> children) {
         super(children);
-        setStrToSearch(strToSearch);
+        init();
+    }
+    
+    private void init() {
+        Expression strToSearchExpression = children.get(1);
+        if (strToSearchExpression instanceof LiteralExpression) {
+            Object strToSearchValue = ((LiteralExpression) strToSearchExpression).getValue();
+            if (strToSearchValue != null) {
+                this.strToSearch = strToSearchValue.toString();
+            }
+        }
     }
     
     
@@ -56,21 +67,24 @@ public class InstrFunction extends ScalarFunction{
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
         Expression child = getStringExpression();
+        
         if (!child.evaluate(tuple, ptr)) {
             return false;
         }
-        
+
         int position;
         //Logic for Empty string search
-        if(strToSearch.length()==0){
+        if (strToSearch == null){
             position = 0;
             ptr.set(PInteger.INSTANCE.toBytes(position));
             return true;
         }
         
-        
-        byte [] strPattern = strToSearch.getBytes();
+        byte [] strToSearchBytes = strToSearch.getBytes();
+        ImmutableBytesWritable strImmutableBytes = new ImmutableBytesWritable(strToSearchBytes);
         SortOrder sortOrder = child.getSortOrder();
+        byte [] strPattern = strModifiedOnOrder(strToSearchBytes,strImmutableBytes.getOffset(),sortOrder);
+        
         ImmutableBytesWritable str = new ImmutableBytesWritable(strPattern);
         
         position = searchString(ptr,str,sortOrder,strPattern);
@@ -88,16 +102,24 @@ public class InstrFunction extends ScalarFunction{
     public String getName() {
         return NAME;
     }
-
-    public String getStrToSearch() {
-        return strToSearch;
-    }
-
-    public void setStrToSearch(String strToSearch) {
-        this.strToSearch = strToSearch;
+    
+    @Override
+    public SortOrder getSortOrder() {
+        return getChildren().get(0).getSortOrder();
     }
     
-    //Below Method is to Search the Pattern in the given String
+    
+    /*Method to return a byte array based on the SortOrder of the string. The returned inverted byte array will
+      be used for comparing with the string for DESC SortOrder scenarios
+    */
+    private byte [] strModifiedOnOrder(byte [] strToSearchBytes, int srcOffset, SortOrder sortOrder){
+        if (sortOrder==SortOrder.DESC){
+            return SortOrder.invert(strToSearchBytes, srcOffset, strToSearchBytes.length);
+        }
+        
+        return strToSearchBytes;
+    }
+    //Method is to Search the Pattern in the given String
     private int searchString(ImmutableBytesWritable ptr, ImmutableBytesWritable strbytes,
                              SortOrder sortOrder, byte [] strPattern) {
         
@@ -109,18 +131,21 @@ public class InstrFunction extends ScalarFunction{
         int position = 0;
         
         //Logic to compare Byte arrays
-        while((textLength - textOffset) > 0){
+        while ((textLength - textOffset) > 0){
             int nBytes = StringUtil.getBytesInChar(text[textOffset], sortOrder);
             
             //Checking for the boundary condition
-            if(textLength - textOffset < strLength )
+            if (textLength - textOffset < strLength ){
                 return -1;
+            }
             
-            System.arraycopy(text, textOffset, target, textOffset, strLength);
+            System.arraycopy(text, textOffset, target, 0, strLength);
             textOffset += nBytes;
             position++;
-            if(Arrays.equals(strPattern, target))
-                return position;
+            if (Arrays.equals(strPattern, target)){
+                System.out.println("Position value at the end:"+ position);
+                return position - 1;
+            }
         }
         
         return -1;
