@@ -764,7 +764,7 @@ public class MetaDataClient {
                 String tableName = getFullTableName(dataTableRef);
                 String query = "SELECT count(*) FROM " + tableName;
                 final QueryPlan plan = statement.compileQuery(query);
-                TableRef tableRef = plan.getContext().getResolver().getTables().get(0);
+                TableRef tableRef = plan.getTableRef();
                 // Set attribute on scan that UngroupedAggregateRegionObserver will switch on.
                 // We'll detect that this attribute was set the server-side and write the index
                 // rows per region as a result. The value of the attribute will be our persisted
@@ -1096,7 +1096,8 @@ public class MetaDataClient {
                         dataTable.getTimeStamp());
                     long[] seqValues = new long[1];
                     SQLException[] sqlExceptions = new SQLException[1];
-                    connection.getQueryServices().incrementSequences(Collections.singletonList(key), timestamp, seqValues, sqlExceptions);
+                    connection.getQueryServices().incrementSequences(Collections.singletonList(key),
+                            Math.max(timestamp, dataTable.getTimeStamp()), seqValues, sqlExceptions);
                     if (sqlExceptions[0] != null) {
                         throw sqlExceptions[0];
                     }
@@ -1128,6 +1129,11 @@ public class MetaDataClient {
             return new MutationState(0,connection);
         }
 
+        // In async process, we return immediately as the MR job needs to be triggered .
+        if(statement.isAsync()) {
+            return new MutationState(0, connection);
+        }
+        
         // If our connection is at a fixed point-in-time, we need to open a new
         // connection so that our new index table is visible.
         if (connection.getSCN() != null) {

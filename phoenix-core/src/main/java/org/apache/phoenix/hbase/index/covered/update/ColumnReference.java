@@ -20,8 +20,8 @@ package org.apache.phoenix.hbase.index.covered.update;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
-
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.hbase.index.util.ReadOnlyImmutableBytesPtr;
 
 /**
  * 
@@ -30,59 +30,66 @@ public class ColumnReference implements Comparable<ColumnReference> {
     
   public static final byte[] ALL_QUALIFIERS = new byte[0];
   
-  private static int calcHashCode(byte[] family, byte[] qualifier) {
+  private static int calcHashCode(ImmutableBytesWritable familyPtr, ImmutableBytesWritable qualifierPtr) {
     final int prime = 31;
     int result = 1;
-    result = prime * result + Bytes.hashCode(family);
-    result = prime * result + Bytes.hashCode(qualifier);
+    result = prime * result + familyPtr.hashCode();
+    result = prime * result + qualifierPtr.hashCode();
     return result;
   }
 
-  private final int hashCode;
-  protected final byte[] family;
-  protected final byte[] qualifier;
-    private volatile ImmutableBytesWritable familyPtr;
-    private volatile ImmutableBytesWritable qualifierPtr;
+    private final int hashCode;
+    protected volatile byte[] family;
+    protected volatile byte[] qualifier;
+    private final ImmutableBytesPtr familyPtr;
+    private final ImmutableBytesPtr qualifierPtr;
 
-  public ColumnReference(byte[] family, byte[] qualifier) {
-    this.family = family;
-    this.qualifier = qualifier;
-    this.hashCode = calcHashCode(family, qualifier);
-  }
+    public ColumnReference(byte[] family, byte[] qualifier) {
+        this.familyPtr = new ReadOnlyImmutableBytesPtr(family);
+        this.qualifierPtr = new ReadOnlyImmutableBytesPtr(qualifier);
+        this.hashCode = calcHashCode(this.familyPtr, this.qualifierPtr);
+    }
 
-  public byte[] getFamily() {
-    return this.family;
-  }
-
-  public byte[] getQualifier() {
-    return this.qualifier;
-  }
+    public ColumnReference(byte[] family, int familyOffset, int familyLength, byte[] qualifier,
+            int qualifierOffset, int qualifierLength) {
+        this.familyPtr = new ReadOnlyImmutableBytesPtr(family, familyOffset, familyLength);
+        this.qualifierPtr = new ReadOnlyImmutableBytesPtr(qualifier, qualifierOffset, qualifierLength);
+        this.hashCode = calcHashCode(this.familyPtr, this.qualifierPtr);
+    }
   
-    public ImmutableBytesWritable getFamilyWritable() {
-        if (this.familyPtr == null) {
-            synchronized (this.family) {
-                if (this.familyPtr == null) {
-                    this.familyPtr = new ImmutableBytesPtr(this.family);
+    public byte[] getFamily() {
+        if (this.family == null) {
+            synchronized (this.familyPtr) {
+                if (this.family == null) {
+                    this.family = this.familyPtr.copyBytesIfNecessary();
                 }
             }
         }
+        return this.family;
+    }
+
+    public byte[] getQualifier() {
+        if (this.qualifier == null) {
+            synchronized (this.qualifierPtr) {
+                if (this.qualifier == null) {
+                    this.qualifier = this.qualifierPtr.copyBytesIfNecessary();
+                }
+            }
+        }
+        return this.qualifier;
+    }
+
+    public ImmutableBytesPtr getFamilyWritable() {
         return this.familyPtr;
     }
 
-    public ImmutableBytesWritable getQualifierWritable() {
-        if (this.qualifierPtr == null) {
-            synchronized (this.qualifier) {
-                if (this.qualifierPtr == null) {
-                    this.qualifierPtr = new ImmutableBytesPtr(this.qualifier);
-                }
-            }
-        }
+    public ImmutableBytesPtr getQualifierWritable() {
         return this.qualifierPtr;
     }
 
   public boolean matches(KeyValue kv) {
-    if (matchesFamily(kv.getBuffer(), kv.getFamilyOffset(), kv.getFamilyLength())) {
-      return matchesQualifier(kv.getBuffer(), kv.getQualifierOffset(), kv.getQualifierLength());
+    if (matchesFamily(kv.getRowArray(), kv.getFamilyOffset(), kv.getFamilyLength())) {
+      return matchesQualifier(kv.getRowArray(), kv.getQualifierOffset(), kv.getQualifierLength());
     }
     return false;
   }
@@ -95,9 +102,10 @@ public class ColumnReference implements Comparable<ColumnReference> {
     return matchesQualifier(qual, 0, qual.length);
   }
 
-  public boolean matchesQualifier(byte[] bytes, int offset, int length) {
-    return allColumns() ? true : match(bytes, offset, length, qualifier);
-  }
+    public boolean matchesQualifier(byte[] bytes, int offset, int length) {
+        return allColumns() ? true : match(bytes, offset, length, qualifierPtr.get(),
+            qualifierPtr.getOffset(), qualifierPtr.getLength());
+    }
 
   /**
    * @param family to check against
@@ -108,37 +116,39 @@ public class ColumnReference implements Comparable<ColumnReference> {
   }
 
   public boolean matchesFamily(byte[] bytes, int offset, int length) {
-    return match(bytes, offset, length, family);
+    return match(bytes, offset, length, familyPtr.get(), familyPtr.getOffset(), familyPtr.getLength());
   }
 
   /**
    * @return <tt>true</tt> if this should include all column qualifiers, <tt>false</tt> otherwise
    */
   public boolean allColumns() {
-    return this.qualifier == ALL_QUALIFIERS;
+    return getQualifier() == ALL_QUALIFIERS;
   }
 
-  /**
-   * Check to see if the passed bytes match the stored bytes
-   * @param first
-   * @param storedKey the stored byte[], should never be <tt>null</tt>
-   * @return <tt>true</tt> if they are byte-equal
-   */
-  private boolean match(byte[] first, int offset, int length, byte[] storedKey) {
-    return first == null ? false : Bytes.equals(first, offset, length, storedKey, 0,
-      storedKey.length);
-  }
+    /**
+     * Check to see if the passed bytes match the stored bytes
+     * @param first
+     * @param storedKey the stored byte[], should never be <tt>null</tt>
+     * @return <tt>true</tt> if they are byte-equal
+     */
+    private boolean match(byte[] first, int offset1, int length1, byte[] storedKey, int offset2,
+            int length2) {
+        return first == null ? false : Bytes.equals(first, offset1, length1, storedKey, offset2,
+            length2);
+    }
 
-  public KeyValue getFirstKeyValueForRow(byte[] row) {
-    return KeyValue.createFirstOnRow(row, family, qualifier == ALL_QUALIFIERS ? null : qualifier);
-  }
+    public KeyValue getFirstKeyValueForRow(byte[] row) {
+        return KeyValue.createFirstOnRow(row, getFamily(), getQualifier() == ALL_QUALIFIERS ? null
+                : getQualifier());
+    }
 
   @Override
   public int compareTo(ColumnReference o) {
-    int c = Bytes.compareTo(family, o.family);
+    int c = familyPtr.compareTo(o.familyPtr);
     if (c == 0) {
       // matching families, compare qualifiers
-      c = Bytes.compareTo(qualifier, o.qualifier);
+      c = qualifierPtr.compareTo(o.qualifierPtr);
     }
     return c;
   }
@@ -147,8 +157,8 @@ public class ColumnReference implements Comparable<ColumnReference> {
   public boolean equals(Object o) {
     if (o instanceof ColumnReference) {
       ColumnReference other = (ColumnReference) o;
-      if (hashCode == other.hashCode && Bytes.equals(family, other.family)) {
-        return Bytes.equals(qualifier, other.qualifier);
+      if (hashCode == other.hashCode && familyPtr.equals(other.familyPtr)) {
+        return qualifierPtr.equals(other.qualifierPtr);
       }
     }
     return false;
@@ -161,6 +171,6 @@ public class ColumnReference implements Comparable<ColumnReference> {
 
   @Override
   public String toString() {
-    return "ColumnReference - " + Bytes.toString(family) + ":" + Bytes.toString(qualifier);
+    return "ColumnReference - " + Bytes.toString(getFamily()) + ":" + Bytes.toString(getQualifier());
   }
 }

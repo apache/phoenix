@@ -42,6 +42,17 @@ public class ConnectionUtil {
      * @throws SQLException
      */
     public static Connection getConnection(final Configuration configuration) throws SQLException {
+        return getConnection(configuration, null);
+    }
+    
+    /**
+     * Used primarily in cases where we need to pass few additional/overriding properties 
+     * @param configuration
+     * @param properties
+     * @return
+     * @throws SQLException
+     */
+    public static Connection getConnection(final Configuration configuration , final Properties properties) throws SQLException {
         Preconditions.checkNotNull(configuration);
         final Properties props = new Properties();
         Iterator<Map.Entry<String, String>> iterator = configuration.iterator();
@@ -50,6 +61,9 @@ public class ConnectionUtil {
                 Map.Entry<String, String> entry = iterator.next();
                 props.setProperty(entry.getKey(), entry.getValue());
             }
+        }
+        if(properties != null && !properties.isEmpty()) {
+            props.putAll(properties);
         }
         final Connection conn = DriverManager.getConnection(QueryUtil.getUrl(configuration.get(HConstants.ZOOKEEPER_QUORUM)), props);
         return conn;

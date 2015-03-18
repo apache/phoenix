@@ -70,39 +70,37 @@ public class HashJoinRegionScanner implements RegionScanner {
         this.hasMore = true;
         this.count = 0;
         this.limit = Long.MAX_VALUE;
-        if (joinInfo != null) {
-            for (JoinType type : joinInfo.getJoinTypes()) {
-                if (type != JoinType.Inner && type != JoinType.Left && type != JoinType.Semi && type != JoinType.Anti)
-                    throw new DoNotRetryIOException("Got join type '" + type + "'. Expect only INNER or LEFT with hash-joins.");
+        for (JoinType type : joinInfo.getJoinTypes()) {
+            if (type != JoinType.Inner && type != JoinType.Left && type != JoinType.Semi && type != JoinType.Anti)
+                throw new DoNotRetryIOException("Got join type '" + type + "'. Expect only INNER or LEFT with hash-joins.");
+        }
+        if (joinInfo.getLimit() != null) {
+            this.limit = joinInfo.getLimit();
+        }
+        int count = joinInfo.getJoinIds().length;
+        this.tempTuples = new List[count];
+        this.hashCaches = new HashCache[count];
+        this.tempSrcBitSet = new ValueBitSet[count];
+        TenantCache cache = GlobalCache.getTenantCache(env, tenantId);
+        for (int i = 0; i < count; i++) {
+            ImmutableBytesPtr joinId = joinInfo.getJoinIds()[i];
+            if (joinId.getLength() == 0) { // semi-join optimized into skip-scan
+                hashCaches[i] = null;
+                tempSrcBitSet[i] = null;
+                tempTuples[i] = null;
+                continue;
             }
-            if (joinInfo.getLimit() != null) {
-                this.limit = joinInfo.getLimit();
-            }
-            int count = joinInfo.getJoinIds().length;
-            this.tempTuples = new List[count];
-            this.hashCaches = new HashCache[count];
-            this.tempSrcBitSet = new ValueBitSet[count];
-            TenantCache cache = GlobalCache.getTenantCache(env, tenantId);
-            for (int i = 0; i < count; i++) {
-                ImmutableBytesPtr joinId = joinInfo.getJoinIds()[i];
-                if (joinId.getLength() == 0) { // semi-join optimized into skip-scan
-                    hashCaches[i] = null;
-                    tempSrcBitSet[i] = null;
-                    tempTuples[i] = null;
-                    continue;
-                }
-                HashCache hashCache = (HashCache)cache.getServerCache(joinId);
-                if (hashCache == null)
-                    throw new DoNotRetryIOException("Could not find hash cache for joinId: " 
-                            + Bytes.toString(joinId.get(), joinId.getOffset(), joinId.getLength()) 
-                            + ". The cache might have expired and have been removed.");
-                hashCaches[i] = hashCache;
-                tempSrcBitSet[i] = ValueBitSet.newInstance(joinInfo.getSchemas()[i]);
-            }
-            if (this.projector != null) {
-                this.tempDestBitSet = ValueBitSet.newInstance(joinInfo.getJoinedSchema());
-                this.projector.setValueBitSet(tempDestBitSet);
-            }
+            HashCache hashCache = (HashCache)cache.getServerCache(joinId);
+            if (hashCache == null)
+                throw new DoNotRetryIOException("Could not find hash cache for joinId: " 
+                        + Bytes.toString(joinId.get(), joinId.getOffset(), joinId.getLength()) 
+                        + ". The cache might have expired and have been removed.");
+            hashCaches[i] = hashCache;
+            tempSrcBitSet[i] = ValueBitSet.newInstance(joinInfo.getSchemas()[i]);
+        }
+        if (this.projector != null) {
+            this.tempDestBitSet = ValueBitSet.newInstance(joinInfo.getJoinedSchema());
+            this.projector.setValueBitSet(tempDestBitSet);
         }
     }
     
@@ -111,12 +109,10 @@ public class HashJoinRegionScanner implements RegionScanner {
             return;
         
         Tuple tuple = new ResultTuple(Result.create(result));
-        if (joinInfo == null || joinInfo.forceProjection()) {
+        // For backward compatibility. In new versions, HashJoinInfo.forceProjection()
+        // always returns true.
+        if (joinInfo.forceProjection()) {
             tuple = projector.projectResults(tuple);
-        }
-        if (joinInfo == null) {
-            resultQueue.offer(tuple);
-            return;
         }
         
         if (hasBatchLimit)
@@ -147,7 +143,7 @@ public class HashJoinRegionScanner implements RegionScanner {
                 }
             } else {
                 KeyValueSchema schema = joinInfo.getJoinedSchema();
-                if (!joinInfo.forceProjection()) {
+                if (!joinInfo.forceProjection()) { // backward compatibility
                     tuple = projector.projectResults(tuple);
                 }
                 resultQueue.offer(tuple);

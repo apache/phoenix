@@ -290,7 +290,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     @Override
     public HTableInterface getTable(byte[] tableName) throws SQLException {
         try {
-            return HBaseFactoryProvider.getHTableFactory().getTable(tableName, connection, getExecutor());
+            return HBaseFactoryProvider.getHTableFactory().getTable(tableName, connection, null);
         } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
             byte[][] schemaAndTableName = new byte[2][];
             SchemaUtil.getVarChars(tableName, schemaAndTableName);
@@ -2118,6 +2118,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             Append append = sequence.createSequence(startWith, incrementBy, cacheSize, timestamp, minValue, maxValue, cycle);
             HTableInterface htable =
                     this.getTable(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_BYTES);
+            htable.setAutoFlush(true);
             try {
                 Result result = htable.append(append);
                 return sequence.createSequence(result, minValue, maxValue, cycle);

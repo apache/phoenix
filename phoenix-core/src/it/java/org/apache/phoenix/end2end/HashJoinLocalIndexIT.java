@@ -105,17 +105,17 @@ public class HashJoinLocalIndexIT extends BaseHBaseManagedTimeIT {
                 "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + JOIN_ITEM_TABLE_DISPLAY_NAME + " [-32768,*] - [-32768,'T6']\n" +
                 "            SERVER FILTER BY FIRST KEY ONLY\n" +
                 "        CLIENT MERGE SORT\n" +
-                "    DYNAMIC SERVER FILTER BY \"supplier_id\" IN (\"I.0:supplier_id\")",
+                "    DYNAMIC SERVER FILTER BY \"S.:supplier_id\" IN (\"I.supplier_id\")",
                 
                 "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + JOIN_SUPPLIER_TABLE_DISPLAY_NAME + " [-32768,'S1']\n" +
                 "    SERVER FILTER BY FIRST KEY ONLY\n" + 
-                "    SERVER AGGREGATE INTO DISTINCT ROWS BY [\"S.0:PHONE\"]\n" +
+                "    SERVER AGGREGATE INTO DISTINCT ROWS BY [\"S.PHONE\"]\n" +
                 "CLIENT MERGE SORT\n" +
                 "    PARALLEL INNER-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + JOIN_ITEM_TABLE_DISPLAY_NAME + " [-32768,*] - [-32768,'T6']\n" +
                 "            SERVER FILTER BY FIRST KEY ONLY\n" + 
                 "        CLIENT MERGE SORT\n" +
-                "    DYNAMIC SERVER FILTER BY \"supplier_id\" IN (\"I.0:supplier_id\")",
+                "    DYNAMIC SERVER FILTER BY \"S.:supplier_id\" IN (\"I.supplier_id\")",
                 
                 "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + JOIN_SUPPLIER_TABLE_DISPLAY_NAME + " [-32768,*] - [-32768,'S3']\n" +
                 "    SERVER FILTER BY FIRST KEY ONLY\n" + 

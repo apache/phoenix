@@ -21,7 +21,7 @@ import java.math.BigDecimal;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.phoenix.exception.ValueTypeIncompatibleException;
+import org.apache.phoenix.exception.DataExceedsCapacityException;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
@@ -92,7 +92,7 @@ public class DecimalSubtractExpression extends SubtractExpression {
             result = NumberUtil.setDecimalWidthAndScale(result, maxLength, scale);
         }
         if (result == null) {
-            throw new ValueTypeIncompatibleException(PDecimal.INSTANCE, maxLength, scale);
+            throw new DataExceedsCapacityException(PDecimal.INSTANCE, maxLength, scale);
         }
         ptr.set(PDecimal.INSTANCE.toBytes(result));
         return true;

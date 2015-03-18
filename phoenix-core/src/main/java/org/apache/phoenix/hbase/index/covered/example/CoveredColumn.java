@@ -54,7 +54,7 @@ public class CoveredColumn extends ColumnReference {
   }
 
   public String serialize() {
-    return CoveredColumn.serialize(familyString, qualifier);
+    return CoveredColumn.serialize(familyString, getQualifier());
   }
 
   public static String serialize(String first, byte[] second) {
@@ -96,12 +96,12 @@ public class CoveredColumn extends ColumnReference {
     CoveredColumn other = (CoveredColumn) obj;
     if (hashCode != other.hashCode) return false;
     if (!familyString.equals(other.familyString)) return false;
-    return Bytes.equals(qualifier, other.qualifier);
+    return Bytes.equals(getQualifier(), other.getQualifier());
   }
 
   @Override
   public String toString() {
-    String qualString = qualifier == null ? "null" : Bytes.toString(qualifier);
+    String qualString = getQualifier() == null ? "null" : Bytes.toString(getQualifier());
     return "CoveredColumn:[" + familyString + ":" + qualString + "]";
   }
 }

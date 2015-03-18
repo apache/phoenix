@@ -263,4 +263,14 @@ public class Tracing {
         }
         initialized = true;
     }
+
+    public static boolean isTraceOn(String traceOption) {
+        Preconditions.checkArgument(traceOption != null);
+        if(traceOption.equalsIgnoreCase("ON")) return true;
+        if(traceOption.equalsIgnoreCase("OFF")) return false;
+        else {
+            throw new IllegalArgumentException("Unknown tracing option: " + traceOption);
+        }
+    }
+
 }

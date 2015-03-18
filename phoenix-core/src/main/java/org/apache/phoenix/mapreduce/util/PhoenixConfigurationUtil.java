@@ -33,7 +33,10 @@ import org.apache.hadoop.hbase.mapreduce.TableMapReduceUtil;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.lib.db.DBInputFormat.NullDBWritable;
 import org.apache.hadoop.mapreduce.lib.db.DBWritable;
+import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.mapreduce.CsvToKeyValueMapper.DefaultImportPreUpsertKeyValueProcessor;
+import org.apache.phoenix.mapreduce.ImportPreUpsertKeyValueProcessor;
 import org.apache.phoenix.mapreduce.PhoenixInputFormat;
 import org.apache.phoenix.util.ColumnInfo;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -82,6 +85,11 @@ public final class PhoenixConfigurationUtil {
     public static final String DEFAULT_COLUMN_NAMES_DELIMITER = ",";
 
     public static final String INPUT_CLASS = "phoenix.input.class";
+    
+    public static final String CURRENT_SCN_VALUE = "phoenix.mr.currentscn.value";
+    
+    /** Configuration key for the class name of an ImportPreUpsertKeyValueProcessor */
+    public static final String UPSERT_HOOK_CLASS_CONFKEY = "phoenix.mapreduce.import.kvprocessor";
     
     public enum SchemaType {
         TABLE,
@@ -312,5 +320,18 @@ public final class PhoenixConfigurationUtil {
         }
         //In order to have phoenix working on a secured cluster
         TableMapReduceUtil.initCredentials(job);
+    }
+    
+    public static ImportPreUpsertKeyValueProcessor loadPreUpsertProcessor(Configuration conf) {
+        Class<? extends ImportPreUpsertKeyValueProcessor> processorClass = null;
+        try {
+            processorClass = conf.getClass(
+                    UPSERT_HOOK_CLASS_CONFKEY, DefaultImportPreUpsertKeyValueProcessor.class,
+                    ImportPreUpsertKeyValueProcessor.class);
+        } catch (Exception e) {
+            throw new IllegalStateException("Couldn't load upsert hook class", e);
+        }
+    
+        return ReflectionUtils.newInstance(processorClass, conf);
     }
 }

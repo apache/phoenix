@@ -27,6 +27,7 @@
     <module>phoenix-flume</module>
     <module>phoenix-pig</module>
     <module>phoenix-assembly</module>
+    <module>phoenix-pherf</module>
   </modules>
 
   <repositories>

@@ -56,7 +56,7 @@ import org.apache.hadoop.hbase.regionserver.Store;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
-import org.apache.phoenix.exception.ValueTypeIncompatibleException;
+import org.apache.phoenix.exception.DataExceedsCapacityException;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.ExpressionType;
@@ -214,7 +214,9 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
         byte[][] viewConstants = null;
         ColumnReference[] dataColumns = IndexUtil.deserializeDataTableColumnsToJoin(scan);
         boolean localIndexScan = ScanUtil.isLocalIndex(scan);
-        if (localIndexScan && !isDelete) {
+        final TupleProjector p = TupleProjector.deserializeProjectorFromScan(scan);
+        final HashJoinInfo j = HashJoinInfo.deserializeHashJoinFromScan(scan);
+        if ((localIndexScan && !isDelete) || (j == null && p != null)) {
             if (dataColumns != null) {
                 tupleProjector = IndexUtil.getTupleProjector(scan, dataColumns);
                 dataRegion = IndexUtil.getDataRegion(c.getEnvironment());
@@ -223,12 +225,10 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
             ImmutableBytesWritable tempPtr = new ImmutableBytesWritable();
             theScanner =
                     getWrappedScanner(c, theScanner, offset, scan, dataColumns, tupleProjector, 
-                            dataRegion, indexMaintainers == null ? null : indexMaintainers.get(0), viewConstants, tempPtr);
+                            dataRegion, indexMaintainers == null ? null : indexMaintainers.get(0), viewConstants, p, tempPtr);
         } 
         
-        final TupleProjector p = TupleProjector.deserializeProjectorFromScan(scan);
-        final HashJoinInfo j = HashJoinInfo.deserializeHashJoinFromScan(scan);
-        if (p != null || j != null)  {
+        if (j != null)  {
             theScanner = new HashJoinRegionScanner(theScanner, p, j, ScanUtil.getTenantId(scan), c.getEnvironment());
         }
         
@@ -322,7 +322,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
                                                 column.getDataType(), expression.getMaxLength(),
                                                 expression.getScale(), column.getMaxLength(),
                                                 column.getScale())) {
-                                            throw new ValueTypeIncompatibleException(
+                                            throw new DataExceedsCapacityException(
                                                 column.getDataType(), column.getMaxLength(),
                                                 column.getScale());
                                         }

@@ -485,8 +485,7 @@ public abstract class BaseTest {
     }
     
     /**
-     * Set up the test hbase cluster. 
-     * @param props TODO
+     * Set up the test hbase cluster.
      * @return url to be used by clients to connect to the cluster.
      */
     protected static String setUpTestCluster(@Nonnull Configuration conf, ReadOnlyProps overrideProps) {
@@ -631,7 +630,7 @@ public abstract class BaseTest {
          * the threads limit imposed by the OS. 
          */
         conf.setInt(HConstants.REGION_SERVER_HANDLER_COUNT, 5);
-        conf.setInt(HConstants.REGION_SERVER_META_HANDLER_COUNT, 2);
+        conf.setInt("hbase.regionserver.metahandler.count", 2);
         conf.setInt(HConstants.MASTER_HANDLER_COUNT, 2);
         conf.setClass("hbase.coprocessor.regionserver.classes", LocalIndexMerger.class,
             RegionServerObserver.class);
@@ -769,6 +768,7 @@ public abstract class BaseTest {
     
     protected static void deletePriorTables(long ts, String tenantId, String url) throws Exception {
         Properties props = new Properties();
+        props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(1024));
         if (ts != HConstants.LATEST_TIMESTAMP) {
             props.setProperty(CURRENT_SCN_ATTRIB, Long.toString(ts));
         }
@@ -842,6 +842,8 @@ public abstract class BaseTest {
                 conn = DriverManager.getConnection(url, props);
                 lastTenantId = tenantId;
             }
+
+            logger.info("DROP SEQUENCE STATEMENT: DROP SEQUENCE " + SchemaUtil.getEscapedTableName(rs.getString(2), rs.getString(3)));
             conn.createStatement().execute("DROP SEQUENCE " + SchemaUtil.getEscapedTableName(rs.getString(2), rs.getString(3)));
         }
     }

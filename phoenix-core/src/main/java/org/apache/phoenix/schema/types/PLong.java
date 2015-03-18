@@ -17,16 +17,17 @@
  */
 package org.apache.phoenix.schema.types;
 
-import com.google.common.base.Preconditions;
-import com.google.common.primitives.Doubles;
-import com.google.common.primitives.Longs;
-import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.schema.SortOrder;
-
 import java.math.BigDecimal;
 import java.sql.Types;
 
-public class PLong extends PDataType<Long> {
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.schema.SortOrder;
+
+import com.google.common.base.Preconditions;
+import com.google.common.primitives.Doubles;
+import com.google.common.primitives.Longs;
+
+public class PLong extends PWholeNumber<Long> {
 
   public static final PLong INSTANCE = new PLong();
 

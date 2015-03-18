@@ -20,16 +20,13 @@ package org.apache.phoenix.schema;
 import java.sql.SQLException;
 import java.util.Set;
 
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.expression.ColumnExpression;
 import org.apache.phoenix.expression.ProjectedColumnExpression;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.TableName;
-import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.util.IndexUtil;
-import org.apache.phoenix.util.SchemaUtil;
 
 public class LocalIndexDataColumnRef extends ColumnRef {
     final private int position;
@@ -62,11 +59,7 @@ public class LocalIndexDataColumnRef extends ColumnRef {
 
     @Override
     public ColumnExpression newColumnExpression(boolean schemaNameCaseSensitive, boolean colNameCaseSensitive) {
-        PTable table = this.getTable();
-        PColumn column = this.getColumn();
-        // TODO: util for this or store in member variable
-        byte[] defaultFamily = table.getDefaultFamilyName() == null ? QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES : table.getDefaultFamilyName().getBytes();
-        String displayName = SchemaUtil.getColumnDisplayName(Bytes.compareTo(defaultFamily, column.getFamilyName().getBytes()) == 0  ? null : column.getFamilyName().getBytes(), column.getName().getBytes());
+        String displayName = this.getTableRef().getColumnDisplayName(this, schemaNameCaseSensitive, colNameCaseSensitive);
         return new ProjectedColumnExpression(this.getColumn(), columns, position, displayName);
     }
 }

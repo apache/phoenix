@@ -28,15 +28,6 @@ import java.util.Properties;
 
 import javax.annotation.Nullable;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Function;
-import com.google.common.base.Joiner;
-import com.google.common.base.Preconditions;
-import com.google.common.base.Splitter;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Iterables;
-import com.google.common.collect.Lists;
-
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
@@ -49,15 +40,24 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Mapper;
-import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDriver;
+import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.util.CSVCommonsLoader;
 import org.apache.phoenix.util.ColumnInfo;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.csv.CsvUpsertExecutor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Function;
+import com.google.common.base.Joiner;
+import com.google.common.base.Preconditions;
+import com.google.common.base.Splitter;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Lists;
 
 /**
  * MapReduce mapper that converts CSV input lines into KeyValues that can be written to HFiles.
@@ -72,9 +72,6 @@ public class CsvToKeyValueMapper extends Mapper<LongWritable,Text,ImmutableBytes
     private static final Logger LOG = LoggerFactory.getLogger(CsvToKeyValueMapper.class);
 
     private static final String COUNTER_GROUP_NAME = "Phoenix MapReduce Import";
-
-    /** Configuration key for the class name of an ImportPreUpsertKeyValueProcessor */
-    public static final String UPSERT_HOOK_CLASS_CONFKEY = "phoenix.mapreduce.import.kvprocessor";
 
     /** Configuration key for the field delimiter for input csv records */
     public static final String FIELD_DELIMITER_CONFKEY = "phoenix.mapreduce.import.fielddelimiter";
@@ -136,7 +133,7 @@ public class CsvToKeyValueMapper extends Mapper<LongWritable,Text,ImmutableBytes
         csvLineParser = new CsvLineParser(conf.get(FIELD_DELIMITER_CONFKEY).charAt(0), conf.get(QUOTE_CHAR_CONFKEY).charAt(0),
                 conf.get(ESCAPE_CHAR_CONFKEY).charAt(0));
 
-        preUpdateProcessor = loadPreUpsertProcessor(conf);
+        preUpdateProcessor = PhoenixConfigurationUtil.loadPreUpsertProcessor(conf);
         if(!conf.get(CsvToKeyValueMapper.INDEX_TABLE_NAME_CONFKEY, "").isEmpty()){
         	tableName = Bytes.toBytes(conf.get(CsvToKeyValueMapper.INDEX_TABLE_NAME_CONFKEY));
         } else {
@@ -190,23 +187,6 @@ public class CsvToKeyValueMapper extends Mapper<LongWritable,Text,ImmutableBytes
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
-    }
-
-    /**
-     * Load the configured ImportPreUpsertKeyValueProcessor, or supply a dummy processor.
-     */
-    @VisibleForTesting
-    static ImportPreUpsertKeyValueProcessor loadPreUpsertProcessor(Configuration conf) {
-        Class<? extends ImportPreUpsertKeyValueProcessor> processorClass = null;
-        try {
-            processorClass = conf.getClass(
-                    UPSERT_HOOK_CLASS_CONFKEY, DefaultImportPreUpsertKeyValueProcessor.class,
-                    ImportPreUpsertKeyValueProcessor.class);
-        } catch (Exception e) {
-            throw new IllegalStateException("Couldn't load upsert hook class", e);
-        }
-
-        return ReflectionUtils.newInstance(processorClass, conf);
     }
 
     /**

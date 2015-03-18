@@ -17,17 +17,19 @@
  */
 package org.apache.phoenix.mapreduce;
 
-import com.google.common.collect.ImmutableList;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
+
+import java.util.List;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.util.ColumnInfo;
 import org.junit.Test;
 
-import java.util.List;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
+import com.google.common.collect.ImmutableList;
 
 public class CsvBulkImportUtilTest {
 
@@ -57,7 +59,7 @@ public class CsvBulkImportUtilTest {
     public void testConfigurePreUpsertProcessor() {
         Configuration conf = new Configuration();
         CsvBulkImportUtil.configurePreUpsertProcessor(conf, MockProcessor.class);
-        ImportPreUpsertKeyValueProcessor processor = CsvToKeyValueMapper.loadPreUpsertProcessor(conf);
+        ImportPreUpsertKeyValueProcessor processor = PhoenixConfigurationUtil.loadPreUpsertProcessor(conf);
         assertEquals(MockProcessor.class, processor.getClass());
     }
 

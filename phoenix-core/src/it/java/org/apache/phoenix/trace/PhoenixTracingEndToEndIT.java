@@ -19,12 +19,15 @@ package org.apache.phoenix.trace;
 
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
+import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.Collection;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -33,6 +36,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.metrics2.MetricsSource;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.metrics.Metrics;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.trace.TraceReader.SpanInfo;
@@ -391,7 +395,33 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
         assertAnnotationPresent(TENANT_ID_ATTRIB, tenantId, conn);
         // CurrentSCN is also added as an annotation. Not tested here because it screws up test setup.
     }
-    
+
+    @Test
+    public void testTraceOnOrOff() throws Exception {
+        Connection conn1 = DriverManager.getConnection(getUrl());
+        try{
+            Statement statement = conn1.createStatement();
+            ResultSet  rs = statement.executeQuery("TRACE ON");
+            assertTrue(rs.next());
+            long traceId = ((PhoenixConnection) conn1).getTraceScope().getSpan()
+            .getTraceId();
+            assertEquals(rs.getLong(1), traceId);
+            assertEquals(rs.getLong("trace_id"), traceId);
+            assertFalse(rs.next());
+
+            rs = statement.executeQuery("TRACE OFF");
+            assertTrue(rs.next());
+            assertEquals(rs.getLong(1), traceId);
+            assertEquals(rs.getLong("trace_id"), traceId);
+            assertFalse(rs.next());
+
+            rs = statement.executeQuery("TRACE OFF");
+            assertFalse(rs.next());
+       } finally {
+            conn1.close();
+        }
+    }
+
     private void assertAnnotationPresent(final String annotationKey, final String annotationValue, Connection conn) throws Exception {
         boolean tracingComplete = checkStoredTraces(conn, new TraceChecker(){
             @Override
