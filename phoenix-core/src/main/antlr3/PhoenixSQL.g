@@ -1140,13 +1140,12 @@ STRING_LITERAL
 @init{ StringBuilder sb = new StringBuilder(); }
     :   '\''
     ( t=CHAR { sb.append(t.getText()); }
-    | t=CHAR_ESC { sb.append(getText()); }
     )* '\'' { setText(sb.toString()); }
     ;
 
 fragment
 CHAR
-    :   ( ~('\'' | '\\') )+
+    :   (~('\''))+
     ;
 
 fragment

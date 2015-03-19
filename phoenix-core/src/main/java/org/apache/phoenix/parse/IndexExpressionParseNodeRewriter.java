@@ -51,6 +51,12 @@ public class IndexExpressionParseNodeRewriter extends ParseNodeRewriter {
             return null;
         }
         
+        @Override
+        public boolean visitEnter(FunctionParseNode node) throws SQLException {
+            isParseNodeCaseSensitive = true;
+            return super.visitEnter(node);
+        }
+        
         public boolean isParseNodeCaseSensitive() {
             return isParseNodeCaseSensitive;
         }
