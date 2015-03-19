@@ -76,7 +76,7 @@ public class IndexQosIT extends BaseTest {
     private HBaseTestingUtility util;
     private HBaseAdmin admin;
     private Configuration conf;
-    private static RpcExecutor spyRpcExecutor = Mockito.spy(new BalancedQueueRpcExecutor("test-queue", 1, 1, 1));
+    private static RpcExecutor spyRpcExecutor = Mockito.spy(new BalancedQueueRpcExecutor("test-queue", 30, 1, 300));
 
     /**
      * Factory that uses a spyed RpcExecutor
@@ -111,6 +111,9 @@ public class IndexQosIT extends BaseTest {
     public void tearDown() throws Exception {
         try {
             destroyDriver(driver);
+            if (admin!=null) {
+            	admin.close();
+            }
         } finally {
             util.shutdownMiniCluster();
         }
