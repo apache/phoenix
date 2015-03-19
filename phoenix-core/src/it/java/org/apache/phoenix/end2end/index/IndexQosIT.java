@@ -45,7 +45,6 @@ import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.regionserver.RegionServerServices;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
-import org.apache.phoenix.hbase.index.IndexQosCompat;
 import org.apache.phoenix.hbase.index.IndexQosRpcControllerFactory;
 import org.apache.phoenix.hbase.index.ipc.PhoenixIndexRpcSchedulerFactory;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
@@ -116,32 +115,6 @@ public class IndexQosIT extends BaseTest {
         }
     }
     
-    @Test
-    public void testIndexQosEnabledCorrectly() throws Exception {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = driver.connect(url, props);
-        
-        // create a data table
-        conn.createStatement().execute(
-                "CREATE TABLE " + DATA_TABLE_FULL_NAME + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
-        
-        // create an index table
-        conn.createStatement().execute(
-                "CREATE INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_FULL_NAME + " (v1) INCLUDE (v2)");
-        
-        // upsert one row (which upserts a row to the data and index table)
-        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + DATA_TABLE_FULL_NAME + " VALUES(?,?,?)");
-        stmt.setString(1, "k1");
-        stmt.setString(2, "v1");
-        stmt.setString(3, "v2");
-        stmt.execute();
-        conn.commit();
-        
-        // qos should only be enabled for index table
-        assertFalse(IndexQosCompat.isIndexTable(DATA_TABLE_FULL_NAME));
-        assertTrue(IndexQosCompat.isIndexTable(INDEX_TABLE_FULL_NAME));
-    }
-
     @Test
     public void testIndexWriteQos() throws Exception { 
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);

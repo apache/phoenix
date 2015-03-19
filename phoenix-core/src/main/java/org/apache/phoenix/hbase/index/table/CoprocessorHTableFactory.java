@@ -25,7 +25,6 @@ import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.hbase.index.IndexQosCompat;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 
 public class CoprocessorHTableFactory implements HTableFactory {
@@ -42,7 +41,6 @@ public class CoprocessorHTableFactory implements HTableFactory {
 
         // make sure we include the index table in the tables we need to track
         String tableName = Bytes.toString(tablename.copyBytesIfNecessary());
-        IndexQosCompat.enableIndexQosForTable(tableName);
 
         if (LOG.isDebugEnabled()) {
             LOG.debug("Creating new HTable: " + tableName);

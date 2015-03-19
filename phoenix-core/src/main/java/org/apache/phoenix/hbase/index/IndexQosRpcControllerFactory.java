@@ -27,6 +27,7 @@ import org.apache.hadoop.hbase.ipc.DelegatingPayloadCarryingRpcController;
 import org.apache.hadoop.hbase.ipc.PayloadCarryingRpcController;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
 import org.apache.phoenix.hbase.index.ipc.PhoenixIndexRpcSchedulerFactory;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 
 /**
  * {@link RpcControllerFactory} that overrides the standard {@link PayloadCarryingRpcController} to
@@ -66,11 +67,10 @@ public class IndexQosRpcControllerFactory extends RpcControllerFactory {
             super(delegate);
             this.priority = PhoenixIndexRpcSchedulerFactory.getMinPriority(conf);
         }
-        
         @Override
         public void setPriority(final TableName tn) {
             // if its an index table, then we override to the index priority
-            if (IndexQosCompat.isIndexTable(tn.getNameAsString())) {
+            if (!tn.isSystemTable() &&  !PhoenixDatabaseMetaData.SYSTEM_TABLE_NAMES.contains(tn.getNameAsString())) {
                 setPriority(this.priority);
             } 
             else {

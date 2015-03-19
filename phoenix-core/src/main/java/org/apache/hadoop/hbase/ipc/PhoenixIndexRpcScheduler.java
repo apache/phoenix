@@ -120,5 +120,4 @@ public class PhoenixIndexRpcScheduler extends RpcScheduler {
     public void setExecutorForTesting(RpcExecutor executor) {
         this.callExecutor = executor;
     }
-    
 }
