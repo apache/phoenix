@@ -75,7 +75,7 @@ public class IndexQosIT extends BaseTest {
     private HBaseTestingUtility util;
     private HBaseAdmin admin;
     private Configuration conf;
-    private static RpcExecutor spyRpcExecutor = Mockito.spy(new BalancedQueueRpcExecutor("test-queue", 1, 1, 1));
+    private static RpcExecutor spyRpcExecutor = Mockito.spy(new BalancedQueueRpcExecutor("test-queue", 30, 1, 300));
 
     /**
      * Factory that uses a spyed RpcExecutor
@@ -110,6 +110,9 @@ public class IndexQosIT extends BaseTest {
     public void tearDown() throws Exception {
         try {
             destroyDriver(driver);
+            if (admin!=null) {
+            	admin.close();
+            }
         } finally {
             util.shutdownMiniCluster();
         }
@@ -210,13 +213,25 @@ public class IndexQosIT extends BaseTest {
         conn.createStatement().execute(
                 "CREATE TABLE " + INDEX_TABLE_FULL_NAME + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
         
-        // upsert one row to the newly created table (which has the same table name as the previous index table)
+        // upsert one row to the table (which has the same table name as the previous index table)
         stmt = conn.prepareStatement("UPSERT INTO " + INDEX_TABLE_FULL_NAME + " VALUES(?,?,?)");
         stmt.setString(1, "k1");
         stmt.setString(2, "v1");
         stmt.setString(3, "v2");
         stmt.execute();
         conn.commit();
+        
+        // run select query on the new table
+        selectSql = "SELECT k, v2 from " + INDEX_TABLE_FULL_NAME + " WHERE v1=?";
+        stmt = conn.prepareStatement(selectSql);
+        stmt.setString(1, "v1");
+
+        // verify that the correct results are returned
+        rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertEquals("k1", rs.getString(1));
+        assertEquals("v2", rs.getString(2));
+        assertFalse(rs.next());
         
         // verify that that index queue is used only once (for the first upsert)
         Mockito.verify(spyRpcExecutor).dispatch(Mockito.any(CallRunner.class));
