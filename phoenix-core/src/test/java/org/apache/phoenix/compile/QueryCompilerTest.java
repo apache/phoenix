@@ -1564,5 +1564,20 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             stmt.close();
         }
     }
+    
+    @Test
+    public void testRegexPredefinedCharacterClasses() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        Statement stmt = conn.createStatement();
+        stmt.execute("CREATE TABLE t (k1 INTEGER PRIMARY KEY, v VARCHAR)");
+        stmt.executeQuery("select * from T where REGEXP_SUBSTR(v, '.\\d\\D\\s\\S\\w\\W') = 'val'");
+    }
+    
+    @Test
+    public void testRegexCharacter() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().executeQuery(
+                "select * from T where REGEXP_SUBSTR(uri, 'x') = 'val'");
+    }
 
 }

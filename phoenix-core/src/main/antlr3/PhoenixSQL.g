@@ -1163,6 +1163,12 @@ CHAR_ESC
         | 't'   { setText("\t"); }
         | 'b'   { setText("\b"); }
         | 'f'   { setText("\f"); }
+    	| 'd'   { setText("\\d"); }
+		| 'D'   { setText("\\D"); }
+		| 's'   { setText("\\s"); }
+		| 'S'   { setText("\\S"); }
+		| 'w'   { setText("\\w"); }
+		| 'W'   { setText("\\W"); }
         | '\"'  { setText("\""); }
         | '\''  { setText("\'"); }
         | '\\'  { setText("\\"); }
