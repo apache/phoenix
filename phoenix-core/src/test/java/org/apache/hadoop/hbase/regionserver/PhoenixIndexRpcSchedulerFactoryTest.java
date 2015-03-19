@@ -30,13 +30,13 @@ public class PhoenixIndexRpcSchedulerFactoryTest {
     @Test
     public void ensureInstantiation() throws Exception {
         Configuration conf = new Configuration(false);
-        conf.setClass(HRegionServer.REGION_SERVER_RPC_SCHEDULER_FACTORY_CLASS,
+        conf.setClass(RSRpcServices.REGION_SERVER_RPC_SCHEDULER_FACTORY_CLASS,
             PhoenixIndexRpcSchedulerFactory.class, RpcSchedulerFactory.class);
         // kinda lame that we copy the copy from the regionserver to do this and can't use a static
         // method, but meh
         try {
             Class<?> rpcSchedulerFactoryClass =
-                    conf.getClass(HRegionServer.REGION_SERVER_RPC_SCHEDULER_FACTORY_CLASS,
+                    conf.getClass(RSRpcServices.REGION_SERVER_RPC_SCHEDULER_FACTORY_CLASS,
                         SimpleRpcSchedulerFactory.class);
             Object o = rpcSchedulerFactoryClass.newInstance();
             assertTrue(o instanceof PhoenixIndexRpcSchedulerFactory);
@@ -63,7 +63,7 @@ public class PhoenixIndexRpcSchedulerFactoryTest {
         setMinMax(conf, 0, 4);
         factory.create(conf, null);
 
-        setMinMax(conf, 101, 102);
+        setMinMax(conf, 201, 202);
         factory.create(conf, null);
 
         setMinMax(conf, 102, 101);

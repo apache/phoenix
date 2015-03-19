@@ -66,7 +66,7 @@ import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.ScanUtil;
-import org.cloudera.htrace.TraceScope;
+import org.apache.htrace.TraceScope;
 
 import com.google.common.collect.Lists;
 

@@ -42,11 +42,11 @@ import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
+import org.apache.hadoop.hbase.MetaTableAccessor;
 import org.apache.hadoop.hbase.RegionTransition;
 import org.apache.hadoop.hbase.Server;
 import org.apache.hadoop.hbase.ServerName;
-import org.apache.hadoop.hbase.catalog.CatalogTracker;
-import org.apache.hadoop.hbase.catalog.MetaEditor;
+import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.executor.EventType;
@@ -286,11 +286,11 @@ public class IndexSplitTransaction extends SplitTransaction {
     // and assign the parent region.
     if (!testing) {
       if (metaEntries == null || metaEntries.isEmpty()) {
-        MetaEditor.splitRegion(server.getCatalogTracker(),
-            parent.getRegionInfo(), daughterRegions.getFirst().getRegionInfo(),
-            daughterRegions.getSecond().getRegionInfo(), server.getServerName());
+        MetaTableAccessor.splitRegion(server.getConnection(), parent.getRegionInfo(),
+                daughterRegions.getFirst().getRegionInfo(),
+                daughterRegions.getSecond().getRegionInfo(), server.getServerName());
       } else {
-        offlineParentInMetaAndputMetaEntries(server.getCatalogTracker(),
+        offlineParentInMetaAndputMetaEntries(server.getConnection(),
           parent.getRegionInfo(), daughterRegions.getFirst().getRegionInfo(), daughterRegions
               .getSecond().getRegionInfo(), server.getServerName(), metaEntries);
       }
@@ -415,10 +415,10 @@ public class IndexSplitTransaction extends SplitTransaction {
       if (services != null) {
         try {
           // add 2nd daughter first (see HBASE-4335)
-          services.postOpenDeployTasks(b, server.getCatalogTracker());
+          services.postOpenDeployTasks(b);
           // Should add it to OnlineRegions
           services.addToOnlineRegions(b);
-          services.postOpenDeployTasks(a, server.getCatalogTracker());
+          services.postOpenDeployTasks(a);
           services.addToOnlineRegions(a);
         } catch (KeeperException ke) {
           throw new IOException(ke);
@@ -583,7 +583,7 @@ public class IndexSplitTransaction extends SplitTransaction {
     return regions;
   }
 
-  private void offlineParentInMetaAndputMetaEntries(CatalogTracker catalogTracker,
+  private void offlineParentInMetaAndputMetaEntries(Connection conn,
       HRegionInfo parent, HRegionInfo splitA, HRegionInfo splitB,
       ServerName serverName, List<Mutation> metaEntries) throws IOException {
     List<Mutation> mutations = metaEntries;
@@ -592,19 +592,19 @@ public class IndexSplitTransaction extends SplitTransaction {
     copyOfParent.setSplit(true);
 
     //Put for parent
-    Put putParent = MetaEditor.makePutFromRegionInfo(copyOfParent);
-    MetaEditor.addDaughtersToPut(putParent, splitA, splitB);
+    Put putParent = MetaTableAccessor.makePutFromRegionInfo(copyOfParent);
+    MetaTableAccessor.addDaughtersToPut(putParent, splitA, splitB);
     mutations.add(putParent);
     
     //Puts for daughters
-    Put putA = MetaEditor.makePutFromRegionInfo(splitA);
-    Put putB = MetaEditor.makePutFromRegionInfo(splitB);
+    Put putA = MetaTableAccessor.makePutFromRegionInfo(splitA);
+    Put putB = MetaTableAccessor.makePutFromRegionInfo(splitB);
 
     addLocation(putA, serverName, 1); //these are new regions, openSeqNum = 1 is fine.
     addLocation(putB, serverName, 1);
     mutations.add(putA);
     mutations.add(putB);
-    MetaEditor.mutateMetaTable(catalogTracker, mutations);
+    MetaTableAccessor.mutateMetaTable(conn, mutations);
   }
 
   public Put addLocation(final Put p, final ServerName sn, long openSeqNum) {

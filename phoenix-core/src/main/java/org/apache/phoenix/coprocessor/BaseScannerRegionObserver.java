@@ -53,8 +53,8 @@ import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
-import org.cloudera.htrace.Span;
-import org.cloudera.htrace.Trace;
+import org.apache.htrace.Span;
+import org.apache.htrace.Trace;
 
 import com.google.common.collect.ImmutableList;
 

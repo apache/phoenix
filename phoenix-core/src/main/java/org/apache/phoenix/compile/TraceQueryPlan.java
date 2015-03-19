@@ -30,6 +30,8 @@ import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.htrace.Sampler;
+import org.apache.htrace.TraceScope;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.expression.Determinism;
@@ -58,9 +60,6 @@ import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.SizedUtil;
-import org.cloudera.htrace.Sampler;
-import org.cloudera.htrace.TraceScope;
-import org.cloudera.htrace.impl.ProbabilitySampler;
 
 public class TraceQueryPlan implements QueryPlan {
 
@@ -124,14 +123,9 @@ public class TraceQueryPlan implements QueryPlan {
                 if(!first) return null;
                 TraceScope traceScope = conn.getTraceScope();
                 if (traceStatement.isTraceOn()) {
-                    double samplingRate = traceStatement.getSamplingRate();
-                    if (samplingRate >= 1.0) {
-                        conn.setSampler(Sampler.ALWAYS);
-                    } else if (samplingRate < 1.0 && samplingRate > 0.0) {
-                        conn.setSampler(new ProbabilitySampler(samplingRate));
-                    } else {
+                    conn.setSampler(Tracing.getConfiguredSampler(traceStatement));
+                    if (conn.getSampler() == Sampler.NEVER) {
                         closeTraceScope(conn);
-                        conn.setSampler(Sampler.NEVER);
                     }
                     if (traceScope == null && !conn.getSampler().equals(Sampler.NEVER)) {
                         traceScope = Tracing.startNewSpan(conn, "Enabling trace");

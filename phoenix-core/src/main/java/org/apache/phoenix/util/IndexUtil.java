@@ -571,6 +571,10 @@ public class IndexUtil {
                     return cell.getMvccVersion();
                 }
 
+                @Override public long getSequenceId() {
+                    return cell.getSequenceId();
+                }
+
                 @Override
                 public byte[] getValueArray() {
                     return cell.getValueArray();
@@ -597,7 +601,7 @@ public class IndexUtil {
                 }
 
                 @Override
-                public short getTagsLength() {
+                public int getTagsLength() {
                     return cell.getTagsLength();
                 }
 
@@ -619,12 +623,6 @@ public class IndexUtil {
                 @Override
                 public byte[] getRow() {
                     return cell.getRow();
-                }
-
-                @Override
-                @Deprecated
-                public int getTagsLengthUnsigned() {
-                    return cell.getTagsLengthUnsigned();
                 }
             };
             // Wrap cell in cell that offsets row key

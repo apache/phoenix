@@ -23,7 +23,9 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
 
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.filter.BinaryComparator;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
@@ -110,7 +112,7 @@ public class ScannerBuilder {
     // create a scanner and wrap it as an iterator, meaning you can only go forward
     final FilteredKeyValueScanner kvScanner = new FilteredKeyValueScanner(filters, memstore);
     // seek the scanner to initialize it
-    KeyValue start = KeyValue.createFirstOnRow(update.getRow());
+    KeyValue start = KeyValueUtil.createFirstOnRow(update.getRow());
     try {
       if (!kvScanner.seek(start)) {
         return new EmptyScanner();
@@ -125,7 +127,7 @@ public class ScannerBuilder {
     return new Scanner() {
 
       @Override
-      public KeyValue next() {
+      public Cell next() {
         try {
           return kvScanner.next();
         } catch (IOException e) {
@@ -137,7 +139,7 @@ public class ScannerBuilder {
       public boolean seek(KeyValue next) throws IOException {
         // check to see if the next kv is after the current key, in which case we can use reseek,
         // which will be more efficient
-        KeyValue peek = kvScanner.peek();
+        Cell peek = kvScanner.peek();
         // there is another value and its before the requested one - we can do a reseek!
         if (peek != null) {
           int compare = KeyValue.COMPARATOR.compare(peek, next);
@@ -152,7 +154,7 @@ public class ScannerBuilder {
       }
 
       @Override
-      public KeyValue peek() throws IOException {
+      public Cell peek() throws IOException {
         return kvScanner.peek();
       }
 

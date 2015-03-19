@@ -92,8 +92,8 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
-import org.cloudera.htrace.Sampler;
-import org.cloudera.htrace.TraceScope;
+import org.apache.htrace.Sampler;
+import org.apache.htrace.TraceScope;
 
 import com.google.common.base.Objects;
 import com.google.common.base.Strings;

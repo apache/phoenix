@@ -116,23 +116,6 @@ public class IndexedKeyValue extends KeyValue {
         return COLUMN_QUALIFIER.length;
     }
 
-    /**
-     * This is a KeyValue that shouldn't actually be replayed/replicated, so we always mark it as 
-     * an {@link WALEdit#METAFAMILY} so it isn't replayed/replicated via the normal replay mechanism
-     */
-    @Override
-    public boolean matchingFamily(final byte[] family) {
-        return Bytes.equals(family, WALEdit.METAFAMILY);
-    }
-    
-    /**
-     * Not a real KeyValue
-     */
-    @Override
-    public boolean matchingRow(final byte [] row) {
-        return false;
-    }
-
     @Override
     public String toString() {
         return "IndexWrite:\n\ttable: " + indexTableName + "\n\tmutation:" + mutation;
