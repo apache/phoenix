@@ -20,6 +20,11 @@ import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.convert.ConverterImpl;
 import org.apache.calcite.rel.type.RelDataType;
+import org.apache.calcite.tools.FrameworkConfig;
+import org.apache.calcite.tools.Frameworks;
+import org.apache.calcite.tools.Planner;
+import org.apache.calcite.tools.Program;
+import org.apache.calcite.tools.Programs;
 import org.apache.phoenix.compile.QueryPlan;
 
 /**
@@ -67,6 +72,8 @@ public class PhoenixToEnumerableConverter extends ConverterImpl implements Enume
     }
     
     static QueryPlan makePlan(PhoenixRel rel) {
+        Program p = Programs.ofRules(PhoenixFilterScanMergeRule.INSTANCE, PhoenixProjectScanMergeRule.INSTANCE);
+        rel = (PhoenixRel) (p.run(rel.getCluster().getPlanner(), rel, RelTraitSet.createEmpty()));
         final PhoenixRel.Implementor phoenixImplementor = new PhoenixRelImplementorImpl();
         return phoenixImplementor.visitInput(0, rel);
     }

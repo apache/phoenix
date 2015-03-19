@@ -19,7 +19,6 @@ public class PhoenixAggregate extends Aggregate implements PhoenixRel {
     public PhoenixAggregate(RelOptCluster cluster, RelTraitSet traits, RelNode child, boolean indicator, ImmutableBitSet groupSet, List<ImmutableBitSet> groupSets, List<AggregateCall> aggCalls) throws InvalidRelException {
         super(cluster, traits, child, indicator, groupSet, groupSets, aggCalls);
         assert getConvention() == PhoenixRel.CONVENTION;
-        assert getConvention() == child.getConvention();
 
         for (AggregateCall aggCall : aggCalls) {
             if (aggCall.isDistinct()) {
@@ -47,6 +46,7 @@ public class PhoenixAggregate extends Aggregate implements PhoenixRel {
 
     @Override
     public QueryPlan implement(Implementor implementor) {
+        assert getConvention() == getInput().getConvention();
         implementor.visitInput(0, (PhoenixRel) getInput());
         throw new UnsupportedOperationException();
     }

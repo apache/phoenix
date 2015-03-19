@@ -69,8 +69,6 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
         for (RelOptRule rule : rules) {
             planner.addRule(rule);
         }
-        planner.addRule(PhoenixFilterScanMergeRule.INSTANCE);
-        planner.addRule(PhoenixProjectScanMergeRule.INSTANCE);
     }
 
     @Override

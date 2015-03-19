@@ -17,10 +17,6 @@ public class PhoenixUnion extends Union implements PhoenixRel {
     protected PhoenixUnion(RelOptCluster cluster, RelTraitSet traits, List<RelNode> inputs, boolean all) {
         super(cluster, traits, inputs, all);
         assert getConvention() == PhoenixRel.CONVENTION;
-
-        for (RelNode input : inputs) {
-            assert getConvention() == input.getConvention();
-        }
     }
 
     @Override
@@ -30,6 +26,9 @@ public class PhoenixUnion extends Union implements PhoenixRel {
 
     @Override
     public QueryPlan implement(Implementor implementor) {
+        for (RelNode input : getInputs()) {
+            assert getConvention() == input.getConvention();
+        }
         for (Ord<RelNode> input : Ord.zip(inputs)) {
             implementor.visitInput(input.i, (PhoenixRel) input.e);
         }

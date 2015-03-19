@@ -36,9 +36,8 @@ import com.google.common.collect.Lists;
  */
 public class PhoenixProject extends Project implements PhoenixRel {
     public PhoenixProject(RelOptCluster cluster, RelTraitSet traits, RelNode input, List<? extends RexNode> projects, RelDataType rowType) {
-        super(cluster, traits, input, projects, rowType, Flags.BOXED);
+        super(cluster, traits, input, projects, rowType);
         assert getConvention() == PhoenixRel.CONVENTION;
-        assert getConvention() == input.getConvention();
     }
 
     @Override
@@ -52,6 +51,7 @@ public class PhoenixProject extends Project implements PhoenixRel {
 
     @Override
     public QueryPlan implement(Implementor implementor) {
+        assert getConvention() == getInput().getConvention();
         QueryPlan plan = implementor.visitInput(0, (PhoenixRel) getInput());
         
         TupleProjector tupleProjector = project(implementor, getProjects());

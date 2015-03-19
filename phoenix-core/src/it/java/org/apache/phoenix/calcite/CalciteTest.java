@@ -188,7 +188,8 @@ public class CalciteTest extends BaseClientManagedTimeIT {
     @Test public void testTableScan() throws Exception {
         start().sql("select * from aTable where a_string = 'a'")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'a')])\n")
+                           "  PhoenixFilter(condition=[=($2, 'a')])\n" +
+                           "    PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
                 .resultIs(new Object[][] {
                           {"00D300000000XHP", "00A123122312312", "a"}, 
                           {"00D300000000XHP", "00A223122312312", "a"}, 
@@ -200,7 +201,9 @@ public class CalciteTest extends BaseClientManagedTimeIT {
     @Test public void testProject() throws Exception {
         start().sql("select entity_id, a_string, organization_id from aTable where a_string = 'a'")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'a')], project=[[$1, $2, $0]])\n")
+                           "  PhoenixProject(ENTITY_ID=[$1], A_STRING=[$2], ORGANIZATION_ID=[$0])\n" +
+                           "    PhoenixFilter(condition=[=($2, 'a')])\n" +
+                           "      PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
                 .resultIs(new Object[][] {
                           {"00A123122312312", "a", "00D300000000XHP"}, 
                           {"00A223122312312", "a", "00D300000000XHP"}, 
@@ -214,8 +217,11 @@ public class CalciteTest extends BaseClientManagedTimeIT {
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixProject(ENTITY_ID=[$4], A_STRING=[$2], ORGANIZATION_ID=[$3])\n" +
                            "    PhoenixJoin(condition=[AND(=($4, $1), =($3, $0))], joinType=[inner])\n" +
-                           "      PhoenixTableScan(table=[[phoenix, ATABLE]], project=[[$0, $1, $2]])\n" +
-                           "      PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'a')], project=[[$0, $1, $2]])\n")
+                           "      PhoenixProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1], A_STRING=[$2])\n" +
+                           "        PhoenixTableScan(table=[[phoenix, ATABLE]])\n" +
+                           "      PhoenixProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1], A_STRING=[$2])\n" +
+                           "        PhoenixFilter(condition=[=($2, 'a')])\n" +
+                           "          PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
                 .resultIs(new Object[][] {
                           {"00A123122312312", "a", "00D300000000XHP"}, 
                           {"00A223122312312", "a", "00D300000000XHP"}, 
@@ -227,8 +233,10 @@ public class CalciteTest extends BaseClientManagedTimeIT {
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixProject(item_id=[$0], NAME=[$1], supplier_id=[$3], NAME0=[$4])\n" +
                            "    PhoenixJoin(condition=[=($2, $3)], joinType=[inner])\n" +
-                           "      PhoenixTableScan(table=[[phoenix, ITEMTABLE]], project=[[$0, $1, $5]])\n" +
-                           "      PhoenixTableScan(table=[[phoenix, SUPPLIERTABLE]], project=[[$0, $1]])\n")
+                           "      PhoenixProject(item_id=[$0], NAME=[$1], supplier_id=[$5])\n" +
+                           "        PhoenixTableScan(table=[[phoenix, ITEMTABLE]])\n" +
+                           "      PhoenixProject(supplier_id=[$0], NAME=[$1])\n" +
+                           "        PhoenixTableScan(table=[[phoenix, SUPPLIERTABLE]])\n")
                 .resultIs(new Object[][] {
                           {"0000000001", "T1", "0000000001", "S1"}, 
                           {"0000000002", "T2", "0000000001", "S1"}, 
@@ -236,6 +244,19 @@ public class CalciteTest extends BaseClientManagedTimeIT {
                           {"0000000004", "T4", "0000000002", "S2"},
                           {"0000000005", "T5", "0000000005", "S5"},
                           {"0000000006", "T6", "0000000006", "S6"}})
+                .close();
+    }
+    
+    @Test public void testMultiJoin() throws Exception {
+        start().sql("select t1.entity_id, t2.a_string, t3.organization_id from aTable t1 join aTable t2 on t1.entity_id = t2.entity_id and t1.organization_id = t2.organization_id join atable t3 on t1.entity_id = t3.entity_id and t1.organization_id = t3.organization_id where t1.a_string = 'a'") 
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                           "  PhoenixProject(ENTITY_ID=[$1], A_STRING=[$20], ORGANIZATION_ID=[$36])\n" +
+                           "    PhoenixJoin(condition=[AND(=($1, $37), =($0, $36))], joinType=[inner])\n" +
+                           "      PhoenixJoin(condition=[AND(=($1, $19), =($0, $18))], joinType=[inner])\n" +
+                           "        PhoenixFilter(condition=[=($2, 'a')])\n" +
+                           "          PhoenixTableScan(table=[[phoenix, ATABLE]])\n" +
+                           "        PhoenixTableScan(table=[[phoenix, ATABLE]])\n" +
+                           "      PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
                 .close();
     }
 

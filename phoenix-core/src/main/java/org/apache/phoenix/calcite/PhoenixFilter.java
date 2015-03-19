@@ -20,7 +20,6 @@ public class PhoenixFilter extends Filter implements PhoenixRel {
     protected PhoenixFilter(RelOptCluster cluster, RelTraitSet traits, RelNode input, RexNode condition) {
         super(cluster, traits, input, condition);
         assert getConvention() == PhoenixRel.CONVENTION;
-        assert getConvention() == input.getConvention();
     }
 
     public PhoenixFilter copy(RelTraitSet traitSet, RelNode input, RexNode condition) {
@@ -33,6 +32,7 @@ public class PhoenixFilter extends Filter implements PhoenixRel {
     }
 
     public QueryPlan implement(Implementor implementor) {
+        assert getConvention() == getInput().getConvention();
         QueryPlan plan = implementor.visitInput(0, (PhoenixRel) getInput());
         // TODO: what to do with the Expression?
         // Already determined this filter cannot be pushed down, so

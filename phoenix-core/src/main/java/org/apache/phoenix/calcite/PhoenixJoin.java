@@ -35,8 +35,6 @@ public class PhoenixJoin extends Join implements PhoenixRel {
     public PhoenixJoin(RelOptCluster cluster, RelTraitSet traits, RelNode left, RelNode right, RexNode condition, JoinRelType joinType, Set<String> variablesStopped) {
         super( cluster, traits, left, right, condition, joinType, variablesStopped);
         assert getConvention() == PhoenixRel.CONVENTION;
-        assert left.getConvention() == PhoenixRel.CONVENTION;
-        assert right.getConvention() == PhoenixRel.CONVENTION;
     }
 
     @Override
@@ -46,6 +44,8 @@ public class PhoenixJoin extends Join implements PhoenixRel {
 
     @Override
     public QueryPlan implement(Implementor implementor) {
+        assert getLeft().getConvention() == PhoenixRel.CONVENTION;
+        assert getRight().getConvention() == PhoenixRel.CONVENTION;
         PhoenixRel left = (PhoenixRel) getLeft();
         PhoenixRel right = (PhoenixRel) getRight();
         boolean hashRHS = (left instanceof PhoenixTableScan) && getJoinType() != JoinRelType.RIGHT;
