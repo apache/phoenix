@@ -1566,18 +1566,23 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     }
     
     @Test
-    public void testRegexPredefinedCharacterClasses() throws Exception {
+    public void testRegex() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         Statement stmt = conn.createStatement();
         stmt.execute("CREATE TABLE t (k1 INTEGER PRIMARY KEY, v VARCHAR)");
+        
+        //character classes
+        stmt.executeQuery("select * from T where REGEXP_SUBSTR(v, '[abc]') = 'val'");
+        stmt.executeQuery("select * from T where REGEXP_SUBSTR(v, '[^abc]') = 'val'");
+        stmt.executeQuery("select * from T where REGEXP_SUBSTR(v, '[a-zA-Z]') = 'val'");
+        stmt.executeQuery("select * from T where REGEXP_SUBSTR(v, '[a-d[m-p]]') = 'val'");
+        stmt.executeQuery("select * from T where REGEXP_SUBSTR(v, '[a-z&&[def]]') = 'val'");
+        stmt.executeQuery("select * from T where REGEXP_SUBSTR(v, '[a-z&&[^bc]]') = 'val'");
+        stmt.executeQuery("select * from T where REGEXP_SUBSTR(v, '[a-z&&[^m-p]]') = 'val'");
+        
+        // predefined character classes
         stmt.executeQuery("select * from T where REGEXP_SUBSTR(v, '.\\d\\D\\s\\S\\w\\W') = 'val'");
     }
     
-    @Test
-    public void testRegexCharacter() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
-        conn.createStatement().executeQuery(
-                "select * from T where REGEXP_SUBSTR(uri, 'x') = 'val'");
-    }
-
+   
 }

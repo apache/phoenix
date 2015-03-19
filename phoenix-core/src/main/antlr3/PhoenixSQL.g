@@ -1140,6 +1140,7 @@ STRING_LITERAL
 @init{ StringBuilder sb = new StringBuilder(); }
     :   '\''
     ( t=CHAR { sb.append(t.getText()); }
+    | t=CHAR_ESC { sb.append(getText()); }
     )* '\'' { setText(sb.toString()); }
     ;
 
@@ -1156,25 +1157,7 @@ DBL_QUOTE_CHAR
 // escape sequence inside a string literal
 fragment
 CHAR_ESC
-    :   '\\'
-        ( 'n'   { setText("\n"); }
-        | 'r'   { setText("\r"); }
-        | 't'   { setText("\t"); }
-        | 'b'   { setText("\b"); }
-        | 'f'   { setText("\f"); }
-    	| 'd'   { setText("\\d"); }
-		| 'D'   { setText("\\D"); }
-		| 's'   { setText("\\s"); }
-		| 'S'   { setText("\\S"); }
-		| 'w'   { setText("\\w"); }
-		| 'W'   { setText("\\W"); }
-        | '\"'  { setText("\""); }
-        | '\''  { setText("\'"); }
-        | '\\'  { setText("\\"); }
-        | '_'   { setText("\\_"); }
-        | '%'   { setText("\\\%"); }
-        )
-    |   '\'\''  { setText("\'"); }
+    :   '\'\''  { setText("\'"); }
     ;
 
 // whitespace (skip)
