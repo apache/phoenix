@@ -318,12 +318,12 @@
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>org.cloudera.htrace</groupId>
+      <groupId>org.apache.htrace</groupId>
       <artifactId>htrace-core</artifactId>
     </dependency>
     <dependency>
       <groupId>io.netty</groupId>
-      <artifactId>netty</artifactId>
+      <artifactId>netty-all</artifactId>
     </dependency>
     <dependency>
       <groupId>commons-codec</groupId>

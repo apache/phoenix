@@ -24,7 +24,6 @@ import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.regionserver.KeyValueScanner;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.hbase.index.covered.data.IndexMemStore;
 import org.junit.Test;
 
 public class TestIndexMemStore {
@@ -40,9 +39,9 @@ public class TestIndexMemStore {
     IndexMemStore store = new IndexMemStore(IndexMemStore.COMPARATOR);
     long ts = 10;
     KeyValue kv = new KeyValue(row, family, qual, ts, Type.Put, val);
-    kv.setMvccVersion(2);
+    kv.setSequenceId(2);
     KeyValue kv2 = new KeyValue(row, family, qual, ts, Type.Put, val2);
-    kv2.setMvccVersion(0);
+    kv2.setSequenceId(0);
     store.add(kv, true);
     // adding the exact same kv shouldn't change anything stored if not overwritting
     store.add(kv2, false);

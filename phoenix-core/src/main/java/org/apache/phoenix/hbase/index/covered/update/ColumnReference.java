@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.hbase.index.covered.update;
 
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -87,9 +88,9 @@ public class ColumnReference implements Comparable<ColumnReference> {
         return this.qualifierPtr;
     }
 
-  public boolean matches(KeyValue kv) {
-    if (matchesFamily(kv.getRowArray(), kv.getFamilyOffset(), kv.getFamilyLength())) {
-      return matchesQualifier(kv.getRowArray(), kv.getQualifierOffset(), kv.getQualifierLength());
+  public boolean matches(Cell kv) {
+    if (matchesFamily(kv.getFamilyArray(), kv.getFamilyOffset(), kv.getFamilyLength())) {
+      return matchesQualifier(kv.getQualifierArray(), kv.getQualifierOffset(), kv.getQualifierLength());
     }
     return false;
   }

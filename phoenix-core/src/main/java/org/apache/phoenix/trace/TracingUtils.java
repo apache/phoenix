@@ -19,7 +19,7 @@ package org.apache.phoenix.trace;
 
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
-import org.cloudera.htrace.Span;
+import org.apache.htrace.Span;
 
 /**
  * Utilities for tracing

@@ -124,6 +124,11 @@ public class IndexLoadBalancer implements LoadBalancer {
     }
 
     @Override
+    public void onConfigurationChange(Configuration conf) {
+        setConf(conf);
+    }
+
+    @Override
     public void setClusterStatus(ClusterStatus st) {
         this.clusterStatus = st;
     }

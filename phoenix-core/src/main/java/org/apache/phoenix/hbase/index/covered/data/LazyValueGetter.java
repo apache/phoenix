@@ -22,6 +22,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 
 import org.apache.phoenix.hbase.index.ValueGetter;
@@ -78,9 +79,9 @@ public class LazyValueGetter implements ValueGetter {
       return null;
     }
     // there is a next value - we only care about the current value, so we can just snag that
-    KeyValue next = scan.next();
+    Cell next = scan.next();
     if (ref.matches(next)) {
-      return new ImmutableBytesPtr(next.getBuffer(), next.getValueOffset(), next.getValueLength());
+      return new ImmutableBytesPtr(next.getValueArray(), next.getValueOffset(), next.getValueLength());
     }
     return null;
   }

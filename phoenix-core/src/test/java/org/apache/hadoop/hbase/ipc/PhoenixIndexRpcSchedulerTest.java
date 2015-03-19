@@ -19,6 +19,7 @@ package org.apache.hadoop.hbase.ipc;
 
 import static org.junit.Assert.assertEquals;
 
+import java.net.InetSocketAddress;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -37,6 +38,7 @@ import org.mockito.Mockito;
 public class PhoenixIndexRpcSchedulerTest {
 
     private static final Configuration conf = HBaseConfiguration.create();
+    private static final InetSocketAddress isa = new InetSocketAddress("localhost", 0);
 
     @Test
     public void testIndexPriorityWritesToIndexHandler() throws Exception {
@@ -86,7 +88,7 @@ public class PhoenixIndexRpcSchedulerTest {
     private void dispatchCallWithPriority(RpcScheduler scheduler, int priority) throws Exception {
         CallRunner task = Mockito.mock(CallRunner.class);
         RequestHeader header = RequestHeader.newBuilder().setPriority(priority).build();
-        RpcServer server = new RpcServer(null, "test-rpcserver", null, null, conf, scheduler);
+        RpcServer server = new RpcServer(null, "test-rpcserver", null, isa, conf, scheduler);
         RpcServer.Call call =
                 server.new Call(0, null, null, header, null, null, null, null, 10, null);
         Mockito.when(task.getCall()).thenReturn(call);

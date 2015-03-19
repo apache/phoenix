@@ -34,7 +34,7 @@ import org.apache.phoenix.metrics.MetricInfo;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.LogUtil;
-import org.cloudera.htrace.Span;
+import org.apache.htrace.Span;
 
 import com.google.common.base.Joiner;
 import com.google.common.primitives.Longs;
