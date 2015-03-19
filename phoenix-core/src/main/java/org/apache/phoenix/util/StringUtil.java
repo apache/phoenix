@@ -331,4 +331,9 @@ public class StringUtil {
     public static String escapeStringConstant(String pattern) {
         return StringEscapeUtils.escapeSql(pattern); // Need to escape double quotes
     }   
+    
+    public static String escapeBackslash(String input) {
+    	// see http://stackoverflow.com/questions/4653831/regex-how-to-escape-backslashes-and-special-characters
+    	return input.replaceAll("\\\\","\\\\\\\\");
+    }
 }
