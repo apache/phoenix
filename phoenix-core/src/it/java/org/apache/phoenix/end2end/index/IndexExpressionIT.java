@@ -1324,8 +1324,8 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeIT {
 			rs = conn.createStatement().executeQuery("EXPLAIN " + query);
 			if (localIndex) {
 				assertEquals(
-						"CLIENT PARALLEL 1-WAY RANGE SCAN OVER IDX ['id:id1']\n"
-								+ "    SERVER FILTER BY FIRST KEY ONLY",
+						"CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_T [-32768,'id:id1']\n"
+								+ "    SERVER FILTER BY FIRST KEY ONLY\nCLIENT MERGE SORT",
 						QueryUtil.getExplainPlan(rs));
 			} else {
 				assertEquals(

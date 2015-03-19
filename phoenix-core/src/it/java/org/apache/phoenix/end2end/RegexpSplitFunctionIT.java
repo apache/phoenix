@@ -162,7 +162,7 @@ public class RegexpSplitFunctionIT extends BaseHBaseManagedTimeIT {
         initTable(conn, "ONE|TWO|THREE");
 
         ResultSet rs = conn.createStatement().executeQuery(
-                "SELECT REGEXP_SPLIT(VAL, '\\\\|') FROM SPLIT_TEST");
+                "SELECT REGEXP_SPLIT(VAL, '\\|') FROM SPLIT_TEST");
         assertTrue(rs.next());
         Array array = rs.getArray(1);
         String[] values = (String[]) array.getArray();
