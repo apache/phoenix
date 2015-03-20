@@ -18,11 +18,10 @@
 package org.apache.phoenix.expression.util.regex;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.phoenix.schema.SortOrder;
 
 public abstract class AbstractBasePattern {
 
-    public abstract boolean matches(ImmutableBytesWritable ptr, SortOrder sortOrder);
+    public abstract boolean matches(ImmutableBytesWritable ptr);
 
     public abstract String pattern();
 }

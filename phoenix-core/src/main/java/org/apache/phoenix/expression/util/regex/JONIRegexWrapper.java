@@ -18,7 +18,6 @@
 package org.apache.phoenix.expression.util.regex;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.phoenix.schema.SortOrder;
 import org.jcodings.Encoding;
 import org.jcodings.specific.UTF8Encoding;
 import org.joni.Matcher;
@@ -53,10 +52,9 @@ public class JONIRegexWrapper {
         }
 
         @Override
-        public boolean matches(ImmutableBytesWritable ptr, SortOrder sortOrder) {
+        public boolean matches(ImmutableBytesWritable ptr) {
             Preconditions.checkNotNull(ptr);
-            Preconditions.checkNotNull(sortOrder);
-            byte[] matcherSourceBytes = Utils.immutableBytesWritableToBytes(ptr, sortOrder);
+            byte[] matcherSourceBytes = ptr.get();
             return matches(matcherSourceBytes, 0, matcherSourceBytes.length);
         }
 

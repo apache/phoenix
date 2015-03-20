@@ -20,17 +20,21 @@ package org.apache.phoenix.expression;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
+import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.parse.LikeParseNode.LikeType;
+import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.junit.Test;
 
 public class LikeExpressionTest {
-    public boolean testExpression (String value, String expression) {
-      LiteralExpression v = LiteralExpression.newConstant(value);
-      LiteralExpression p = LiteralExpression.newConstant(expression);
+    private boolean testExpression(String value, String expression, SortOrder sortorder)
+            throws SQLException {
+      LiteralExpression v = LiteralExpression.newConstant(value, PVarchar.INSTANCE, sortorder);
+      LiteralExpression p = LiteralExpression.newConstant(expression, PVarchar.INSTANCE, sortorder);
       List<Expression> children = Arrays.<Expression>asList(v,p);
       LikeExpression e1 = ByteBasedLikeExpression.create(children, LikeType.CASE_SENSITIVE);
       LikeExpression e2 = StringBasedLikeExpression.create(children, LikeType.CASE_SENSITIVE);
@@ -44,6 +48,14 @@ public class LikeExpressionTest {
       assertEquals(result1, result2);
       return result1;
     }
+
+    private boolean testExpression(String value, String expression) throws SQLException {
+        boolean result1 = testExpression(value, expression, SortOrder.ASC);
+        boolean result2 = testExpression(value, expression, SortOrder.DESC);
+        assertEquals(result1, result2);
+        return result1;
+    }
+
     @Test
     public void testStartWildcard() throws Exception {
         assertEquals(Boolean.FALSE, testExpression ("149na7-app1-2-", "%-w"));

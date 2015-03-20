@@ -26,6 +26,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.util.regex.AbstractBasePattern;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.parse.LikeParseNode.LikeType;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
@@ -292,7 +293,9 @@ public abstract class LikeExpression extends BaseCompoundExpression {
         if (logger.isTraceEnabled()) {
             value = (String) PVarchar.INSTANCE.toObject(ptr, getStrExpression().getSortOrder());
         }
-        boolean matched = pattern.matches(ptr, getStrExpression().getSortOrder());
+        PVarchar.INSTANCE.coerceBytes(ptr, PVarchar.INSTANCE, getStrExpression().getSortOrder(),
+            SortOrder.ASC);
+        boolean matched = pattern.matches(ptr);
         ptr.set(matched ? PDataType.TRUE_BYTES : PDataType.FALSE_BYTES);
         if (logger.isTraceEnabled()) {
             logger.trace("LIKE(value='" + value + "'pattern='" + pattern.pattern() + "' is " + matched);

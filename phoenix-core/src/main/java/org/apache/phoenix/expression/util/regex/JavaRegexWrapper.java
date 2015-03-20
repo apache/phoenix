@@ -20,7 +20,7 @@ package org.apache.phoenix.expression.util.regex;
 import java.util.regex.Pattern;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.types.PVarchar;
 
 import com.google.common.base.Preconditions;
 
@@ -42,10 +42,9 @@ public class JavaRegexWrapper {
         }
 
         @Override
-        public boolean matches(ImmutableBytesWritable ptr, SortOrder sortOrder) {
+        public boolean matches(ImmutableBytesWritable ptr) {
             Preconditions.checkNotNull(ptr);
-            Preconditions.checkNotNull(sortOrder);
-            String matcherSourceStr = Utils.immutableBytesWritableToString(ptr, sortOrder);
+            String matcherSourceStr = (String) PVarchar.INSTANCE.toObject(ptr);
             return pattern.matcher(matcherSourceStr).matches();
         }
 
