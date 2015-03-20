@@ -52,5 +52,14 @@ public class JavaRegexWrapper {
         public String pattern() {
             return pattern.pattern();
         }
+
+        @Override
+        public void replaceAll(ImmutableBytesWritable srcPtr, ImmutableBytesWritable replacePtr,
+                ImmutableBytesWritable replacedPtr) {
+            String sourceStr = (String) PVarchar.INSTANCE.toObject(srcPtr);
+            String replaceStr = (String) PVarchar.INSTANCE.toObject(replacePtr);
+            String replacedStr = pattern.matcher(sourceStr).replaceAll(replaceStr);
+            replacedPtr.set(PVarchar.INSTANCE.toBytes(replacedStr));
+        }
     }
 }
