@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.expression.util.regex;
 
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -43,33 +42,16 @@ public class JavaRegexWrapper {
         }
 
         @Override
-        public AbstractBaseMatcher matcher(ImmutableBytesWritable ptr, SortOrder sortOrder) {
+        public boolean matches(ImmutableBytesWritable ptr, SortOrder sortOrder) {
             Preconditions.checkNotNull(ptr);
             Preconditions.checkNotNull(sortOrder);
             String matcherSourceStr = Utils.immutableBytesWritableToString(ptr, sortOrder);
-            if (matcherSourceStr == null) {
-                return null;
-            }
-            return new JavaMatcher(pattern.matcher(matcherSourceStr));
+            return pattern.matcher(matcherSourceStr).matches();
         }
 
         @Override
         public String pattern() {
             return pattern.pattern();
         }
-    }
-
-    public static class JavaMatcher extends AbstractBaseMatcher {
-        private Matcher matcher;
-
-        public JavaMatcher(Matcher matcher) {
-            this.matcher = matcher;
-        }
-
-        @Override
-        public boolean matches() {
-            return matcher.matches();
-        }
-
     }
 }

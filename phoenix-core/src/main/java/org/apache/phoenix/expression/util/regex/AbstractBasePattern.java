@@ -22,7 +22,7 @@ import org.apache.phoenix.schema.SortOrder;
 
 public abstract class AbstractBasePattern {
 
-    public abstract AbstractBaseMatcher matcher(ImmutableBytesWritable ptr, SortOrder sortOrder);
+    public abstract boolean matches(ImmutableBytesWritable ptr, SortOrder sortOrder);
 
     public abstract String pattern();
 }

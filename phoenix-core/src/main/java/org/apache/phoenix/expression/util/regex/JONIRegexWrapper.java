@@ -53,34 +53,18 @@ public class JONIRegexWrapper {
         }
 
         @Override
-        public AbstractBaseMatcher matcher(ImmutableBytesWritable ptr, SortOrder sortOrder) {
+        public boolean matches(ImmutableBytesWritable ptr, SortOrder sortOrder) {
             Preconditions.checkNotNull(ptr);
             Preconditions.checkNotNull(sortOrder);
             byte[] matcherSourceBytes = Utils.immutableBytesWritableToBytes(ptr, sortOrder);
-            if (matcherSourceBytes == null) {
-                return null;
-            }
-            return new JONIMatcher(pattern.matcher(matcherSourceBytes), matcherSourceBytes.length);
+            Matcher matcher = pattern.matcher(matcherSourceBytes);
+            int ret = matcher.match(0, matcherSourceBytes.length, Option.DEFAULT);
+            return matcherSourceBytes.length == ret;
         }
 
         @Override
         public String pattern() {
             return patternString;
-        }
-    }
-
-    public static class JONIMatcher extends AbstractBaseMatcher {
-        private Matcher matcher;
-        private final int matcherSourceBytesLen;
-
-        public JONIMatcher(Matcher matcher, int matcherSourceBytesLen) {
-            this.matcher = matcher;
-            this.matcherSourceBytesLen = matcherSourceBytesLen;
-        }
-
-        @Override
-        public boolean matches() {
-            return matcherSourceBytesLen == matcher.match(0, matcherSourceBytesLen, Option.DEFAULT);
         }
     }
 }
