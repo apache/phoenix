@@ -266,21 +266,21 @@ public abstract class LikeExpression extends BaseCompoundExpression {
         AbstractBasePattern pattern = this.pattern;
         if (pattern == null) { // TODO: don't allow? this is going to be slooowwww
             if (!getPatternExpression().evaluate(tuple, ptr)) {
-                if (logger.isDebugEnabled()) {
-                    logger.debug("LIKE is FALSE: pattern is null");
+                if (logger.isTraceEnabled()) {
+                    logger.trace("LIKE is FALSE: pattern is null");
                 }
                 return false;
             }
             String value = (String) PVarchar.INSTANCE.toObject(ptr, getPatternExpression().getSortOrder());
             pattern = compilePattern(value);
-            if (logger.isDebugEnabled()) {
-                logger.debug("LIKE pattern is expression: " + pattern.pattern());
+            if (logger.isTraceEnabled()) {
+                logger.trace("LIKE pattern is expression: " + pattern.pattern());
             }
         }
 
         if (!getStrExpression().evaluate(tuple, ptr)) {
-            if (logger.isDebugEnabled()) {
-                logger.debug("LIKE is FALSE: child expression is null");
+            if (logger.isTraceEnabled()) {
+                logger.trace("LIKE is FALSE: child expression is null");
             }
             return false;
         }
@@ -289,13 +289,13 @@ public abstract class LikeExpression extends BaseCompoundExpression {
         }
 
         String value = null;
-        if (logger.isDebugEnabled()) {
+        if (logger.isTraceEnabled()) {
             value = (String) PVarchar.INSTANCE.toObject(ptr, getStrExpression().getSortOrder());
         }
         boolean matched = pattern.matcher(ptr, getStrExpression().getSortOrder()).matches();
         ptr.set(matched ? PDataType.TRUE_BYTES : PDataType.FALSE_BYTES);
-        if (logger.isDebugEnabled()) {
-            logger.debug("LIKE(value='" + value + "'pattern='" + pattern.pattern() + "' is " + matched);
+        if (logger.isTraceEnabled()) {
+            logger.trace("LIKE(value='" + value + "'pattern='" + pattern.pattern() + "' is " + matched);
         }
         return true;
     }
