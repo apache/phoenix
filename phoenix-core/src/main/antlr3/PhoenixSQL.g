@@ -1146,7 +1146,7 @@ STRING_LITERAL
 
 fragment
 CHAR
-    :   (~('\''))+
+    :   ( ~('\'' | '\\') )+
     ;
 
 fragment
@@ -1157,7 +1157,19 @@ DBL_QUOTE_CHAR
 // escape sequence inside a string literal
 fragment
 CHAR_ESC
-    :   '\'\''  { setText("\'"); }
+    :   '\\'
+        ( 'n'   { setText("\n"); }
+        | 'r'   { setText("\r"); }
+        | 't'   { setText("\t"); }
+        | 'b'   { setText("\b"); }
+        | 'f'   { setText("\f"); }
+        | '\"'  { setText("\""); }
+        | '\''  { setText("\'"); }
+        | '\\'  { setText("\\"); }
+        | '_'   { setText("\\_"); }
+        | '%'   { setText("\\\%"); }
+        )
+    |   '\'\''  { setText("\'"); }
     ;
 
 // whitespace (skip)

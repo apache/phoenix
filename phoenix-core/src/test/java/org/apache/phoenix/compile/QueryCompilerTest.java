@@ -1581,7 +1581,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         stmt.executeQuery("select * from T where REGEXP_SUBSTR(v, '[a-z&&[^m-p]]') = 'val'");
         
         // predefined character classes
-        stmt.executeQuery("select * from T where REGEXP_SUBSTR(v, '.\\d\\D\\s\\S\\w\\W') = 'val'");
+        stmt.executeQuery("select * from T where REGEXP_SUBSTR(v, '.\\\\d\\\\D\\\\s\\\\S\\\\w\\\\W') = 'val'");
     }
     
    
