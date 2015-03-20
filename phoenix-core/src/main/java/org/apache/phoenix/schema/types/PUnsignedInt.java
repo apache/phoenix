@@ -92,11 +92,6 @@ public class PUnsignedInt extends PWholeNumber<Integer> {
   }
 
   @Override
-  public boolean isCastableTo(PDataType targetType) {
-      return super.isCastableTo(targetType) || targetType.isCoercibleTo(PTimestamp.INSTANCE);
-  }
-
-  @Override
   public boolean isCoercibleTo(PDataType targetType) {
     return targetType.equals(this) || targetType.equals(PUnsignedFloat.INSTANCE)
         || PUnsignedLong.INSTANCE.isCoercibleTo(targetType)

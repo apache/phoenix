@@ -18,24 +18,16 @@
 
 package org.apache.phoenix.end2end;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
-
-import java.sql.Connection;
-import java.sql.Date;
-import java.sql.DriverManager;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.sql.Time;
-import java.sql.Timestamp;
-import java.util.Properties;
-
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.TypeMismatchException;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+
+import java.sql.*;
+import java.util.Properties;
+
+import static org.junit.Assert.*;
 
 
 public class ToDateFunctionIT extends BaseHBaseManagedTimeIT {
@@ -189,10 +181,13 @@ public class ToDateFunctionIT extends BaseHBaseManagedTimeIT {
                         customTimeZoneConn, "CAST(1426188807198 AS TIMESTAMP)").getTime());
         
 
-        assertEquals(
-            22005,
-                callToDateFunction(
-                        customTimeZoneConn, "CAST(22005 AS TIMESTAMP)").getTime());
+        try {
+            callToDateFunction(
+                    customTimeZoneConn, "CAST(22005 AS TIMESTAMP)");
+            fail();
+        } catch (TypeMismatchException e) {
+
+        }
     }
     
     @Test
@@ -213,11 +208,18 @@ public class ToDateFunctionIT extends BaseHBaseManagedTimeIT {
             conn.prepareStatement("upsert into TT values (0, 22120, 1426188807198)").execute();
             conn.commit();
             
-            ResultSet rs = conn.prepareStatement("select a, b, ts, CAST(ts AS TIMESTAMP), CAST(b AS TIMESTAMP) from TT").executeQuery();
+            ResultSet rs = conn.prepareStatement("select a, b, ts, CAST(ts AS TIMESTAMP) from TT").executeQuery();
             assertTrue(rs.next());
             assertEquals(new Date(1426188807198L), rs.getObject(4));
-            assertEquals(new Date(22120), rs.getObject(5));
-            
+            rs.close();
+
+            try {
+                rs = conn.prepareStatement("select a, b, ts, CAST(b AS TIMESTAMP) from TT").executeQuery();
+                fail();
+            } catch (TypeMismatchException e) {
+
+            }
+
         } finally {
             conn.close();
         }
