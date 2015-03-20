@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Properties;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.Abortable;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HRegionInfo;
@@ -36,13 +37,14 @@ import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.ipc.BalancedQueueRpcExecutor;
 import org.apache.hadoop.hbase.ipc.CallRunner;
 import org.apache.hadoop.hbase.ipc.PhoenixIndexRpcScheduler;
+import org.apache.hadoop.hbase.ipc.PriorityFunction;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
 import org.apache.hadoop.hbase.ipc.RpcExecutor;
 import org.apache.hadoop.hbase.ipc.RpcScheduler;
 import org.apache.hadoop.hbase.master.AssignmentManager;
 import org.apache.hadoop.hbase.master.HMaster;
 import org.apache.hadoop.hbase.regionserver.HRegionServer;
-import org.apache.hadoop.hbase.regionserver.RegionServerServices;
+import org.apache.hadoop.hbase.regionserver.RSRpcServices;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.hbase.index.IndexQosRpcControllerFactory;
@@ -82,8 +84,8 @@ public class IndexQosIT extends BaseTest {
      */
     public static class TestPhoenixIndexRpcSchedulerFactory extends PhoenixIndexRpcSchedulerFactory {
         @Override
-        public RpcScheduler create(Configuration conf, RegionServerServices services) {
-            PhoenixIndexRpcScheduler phoenixIndexRpcScheduler = (PhoenixIndexRpcScheduler)super.create(conf, services);
+        public RpcScheduler create(Configuration conf, PriorityFunction priorityFunction, Abortable abortable) {
+            PhoenixIndexRpcScheduler phoenixIndexRpcScheduler = (PhoenixIndexRpcScheduler)super.create(conf, priorityFunction, abortable);
             phoenixIndexRpcScheduler.setExecutorForTesting(spyRpcExecutor);
             return phoenixIndexRpcScheduler;
         }
@@ -93,7 +95,7 @@ public class IndexQosIT extends BaseTest {
     public void doSetup() throws Exception {
         conf = HBaseConfiguration.create();
         setUpConfigForMiniCluster(conf);
-        conf.set(HRegionServer.REGION_SERVER_RPC_SCHEDULER_FACTORY_CLASS,
+        conf.set(RSRpcServices.REGION_SERVER_RPC_SCHEDULER_FACTORY_CLASS,
                 TestPhoenixIndexRpcSchedulerFactory.class.getName());
         conf.set(RpcControllerFactory.CUSTOM_CONTROLLER_CONF_KEY, IndexQosRpcControllerFactory.class.getName());
         util = new HBaseTestingUtility(conf);

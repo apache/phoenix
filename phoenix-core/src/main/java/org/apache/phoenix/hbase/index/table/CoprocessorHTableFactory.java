@@ -45,7 +45,7 @@ public class CoprocessorHTableFactory implements HTableFactory {
         if (LOG.isDebugEnabled()) {
             LOG.debug("Creating new HTable: " + tableName);
         }
-        return this.e.getTable(TableName.valueOf(tablename.copyBytesIfNecessary()));
+        return this.e.getTable(TableName.valueOf(tableName));
     }
 
     @Override
