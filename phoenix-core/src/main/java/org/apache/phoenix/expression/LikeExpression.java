@@ -350,4 +350,6 @@ public abstract class LikeExpression extends BaseCompoundExpression {
     public String toString() {
         return (children.get(0) + " LIKE " + children.get(1));
     }
+
+    abstract public LikeExpression clone(List<Expression> children);
 }

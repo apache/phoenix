@@ -23,7 +23,6 @@ import org.apache.phoenix.compile.SequenceValueExpression;
 import org.apache.phoenix.expression.AddExpression;
 import org.apache.phoenix.expression.AndExpression;
 import org.apache.phoenix.expression.ArrayConstructorExpression;
-import org.apache.phoenix.expression.ByteBasedLikeExpression;
 import org.apache.phoenix.expression.CaseExpression;
 import org.apache.phoenix.expression.CoerceExpression;
 import org.apache.phoenix.expression.ComparisonExpression;
@@ -42,7 +41,6 @@ import org.apache.phoenix.expression.OrExpression;
 import org.apache.phoenix.expression.ProjectedColumnExpression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.expression.RowValueConstructorExpression;
-import org.apache.phoenix.expression.StringBasedLikeExpression;
 import org.apache.phoenix.expression.StringConcatExpression;
 import org.apache.phoenix.expression.SubtractExpression;
 import org.apache.phoenix.expression.function.ArrayAnyComparisonExpression;
@@ -109,9 +107,8 @@ public class CloneExpressionVisitor extends TraverseAllExpressionVisitor<Express
 
     @Override
     public Expression visitLeave(LikeExpression node, List<Expression> l) {
-        return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node
-                : ((node instanceof ByteBasedLikeExpression) ? new ByteBasedLikeExpression(l)
-                        : new StringBasedLikeExpression(l));
+        return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node : node
+                .clone(l);
     }
 
     @Override

@@ -40,4 +40,9 @@ public class ByteBasedLikeExpression extends LikeExpression {
     public static LikeExpression create(List<Expression> children, LikeType likeType) {
         return new ByteBasedLikeExpression(addLikeTypeChild(children, likeType));
     }
+
+    @Override
+    public LikeExpression clone(List<Expression> children) {
+        return new ByteBasedLikeExpression(children);
+    }
 }

@@ -40,4 +40,9 @@ public class StringBasedLikeExpression extends LikeExpression {
     public static LikeExpression create(List<Expression> children, LikeType likeType) {
         return new StringBasedLikeExpression(addLikeTypeChild(children, likeType));
     }
+
+    @Override
+    public LikeExpression clone(List<Expression> children) {
+        return new StringBasedLikeExpression(children);
+    }
 }
