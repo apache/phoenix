@@ -26,16 +26,16 @@ import org.apache.phoenix.schema.SortOrder;
 import com.google.common.base.Preconditions;
 
 public class JavaRegexWrapper {
-    static class JavaPattern extends AbstractBasePattern {
+    public static class JavaPattern extends AbstractBasePattern {
 
         private final Pattern pattern;
         private boolean isLastMatcherStringNull;
 
-        JavaPattern(String patternString) {
+        public JavaPattern(String patternString) {
             this(patternString, 0);
         }
 
-        JavaPattern(String patternString, int flags) {
+        public JavaPattern(String patternString, int flags) {
             if (patternString != null) {
                 pattern = Pattern.compile(patternString, flags);
             } else {
@@ -68,10 +68,10 @@ public class JavaRegexWrapper {
         }
     }
 
-    static class JavaMatcher extends AbstractBaseMatcher {
+    public static class JavaMatcher extends AbstractBaseMatcher {
         private Matcher matcher;
 
-        JavaMatcher(Matcher matcher) {
+        public JavaMatcher(Matcher matcher) {
             this.matcher = matcher;
         }
 

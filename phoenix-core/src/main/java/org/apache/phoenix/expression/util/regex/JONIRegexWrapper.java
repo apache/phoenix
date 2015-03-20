@@ -29,24 +29,25 @@ import org.joni.Syntax;
 import com.google.common.base.Preconditions;
 
 public class JONIRegexWrapper {
-
-    private static final Encoding PVARCHAR_ENCODING = UTF8Encoding.INSTANCE;
-
-    static class JONIPattern extends AbstractBasePattern {
+    public static class JONIPattern extends AbstractBasePattern {
 
         private final Regex pattern;
         private boolean isLastMatcherStringNull;
         private final String patternString;
 
-        JONIPattern(String patternString) {
+        public JONIPattern(String patternString) {
             this(patternString, 0);
         }
 
-        JONIPattern(String patternString, int flags) {
+        public JONIPattern(String patternString, int flags) {
+            this(patternString, flags, UTF8Encoding.INSTANCE);
+        }
+
+        public JONIPattern(String patternString, int flags, Encoding coding) {
             this.patternString = patternString;
             if (patternString != null) {
-                byte[] patternBytes = patternString.getBytes();
-                pattern = new Regex(patternBytes, 0, patternBytes.length, flags, PVARCHAR_ENCODING, Syntax.Java);
+                byte[] bytes = patternString.getBytes();
+                pattern = new Regex(bytes, 0, bytes.length, flags, coding, Syntax.Java);
             } else {
                 pattern = null;
             }
@@ -77,11 +78,11 @@ public class JONIRegexWrapper {
         }
     }
 
-    static class JONIMatcher extends AbstractBaseMatcher {
+    public static class JONIMatcher extends AbstractBaseMatcher {
         private Matcher matcher;
         private final int matcherSourceBytesLen;
 
-        JONIMatcher(Matcher matcher, int matcherSourceBytesLen) {
+        public JONIMatcher(Matcher matcher, int matcherSourceBytesLen) {
             this.matcher = matcher;
             this.matcherSourceBytesLen = matcherSourceBytesLen;
         }
