@@ -542,6 +542,10 @@ public class WhereOptimizer {
                 int span = position - initialPosition;
                 return new SingleKeySlot(new RowValueConstructorKeyPart(table.getPKColumns().get(initialPosition), rvc, span, childSlots), initialPosition, span, EVERYTHING_RANGES);
             }
+            // If we don't clear the child list, we end up passing some of
+            // the child expressions of previous matches up the tree, causing
+            // those expressions to form the scan start/stop key. PHOENIX-1753
+            childSlots.clear();
             return null;
         }
 

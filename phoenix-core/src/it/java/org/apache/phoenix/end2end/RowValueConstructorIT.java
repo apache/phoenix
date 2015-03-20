@@ -1362,6 +1362,37 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
         conn.close();
     }
 
-
+    @Test
+    public void testRVCWithRowKeyNotLeading() throws Exception {
+        String ddl = "CREATE TABLE sorttest4 (rownum BIGINT primary key, name varchar(16), age integer)";
+        Connection conn = nextConnection(getUrl());
+        conn.createStatement().execute(ddl);
+        conn.close();
+        conn = nextConnection(getUrl());
+        String dml = "UPSERT INTO sorttest4 (rownum, name, age) values (?, ?, ?)";
+        PreparedStatement stmt = conn.prepareStatement(dml);
+        stmt.setInt(1, 1);
+        stmt.setString(2, "A");
+        stmt.setInt(3, 1);
+        stmt.executeUpdate();
+        stmt.setInt(1, 2);
+        stmt.setString(2, "B");
+        stmt.setInt(3, 2);
+        stmt.executeUpdate();
+        conn.commit();
+        conn.close();
+        // the below query should only return one record -> (1, "A", 1)
+        String query = "SELECT rownum, name, age FROM sorttest4 where (age, rownum) < (2, 2)";
+        conn = nextConnection(getUrl());
+        ResultSet rs = conn.createStatement().executeQuery(query);
+        int numRecords = 0;
+        while (rs.next()) {
+            assertEquals(1, rs.getInt(1));
+            assertEquals("A", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            numRecords++;
+        }
+        assertEquals(1, numRecords);
+    }
 
 }
