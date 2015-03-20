@@ -76,8 +76,7 @@ public class PTimestamp extends PDataType<Timestamp> {
       return object;
     } else if (equalsAny(actualType, PLong.INSTANCE, PUnsignedLong.INSTANCE)) {
       return new java.sql.Timestamp((Long) object);
-    }
-    else if (actualType == PDecimal.INSTANCE) {
+    } else if (actualType == PDecimal.INSTANCE) {
       BigDecimal bd = (BigDecimal) object;
       long ms = bd.longValue();
       int nanos =
