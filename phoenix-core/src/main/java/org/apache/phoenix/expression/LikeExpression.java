@@ -279,7 +279,10 @@ public abstract class LikeExpression extends BaseCompoundExpression {
             }
         }
 
-        if (!getStrExpression().evaluate(tuple, ptr)) {
+        Expression strExpression = getStrExpression();
+        SortOrder strSortOrder = strExpression.getSortOrder();
+        PVarchar strDataType = PVarchar.INSTANCE;
+        if (!strExpression.evaluate(tuple, ptr)) {
             if (logger.isTraceEnabled()) {
                 logger.trace("LIKE is FALSE: child expression is null");
             }
@@ -291,10 +294,9 @@ public abstract class LikeExpression extends BaseCompoundExpression {
 
         String value = null;
         if (logger.isTraceEnabled()) {
-            value = (String) PVarchar.INSTANCE.toObject(ptr, getStrExpression().getSortOrder());
+            value = (String) strDataType.toObject(ptr, strSortOrder);
         }
-        PVarchar.INSTANCE.coerceBytes(ptr, PVarchar.INSTANCE, getStrExpression().getSortOrder(),
-            SortOrder.ASC);
+        strDataType.coerceBytes(ptr, strDataType, strSortOrder, SortOrder.ASC);
         boolean matched = pattern.matches(ptr);
         ptr.set(matched ? PDataType.TRUE_BYTES : PDataType.FALSE_BYTES);
         if (logger.isTraceEnabled()) {

@@ -89,18 +89,17 @@ public abstract class RegexpReplaceFunction extends ScalarFunction {
             return false;
         }
         if (ptr == null) return false;
-        PVarchar.INSTANCE.coerceBytes(ptr, PVarchar.INSTANCE, sourceStrExpression.getSortOrder(),
-            SortOrder.ASC);
+        PVarchar type = PVarchar.INSTANCE;
+        type.coerceBytes(ptr, type, sourceStrExpression.getSortOrder(), SortOrder.ASC);
         ImmutableBytesWritable replacePtr = new ImmutableBytesWritable();
         if (hasReplaceStr) {
-            Expression replaceStrExpression = this.getReplaceStrExpression();
+            Expression replaceStrExpression = getReplaceStrExpression();
             if (!replaceStrExpression.evaluate(tuple, replacePtr)) {
                 return false;
             }
-            PVarchar.INSTANCE.coerceBytes(replacePtr, PVarchar.INSTANCE,
-                replaceStrExpression.getSortOrder(), SortOrder.ASC);
+            type.coerceBytes(replacePtr, type, replaceStrExpression.getSortOrder(), SortOrder.ASC);
         } else {
-            replacePtr.set(PVarchar.INSTANCE.toBytes(""));
+            replacePtr.set(type.toBytes(""));
         }
         pattern.replaceAll(ptr, replacePtr, ptr);
         return true;
