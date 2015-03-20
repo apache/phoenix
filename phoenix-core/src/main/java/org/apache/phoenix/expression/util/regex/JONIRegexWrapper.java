@@ -57,9 +57,16 @@ public class JONIRegexWrapper {
             Preconditions.checkNotNull(ptr);
             Preconditions.checkNotNull(sortOrder);
             byte[] matcherSourceBytes = Utils.immutableBytesWritableToBytes(ptr, sortOrder);
-            Matcher matcher = pattern.matcher(matcherSourceBytes);
-            int ret = matcher.match(0, matcherSourceBytes.length, Option.DEFAULT);
-            return matcherSourceBytes.length == ret;
+            return matches(matcherSourceBytes, 0, matcherSourceBytes.length);
+        }
+
+        /**
+         * @return if bytes[offset, range) match pattern
+         */
+        public boolean matches(byte[] bytes, int offset, int range) {
+            Matcher matcher = pattern.matcher(bytes);
+            int ret = matcher.match(offset, range, Option.DEFAULT);
+            return (range - offset) == ret;
         }
 
         @Override
