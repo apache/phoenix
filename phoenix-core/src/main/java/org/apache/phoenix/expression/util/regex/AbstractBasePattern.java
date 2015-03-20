@@ -25,6 +25,4 @@ public abstract class AbstractBasePattern {
     public abstract AbstractBaseMatcher matcher(ImmutableBytesWritable ptr, SortOrder sortOrder);
 
     public abstract String pattern();
-
-    public abstract boolean isMatcherSourceStrNull();
 }

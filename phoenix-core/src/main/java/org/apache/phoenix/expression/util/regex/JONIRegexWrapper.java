@@ -32,7 +32,6 @@ public class JONIRegexWrapper {
     public static class JONIPattern extends AbstractBasePattern {
 
         private final Regex pattern;
-        private boolean isLastMatcherStringNull;
         private final String patternString;
 
         public JONIPattern(String patternString) {
@@ -51,7 +50,6 @@ public class JONIRegexWrapper {
             } else {
                 pattern = null;
             }
-            isLastMatcherStringNull = false;
         }
 
         @Override
@@ -60,16 +58,9 @@ public class JONIRegexWrapper {
             Preconditions.checkNotNull(sortOrder);
             byte[] matcherSourceBytes = Utils.immutableBytesWritableToBytes(ptr, sortOrder);
             if (matcherSourceBytes == null) {
-                isLastMatcherStringNull = true;
                 return null;
             }
-            isLastMatcherStringNull = false;
             return new JONIMatcher(pattern.matcher(matcherSourceBytes), matcherSourceBytes.length);
-        }
-
-        @Override
-        public boolean isMatcherSourceStrNull() {
-            return isLastMatcherStringNull;
         }
 
         @Override

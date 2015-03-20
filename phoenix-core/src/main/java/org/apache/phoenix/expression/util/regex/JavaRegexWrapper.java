@@ -29,7 +29,6 @@ public class JavaRegexWrapper {
     public static class JavaPattern extends AbstractBasePattern {
 
         private final Pattern pattern;
-        private boolean isLastMatcherStringNull;
 
         public JavaPattern(String patternString) {
             this(patternString, 0);
@@ -41,7 +40,6 @@ public class JavaRegexWrapper {
             } else {
                 pattern = null;
             }
-            isLastMatcherStringNull = false;
         }
 
         @Override
@@ -50,16 +48,9 @@ public class JavaRegexWrapper {
             Preconditions.checkNotNull(sortOrder);
             String matcherSourceStr = Utils.immutableBytesWritableToString(ptr, sortOrder);
             if (matcherSourceStr == null) {
-                isLastMatcherStringNull = true;
                 return null;
             }
-            isLastMatcherStringNull = false;
             return new JavaMatcher(pattern.matcher(matcherSourceStr));
-        }
-
-        @Override
-        public boolean isMatcherSourceStrNull() {
-            return isLastMatcherStringNull;
         }
 
         @Override
