@@ -1275,6 +1275,22 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     }
     
     @Test
+    public void testRVCExpressionWithNonFirstLeadingColOfRowKey() throws SQLException {
+        String old_value = "value";
+        String orgId = getOrganizationId();
+        
+        String query = "select * from entity_history where (old_value, organization_id) >= (?,?)";
+        List<Object> binds = Arrays.<Object>asList(old_value, orgId);
+        StatementContext context = compileStatement(query, binds);
+        Scan scan = context.getScan();
+        Filter filter = scan.getFilter();
+        assertNotNull(filter);
+        assertTrue(filter instanceof SingleKeyValueComparisonFilter);
+        assertArrayEquals(HConstants.EMPTY_START_ROW, scan.getStartRow());
+        assertArrayEquals(HConstants.EMPTY_END_ROW, scan.getStopRow());
+    }
+    
+    @Test
     public void testMultiRVCExpressionsCombinedWithAnd() throws SQLException {
         String lowerTenantId = "000000000000001";
         String lowerParentId = "000000000000002";
