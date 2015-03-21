@@ -15,19 +15,24 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.expression.util.regex;
+package org.apache.phoenix.expression.function;
 
-import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import java.util.List;
 
-public abstract class AbstractBasePattern {
+import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.util.regex.AbstractBasePattern;
+import org.apache.phoenix.expression.util.regex.JONIRegexWrapper;
 
-    public abstract boolean matches(ImmutableBytesWritable ptr);
+public class ByteBasedRegexpSubstrFunction extends RegexpSubstrFunction {
+    public ByteBasedRegexpSubstrFunction() {
+    }
 
-    public abstract void replaceAll(ImmutableBytesWritable srcPtr,
-            ImmutableBytesWritable replacePtr, ImmutableBytesWritable outPtr);
+    public ByteBasedRegexpSubstrFunction(List<Expression> children) {
+        super(children);
+    }
 
-    public abstract boolean substr(ImmutableBytesWritable srcPtr, int offsetInStr,
-            ImmutableBytesWritable outPtr);
-
-    public abstract String pattern();
+    @Override
+    protected AbstractBasePattern compilePatternSpec(String value) {
+        return new JONIRegexWrapper.JONIPattern(value);
+    }
 }

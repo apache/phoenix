@@ -21,6 +21,8 @@ import java.util.LinkedList;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.util.ByteUtil;
 import org.jcodings.Encoding;
 import org.jcodings.specific.UTF8Encoding;
 import org.joni.Matcher;
@@ -126,6 +128,41 @@ public class JONIRegexWrapper {
 
         public byte[] replaceAll(byte[] srcBytes, byte[] replaceBytes) {
             return replaceAll(srcBytes, 0, srcBytes.length, replaceBytes, 0, replaceBytes.length);
+        }
+
+        @Override
+        public boolean substr(ImmutableBytesWritable srcPtr, int offsetInStr,
+                ImmutableBytesWritable outPtr) {
+            Preconditions.checkNotNull(srcPtr);
+            Preconditions.checkNotNull(outPtr);
+            byte[] srcBytes = srcPtr.get();
+            int offsetInBytes;
+            if (offsetInStr == 0) {
+                offsetInBytes = 0;
+            } else {
+                String sourceStr = (String) PVarchar.INSTANCE.toObject(srcPtr);
+                if (srcPtr.get().length == 0 && sourceStr == null) sourceStr = "";
+                int srcStrLen = sourceStr.length();
+                if (offsetInStr < 0) offsetInStr += srcStrLen;
+                if (offsetInStr < 0 || offsetInStr >= srcStrLen) return false;
+                String strBeforeOffset = sourceStr.substring(0, offsetInStr);
+                offsetInBytes = PVarchar.INSTANCE.toBytes(strBeforeOffset).length;
+            }
+            substr(srcBytes, offsetInBytes, srcBytes.length, outPtr);
+            return true;
+        }
+
+        public boolean
+                substr(byte[] srcBytes, int offset, int range, ImmutableBytesWritable outPtr) {
+            Matcher matcher = pattern.matcher(srcBytes, 0, range);
+            boolean ret = matcher.search(offset, range, Option.DEFAULT) >= 0;
+            if (ret) {
+                int len = matcher.getEnd() - matcher.getBegin();
+                outPtr.set(srcBytes, matcher.getBegin(), len);
+            } else {
+                outPtr.set(ByteUtil.EMPTY_BYTE_ARRAY);
+            }
+            return ret;
         }
     }
 }

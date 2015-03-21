@@ -17,10 +17,12 @@
  */
 package org.apache.phoenix.expression.util.regex;
 
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.util.ByteUtil;
 
 import com.google.common.base.Preconditions;
 
@@ -66,6 +68,25 @@ public class JavaRegexWrapper {
             if (replacePtr.get().length == 0 && replaceStr == null) replaceStr = "";
             String replacedStr = pattern.matcher(sourceStr).replaceAll(replaceStr);
             replacedPtr.set(PVarchar.INSTANCE.toBytes(replacedStr));
+        }
+
+        @Override
+        public boolean substr(ImmutableBytesWritable srcPtr, int offsetInStr,
+                ImmutableBytesWritable outPtr) {
+            Preconditions.checkNotNull(srcPtr);
+            Preconditions.checkNotNull(outPtr);
+            String sourceStr = (String) PVarchar.INSTANCE.toObject(srcPtr);
+            if (srcPtr.get().length == 0 && sourceStr == null) sourceStr = "";
+            if (offsetInStr < 0) offsetInStr += sourceStr.length();
+            if (offsetInStr < 0 || offsetInStr >= sourceStr.length()) return false;
+            Matcher matcher = pattern.matcher(sourceStr);
+            boolean ret = matcher.find(offsetInStr);
+            if (ret) {
+                outPtr.set(PVarchar.INSTANCE.toBytes(matcher.group()));
+            } else {
+                outPtr.set(ByteUtil.EMPTY_BYTE_ARRAY);
+            }
+            return true;
         }
     }
 }

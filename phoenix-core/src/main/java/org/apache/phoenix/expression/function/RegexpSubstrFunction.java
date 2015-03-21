@@ -20,19 +20,19 @@ package org.apache.phoenix.expression.function;
 import java.io.DataInput;
 import java.io.IOException;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
+import org.apache.phoenix.expression.util.regex.AbstractBasePattern;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
-import org.apache.phoenix.schema.types.PLong;
-import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.parse.RegexpSubstrParseNode;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
-import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.schema.types.PVarchar;
 
 
 /**
@@ -47,16 +47,19 @@ import org.apache.phoenix.util.ByteUtil;
  * 
  * @since 0.1
  */
-@BuiltInFunction(name=RegexpSubstrFunction.NAME, args={
+@BuiltInFunction(name=RegexpSubstrFunction.NAME,
+    nodeClass = RegexpSubstrParseNode.class, args={
     @Argument(allowedTypes={PVarchar.class}),
     @Argument(allowedTypes={PVarchar.class}),
     @Argument(allowedTypes={PLong.class}, defaultValue="1")} )
-public class RegexpSubstrFunction extends PrefixFunction {
+public abstract class RegexpSubstrFunction extends PrefixFunction {
     public static final String NAME = "REGEXP_SUBSTR";
 
-    private Pattern pattern;
+    private AbstractBasePattern pattern;
     private boolean isOffsetConstant;
     private Integer maxLength;
+
+    private static final PDataType TYPE = PVarchar.INSTANCE;
 
     public RegexpSubstrFunction() { }
 
@@ -65,10 +68,12 @@ public class RegexpSubstrFunction extends PrefixFunction {
         init();
     }
 
+    protected abstract AbstractBasePattern compilePatternSpec(String value);
+
     private void init() {
         Object patternString = ((LiteralExpression)children.get(1)).getValue();
         if (patternString != null) {
-            pattern = Pattern.compile((String)patternString);
+            pattern = compilePatternSpec((String) patternString);
         }
         // If the source string has a fixed width, then the max length would be the length 
         // of the source string minus the offset, or the absolute value of the offset if 
@@ -95,13 +100,11 @@ public class RegexpSubstrFunction extends PrefixFunction {
         if (pattern == null) {
             return false;
         }
-        if (!getSourceStrExpression().evaluate(tuple, ptr)) {
+        ImmutableBytesWritable srcPtr = new ImmutableBytesWritable();
+        if (!getSourceStrExpression().evaluate(tuple, srcPtr)) {
             return false;
         }
-        String sourceStr = (String) PVarchar.INSTANCE.toObject(ptr, getSourceStrExpression().getSortOrder());
-        if (sourceStr == null) {
-            return false;
-        }
+        TYPE.coerceBytes(srcPtr, TYPE, getSourceStrExpression().getSortOrder(), SortOrder.ASC);
 
         Expression offsetExpression = getOffsetExpression();
         if (!offsetExpression.evaluate(tuple, ptr)) {
@@ -109,25 +112,10 @@ public class RegexpSubstrFunction extends PrefixFunction {
         }
         int offset = offsetExpression.getDataType().getCodec().decodeInt(ptr, offsetExpression.getSortOrder());
 
-        int strlen = sourceStr.length();
         // Account for 1 versus 0-based offset
         offset = offset - (offset <= 0 ? 0 : 1);
-        if (offset < 0) { // Offset < 0 means get from end
-            offset = strlen + offset;
-        }
-        if (offset < 0 || offset >= strlen) {
-            return false;
-        }
 
-        Matcher matcher = pattern.matcher(sourceStr);
-        boolean hasSubString = matcher.find(offset);
-        if (!hasSubString) {
-            ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
-            return true;
-        }
-        String subString = matcher.group();
-        ptr.set(PVarchar.INSTANCE.toBytes(subString));
-        return true;
+        return pattern.substr(srcPtr, offset, ptr);
     }
 
     @Override
