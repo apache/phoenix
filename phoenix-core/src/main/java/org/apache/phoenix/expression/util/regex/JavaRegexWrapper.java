@@ -45,6 +45,7 @@ public class JavaRegexWrapper {
         public boolean matches(ImmutableBytesWritable ptr) {
             Preconditions.checkNotNull(ptr);
             String matcherSourceStr = (String) PVarchar.INSTANCE.toObject(ptr);
+            if (ptr.get().length == 0 && matcherSourceStr == null) matcherSourceStr = "";
             return pattern.matcher(matcherSourceStr).matches();
         }
 
@@ -61,7 +62,7 @@ public class JavaRegexWrapper {
             Preconditions.checkNotNull(replacedPtr);
             String sourceStr = (String) PVarchar.INSTANCE.toObject(srcPtr);
             String replaceStr = (String) PVarchar.INSTANCE.toObject(replacePtr);
-            //TODO when replacePtr.get().length=0, replaceStr will be null
+            if (srcPtr.get().length == 0 && sourceStr == null) sourceStr = "";
             if (replacePtr.get().length == 0 && replaceStr == null) replaceStr = "";
             String replacedStr = pattern.matcher(sourceStr).replaceAll(replaceStr);
             replacedPtr.set(PVarchar.INSTANCE.toBytes(replacedStr));
