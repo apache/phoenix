@@ -59,14 +59,10 @@ public class JONIRegexWrapper {
         @Override
         public boolean matches(ImmutableBytesWritable ptr) {
             Preconditions.checkNotNull(ptr);
-            byte[] matcherSourceBytes = ptr.get();
-            return matches(matcherSourceBytes, 0, matcherSourceBytes.length);
+            return matches(ptr.get(), ptr.getOffset(), ptr.getOffset() + ptr.getLength());
         }
 
-        /**
-         * @return if bytes[offset, range) match pattern
-         */
-        public boolean matches(byte[] bytes, int offset, int range) {
+        private boolean matches(byte[] bytes, int offset, int range) {
             Matcher matcher = pattern.matcher(bytes, offset, range);
             int ret = matcher.match(offset, range, Option.DEFAULT);
             return (range - offset) == ret;
@@ -83,13 +79,14 @@ public class JONIRegexWrapper {
             Preconditions.checkNotNull(srcPtr);
             Preconditions.checkNotNull(replacePtr);
             Preconditions.checkNotNull(replacedPtr);
-            byte[] srcBytes = srcPtr.get(), replaceBytes = replacePtr.get();
-            byte[] replacedBytes = replaceAll(srcBytes, replaceBytes);
+            byte[] replacedBytes =
+                    replaceAll(srcPtr.get(), srcPtr.getOffset(), srcPtr.getLength(),
+                        replacePtr.get(), replacePtr.getOffset(), replacePtr.getLength());
             replacedPtr.set(replacedBytes);
         }
 
-        public byte[] replaceAll(byte[] srcBytes, int srcOffset, int srcRange, byte[] replaceBytes,
-                int replaceOffset, int replaceRange) {
+        private byte[] replaceAll(byte[] srcBytes, int srcOffset, int srcLen, byte[] replaceBytes,
+                int replaceOffset, int replaceLen) {
             class PairInt {
                 public int begin, end;
 
@@ -98,15 +95,15 @@ public class JONIRegexWrapper {
                     this.end = end;
                 }
             }
-            Matcher matcher = pattern.matcher(srcBytes, srcOffset, srcRange);
-            int replaceLen = replaceRange - replaceOffset;
+            int srcRange = srcOffset + srcLen;
+            Matcher matcher = pattern.matcher(srcBytes, 0, srcRange);
             int cur = srcOffset;
             List<PairInt> searchResults = new LinkedList<PairInt>();
             int totalBytesNeeded = 0;
             while (true) {
                 int nextCur = matcher.search(cur, srcRange, Option.DEFAULT);
                 if (nextCur < 0) {
-                    totalBytesNeeded += srcBytes.length - cur;
+                    totalBytesNeeded += srcRange - cur;
                     break;
                 }
                 searchResults.add(new PairInt(matcher.getBegin(), matcher.getEnd()));
@@ -124,10 +121,6 @@ public class JONIRegexWrapper {
             }
             System.arraycopy(srcBytes, curPosInSrc, ret, curPosInRet, srcRange - curPosInSrc);
             return ret;
-        }
-
-        public byte[] replaceAll(byte[] srcBytes, byte[] replaceBytes) {
-            return replaceAll(srcBytes, 0, srcBytes.length, replaceBytes, 0, replaceBytes.length);
         }
 
         @Override
@@ -153,7 +146,7 @@ public class JONIRegexWrapper {
             return true;
         }
 
-        public boolean
+        private boolean
                 substr(byte[] srcBytes, int offset, int range, ImmutableBytesWritable outPtr) {
             Matcher matcher = pattern.matcher(srcBytes, 0, range);
             boolean ret = matcher.search(offset, range, Option.DEFAULT) >= 0;
