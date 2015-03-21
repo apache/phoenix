@@ -21,6 +21,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
 
@@ -43,11 +44,13 @@ public class JavaPattern extends AbstractBasePattern {
     }
 
     @Override
-    public boolean matches(ImmutableBytesWritable ptr) {
-        Preconditions.checkNotNull(ptr);
-        String matcherSourceStr = (String) PVarchar.INSTANCE.toObject(ptr);
-        if (ptr.get().length == 0 && matcherSourceStr == null) matcherSourceStr = "";
-        return pattern.matcher(matcherSourceStr).matches();
+    public void matches(ImmutableBytesWritable srcPtr, ImmutableBytesWritable outPtr) {
+        Preconditions.checkNotNull(srcPtr);
+        Preconditions.checkNotNull(outPtr);
+        String matcherSourceStr = (String) PVarchar.INSTANCE.toObject(srcPtr);
+        if (srcPtr.get().length == 0 && matcherSourceStr == null) matcherSourceStr = "";
+        boolean ret = pattern.matcher(matcherSourceStr).matches();
+        outPtr.set(ret ? PDataType.TRUE_BYTES : PDataType.FALSE_BYTES);
     }
 
     @Override

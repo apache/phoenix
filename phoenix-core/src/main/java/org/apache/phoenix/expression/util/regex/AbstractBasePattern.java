@@ -21,7 +21,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 
 public abstract class AbstractBasePattern {
 
-    public abstract boolean matches(ImmutableBytesWritable ptr);
+    public abstract void matches(ImmutableBytesWritable srcPtr, ImmutableBytesWritable outPtr);
 
     public abstract void replaceAll(ImmutableBytesWritable srcPtr,
             ImmutableBytesWritable replacePtr, ImmutableBytesWritable outPtr);

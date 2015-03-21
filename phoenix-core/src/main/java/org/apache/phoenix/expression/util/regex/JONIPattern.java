@@ -21,6 +21,7 @@ import java.util.LinkedList;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
 import org.jcodings.Encoding;
@@ -56,12 +57,14 @@ public class JONIPattern extends AbstractBasePattern {
     }
 
     @Override
-    public boolean matches(ImmutableBytesWritable ptr) {
-        Preconditions.checkNotNull(ptr);
-        return matches(ptr.get(), ptr.getOffset(), ptr.getLength());
+    public void matches(ImmutableBytesWritable srcPtr, ImmutableBytesWritable outPtr) {
+        Preconditions.checkNotNull(srcPtr);
+        Preconditions.checkNotNull(outPtr);
+        boolean ret = matches(srcPtr.get(), srcPtr.getOffset(), srcPtr.getLength());
+        outPtr.set(ret ? PDataType.TRUE_BYTES : PDataType.FALSE_BYTES);
     }
 
-    private boolean matches(byte[] bytes, int offset, int len) {
+    public boolean matches(byte[] bytes, int offset, int len) {
         int range = offset + len;
         Matcher matcher = pattern.matcher(bytes, offset, range);
         int ret = matcher.match(offset, range, Option.DEFAULT);

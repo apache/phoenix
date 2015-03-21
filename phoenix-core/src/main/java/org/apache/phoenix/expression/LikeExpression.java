@@ -294,9 +294,9 @@ public abstract class LikeExpression extends BaseCompoundExpression {
             value = (String) strDataType.toObject(ptr, strSortOrder);
         }
         strDataType.coerceBytes(ptr, strDataType, strSortOrder, SortOrder.ASC);
-        boolean matched = pattern.matches(ptr);
-        ptr.set(matched ? PDataType.TRUE_BYTES : PDataType.FALSE_BYTES);
+        pattern.matches(ptr, ptr);
         if (logger.isTraceEnabled()) {
+            boolean matched = ((Boolean) PBoolean.INSTANCE.toObject(ptr)).booleanValue();
             logger.trace("LIKE(value='" + value + "'pattern='" + pattern.pattern() + "' is " + matched);
         }
         return true;
