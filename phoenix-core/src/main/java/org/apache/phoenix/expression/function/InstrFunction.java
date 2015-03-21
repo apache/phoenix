@@ -143,7 +143,6 @@ public class InstrFunction extends ScalarFunction{
             textOffset += nBytes;
             position++;
             if (Arrays.equals(strPattern, target)){
-                System.out.println("Position value at the end:"+ position);
                 return position - 1;
             }
         }
