@@ -56,8 +56,13 @@ public class JavaRegexWrapper {
         @Override
         public void replaceAll(ImmutableBytesWritable srcPtr, ImmutableBytesWritable replacePtr,
                 ImmutableBytesWritable replacedPtr) {
+            Preconditions.checkNotNull(srcPtr);
+            Preconditions.checkNotNull(replacePtr);
+            Preconditions.checkNotNull(replacedPtr);
             String sourceStr = (String) PVarchar.INSTANCE.toObject(srcPtr);
             String replaceStr = (String) PVarchar.INSTANCE.toObject(replacePtr);
+            //TODO when replacePtr.get().length=0, replaceStr will be null
+            if (replacePtr.get().length == 0 && replaceStr == null) replaceStr = "";
             String replacedStr = pattern.matcher(sourceStr).replaceAll(replaceStr);
             replacedPtr.set(PVarchar.INSTANCE.toBytes(replacedStr));
         }
