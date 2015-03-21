@@ -148,7 +148,8 @@ public class JONIRegexWrapper {
                 String strBeforeOffset = sourceStr.substring(0, offsetInStr);
                 offsetInBytes = PVarchar.INSTANCE.toBytes(strBeforeOffset).length;
             }
-            substr(srcBytes, offsetInBytes, srcBytes.length, outPtr);
+            offsetInBytes += srcPtr.getOffset();
+            substr(srcBytes, offsetInBytes, srcPtr.getOffset() + srcPtr.getLength(), outPtr);
             return true;
         }
 
