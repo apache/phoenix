@@ -21,7 +21,7 @@ import java.util.List;
 
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.util.regex.AbstractBasePattern;
-import org.apache.phoenix.expression.util.regex.JavaRegexWrapper;
+import org.apache.phoenix.expression.util.regex.JavaPattern;
 
 public class StringBasedRegexpReplaceFunction extends RegexpReplaceFunction {
 
@@ -34,7 +34,7 @@ public class StringBasedRegexpReplaceFunction extends RegexpReplaceFunction {
 
     @Override
     protected AbstractBasePattern compilePatternSpec(String value) {
-        return new JavaRegexWrapper.JavaPattern(value);
+        return new JavaPattern(value);
     }
 
 }

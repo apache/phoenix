@@ -20,7 +20,7 @@ package org.apache.phoenix.expression;
 import java.util.List;
 
 import org.apache.phoenix.expression.util.regex.AbstractBasePattern;
-import org.apache.phoenix.expression.util.regex.JONIRegexWrapper;
+import org.apache.phoenix.expression.util.regex.JONIPattern;
 import org.apache.phoenix.parse.LikeParseNode.LikeType;
 
 public class ByteBasedLikeExpression extends LikeExpression {
@@ -34,7 +34,7 @@ public class ByteBasedLikeExpression extends LikeExpression {
 
     @Override
     protected AbstractBasePattern compilePatternSpec(String value) {
-        return new JONIRegexWrapper.JONIPattern(value);
+        return new JONIPattern(value);
     }
 
     public static LikeExpression create(List<Expression> children, LikeType likeType) {
