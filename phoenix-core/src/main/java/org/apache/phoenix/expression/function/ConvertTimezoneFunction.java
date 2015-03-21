@@ -15,12 +15,10 @@
  */
 package org.apache.phoenix.expression.function;
 
-import java.sql.Date;
 import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.TimeZone;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.expression.Expression;
@@ -30,6 +28,8 @@ import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.joda.time.DateTimeZone;
+import org.joda.time.tz.CachedDateTimeZone;
 
 /**
  * Build in function CONVERT_TZ(date, 'timezone_from', 'timezone_to). Convert date from one timezone to
@@ -43,7 +43,7 @@ import org.apache.phoenix.schema.tuple.Tuple;
 public class ConvertTimezoneFunction extends ScalarFunction {
 
     public static final String NAME = "CONVERT_TZ";
-    private final Map<String, TimeZone> cachedTimeZones = new HashMap<String, TimeZone>();
+    private static final Map<byte[], DateTimeZone> cachedJodaTimeZones = new HashMap<>();
 
     public ConvertTimezoneFunction() {
     }
@@ -62,38 +62,36 @@ public class ConvertTimezoneFunction extends ScalarFunction {
         if (!children.get(0).evaluate(tuple, ptr)) {
             return false;
         }
-
-        Date dateo = (Date) PDate.INSTANCE.toObject(ptr, children.get(0).getSortOrder());
-        Long date = dateo.getTime();
+        long date = PDate.INSTANCE.getCodec().decodeLong(ptr, children.get(0).getSortOrder());
 
         if (!children.get(1).evaluate(tuple, ptr)) {
             return false;
         }
-        TimeZone timezoneFrom = getTimezoneFromCache(Bytes.toString(ptr.get(), ptr.getOffset(), ptr.getLength()));
+        DateTimeZone timezoneFrom = getJodaTimezoneFromCache(ptr.copyBytes());
 
         if (!children.get(2).evaluate(tuple, ptr)) {
             return false;
         }
-        TimeZone timezoneTo = TimeZone.getTimeZone(Bytes.toString(ptr.get(), ptr.getOffset(), ptr.getLength()));
+        DateTimeZone timezoneTo = getJodaTimezoneFromCache(ptr.copyBytes());
 
-        long dateInUtc = date - timezoneFrom.getOffset(date);
-        long dateInTo = dateInUtc + timezoneTo.getOffset(dateInUtc);
-
-        ptr.set(PDate.INSTANCE.toBytes(new Date(dateInTo)));
-
+        long convertedDate = date - timezoneFrom.getOffset(date) + timezoneTo.getOffset(date);
+        PDate.INSTANCE.getCodec().encodeLong(convertedDate, ptr);
         return true;
     }
 
-    private TimeZone getTimezoneFromCache(String timezone) throws IllegalDataException {
-        if (!cachedTimeZones.containsKey(timezone)) {
-            TimeZone tz = TimeZone.getTimeZone(timezone);
-            if (!tz.getID().equals(timezone)) {
-                throw new IllegalDataException("Invalid timezone " + timezone);
+    private static DateTimeZone getJodaTimezoneFromCache(byte[] timezone) {
+        DateTimeZone jodaTimezone = cachedJodaTimeZones.get(timezone);
+        if (jodaTimezone == null) {
+            try {
+                //cache timezone instance
+                DateTimeZone tz = CachedDateTimeZone.forID(Bytes.toString(timezone));
+                cachedJodaTimeZones.put(timezone, tz);
+                return tz;
+            } catch (IllegalArgumentException e) {
+                throw new IllegalDataException("Unknown timezone " + Bytes.toString(timezone), e);
             }
-            cachedTimeZones.put(timezone, tz);
-            return tz;
         }
-        return cachedTimeZones.get(timezone);
+        return jodaTimezone;
     }
 
     @Override
