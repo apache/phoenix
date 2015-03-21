@@ -75,4 +75,10 @@ public class LikeExpressionTest {
         assertEquals(Boolean.TRUE, testExpression ("test", "%s%"));
         assertEquals(Boolean.FALSE, testExpression ("test", "%S%"));
     }
+
+    @Test
+    public void testEmptySourceStr() throws Exception {
+        assertEquals(Boolean.TRUE, testExpression ("", "%"));
+        assertEquals(Boolean.FALSE, testExpression ("", "_"));
+    }
  }

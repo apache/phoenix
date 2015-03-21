@@ -288,9 +288,6 @@ public abstract class LikeExpression extends BaseCompoundExpression {
             }
             return false;
         }
-        if (ptr.getLength() == 0) {
-            return true;
-        }
 
         String value = null;
         if (logger.isTraceEnabled()) {
