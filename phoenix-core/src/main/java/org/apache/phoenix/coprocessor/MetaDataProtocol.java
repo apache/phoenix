@@ -52,9 +52,9 @@ import com.google.protobuf.HBaseZeroCopyByteString;
  * @since 0.1
  */
 public abstract class MetaDataProtocol extends MetaDataService {
-    public static final int PHOENIX_MAJOR_VERSION = 4;
-    public static final int PHOENIX_MINOR_VERSION = 2;
-    public static final int PHOENIX_PATCH_NUMBER = 1;
+    public static final int PHOENIX_MAJOR_VERSION = 5;
+    public static final int PHOENIX_MINOR_VERSION = 0;
+    public static final int PHOENIX_PATCH_NUMBER = 0;
     public static final int PHOENIX_VERSION =
             VersionUtil.encodeVersion(PHOENIX_MAJOR_VERSION, PHOENIX_MINOR_VERSION, PHOENIX_PATCH_NUMBER);
 
