@@ -58,13 +58,14 @@ public class JONIPattern extends AbstractBasePattern {
     @Override
     public boolean matches(ImmutableBytesWritable ptr) {
         Preconditions.checkNotNull(ptr);
-        return matches(ptr.get(), ptr.getOffset(), ptr.getOffset() + ptr.getLength());
+        return matches(ptr.get(), ptr.getOffset(), ptr.getLength());
     }
 
-    private boolean matches(byte[] bytes, int offset, int range) {
+    private boolean matches(byte[] bytes, int offset, int len) {
+        int range = offset + len;
         Matcher matcher = pattern.matcher(bytes, offset, range);
         int ret = matcher.match(offset, range, Option.DEFAULT);
-        return (range - offset) == ret;
+        return len == ret;
     }
 
     @Override
