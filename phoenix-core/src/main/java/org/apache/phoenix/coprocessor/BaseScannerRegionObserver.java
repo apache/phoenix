@@ -38,6 +38,8 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.htrace.Span;
+import org.apache.htrace.Trace;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
@@ -53,8 +55,6 @@ import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
-import org.apache.htrace.Span;
-import org.apache.htrace.Trace;
 
 import com.google.common.collect.ImmutableList;
 
@@ -85,6 +85,8 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
     public static final String EXPECTED_UPPER_REGION_KEY = "_ExpectedUpperRegionKey";
     public static final String REVERSE_SCAN = "_ReverseScan";
     public static final String ANALYZE_TABLE = "_ANALYZETABLE";
+    public static final String GUIDEPOST_WIDTH_BYTES = "_GUIDEPOST_WIDTH_BYTES";
+    public static final String GUIDEPOST_PER_REGION = "_GUIDEPOST_PER_REGION";
     /**
      * Attribute name used to pass custom annotations in Scans and Mutations (later). Custom annotations
      * are used to augment log lines emitted by Phoenix. See https://issues.apache.org/jira/browse/PHOENIX-1198.

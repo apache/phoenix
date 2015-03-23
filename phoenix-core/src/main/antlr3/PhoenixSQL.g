@@ -520,8 +520,8 @@ alter_table_node returns [AlterTableStatement ret]
     ;
 
 update_statistics_node returns [UpdateStatisticsStatement ret]
-	:   UPDATE STATISTICS t=from_table_name (s=INDEX | s=ALL | s=COLUMNS)?
-		{ret = factory.updateStatistics(factory.namedTable(null, t), s == null ? StatisticsCollectionScope.getDefault() : StatisticsCollectionScope.valueOf(SchemaUtil.normalizeIdentifier(s.getText())));}
+	:   UPDATE STATISTICS t=from_table_name (s=INDEX | s=ALL | s=COLUMNS)? (SET (p=properties))?
+		{ret = factory.updateStatistics(factory.namedTable(null, t), s == null ? StatisticsCollectionScope.getDefault() : StatisticsCollectionScope.valueOf(SchemaUtil.normalizeIdentifier(s.getText())), p);}
 	;
 
 prop_name returns [String ret]
