@@ -353,8 +353,8 @@ public class ParseNodeFactory {
         return new DivideParseNode(children);
     }
 
-    public UpdateStatisticsStatement updateStatistics(NamedTableNode table, StatisticsCollectionScope scope) {
-      return new UpdateStatisticsStatement(table, scope);
+    public UpdateStatisticsStatement updateStatistics(NamedTableNode table, StatisticsCollectionScope scope, Map<String,Object> props) {
+      return new UpdateStatisticsStatement(table, scope, props);
     }
 
 
