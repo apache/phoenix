@@ -136,6 +136,12 @@ public class StatsCollectorWithSplitsAndMultiCFIT extends StatsCollectorAbstract
             assertRowCountAndByteCount(info, rowCountArr[i], byteCountArr[i]);
             i++;
         }
+        
+        TestUtil.analyzeTable(conn, STATS_TEST_TABLE_NAME_NEW);
+        String query = "UPDATE STATISTICS " + STATS_TEST_TABLE_NAME_NEW + " SET \"" + QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB + "\"=" + Long.toString(2000);
+        conn.createStatement().execute(query);
+        keyRanges = getAllSplits(conn, STATS_TEST_TABLE_NAME_NEW);
+        assertEquals(6, keyRanges.size());
     }
 
     protected void assertRowCountAndByteCount(GuidePostsInfo info, long rowCount, long byteCount) {
