@@ -17,9 +17,9 @@
  */
 package org.apache.phoenix.expression.util.regex;
 
-import java.util.LinkedList;
-import java.util.List;
+import java.io.IOException;
 
+import org.apache.commons.io.output.ByteArrayOutputStream;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarchar;
@@ -90,39 +90,26 @@ public class JONIPattern extends AbstractBasePattern {
 
     private byte[] replaceAll(byte[] srcBytes, int srcOffset, int srcLen, byte[] replaceBytes,
             int replaceOffset, int replaceLen) {
-        class PairInt {
-            public int begin, end;
-
-            public PairInt(int begin, int end) {
-                this.begin = begin;
-                this.end = end;
-            }
-        }
         int srcRange = srcOffset + srcLen;
         Matcher matcher = pattern.matcher(srcBytes, 0, srcRange);
         int cur = srcOffset;
-        List<PairInt> searchResults = new LinkedList<PairInt>();
-        int totalBytesNeeded = 0;
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
         while (true) {
             int nextCur = matcher.search(cur, srcRange, Option.DEFAULT);
             if (nextCur < 0) {
-                totalBytesNeeded += srcRange - cur;
+                out.write(srcBytes, cur, srcRange - cur);
                 break;
             }
-            searchResults.add(new PairInt(matcher.getBegin(), matcher.getEnd()));
-            totalBytesNeeded += (nextCur - cur) + replaceLen;
+            out.write(srcBytes, cur, nextCur - cur);
+            out.write(replaceBytes, replaceOffset, replaceLen);
             cur = matcher.getEnd();
         }
-        byte[] ret = new byte[totalBytesNeeded];
-        int curPosInSrc = srcOffset, curPosInRet = 0;
-        for (PairInt pair : searchResults) {
-            System.arraycopy(srcBytes, curPosInSrc, ret, curPosInRet, pair.begin - curPosInSrc);
-            curPosInRet += pair.begin - curPosInSrc;
-            System.arraycopy(replaceBytes, replaceOffset, ret, curPosInRet, replaceLen);
-            curPosInRet += replaceLen;
-            curPosInSrc = pair.end;
+        byte[] ret = out.toByteArray();
+        try {
+            out.close();
+        } catch (IOException e) {
+            // According to ByteArrayOutputStream#close, never goes here
         }
-        System.arraycopy(srcBytes, curPosInSrc, ret, curPosInRet, srcRange - curPosInSrc);
         return ret;
     }
 
