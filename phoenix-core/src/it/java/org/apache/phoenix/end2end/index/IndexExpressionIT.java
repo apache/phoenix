@@ -1304,7 +1304,7 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeIT {
 			ResultSet rs = conn.createStatement().executeQuery(query);
 			assertFalse(rs.next());
 			String ddl = "CREATE " + (localIndex ? "LOCAL" : "")
-					+ " INDEX idx ON t (REGEXP_SUBSTR(v,'id:\\w+'))";
+					+ " INDEX idx ON t (REGEXP_SUBSTR(v,'id:\\\\w+'))";
 			PreparedStatement stmt = conn.prepareStatement(ddl);
 			stmt.execute();
 			query = "SELECT * FROM idx";
@@ -1319,8 +1319,8 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeIT {
 			stmt.setString(2, "{id:id2}");
 			stmt.execute();
 			conn.commit();
-
-			query = "SELECT k FROM t WHERE REGEXP_SUBSTR(v,'id:\\w+') = 'id:id1'";
+			
+			query = "SELECT k FROM t WHERE REGEXP_SUBSTR(v,'id:\\\\w+') = 'id:id1'";
 			rs = conn.createStatement().executeQuery("EXPLAIN " + query);
 			if (localIndex) {
 				assertEquals(

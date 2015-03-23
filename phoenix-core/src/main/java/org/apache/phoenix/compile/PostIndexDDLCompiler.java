@@ -73,7 +73,7 @@ public class PostIndexDDLCompiler {
         for (int i = posOffset; i < nIndexPKColumns; i++) {
             PColumn col = indexPKColumns.get(i);
             String indexColName = col.getName().getString();
-            String dataColName = col.getExpressionStr();
+            String dataColName = col.getExpressionStr().replaceAll("\\\\","\\\\\\\\");
             dataColumns.append(dataColName).append(",");
             indexColumns.append('"').append(indexColName).append("\",");
             indexColumnNames.add(indexColName);

@@ -1025,7 +1025,7 @@ public class MetaDataClient {
                     // can lose information during compilation
                     StringBuilder buf = new StringBuilder();
                     parseNode.toSQL(resolver, buf);
-                    String expressionStr = buf.toString();
+                    String expressionStr = buf.toString().replaceAll("\\\\","\\\\\\\\");
                     
                     ColumnName colName = null;
                     ColumnRef colRef = expressionIndexCompiler.getColumnRef();
