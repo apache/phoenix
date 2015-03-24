@@ -20,17 +20,18 @@ package org.apache.phoenix.expression.function;
 import java.io.DataInput;
 import java.io.IOException;
 import java.util.List;
-import java.util.regex.Pattern;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
+import org.apache.phoenix.expression.util.regex.AbstractBasePattern;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
+import org.apache.phoenix.parse.RegexpReplaceParseNode;
+import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarchar;
-import org.apache.phoenix.schema.tuple.Tuple;
 
 
 /**
@@ -48,15 +49,16 @@ import org.apache.phoenix.schema.tuple.Tuple;
  * 
  * @since 0.1
  */
-@BuiltInFunction(name=RegexpReplaceFunction.NAME, args= {
+@BuiltInFunction(name=RegexpReplaceFunction.NAME,
+    nodeClass = RegexpReplaceParseNode.class, args= {
     @Argument(allowedTypes={PVarchar.class}),
     @Argument(allowedTypes={PVarchar.class}),
     @Argument(allowedTypes={PVarchar.class},defaultValue="null")} )
-public class RegexpReplaceFunction extends ScalarFunction {
+public abstract class RegexpReplaceFunction extends ScalarFunction {
     public static final String NAME = "REGEXP_REPLACE";
 
     private boolean hasReplaceStr;
-    private Pattern pattern;
+    private AbstractBasePattern pattern;
     
     public RegexpReplaceFunction() { }
 
@@ -66,11 +68,13 @@ public class RegexpReplaceFunction extends ScalarFunction {
         init();
     }
 
+    protected abstract AbstractBasePattern compilePatternSpec(String value);
+
     private void init() {
         hasReplaceStr = ((LiteralExpression)getReplaceStrExpression()).getValue() != null;
         Object patternString = ((LiteralExpression)children.get(1)).getValue();
         if (patternString != null) {
-            pattern = Pattern.compile((String)patternString);
+            pattern = compilePatternSpec((String) patternString);
         }
     }
 
@@ -84,22 +88,20 @@ public class RegexpReplaceFunction extends ScalarFunction {
         if (!sourceStrExpression.evaluate(tuple, ptr)) {
             return false;
         }
-        String sourceStr = (String) PVarchar.INSTANCE.toObject(ptr, sourceStrExpression.getSortOrder());
-        if (sourceStr == null) {
-            return false;
-        }
-        String replaceStr;
+        if (ptr == null) return false;
+        PVarchar type = PVarchar.INSTANCE;
+        type.coerceBytes(ptr, type, sourceStrExpression.getSortOrder(), SortOrder.ASC);
+        ImmutableBytesWritable replacePtr = new ImmutableBytesWritable();
         if (hasReplaceStr) {
-            Expression replaceStrExpression = this.getReplaceStrExpression();
-            if (!replaceStrExpression.evaluate(tuple, ptr)) {
+            Expression replaceStrExpression = getReplaceStrExpression();
+            if (!replaceStrExpression.evaluate(tuple, replacePtr)) {
                 return false;
             }
-            replaceStr = (String) PVarchar.INSTANCE.toObject(ptr, replaceStrExpression.getSortOrder());
+            type.coerceBytes(replacePtr, type, replaceStrExpression.getSortOrder(), SortOrder.ASC);
         } else {
-            replaceStr = "";
+            replacePtr.set(type.toBytes(""));
         }
-        String replacedStr = pattern.matcher(sourceStr).replaceAll(replaceStr);
-        ptr.set(PVarchar.INSTANCE.toBytes(replacedStr));
+        pattern.replaceAll(ptr, replacePtr, ptr);
         return true;
     }
 

@@ -24,6 +24,8 @@ import org.apache.phoenix.expression.function.ArrayAnyComparisonExpression;
 import org.apache.phoenix.expression.function.ArrayElemRefExpression;
 import org.apache.phoenix.expression.function.ArrayIndexFunction;
 import org.apache.phoenix.expression.function.ArrayLengthFunction;
+import org.apache.phoenix.expression.function.ByteBasedRegexpReplaceFunction;
+import org.apache.phoenix.expression.function.ByteBasedRegexpSubstrFunction;
 import org.apache.phoenix.expression.function.CeilDateExpression;
 import org.apache.phoenix.expression.function.CeilDecimalExpression;
 import org.apache.phoenix.expression.function.CeilFunction;
@@ -70,6 +72,8 @@ import org.apache.phoenix.expression.function.SQLViewTypeFunction;
 import org.apache.phoenix.expression.function.SqlTypeNameFunction;
 import org.apache.phoenix.expression.function.StddevPopFunction;
 import org.apache.phoenix.expression.function.StddevSampFunction;
+import org.apache.phoenix.expression.function.StringBasedRegexpReplaceFunction;
+import org.apache.phoenix.expression.function.StringBasedRegexpSubstrFunction;
 import org.apache.phoenix.expression.function.SubstrFunction;
 import org.apache.phoenix.expression.function.SumAggregateFunction;
 import org.apache.phoenix.expression.function.TimezoneOffsetFunction;
@@ -125,6 +129,8 @@ public enum ExpressionType {
     MinAggregateFunction(MinAggregateFunction.class),
     MaxAggregateFunction(MaxAggregateFunction.class),
     LikeExpression(LikeExpression.class),
+    ByteBasedLikeExpression(ByteBasedLikeExpression.class),
+    StringBasedLikeExpression(StringBasedLikeExpression.class),
     NotExpression(NotExpression.class),
     CaseExpression(CaseExpression.class),
     InListExpression(InListExpression.class),
@@ -141,8 +147,12 @@ public enum ExpressionType {
     DecimalDivideExpression(DecimalDivideExpression.class),
     CoalesceFunction(CoalesceFunction.class),
     RegexpReplaceFunction(RegexpReplaceFunction.class),
+    ByteBasedRegexpReplaceFunction(ByteBasedRegexpReplaceFunction.class),
+    StringBasedRegexpReplaceFunction(StringBasedRegexpReplaceFunction.class),
     SQLTypeNameFunction(SqlTypeNameFunction.class),
     RegexpSubstrFunction(RegexpSubstrFunction.class),
+    ByteBasedRegexpSubstrFunction(ByteBasedRegexpSubstrFunction.class),
+    StringBasedRegexpSubstrFunction(StringBasedRegexpSubstrFunction.class),
     StringConcatExpression(StringConcatExpression.class),
     LengthFunction(LengthFunction.class),
     LTrimFunction(LTrimFunction.class),
