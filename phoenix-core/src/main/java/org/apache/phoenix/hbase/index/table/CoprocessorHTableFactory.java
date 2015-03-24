@@ -21,15 +21,11 @@ import java.io.IOException;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.hbase.index.IndexQosCompat;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
-import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 
 public class CoprocessorHTableFactory implements HTableFactory {
 
@@ -42,19 +38,14 @@ public class CoprocessorHTableFactory implements HTableFactory {
 
     @Override
     public HTableInterface getTable(ImmutableBytesPtr tablename) throws IOException {
-        Configuration conf = e.getConfiguration();
-
-        // make sure we use the index priority writer for our rpcs
-        IndexQosCompat.setPhoenixIndexRpcController(conf);
 
         // make sure we include the index table in the tables we need to track
         String tableName = Bytes.toString(tablename.copyBytesIfNecessary());
-        IndexQosCompat.enableIndexQosForTable(conf, tableName);
 
         if (LOG.isDebugEnabled()) {
             LOG.debug("Creating new HTable: " + tableName);
         }
-        return this.e.getTable(TableName.valueOf(tablename.copyBytesIfNecessary()));
+        return this.e.getTable(TableName.valueOf(tableName));
     }
 
     @Override
