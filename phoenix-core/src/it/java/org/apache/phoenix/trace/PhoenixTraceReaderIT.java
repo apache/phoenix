@@ -38,7 +38,7 @@ import org.apache.hadoop.metrics2.MetricsTag;
 import org.apache.phoenix.metrics.MetricInfo;
 import org.apache.phoenix.trace.TraceReader.SpanInfo;
 import org.apache.phoenix.trace.TraceReader.TraceHolder;
-import org.cloudera.htrace.Span;
+import org.apache.htrace.Span;
 import org.junit.Test;
 
 /**

@@ -35,17 +35,18 @@ import java.util.concurrent.TimeUnit;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.metrics2.MetricsSource;
+import org.apache.htrace.Sampler;
+import org.apache.htrace.Span;
+import org.apache.htrace.SpanReceiver;
+import org.apache.htrace.Trace;
+import org.apache.htrace.TraceScope;
+import org.apache.htrace.impl.ProbabilitySampler;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.metrics.Metrics;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.trace.TraceReader.SpanInfo;
 import org.apache.phoenix.trace.TraceReader.TraceHolder;
-import org.cloudera.htrace.Sampler;
-import org.cloudera.htrace.Span;
-import org.cloudera.htrace.SpanReceiver;
-import org.cloudera.htrace.Trace;
-import org.cloudera.htrace.TraceScope;
 import org.junit.After;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -348,7 +349,7 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
         });
         assertTrue("Didn't find the parallel scanner in the tracing", found);
     }
-    
+
     @Test
     public void testCustomAnnotationTracing() throws Exception {
     	final String customAnnotationKey = "myannot";
@@ -374,7 +375,7 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
         stmt.execute();
         conn.commit();
         conn.rollback();
-        
+
         // setup for next set of updates
         stmt.setString(1, "key2");
         stmt.setLong(2, 2);
@@ -403,17 +404,43 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
             Statement statement = conn1.createStatement();
             ResultSet  rs = statement.executeQuery("TRACE ON");
             assertTrue(rs.next());
-            long traceId = ((PhoenixConnection) conn1).getTraceScope().getSpan()
-            .getTraceId();
-            assertEquals(rs.getLong(1), traceId);
-            assertEquals(rs.getLong("trace_id"), traceId);
+            PhoenixConnection pconn= (PhoenixConnection) conn1;
+            long traceId = pconn.getTraceScope().getSpan().getTraceId();
+            assertEquals(traceId, rs.getLong(1));
+            assertEquals(traceId, rs.getLong("trace_id"));
             assertFalse(rs.next());
+            assertEquals(Sampler.ALWAYS, pconn.getSampler());
 
             rs = statement.executeQuery("TRACE OFF");
             assertTrue(rs.next());
-            assertEquals(rs.getLong(1), traceId);
-            assertEquals(rs.getLong("trace_id"), traceId);
+            assertEquals(traceId, rs.getLong(1));
+            assertEquals(traceId, rs.getLong("trace_id"));
             assertFalse(rs.next());
+            assertEquals(Sampler.NEVER, pconn.getSampler());
+
+            rs = statement.executeQuery("TRACE OFF");
+            assertFalse(rs.next());
+
+            rs = statement.executeQuery("TRACE ON  WITH SAMPLING 0.5");
+            rs.next();
+            assertTrue(((PhoenixConnection) conn1).getSampler() instanceof ProbabilitySampler);
+
+            rs = statement.executeQuery("TRACE ON  WITH SAMPLING 1.0");
+            assertTrue(rs.next());
+            traceId = pconn.getTraceScope().getSpan()
+            .getTraceId();
+            assertEquals(traceId, rs.getLong(1));
+            assertEquals(traceId, rs.getLong("trace_id"));
+            assertFalse(rs.next());
+            assertEquals(Sampler.ALWAYS, pconn.getSampler());
+
+            rs = statement.executeQuery("TRACE ON  WITH SAMPLING 0.5");
+            rs.next();
+            assertTrue(((PhoenixConnection) conn1).getSampler() instanceof ProbabilitySampler);
+
+            rs = statement.executeQuery("TRACE ON WITH SAMPLING 0.0");
+            rs.next();
+            assertEquals(Sampler.NEVER, pconn.getSampler());
 
             rs = statement.executeQuery("TRACE OFF");
             assertFalse(rs.next());
@@ -429,10 +456,10 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
             	return currentTrace.toString().contains(annotationKey + " - " + annotationValue);
             }
         });
-        
+
         assertTrue("Didn't find the custom annotation in the tracing", tracingComplete);
     }
-    
+
     private boolean checkStoredTraces(Connection conn, TraceChecker checker) throws Exception {
         TraceReader reader = new TraceReader(conn);
         int retries = 0;

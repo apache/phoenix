@@ -325,8 +325,8 @@ public class ParseNodeFactory {
         return new AlterIndexStatement(indexTableNode, dataTableName, ifExists, state);
     }
 
-    public TraceStatement trace(boolean isTraceOn) {
-        return new TraceStatement(isTraceOn);
+    public TraceStatement trace(boolean isTraceOn, double samplingRate) {
+        return new TraceStatement(isTraceOn, samplingRate);
     }
 
     public TableName table(String schemaName, String tableName) {
@@ -357,8 +357,8 @@ public class ParseNodeFactory {
         return new DivideParseNode(children);
     }
 
-    public UpdateStatisticsStatement updateStatistics(NamedTableNode table, StatisticsCollectionScope scope) {
-      return new UpdateStatisticsStatement(table, scope);
+    public UpdateStatisticsStatement updateStatistics(NamedTableNode table, StatisticsCollectionScope scope, Map<String,Object> props) {
+      return new UpdateStatisticsStatement(table, scope, props);
     }
 
 

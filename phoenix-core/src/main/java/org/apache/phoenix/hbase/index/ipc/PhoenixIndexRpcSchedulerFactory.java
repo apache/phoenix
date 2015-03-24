@@ -20,8 +20,10 @@ package org.apache.phoenix.hbase.index.ipc;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.Abortable;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.ipc.PhoenixIndexRpcScheduler;
+import org.apache.hadoop.hbase.ipc.PriorityFunction;
 import org.apache.hadoop.hbase.ipc.RpcScheduler;
 import org.apache.hadoop.hbase.regionserver.RegionServerServices;
 import org.apache.hadoop.hbase.regionserver.RpcSchedulerFactory;
@@ -43,23 +45,15 @@ public class PhoenixIndexRpcSchedulerFactory implements RpcSchedulerFactory {
             "Running an older version of HBase (less than 0.98.4), Phoenix index RPC handling cannot be enabled.";
 
     @Override
-    public RpcScheduler create(Configuration conf, RegionServerServices services) {
+    public RpcScheduler create(Configuration conf, PriorityFunction priorityFunction, Abortable abortable) {
         // create the delegate scheduler
         RpcScheduler delegate;
         try {
             // happens in <=0.98.4 where the scheduler factory is not visible
-            delegate = new SimpleRpcSchedulerFactory().create(conf, services);
+            delegate = new SimpleRpcSchedulerFactory().create(conf, priorityFunction, abortable);
         } catch (IllegalAccessError e) {
             LOG.fatal(VERSION_TOO_OLD_FOR_INDEX_RPC);
             throw e;
-        }
-        try {
-            // make sure we are on a version that phoenix can support
-            Class.forName("org.apache.hadoop.hbase.ipc.RpcExecutor");
-        } catch (ClassNotFoundException e) {
-            LOG.error(VERSION_TOO_OLD_FOR_INDEX_RPC
-                    + " Instead, using falling back to Simple RPC scheduling.");
-            return delegate;
         }
 
         int indexHandlerCount = conf.getInt(QueryServices.INDEX_HANDLER_COUNT_ATTRIB, QueryServicesOptions.DEFAULT_INDEX_HANDLER_COUNT);
@@ -83,6 +77,11 @@ public class PhoenixIndexRpcSchedulerFactory implements RpcSchedulerFactory {
                 new PhoenixIndexRpcScheduler(indexHandlerCount, conf, delegate, minPriority,
                         maxPriority);
         return scheduler;
+    }
+
+    @Override
+    public RpcScheduler create(Configuration configuration, PriorityFunction priorityFunction) {
+        return create(configuration, priorityFunction, null);
     }
 
     public static int getMinPriority(Configuration conf) {

@@ -34,6 +34,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Pair;
@@ -704,8 +705,8 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
     
     private static class ExecutableTraceStatement extends TraceStatement implements CompilableStatement {
 
-        public ExecutableTraceStatement(boolean isTraceOn) {
-            super(isTraceOn);
+        public ExecutableTraceStatement(boolean isTraceOn, double samplingRate) {
+            super(isTraceOn, samplingRate);
         }
 
         @SuppressWarnings("unchecked")
@@ -717,8 +718,8 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
 
     private static class ExecutableUpdateStatisticsStatement extends UpdateStatisticsStatement implements
             CompilableStatement {
-        public ExecutableUpdateStatisticsStatement(NamedTableNode table, StatisticsCollectionScope scope) {
-            super(table, scope);
+        public ExecutableUpdateStatisticsStatement(NamedTableNode table, StatisticsCollectionScope scope, Map<String,Object> props) {
+            super(table, scope, props);
         }
 
         @SuppressWarnings("unchecked")
@@ -909,8 +910,8 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         }
 
         @Override
-        public TraceStatement trace(boolean isTraceOn) {
-            return new ExecutableTraceStatement(isTraceOn);
+        public TraceStatement trace(boolean isTraceOn, double samplingRate) {
+            return new ExecutableTraceStatement(isTraceOn, samplingRate);
         }
 
         @Override
@@ -919,8 +920,8 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         }
 
         @Override
-        public UpdateStatisticsStatement updateStatistics(NamedTableNode table, StatisticsCollectionScope scope) {
-            return new ExecutableUpdateStatisticsStatement(table, scope);
+        public UpdateStatisticsStatement updateStatistics(NamedTableNode table, StatisticsCollectionScope scope, Map<String,Object> props) {
+            return new ExecutableUpdateStatisticsStatement(table, scope, props);
         }
     }
     

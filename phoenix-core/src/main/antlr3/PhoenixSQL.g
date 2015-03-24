@@ -111,6 +111,7 @@ tokens
     COLUMNS='columns';
     TRACE='trace';
     ASYNC='async';
+    SAMPLING='sampling';
 }
 
 
@@ -507,8 +508,8 @@ alter_index_node returns [AlterIndexStatement ret]
 
 // Parse a trace statement.
 trace_node returns [TraceStatement ret]
-    :   TRACE (flag = ON| flag = OFF)
-       {ret = factory.trace(Tracing.isTraceOn(flag.getText()));}
+    :   TRACE ((flag = ON  ( WITH SAMPLING s = sampling_rate)?) | flag = OFF)
+       {ret = factory.trace(Tracing.isTraceOn(flag.getText()), s == null ? Tracing.isTraceOn(flag.getText()) ? 1.0 : 0.0 : (((BigDecimal)s.getValue())).doubleValue());}
     ;
 
 // Parse an alter table statement.
@@ -519,8 +520,8 @@ alter_table_node returns [AlterTableStatement ret]
     ;
 
 update_statistics_node returns [UpdateStatisticsStatement ret]
-	:   UPDATE STATISTICS t=from_table_name (s=INDEX | s=ALL | s=COLUMNS)?
-		{ret = factory.updateStatistics(factory.namedTable(null, t), s == null ? StatisticsCollectionScope.getDefault() : StatisticsCollectionScope.valueOf(SchemaUtil.normalizeIdentifier(s.getText())));}
+	:   UPDATE STATISTICS t=from_table_name (s=INDEX | s=ALL | s=COLUMNS)? (SET (p=properties))?
+		{ret = factory.updateStatistics(factory.namedTable(null, t), s == null ? StatisticsCollectionScope.getDefault() : StatisticsCollectionScope.valueOf(SchemaUtil.normalizeIdentifier(s.getText())), p);}
 	;
 
 prop_name returns [String ret]
@@ -626,6 +627,10 @@ limit returns [LimitNode ret]
     | l=int_literal { $ret = factory.limit(l); }
     ;
     
+sampling_rate returns [LiteralParseNode ret]
+    : l=literal { $ret = l; }
+    ;
+
 hintClause returns [HintNode ret]
     :  c=ML_HINT { $ret = factory.hint(c.getText()); }
     ;

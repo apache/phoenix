@@ -21,6 +21,7 @@ package org.apache.phoenix.hbase.index.scanner;
 import java.io.Closeable;
 import java.io.IOException;
 
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 
 /**
@@ -33,7 +34,7 @@ public interface Scanner extends Closeable {
    * @return the next keyvalue in the scanner or <tt>null</tt> if there is no next {@link KeyValue}
    * @throws IOException if there is an underlying error reading the data
    */
-  public KeyValue next() throws IOException;
+  public Cell next() throws IOException;
 
   /**
    * Seek to immediately before the given {@link KeyValue}. If that exact {@link KeyValue} is
@@ -51,5 +52,5 @@ public interface Scanner extends Closeable {
    * @return the next {@link KeyValue} or <tt>null</tt> if there are no more values in <tt>this</tt>
    * @throws IOException if there is an error reading the underlying data.
    */
-  public KeyValue peek() throws IOException;
+  public Cell peek() throws IOException;
 }

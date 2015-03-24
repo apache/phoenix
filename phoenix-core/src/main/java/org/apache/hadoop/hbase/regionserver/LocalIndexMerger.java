@@ -23,8 +23,8 @@ import java.util.List;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.MetaTableAccessor;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.catalog.MetaReader;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.BaseRegionServerObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
@@ -55,7 +55,7 @@ public class LocalIndexMerger extends BaseRegionServerObserver {
                         .getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES)))) {
             TableName indexTable =
                     TableName.valueOf(MetaDataUtil.getLocalIndexPhysicalName(tableDesc.getName()));
-            if (!MetaReader.tableExists(rs.getCatalogTracker(), indexTable)) return;
+            if (!MetaTableAccessor.tableExists(rs.getConnection(), indexTable)) return;
             HRegion indexRegionA = IndexUtil.getIndexRegion(regionA, ctx.getEnvironment());
             if (indexRegionA == null) {
                 LOG.warn("Index region corresponindg to data region " + regionA
