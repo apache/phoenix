@@ -74,7 +74,7 @@ public class PostIndexDDLCompiler {
         for (int i = posOffset; i < nIndexPKColumns; i++) {
             PColumn col = indexPKColumns.get(i);
             String indexColName = col.getName().getString();
-            // need to escape backslash as this is the SELECT statement
+            // need to escape backslash as this used in the SELECT statement
             String dataColName = StringUtil.escapeBackslash(col.getExpressionStr());
             dataColumns.append(dataColName).append(",");
             indexColumns.append('"').append(indexColName).append("\",");
