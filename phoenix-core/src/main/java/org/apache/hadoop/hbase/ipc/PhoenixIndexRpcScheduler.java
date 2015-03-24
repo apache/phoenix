@@ -43,6 +43,7 @@ public class PhoenixIndexRpcScheduler extends RpcScheduler {
     private int minPriority;
     private int maxPriority;
     private RpcExecutor callExecutor;
+    private int port;
 
     public PhoenixIndexRpcScheduler(int indexHandlerCount, Configuration conf,
             RpcScheduler delegate, int minPriority, int maxPriority) {
@@ -67,11 +68,13 @@ public class PhoenixIndexRpcScheduler extends RpcScheduler {
     @Override
     public void init(Context context) {
         delegate.init(context);
+        this.port = context.getListenerAddress().getPort();
     }
 
     @Override
     public void start() {
         delegate.start();
+        callExecutor.start(port);
     }
 
     @Override
