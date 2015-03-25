@@ -107,7 +107,7 @@ public class YearMonthSecondFunctionIT extends BaseHBaseManagedTimeIT {
                         "unsignedDates UNSIGNED_DATE, unsignedTimestamps UNSIGNED_TIMESTAMP, unsignedTimes UNSIGNED_TIME CONSTRAINT pk PRIMARY KEY (k1))";
         conn.createStatement().execute(ddl);
         String dml = "UPSERT INTO T1 VALUES (1, TO_DATE('2004-03-01 00:00:00'), TO_TIMESTAMP('2006-02-01 00:00:00'), TO_TIME('2008-02-01 00:00:00'), " +
-                "TO_DATE('2010-03-01 00:00:00'), TO_TIMESTAMP('2012-02-01'), TO_TIME('2015-02-01 00:00:00'))";
+                "TO_DATE('2010-03-01 00:00:00:896', 'yyyy-MM-dd HH:mm:ss:SSS'), TO_TIMESTAMP('2012-02-01'), TO_TIME('2015-02-01 00:00:00'))";
         conn.createStatement().execute(dml);
         conn.commit();
 
@@ -120,6 +120,52 @@ public class YearMonthSecondFunctionIT extends BaseHBaseManagedTimeIT {
         assertEquals(2010, rs.getInt(4));
         assertEquals(2012, rs.getInt(5));
         assertEquals(2015, rs.getInt(6));
+        assertFalse(rs.next());
+    }
+
+    @Test
+    public void testMonthFuncAgainstColumns() throws Exception {
+        String ddl =
+                "CREATE TABLE IF NOT EXISTS T1 (k1 INTEGER NOT NULL, dates DATE, timestamps TIMESTAMP, times TIME, " +
+                        "unsignedDates UNSIGNED_DATE, unsignedTimestamps UNSIGNED_TIMESTAMP, unsignedTimes UNSIGNED_TIME CONSTRAINT pk PRIMARY KEY (k1))";
+        conn.createStatement().execute(ddl);
+        String dml = "UPSERT INTO T1 VALUES (1, TO_DATE('2004-03-10 00:00:00'), TO_TIMESTAMP('2006-04-12 00:00:00'), TO_TIME('2008-05-16 00:00:00'), " +
+                "TO_DATE('2010-06-20 00:00:00:789', 'yyyy-MM-dd HH:mm:ss:SSS'), TO_TIMESTAMP('2012-07-28'), TO_TIME('2015-12-25 00:00:00'))";
+        conn.createStatement().execute(dml);
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery("SELECT k1, MONTH(timestamps), MONTH(times), MONTH(unsignedDates), MONTH(unsignedTimestamps), " +
+                "MONTH(unsignedTimes) FROM T1 where MONTH(dates) = 3");
+        assertTrue(rs.next());
+        assertEquals(1, rs.getInt(1));
+        assertEquals(4, rs.getInt(2));
+        assertEquals(5, rs.getInt(3));
+        assertEquals(6, rs.getInt(4));
+        assertEquals(7, rs.getInt(5));
+        assertEquals(12, rs.getInt(6));
+        assertFalse(rs.next());
+    }
+
+    @Test
+    public void testSecondFuncAgainstColumns() throws Exception {
+        String ddl =
+                "CREATE TABLE IF NOT EXISTS T1 (k1 INTEGER NOT NULL, dates DATE, timestamps TIMESTAMP, times TIME, " +
+                        "unsignedDates UNSIGNED_DATE, unsignedTimestamps UNSIGNED_TIMESTAMP, unsignedTimes UNSIGNED_TIME CONSTRAINT pk PRIMARY KEY (k1))";
+        conn.createStatement().execute(ddl);
+        String dml = "UPSERT INTO T1 VALUES (1, TO_DATE('2004-03-01 00:00:10'), TO_TIMESTAMP('2006-04-12 00:00:20'), TO_TIME('2008-05-16 10:00:30'), " +
+                "TO_DATE('2010-06-20 00:00:40:789', 'yyyy-MM-dd HH:mm:ss:SSS'), TO_TIMESTAMP('2012-07-28'), TO_TIME('2015-12-25 00:00:50'))";
+        conn.createStatement().execute(dml);
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery("SELECT k1, SECOND(dates), SECOND(times), SECOND(unsignedDates), SECOND(unsignedTimestamps), " +
+                "SECOND(unsignedTimes) FROM T1 where SECOND(timestamps)=20");
+        assertTrue(rs.next());
+        assertEquals(1, rs.getInt(1));
+        assertEquals(10, rs.getInt(2));
+        assertEquals(30, rs.getInt(3));
+        assertEquals(40, rs.getInt(4));
+        assertEquals(0, rs.getInt(5));
+        assertEquals(50, rs.getInt(6));
         assertFalse(rs.next());
     }
 }

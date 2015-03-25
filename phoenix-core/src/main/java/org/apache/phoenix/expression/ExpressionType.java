@@ -50,6 +50,7 @@ import org.apache.phoenix.expression.function.LpadFunction;
 import org.apache.phoenix.expression.function.MD5Function;
 import org.apache.phoenix.expression.function.MaxAggregateFunction;
 import org.apache.phoenix.expression.function.MinAggregateFunction;
+import org.apache.phoenix.expression.function.MonthFunction;
 import org.apache.phoenix.expression.function.NthValueFunction;
 import org.apache.phoenix.expression.function.PercentRankAggregateFunction;
 import org.apache.phoenix.expression.function.PercentileContAggregateFunction;
@@ -67,6 +68,7 @@ import org.apache.phoenix.expression.function.RoundTimestampExpression;
 import org.apache.phoenix.expression.function.SQLIndexTypeFunction;
 import org.apache.phoenix.expression.function.SQLTableTypeFunction;
 import org.apache.phoenix.expression.function.SQLViewTypeFunction;
+import org.apache.phoenix.expression.function.SecondFunction;
 import org.apache.phoenix.expression.function.SignFunction;
 import org.apache.phoenix.expression.function.SqlTypeNameFunction;
 import org.apache.phoenix.expression.function.StddevPopFunction;
@@ -194,9 +196,11 @@ public enum ExpressionType {
     ToTimeFunction(ToTimeFunction.class),
     ToTimestampFunction(ToTimestampFunction.class),
     SignFunction(SignFunction.class),
-    YearFunction(YearFunction.class)
+    YearFunction(YearFunction.class),
+    MonthFunction(MonthFunction.class),
+    SecondFunction(SecondFunction.class)
     ;
-    
+
     ExpressionType(Class<? extends Expression> clazz) {
         this.clazz = clazz;
     }
