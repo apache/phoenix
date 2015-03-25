@@ -65,12 +65,12 @@ class PhoenixRDD(sc: SparkContext, table: String, columns: Seq[String],
 
   def buildSql(table: String, columns: Seq[String], predicate: Option[String]): String = {
     val query = "SELECT %s FROM \"%s\"".format(
-      columns.map(f => "\"" + f + "\"").mkString(", "),
+      if (columns.isEmpty) "*" else columns.map(f => "\"" + f + "\"").mkString(", "),
       table
     )
 
     query + (predicate match {
-      case Some(p: String) => " WHERE " + p
+      case Some(p: String) if p.length > 0 => " WHERE " + p
       case _ => ""
     })
   }
@@ -82,7 +82,9 @@ class PhoenixRDD(sc: SparkContext, table: String, columns: Seq[String],
     val config = new Configuration(conf)
 
     PhoenixConfigurationUtil.setInputQuery(config, buildSql(table, columns, predicate))
-    PhoenixConfigurationUtil.setSelectColumnNames(config, columns.mkString(","))
+    if(!columns.isEmpty) {
+      PhoenixConfigurationUtil.setSelectColumnNames(config, columns.mkString(","))
+    }
     PhoenixConfigurationUtil.setInputTableName(config, "\"" + table + "\"")
     PhoenixConfigurationUtil.setInputClass(config, classOf[PhoenixRecordWritable])
 
