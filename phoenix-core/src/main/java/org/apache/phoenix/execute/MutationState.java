@@ -394,9 +394,10 @@ public class MutationState implements SQLCloseable {
                     if (hasIndexMaintainers && isDataTable) {
                         byte[] attribValue = null;
                         byte[] uuidValue;
-                        if (IndexMetaDataCacheClient.useIndexMetadataCache(connection, mutations, tempPtr.getLength())) {
+                        byte[] txState = table.isTransactional() ? TransactionUtil.encodeTxnState(connection.getTransactionContext().getCurrentTransaction()) : ByteUtil.EMPTY_BYTE_ARRAY;
+                        if (IndexMetaDataCacheClient.useIndexMetadataCache(connection, mutations, tempPtr.getLength() + txState.length)) {
                             IndexMetaDataCacheClient client = new IndexMetaDataCacheClient(connection, tableRef);
-                            cache = client.addIndexMetadataCache(mutations, tempPtr);
+                            cache = client.addIndexMetadataCache(mutations, tempPtr, txState);
                             child.addTimelineAnnotation("Updated index metadata cache");
                             uuidValue = cache.getId();
                             // If we haven't retried yet, retry for this case only, as it's possible that

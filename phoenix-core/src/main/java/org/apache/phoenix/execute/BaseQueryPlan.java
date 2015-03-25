@@ -66,6 +66,7 @@ import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.ScanUtil;
+import org.apache.phoenix.util.TransactionUtil;
 import org.cloudera.htrace.TraceScope;
 
 import com.google.common.collect.Lists;
@@ -205,13 +206,15 @@ public abstract class BaseQueryPlan implements QueryPlan {
                 KeyValueSchema schema = ProjectedColumnExpression.buildSchema(dataColumns);
                 // Set key value schema of the data columns.
                 serializeSchemaIntoScan(scan, schema);
-                String parentSchema = context.getCurrentTable().getTable().getParentSchemaName().getString();
-                String parentTable = context.getCurrentTable().getTable().getParentTableName().getString();
+                PTable parentTable = context.getCurrentTable().getTable();
+                String parentSchemaName = parentTable.getParentSchemaName().getString();
+                String parentTableName = parentTable.getParentTableName().getString();
                 final ParseNodeFactory FACTORY = new ParseNodeFactory();
+                // TODO: is it necessary to re-resolve the table?
                 TableRef dataTableRef =
                         FromCompiler.getResolver(
-                            FACTORY.namedTable(null, TableName.create(parentSchema, parentTable)),
-                            context.getConnection()).resolveTable(parentSchema, parentTable);
+                            FACTORY.namedTable(null, TableName.create(parentSchemaName, parentTableName)),
+                            context.getConnection()).resolveTable(parentSchemaName, parentTableName);
                 PTable dataTable = dataTableRef.getTable();
                 // Set index maintainer of the local index.
                 serializeIndexMaintainerIntoScan(scan, dataTable);
@@ -248,7 +251,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
         return (scope.getSpan() != null) ? new TracingIterator(scope, iterator) : iterator;
     }
 
-    private void serializeIndexMaintainerIntoScan(Scan scan, PTable dataTable) {
+    private void serializeIndexMaintainerIntoScan(Scan scan, PTable dataTable) throws SQLException {
         PName name = context.getCurrentTable().getTable().getName();
         List<PTable> indexes = Lists.newArrayListWithExpectedSize(1);
         for (PTable index : dataTable.getIndexes()) {
@@ -260,6 +263,10 @@ public abstract class BaseQueryPlan implements QueryPlan {
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         IndexMaintainer.serialize(dataTable, ptr, indexes, context.getConnection());
         scan.setAttribute(BaseScannerRegionObserver.LOCAL_INDEX_BUILD, ByteUtil.copyKeyBytesIfNecessary(ptr));
+        if (dataTable.isTransactional()) {
+            PhoenixConnection conn = context.getConnection();
+            scan.setAttribute(BaseScannerRegionObserver.TX_STATE, TransactionUtil.encodeTxnState(conn.getTransactionContext().getCurrentTransaction()));
+        }
     }
 
     private void serializeViewConstantsIntoScan(Scan scan, PTable dataTable) {

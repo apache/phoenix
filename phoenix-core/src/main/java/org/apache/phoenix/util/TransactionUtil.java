@@ -45,12 +45,8 @@ public class TransactionUtil {
         }
     }
     
-    public static Transaction decodeTxnState(byte[] txnBytes) throws SQLException {
-        try {
-            return codec.decode(txnBytes);
-        } catch (IOException e) {
-            throw new SQLException(e);
-        }
+    public static Transaction decodeTxnState(byte[] txnBytes) throws IOException {
+        return txnBytes == null ? null : codec.decode(txnBytes);
     }
 
     public static SQLException getSQLException(TransactionFailureException e) {

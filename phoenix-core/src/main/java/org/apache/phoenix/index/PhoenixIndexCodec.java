@@ -23,10 +23,10 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
+import co.cask.tephra.Transaction;
+
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
-import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Pair;
@@ -34,6 +34,7 @@ import org.apache.phoenix.cache.GlobalCache;
 import org.apache.phoenix.cache.IndexMetaDataCache;
 import org.apache.phoenix.cache.ServerCacheClient;
 import org.apache.phoenix.cache.TenantCache;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.hbase.index.ValueGetter;
@@ -50,6 +51,7 @@ import org.apache.phoenix.hbase.index.write.IndexWriter;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ServerUtil;
+import org.apache.phoenix.util.TransactionUtil;
 
 import com.google.common.collect.Lists;
 
@@ -78,18 +80,47 @@ public class PhoenixIndexCodec extends BaseIndexCodec {
         this.kvBuilder = GenericKeyValueBuilder.INSTANCE;
     }
 
-    List<IndexMaintainer> getIndexMaintainers(Map<String, byte[]> attributes) throws IOException{
+    boolean hasIndexMaintainers(Map<String, byte[]> attributes) {
         if (attributes == null) {
-            return Collections.emptyList();
+            return false;
         }
         byte[] uuid = attributes.get(INDEX_UUID);
         if (uuid == null) {
-            return Collections.emptyList();
+            return false;
+        }
+        return true;
+    }
+    
+    IndexMetaDataCache getIndexMetaData(Map<String, byte[]> attributes) throws IOException{
+        if (attributes == null) {
+            return IndexMetaDataCache.EMPTY_INDEX_META_DATA_CACHE;
+        }
+        byte[] uuid = attributes.get(INDEX_UUID);
+        if (uuid == null) {
+            return IndexMetaDataCache.EMPTY_INDEX_META_DATA_CACHE;
         }
         byte[] md = attributes.get(INDEX_MD);
-        List<IndexMaintainer> indexMaintainers;
+        byte[] txState = attributes.get(BaseScannerRegionObserver.TX_STATE);
         if (md != null) {
-            indexMaintainers = IndexMaintainer.deserialize(md);
+            final List<IndexMaintainer> indexMaintainers = IndexMaintainer.deserialize(md);
+            final Transaction txn = TransactionUtil.decodeTxnState(txState);
+            return new IndexMetaDataCache() {
+
+                @Override
+                public void close() throws IOException {
+                }
+
+                @Override
+                public List<IndexMaintainer> getIndexMaintainers() {
+                    return indexMaintainers;
+                }
+
+                @Override
+                public Transaction getTransaction() {
+                    return txn;
+                }
+                
+            };
         } else {
             byte[] tenantIdBytes = attributes.get(PhoenixRuntime.TENANT_ID_ATTRIB);
             ImmutableBytesWritable tenantId =
@@ -103,10 +134,9 @@ public class PhoenixIndexCodec extends BaseIndexCodec {
                     .setMessage(msg).build().buildException();
                 ServerUtil.throwIOException("Index update failed", e); // will not return
             }
-            indexMaintainers = indexCache.getIndexMaintainers();
+            return indexCache;
         }
     
-        return indexMaintainers;
     }
     
     @Override
@@ -127,7 +157,8 @@ public class PhoenixIndexCodec extends BaseIndexCodec {
      * @throws IOException
      */
     private Iterable<IndexUpdate> getIndexUpdates(TableState state, boolean upsert) throws IOException {
-        List<IndexMaintainer> indexMaintainers = getIndexMaintainers(state.getUpdateAttributes());
+        IndexMetaDataCache indexCache = getIndexMetaData(state.getUpdateAttributes());
+        List<IndexMaintainer> indexMaintainers = indexCache.getIndexMaintainers();
         if (indexMaintainers.isEmpty()) {
             return Collections.emptyList();
         }
@@ -187,7 +218,7 @@ public class PhoenixIndexCodec extends BaseIndexCodec {
     
   @Override
   public boolean isEnabled(Mutation m) throws IOException {
-      return !getIndexMaintainers(m.getAttributesMap()).isEmpty();
+      return !hasIndexMaintainers(m.getAttributesMap());
   }
   
   @Override

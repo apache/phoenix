@@ -68,6 +68,15 @@ public interface IndexBuilder extends Stoppable {
    * @return a Map of the mutations to make -> target index table name
    * @throws IOException on failure
    */
+  /* TODO:
+  Create BaseIndexBuilder with everything except getIndexUpdate(). 
+  Derive two concrete classes: NonTxIndexBuilder and TxIndexBuilder.
+  NonTxIndexBuilder will be current impl of this method.
+  TxIndexBuilder will use a scan with skipScan over TxAwareHBase to find the latest values.
+  Conditionally don't do WALEdit stuff for txnal table (ensure Phoenix/HBase tolerates index WAl edit info not being there)
+  Noop Failure mode
+  */
+  
   public Collection<Pair<Mutation, byte[]>> getIndexUpdate(Mutation mutation) throws IOException;
 
   /**

@@ -26,7 +26,7 @@ import java.sql.SQLException;
 import java.util.List;
 import java.util.Set;
 
-import com.google.common.collect.Sets;
+import co.cask.tephra.Transaction;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HRegionInfo;
@@ -58,8 +58,10 @@ import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
+import org.apache.phoenix.util.TransactionUtil;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 
 
 /**
@@ -190,6 +192,7 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
         HRegion dataRegion = null;
         IndexMaintainer indexMaintainer = null;
         byte[][] viewConstants = null;
+        Transaction tx = null;
         ColumnReference[] dataColumns = IndexUtil.deserializeDataTableColumnsToJoin(scan);
         if (dataColumns != null) {
             tupleProjector = IndexUtil.getTupleProjector(scan, dataColumns);
@@ -198,14 +201,16 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
             List<IndexMaintainer> indexMaintainers = localIndexBytes == null ? null : IndexMaintainer.deserialize(localIndexBytes);
             indexMaintainer = indexMaintainers.get(0);
             viewConstants = IndexUtil.deserializeViewConstantsFromScan(scan);
+            byte[] txState = scan.getAttribute(BaseScannerRegionObserver.TX_STATE);
+            tx = TransactionUtil.decodeTxnState(txState);
         }
         
         final TupleProjector p = TupleProjector.deserializeProjectorFromScan(scan);
         final HashJoinInfo j = HashJoinInfo.deserializeHashJoinFromScan(scan);
         innerScanner =
                 getWrappedScanner(c, innerScanner, arrayKVRefs, arrayFuncRefs, offset, scan,
-                    dataColumns, tupleProjector, dataRegion, indexMaintainer, viewConstants,
-                    kvSchema, kvSchemaBitSet, j == null ? p : null, ptr);
+                    dataColumns, tupleProjector, dataRegion, indexMaintainer, tx,
+                    viewConstants, kvSchema, kvSchemaBitSet, j == null ? p : null, ptr);
 
         final ImmutableBytesWritable tenantId = ScanUtil.getTenantId(scan);
         if (j != null) {

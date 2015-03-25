@@ -21,6 +21,8 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Set;
 
+import co.cask.tephra.Transaction;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
@@ -85,6 +87,7 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
     public static final String EXPECTED_UPPER_REGION_KEY = "_ExpectedUpperRegionKey";
     public static final String REVERSE_SCAN = "_ReverseScan";
     public static final String ANALYZE_TABLE = "_ANALYZETABLE";
+    public static final String TX_STATE = "_TxState";
     /**
      * Attribute name used to pass custom annotations in Scans and Mutations (later). Custom annotations
      * are used to augment log lines emitted by Phoenix. See https://issues.apache.org/jira/browse/PHOENIX-1198.
@@ -222,7 +225,7 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
             final byte[][] viewConstants, final TupleProjector projector,
             final ImmutableBytesWritable ptr) {
         return getWrappedScanner(c, s, null, null, offset, scan, dataColumns, tupleProjector,
-                dataRegion, indexMaintainer, viewConstants, null, null, projector, ptr);
+                dataRegion, indexMaintainer, null, viewConstants, null, null, projector, ptr);
     }
     
     /**
@@ -230,13 +233,14 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
      * re-throws as DoNotRetryIOException to prevent needless retrying hanging the query
      * for 30 seconds. Unfortunately, until HBASE-7481 gets fixed, there's no way to do
      * the same from a custom filter.
-     * @param arrayFuncRefs
      * @param arrayKVRefs
+     * @param arrayFuncRefs
      * @param offset starting position in the rowkey.
      * @param scan
      * @param tupleProjector
      * @param dataRegion
      * @param indexMaintainer
+     * @param tx TODO
      * @param viewConstants
      */
     protected RegionScanner getWrappedScanner(final ObserverContext<RegionCoprocessorEnvironment> c,
@@ -244,9 +248,9 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
             final Expression[] arrayFuncRefs, final int offset, final Scan scan,
             final ColumnReference[] dataColumns, final TupleProjector tupleProjector,
             final HRegion dataRegion, final IndexMaintainer indexMaintainer,
-            final byte[][] viewConstants, final KeyValueSchema kvSchema, 
-            final ValueBitSet kvSchemaBitSet, final TupleProjector projector,
-            final ImmutableBytesWritable ptr) {
+            Transaction tx, final byte[][] viewConstants, 
+            final KeyValueSchema kvSchema, final ValueBitSet kvSchemaBitSet,
+            final TupleProjector projector, final ImmutableBytesWritable ptr) {
         return new RegionScanner() {
 
             @Override

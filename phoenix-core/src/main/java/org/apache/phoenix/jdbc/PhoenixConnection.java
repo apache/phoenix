@@ -439,12 +439,16 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
 
     public void startTransaction() throws SQLException {
         if (txContext == null) {
+            boolean success = false;
             try {
                 TransactionSystemClient txServiceClient = this.getQueryServices().getTransactionSystemClient();
                 this.txContext = new TransactionContext(txServiceClient);
                 txContext.start();
+                success = true;
             } catch (TransactionFailureException e) {
                 throw new SQLException(e); // TODO: error code
+            } finally {
+                if (!success) endTransaction();
             }
         }
     }
