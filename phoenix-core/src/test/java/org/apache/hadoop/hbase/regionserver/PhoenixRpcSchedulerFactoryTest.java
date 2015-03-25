@@ -21,17 +21,18 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.phoenix.hbase.index.ipc.PhoenixIndexRpcSchedulerFactory;
+import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
 import org.apache.phoenix.query.QueryServices;
 import org.junit.Test;
 
-public class PhoenixIndexRpcSchedulerFactoryTest {
+public class PhoenixRpcSchedulerFactoryTest {
 
     @Test
     public void ensureInstantiation() throws Exception {
         Configuration conf = new Configuration(false);
         conf.setClass(RSRpcServices.REGION_SERVER_RPC_SCHEDULER_FACTORY_CLASS,
-            PhoenixIndexRpcSchedulerFactory.class, RpcSchedulerFactory.class);
+            PhoenixRpcSchedulerFactory.class, RpcSchedulerFactory.class);
         // kinda lame that we copy the copy from the regionserver to do this and can't use a static
         // method, but meh
         try {
@@ -39,7 +40,7 @@ public class PhoenixIndexRpcSchedulerFactoryTest {
                     conf.getClass(RSRpcServices.REGION_SERVER_RPC_SCHEDULER_FACTORY_CLASS,
                         SimpleRpcSchedulerFactory.class);
             Object o = rpcSchedulerFactoryClass.newInstance();
-            assertTrue(o instanceof PhoenixIndexRpcSchedulerFactory);
+            assertTrue(o instanceof PhoenixRpcSchedulerFactory);
         } catch (InstantiationException e) {
             assertTrue("Should not have got an exception when instantiing the rpc scheduler: " + e,
                 false);
@@ -50,57 +51,75 @@ public class PhoenixIndexRpcSchedulerFactoryTest {
     }
 
     /**
-     * Ensure that we can't configure the index priority ranges inside the hbase ranges
+     * Ensure that we can't configure the index and metadata priority ranges inside the hbase ranges
      * @throws Exception
      */
     @Test
-    public void testValidateIndexPriorityRanges() throws Exception {
+    public void testValidateRpcPriorityRanges() throws Exception {
         Configuration conf = new Configuration(false);
         // standard configs should be fine
-        PhoenixIndexRpcSchedulerFactory factory = new PhoenixIndexRpcSchedulerFactory();
+        PhoenixRpcSchedulerFactory factory = new PhoenixRpcSchedulerFactory();
         factory.create(conf, null);
 
-        setMinMax(conf, 0, 4);
+        // test priorities less than HBase range
+        setPriorities(conf, -4, -1);
         factory.create(conf, null);
 
-        setMinMax(conf, 201, 202);
+        // test priorities greater than HBase range
+        setPriorities(conf, 1001, 1002);
         factory.create(conf, null);
 
-        setMinMax(conf, 102, 101);
+        // test priorities in HBase range
+        setPriorities(conf, 1, 201);
         try {
             factory.create(conf, null);
-            fail("Should not have allowed max less than min");
+            fail("Should not have allowed priorities in HBase range");
         } catch (IllegalArgumentException e) {
             // expected
         }
-
-        setMinMax(conf, 5, 6);
+        setPriorities(conf, 1001, 1);
         try {
             factory.create(conf, null);
-            fail("Should not have allowed min in range");
+            fail("Should not have allowed priorities in HBase range");
         } catch (IllegalArgumentException e) {
             // expected
         }
-
-        setMinMax(conf, 6, 60);
+        
+        // test priorities in HBase range
+        setPriorities(conf, 1001, HConstants.NORMAL_QOS);
         try {
             factory.create(conf, null);
-            fail("Should not have allowed min/max in hbase range");
+            fail("Should not have allowed priorities in HBase range");
         } catch (IllegalArgumentException e) {
             // expected
         }
-
-        setMinMax(conf, 6, 101);
+        setPriorities(conf, HConstants.NORMAL_QOS, 1001);
         try {
             factory.create(conf, null);
-            fail("Should not have allowed in range");
+            fail("Should not have allowed priorities in HBase range");
+        } catch (IllegalArgumentException e) {
+            // expected
+        }
+        
+        // test priorities in HBase range
+        setPriorities(conf, 1001, HConstants.HIGH_QOS);
+        try {
+            factory.create(conf, null);
+            fail("Should not have allowed priorities in HBase range");
+        } catch (IllegalArgumentException e) {
+            // expected
+        }
+        setPriorities(conf, HConstants.HIGH_QOS, 1001);
+        try {
+            factory.create(conf, null);
+            fail("Should not have allowed priorities in HBase range");
         } catch (IllegalArgumentException e) {
             // expected
         }
     }
 
-    private void setMinMax(Configuration conf, int min, int max) {
-        conf.setInt(QueryServices.MIN_INDEX_PRIOIRTY_ATTRIB, min);
-        conf.setInt(QueryServices.MAX_INDEX_PRIOIRTY_ATTRIB, max);
+    private void setPriorities(Configuration conf, int indexPrioritymin, int metadataPriority) {
+        conf.setInt(QueryServices.INDEX_PRIOIRTY_ATTRIB, indexPrioritymin);
+        conf.setInt(QueryServices.METADATA_PRIOIRTY_ATTRIB, metadataPriority);
     }
 }

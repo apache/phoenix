@@ -15,14 +15,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.hbase.index.ipc;
+package org.apache.hadoop.hbase.ipc;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Abortable;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.ipc.PhoenixIndexRpcScheduler;
 import org.apache.hadoop.hbase.ipc.PriorityFunction;
 import org.apache.hadoop.hbase.ipc.RpcScheduler;
 import org.apache.hadoop.hbase.regionserver.RegionServerServices;
@@ -34,12 +33,12 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import com.google.common.base.Preconditions;
 
 /**
- * Factory to create a {@link PhoenixIndexRpcScheduler}. In this package so we can access the
+ * Factory to create a {@link PhoenixRpcScheduler}. In this package so we can access the
  * {@link SimpleRpcSchedulerFactory}.
  */
-public class PhoenixIndexRpcSchedulerFactory implements RpcSchedulerFactory {
+public class PhoenixRpcSchedulerFactory implements RpcSchedulerFactory {
 
-    private static final Log LOG = LogFactory.getLog(PhoenixIndexRpcSchedulerFactory.class);
+    private static final Log LOG = LogFactory.getLog(PhoenixRpcSchedulerFactory.class);
 
     private static final String VERSION_TOO_OLD_FOR_INDEX_RPC =
             "Running an older version of HBase (less than 0.98.4), Phoenix index RPC handling cannot be enabled.";
@@ -56,26 +55,19 @@ public class PhoenixIndexRpcSchedulerFactory implements RpcSchedulerFactory {
             throw e;
         }
 
-        int indexHandlerCount = conf.getInt(QueryServices.INDEX_HANDLER_COUNT_ATTRIB, QueryServicesOptions.DEFAULT_INDEX_HANDLER_COUNT);
-        int minPriority = getMinPriority(conf);
-        int maxPriority = conf.getInt(QueryServices.MAX_INDEX_PRIOIRTY_ATTRIB, QueryServicesOptions.DEFAULT_INDEX_MAX_PRIORITY);
-        // make sure the ranges are outside the warning ranges
-        Preconditions.checkArgument(maxPriority > minPriority, "Max index priority (" + maxPriority
-                + ") must be larger than min priority (" + minPriority + ")");
-        boolean allSmaller =
-                minPriority < HConstants.REPLICATION_QOS
-                        && maxPriority < HConstants.REPLICATION_QOS;
-        boolean allLarger = minPriority > HConstants.HIGH_QOS;
-        Preconditions.checkArgument(allSmaller || allLarger, "Index priority range (" + minPriority
-                + ",  " + maxPriority + ") must be outside HBase priority range ("
-                + HConstants.REPLICATION_QOS + ", " + HConstants.HIGH_QOS + ")");
+        // get the index priority configs
+        int indexPriority = getIndexPriority(conf);
+        validatePriority(indexPriority);
+        // get the metadata priority configs
+        int metadataPriority = getMetadataPriority(conf);
+        validatePriority(metadataPriority);
 
-        LOG.info("Using custom Phoenix Index RPC Handling with " + indexHandlerCount
-                + " handlers and priority range [" + minPriority + ", " + maxPriority + ")");
+        // validate index and metadata priorities are not the same
+        Preconditions.checkArgument(indexPriority != metadataPriority, "Index and Metadata priority must not be same "+ indexPriority);
+        LOG.info("Using custom Phoenix Index RPC Handling with index rpc priority " + indexPriority + " and metadata rpc priority " + metadataPriority);
 
-        PhoenixIndexRpcScheduler scheduler =
-                new PhoenixIndexRpcScheduler(indexHandlerCount, conf, delegate, minPriority,
-                        maxPriority);
+        PhoenixRpcScheduler scheduler =
+                new PhoenixRpcScheduler(conf, delegate, indexPriority, metadataPriority);
         return scheduler;
     }
 
@@ -84,7 +76,20 @@ public class PhoenixIndexRpcSchedulerFactory implements RpcSchedulerFactory {
         return create(configuration, priorityFunction, null);
     }
 
-    public static int getMinPriority(Configuration conf) {
-        return conf.getInt(QueryServices.MIN_INDEX_PRIOIRTY_ATTRIB, QueryServicesOptions.DEFAULT_INDEX_MIN_PRIORITY);
+    /**
+     * Validates that the given priority does not overlap with the HBase priority range
+     */
+    private void validatePriority(int priority) {
+        Preconditions.checkArgument( priority < HConstants.NORMAL_QOS || priority > HConstants.HIGH_QOS, "priority cannot be within hbase priority range " 
+        			+ HConstants.NORMAL_QOS +" to " + HConstants.HIGH_QOS ); 
     }
+
+    public static int getIndexPriority(Configuration conf) {
+        return conf.getInt(QueryServices.INDEX_PRIOIRTY_ATTRIB, QueryServicesOptions.DEFAULT_INDEX_PRIORITY);
+    }
+    
+    public static int getMetadataPriority(Configuration conf) {
+        return conf.getInt(QueryServices.METADATA_PRIOIRTY_ATTRIB, QueryServicesOptions.DEFAULT_METADATA_PRIORITY);
+    }
+    
 }

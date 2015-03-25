@@ -44,9 +44,9 @@ public class PhoenixIndexRpcSchedulerTest {
     public void testIndexPriorityWritesToIndexHandler() throws Exception {
         RpcScheduler mock = Mockito.mock(RpcScheduler.class);
 
-        PhoenixIndexRpcScheduler scheduler = new PhoenixIndexRpcScheduler(10, conf, mock, 200, 250);
+        PhoenixRpcScheduler scheduler = new PhoenixRpcScheduler(conf, mock, 200, 250);
         BalancedQueueRpcExecutor executor = new BalancedQueueRpcExecutor("test-queue", 1, 1, 1);
-        scheduler.setExecutorForTesting(executor);
+        scheduler.setIndexExecutorForTesting(executor);
         dispatchCallWithPriority(scheduler, 200);
         List<BlockingQueue<CallRunner>> queues = executor.getQueues();
         assertEquals(1, queues.size());
@@ -54,8 +54,8 @@ public class PhoenixIndexRpcSchedulerTest {
         queue.poll(20, TimeUnit.SECONDS);
 
         // try again, this time we tweak the ranges we support
-        scheduler = new PhoenixIndexRpcScheduler(10, conf, mock, 101, 110);
-        scheduler.setExecutorForTesting(executor);
+        scheduler = new PhoenixRpcScheduler(conf, mock, 101, 110);
+        scheduler.setIndexExecutorForTesting(executor);
         dispatchCallWithPriority(scheduler, 101);
         queue.poll(20, TimeUnit.SECONDS);
 
@@ -71,14 +71,14 @@ public class PhoenixIndexRpcSchedulerTest {
     @Test
     public void testDelegateWhenOutsideRange() throws Exception {
         RpcScheduler mock = Mockito.mock(RpcScheduler.class);
-        PhoenixIndexRpcScheduler scheduler = new PhoenixIndexRpcScheduler(10, conf, mock, 200, 250);
+        PhoenixRpcScheduler scheduler = new PhoenixRpcScheduler(conf, mock, 200, 250);
         dispatchCallWithPriority(scheduler, 100);
-        dispatchCallWithPriority(scheduler, 250);
+        dispatchCallWithPriority(scheduler, 251);
 
         // try again, this time we tweak the ranges we support
-        scheduler = new PhoenixIndexRpcScheduler(10, conf, mock, 101, 110);
+        scheduler = new PhoenixRpcScheduler(conf, mock, 101, 110);
         dispatchCallWithPriority(scheduler, 200);
-        dispatchCallWithPriority(scheduler, 110);
+        dispatchCallWithPriority(scheduler, 111);
 
         Mockito.verify(mock, Mockito.times(4)).init(Mockito.any(Context.class));
         Mockito.verify(mock, Mockito.times(4)).dispatch(Mockito.any(CallRunner.class));
