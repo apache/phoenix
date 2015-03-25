@@ -246,20 +246,18 @@ public class PhoenixRpcIT extends BaseTest {
     @Test
     public void testMetadataQos() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn1 = driver.connect(url, props);
-        Connection conn2 = driver.connect(url, props);
+        Connection conn = driver.connect(url, props);
         try {
             // create the table 
-            conn1.createStatement().execute(
+            conn.createStatement().execute(
                     "CREATE TABLE " + DATA_TABLE_FULL_NAME + " (k VARCHAR NOT NULL PRIMARY KEY, v VARCHAR)");
             // query the table from another connection, so that SYSTEM.STATS will be used 
-            conn1.createStatement().execute("SELECT * FROM "+DATA_TABLE_FULL_NAME);
-            
-            // verify that that index queue is used only once (for the first upsert)
+            conn.createStatement().execute("SELECT * FROM "+DATA_TABLE_FULL_NAME);
+            // verify that that metadata queue is used once 
             Mockito.verify(metadataRpcExecutor).dispatch(Mockito.any(CallRunner.class));
         }
         finally {
-            conn1.close();
+            conn.close();
         }
     }
 
