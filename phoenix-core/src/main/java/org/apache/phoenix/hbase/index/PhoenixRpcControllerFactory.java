@@ -73,10 +73,10 @@ public class PhoenixRpcControllerFactory extends RpcControllerFactory {
         public void setPriority(final TableName tn) {
             // this is function is called for hbase system tables, phoenix system tables and index tables 
             if (SchemaUtil.isSystemDataTable(tn.getNameAsString())) {
-                setPriority(this.indexPriority);
+                setPriority(this.metadataPriority);
             } 
             else if (!tn.isSystemTable()) {
-                setPriority(this.metadataPriority);
+                setPriority(this.indexPriority);
             } 
             else {
                 super.setPriority(tn);

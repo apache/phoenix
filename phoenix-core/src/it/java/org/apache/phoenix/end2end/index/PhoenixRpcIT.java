@@ -119,122 +119,143 @@ public class PhoenixRpcIT extends BaseTest {
     }
     
     @Test
-    public void testIndexWriteQos() throws Exception { 
+    public void testIndexQos() throws Exception { 
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = driver.connect(url, props);
-
-        // create the table 
-        conn.createStatement().execute(
-                "CREATE TABLE " + DATA_TABLE_FULL_NAME + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
-
-        // create the index 
-        conn.createStatement().execute(
-                "CREATE INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_FULL_NAME + " (v1) INCLUDE (v2)");
-
-        byte[] dataTableName = Bytes.toBytes(DATA_TABLE_FULL_NAME);
-        byte[] indexTableName = Bytes.toBytes(INDEX_TABLE_FULL_NAME);
-        MiniHBaseCluster cluster = util.getHBaseCluster();
-        HMaster master = cluster.getMaster();
-        AssignmentManager am = master.getAssignmentManager();
-
-        // verify there is only a single region for data table
-        List<HRegionInfo> tableRegions = admin.getTableRegions(dataTableName);
-        assertEquals("Expected single region for " + dataTableName, tableRegions.size(), 1);
-        HRegionInfo dataHri = tableRegions.get(0);
-
-        // verify there is only a single region for index table
-        tableRegions = admin.getTableRegions(indexTableName);
-        HRegionInfo indexHri = tableRegions.get(0);
-        assertEquals("Expected single region for " + indexTableName, tableRegions.size(), 1);
-
-        ServerName dataServerName = am.getRegionStates().getRegionServerOfRegion(dataHri);
-        ServerName indexServerName = am.getRegionStates().getRegionServerOfRegion(indexHri);
-
-        // if data table and index table are on same region server, move the index table to the other region server
-        if (dataServerName.equals(indexServerName)) {
-            HRegionServer server1 = util.getHBaseCluster().getRegionServer(0);
-            HRegionServer server2 = util.getHBaseCluster().getRegionServer(1);
-            HRegionServer dstServer = null;
-            HRegionServer srcServer = null;
-            if (server1.getServerName().equals(indexServerName)) {
-                dstServer = server2;
-                srcServer = server1;
-            } else {
-                dstServer = server1;
-                srcServer = server2;
+        try {
+            // create the table 
+            conn.createStatement().execute(
+                    "CREATE TABLE " + DATA_TABLE_FULL_NAME + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
+    
+            // create the index 
+            conn.createStatement().execute(
+                    "CREATE INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_FULL_NAME + " (v1) INCLUDE (v2)");
+    
+            byte[] dataTableName = Bytes.toBytes(DATA_TABLE_FULL_NAME);
+            byte[] indexTableName = Bytes.toBytes(INDEX_TABLE_FULL_NAME);
+            MiniHBaseCluster cluster = util.getHBaseCluster();
+            HMaster master = cluster.getMaster();
+            AssignmentManager am = master.getAssignmentManager();
+    
+            // verify there is only a single region for data table
+            List<HRegionInfo> tableRegions = admin.getTableRegions(dataTableName);
+            assertEquals("Expected single region for " + dataTableName, tableRegions.size(), 1);
+            HRegionInfo dataHri = tableRegions.get(0);
+    
+            // verify there is only a single region for index table
+            tableRegions = admin.getTableRegions(indexTableName);
+            HRegionInfo indexHri = tableRegions.get(0);
+            assertEquals("Expected single region for " + indexTableName, tableRegions.size(), 1);
+    
+            ServerName dataServerName = am.getRegionStates().getRegionServerOfRegion(dataHri);
+            ServerName indexServerName = am.getRegionStates().getRegionServerOfRegion(indexHri);
+    
+            // if data table and index table are on same region server, move the index table to the other region server
+            if (dataServerName.equals(indexServerName)) {
+                HRegionServer server1 = util.getHBaseCluster().getRegionServer(0);
+                HRegionServer server2 = util.getHBaseCluster().getRegionServer(1);
+                HRegionServer dstServer = null;
+                HRegionServer srcServer = null;
+                if (server1.getServerName().equals(indexServerName)) {
+                    dstServer = server2;
+                    srcServer = server1;
+                } else {
+                    dstServer = server1;
+                    srcServer = server2;
+                }
+                byte[] encodedRegionNameInBytes = indexHri.getEncodedNameAsBytes();
+                admin.move(encodedRegionNameInBytes, Bytes.toBytes(dstServer.getServerName().getServerName()));
+                while (dstServer.getOnlineRegion(indexHri.getRegionName()) == null
+                        || dstServer.getRegionsInTransitionInRS().containsKey(encodedRegionNameInBytes)
+                        || srcServer.getRegionsInTransitionInRS().containsKey(encodedRegionNameInBytes)
+                        || master.getAssignmentManager().getRegionStates().isRegionsInTransition()) {
+                    // wait for the move to be finished
+                    Thread.sleep(1);
+                }
             }
-            byte[] encodedRegionNameInBytes = indexHri.getEncodedNameAsBytes();
-            admin.move(encodedRegionNameInBytes, Bytes.toBytes(dstServer.getServerName().getServerName()));
-            while (dstServer.getOnlineRegion(indexHri.getRegionName()) == null
-                    || dstServer.getRegionsInTransitionInRS().containsKey(encodedRegionNameInBytes)
-                    || srcServer.getRegionsInTransitionInRS().containsKey(encodedRegionNameInBytes)
-                    || master.getAssignmentManager().getRegionStates().isRegionsInTransition()) {
-                // wait for the move to be finished
-                Thread.sleep(1);
-            }
+    
+            dataHri = admin.getTableRegions(dataTableName).get(0);
+            dataServerName = am.getRegionStates().getRegionServerOfRegion(dataHri);
+            indexHri = admin.getTableRegions(indexTableName).get(0);
+            indexServerName = am.getRegionStates().getRegionServerOfRegion(indexHri);
+    
+            // verify index and data tables are on different servers
+            assertNotEquals("Index and Data table should be on different region servers dataServer " + dataServerName
+                    + " indexServer " + indexServerName, dataServerName, indexServerName);
+    
+            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + DATA_TABLE_FULL_NAME + " VALUES(?,?,?)");
+            stmt.setString(1, "k1");
+            stmt.setString(2, "v1");
+            stmt.setString(3, "v2");
+            stmt.execute();
+            conn.commit();
+    
+            // run select query that should use the index
+            String selectSql = "SELECT k, v2 from " + DATA_TABLE_FULL_NAME + " WHERE v1=?";
+            stmt = conn.prepareStatement(selectSql);
+            stmt.setString(1, "v1");
+    
+            // verify that the query does a range scan on the index table
+            ResultSet rs = stmt.executeQuery("EXPLAIN " + selectSql);
+            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER S.I ['v1']", QueryUtil.getExplainPlan(rs));
+    
+            // verify that the correct results are returned
+            rs = stmt.executeQuery();
+            assertTrue(rs.next());
+            assertEquals("k1", rs.getString(1));
+            assertEquals("v2", rs.getString(2));
+            assertFalse(rs.next());
+            
+            // drop index table 
+            conn.createStatement().execute(
+                    "DROP INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_FULL_NAME );
+            // create a data table with the same name as the index table 
+            conn.createStatement().execute(
+                    "CREATE TABLE " + INDEX_TABLE_FULL_NAME + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
+            
+            // upsert one row to the table (which has the same table name as the previous index table)
+            stmt = conn.prepareStatement("UPSERT INTO " + INDEX_TABLE_FULL_NAME + " VALUES(?,?,?)");
+            stmt.setString(1, "k1");
+            stmt.setString(2, "v1");
+            stmt.setString(3, "v2");
+            stmt.execute();
+            conn.commit();
+            
+            // run select query on the new table
+            selectSql = "SELECT k, v2 from " + INDEX_TABLE_FULL_NAME + " WHERE v1=?";
+            stmt = conn.prepareStatement(selectSql);
+            stmt.setString(1, "v1");
+    
+            // verify that the correct results are returned
+            rs = stmt.executeQuery();
+            assertTrue(rs.next());
+            assertEquals("k1", rs.getString(1));
+            assertEquals("v2", rs.getString(2));
+            assertFalse(rs.next());
+            
+            // verify that that index queue is used only once (for the first upsert)
+            Mockito.verify(spyRpcExecutor).dispatch(Mockito.any(CallRunner.class));
         }
-
-        dataHri = admin.getTableRegions(dataTableName).get(0);
-        dataServerName = am.getRegionStates().getRegionServerOfRegion(dataHri);
-        indexHri = admin.getTableRegions(indexTableName).get(0);
-        indexServerName = am.getRegionStates().getRegionServerOfRegion(indexHri);
-
-        // verify index and data tables are on different servers
-        assertNotEquals("Index and Data table should be on different region servers dataServer " + dataServerName
-                + " indexServer " + indexServerName, dataServerName, indexServerName);
-
-        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + DATA_TABLE_FULL_NAME + " VALUES(?,?,?)");
-        stmt.setString(1, "k1");
-        stmt.setString(2, "v1");
-        stmt.setString(3, "v2");
-        stmt.execute();
-        conn.commit();
-
-        // run select query that should use the index
-        String selectSql = "SELECT k, v2 from " + DATA_TABLE_FULL_NAME + " WHERE v1=?";
-        stmt = conn.prepareStatement(selectSql);
-        stmt.setString(1, "v1");
-
-        // verify that the query does a range scan on the index table
-        ResultSet rs = stmt.executeQuery("EXPLAIN " + selectSql);
-        assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER S.I ['v1']", QueryUtil.getExplainPlan(rs));
-
-        // verify that the correct results are returned
-        rs = stmt.executeQuery();
-        assertTrue(rs.next());
-        assertEquals("k1", rs.getString(1));
-        assertEquals("v2", rs.getString(2));
-        assertFalse(rs.next());
-        
-        // drop index table 
-        conn.createStatement().execute(
-                "DROP INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_FULL_NAME );
-        // create a data table with the same name as the index table 
-        conn.createStatement().execute(
-                "CREATE TABLE " + INDEX_TABLE_FULL_NAME + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
-        
-        // upsert one row to the table (which has the same table name as the previous index table)
-        stmt = conn.prepareStatement("UPSERT INTO " + INDEX_TABLE_FULL_NAME + " VALUES(?,?,?)");
-        stmt.setString(1, "k1");
-        stmt.setString(2, "v1");
-        stmt.setString(3, "v2");
-        stmt.execute();
-        conn.commit();
-        
-        // run select query on the new table
-        selectSql = "SELECT k, v2 from " + INDEX_TABLE_FULL_NAME + " WHERE v1=?";
-        stmt = conn.prepareStatement(selectSql);
-        stmt.setString(1, "v1");
-
-        // verify that the correct results are returned
-        rs = stmt.executeQuery();
-        assertTrue(rs.next());
-        assertEquals("k1", rs.getString(1));
-        assertEquals("v2", rs.getString(2));
-        assertFalse(rs.next());
-        
-        // verify that that index queue is used only once (for the first upsert)
-        Mockito.verify(spyRpcExecutor).dispatch(Mockito.any(CallRunner.class));
+        finally {
+            conn.close();
+        }
+    }
+    
+    @Test
+    public void testMetadataQos() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn1 = driver.connect(url, props);
+        Connection conn2 = driver.connect(url, props);
+        try {
+            // create the table 
+            conn1.createStatement().execute(
+                    "CREATE TABLE " + DATA_TABLE_FULL_NAME + " (k VARCHAR NOT NULL PRIMARY KEY, v VARCHAR)");
+            // query the table from another connection, so that SYSTEM.STATS will be used 
+            conn2.createStatement().execute("SELECT * FROM "+DATA_TABLE_FULL_NAME);
+        }
+        finally {
+            conn1.close();
+        }
     }
 
 }
