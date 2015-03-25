@@ -21,7 +21,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.phoenix.hbase.index.ipc.PhoenixIndexRpcSchedulerFactory;
+import org.apache.phoenix.hbase.index.ipc.PhoenixRpcSchedulerFactory;
 import org.apache.phoenix.query.QueryServices;
 import org.junit.Test;
 
@@ -31,7 +31,7 @@ public class PhoenixIndexRpcSchedulerFactoryTest {
     public void ensureInstantiation() throws Exception {
         Configuration conf = new Configuration(false);
         conf.setClass(HRegionServer.REGION_SERVER_RPC_SCHEDULER_FACTORY_CLASS,
-            PhoenixIndexRpcSchedulerFactory.class, RpcSchedulerFactory.class);
+            PhoenixRpcSchedulerFactory.class, RpcSchedulerFactory.class);
         // kinda lame that we copy the copy from the regionserver to do this and can't use a static
         // method, but meh
         try {
@@ -39,7 +39,7 @@ public class PhoenixIndexRpcSchedulerFactoryTest {
                     conf.getClass(HRegionServer.REGION_SERVER_RPC_SCHEDULER_FACTORY_CLASS,
                         SimpleRpcSchedulerFactory.class);
             Object o = rpcSchedulerFactoryClass.newInstance();
-            assertTrue(o instanceof PhoenixIndexRpcSchedulerFactory);
+            assertTrue(o instanceof PhoenixRpcSchedulerFactory);
         } catch (InstantiationException e) {
             assertTrue("Should not have got an exception when instantiing the rpc scheduler: " + e,
                 false);
@@ -57,7 +57,7 @@ public class PhoenixIndexRpcSchedulerFactoryTest {
     public void testValidateIndexPriorityRanges() throws Exception {
         Configuration conf = new Configuration(false);
         // standard configs should be fine
-        PhoenixIndexRpcSchedulerFactory factory = new PhoenixIndexRpcSchedulerFactory();
+        PhoenixRpcSchedulerFactory factory = new PhoenixRpcSchedulerFactory();
         factory.create(conf, null);
 
         setMinMax(conf, 0, 4);

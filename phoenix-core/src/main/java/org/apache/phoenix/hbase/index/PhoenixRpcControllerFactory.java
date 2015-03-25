@@ -26,52 +26,57 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.ipc.DelegatingPayloadCarryingRpcController;
 import org.apache.hadoop.hbase.ipc.PayloadCarryingRpcController;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
-import org.apache.phoenix.hbase.index.ipc.PhoenixIndexRpcSchedulerFactory;
+import org.apache.phoenix.hbase.index.ipc.PhoenixRpcSchedulerFactory;
 import org.apache.phoenix.util.SchemaUtil;
 
 /**
  * {@link RpcControllerFactory} that overrides the standard {@link PayloadCarryingRpcController} to
  * allow the configured index tables (via {@link #INDEX_TABLE_NAMES_KEY}) to use the Index priority.
  */
-public class IndexQosRpcControllerFactory extends RpcControllerFactory {
+public class PhoenixRpcControllerFactory extends RpcControllerFactory {
 
     public static final String INDEX_TABLE_NAMES_KEY = "phoenix.index.rpc.controller.index-tables";
 
-    public IndexQosRpcControllerFactory(Configuration conf) {
+    public PhoenixRpcControllerFactory(Configuration conf) {
         super(conf);
     }
 
     @Override
     public PayloadCarryingRpcController newController() {
         PayloadCarryingRpcController delegate = super.newController();
-        return new IndexQosRpcController(delegate, conf);
+        return new PhoenixRpcController(delegate, conf);
     }
 
     @Override
     public PayloadCarryingRpcController newController(CellScanner cellScanner) {
         PayloadCarryingRpcController delegate = super.newController(cellScanner);
-        return new IndexQosRpcController(delegate, conf);
+        return new PhoenixRpcController(delegate, conf);
     }
 
     @Override
     public PayloadCarryingRpcController newController(List<CellScannable> cellIterables) {
         PayloadCarryingRpcController delegate = super.newController(cellIterables);
-        return new IndexQosRpcController(delegate, conf);
+        return new PhoenixRpcController(delegate, conf);
     }
 
-    private class IndexQosRpcController extends DelegatingPayloadCarryingRpcController {
+    private class PhoenixRpcController extends DelegatingPayloadCarryingRpcController {
 
-        private int priority;
+        private int indexPriority;
+        private int metadataPriority;
 
-        public IndexQosRpcController(PayloadCarryingRpcController delegate, Configuration conf) {
+        public PhoenixRpcController(PayloadCarryingRpcController delegate, Configuration conf) {
             super(delegate);
-            this.priority = PhoenixIndexRpcSchedulerFactory.getMinPriority(conf);
+            this.indexPriority = PhoenixRpcSchedulerFactory.getIndexMinPriority(conf);
+            this.metadataPriority = PhoenixRpcSchedulerFactory.getMetadataMinPriority(conf);
         }
         @Override
         public void setPriority(final TableName tn) {
-            // if its an index table, then we override to the index priority
-            if (!tn.isSystemTable() &&  !SchemaUtil.isSystemDataTable(tn.getNameAsString())) {
-                setPriority(this.priority);
+            // this is function is called for hbase system tables, phoenix system tables and index tables 
+            if (SchemaUtil.isSystemDataTable(tn.getNameAsString())) {
+                setPriority(this.indexPriority);
+            } 
+            else if (!tn.isSystemTable()) {
+                setPriority(this.metadataPriority);
             } 
             else {
                 super.setPriority(tn);

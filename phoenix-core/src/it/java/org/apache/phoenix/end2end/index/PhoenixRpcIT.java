@@ -35,7 +35,7 @@ import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.ipc.BalancedQueueRpcExecutor;
 import org.apache.hadoop.hbase.ipc.CallRunner;
-import org.apache.hadoop.hbase.ipc.PhoenixIndexRpcScheduler;
+import org.apache.hadoop.hbase.ipc.PhoenixRpcScheduler;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
 import org.apache.hadoop.hbase.ipc.RpcExecutor;
 import org.apache.hadoop.hbase.ipc.RpcScheduler;
@@ -45,8 +45,8 @@ import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.regionserver.RegionServerServices;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
-import org.apache.phoenix.hbase.index.IndexQosRpcControllerFactory;
-import org.apache.phoenix.hbase.index.ipc.PhoenixIndexRpcSchedulerFactory;
+import org.apache.phoenix.hbase.index.PhoenixRpcControllerFactory;
+import org.apache.phoenix.hbase.index.ipc.PhoenixRpcSchedulerFactory;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
@@ -62,7 +62,7 @@ import org.mockito.Mockito;
 
 
 @Category(NeedsOwnMiniClusterTest.class)
-public class IndexQosIT extends BaseTest {
+public class PhoenixRpcIT extends BaseTest {
 
     private static final String SCHEMA_NAME = "S";
     private static final String INDEX_TABLE_NAME = "I";
@@ -80,11 +80,11 @@ public class IndexQosIT extends BaseTest {
     /**
      * Factory that uses a spyed RpcExecutor
      */
-    public static class TestPhoenixIndexRpcSchedulerFactory extends PhoenixIndexRpcSchedulerFactory {
+    public static class TestPhoenixIndexRpcSchedulerFactory extends PhoenixRpcSchedulerFactory {
         @Override
         public RpcScheduler create(Configuration conf, RegionServerServices services) {
-            PhoenixIndexRpcScheduler phoenixIndexRpcScheduler = (PhoenixIndexRpcScheduler)super.create(conf, services);
-            phoenixIndexRpcScheduler.setExecutorForTesting(spyRpcExecutor);
+            PhoenixRpcScheduler phoenixIndexRpcScheduler = (PhoenixRpcScheduler)super.create(conf, services);
+            phoenixIndexRpcScheduler.setIndexExecutorForTesting(spyRpcExecutor);
             return phoenixIndexRpcScheduler;
         }
     }
@@ -95,7 +95,7 @@ public class IndexQosIT extends BaseTest {
         setUpConfigForMiniCluster(conf);
         conf.set(HRegionServer.REGION_SERVER_RPC_SCHEDULER_FACTORY_CLASS,
                 TestPhoenixIndexRpcSchedulerFactory.class.getName());
-        conf.set(RpcControllerFactory.CUSTOM_CONTROLLER_CONF_KEY, IndexQosRpcControllerFactory.class.getName());
+        conf.set(RpcControllerFactory.CUSTOM_CONTROLLER_CONF_KEY, PhoenixRpcControllerFactory.class.getName());
         util = new HBaseTestingUtility(conf);
         // start cluster with 2 region servers
         util.startMiniCluster(NUM_SLAVES);
