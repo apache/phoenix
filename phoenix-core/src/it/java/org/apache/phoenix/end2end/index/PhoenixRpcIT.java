@@ -75,8 +75,9 @@ public class PhoenixRpcIT extends BaseTest {
     private HBaseTestingUtility util;
     private HBaseAdmin admin;
     private Configuration conf;
-    private static RpcExecutor spyRpcExecutor = Mockito.spy(new BalancedQueueRpcExecutor("test-queue", 30, 1, 300));
-
+    private static RpcExecutor indexRpcExecutor = Mockito.spy(new BalancedQueueRpcExecutor("test-index-queue", 30, 1, 300));
+    private static RpcExecutor metadataRpcExecutor = Mockito.spy(new BalancedQueueRpcExecutor("test-metataqueue", 30, 1, 300));
+    
     /**
      * Factory that uses a spyed RpcExecutor
      */
@@ -84,7 +85,7 @@ public class PhoenixRpcIT extends BaseTest {
         @Override
         public RpcScheduler create(Configuration conf, RegionServerServices services) {
             PhoenixRpcScheduler phoenixIndexRpcScheduler = (PhoenixRpcScheduler)super.create(conf, services);
-            phoenixIndexRpcScheduler.setIndexExecutorForTesting(spyRpcExecutor);
+            phoenixIndexRpcScheduler.setIndexExecutorForTesting(indexRpcExecutor);
             return phoenixIndexRpcScheduler;
         }
     }
@@ -234,7 +235,7 @@ public class PhoenixRpcIT extends BaseTest {
             assertFalse(rs.next());
             
             // verify that that index queue is used only once (for the first upsert)
-            Mockito.verify(spyRpcExecutor).dispatch(Mockito.any(CallRunner.class));
+            Mockito.verify(indexRpcExecutor).dispatch(Mockito.any(CallRunner.class));
         }
         finally {
             conn.close();
@@ -252,6 +253,9 @@ public class PhoenixRpcIT extends BaseTest {
                     "CREATE TABLE " + DATA_TABLE_FULL_NAME + " (k VARCHAR NOT NULL PRIMARY KEY, v VARCHAR)");
             // query the table from another connection, so that SYSTEM.STATS will be used 
             conn2.createStatement().execute("SELECT * FROM "+DATA_TABLE_FULL_NAME);
+            
+            // verify that that index queue is used only once (for the first upsert)
+            Mockito.verify(metadataRpcExecutor).dispatch(Mockito.any(CallRunner.class));
         }
         finally {
             conn1.close();
