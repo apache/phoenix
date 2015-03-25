@@ -60,7 +60,7 @@ public class PhoenixIndexRpcSchedulerFactoryTest {
         PhoenixRpcSchedulerFactory factory = new PhoenixRpcSchedulerFactory();
         factory.create(conf, null);
 
-        setMinMax(conf, 0, 4);
+        setMinMax(conf, -4, -1);
         factory.create(conf, null);
 
         setMinMax(conf, 101, 102);

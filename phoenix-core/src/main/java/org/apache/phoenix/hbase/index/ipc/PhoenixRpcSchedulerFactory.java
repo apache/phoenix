@@ -75,7 +75,7 @@ public class PhoenixRpcSchedulerFactory implements RpcSchedulerFactory {
         validatePriority(indexMinPriority, indexMaxPriority);
         
         //validate index and metadata priorities do not overlap
-        Preconditions.checkArgument(checkForOverlap(indexMinPriority, indexMaxPriority, metadataMinPriority, metadataMaxPriority), "Priority ranges ("
+        Preconditions.checkArgument(doesNotOverlap(indexMinPriority, indexMaxPriority, metadataMinPriority, metadataMaxPriority), "Priority ranges ("
                 + indexMinPriority + ",  " + indexMaxPriority + ") and  (" + metadataMinPriority + ", " + metadataMaxPriority
                 + ") must not overlap");
 
@@ -96,7 +96,7 @@ public class PhoenixRpcSchedulerFactory implements RpcSchedulerFactory {
         Preconditions.checkArgument(maxPriority > minPriority, "Max index priority (" + maxPriority
                 + ") must be larger than min priority (" + minPriority + ")");
         Preconditions.checkArgument(
-                checkForOverlap(minPriority, maxPriority, HConstants.NORMAL_QOS, HConstants.HIGH_QOS),
+                doesNotOverlap(minPriority, maxPriority, HConstants.NORMAL_QOS, HConstants.HIGH_QOS),
                 "Index priority range (" + minPriority + ",  " + maxPriority
                         + ") must be outside HBase priority range (" + HConstants.NORMAL_QOS + ", "
                         + HConstants.HIGH_QOS + ")");
@@ -105,8 +105,8 @@ public class PhoenixRpcSchedulerFactory implements RpcSchedulerFactory {
     /**
      * Returns true if the two priority ranges overlap
      */
-    private boolean checkForOverlap(int minPriority1, int maxPriority1, int minPriority2, int maxPriority2) {
-        return minPriority1 > maxPriority2 || maxPriority1 < minPriority1;
+    private boolean doesNotOverlap(int minPriority1, int maxPriority1, int minPriority2, int maxPriority2) {
+        return minPriority1 > maxPriority2 || maxPriority1 < minPriority2;
     }
 
     public static int getIndexMinPriority(Configuration conf) {
