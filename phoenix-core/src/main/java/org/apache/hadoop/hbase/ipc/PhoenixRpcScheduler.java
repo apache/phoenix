@@ -133,7 +133,7 @@ public class PhoenixRpcScheduler extends RpcScheduler {
     
     @VisibleForTesting
     public void setMetadataExecutorForTesting(RpcExecutor executor) {
-        this.indexCallExecutor = executor;
+        this.metadataCallExecutor = executor;
     }
     
     

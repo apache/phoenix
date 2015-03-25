@@ -86,6 +86,7 @@ public class PhoenixRpcIT extends BaseTest {
         public RpcScheduler create(Configuration conf, RegionServerServices services) {
             PhoenixRpcScheduler phoenixIndexRpcScheduler = (PhoenixRpcScheduler)super.create(conf, services);
             phoenixIndexRpcScheduler.setIndexExecutorForTesting(indexRpcExecutor);
+            phoenixIndexRpcScheduler.setMetadataExecutorForTesting(metadataRpcExecutor);
             return phoenixIndexRpcScheduler;
         }
     }
@@ -252,7 +253,7 @@ public class PhoenixRpcIT extends BaseTest {
             conn1.createStatement().execute(
                     "CREATE TABLE " + DATA_TABLE_FULL_NAME + " (k VARCHAR NOT NULL PRIMARY KEY, v VARCHAR)");
             // query the table from another connection, so that SYSTEM.STATS will be used 
-            conn2.createStatement().execute("SELECT * FROM "+DATA_TABLE_FULL_NAME);
+            conn1.createStatement().execute("SELECT * FROM "+DATA_TABLE_FULL_NAME);
             
             // verify that that index queue is used only once (for the first upsert)
             Mockito.verify(metadataRpcExecutor).dispatch(Mockito.any(CallRunner.class));

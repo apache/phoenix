@@ -85,7 +85,7 @@ public class PhoenixRpcSchedulerFactory implements RpcSchedulerFactory {
 
         PhoenixRpcScheduler scheduler =
                 new PhoenixRpcScheduler(indexHandlerCount, metadataHandlerCount, 
-                        conf, delegate, indexMinPriority,indexMaxPriority);
+                        conf, delegate, indexMinPriority, metadataMinPriority);
         return scheduler;
     }
 
