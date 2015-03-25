@@ -24,45 +24,34 @@ import org.apache.hadoop.conf.Configuration;
 import com.google.common.annotations.VisibleForTesting;
 
 /**
- * {@link RpcScheduler} that first checks to see if this is an index update before passing off the
+ * {@link RpcScheduler} that first checks to see if this is an index or metedata update before passing off the
  * call to the delegate {@link RpcScheduler}.
- * <p>
- * We reserve the range (1000, 1050], by default (though it is configurable), for index priority
- * writes. Currently, we don't do any prioritization within that range - all index writes are
- * treated with the same priority and put into the same queue.
  */
-public class PhoenixIndexRpcScheduler extends RpcScheduler {
+public class PhoenixRpcScheduler extends RpcScheduler {
 
     // copied from org.apache.hadoop.hbase.ipc.SimpleRpcScheduler in HBase 0.98.4
-    public static final String CALL_QUEUE_READ_SHARE_CONF_KEY = "ipc.server.callqueue.read.share";
-    public static final String CALL_QUEUE_HANDLER_FACTOR_CONF_KEY =
-            "ipc.server.callqueue.handler.factor";
+    private static final String CALL_QUEUE_HANDLER_FACTOR_CONF_KEY = "ipc.server.callqueue.handler.factor";
+    private static final String CALLQUEUE_LENGTH_CONF_KEY = "ipc.server.max.callqueue.length";
     private static final int DEFAULT_MAX_CALLQUEUE_LENGTH_PER_HANDLER = 10;
 
     private RpcScheduler delegate;
-    private int minPriority;
-    private int maxPriority;
-    private RpcExecutor callExecutor;
+    private int indexPriority;
+    private int metadataPriority;
+    private RpcExecutor indexCallExecutor;
+    private RpcExecutor metadataCallExecutor;
     private int port;
 
-    public PhoenixIndexRpcScheduler(int indexHandlerCount, Configuration conf,
-            RpcScheduler delegate, int minPriority, int maxPriority) {
-        int maxQueueLength =
-                conf.getInt("ipc.server.max.callqueue.length", indexHandlerCount
-                        * DEFAULT_MAX_CALLQUEUE_LENGTH_PER_HANDLER);
-
+    public PhoenixRpcScheduler(Configuration conf, RpcScheduler delegate, int indexPriority, int metadataPriority) {
         // copied from org.apache.hadoop.hbase.ipc.SimpleRpcScheduler in HBase 0.98.4
+        int maxQueueLength =  conf.getInt(CALLQUEUE_LENGTH_CONF_KEY, DEFAULT_MAX_CALLQUEUE_LENGTH_PER_HANDLER);
         float callQueuesHandlersFactor = conf.getFloat(CALL_QUEUE_HANDLER_FACTOR_CONF_KEY, 0);
-        int numCallQueues =
-                Math.max(1, Math.round(indexHandlerCount * callQueuesHandlersFactor));
+        int numQueues = Math.max(1, Math.round(callQueuesHandlersFactor));
 
-        this.minPriority = minPriority;
-        this.maxPriority = maxPriority;
+        this.indexPriority = indexPriority;
+        this.metadataPriority = metadataPriority;
         this.delegate = delegate;
-
-        this.callExecutor =
-                new BalancedQueueRpcExecutor("Index", indexHandlerCount, numCallQueues,
-                        maxQueueLength);
+        this.indexCallExecutor = new BalancedQueueRpcExecutor("Index", 1, numQueues, maxQueueLength);
+        this.metadataCallExecutor = new BalancedQueueRpcExecutor("Metadata", 1, numQueues, maxQueueLength);
     }
 
     @Override
@@ -74,21 +63,25 @@ public class PhoenixIndexRpcScheduler extends RpcScheduler {
     @Override
     public void start() {
         delegate.start();
-        callExecutor.start(port);
+        indexCallExecutor.start(port);
+        metadataCallExecutor.start(port);
     }
 
     @Override
     public void stop() {
         delegate.stop();
-        callExecutor.stop();
+        indexCallExecutor.stop();
+        metadataCallExecutor.stop();
     }
 
     @Override
     public void dispatch(CallRunner callTask) throws InterruptedException, IOException {
         RpcServer.Call call = callTask.getCall();
         int priority = call.header.getPriority();
-        if (minPriority <= priority && priority < maxPriority) {
-            callExecutor.dispatch(callTask);
+        if (indexPriority == priority) {
+            indexCallExecutor.dispatch(callTask);
+        } else if (metadataPriority == priority) {
+            metadataCallExecutor.dispatch(callTask);
         } else {
             delegate.dispatch(callTask);
         }
@@ -98,7 +91,7 @@ public class PhoenixIndexRpcScheduler extends RpcScheduler {
     public int getGeneralQueueLength() {
         // not the best way to calculate, but don't have a better way to hook
         // into metrics at the moment
-        return this.delegate.getGeneralQueueLength() + this.callExecutor.getQueueLength();
+        return this.delegate.getGeneralQueueLength() + this.indexCallExecutor.getQueueLength() + this.metadataCallExecutor.getQueueLength();
     }
 
     @Override
@@ -113,11 +106,18 @@ public class PhoenixIndexRpcScheduler extends RpcScheduler {
 
     @Override
     public int getActiveRpcHandlerCount() {
-        return this.delegate.getActiveRpcHandlerCount() + this.callExecutor.getActiveHandlerCount();
+        return this.delegate.getActiveRpcHandlerCount() + this.indexCallExecutor.getActiveHandlerCount() + this.metadataCallExecutor.getActiveHandlerCount();
     }
 
     @VisibleForTesting
-    public void setExecutorForTesting(RpcExecutor executor) {
-        this.callExecutor = executor;
+    public void setIndexExecutorForTesting(RpcExecutor executor) {
+        this.indexCallExecutor = executor;
     }
+    
+    @VisibleForTesting
+    public void setMetadataExecutorForTesting(RpcExecutor executor) {
+        this.metadataCallExecutor = executor;
+    }
+    
+    
 }
