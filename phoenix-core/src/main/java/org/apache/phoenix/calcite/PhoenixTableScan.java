@@ -69,6 +69,8 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
         for (RelOptRule rule : rules) {
             planner.addRule(rule);
         }
+        planner.addRule(PhoenixFilterScanMergeRule.INSTANCE);
+        planner.addRule(PhoenixProjectScanMergeRule.INSTANCE);
     }
 
     @Override
@@ -85,7 +87,17 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
             final Double selectivity = RelMetadataQuery.getSelectivity(this, filter);
             cost = cost.multiplyBy(selectivity);
         }
+        if (projects != null) {
+            final double projectFieldRatio = ((double) projects.size()) / getRowType().getFieldCount();
+            cost = cost.multiplyBy(projectFieldRatio);
+        }
         return cost;
+    }
+    
+    @Override
+    public double getRows() {
+        return super.getRows()
+                * RelMetadataQuery.getSelectivity(this, filter);
     }
 
     @Override
@@ -128,7 +140,7 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
         KeyValueSchemaBuilder builder = new KeyValueSchemaBuilder(0);
         List<Expression> exprs = Lists.<Expression> newArrayList();
         for (PColumn column : table.getColumns()) {
-            if (!SchemaUtil.isPKColumn(column)) {
+            if (!SchemaUtil.isPKColumn(column) || !implementor.getCurrentContext().isRetainPKColumns()) {
                 Expression expr = implementor.newColumnExpression(column.getPosition());
                 exprs.add(expr);
                 builder.addField(expr);                
