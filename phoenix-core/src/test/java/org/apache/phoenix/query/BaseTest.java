@@ -457,7 +457,7 @@ public abstract class BaseTest {
     }
     
     private static final String ORG_ID = "00D300000000XHP";
-    private static final int NUM_SLAVES_BASE = 1;
+    protected static int NUM_SLAVES_BASE = 1;
     
     protected static String getZKClientPort(Configuration conf) {
         return conf.get(QueryServices.ZOOKEEPER_PORT_ATTRIB);
@@ -531,9 +531,13 @@ public abstract class BaseTest {
     }
             
     protected static void setUpTestDriver(ReadOnlyProps props) throws Exception {
-        String url = checkClusterInitialized(props);
+        setUpTestDriver(props, props);
+    }
+    
+    protected static void setUpTestDriver(ReadOnlyProps serverProps, ReadOnlyProps clientProps) throws Exception {
+        String url = checkClusterInitialized(serverProps);
         if (driver == null) {
-            driver = initAndRegisterDriver(url, props);
+            driver = initAndRegisterDriver(url, clientProps);
         }
     }
 
@@ -557,7 +561,7 @@ public abstract class BaseTest {
         setUpConfigForMiniCluster(conf, overrideProps);
         utility = new HBaseTestingUtility(conf);
         try {
-            utility.startMiniCluster();
+            utility.startMiniCluster(NUM_SLAVES_BASE);
             // add shutdown hook to kill the mini cluster
             Runtime.getRuntime().addShutdownHook(new Thread() {
                 @Override

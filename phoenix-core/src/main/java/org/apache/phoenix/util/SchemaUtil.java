@@ -404,13 +404,6 @@ public class SchemaUtil {
         return false;
     }
     
-    /**
-     * Returns true if the given table is a system table (does not include future system indexes)
-     */
-    public static boolean isSystemDataTable(String fullTableName) {
-    	return PhoenixDatabaseMetaData.SYSTEM_TABLE_NAMES.contains(fullTableName);
-    }
-
     // Given the splits and the rowKeySchema, find out the keys that 
     public static byte[][] processSplits(byte[][] splits, LinkedHashSet<PColumn> pkColumns, Integer saltBucketNum, boolean defaultRowKeyOrder) throws SQLException {
         // FIXME: shouldn't this return if splits.length == 0?
