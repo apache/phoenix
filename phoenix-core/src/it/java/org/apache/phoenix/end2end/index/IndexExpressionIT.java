@@ -480,7 +480,7 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeIT {
             String expectedPlan = "CLIENT PARALLEL 1-WAY "
                     + (localIndex ? "RANGE SCAN OVER _LOCAL_IDX_" + fullDataTableName + " [-32768]"
                             : "FULL SCAN OVER INDEX_TEST.IDX")
-                    + "\n    SERVER FILTER BY FIRST KEY ONLY\n    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [TO_BIGINT((A.INT_COL1 + B.INT_COL2))]\nCLIENT MERGE SORT";
+                    + "\n    SERVER FILTER BY FIRST KEY ONLY\n    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [TO_BIGINT(\"(A.INT_COL1 + B.INT_COL2)\")]\nCLIENT MERGE SORT";
             assertEquals(expectedPlan, QueryUtil.getExplainPlan(rs));
             rs = conn.createStatement().executeQuery(groupBySql);
             assertTrue(rs.next());
@@ -531,7 +531,7 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeIT {
             String expectedPlan = "CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
                     + (localIndex ? "_LOCAL_IDX_" + fullDataTableName + " [-32768,0] - [-32768,*]"
                             : "INDEX_TEST.IDX [0] - [*]")
-                    + "\n    SERVER FILTER BY FIRST KEY ONLY\n    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [TO_BIGINT((A.INT_COL1 + 1))]\nCLIENT MERGE SORT";
+                    + "\n    SERVER FILTER BY FIRST KEY ONLY\n    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [TO_BIGINT(\"(A.INT_COL1 + 1)\")]\nCLIENT MERGE SORT";
             assertEquals(expectedPlan, QueryUtil.getExplainPlan(rs));
             rs = conn.createStatement().executeQuery(sql);
             assertTrue(rs.next());
