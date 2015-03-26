@@ -542,8 +542,15 @@ public class ParseNodeFactory {
     	return new ArrayConstructorNode(upsertStmtArray);
     }
 
-    public MultiplyParseNode negate(ParseNode child) {
-        return new MultiplyParseNode(Arrays.asList(child,this.literal(-1)));
+
+    public ParseNode negate(ParseNode child) {
+        // Prevents reparsing of -1 from becoming 1*-1 and 1*1*-1 with each re-parsing
+        if (LiteralParseNode.ONE.equals(child) && ((LiteralParseNode)child).getType().isCoercibleTo(
+                PDataType.LONG)) {
+            return LiteralParseNode.MINUS_ONE;
+        }
+        return new MultiplyParseNode(Arrays.asList(child,LiteralParseNode.MINUS_ONE));
+
     }
 
     public NotEqualParseNode notEqual(ParseNode lhs, ParseNode rhs) {

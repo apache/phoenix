@@ -37,6 +37,7 @@ public class LiteralParseNode extends TerminalParseNode {
     public static final ParseNode NULL = new LiteralParseNode(null);
     public static final ParseNode ZERO = new LiteralParseNode(0);
     public static final ParseNode ONE = new LiteralParseNode(1);
+    public static final ParseNode MINUS_ONE = new LiteralParseNode(-1L);
     
     private final Object value;
     private final PDataType type;
