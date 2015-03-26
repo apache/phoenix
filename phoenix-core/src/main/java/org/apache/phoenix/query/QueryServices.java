@@ -123,11 +123,9 @@ public interface QueryServices extends SQLCloseable {
     // Index will be partially re-built from index disable time stamp - following overlap time
     public static final String INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_TIME_ATTRIB =
         "phoenix.index.failure.handling.rebuild.overlap.time";
-    public static final String MIN_INDEX_PRIOIRTY_ATTRIB = "phoenix.regionserver.index.priority.min";
-    public static final String MAX_INDEX_PRIOIRTY_ATTRIB = "phoenix.regionserver.index.priority.max";
+    public static final String INDEX_PRIOIRTY_ATTRIB = "phoenix.regionserver.index.priority";
     public static final String INDEX_HANDLER_COUNT_ATTRIB = "phoenix.regionserver.index.handler.count";
-    public static final String MIN_METADATA_PRIOIRTY_ATTRIB = "phoenix.regionserver.metadata.priority.min";
-    public static final String MAX_METADATA_PRIOIRTY_ATTRIB = "phoenix.regionserver.metadata.priority.max";
+    public static final String METADATA_PRIOIRTY_ATTRIB = "phoenix.regionserver.metadata.priority";
     public static final String METADATA_HANDLER_COUNT_ATTRIB = "phoenix.regionserver.metadata.handler.count";
     public static final String ALLOW_LOCAL_INDEX_ATTRIB = "phoenix.index.allowLocalIndex";
 

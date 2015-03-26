@@ -15,13 +15,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.hbase.index.ipc;
+package org.apache.hadoop.hbase.ipc;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.ipc.PhoenixRpcScheduler;
 import org.apache.hadoop.hbase.ipc.RpcScheduler;
 import org.apache.hadoop.hbase.regionserver.RegionServerServices;
 import org.apache.hadoop.hbase.regionserver.RpcSchedulerFactory;
@@ -64,57 +63,44 @@ public class PhoenixRpcSchedulerFactory implements RpcSchedulerFactory {
 
         // get the index priority configs
         int indexHandlerCount = conf.getInt(QueryServices.INDEX_HANDLER_COUNT_ATTRIB, QueryServicesOptions.DEFAULT_INDEX_HANDLER_COUNT);
-        int indexMinPriority = getIndexMinPriority(conf);
-        int indexMaxPriority = conf.getInt(QueryServices.MAX_INDEX_PRIOIRTY_ATTRIB, QueryServicesOptions.DEFAULT_INDEX_MAX_PRIORITY);
-        validatePriority(indexMinPriority, indexMaxPriority);
+        int indexPriority = getIndexPriority(conf);
+        validatePriority(indexPriority);
         
         // get the metadata priority configs
         int metadataHandlerCount = conf.getInt(QueryServices.INDEX_HANDLER_COUNT_ATTRIB, QueryServicesOptions.DEFAULT_METADATA_HANDLER_COUNT);
-        int metadataMinPriority = getMetadataMinPriority(conf);
-        int metadataMaxPriority = conf.getInt(QueryServices.MAX_INDEX_PRIOIRTY_ATTRIB, QueryServicesOptions.DEFAULT_METADATA_MAX_PRIORITY);
-        validatePriority(indexMinPriority, indexMaxPriority);
-        
-        //validate index and metadata priorities do not overlap
-        Preconditions.checkArgument(doesNotOverlap(indexMinPriority, indexMaxPriority, metadataMinPriority, metadataMaxPriority), "Priority ranges ("
-                + indexMinPriority + ",  " + indexMaxPriority + ") and  (" + metadataMinPriority + ", " + metadataMaxPriority
-                + ") must not overlap");
+        int metadataPriority = getMetadataPriority(conf);
+        validatePriority(metadataPriority);
 
-        LOG.info("Using custom Phoenix Index RPC Handling with " + indexHandlerCount
-                + " index handlers and priority range [" + indexMinPriority + ", " + indexMaxPriority + " and " + metadataHandlerCount
-                + " metadata handlers and priority range [" + metadataMinPriority + ", " + metadataMaxPriority + ")");
+		// validate index and metadata priorities are not the same
+		Preconditions
+				.checkArgument(indexPriority != metadataPriority,
+						"Index and Metadata priority must not be same "
+								+ indexPriority);
+
+		LOG.info("Using custom Phoenix Index RPC Handling with "
+				+ indexHandlerCount + " index handlers and priority " + indexPriority + " and " 
+				+ metadataHandlerCount + " metadata handlers and priority " + metadataPriority);
 
         PhoenixRpcScheduler scheduler =
                 new PhoenixRpcScheduler(indexHandlerCount, metadataHandlerCount, 
-                        conf, delegate, indexMinPriority, metadataMinPriority);
+                        conf, delegate, indexPriority, metadataPriority);
         return scheduler;
     }
 
     /**
-     * Validates that the given priority range does not overlap with the HBase priority range
+     * Validates that the given priority does not overlap with the HBase priority range
      */
-    private void validatePriority(int minPriority, int maxPriority) {
-        Preconditions.checkArgument(maxPriority > minPriority, "Max index priority (" + maxPriority
-                + ") must be larger than min priority (" + minPriority + ")");
-        Preconditions.checkArgument(
-                doesNotOverlap(minPriority, maxPriority, HConstants.NORMAL_QOS, HConstants.HIGH_QOS),
-                "Index priority range (" + minPriority + ",  " + maxPriority
-                        + ") must be outside HBase priority range (" + HConstants.NORMAL_QOS + ", "
-                        + HConstants.HIGH_QOS + ")");
+    private void validatePriority(int priority) {
+        Preconditions.checkArgument( priority < HConstants.NORMAL_QOS || priority > HConstants.HIGH_QOS, "priority cannot be within hbase priority range " 
+        			+ HConstants.NORMAL_QOS +" to " + HConstants.HIGH_QOS ); 
     }
 
-    /**
-     * Returns true if the two priority ranges overlap
-     */
-    private boolean doesNotOverlap(int minPriority1, int maxPriority1, int minPriority2, int maxPriority2) {
-        return minPriority1 > maxPriority2 || maxPriority1 < minPriority2;
-    }
-
-    public static int getIndexMinPriority(Configuration conf) {
-        return conf.getInt(QueryServices.MIN_INDEX_PRIOIRTY_ATTRIB, QueryServicesOptions.DEFAULT_INDEX_MIN_PRIORITY);
+    public static int getIndexPriority(Configuration conf) {
+        return conf.getInt(QueryServices.INDEX_PRIOIRTY_ATTRIB, QueryServicesOptions.DEFAULT_INDEX_PRIORITY);
     }
     
-    public static int getMetadataMinPriority(Configuration conf) {
-        return conf.getInt(QueryServices.MIN_METADATA_PRIOIRTY_ATTRIB, QueryServicesOptions.DEFAULT_METADATA_MIN_PRIORITY);
+    public static int getMetadataPriority(Configuration conf) {
+        return conf.getInt(QueryServices.METADATA_PRIOIRTY_ATTRIB, QueryServicesOptions.DEFAULT_METADATA_PRIORITY);
     }
     
 }

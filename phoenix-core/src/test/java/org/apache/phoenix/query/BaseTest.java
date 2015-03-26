@@ -457,7 +457,7 @@ public abstract class BaseTest {
     }
     
     private static final String ORG_ID = "00D300000000XHP";
-    private static final int NUM_SLAVES_BASE = 1;
+    protected static int NUM_SLAVES_BASE = 1;
     
     protected static String getZKClientPort(Configuration conf) {
         return conf.get(QueryServices.ZOOKEEPER_PORT_ATTRIB);
@@ -557,7 +557,7 @@ public abstract class BaseTest {
         setUpConfigForMiniCluster(conf, overrideProps);
         utility = new HBaseTestingUtility(conf);
         try {
-            utility.startMiniCluster();
+            utility.startMiniCluster(NUM_SLAVES_BASE);
             // add shutdown hook to kill the mini cluster
             Runtime.getRuntime().addShutdownHook(new Thread() {
                 @Override

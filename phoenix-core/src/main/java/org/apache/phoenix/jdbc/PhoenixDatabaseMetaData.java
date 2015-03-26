@@ -279,10 +279,6 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
     /** Version below which we fall back on the generic KeyValueBuilder */
     public static final int CLIENT_KEY_VALUE_BUILDER_THRESHOLD = VersionUtil.encodeVersion("0", "94", "14");
     
-    // list of system tables
-    public static final List<String> SYSTEM_TABLE_NAMES = new ImmutableList.Builder<String>().add(SYSTEM_CATALOG_NAME)
-            .add(SYSTEM_STATS_NAME).add(SEQUENCE_FULLNAME).build();
-    
     PhoenixDatabaseMetaData(PhoenixConnection connection) throws SQLException {
         this.emptyResultSet = new PhoenixResultSet(ResultIterator.EMPTY_ITERATOR, RowProjector.EMPTY_PROJECTOR, new PhoenixStatement(connection));
         this.connection = connection;

@@ -21,7 +21,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.phoenix.hbase.index.ipc.PhoenixRpcSchedulerFactory;
+import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
 import org.apache.phoenix.query.QueryServices;
 import org.junit.Test;
 

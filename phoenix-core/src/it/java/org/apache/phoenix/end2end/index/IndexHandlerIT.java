@@ -35,8 +35,8 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.ipc.DelegatingPayloadCarryingRpcController;
 import org.apache.hadoop.hbase.ipc.PayloadCarryingRpcController;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
+import org.apache.hadoop.hbase.ipc.ServerRpcControllerFactory;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.hbase.index.PhoenixRpcControllerFactory;
 import org.apache.phoenix.hbase.index.TableName;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.junit.After;
@@ -53,11 +53,11 @@ public class IndexHandlerIT {
 
     public static class CountingIndexClientRpcFactory extends RpcControllerFactory {
 
-        private PhoenixRpcControllerFactory delegate;
+        private ServerRpcControllerFactory delegate;
 
         public CountingIndexClientRpcFactory(Configuration conf) {
             super(conf);
-            this.delegate = new PhoenixRpcControllerFactory(conf);
+            this.delegate = new ServerRpcControllerFactory(conf);
         }
 
         @Override
@@ -146,8 +146,8 @@ public class IndexHandlerIT {
         conf.set(RpcControllerFactory.CUSTOM_CONTROLLER_CONF_KEY,
             CountingIndexClientRpcFactory.class.getName());
         // and set the index table as the current table
-        conf.setStrings(PhoenixRpcControllerFactory.INDEX_TABLE_NAMES_KEY,
-            TestTable.getTableNameString());
+//        conf.setStrings(PhoenixRpcControllerFactory.INDEX_TABLE_NAMES_KEY,
+//            TestTable.getTableNameString());
         HTable table = new HTable(conf, TestTable.getTableName());
 
         // do a write to the table
