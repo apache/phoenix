@@ -387,7 +387,7 @@ public class IndexHalfStoreFileReader extends StoreFile.Reader {
             // Added for compatibility with HBASE-13109
             // Once we drop support for older versions, add an @override annotation here
             // and figure out how to get the next indexed key
-            public byte[] getNextIndexedKey() {
+            public Cell getNextIndexedKey() {
                 return null; // indicate that we cannot use the optimization
             }
         };
