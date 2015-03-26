@@ -957,4 +957,32 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
         assertTrue(rs.next());
         assertEquals(1.333333333, rs.getDouble(1), 0.001);
     }
+
+    @Test
+    public void testFloatingPointUpsert() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String ddl = "CREATE TABLE test (id VARCHAR not null primary key, name VARCHAR, lat FLOAT)";
+        conn.createStatement().execute(ddl);
+        String dml = "UPSERT INTO test(id,name,lat) VALUES ('testid', 'testname', -1.00)";
+        conn.createStatement().execute(dml);
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery("SELECT lat FROM test");
+        assertTrue(rs.next());
+        assertEquals(-1.0f, rs.getFloat(1), 0.001);
+    }
+
+    @Test
+    public void testFloatingPointMultiplicationUpsert() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String ddl = "CREATE TABLE test (id VARCHAR not null primary key, name VARCHAR, lat FLOAT)";
+        conn.createStatement().execute(ddl);
+        String dml = "UPSERT INTO test(id,name,lat) VALUES ('testid', 'testname', -1.00 * 1)";
+        conn.createStatement().execute(dml);
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery("SELECT lat FROM test");
+        assertTrue(rs.next());
+        assertEquals(-1.0f, rs.getFloat(1), 0.001);
+    }
 }

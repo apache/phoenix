@@ -47,6 +47,7 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.stats.StatisticsCollectionScope;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.util.SchemaUtil;
 
@@ -577,7 +578,8 @@ public class ParseNodeFactory {
 
     public ParseNode negate(ParseNode child) {
         // Prevents reparsing of -1 from becoming 1*-1 and 1*1*-1 with each re-parsing
-        if (LiteralParseNode.ONE.equals(child)) {
+        if (LiteralParseNode.ONE.equals(child) && ((LiteralParseNode)child).getType().isCoercibleTo(
+                PLong.INSTANCE)) {
             return LiteralParseNode.MINUS_ONE;
         }
         return new MultiplyParseNode(Arrays.asList(child,LiteralParseNode.MINUS_ONE));
