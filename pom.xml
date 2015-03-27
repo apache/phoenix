@@ -103,7 +103,7 @@
     <commons-codec.version>1.7</commons-codec.version>
     <htrace.version>3.1.0-incubating</htrace.version>
     <collections.version>3.2.1</collections.version>
-    <jodatime.version>2.3</jodatime.version>
+    <jodatime.version>2.7</jodatime.version>
 
     <!-- Test Dependencies -->
     <mockito-all.version>1.8.5</mockito-all.version>
