@@ -49,7 +49,7 @@ public class PhoenixClientRpcIT extends BaseOwnClusterHBaseManagedTimeIT {
         serverProps.put(HRegionServer.REGION_SERVER_RPC_SCHEDULER_FACTORY_CLASS,
                 TestPhoenixIndexRpcSchedulerFactory.class.getName());
         serverProps.put(RpcControllerFactory.CUSTOM_CONTROLLER_CONF_KEY, ServerRpcControllerFactory.class.getName());
-        Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(2);
+        Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(1);
         clientProps.put(RpcControllerFactory.CUSTOM_CONTROLLER_CONF_KEY, ClientRpcControllerFactory.class.getName());
         NUM_SLAVES_BASE = 2;
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet()
