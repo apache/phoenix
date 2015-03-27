@@ -67,6 +67,8 @@ import java.util.Map.Entry;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Coprocessor;
+import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
+import org.apache.hadoop.hbase.ipc.controller.ClientRpcControllerFactory;
 import org.apache.hadoop.hbase.regionserver.wal.WALCellCodec;
 import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.trace.util.Tracing;
@@ -143,9 +145,7 @@ public class QueryServicesOptions {
      * and give some room for things in the middle
      */
     public static final int DEFAULT_INDEX_PRIORITY = 1000;
-    public static final int DEFAULT_INDEX_HANDLER_COUNT = 30;
     public static final int DEFAULT_METADATA_PRIORITY = 2000;
-    public static final int DEFAULT_METADATA_HANDLER_COUNT = 30;
     public static final boolean DEFAULT_ALLOW_LOCAL_INDEX = true;
 
     public static final int DEFAULT_TRACING_PAGE_SIZE = 100;
@@ -236,7 +236,8 @@ public class QueryServicesOptions {
             .setIfUnset(ALLOW_ONLINE_TABLE_SCHEMA_UPDATE, DEFAULT_ALLOW_ONLINE_TABLE_SCHEMA_UPDATE)
             .setIfUnset(NUM_RETRIES_FOR_SCHEMA_UPDATE_CHECK, DEFAULT_RETRIES_FOR_SCHEMA_UPDATE_CHECK)
             .setIfUnset(DELAY_FOR_SCHEMA_UPDATE_CHECK, DEFAULT_DELAY_FOR_SCHEMA_UPDATE_CHECK)
-            .setIfUnset(METRICS_ENABLED, DEFAULT_IS_METRICS_ENABLED);
+            .setIfUnset(METRICS_ENABLED, DEFAULT_IS_METRICS_ENABLED)
+            .setIfUnset(RpcControllerFactory.CUSTOM_CONTROLLER_CONF_KEY, ClientRpcControllerFactory.class.getName());
             ;
         // HBase sets this to 1, so we reset it to something more appropriate.
         // Hopefully HBase will change this, because we can't know if a user set

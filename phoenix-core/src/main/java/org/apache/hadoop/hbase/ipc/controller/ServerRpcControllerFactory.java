@@ -54,7 +54,7 @@ public class ServerRpcControllerFactory extends RpcControllerFactory {
     }
     
     private PayloadCarryingRpcController getController(PayloadCarryingRpcController delegate) {
-    	// construct a chain of controller, metadata, index and standard controller
+    	// construct a chain of controllers: metadata, index and standard controller
     	IndexRpcController indexRpcController = new IndexRpcController(delegate, conf);
 		return new MetadataRpcController(indexRpcController, conf);
     }

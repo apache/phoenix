@@ -24,19 +24,14 @@ import org.apache.hadoop.conf.Configuration;
 import com.google.common.annotations.VisibleForTesting;
 
 /**
- * {@link RpcScheduler} that first checks to see if this is an index update before passing off the
+ * {@link RpcScheduler} that first checks to see if this is an index or metedata update before passing off the
  * call to the delegate {@link RpcScheduler}.
- * <p>
- * We reserve the range (1000, 1050], by default (though it is configurable), for index priority
- * writes. Currently, we don't do any prioritization within that range - all index writes are
- * treated with the same priority and put into the same queue.
  */
 public class PhoenixRpcScheduler extends RpcScheduler {
 
     // copied from org.apache.hadoop.hbase.ipc.SimpleRpcScheduler in HBase 0.98.4
-    public static final String CALL_QUEUE_READ_SHARE_CONF_KEY = "ipc.server.callqueue.read.share";
-    public static final String CALL_QUEUE_HANDLER_FACTOR_CONF_KEY =
-            "ipc.server.callqueue.handler.factor";
+    private static final String CALL_QUEUE_HANDLER_FACTOR_CONF_KEY = "ipc.server.callqueue.handler.factor";
+    private static final String CALLQUEUE_LENGTH_CONF_KEY = "ipc.server.max.callqueue.length";
     private static final int DEFAULT_MAX_CALLQUEUE_LENGTH_PER_HANDLER = 10;
 
     private RpcScheduler delegate;
@@ -46,29 +41,17 @@ public class PhoenixRpcScheduler extends RpcScheduler {
     private RpcExecutor metadataCallExecutor;
     private int port;
 
-    public PhoenixRpcScheduler(int indexHandlerCount, int metadataHandlerCount, Configuration conf,
-            RpcScheduler delegate, int indexPriority, int metadataPriority) {
-        int maxQueueLength =
-                conf.getInt("ipc.server.max.callqueue.length", indexHandlerCount
-                        * DEFAULT_MAX_CALLQUEUE_LENGTH_PER_HANDLER);
-
+    public PhoenixRpcScheduler(Configuration conf, RpcScheduler delegate, int indexPriority, int metadataPriority) {
         // copied from org.apache.hadoop.hbase.ipc.SimpleRpcScheduler in HBase 0.98.4
+        int maxQueueLength =  conf.getInt(CALLQUEUE_LENGTH_CONF_KEY, DEFAULT_MAX_CALLQUEUE_LENGTH_PER_HANDLER);
         float callQueuesHandlersFactor = conf.getFloat(CALL_QUEUE_HANDLER_FACTOR_CONF_KEY, 0);
-        int numIndexCallQueues =
-                Math.max(1, Math.round(indexHandlerCount * callQueuesHandlersFactor));
-        int numMetadataCallQueues =
-                Math.max(1, Math.round(indexHandlerCount * callQueuesHandlersFactor));
+        int numQueues = Math.max(1, Math.round(callQueuesHandlersFactor));
 
         this.indexPriority = indexPriority;
         this.metadataPriority = metadataPriority;
         this.delegate = delegate;
-
-        this.indexCallExecutor =
-                new BalancedQueueRpcExecutor("Index", indexHandlerCount, numIndexCallQueues,
-                        maxQueueLength);
-        this.metadataCallExecutor =
-                new BalancedQueueRpcExecutor("Metadata", metadataHandlerCount, numMetadataCallQueues,
-                        maxQueueLength);
+        this.indexCallExecutor = new BalancedQueueRpcExecutor("Index", 1, numQueues, maxQueueLength);
+        this.metadataCallExecutor = new BalancedQueueRpcExecutor("Metadata", 1, numQueues, maxQueueLength);
     }
 
     @Override

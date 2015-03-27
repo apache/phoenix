@@ -21,7 +21,6 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.ipc.RpcScheduler;
 import org.apache.hadoop.hbase.regionserver.RegionServerServices;
 import org.apache.hadoop.hbase.regionserver.RpcSchedulerFactory;
 import org.apache.hadoop.hbase.regionserver.SimpleRpcSchedulerFactory;
@@ -62,28 +61,18 @@ public class PhoenixRpcSchedulerFactory implements RpcSchedulerFactory {
         }
 
         // get the index priority configs
-        int indexHandlerCount = conf.getInt(QueryServices.INDEX_HANDLER_COUNT_ATTRIB, QueryServicesOptions.DEFAULT_INDEX_HANDLER_COUNT);
         int indexPriority = getIndexPriority(conf);
         validatePriority(indexPriority);
-        
         // get the metadata priority configs
-        int metadataHandlerCount = conf.getInt(QueryServices.INDEX_HANDLER_COUNT_ATTRIB, QueryServicesOptions.DEFAULT_METADATA_HANDLER_COUNT);
         int metadataPriority = getMetadataPriority(conf);
         validatePriority(metadataPriority);
 
-		// validate index and metadata priorities are not the same
-		Preconditions
-				.checkArgument(indexPriority != metadataPriority,
-						"Index and Metadata priority must not be same "
-								+ indexPriority);
-
-		LOG.info("Using custom Phoenix Index RPC Handling with "
-				+ indexHandlerCount + " index handlers and priority " + indexPriority + " and " 
-				+ metadataHandlerCount + " metadata handlers and priority " + metadataPriority);
+        // validate index and metadata priorities are not the same
+        Preconditions.checkArgument(indexPriority != metadataPriority, "Index and Metadata priority must not be same "+ indexPriority);
+        LOG.info("Using custom Phoenix Index RPC Handling with index rpc priority " + indexPriority + " and metadata rpc priority " + metadataPriority);
 
         PhoenixRpcScheduler scheduler =
-                new PhoenixRpcScheduler(indexHandlerCount, metadataHandlerCount, 
-                        conf, delegate, indexPriority, metadataPriority);
+                new PhoenixRpcScheduler(conf, delegate, indexPriority, metadataPriority);
         return scheduler;
     }
 
