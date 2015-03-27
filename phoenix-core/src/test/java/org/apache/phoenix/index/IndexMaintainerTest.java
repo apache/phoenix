@@ -73,7 +73,7 @@ public class IndexMaintainerTest  extends BaseConnectionlessQueryTest {
         return new ValueGetter() {
 
             @Override
-            public ImmutableBytesPtr getLatestValue(ColumnReference ref) {
+            public ImmutableBytesWritable getLatestValue(ColumnReference ref) {
                 return new ImmutableBytesPtr(valueMap.get(ref));
             }
 

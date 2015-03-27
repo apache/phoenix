@@ -32,26 +32,22 @@ import java.util.List;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.junit.Test;
-import org.mockito.Mockito;
-
-import com.google.common.collect.Lists;
 import org.apache.phoenix.hbase.index.covered.IndexCodec;
 import org.apache.phoenix.hbase.index.covered.IndexUpdate;
 import org.apache.phoenix.hbase.index.covered.LocalTableState;
 import org.apache.phoenix.hbase.index.covered.data.LocalHBaseState;
-import org.apache.phoenix.hbase.index.covered.example.ColumnGroup;
-import org.apache.phoenix.hbase.index.covered.example.CoveredColumn;
-import org.apache.phoenix.hbase.index.covered.example.CoveredColumnIndexCodec;
 import org.apache.phoenix.hbase.index.covered.example.CoveredColumnIndexCodec.ColumnEntry;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
+import org.junit.Test;
+import org.mockito.Mockito;
+
+import com.google.common.collect.Lists;
 
 public class TestCoveredColumnIndexCodec {
   private static final byte[] PK = new byte[] { 'a' };
@@ -190,7 +186,7 @@ public class TestCoveredColumnIndexCodec {
 
     // get the updates with the pending update
     state.setCurrentTimestamp(1);
-    state.addPendingUpdates(KeyValueUtil.ensureKeyValues(kvs));
+    state.addPendingUpdates(kvs);
     updates = codec.getIndexUpserts(state);
     assertTrue("Didn't find index updates for pending primary table update!", updates.iterator()
         .hasNext());
@@ -243,7 +239,7 @@ public class TestCoveredColumnIndexCodec {
     LocalTableState state = new LocalTableState(env, table, d);
     state.setCurrentTimestamp(d.getTimeStamp());
     // now we shouldn't see anything when getting the index update
-    state.addPendingUpdates(KeyValueUtil.ensureKeyValues(d.getFamilyCellMap().get(FAMILY)));
+    state.addPendingUpdates(d.getFamilyCellMap().get(FAMILY));
     Iterable<IndexUpdate> updates = codec.getIndexUpserts(state);
     for (IndexUpdate update : updates) {
       assertFalse("Had some index updates, though it should have been covered by the delete",

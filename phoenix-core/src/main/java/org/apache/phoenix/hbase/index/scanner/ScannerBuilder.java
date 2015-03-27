@@ -23,7 +23,9 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
 
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.filter.BinaryComparator;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
@@ -126,7 +128,7 @@ public class ScannerBuilder {
     return new Scanner() {
 
       @Override
-      public KeyValue next() {
+      public Cell next() {
         try {
           return kvScanner.next();
         } catch (IOException e) {
@@ -135,7 +137,7 @@ public class ScannerBuilder {
       }
 
       @Override
-      public boolean seek(KeyValue next) throws IOException {
+      public boolean seek(Cell next) throws IOException {
         // check to see if the next kv is after the current key, in which case we can use reseek,
         // which will be more efficient
         KeyValue peek = kvScanner.peek();
@@ -143,17 +145,17 @@ public class ScannerBuilder {
         if (peek != null) {
           int compare = KeyValue.COMPARATOR.compare(peek, next);
           if (compare < 0) {
-            return kvScanner.reseek(next);
+            return kvScanner.reseek(KeyValueUtil.ensureKeyValue(next));
           } else if (compare == 0) {
             // we are already at the given key!
             return true;
           }
         }
-        return kvScanner.seek(next);
+        return kvScanner.seek(KeyValueUtil.ensureKeyValue(next));
       }
 
       @Override
-      public KeyValue peek() throws IOException {
+      public Cell peek() throws IOException {
         return kvScanner.peek();
       }
 

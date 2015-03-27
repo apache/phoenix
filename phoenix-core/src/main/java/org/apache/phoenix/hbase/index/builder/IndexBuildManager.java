@@ -29,7 +29,6 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.Stoppable;
-import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
@@ -154,19 +153,6 @@ public class IndexBuildManager implements Stoppable {
     }
 
     return results;
-  }
-
-  public Collection<Pair<Mutation, byte[]>> getIndexUpdate(Delete delete) throws IOException {
-    // all we get is a single update, so it would probably just go slower if we needed to queue it
-    // up. It will increase underlying resource contention a little bit, but the mutation case is
-    // far more common, so let's not worry about it for now.
-    // short circuit so we don't waste time.
-    if (!this.delegate.isEnabled(delete)) {
-      return null;
-    }
-
-    return delegate.getIndexUpdate(delete);
-
   }
 
   public Collection<Pair<Mutation, byte[]>> getIndexUpdateForFilteredRows(

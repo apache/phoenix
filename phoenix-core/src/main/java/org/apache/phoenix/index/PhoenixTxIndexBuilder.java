@@ -23,23 +23,18 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
-import org.apache.phoenix.hbase.index.covered.NonTxIndexBuilder;
+import org.apache.phoenix.hbase.index.covered.TxIndexBuilder;
 import org.apache.phoenix.hbase.index.write.IndexWriter;
 import org.apache.phoenix.util.IndexUtil;
 
-/**
- * Index builder for covered-columns index that ties into phoenix for faster use.
- */
-public class PhoenixIndexBuilder extends NonTxIndexBuilder {
-
+public class PhoenixTxIndexBuilder extends TxIndexBuilder {
     @Override
     public void setup(RegionCoprocessorEnvironment env) throws IOException {
         super.setup(env);
         Configuration conf = env.getConfiguration();
-        // Install handler that will attempt to disable the index first before killing the region
-        // server
-        conf.setIfUnset(IndexWriter.INDEX_FAILURE_POLICY_CONF_KEY,
-            PhoenixIndexFailurePolicy.class.getName());
+        // Install failure policy that just re-throws exception instead of killing RS
+        // or disabling the index
+        conf.set(IndexWriter.INDEX_FAILURE_POLICY_CONF_KEY, PhoenixTxIndexFailurePolicy.class.getName());
     }
 
     @Override

@@ -23,6 +23,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
@@ -35,8 +36,8 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.hbase.index.covered.Batch;
-import org.apache.phoenix.hbase.index.covered.CoveredColumnsIndexBuilder;
 import org.apache.phoenix.hbase.index.covered.LocalTableState;
+import org.apache.phoenix.hbase.index.covered.NonTxIndexBuilder;
 import org.apache.phoenix.hbase.index.covered.update.IndexUpdateManager;
 
 /**
@@ -90,7 +91,7 @@ import org.apache.phoenix.hbase.index.covered.update.IndexUpdateManager;
  * <b>NOTE:</b> this means that we need to do a lookup (point {@link Get}) of the entire row
  * <i>every time there is a write to the table</i>.
  */
-public class CoveredColumnIndexer extends CoveredColumnsIndexBuilder {
+public class CoveredColumnIndexer extends NonTxIndexBuilder {
 
   /**
    * Create the specified index table with the necessary columns
@@ -125,9 +126,9 @@ public class CoveredColumnIndexer extends CoveredColumnsIndexBuilder {
     Collection<Batch> batches = batchByRow(filtered);
 
     for (Batch batch : batches) {
-      KeyValue curKV = batch.getKvs().iterator().next();
+      Cell curKV = batch.getKvs().iterator().next();
       Put p = new Put(curKV.getRowArray(), curKV.getRowOffset(), curKV.getRowLength());
-      for (KeyValue kv : batch.getKvs()) {
+      for (Cell kv : batch.getKvs()) {
         // we only need to cleanup Put entries
         byte type = kv.getTypeByte();
         Type t = KeyValue.Type.codeToType(type);

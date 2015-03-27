@@ -766,7 +766,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         int i = 0;
         for (ColumnReference ref : this.getCoverededColumns()) {
             ImmutableBytesPtr cq = this.indexQualifiers.get(i++);
-            ImmutableBytesPtr value = valueGetter.getLatestValue(ref);
+            ImmutableBytesWritable value = valueGetter.getLatestValue(ref);
             byte[] indexRowKey = this.buildRowKey(valueGetter, dataRowKeyPtr, regionStartKey, regionEndKey);
             ImmutableBytesPtr rowKey = new ImmutableBytesPtr(indexRowKey);
             if (value != null) {
@@ -781,9 +781,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         return put;
     }
 
-    public boolean isRowDeleted(Collection<KeyValue> pendingUpdates) {
+    public boolean isRowDeleted(Collection<Cell> pendingUpdates) {
         int nDeleteCF = 0;
-        for (KeyValue kv : pendingUpdates) {
+        for (Cell kv : pendingUpdates) {
             if (kv.getTypeByte() == KeyValue.Type.DeleteFamily.getCode()) {
                 nDeleteCF++;
                 boolean isEmptyCF = Bytes.compareTo(kv.getFamilyArray(), kv.getFamilyOffset(), kv.getFamilyLength(), 
@@ -798,18 +798,18 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         return nDeleteCF == this.nDataCFs;
     }
     
-    private boolean hasIndexedColumnChanged(ValueGetter oldState, Collection<KeyValue> pendingUpdates) throws IOException {
+    private boolean hasIndexedColumnChanged(ValueGetter oldState, Collection<Cell> pendingUpdates) throws IOException {
         if (pendingUpdates.isEmpty()) {
             return false;
         }
-        Map<ColumnReference,KeyValue> newState = Maps.newHashMapWithExpectedSize(pendingUpdates.size()); 
-        for (KeyValue kv : pendingUpdates) {
+        Map<ColumnReference,Cell> newState = Maps.newHashMapWithExpectedSize(pendingUpdates.size()); 
+        for (Cell kv : pendingUpdates) {
             newState.put(new ColumnReference(CellUtil.cloneFamily(kv), CellUtil.cloneQualifier(kv)), kv);
         }
         for (ColumnReference ref : indexedColumns) {
-        	KeyValue newValue = newState.get(ref);
+        	Cell newValue = newState.get(ref);
         	if (newValue != null) { // Indexed column has potentially changed
-        		ImmutableBytesPtr oldValue = oldState.getLatestValue(ref);
+        	    ImmutableBytesWritable oldValue = oldState.getLatestValue(ref);
         		boolean newValueSetAsNull = newValue.getTypeByte() == Type.DeleteColumn.getCode();
         		//If the new column value has to be set as null and the older value is null too,
         		//then just skip to the next indexed column.
@@ -834,11 +834,11 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
      * since we can build the corresponding index row key.
      */
     public Delete buildDeleteMutation(KeyValueBuilder kvBuilder, ImmutableBytesWritable dataRowKeyPtr, long ts) throws IOException {
-        return buildDeleteMutation(kvBuilder, null, dataRowKeyPtr, Collections.<KeyValue>emptyList(), ts, null, null);
+        return buildDeleteMutation(kvBuilder, null, dataRowKeyPtr, Collections.<Cell>emptyList(), ts, null, null);
     }
     
     @SuppressWarnings("deprecation")
-    public Delete buildDeleteMutation(KeyValueBuilder kvBuilder, ValueGetter oldState, ImmutableBytesWritable dataRowKeyPtr, Collection<KeyValue> pendingUpdates, long ts, byte[] regionStartKey, byte[] regionEndKey) throws IOException {
+    public Delete buildDeleteMutation(KeyValueBuilder kvBuilder, ValueGetter oldState, ImmutableBytesWritable dataRowKeyPtr, Collection<Cell> pendingUpdates, long ts, byte[] regionStartKey, byte[] regionEndKey) throws IOException {
         byte[] indexRowKey = this.buildRowKey(oldState, dataRowKeyPtr, regionStartKey, regionEndKey);
         // Delete the entire row if any of the indexed columns changed
         if (oldState == null || isRowDeleted(pendingUpdates) || hasIndexedColumnChanged(oldState, pendingUpdates)) { // Deleting the entire row
@@ -848,7 +848,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         }
         Delete delete = null;
         // Delete columns for missing key values
-        for (KeyValue kv : pendingUpdates) {
+        for (Cell kv : pendingUpdates) {
             if (kv.getTypeByte() != KeyValue.Type.Put.getCode()) {
                 ColumnReference ref = new ColumnReference(kv.getFamily(), kv.getQualifier());
                 if (coveredColumns.contains(ref)) {
@@ -1304,14 +1304,12 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 .size());
         for (Cell kv : pendingUpdates) {
             // create new pointers to each part of the kv
-            ImmutableBytesPtr family = new ImmutableBytesPtr(kv.getRowArray(),kv.getFamilyOffset(),kv.getFamilyLength());
-            ImmutableBytesPtr qual = new ImmutableBytesPtr(kv.getRowArray(), kv.getQualifierOffset(), kv.getQualifierLength());
             ImmutableBytesPtr value = new ImmutableBytesPtr(kv.getValueArray(), kv.getValueOffset(), kv.getValueLength());
-            valueMap.put(new ColumnReference(kv.getRowArray(), kv.getFamilyOffset(), kv.getFamilyLength(), kv.getRowArray(), kv.getQualifierOffset(), kv.getQualifierLength()), value);
+            valueMap.put(new ColumnReference(kv.getFamilyArray(), kv.getFamilyOffset(), kv.getFamilyLength(), kv.getQualifierArray(), kv.getQualifierOffset(), kv.getQualifierLength()), value);
         }
         return new ValueGetter() {
             @Override
-            public ImmutableBytesPtr getLatestValue(ColumnReference ref) {
+            public ImmutableBytesWritable getLatestValue(ColumnReference ref) {
                 if(ref.equals(dataEmptyKeyValueRef)) return null;
                 return valueMap.get(ref);
             }

@@ -59,7 +59,7 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 /**
- * End-to-End test of just the {@link CoveredColumnsIndexBuilder}, but with a simple
+ * End-to-End test of just the {@link NonTxIndexBuilder}, but with a simple
  * {@link IndexCodec} and BatchCache implementation.
  */
 @Category(NeedsOwnMiniClusterTest.class)
@@ -151,7 +151,7 @@ public class EndToEndCoveredColumnsIndexBuilderIT {
             ((LocalTableState) state).getIndexedColumnsTableState(Arrays.asList(columns)).getFirst();
 
         int count = 0;
-        KeyValue kv;
+        Cell kv;
         while ((kv = kvs.next()) != null) {
           Cell next = expectedKvs.get(count++);
           assertEquals(
@@ -302,9 +302,9 @@ public class EndToEndCoveredColumnsIndexBuilderIT {
     Map<String, String> indexerOpts = new HashMap<String, String>();
     // just need to set the codec - we are going to set it later, but we need something here or the
     // initializer blows up.
-    indexerOpts.put(CoveredColumnsIndexBuilder.CODEC_CLASS_NAME_KEY,
+    indexerOpts.put(NonTxIndexBuilder.CODEC_CLASS_NAME_KEY,
       CoveredIndexCodecForTesting.class.getName());
-    Indexer.enableIndexing(desc, CoveredColumnsIndexBuilder.class, indexerOpts, Coprocessor.PRIORITY_USER);
+    Indexer.enableIndexing(desc, NonTxIndexBuilder.class, indexerOpts, Coprocessor.PRIORITY_USER);
 
     // create the table
     HBaseAdmin admin = UTIL.getHBaseAdmin();
@@ -315,8 +315,8 @@ public class EndToEndCoveredColumnsIndexBuilderIT {
     HRegion region = UTIL.getMiniHBaseCluster().getRegions(tableNameBytes).get(0);
     Indexer indexer =
         (Indexer) region.getCoprocessorHost().findCoprocessor(Indexer.class.getName());
-    CoveredColumnsIndexBuilder builder =
-        (CoveredColumnsIndexBuilder) indexer.getBuilderForTesting();
+    NonTxIndexBuilder builder =
+        (NonTxIndexBuilder) indexer.getBuilderForTesting();
     VerifyingIndexCodec codec = new VerifyingIndexCodec();
     builder.setIndexCodecForTesting(codec);
 

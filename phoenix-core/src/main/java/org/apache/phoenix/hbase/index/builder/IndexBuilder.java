@@ -24,7 +24,6 @@ import java.util.Map;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.Stoppable;
 import org.apache.hadoop.hbase.client.Delete;
-import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -79,32 +78,26 @@ public interface IndexBuilder extends Stoppable {
   
   public Collection<Pair<Mutation, byte[]>> getIndexUpdate(Mutation mutation) throws IOException;
 
-  /**
-   * The counter-part to {@link #getIndexUpdate(Mutation)} - your opportunity to update any/all
-   * index tables based on the delete of the primary table row. This is only called for cases where
-   * the client sends a single delete ({@link HTable#delete}). We separate this method from
-   * {@link #getIndexUpdate(Mutation)} only for the ease of implementation as the delete path has
-   * subtly different semantics for updating the families/timestamps from the generic batch path.
-   * <p>
-   * Its up to your implementation to ensure that timestamps match between the primary and index
-   * tables.
-   * <p>
-   * Implementers must ensure that this method is thread-safe - it could (and probably will) be
-   * called concurrently for different mutations, which may or may not be part of the same batch.
-   * @param delete {@link Delete} to the primary table that may be indexed
-   * @return a {@link Map} of the mutations to make -> target index table name
-   * @throws IOException on failure
-   */
-  public Collection<Pair<Mutation, byte[]>> getIndexUpdate(Delete delete) throws IOException;
-
-  /**
-   * Build an index update to cleanup the index when we remove {@link KeyValue}s via the normal
-   * flush or compaction mechanisms.
-   * @param filtered {@link KeyValue}s that previously existed, but won't be included in further
-   *          output from HBase.
-   * @return a {@link Map} of the mutations to make -> target index table name
-   * @throws IOException on failure
-   */
+    /**
+     * Build an index update to cleanup the index when we remove {@link KeyValue}s via the normal flush or compaction
+     * mechanisms. Currently not implemented by any implementors nor called, but left here to be implemented if we
+     * ever need it. In Jesse's words:
+     * 
+     * Arguably, this is a correctness piece that should be used, but isn't. Basically, it *could* be that
+     * if a compaction/flush were to remove a key (too old, too many versions) you might want to cleanup the index table
+     * as well, if it were to get out of sync with the primary table. For instance, you might get multiple versions of
+     * the same row, which should eventually age of the oldest version. However, in the index table there would only
+     * ever be two entries for that row - the first one, matching the original row, and the delete marker for the index
+     * update, set when we got a newer version of the primary row. So, a basic HBase scan wouldn't show the index update
+     * b/c its covered by the delete marker, but an older timestamp based read would actually show the index row, even
+     * after the primary table row is gone due to MAX_VERSIONS requirement.
+     *  
+     * @param filtered {@link KeyValue}s that previously existed, but won't be included
+     * in further output from HBase.
+     * 
+     * @return a {@link Map} of the mutations to make -> target index table name
+     * @throws IOException on failure
+     */
   public Collection<Pair<Mutation, byte[]>> getIndexUpdateForFilteredRows(
       Collection<KeyValue> filtered)
       throws IOException;

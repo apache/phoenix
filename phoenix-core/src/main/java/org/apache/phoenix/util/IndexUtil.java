@@ -24,6 +24,8 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -41,12 +43,15 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionServerCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.HRegion;
+import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
+import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.RegionServerServices;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.IndexStatementRewriter;
+import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.compile.WhereCompiler;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
@@ -60,13 +65,16 @@ import org.apache.phoenix.expression.visitor.RowKeyExpressionVisitor;
 import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.IndexMaintainer;
+import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.SelectStatement;
+import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
@@ -235,7 +243,7 @@ public class IndexUtil {
                     	}
         
                         @Override
-                        public ImmutableBytesPtr getLatestValue(ColumnReference ref) {
+                        public ImmutableBytesWritable getLatestValue(ColumnReference ref) {
                             // Always return null for our empty key value, as this will cause the index
                             // maintainer to always treat this Put as a new row.
                             if (isEmptyKeyValue(table, ref)) {
@@ -635,5 +643,59 @@ public class IndexUtil {
     public static String getIndexColumnExpressionStr(PColumn col) {
         return col.getExpressionStr() == null ? IndexUtil.getCaseSensitiveDataColumnFullName(col.getName().getString())
                 : col.getExpressionStr();
+    }
+    
+    /*
+     * The entire purpose of this method is to get the existing rows for the table rows being indexed into the
+     * block cache, as the index maintenance code does a point scan per row. Though for the transactional
+     * case we may be loading more than we need, since we're not applying the transaction filters, that
+     * should still be ok.
+     */
+    public static void loadMutatingRowsIntoBlockCache(HRegion region, PhoenixIndexCodec codec, MiniBatchOperationInProgress<Mutation> miniBatchOp, boolean useRawScan) 
+    throws IOException {
+        List<KeyRange> keys = Lists.newArrayListWithExpectedSize(miniBatchOp.size());
+        Map<ImmutableBytesWritable, IndexMaintainer> maintainers =
+                new HashMap<ImmutableBytesWritable, IndexMaintainer>();
+        ImmutableBytesWritable indexTableName = new ImmutableBytesWritable();
+        for (int i = 0; i < miniBatchOp.size(); i++) {
+            Mutation m = miniBatchOp.getOperation(i);
+            keys.add(PVarbinary.INSTANCE.getKeyRange(m.getRow()));
+            List<IndexMaintainer> indexMaintainers = codec.getIndexMetaData(m.getAttributesMap()).getIndexMaintainers();
+            
+            for(IndexMaintainer indexMaintainer: indexMaintainers) {
+                if (indexMaintainer.isImmutableRows() && indexMaintainer.isLocalIndex()) continue;
+                indexTableName.set(indexMaintainer.getIndexTableName());
+                if (maintainers.get(indexTableName) != null) continue;
+                maintainers.put(indexTableName, indexMaintainer);
+            }
+            
+        }
+        if (maintainers.isEmpty()) return;
+        Scan scan = IndexManagementUtil.newLocalStateScan(new ArrayList<IndexMaintainer>(maintainers.values()));
+        scan.setRaw(useRawScan);
+        ScanRanges scanRanges = ScanRanges.create(SchemaUtil.VAR_BINARY_SCHEMA, Collections.singletonList(keys), ScanUtil.SINGLE_COLUMN_SLOT_SPAN);
+        scanRanges.initializeScan(scan);
+        scan.setFilter(scanRanges.getSkipScanFilter());
+        RegionScanner scanner = region.getScanner(scan);
+        // Run through the scanner using internal nextRaw method
+        region.startRegionOperation();
+        try {
+            synchronized (scanner) {
+                boolean hasMore;
+                do {
+                    List<Cell> results = Lists.newArrayList();
+                    // Results are potentially returned even when the return value of s.next is
+                    // false since this is an indication of whether or not there are more values
+                    // after the ones returned
+                    hasMore = scanner.nextRaw(results);
+                } while (hasMore);
+            }
+        } finally {
+            try {
+                scanner.close();
+            } finally {
+                region.closeRegionOperation();
+            }
+        }
     }
 }

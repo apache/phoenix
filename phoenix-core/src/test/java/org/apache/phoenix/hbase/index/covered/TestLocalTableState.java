@@ -23,9 +23,10 @@ import java.util.Arrays;
 import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.KeyValue.Type;
+import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -33,17 +34,14 @@ import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
-import org.junit.Test;
-import org.mockito.Mockito;
-import org.mockito.invocation.InvocationOnMock;
-import org.mockito.stubbing.Answer;
-
-import org.apache.phoenix.hbase.index.covered.IndexUpdate;
-import org.apache.phoenix.hbase.index.covered.LocalTableState;
 import org.apache.phoenix.hbase.index.covered.data.LocalHBaseState;
 import org.apache.phoenix.hbase.index.covered.data.LocalTable;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.scanner.Scanner;
+import org.junit.Test;
+import org.mockito.Mockito;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
 
 /**
  *
@@ -86,7 +84,7 @@ public class TestLocalTableState {
     LocalHBaseState state = new LocalTable(env);
     LocalTableState table = new LocalTableState(env, state, m);
     //add the kvs from the mutation
-    table.addPendingUpdates(KeyValueUtil.ensureKeyValues(m.get(fam, qual)));
+    table.addPendingUpdates(m.get(fam, qual));
 
     // setup the lookup
     ColumnReference col = new ColumnReference(fam, qual);
@@ -128,8 +126,8 @@ public class TestLocalTableState {
     LocalHBaseState state = new LocalTable(env);
     LocalTableState table = new LocalTableState(env, state, m);
     // add the kvs from the mutation
-    KeyValue kv = KeyValueUtil.ensureKeyValue(m.get(fam, qual).get(0));
-    kv.setMvccVersion(0);
+    Cell kv = m.get(fam, qual).get(0);
+    KeyValueUtil.ensureKeyValue(kv).setMvccVersion(0);
     table.addPendingUpdates(kv);
 
     // setup the lookup
