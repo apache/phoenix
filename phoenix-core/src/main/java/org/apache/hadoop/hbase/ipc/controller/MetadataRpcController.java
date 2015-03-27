@@ -15,31 +15,41 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hbase.ipc;
+package org.apache.hadoop.hbase.ipc.controller;
+
+import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.ipc.DelegatingPayloadCarryingRpcController;
 import org.apache.hadoop.hbase.ipc.PayloadCarryingRpcController;
+import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 
-class IndexRpcController extends DelegatingPayloadCarryingRpcController {
+import com.google.common.collect.ImmutableList;
 
-    private int priority;
-    
-    public IndexRpcController(PayloadCarryingRpcController delegate, Configuration conf) {
-        super(delegate);
-        this.priority = PhoenixRpcSchedulerFactory.getIndexPriority(conf);
-    }
-    
-    @Override
-    public void setPriority(final TableName tn) {
-		if (!tn.isSystemTable()) {
+class MetadataRpcController extends DelegatingPayloadCarryingRpcController {
+
+	private int priority;
+	// list of system tables
+	private static final List<String> SYSTEM_TABLE_NAMES = new ImmutableList.Builder<String>()
+			.add(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME)
+			.add(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME)
+			.add(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME).build();
+
+	public MetadataRpcController(PayloadCarryingRpcController delegate,
+			Configuration conf) {
+		super(delegate);
+		this.priority = PhoenixRpcSchedulerFactory.getMetadataPriority(conf);
+	}
+
+	@Override
+	public void setPriority(final TableName tn) {
+		if (SYSTEM_TABLE_NAMES.contains(tn.getNameAsString())) {
 			setPriority(this.priority);
-		}  
-        else {
-            super.setPriority(tn);
-        }
-    }
-    
+		} else {
+			super.setPriority(tn);
+		}
+	}
 
 }

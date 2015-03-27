@@ -531,9 +531,13 @@ public abstract class BaseTest {
     }
             
     protected static void setUpTestDriver(ReadOnlyProps props) throws Exception {
-        String url = checkClusterInitialized(props);
+        setUpTestDriver(props, props);
+    }
+    
+    protected static void setUpTestDriver(ReadOnlyProps serverProps, ReadOnlyProps clientProps) throws Exception {
+        String url = checkClusterInitialized(serverProps);
         if (driver == null) {
-            driver = initAndRegisterDriver(url, props);
+            driver = initAndRegisterDriver(url, clientProps);
         }
     }
 

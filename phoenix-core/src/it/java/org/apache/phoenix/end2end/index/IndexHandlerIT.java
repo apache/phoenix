@@ -35,7 +35,7 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.ipc.DelegatingPayloadCarryingRpcController;
 import org.apache.hadoop.hbase.ipc.PayloadCarryingRpcController;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
-import org.apache.hadoop.hbase.ipc.ServerRpcControllerFactory;
+import org.apache.hadoop.hbase.ipc.controller.ServerRpcControllerFactory;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.hbase.index.TableName;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -159,7 +159,7 @@ public class IndexHandlerIT {
         // check the counts on the rpc controller
         assertEquals("Didn't get the expected number of index priority writes!", 1,
             (int) CountingIndexClientRpcController.priorityCounts
-                    .get(QueryServicesOptions.DEFAULT_INDEX_MIN_PRIORITY));
+                    .get(QueryServicesOptions.DEFAULT_INDEX_PRIORITY));
 
         table.close();
     }

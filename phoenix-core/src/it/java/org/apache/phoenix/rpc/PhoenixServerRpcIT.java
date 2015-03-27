@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.end2end.index;
+package org.apache.phoenix.rpc;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
@@ -30,24 +30,17 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.MiniHBaseCluster;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.ipc.BalancedQueueRpcExecutor;
 import org.apache.hadoop.hbase.ipc.CallRunner;
-import org.apache.hadoop.hbase.ipc.PhoenixRpcScheduler;
-import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
-import org.apache.hadoop.hbase.ipc.RpcExecutor;
-import org.apache.hadoop.hbase.ipc.RpcScheduler;
-import org.apache.hadoop.hbase.ipc.ServerRpcControllerFactory;
+import org.apache.hadoop.hbase.ipc.controller.ServerRpcControllerFactory;
 import org.apache.hadoop.hbase.master.AssignmentManager;
 import org.apache.hadoop.hbase.master.HMaster;
 import org.apache.hadoop.hbase.regionserver.HRegionServer;
-import org.apache.hadoop.hbase.regionserver.RegionServerServices;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.BaseOwnClusterHBaseManagedTimeIT;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -55,44 +48,35 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
+import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.mockito.Mockito;
 
 import com.google.common.collect.Maps;
 
-public class PhoenixRpcIT extends BaseOwnClusterHBaseManagedTimeIT {
+public class PhoenixServerRpcIT extends BaseOwnClusterHBaseManagedTimeIT {
 
     private static final String SCHEMA_NAME = "S";
     private static final String INDEX_TABLE_NAME = "I";
     private static final String DATA_TABLE_FULL_NAME = SchemaUtil.getTableName(SCHEMA_NAME, "T");
     private static final String INDEX_TABLE_FULL_NAME = SchemaUtil.getTableName(SCHEMA_NAME, "I");
-    private static RpcExecutor indexRpcExecutor = Mockito.spy(new BalancedQueueRpcExecutor("test-index-queue", 30, 1, 300));
-    private static RpcExecutor metadataRpcExecutor = Mockito.spy(new BalancedQueueRpcExecutor("test-metataqueue", 30, 1, 300));
     
     @BeforeClass
     public static void doSetup() throws Exception {
-        Map<String, String> props = Maps.newHashMapWithExpectedSize(2);
-        props.put(HRegionServer.REGION_SERVER_RPC_SCHEDULER_FACTORY_CLASS,
+        Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(2);
+        serverProps.put(HRegionServer.REGION_SERVER_RPC_SCHEDULER_FACTORY_CLASS,
                 TestPhoenixIndexRpcSchedulerFactory.class.getName());
-        props.put(RpcControllerFactory.CUSTOM_CONTROLLER_CONF_KEY, ServerRpcControllerFactory.class.getName());
+        serverProps.put(RpcControllerFactory.CUSTOM_CONTROLLER_CONF_KEY, ServerRpcControllerFactory.class.getName());
         NUM_SLAVES_BASE = 2;
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), ReadOnlyProps.EMPTY_PROPS);
     }
     
-    /**
-     * Factory that uses a spyed RpcExecutor
-     */
-    public static class TestPhoenixIndexRpcSchedulerFactory extends PhoenixRpcSchedulerFactory {
-        @Override
-        public RpcScheduler create(Configuration conf, RegionServerServices services) {
-            PhoenixRpcScheduler phoenixIndexRpcScheduler = (PhoenixRpcScheduler)super.create(conf, services);
-            phoenixIndexRpcScheduler.setIndexExecutorForTesting(indexRpcExecutor);
-            phoenixIndexRpcScheduler.setMetadataExecutorForTesting(metadataRpcExecutor);
-            return phoenixIndexRpcScheduler;
-        }
+    @AfterClass
+    public static void doTeardown() throws Exception {
+        TestPhoenixIndexRpcSchedulerFactory.reset();
     }
-
+    
     @Test
     public void testIndexQos() throws Exception { 
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -159,7 +143,7 @@ public class PhoenixRpcIT extends BaseOwnClusterHBaseManagedTimeIT {
             assertFalse(rs.next());
             
             // verify that that index queue is used only once (for the first upsert)
-            Mockito.verify(indexRpcExecutor).dispatch(Mockito.any(CallRunner.class));
+            Mockito.verify(TestPhoenixIndexRpcSchedulerFactory.getIndexRpcExecutor()).dispatch(Mockito.any(CallRunner.class));
         }
         finally {
             conn.close();
@@ -238,7 +222,7 @@ public class PhoenixRpcIT extends BaseOwnClusterHBaseManagedTimeIT {
             // query the table from another connection, so that SYSTEM.STATS will be used 
             conn.createStatement().execute("SELECT * FROM "+DATA_TABLE_FULL_NAME);
             // verify that that metadata queue is used once 
-            Mockito.verify(metadataRpcExecutor).dispatch(Mockito.any(CallRunner.class));
+            Mockito.verify(TestPhoenixIndexRpcSchedulerFactory.getMetadataRpcExecutor()).dispatch(Mockito.any(CallRunner.class));
         }
         finally {
             conn.close();

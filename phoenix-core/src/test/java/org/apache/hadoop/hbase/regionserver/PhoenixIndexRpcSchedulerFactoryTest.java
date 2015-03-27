@@ -21,6 +21,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
 import org.apache.phoenix.query.QueryServices;
 import org.junit.Test;
@@ -50,57 +51,75 @@ public class PhoenixIndexRpcSchedulerFactoryTest {
     }
 
     /**
-     * Ensure that we can't configure the index priority ranges inside the hbase ranges
+     * Ensure that we can't configure the index and metadata priority ranges inside the hbase ranges
      * @throws Exception
      */
     @Test
-    public void testValidateIndexPriorityRanges() throws Exception {
+    public void testValidateRpcPriorityRanges() throws Exception {
         Configuration conf = new Configuration(false);
         // standard configs should be fine
         PhoenixRpcSchedulerFactory factory = new PhoenixRpcSchedulerFactory();
         factory.create(conf, null);
 
-        setMinMax(conf, -4, -1);
+        // test priorities less than HBase range
+        setPriorities(conf, -4, -1);
         factory.create(conf, null);
 
-        setMinMax(conf, 101, 102);
+        // test priorities greater than HBase range
+        setPriorities(conf, 101, 102);
         factory.create(conf, null);
 
-        setMinMax(conf, 102, 101);
+        // test priorities in HBase range
+        setPriorities(conf, 1, 101);
         try {
             factory.create(conf, null);
-            fail("Should not have allowed max less than min");
+            fail("Should not have allowed priorities in HBase range");
         } catch (IllegalArgumentException e) {
             // expected
         }
-
-        setMinMax(conf, 5, 6);
+        setPriorities(conf, 101, 1);
         try {
             factory.create(conf, null);
-            fail("Should not have allowed min in range");
+            fail("Should not have allowed priorities in HBase range");
         } catch (IllegalArgumentException e) {
             // expected
         }
-
-        setMinMax(conf, 6, 60);
+        
+        // test priorities in HBase range
+        setPriorities(conf, 101, HConstants.NORMAL_QOS);
         try {
             factory.create(conf, null);
-            fail("Should not have allowed min/max in hbase range");
+            fail("Should not have allowed priorities in HBase range");
         } catch (IllegalArgumentException e) {
             // expected
         }
-
-        setMinMax(conf, 6, 101);
+        setPriorities(conf, HConstants.NORMAL_QOS, 101);
         try {
             factory.create(conf, null);
-            fail("Should not have allowed in range");
+            fail("Should not have allowed priorities in HBase range");
+        } catch (IllegalArgumentException e) {
+            // expected
+        }
+        
+        // test priorities in HBase range
+        setPriorities(conf, 101, HConstants.HIGH_QOS);
+        try {
+            factory.create(conf, null);
+            fail("Should not have allowed priorities in HBase range");
+        } catch (IllegalArgumentException e) {
+            // expected
+        }
+        setPriorities(conf, HConstants.HIGH_QOS, 101);
+        try {
+            factory.create(conf, null);
+            fail("Should not have allowed priorities in HBase range");
         } catch (IllegalArgumentException e) {
             // expected
         }
     }
 
-    private void setMinMax(Configuration conf, int min, int max) {
-        conf.setInt(QueryServices.MIN_INDEX_PRIOIRTY_ATTRIB, min);
-        conf.setInt(QueryServices.MAX_INDEX_PRIOIRTY_ATTRIB, max);
+    private void setPriorities(Configuration conf, int indexPrioritymin, int metadataPriority) {
+        conf.setInt(QueryServices.INDEX_PRIOIRTY_ATTRIB, indexPrioritymin);
+        conf.setInt(QueryServices.METADATA_PRIOIRTY_ATTRIB, metadataPriority);
     }
 }
