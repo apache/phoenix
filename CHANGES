@@ -1,13 +1,39 @@
 Release Notes - Phoenix - Version 4.3.1
 
+** New Feature
+    * [PHOENIX-1452] - Add Phoenix client-side logging and capture resource utilization metrics
+
+** Improvement
+    * [PHOENIX-1722] - Speedup CONVERT_TZ function
+    * [PHOENIX-1746] - Pass through guidepost config params on UPDATE STATISTICS call
+    * [PHOENIX-1770] - psql.py returns 0 even if an error has occurred
+
+** Sub-task
+    * [PHOENIX-1115] - Provide a SQL command to turn tracing on/off
+    * [PHOENIX-1691] - Allow settting sampling rate while enabling tracing.
+    * [PHOENIX-1776] - The literal -1.0 (floating point) should not be converted to -1 (Integer)
+
 ** Bug
     * [PHOENIX-1078] - Unable to run pig script with Phoenix in a secure HBase cluster
+    * [PHOENIX-1577] - java.lang.IllegalArgumentException: nanos > 999999999 or < 0 while use Calendar
     * [PHOENIX-1672] - RegionScanner.nextRaw contract not implemented correctly
+    * [PHOENIX-1676] - Set priority of Index Updates correctly 
+    * [PHOENIX-1677] - Immutable index deadlocks when number of guideposts are one half of thread pool size
     * [PHOENIX-1690] - IndexOutOfBoundsException during SkipScanFilter interesect
     * [PHOENIX-1696] - Selecting column more than once fails
+    * [PHOENIX-1703] - Fail connection when server minor version is less than client minor version
+    * [PHOENIX-1709] - And expression of primary key RVCs can not compile
+    * [PHOENIX-1723] - PTinyint.isCoercibleTo fails to test -1 with type PTinyint
+    * [PHOENIX-1724] - Update MetaDataProtocol patch version for 4.3.1
+    * [PHOENIX-1736] - Use non deprecated APIs where possible
+    * [PHOENIX-1741] - PUnsignedTimestamp should define its codec 
+    * [PHOENIX-1744] - CAST from UNSIGNED_LONG (_INT) to * TIMESTAMP is not supported.
+    * [PHOENIX-1753] - Query with RVC that doesn't lead with the row key can return incorrect results
 
+** Test
+    * [PHOENIX-1739] - Ensure RuntimeException nests SQLException so that proper exception gets thrown
 
-Release Notes - Phoenix - Version 4.3
+Release Notes - Phoenix - Version 4.3.0
 
 ** New Feature
     * [PHOENIX-1399] - Support cross joins and comma-separated table list
