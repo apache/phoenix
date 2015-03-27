@@ -26,7 +26,7 @@ import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
 import org.apache.phoenix.query.QueryServices;
 import org.junit.Test;
 
-public class PhoenixIndexRpcSchedulerFactoryTest {
+public class PhoenixRpcSchedulerFactoryTest {
 
     @Test
     public void ensureInstantiation() throws Exception {
