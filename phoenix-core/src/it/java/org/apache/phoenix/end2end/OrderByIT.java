@@ -80,7 +80,7 @@ public class OrderByIT extends BaseClientManagedTimeIT {
             conn.close();
         }
     }
-    
+
 
     @Test
     public void testDescMultiOrderByExpr() throws Exception {
@@ -118,4 +118,57 @@ public class OrderByIT extends BaseClientManagedTimeIT {
             conn.close();
         }
     }
+
+    @Test
+    public void testOrderByWithPosition() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(false);
+
+        try {
+            String ddl = "CREATE TABLE t_table " +
+                    "  (a_string varchar not null, col1 integer" +
+                    "  CONSTRAINT pk PRIMARY KEY (a_string))\n";
+            createTestTable(getUrl(), ddl);
+
+            String dml = "UPSERT INTO t_table VALUES(?, ?)";
+            PreparedStatement stmt = conn.prepareStatement(dml);
+            stmt.setString(1, "a");
+            stmt.setInt(2, 40);
+            stmt.execute();
+            stmt.setString(1, "b");
+            stmt.setInt(2, 20);
+            stmt.execute();
+            stmt.setString(1, "c");
+            stmt.setInt(2, 30);
+            stmt.execute();
+            conn.commit();
+
+            String aggregate = "select count(*), col1 from t_table group by col1 order by 2";
+            ResultSet rs = conn.createStatement().executeQuery(aggregate);
+            assertTrue(rs.next());
+            assertEquals(1,rs.getInt(1));
+            assertTrue(rs.next());
+            assertEquals(1,rs.getInt(1));
+            assertTrue(rs.next());
+            assertEquals(1,rs.getInt(1));  
+            assertFalse(rs.next());  
+
+            aggregate = "select a_string x, col1 y from t_table order by x";
+            rs = conn.createStatement().executeQuery(aggregate);
+            assertTrue(rs.next());
+            assertEquals("a",rs.getString(1));
+            assertEquals(40,rs.getInt(2));
+            assertTrue(rs.next());
+            assertEquals("b",rs.getString(1));
+            assertEquals(20,rs.getInt(2));
+            assertTrue(rs.next());
+            assertEquals("c",rs.getString(1));  
+            assertEquals(30,rs.getInt(2));
+            assertFalse(rs.next());  
+        } finally {
+            conn.close();
+        }
+    }
+
 }
