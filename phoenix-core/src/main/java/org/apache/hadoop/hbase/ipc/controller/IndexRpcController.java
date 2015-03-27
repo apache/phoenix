@@ -22,19 +22,24 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.ipc.DelegatingPayloadCarryingRpcController;
 import org.apache.hadoop.hbase.ipc.PayloadCarryingRpcController;
 import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 
 class IndexRpcController extends DelegatingPayloadCarryingRpcController {
 
-    private int priority;
+    private final int priority;
+    private final String tracingTableName;
     
     public IndexRpcController(PayloadCarryingRpcController delegate, Configuration conf) {
         super(delegate);
         this.priority = PhoenixRpcSchedulerFactory.getIndexPriority(conf);
+        this.tracingTableName = conf.get(QueryServices.TRACING_STATS_TABLE_NAME_ATTRIB,
+                QueryServicesOptions.DEFAULT_TRACING_STATS_TABLE_NAME);
     }
     
     @Override
     public void setPriority(final TableName tn) {
-		if (!tn.isSystemTable()) {
+		if (!tn.isSystemTable() && !tn.getNameAsString().equals(tracingTableName)) {
 			setPriority(this.priority);
 		}  
         else {

@@ -98,7 +98,7 @@ public class PhoenixClientRpcIT extends BaseOwnClusterHBaseManagedTimeIT {
             assertEquals("v2", rs.getString(2));
             assertFalse(rs.next());
 
-            // verify that index queue is not used (since the index write originate from a client an not a region server)
+            // verify that index queue is not used (since the index writes originate from a client an not a region server)
             Mockito.verify(TestPhoenixIndexRpcSchedulerFactory.getIndexRpcExecutor(), Mockito.never()).dispatch(Mockito.any(CallRunner.class));
         } finally {
             conn.close();

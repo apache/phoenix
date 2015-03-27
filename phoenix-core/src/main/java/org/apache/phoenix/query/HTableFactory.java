@@ -20,11 +20,8 @@ package org.apache.phoenix.query;
 import java.io.IOException;
 import java.util.concurrent.ExecutorService;
 
-import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HConnection;
-import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.HTableInterface;
-import org.apache.hadoop.hbase.ipc.controller.ServerRpcControllerFactory;
 
 /**
  * Creates clients to access HBase tables.
@@ -53,8 +50,6 @@ public interface HTableFactory {
         public HTableInterface getTable(byte[] tableName, HConnection connection, ExecutorService pool) throws IOException {
             // Let the HBase client manage the thread pool instead of passing ours through
             return connection.getTable(tableName);
-//        	PhoenixRpcControllerFactory phoenixRpcControllerFactory = new PhoenixRpcControllerFactory(connection.getConfiguration());
-//        	return new HTable(TableName.valueOf(tableName), connection, null, null, phoenixRpcControllerFactory, pool);
         }
     }
 }

@@ -60,9 +60,7 @@ import org.apache.hadoop.hbase.client.coprocessor.Batch;
 import org.apache.hadoop.hbase.coprocessor.MultiRowMutationEndpoint;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.BlockingRpcCallback;
-import org.apache.hadoop.hbase.ipc.PayloadCarryingRpcController;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
-import org.apache.hadoop.hbase.ipc.controller.ServerRpcControllerFactory;
 import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto;
 import org.apache.hadoop.hbase.regionserver.IndexHalfStoreFileReaderGenerator;
 import org.apache.hadoop.hbase.regionserver.LocalIndexSplitter;
@@ -1260,7 +1258,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             new Batch.Call<MetaDataService, MetaDataResponse>() {
                 @Override
                 public MetaDataResponse call(MetaDataService instance) throws IOException {
-//                	PayloadCarryingRpcController controller = new PhoenixRpcControllerFactory(config).newController();
                     ServerRpcController controller = new ServerRpcController();
                     BlockingRpcCallback<MetaDataResponse> rpcCallback =
                             new BlockingRpcCallback<MetaDataResponse>();
