@@ -64,12 +64,6 @@ public class DateTimeIT extends BaseHBaseManagedTimeIT {
         initAtable();
     }
 
-    /*@BeforeClass
-    @Shadower(classBeingShadowed = BaseClientManagedTimeIT.class)
-    public static void doSetup() throws Exception {
-        doSetup();
-    }*/
-
     protected void initAtable() throws Exception { 
         ensureTableCreated(getUrl(), ATABLE_NAME, (byte[][])null);
         PreparedStatement stmt = conn.prepareStatement(
