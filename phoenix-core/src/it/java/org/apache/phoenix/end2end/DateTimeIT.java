@@ -255,8 +255,6 @@ public class DateTimeIT extends BaseHBaseManagedTimeIT {
         conn.commit();
     }
 
-
-
     @Test
     public void selectBetweenDates() throws Exception {
         Format formatter = DateUtil.getDateFormatter("yyyy-MM-dd");
@@ -288,7 +286,6 @@ public class DateTimeIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testSelectLiteralDateCompare() throws Exception {
         String query = "SELECT (DATE '" + date + "' = DATE '" + date + "') FROM ATABLE";
-
         Statement statement = conn.createStatement();
         ResultSet rs = statement.executeQuery(query);
         assertTrue(rs.next());
@@ -298,7 +295,6 @@ public class DateTimeIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testSelectWhereDatesEqual() throws Exception {
         String query = "SELECT entity_id FROM ATABLE WHERE  a_integer < 4 AND DATE '" + date + "' = DATE '" + date + "'";
-
         Statement statement = conn.createStatement();
         ResultSet rs = statement.executeQuery(query);
         assertTrue(rs.next());
@@ -308,7 +304,6 @@ public class DateTimeIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testSelectWhereDateAndToDateEqual() throws Exception {
         String query = "SELECT entity_id FROM ATABLE WHERE  a_integer < 4 AND DATE '" + date + "' = TO_DATE ('" + date + "')";
-
         Statement statement = conn.createStatement();
         ResultSet rs = statement.executeQuery(query);
         assertTrue(rs.next());
@@ -323,25 +318,19 @@ public class DateTimeIT extends BaseHBaseManagedTimeIT {
         Statement statement = conn.createStatement();
         ResultSet rs = statement.executeQuery(query);
         assertTrue(rs.next());
-
     }
 
     @Test
     public void testSelectWhereSameDatesUnequal() throws Exception {
         String query = "SELECT entity_id FROM ATABLE WHERE  a_integer < 4 AND DATE '" + date + "' > DATE '" + date + "'";
-
         Statement statement = conn.createStatement();
         ResultSet rs = statement.executeQuery(query);
         assertFalse(rs.next());
-
     }
-
-    
 
     @Test
     public void testDateInList() throws Exception {
         String query = "SELECT entity_id FROM ATABLE WHERE a_date IN (?,?) AND a_integer < 4";
-        try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setDate(1, new Date(0));
             statement.setDate(2, date);
@@ -349,9 +338,6 @@ public class DateTimeIT extends BaseHBaseManagedTimeIT {
             assertTrue(rs.next());
             assertEquals(ROW1, rs.getString(1));
             assertFalse(rs.next());
-        } finally {
-            conn.close();
-        }
     }  
 
     @Test
@@ -365,16 +351,10 @@ public class DateTimeIT extends BaseHBaseManagedTimeIT {
         String today = formatter.format(dateToday);
         String tomorrow = formatter.format(dateTomorrow);
         String query = "SELECT entity_id FROM ATABLE WHERE a_integer < 4 AND a_date BETWEEN date '" + today + "' AND date '" + tomorrow + "' ";
-        try {
             Statement statement = conn.createStatement();
             ResultSet rs = statement.executeQuery(query);
             assertTrue(rs.next());
             assertEquals(ROW1, rs.getString(1));
             assertFalse(rs.next());
-        } finally {
-            conn.close();
-        }
     }
-
-
 }
