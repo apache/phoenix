@@ -682,6 +682,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
             descriptor.addFamily(columnDescriptor);
         }
         admin.createTable(descriptor);
+        admin.close();
             
         long ts = nextTimestamp();
         Properties props = new Properties();
