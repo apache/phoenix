@@ -26,6 +26,7 @@ import static org.junit.Assert.assertTrue;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -37,8 +38,6 @@ import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.ipc.CallRunner;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
-import org.apache.hadoop.hbase.ipc.controller.ClientRpcControllerFactory;
-import org.apache.hadoop.hbase.ipc.controller.ServerRpcControllerFactory;
 import org.apache.hadoop.hbase.master.AssignmentManager;
 import org.apache.hadoop.hbase.master.HMaster;
 import org.apache.hadoop.hbase.regionserver.HRegionServer;
@@ -54,8 +53,6 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.mockito.Mockito;
 
-import com.google.common.collect.Maps;
-
 public class PhoenixServerRpcIT extends BaseOwnClusterHBaseManagedTimeIT {
 
     private static final String SCHEMA_NAME = "S";
@@ -65,12 +62,11 @@ public class PhoenixServerRpcIT extends BaseOwnClusterHBaseManagedTimeIT {
     
     @BeforeClass
     public static void doSetup() throws Exception {
-        Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(2);
-        serverProps.put(HRegionServer.REGION_SERVER_RPC_SCHEDULER_FACTORY_CLASS,
-                TestPhoenixIndexRpcSchedulerFactory.class.getName());
-        serverProps.put(RpcControllerFactory.CUSTOM_CONTROLLER_CONF_KEY, ServerRpcControllerFactory.class.getName());
-        Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(1);
-        clientProps.put(RpcControllerFactory.CUSTOM_CONTROLLER_CONF_KEY, RpcControllerFactory.class.getName());
+    	Map<String, String> serverProps = Collections.singletonMap(HRegionServer.REGION_SERVER_RPC_SCHEDULER_FACTORY_CLASS, 
+        		TestPhoenixIndexRpcSchedulerFactory.class.getName());
+        // use the standard rpc controller for client rpc, so that we can isolate server rpc and ensure they use the correct queue  
+    	Map<String, String> clientProps = Collections.singletonMap(RpcControllerFactory.CUSTOM_CONTROLLER_CONF_KEY, 
+    			RpcControllerFactory.class.getName());      
         NUM_SLAVES_BASE = 2;
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
     }

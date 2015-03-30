@@ -675,9 +675,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
             admin.deleteTable(htableName);
             admin.enableTable(htableName);
         } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
-        } finally {
-            admin.close();
-        }
+        } 
         
         HTableDescriptor descriptor = new HTableDescriptor(htableName);
         for (byte[] familyName : familyNames) {
@@ -685,6 +683,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
             descriptor.addFamily(columnDescriptor);
         }
         admin.createTable(descriptor);
+        admin.close();
             
         long ts = nextTimestamp();
         Properties props = new Properties();

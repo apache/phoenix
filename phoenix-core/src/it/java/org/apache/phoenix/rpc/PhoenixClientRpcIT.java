@@ -17,13 +17,11 @@ import static org.junit.Assert.assertTrue;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.util.Collections;
 import java.util.Map;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.ipc.CallRunner;
-import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
-import org.apache.hadoop.hbase.ipc.controller.ClientRpcControllerFactory;
-import org.apache.hadoop.hbase.ipc.controller.ServerRpcControllerFactory;
 import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.phoenix.end2end.BaseOwnClusterHBaseManagedTimeIT;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -35,8 +33,6 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.mockito.Mockito;
 
-import com.google.common.collect.Maps;
-
 public class PhoenixClientRpcIT extends BaseOwnClusterHBaseManagedTimeIT {
 
     private static final String SCHEMA_NAME = "S";
@@ -45,15 +41,10 @@ public class PhoenixClientRpcIT extends BaseOwnClusterHBaseManagedTimeIT {
 
     @BeforeClass
     public static void doSetup() throws Exception {
-        Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(2);
-        serverProps.put(HRegionServer.REGION_SERVER_RPC_SCHEDULER_FACTORY_CLASS,
-                TestPhoenixIndexRpcSchedulerFactory.class.getName());
-        serverProps.put(RpcControllerFactory.CUSTOM_CONTROLLER_CONF_KEY, ServerRpcControllerFactory.class.getName());
-        Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(1);
-        clientProps.put(RpcControllerFactory.CUSTOM_CONTROLLER_CONF_KEY, ClientRpcControllerFactory.class.getName());
+        Map<String, String> serverProps = Collections.singletonMap(HRegionServer.REGION_SERVER_RPC_SCHEDULER_FACTORY_CLASS, 
+        		TestPhoenixIndexRpcSchedulerFactory.class.getName());
         NUM_SLAVES_BASE = 2;
-        setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet()
-                .iterator()));
+        setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), ReadOnlyProps.EMPTY_PROPS);
     }
     
     @AfterClass
