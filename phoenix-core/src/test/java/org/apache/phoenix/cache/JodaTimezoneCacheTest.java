@@ -15,12 +15,14 @@
  */
 package org.apache.phoenix.cache;
 
+import static org.junit.Assert.assertNotNull;
+
 import java.nio.ByteBuffer;
+
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.joda.time.DateTimeZone;
-import static org.junit.Assert.assertTrue;
 import org.junit.Test;
 
 public class JodaTimezoneCacheTest {
@@ -28,13 +30,13 @@ public class JodaTimezoneCacheTest {
     @Test
     public void testGetInstanceByteBufferUTC() {
         DateTimeZone instance = JodaTimezoneCache.getInstance(ByteBuffer.wrap(Bytes.toBytes("UTC")));
-        assertTrue(instance instanceof DateTimeZone);
+        assertNotNull(instance);
     }
 
     @Test
     public void testGetInstanceString() {
         DateTimeZone instance = JodaTimezoneCache.getInstance("America/St_Vincent");
-        assertTrue(instance instanceof DateTimeZone);
+        assertNotNull(instance);
     }
 
     @Test(expected = IllegalDataException.class)
@@ -46,6 +48,6 @@ public class JodaTimezoneCacheTest {
     public void testGetInstanceImmutableBytesWritable() {
         ImmutableBytesWritable ptr = new ImmutableBytesWritable(Bytes.toBytes("Europe/Isle_of_Man"));
         DateTimeZone instance = JodaTimezoneCache.getInstance(ptr);
-        assertTrue(instance instanceof DateTimeZone);
+        assertNotNull(instance);
     }
 }
