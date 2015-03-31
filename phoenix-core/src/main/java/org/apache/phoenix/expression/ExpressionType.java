@@ -40,6 +40,7 @@ import org.apache.phoenix.expression.function.FirstValueFunction;
 import org.apache.phoenix.expression.function.FloorDateExpression;
 import org.apache.phoenix.expression.function.FloorDecimalExpression;
 import org.apache.phoenix.expression.function.FloorFunction;
+import org.apache.phoenix.expression.function.HourFunction;
 import org.apache.phoenix.expression.function.IndexStateNameFunction;
 import org.apache.phoenix.expression.function.InvertFunction;
 import org.apache.phoenix.expression.function.LTrimFunction;
@@ -84,6 +85,7 @@ import org.apache.phoenix.expression.function.ToTimestampFunction;
 import org.apache.phoenix.expression.function.TrimFunction;
 import org.apache.phoenix.expression.function.TruncFunction;
 import org.apache.phoenix.expression.function.UpperFunction;
+import org.apache.phoenix.expression.function.WeekFunction;
 import org.apache.phoenix.expression.function.YearFunction;
 
 import com.google.common.collect.Maps;
@@ -199,7 +201,9 @@ public enum ExpressionType {
     SignFunction(SignFunction.class),
     YearFunction(YearFunction.class),
     MonthFunction(MonthFunction.class),
-    SecondFunction(SecondFunction.class)
+    SecondFunction(SecondFunction.class),
+    WeekFunction(WeekFunction.class),
+    HourFunction(HourFunction.class)
     ;
 
     ExpressionType(Class<? extends Expression> clazz) {

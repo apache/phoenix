@@ -168,4 +168,40 @@ public class YearMonthSecondFunctionIT extends BaseHBaseManagedTimeIT {
         assertEquals(50, rs.getInt(6));
         assertFalse(rs.next());
     }
+
+    @Test
+    public void testWeekFuncAgainstColumns() throws Exception {
+        String ddl =
+                "CREATE TABLE IF NOT EXISTS T1 (k1 INTEGER NOT NULL, dates DATE, timestamps TIMESTAMP, times TIME CONSTRAINT pk PRIMARY KEY (k1))";
+        conn.createStatement().execute(ddl);
+        String dml = "UPSERT INTO T1 VALUES (1, TO_DATE('2004-03-01 00:00:10'), TO_TIMESTAMP('2006-04-12 00:00:20'), TO_TIME('2008-05-16 10:00:30'))";
+        conn.createStatement().execute(dml);
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery("SELECT k1, WEEK(dates), WEEK(times) FROM T1 where WEEK(timestamps)=15");
+        assertTrue(rs.next());
+        assertEquals(1, rs.getInt(1));
+        assertEquals(9, rs.getInt(2));
+        assertEquals(20, rs.getInt(3));
+        assertFalse(rs.next());
+    }
+    
+    @Test
+    public void testHourFuncAgainstColumns() throws Exception {
+        String ddl =
+                "CREATE TABLE IF NOT EXISTS T1 (k1 INTEGER NOT NULL, dates DATE, timestamps TIMESTAMP, times TIME CONSTRAINT pk PRIMARY KEY (k1))";
+        conn.createStatement().execute(ddl);
+        String dml = "UPSERT INTO T1 VALUES (1, TO_DATE('Sat, 3 Feb 2008 03:05:06 GMT', 'EEE, d MMM yyyy HH:mm:ss z', 'UTC'), TO_TIMESTAMP('2006-04-12 15:10:20'), " +
+                "TO_TIME('2008-05-16 20:40:30'))";
+        conn.createStatement().execute(dml);
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery("SELECT k1, HOUR(dates), HOUR(timestamps), HOUR(times) FROM T1");
+        assertTrue(rs.next());
+        assertEquals(1, rs.getInt(1));
+        assertEquals(3, rs.getInt(2));
+        assertEquals(15, rs.getInt(3));
+        assertEquals(20, rs.getInt(4));
+        assertFalse(rs.next());
+    }
 }
