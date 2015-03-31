@@ -21,6 +21,8 @@ import java.util.LinkedList;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.types.PArrayDataType.PArrayDataTypeBytesArrayBuilder;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
@@ -33,7 +35,7 @@ import org.joni.Syntax;
 
 import com.google.common.base.Preconditions;
 
-public class JONIPattern extends AbstractBasePattern {
+public class JONIPattern extends AbstractBasePattern implements AbstractBaseSplitter {
 
     private final Regex pattern;
     private final String patternString;
@@ -159,5 +161,51 @@ public class JONIPattern extends AbstractBasePattern {
             outPtr.set(ByteUtil.EMPTY_BYTE_ARRAY);
         }
         return ret;
+    }
+
+    @Override
+    public boolean split(ImmutableBytesWritable srcPtr, ImmutableBytesWritable outPtr) {
+        return split(srcPtr.get(), srcPtr.getOffset(), srcPtr.getLength(), outPtr);
+    }
+
+    private boolean
+            split(byte[] srcBytes, int srcOffset, int srcLen, ImmutableBytesWritable outPtr) {
+        PArrayDataTypeBytesArrayBuilder builder =
+                new PArrayDataTypeBytesArrayBuilder(PVarchar.INSTANCE, SortOrder.ASC);
+        int srcRange = srcOffset + srcLen;
+        Matcher matcher = pattern.matcher(srcBytes, 0, srcRange);
+        int cur = srcOffset;
+        boolean append;
+        while (true) {
+            int nextCur = matcher.search(cur, srcRange, Option.DEFAULT);
+            if (nextCur < 0) {
+                append = builder.appendElem(srcBytes, cur, srcRange - cur);
+                if (!append) return false;
+                break;
+            }
+
+            // To handle the following case, which adds null at first.
+            // REGEXP_SPLIT("12ONE34TWO56THREE78","[0-9]+")={null, "ONE", "TWO", "THREE", null}
+            if (cur == matcher.getBegin()) {
+                builder.appendElem(srcBytes, cur, 0);
+            }
+
+            if (cur < matcher.getBegin()) {
+                append = builder.appendElem(srcBytes, cur, matcher.getBegin() - cur);
+                if (!append) return false;
+            }
+            cur = matcher.getEnd();
+
+            // To handle the following case, which adds null at last.
+            // REGEXP_SPLIT("12ONE34TWO56THREE78","[0-9]+")={null, "ONE", "TWO", "THREE", null}
+            if (cur == srcRange) {
+                builder.appendElem(srcBytes, cur, 0);
+                break;
+            }
+        }
+        byte[] bytes = builder.getBytesAndClose();
+        if (bytes == null) return false;
+        outPtr.set(bytes);
+        return true;
     }
 }
