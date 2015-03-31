@@ -503,6 +503,7 @@
             <configuration>
               <parallel>true</parallel>
               <tagsToExclude>Integration-Test</tagsToExclude>
+              <argLine>-Xmx3g -XX:MaxPermSize=512m -XX:ReservedCodeCacheSize=512m</argLine>
             </configuration>
           </execution>
           <execution>
