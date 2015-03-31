@@ -29,6 +29,9 @@ Release Notes - Phoenix - Version 4.3.1
     * [PHOENIX-1741] - PUnsignedTimestamp should define its codec 
     * [PHOENIX-1744] - CAST from UNSIGNED_LONG (_INT) to * TIMESTAMP is not supported.
     * [PHOENIX-1753] - Query with RVC that doesn't lead with the row key can return incorrect results
+    * [PHOENIX-1783] - Fix IDE compiler errors for JodaTimezoneCacheTest
+    * [PHOENIX-1790] - Fix test failures due to incorrect shadowing of @AfterClass methods.
+    * [PHOENIX-1795] - Set handlerCount, numQueues and maxQueueLength of index and metadata queues correctly 
 
 ** Test
     * [PHOENIX-1739] - Ensure RuntimeException nests SQLException so that proper exception gets thrown
