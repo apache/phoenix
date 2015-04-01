@@ -15,7 +15,9 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
+import java.sql.Date;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -58,6 +60,8 @@ public class YearMonthSecondFunctionIT extends BaseHBaseManagedTimeIT {
     public void testYearFunctionDate() throws SQLException {
 
         assertEquals(2015, callYearFunction("YEAR(current_date())"));
+        
+        assertEquals(2015, callYearFunction("YEAR(now())"));
 
         assertEquals(2008, callYearFunction("YEAR(TO_DATE('2008-01-01', 'yyyy-MM-dd', 'local'))"));
 
@@ -174,18 +178,18 @@ public class YearMonthSecondFunctionIT extends BaseHBaseManagedTimeIT {
         String ddl =
                 "CREATE TABLE IF NOT EXISTS T1 (k1 INTEGER NOT NULL, dates DATE, timestamps TIMESTAMP, times TIME CONSTRAINT pk PRIMARY KEY (k1))";
         conn.createStatement().execute(ddl);
-        String dml = "UPSERT INTO T1 VALUES (1, TO_DATE('2004-03-01 00:00:10'), TO_TIMESTAMP('2006-04-12 00:00:20'), TO_TIME('2008-05-16 10:00:30'))";
+        String dml = "UPSERT INTO T1 VALUES (1, TO_DATE('2004-02-01 00:00:10'), TO_TIMESTAMP('2006-04-12 00:00:20'), TO_TIME('2008-05-16 10:00:30'))";
         conn.createStatement().execute(dml);
         conn.commit();
 
         ResultSet rs = conn.createStatement().executeQuery("SELECT k1, WEEK(dates), WEEK(times) FROM T1 where WEEK(timestamps)=15");
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
-        assertEquals(9, rs.getInt(2));
+        assertEquals(5, rs.getInt(2));
         assertEquals(20, rs.getInt(3));
         assertFalse(rs.next());
     }
-    
+
     @Test
     public void testHourFuncAgainstColumns() throws Exception {
         String ddl =
@@ -202,6 +206,26 @@ public class YearMonthSecondFunctionIT extends BaseHBaseManagedTimeIT {
         assertEquals(3, rs.getInt(2));
         assertEquals(15, rs.getInt(3));
         assertEquals(20, rs.getInt(4));
+        assertFalse(rs.next());
+    }
+
+    @Test
+    public void testNowFunction() throws Exception {
+        Date date = new Date(System.currentTimeMillis());
+        String ddl =
+                "CREATE TABLE IF NOT EXISTS T1 (k1 INTEGER NOT NULL, timestamps TIMESTAMP CONSTRAINT pk PRIMARY KEY (k1))";
+        conn.createStatement().execute(ddl);
+        String dml = "UPSERT INTO T1 VALUES (?, ?)";
+        PreparedStatement stmt = conn.prepareStatement(dml);
+        stmt.setInt(1, 1);
+        stmt.setDate(2, new Date(date.getTime()-500));
+        stmt.execute();
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery("SELECT * from T1 where now() > timestamps");
+        assertTrue(rs.next());
+        assertEquals(1, rs.getInt(1));
+        assertEquals(new Date(date.getTime()-500), rs.getDate(2));
         assertFalse(rs.next());
     }
 }

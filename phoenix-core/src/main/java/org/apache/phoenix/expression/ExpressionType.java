@@ -52,6 +52,7 @@ import org.apache.phoenix.expression.function.MD5Function;
 import org.apache.phoenix.expression.function.MaxAggregateFunction;
 import org.apache.phoenix.expression.function.MinAggregateFunction;
 import org.apache.phoenix.expression.function.MonthFunction;
+import org.apache.phoenix.expression.function.NowFunction;
 import org.apache.phoenix.expression.function.NthValueFunction;
 import org.apache.phoenix.expression.function.PercentRankAggregateFunction;
 import org.apache.phoenix.expression.function.PercentileContAggregateFunction;
@@ -92,7 +93,7 @@ import com.google.common.collect.Maps;
 
 /**
  *
- * Enumeration of all Expression types that may be evaluated on the server-side.
+ * Enumeration of all Expression types that will be looked up. They may be evaluated on the server-side.
  * Used during serialization and deserialization to pass Expression between client
  * and server.
  *
@@ -202,7 +203,8 @@ public enum ExpressionType {
     MonthFunction(MonthFunction.class),
     SecondFunction(SecondFunction.class),
     WeekFunction(WeekFunction.class),
-    HourFunction(HourFunction.class)
+    HourFunction(HourFunction.class),
+    NowFunction(NowFunction.class)
     ;
 
     ExpressionType(Class<? extends Expression> clazz) {
