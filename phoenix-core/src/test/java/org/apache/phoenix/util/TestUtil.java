@@ -194,8 +194,8 @@ public class TestUtil {
     public static final String JOIN_ITEM_TABLE = "ItemTable";
     public static final String JOIN_SUPPLIER_TABLE = "SupplierTable";
     public static final String JOIN_COITEM_TABLE = "CoitemTable";
-    public static final String JOIN_ORDER_TABLE_FULL_NAME = '"' + JOIN_SCHEMA + "\".\"" + JOIN_ORDER_TABLE + '"';
-    public static final String JOIN_CUSTOMER_TABLE_FULL_NAME = '"' + JOIN_SCHEMA + "\".\"" + JOIN_CUSTOMER_TABLE + '"';
+    public static final String JOIN_ORDER_TABLE_FULL_NAME = JOIN_ORDER_TABLE; // '"' + JOIN_SCHEMA + "\".\"" + JOIN_ORDER_TABLE + '"';
+    public static final String JOIN_CUSTOMER_TABLE_FULL_NAME = JOIN_CUSTOMER_TABLE; // '"' + JOIN_SCHEMA + "\".\"" + JOIN_CUSTOMER_TABLE + '"';
     public static final String JOIN_ITEM_TABLE_FULL_NAME = JOIN_ITEM_TABLE; //'"' + JOIN_SCHEMA + "\".\"" + JOIN_ITEM_TABLE + '"';
     public static final String JOIN_SUPPLIER_TABLE_FULL_NAME = JOIN_SUPPLIER_TABLE; //'"' + JOIN_SCHEMA + "\".\"" + JOIN_SUPPLIER_TABLE + '"';
     public static final String JOIN_COITEM_TABLE_FULL_NAME = '"' + JOIN_SCHEMA + "\".\"" + JOIN_COITEM_TABLE + '"';

@@ -15,6 +15,7 @@ import java.sql.*;
 import java.util.List;
 
 import static org.apache.phoenix.util.TestUtil.JOIN_ITEM_TABLE_FULL_NAME;
+import static org.apache.phoenix.util.TestUtil.JOIN_ORDER_TABLE_FULL_NAME;
 import static org.apache.phoenix.util.TestUtil.JOIN_SUPPLIER_TABLE_FULL_NAME;
 import static org.junit.Assert.*;
 
@@ -274,6 +275,33 @@ public class CalciteTest extends BaseClientManagedTimeIT {
                           {"00B823122312312", "b", "00D300000000XHP"}, 
                           {"00C923122312312", "c", "00D300000000XHP"}})
                 .close();
+    }
+    
+    @Test public void testAggregate() {
+        start().sql("select a_string, count(entity_id) from atable group by a_string")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                           "  PhoenixAggregate(group=[{0}], EXPR$1=[COUNT()])\n" +
+                           "    PhoenixTableScan(table=[[phoenix, ATABLE]], project=[[$2]])\n")
+                .resultIs(new Object[][] {
+                          {"a", 4L},
+                          {"b", 4L},
+                          {"c", 1L}})
+                .close();
+    }
+    
+    @Test public void testSubquery() {
+        start().sql("SELECT \"order_id\" FROM " + JOIN_ORDER_TABLE_FULL_NAME + " o WHERE quantity = (SELECT max(quantity) FROM " + JOIN_ORDER_TABLE_FULL_NAME + " q WHERE o.\"item_id\" = q.\"item_id\")")
+               .explainIs("PhoenixToEnumerableConverter\n" +
+                          "  PhoenixProject(order_id=[$0])\n" +
+                          "    PhoenixJoin(condition=[AND(=($2, $6), =($4, $7))], joinType=[inner])\n" +
+                          "      PhoenixTableScan(table=[[phoenix, ORDERTABLE]])\n" +
+                          "      PhoenixAggregate(group=[{0}], EXPR$0=[MAX($1)])\n" +
+                          "        PhoenixProject(item_id0=[$6], QUANTITY=[$4])\n" +
+                          "          PhoenixJoin(condition=[=($6, $2)], joinType=[inner])\n" +
+                          "            PhoenixTableScan(table=[[phoenix, ORDERTABLE]])\n" +
+                          "            PhoenixAggregate(group=[{0}])\n" +
+                          "              PhoenixTableScan(table=[[phoenix, ORDERTABLE]], project=[[$2]])\n")
+               .close();
     }
 
     @Test public void testConnectUsingModel() throws Exception {

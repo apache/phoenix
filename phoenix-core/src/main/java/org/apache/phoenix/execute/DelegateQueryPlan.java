@@ -36,6 +36,10 @@ public abstract class DelegateQueryPlan implements QueryPlan {
     public DelegateQueryPlan(QueryPlan delegate) {
         this.delegate = delegate;
     }
+    
+    public QueryPlan getDelegate() {
+        return delegate;
+    }
 
     @Override
     public StatementContext getContext() {

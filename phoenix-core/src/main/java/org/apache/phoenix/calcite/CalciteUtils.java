@@ -9,6 +9,8 @@ import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.sql.SqlAggFunction;
+import org.apache.calcite.sql.SqlFunction;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -17,6 +19,10 @@ import org.apache.phoenix.expression.ComparisonExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.ExpressionType;
 import org.apache.phoenix.expression.LiteralExpression;
+import org.apache.phoenix.expression.function.AggregateFunction;
+import org.apache.phoenix.expression.function.CountAggregateFunction;
+import org.apache.phoenix.expression.function.FunctionExpression;
+import org.apache.phoenix.expression.function.SumAggregateFunction;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -84,6 +90,36 @@ public class CalciteUtils {
 			
 		});
 	}
+	
+    private static final Map<String, FunctionFactory> FUNCTION_MAP = Maps
+            .newHashMapWithExpectedSize(ExpressionType.values().length);
+    private static final FunctionFactory getFactory(SqlFunction func) {
+        FunctionFactory fFactory = FUNCTION_MAP.get(func.getName());
+        if (fFactory == null) {
+            throw new UnsupportedOperationException("Unsupported SqlFunction: "
+                    + func);
+        }
+        return fFactory;
+    }
+    static {
+        FUNCTION_MAP.put("COUNT", new FunctionFactory() {
+            @Override
+            public FunctionExpression newFunction(SqlFunction sqlFunc,
+                    List<Expression> args) {
+                if (args.isEmpty()) {
+                    args = Lists.asList(LiteralExpression.newConstant(1), new Expression[0]);
+                }
+                return new CountAggregateFunction(args);
+            }
+        });
+        FUNCTION_MAP.put("SUM", new FunctionFactory() {
+            @Override
+            public FunctionExpression newFunction(SqlFunction sqlFunc,
+                    List<Expression> args) {
+                return new SumAggregateFunction(args);
+            }
+        });
+    }
 
 	static Expression toExpression(RexNode node, Implementor implementor) {
 		ExpressionFactory eFactory = getFactory(node);
@@ -91,7 +127,21 @@ public class CalciteUtils {
 		return expression;
 	}
 	
+	static AggregateFunction toAggregateFunction(SqlAggFunction aggFunc, List<Integer> args, Implementor implementor) {
+	    FunctionFactory fFactory = getFactory(aggFunc);
+	    List<Expression> exprs = Lists.newArrayListWithExpectedSize(args.size());
+	    for (Integer index : args) {
+	        exprs.add(implementor.newColumnExpression(index));
+	    }
+	    
+	    return (AggregateFunction) (fFactory.newFunction(aggFunc, exprs));
+	}
+	
 	public static interface ExpressionFactory {
 		public Expression newExpression(RexNode node, Implementor implementor);
+	}
+	
+	public static interface FunctionFactory {
+	    public FunctionExpression newFunction(SqlFunction sqlFunc, List<Expression> args);
 	}
 }

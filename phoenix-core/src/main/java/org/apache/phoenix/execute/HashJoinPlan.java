@@ -110,6 +110,14 @@ public class HashJoinPlan extends DelegateQueryPlan {
         this.subPlans = subPlans;
         this.recompileWhereClause = recompileWhereClause;
     }
+    
+    public HashJoinInfo getJoinInfo() {
+        return this.joinInfo;
+    }
+    
+    public SubPlan[] getSubPlans() {
+        return this.subPlans;
+    }
 
     @Override
     public ResultIterator iterator() throws SQLException {

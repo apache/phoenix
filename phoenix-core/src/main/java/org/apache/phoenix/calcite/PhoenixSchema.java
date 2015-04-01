@@ -66,7 +66,7 @@ public class PhoenixSchema implements Schema {
 
     @Override
     public Set<String> getTableNames() {
-        return ImmutableSet.of("ATABLE", "ITEMTABLE", "SUPPLIERTABLE");
+        return ImmutableSet.of("ATABLE", "ITEMTABLE", "SUPPLIERTABLE", "ORDERTABLE", "CUSTOMERTABLE");
     }
 
     @Override
