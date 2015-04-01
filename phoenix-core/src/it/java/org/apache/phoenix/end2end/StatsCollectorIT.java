@@ -58,6 +58,7 @@ public class StatsCollectorIT extends StatsCollectorAbstractIT {
         // Must update config before starting server
         props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20));
         props.put(QueryServices.EXPLAIN_CHUNK_COUNT_ATTRIB, Boolean.TRUE.toString());
+        props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(1024));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 

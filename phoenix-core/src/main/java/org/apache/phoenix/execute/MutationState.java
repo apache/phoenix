@@ -23,10 +23,7 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 
-import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -41,6 +38,7 @@ import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.IndexMetaDataCacheClient;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.monitoring.PhoenixMetrics;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.MetaDataClient;
@@ -56,14 +54,17 @@ import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.ServerUtil;
-import org.cloudera.htrace.Span;
-import org.cloudera.htrace.TraceScope;
+import org.apache.htrace.Span;
+import org.apache.htrace.TraceScope;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import static org.apache.phoenix.monitoring.PhoenixMetrics.SizeMetric.MUTATION_BYTES;
+import static org.apache.phoenix.monitoring.PhoenixMetrics.SizeMetric.MUTATION_BATCH_SIZE;
+import static org.apache.phoenix.monitoring.PhoenixMetrics.SizeMetric.MUTATION_COMMIT_TIME;
 
 /**
  * 
@@ -81,7 +82,7 @@ public class MutationState implements SQLCloseable {
     private final Map<TableRef, Map<ImmutableBytesPtr,Map<PColumn,byte[]>>> mutations = Maps.newHashMapWithExpectedSize(3); // TODO: Sizing?
     private long sizeOffset;
     private int numRows = 0;
-
+    
     public MutationState(int maxSize, PhoenixConnection connection) {
         this(maxSize,connection,0);
     }
@@ -337,19 +338,15 @@ public class MutationState implements SQLCloseable {
     private static void logMutationSize(HTableInterface htable, List<Mutation> mutations, PhoenixConnection connection) {
         long byteSize = 0;
         int keyValueCount = 0;
-        for (Mutation mutation : mutations) {
-            if (mutation.getFamilyCellMap() != null) { // Not a Delete of the row
-                for (Entry<byte[], List<Cell>> entry : mutation.getFamilyCellMap().entrySet()) {
-                    if (entry.getValue() != null) {
-                        for (Cell kv : entry.getValue()) {
-                            byteSize += CellUtil.estimatedSizeOf(kv);
-                            keyValueCount++;
-                        }
-                    }
-                }
+        if (PhoenixMetrics.isMetricsEnabled() || logger.isDebugEnabled()) {
+            for (Mutation mutation : mutations) {
+                byteSize += mutation.heapSize();
+            }
+            MUTATION_BYTES.update(byteSize);
+            if (logger.isDebugEnabled()) {
+                logger.debug(LogUtil.addCustomAnnotations("Sending " + mutations.size() + " mutations for " + Bytes.toString(htable.getTableName()) + " with " + keyValueCount + " key values of total size " + byteSize + " bytes", connection));
             }
         }
-        logger.debug(LogUtil.addCustomAnnotations("Sending " + mutations.size() + " mutations for " + Bytes.toString(htable.getTableName()) + " with " + keyValueCount + " key values of total size " + byteSize + " bytes", connection));
     }
     
     @SuppressWarnings("deprecation")
@@ -418,13 +415,16 @@ public class MutationState implements SQLCloseable {
                     SQLException sqlE = null;
                     HTableInterface hTable = connection.getQueryServices().getTable(htableName);
                     try {
-                        if (logger.isDebugEnabled()) logMutationSize(hTable, mutations, connection);
+                        logMutationSize(hTable, mutations, connection);
+                        MUTATION_BATCH_SIZE.update(mutations.size());
                         long startTime = System.currentTimeMillis();
                         child.addTimelineAnnotation("Attempt " + retryCount);
                         hTable.batch(mutations);
                         child.stop();
+                        long duration = System.currentTimeMillis() - startTime;
+                        MUTATION_COMMIT_TIME.update(duration);
                         shouldRetry = false;
-                        if (logger.isDebugEnabled()) logger.debug(LogUtil.addCustomAnnotations("Total time for batch call of  " + mutations.size() + " mutations into " + table.getName().getString() + ": " + (System.currentTimeMillis() - startTime) + " ms", connection));
+                        if (logger.isDebugEnabled()) logger.debug(LogUtil.addCustomAnnotations("Total time for batch call of  " + mutations.size() + " mutations into " + table.getName().getString() + ": " + duration + " ms", connection));
                         committedList.add(entry);
                     } catch (Exception e) {
                         SQLException inferredE = ServerUtil.parseServerExceptionOrNull(e);

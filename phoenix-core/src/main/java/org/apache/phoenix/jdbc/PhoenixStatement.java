@@ -17,6 +17,10 @@
  */
 package org.apache.phoenix.jdbc;
 
+import static org.apache.phoenix.monitoring.PhoenixMetrics.CountMetric.MUTATION_COUNT;
+import static org.apache.phoenix.monitoring.PhoenixMetrics.CountMetric.QUERY_COUNT;
+import static org.apache.phoenix.monitoring.PhoenixMetrics.SizeMetric.QUERY_TIME;
+
 import java.io.IOException;
 import java.io.Reader;
 import java.sql.ParameterMetaData;
@@ -30,6 +34,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Pair;
@@ -126,16 +131,12 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.ServerUtil;
-import org.cloudera.htrace.Sampler;
-import org.cloudera.htrace.TraceScope;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Throwables;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
-
-
 /**
  * 
  * JDBC Statement implementation of Phoenix.
@@ -225,11 +226,13 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
     }
     
     protected PhoenixResultSet executeQuery(final CompilableStatement stmt) throws SQLException {
+        QUERY_COUNT.increment();
         try {
             return CallRunner.run(
                 new CallRunner.CallableThrowable<PhoenixResultSet, SQLException>() {
                 @Override
                     public PhoenixResultSet call() throws SQLException {
+                    final long startTime = System.currentTimeMillis();
                     try {
                         QueryPlan plan = stmt.compilePlan(PhoenixStatement.this, Sequence.ValueOp.RESERVE_SEQUENCE);
                         plan = connection.getQueryServices().getOptimizer().optimize(
@@ -255,6 +258,11 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
                             throw (SQLException) e.getCause();
                         }
                         throw e;
+                    } finally {
+                        // Regardless of whether the query was successfully handled or not, 
+                        // update the time spent so far. If needed, we can separate out the
+                        // success times and failure times.
+                        QUERY_TIME.update(System.currentTimeMillis() - startTime);
                     }
                 }
                 }, PhoenixContextExecutor.inContext());
@@ -270,6 +278,7 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
                 SQLExceptionCode.READ_ONLY_CONNECTION).
                 build().buildException();
         }
+	    MUTATION_COUNT.increment();
         try {
             return CallRunner
                     .run(
@@ -527,8 +536,8 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
     private static class ExecutableCreateIndexStatement extends CreateIndexStatement implements CompilableStatement {
 
         public ExecutableCreateIndexStatement(NamedNode indexName, NamedTableNode dataTable, IndexKeyConstraint ikConstraint, List<ColumnName> includeColumns, List<ParseNode> splits,
-                ListMultimap<String,Pair<String,Object>> props, boolean ifNotExists, IndexType indexType, int bindCount) {
-            super(indexName, dataTable, ikConstraint, includeColumns, splits, props, ifNotExists, indexType, bindCount);
+                ListMultimap<String,Pair<String,Object>> props, boolean ifNotExists, IndexType indexType, boolean async, int bindCount) {
+            super(indexName, dataTable, ikConstraint, includeColumns, splits, props, ifNotExists, indexType, async , bindCount);
         }
 
         @SuppressWarnings("unchecked")
@@ -696,8 +705,8 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
     
     private static class ExecutableTraceStatement extends TraceStatement implements CompilableStatement {
 
-        public ExecutableTraceStatement(boolean isTraceOn) {
-            super(isTraceOn);
+        public ExecutableTraceStatement(boolean isTraceOn, double samplingRate) {
+            super(isTraceOn, samplingRate);
         }
 
         @SuppressWarnings("unchecked")
@@ -709,8 +718,8 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
 
     private static class ExecutableUpdateStatisticsStatement extends UpdateStatisticsStatement implements
             CompilableStatement {
-        public ExecutableUpdateStatisticsStatement(NamedTableNode table, StatisticsCollectionScope scope) {
-            super(table, scope);
+        public ExecutableUpdateStatisticsStatement(NamedTableNode table, StatisticsCollectionScope scope, Map<String,Object> props) {
+            super(table, scope, props);
         }
 
         @SuppressWarnings("unchecked")
@@ -871,8 +880,8 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         
         @Override
         public CreateIndexStatement createIndex(NamedNode indexName, NamedTableNode dataTable, IndexKeyConstraint ikConstraint, List<ColumnName> includeColumns, List<ParseNode> splits,
-                ListMultimap<String,Pair<String,Object>> props, boolean ifNotExists, IndexType indexType, int bindCount) {
-            return new ExecutableCreateIndexStatement(indexName, dataTable, ikConstraint, includeColumns, splits, props, ifNotExists, indexType, bindCount);
+                ListMultimap<String,Pair<String,Object>> props, boolean ifNotExists, IndexType indexType, boolean async, int bindCount) {
+            return new ExecutableCreateIndexStatement(indexName, dataTable, ikConstraint, includeColumns, splits, props, ifNotExists, indexType, async, bindCount);
         }
         
         @Override
@@ -901,8 +910,8 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         }
 
         @Override
-        public TraceStatement trace(boolean isTraceOn) {
-            return new ExecutableTraceStatement(isTraceOn);
+        public TraceStatement trace(boolean isTraceOn, double samplingRate) {
+            return new ExecutableTraceStatement(isTraceOn, samplingRate);
         }
 
         @Override
@@ -911,8 +920,8 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         }
 
         @Override
-        public UpdateStatisticsStatement updateStatistics(NamedTableNode table, StatisticsCollectionScope scope) {
-            return new ExecutableUpdateStatisticsStatement(table, scope);
+        public UpdateStatisticsStatement updateStatistics(NamedTableNode table, StatisticsCollectionScope scope, Map<String,Object> props) {
+            return new ExecutableUpdateStatisticsStatement(table, scope, props);
         }
     }
     

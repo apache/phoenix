@@ -84,6 +84,7 @@ tokens
     WITHIN='within';
     SET='set';
     CAST='cast';
+    ACTIVE='active';
     USABLE='usable';
     UNUSABLE='unusable';
     DISABLE='disable';
@@ -109,6 +110,8 @@ tokens
     STATISTICS='statistics';    
     COLUMNS='columns';
     TRACE='trace';
+    ASYNC='async';
+    SAMPLING='sampling';
 }
 
 
@@ -405,9 +408,10 @@ create_index_node returns [CreateIndexStatement ret]
     :   CREATE l=LOCAL? INDEX (IF NOT ex=EXISTS)? i=index_name ON t=from_table_name
         (LPAREN ik=ik_constraint RPAREN)
         (INCLUDE (LPAREN icrefs=column_names RPAREN))?
+        (async=ASYNC)?
         (p=fam_properties)?
         (SPLIT ON v=value_expression_list)?
-        {ret = factory.createIndex(i, factory.namedTable(null,t), ik, icrefs, v, p, ex!=null, l==null ? IndexType.getDefault() : IndexType.LOCAL, getBindCount()); }
+        {ret = factory.createIndex(i, factory.namedTable(null,t), ik, icrefs, v, p, ex!=null, l==null ? IndexType.getDefault() : IndexType.LOCAL, async != null, getBindCount()); }
     ;
 
 // Parse a create sequence statement.
@@ -498,14 +502,14 @@ drop_index_node returns [DropIndexStatement ret]
 
 // Parse a alter index statement
 alter_index_node returns [AlterIndexStatement ret]
-    : ALTER INDEX (IF ex=EXISTS)? i=index_name ON t=from_table_name s=(USABLE | UNUSABLE | REBUILD | DISABLE)
+    : ALTER INDEX (IF ex=EXISTS)? i=index_name ON t=from_table_name s=(USABLE | UNUSABLE | REBUILD | DISABLE | ACTIVE)
       {ret = factory.alterIndex(factory.namedTable(null, TableName.create(t.getSchemaName(), i.getName())), t.getTableName(), ex!=null, PIndexState.valueOf(SchemaUtil.normalizeIdentifier(s.getText()))); }
     ;
 
 // Parse a trace statement.
 trace_node returns [TraceStatement ret]
-    :   TRACE (flag = ON| flag = OFF)
-       {ret = factory.trace(Tracing.isTraceOn(flag.getText()));}
+    :   TRACE ((flag = ON  ( WITH SAMPLING s = sampling_rate)?) | flag = OFF)
+       {ret = factory.trace(Tracing.isTraceOn(flag.getText()), s == null ? Tracing.isTraceOn(flag.getText()) ? 1.0 : 0.0 : (((BigDecimal)s.getValue())).doubleValue());}
     ;
 
 // Parse an alter table statement.
@@ -516,8 +520,8 @@ alter_table_node returns [AlterTableStatement ret]
     ;
 
 update_statistics_node returns [UpdateStatisticsStatement ret]
-	:   UPDATE STATISTICS t=from_table_name (s=INDEX | s=ALL | s=COLUMNS)?
-		{ret = factory.updateStatistics(factory.namedTable(null, t), s == null ? StatisticsCollectionScope.getDefault() : StatisticsCollectionScope.valueOf(SchemaUtil.normalizeIdentifier(s.getText())));}
+	:   UPDATE STATISTICS t=from_table_name (s=INDEX | s=ALL | s=COLUMNS)? (SET (p=properties))?
+		{ret = factory.updateStatistics(factory.namedTable(null, t), s == null ? StatisticsCollectionScope.getDefault() : StatisticsCollectionScope.valueOf(SchemaUtil.normalizeIdentifier(s.getText())), p);}
 	;
 
 prop_name returns [String ret]
@@ -623,6 +627,10 @@ limit returns [LimitNode ret]
     | l=int_literal { $ret = factory.limit(l); }
     ;
     
+sampling_rate returns [LiteralParseNode ret]
+    : l=literal { $ret = l; }
+    ;
+
 hintClause returns [HintNode ret]
     :  c=ML_HINT { $ret = factory.hint(c.getText()); }
     ;

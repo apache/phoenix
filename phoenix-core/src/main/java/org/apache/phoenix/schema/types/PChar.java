@@ -23,7 +23,7 @@ import java.util.Arrays;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.exception.ValueTypeIncompatibleException;
+import org.apache.phoenix.exception.DataExceedsCapacityException;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.StringUtil;
 
@@ -61,7 +61,7 @@ public class PChar extends PDataType<String> {
         return object;
       }
       if (s.length() > maxLength) {
-        throw new ValueTypeIncompatibleException(this,maxLength,null);
+        throw new DataExceedsCapacityException(this,maxLength,null);
       }
       return Strings.padEnd(s, maxLength, ' ');
     }

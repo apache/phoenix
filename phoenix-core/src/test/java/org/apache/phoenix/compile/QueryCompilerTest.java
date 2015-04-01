@@ -53,7 +53,6 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnAlreadyExistsException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
-import org.apache.phoenix.schema.ConstraintViolationException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.util.ByteUtil;
@@ -1414,7 +1413,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         try {
             stmt.execute();
             fail();
-        } catch (ConstraintViolationException e) {
+        } catch (SQLException e) {
             assertTrue(e.getMessage().contains("Primary key may not be null"));
         }
     }
@@ -1565,5 +1564,25 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             stmt.close();
         }
     }
-
+    
+    @Test
+    public void testRegex() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        Statement stmt = conn.createStatement();
+        stmt.execute("CREATE TABLE t (k1 INTEGER PRIMARY KEY, v VARCHAR)");
+        
+        //character classes
+        stmt.executeQuery("select * from T where REGEXP_SUBSTR(v, '[abc]') = 'val'");
+        stmt.executeQuery("select * from T where REGEXP_SUBSTR(v, '[^abc]') = 'val'");
+        stmt.executeQuery("select * from T where REGEXP_SUBSTR(v, '[a-zA-Z]') = 'val'");
+        stmt.executeQuery("select * from T where REGEXP_SUBSTR(v, '[a-d[m-p]]') = 'val'");
+        stmt.executeQuery("select * from T where REGEXP_SUBSTR(v, '[a-z&&[def]]') = 'val'");
+        stmt.executeQuery("select * from T where REGEXP_SUBSTR(v, '[a-z&&[^bc]]') = 'val'");
+        stmt.executeQuery("select * from T where REGEXP_SUBSTR(v, '[a-z&&[^m-p]]') = 'val'");
+        
+        // predefined character classes
+        stmt.executeQuery("select * from T where REGEXP_SUBSTR(v, '.\\\\d\\\\D\\\\s\\\\S\\\\w\\\\W') = 'val'");
+    }
+    
+   
 }

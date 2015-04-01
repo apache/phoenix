@@ -27,6 +27,9 @@ import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.StringUtil;
+
+import com.google.common.collect.Lists;
 
 
 /**
@@ -36,10 +39,15 @@ import org.apache.phoenix.util.IndexUtil;
 public class PostIndexDDLCompiler {
     private final PhoenixConnection connection;
     private final TableRef dataTableRef;
-
+    private List<String> indexColumnNames;
+    private List<String> dataColumnNames;
+    private String selectQuery;
+    
     public PostIndexDDLCompiler(PhoenixConnection connection, TableRef dataTableRef) {
         this.connection = connection;
         this.dataTableRef = dataTableRef;
+        indexColumnNames = Lists.newArrayList();
+        dataColumnNames = Lists.newArrayList();
     }
 
     public MutationPlan compile(final PTable indexTable) throws SQLException {
@@ -66,8 +74,12 @@ public class PostIndexDDLCompiler {
         for (int i = posOffset; i < nIndexPKColumns; i++) {
             PColumn col = indexPKColumns.get(i);
             String indexColName = col.getName().getString();
-            dataColumns.append(col.getExpressionStr()).append(",");
+            // need to escape backslash as this used in the SELECT statement
+            String dataColName = StringUtil.escapeBackslash(col.getExpressionStr());
+            dataColumns.append(dataColName).append(",");
             indexColumns.append('"').append(indexColName).append("\",");
+            indexColumnNames.add(indexColName);
+            dataColumnNames.add(dataColName);
         }
         
         // Add the covered columns
@@ -82,6 +94,8 @@ public class PostIndexDDLCompiler {
                     }
                     dataColumns.append('"').append(dataColumnName).append("\",");
                     indexColumns.append('"').append(indexColName).append("\",");
+                    indexColumnNames.add(indexColName);
+                    dataColumnNames.add(dataColumnName);
                 }
             }
         }
@@ -93,11 +107,27 @@ public class PostIndexDDLCompiler {
         
         StringBuilder updateStmtStr = new StringBuilder();
         updateStmtStr.append("UPSERT /*+ NO_INDEX */ INTO ").append(schemaName.length() == 0 ? "" : '"' + schemaName + "\".").append('"').append(tableName).append("\"(")
-            .append(indexColumns).append(") SELECT ").append(dataColumns).append(" FROM ")
-            .append(schemaName.length() == 0 ? "" : '"' + schemaName + "\".").append('"').append(dataTableRef.getTable().getTableName().getString()).append('"');
+           .append(indexColumns).append(") ");
+        final StringBuilder selectQueryBuilder = new StringBuilder();
+        selectQueryBuilder.append(" SELECT ").append(dataColumns).append(" FROM ")
+        .append(schemaName.length() == 0 ? "" : '"' + schemaName + "\".").append('"').append(dataTableRef.getTable().getTableName().getString()).append('"');
+        this.selectQuery = selectQueryBuilder.toString();
+        updateStmtStr.append(this.selectQuery);
         
         final PhoenixStatement statement = new PhoenixStatement(connection);
         return statement.compileMutation(updateStmtStr.toString());
+    }
+
+    public List<String> getIndexColumnNames() {
+        return indexColumnNames;
+    }
+
+    public List<String> getDataColumnNames() {
+        return dataColumnNames;
+    }
+
+    public String getSelectQuery() {
+        return selectQuery;
     }
 
 }

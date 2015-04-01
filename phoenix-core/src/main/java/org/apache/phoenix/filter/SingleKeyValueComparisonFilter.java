@@ -83,8 +83,8 @@ public abstract class SingleKeyValueComparisonFilter extends BooleanExpressionFi
           // We found all the columns, but did not match the expression, so skip to next row
           return ReturnCode.NEXT_ROW;
         }
-        byte[] buf = keyValue.getValueArray();
-        if (compare(buf, keyValue.getFamilyOffset(), keyValue.getFamilyLength(), buf, keyValue.getQualifierOffset(), keyValue.getQualifierLength()) != 0) {
+        if (compare(keyValue.getFamilyArray(), keyValue.getFamilyOffset(), keyValue.getFamilyLength(),
+                keyValue.getQualifierArray(), keyValue.getQualifierOffset(), keyValue.getQualifierLength()) != 0) {
             // Remember the key in case this is the only key value we see.
             // We'll need it if we have row key columns too.
             inputTuple.setKey(KeyValueUtil.ensureKeyValue(keyValue));

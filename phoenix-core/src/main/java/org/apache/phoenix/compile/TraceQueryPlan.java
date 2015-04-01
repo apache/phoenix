@@ -30,6 +30,8 @@ import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.htrace.Sampler;
+import org.apache.htrace.TraceScope;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.expression.Determinism;
@@ -58,8 +60,6 @@ import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.SizedUtil;
-import org.cloudera.htrace.Sampler;
-import org.cloudera.htrace.TraceScope;
 
 public class TraceQueryPlan implements QueryPlan {
 
@@ -122,22 +122,24 @@ public class TraceQueryPlan implements QueryPlan {
             public Tuple next() throws SQLException {
                 if(!first) return null;
                 TraceScope traceScope = conn.getTraceScope();
-                if(traceStatement.isTraceOn()) {
-                    if(!conn.getSampler().equals(Sampler.ALWAYS)) {
-                        conn.setSampler(Sampler.ALWAYS);
+                if (traceStatement.isTraceOn()) {
+                    conn.setSampler(Tracing.getConfiguredSampler(traceStatement));
+                    if (conn.getSampler() == Sampler.NEVER) {
+                        closeTraceScope(conn);
                     }
-                    if (traceScope == null) {
+                    if (traceScope == null && !conn.getSampler().equals(Sampler.NEVER)) {
                         traceScope = Tracing.startNewSpan(conn, "Enabling trace");
-                        conn.setTraceScope(traceScope);
+                        if (traceScope.getSpan() != null) {
+                            conn.setTraceScope(traceScope);
+                        } else {
+                            closeTraceScope(conn);
+                        }
                     }
                 } else {
-                    if (traceScope != null) {
-                        conn.getTraceScope().close();
-                        conn.setTraceScope(null);
-                    }
+                    closeTraceScope(conn);
                     conn.setSampler(Sampler.NEVER);
                 }
-                if(traceScope == null) return null;
+                if (traceScope == null || traceScope.getSpan() == null) return null;
                 first = false;
                 ImmutableBytesWritable ptr = new ImmutableBytesWritable();
                 ParseNodeFactory factory = new ParseNodeFactory();
@@ -155,6 +157,13 @@ public class TraceQueryPlan implements QueryPlan {
                 List<Cell> cells = new ArrayList<Cell>(1);
                 cells.add(cell);
                 return new ResultTuple(Result.create(cells));
+            }
+
+            private void closeTraceScope(final PhoenixConnection conn) {
+                if(conn.getTraceScope()!=null) {
+                    conn.getTraceScope().close();
+                    conn.setTraceScope(null);
+                }
             }
 
             @Override

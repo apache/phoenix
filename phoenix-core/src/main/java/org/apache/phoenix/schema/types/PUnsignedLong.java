@@ -17,14 +17,15 @@
  */
 package org.apache.phoenix.schema.types;
 
-import com.google.common.base.Preconditions;
-import com.google.common.primitives.Doubles;
-import com.google.common.primitives.Longs;
+import java.math.BigDecimal;
+
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Order;
 import org.apache.phoenix.schema.SortOrder;
 
-import java.math.BigDecimal;
+import com.google.common.base.Preconditions;
+import com.google.common.primitives.Doubles;
+import com.google.common.primitives.Longs;
 
 /**
  * Unsigned long type that restricts values to be from 0 to {@link Long#MAX_VALUE}
@@ -34,7 +35,7 @@ import java.math.BigDecimal;
  * them to sort ahead of positive numbers when they're used as part of the row key when using the
  * HBase utility methods).
  */
-public class PUnsignedLong extends PDataType<Long> {
+public class PUnsignedLong extends PWholeNumber<Long> {
 
   public static final PUnsignedLong INSTANCE = new PUnsignedLong();
 
@@ -92,6 +93,11 @@ public class PUnsignedLong extends PDataType<Long> {
     throwIfNonNegativeNumber(v);
     return v;
   }
+
+  @Override
+    public boolean isCastableTo(PDataType targetType) {
+      return super.isCastableTo(targetType) || targetType.isCoercibleTo(PTimestamp.INSTANCE);
+    }
 
   @Override
   public boolean isCoercibleTo(PDataType targetType) {

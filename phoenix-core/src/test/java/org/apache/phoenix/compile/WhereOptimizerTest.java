@@ -57,6 +57,7 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PUnsignedLong;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
@@ -1274,6 +1275,22 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     }
     
     @Test
+    public void testRVCExpressionWithNonFirstLeadingColOfRowKey() throws SQLException {
+        String old_value = "value";
+        String orgId = getOrganizationId();
+        
+        String query = "select * from entity_history where (old_value, organization_id) >= (?,?)";
+        List<Object> binds = Arrays.<Object>asList(old_value, orgId);
+        StatementContext context = compileStatement(query, binds);
+        Scan scan = context.getScan();
+        Filter filter = scan.getFilter();
+        assertNotNull(filter);
+        assertTrue(filter instanceof SingleKeyValueComparisonFilter);
+        assertArrayEquals(HConstants.EMPTY_START_ROW, scan.getStartRow());
+        assertArrayEquals(HConstants.EMPTY_END_ROW, scan.getStopRow());
+    }
+    
+    @Test
     public void testMultiRVCExpressionsCombinedWithAnd() throws SQLException {
         String lowerTenantId = "000000000000001";
         String lowerParentId = "000000000000002";
@@ -1818,4 +1835,41 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         assertArrayEquals(Bytes.toBytes("a"), scan.getStartRow());
         assertArrayEquals(ByteUtil.concat(Bytes.toBytes("a"), QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes("b"), QueryConstants.SEPARATOR_BYTE_ARRAY), scan.getStopRow());
     }
+    
+    @Test
+    public void testAndWithRVC() throws Exception {
+        String ddl;
+        String query;
+        StatementContext context;        
+        Connection conn = DriverManager.getConnection(getUrl());
+        
+        ddl = "create table t (a integer not null, b integer not null, c integer constraint pk primary key (a,b))";
+        conn.createStatement().execute(ddl);
+        conn.close();
+        
+        query = "select c from t where (a,b) in ( (1,2) , (1,3) ) and b = 4";
+        context = compileStatement(query, Collections.<Object>emptyList());
+        assertDegenerate(context.getScan());
+        
+        query = "select c from t where a in (1,2) and b = 3 and (a,b) in ( (1,2) , (1,3))";
+        context = compileStatement(query, Collections.<Object>emptyList());
+        assertArrayEquals(ByteUtil.concat(PInteger.INSTANCE.toBytes(1), PInteger.INSTANCE.toBytes(3)), context.getScan().getStartRow());
+        assertArrayEquals(ByteUtil.concat(PInteger.INSTANCE.toBytes(1), ByteUtil.nextKey(PInteger.INSTANCE.toBytes(3))), context.getScan().getStopRow());
+
+        query = "select c from t where a = 1 and b = 3 and (a,b) in ( (1,2) , (1,3))";
+        context = compileStatement(query, Collections.<Object>emptyList());
+        assertArrayEquals(ByteUtil.concat(PInteger.INSTANCE.toBytes(1), PInteger.INSTANCE.toBytes(3)), context.getScan().getStartRow());
+        assertArrayEquals(ByteUtil.concat(PInteger.INSTANCE.toBytes(1), ByteUtil.nextKey(PInteger.INSTANCE.toBytes(3))), context.getScan().getStopRow());
+
+        // Test with RVC occurring later in the PK
+        ddl = "create table t1 (d varchar, e char(3) not null, a integer not null, b integer not null, c integer constraint pk primary key (d, e, a,b))";
+        conn.createStatement().execute(ddl);
+        conn.close();
+        
+        query = "select c from t1 where d = 'a' and e = 'foo' and a in (1,2) and b = 3 and (a,b) in ( (1,2) , (1,3))";
+        context = compileStatement(query, Collections.<Object>emptyList());
+        assertArrayEquals(ByteUtil.concat(PVarchar.INSTANCE.toBytes("a"), QueryConstants.SEPARATOR_BYTE_ARRAY, PChar.INSTANCE.toBytes("foo"), PInteger.INSTANCE.toBytes(1), PInteger.INSTANCE.toBytes(3)), context.getScan().getStartRow());
+        assertArrayEquals(ByteUtil.concat(PVarchar.INSTANCE.toBytes("a"), QueryConstants.SEPARATOR_BYTE_ARRAY, PChar.INSTANCE.toBytes("foo"), PInteger.INSTANCE.toBytes(1), ByteUtil.nextKey(PInteger.INSTANCE.toBytes(3))), context.getScan().getStopRow());
+    }
+    
 }

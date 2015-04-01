@@ -38,6 +38,9 @@ import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.TimeKeeper;
 import org.slf4j.Logger;
@@ -65,15 +68,23 @@ public class StatisticsCollector {
     private Pair<Long,GuidePostsInfo> cachedGps = null;
 
     public StatisticsCollector(RegionCoprocessorEnvironment env, String tableName, long clientTimeStamp) throws IOException {
-        this(env, tableName, clientTimeStamp, null);
+        this(env, tableName, clientTimeStamp, null, null, null);
+    }
+
+    public StatisticsCollector(RegionCoprocessorEnvironment env, String tableName, long clientTimeStamp, byte[] gp_width_bytes, byte[] gp_per_region_bytes) throws IOException {
+        this(env, tableName, clientTimeStamp, null, gp_width_bytes, gp_per_region_bytes);
     }
 
     public StatisticsCollector(RegionCoprocessorEnvironment env, String tableName, long clientTimeStamp, byte[] family) throws IOException {
+        this(env, tableName, clientTimeStamp, family, null, null);
+    }
+
+    public StatisticsCollector(RegionCoprocessorEnvironment env, String tableName, long clientTimeStamp, byte[] family, byte[] gp_width_bytes, byte[] gp_per_region_bytes) throws IOException {
         Configuration config = env.getConfiguration();
-        int guidepostPerRegion = config.getInt(QueryServices.STATS_GUIDEPOST_PER_REGION_ATTRIB, 
-                QueryServicesOptions.DEFAULT_STATS_GUIDEPOST_PER_REGION);
-        long guidepostWidth = config.getLong(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB,
-                QueryServicesOptions.DEFAULT_STATS_GUIDEPOST_WIDTH_BYTES);
+        int guidepostPerRegion = gp_per_region_bytes == null ? config.getInt(QueryServices.STATS_GUIDEPOST_PER_REGION_ATTRIB, 
+                QueryServicesOptions.DEFAULT_STATS_GUIDEPOST_PER_REGION) : PInteger.INSTANCE.getCodec().decodeInt(gp_per_region_bytes, 0, SortOrder.getDefault());
+        long guidepostWidth = gp_width_bytes == null ? config.getLong(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB,
+                QueryServicesOptions.DEFAULT_STATS_GUIDEPOST_WIDTH_BYTES) : PLong.INSTANCE.getCodec().decodeInt(gp_width_bytes, 0, SortOrder.getDefault());
         this.guidepostDepth = StatisticsUtil.getGuidePostDepth(guidepostPerRegion, guidepostWidth, env.getRegion().getTableDesc());
         // Get the stats table associated with the current table on which the CP is
         // triggered

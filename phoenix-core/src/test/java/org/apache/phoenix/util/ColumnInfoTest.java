@@ -30,7 +30,7 @@ public class ColumnInfoTest {
 
     @Test
     public void testToFromStringRoundTrip() {
-        ColumnInfo columnInfo = new ColumnInfo("myColumn", Types.INTEGER);
+        ColumnInfo columnInfo = new ColumnInfo("a.myColumn", Types.INTEGER);
         assertEquals(columnInfo, ColumnInfo.fromString(columnInfo.toString()));
     }
 
@@ -48,5 +48,11 @@ public class ColumnInfoTest {
             SQLException sqlE = (SQLException)e.getCause();
             assertEquals(SQLExceptionCode.ILLEGAL_DATA.getErrorCode(), sqlE.getErrorCode());
         }
+    }
+    
+    @Test
+    public void testToFromColonInColumnName() {
+        ColumnInfo columnInfo = new ColumnInfo(":myColumn", Types.INTEGER);
+        assertEquals(columnInfo, ColumnInfo.fromString(columnInfo.toString()));
     }
 }

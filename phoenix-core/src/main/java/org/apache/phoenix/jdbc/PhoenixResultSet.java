@@ -652,15 +652,7 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable, org.apache.pho
 
     @Override
     public Timestamp getTimestamp(int columnIndex, Calendar cal) throws SQLException {
-        checkCursorState();
-        Timestamp value = (Timestamp)rowProjector.getColumnProjector(columnIndex-1).getValue(currentRow,
-            PTimestamp.INSTANCE, ptr);
-        wasNull = (value == null);
-        if (value == null) {
-            return null;
-        }
-        cal.setTime(value); //this resets the millisecond part of timestamp according to the time zone of the calendar.
-        return DateUtil.getTimestamp(cal.getTimeInMillis(), value.getNanos());
+        return getTimestamp(columnIndex);
     }
 
     @Override

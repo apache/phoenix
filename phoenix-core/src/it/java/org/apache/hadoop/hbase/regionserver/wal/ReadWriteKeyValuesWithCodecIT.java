@@ -45,7 +45,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 /**
- * Simple test to read/write simple files via our custom {@link WALEditCodec} to ensure properly
+ * Simple test to read/write simple files via our custom {@link WALCellCodec} to ensure properly
  * encoding/decoding without going through a cluster.
  */
 public class ReadWriteKeyValuesWithCodecIT {
@@ -135,11 +135,11 @@ public class ReadWriteKeyValuesWithCodecIT {
   }
 
   
-  private void writeWALEdit(WALCellCodec codec, List<KeyValue> kvs, FSDataOutputStream out) throws IOException {
+  private void writeWALEdit(WALCellCodec codec, List<Cell> kvs, FSDataOutputStream out) throws IOException {
     out.writeInt(kvs.size());
     Codec.Encoder cellEncoder = codec.getEncoder(out);
     // We interleave the two lists for code simplicity
-    for (KeyValue kv : kvs) {
+    for (Cell kv : kvs) {
         cellEncoder.write(kv);
     }
   }
@@ -155,7 +155,7 @@ public class ReadWriteKeyValuesWithCodecIT {
     // write the edits out
     FSDataOutputStream out = fs.create(testFile);
     for (WALEdit edit : edits) {
-      writeWALEdit(codec, edit.getKeyValues(), out);
+      writeWALEdit(codec, edit.getCells(), out);
     }
     out.close();
 
@@ -174,9 +174,9 @@ public class ReadWriteKeyValuesWithCodecIT {
     for(int i=0; i< edits.size(); i++){
       WALEdit expected = edits.get(i);
       WALEdit found = read.get(i);
-      for(int j=0; j< expected.getKeyValues().size(); j++){
-        KeyValue fkv = found.getKeyValues().get(j);
-        KeyValue ekv = expected.getKeyValues().get(j);
+      for(int j=0; j< expected.getCells().size(); j++){
+        Cell fkv = found.getCells().get(j);
+        Cell ekv = expected.getCells().get(j);
         assertEquals("KV mismatch for edit! Expected: "+expected+", but found: "+found, ekv, fkv);
       }
     }

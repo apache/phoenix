@@ -201,8 +201,12 @@ public class IndexUtil {
 
     private static boolean isEmptyKeyValue(PTable table, ColumnReference ref) {
         byte[] emptyKeyValueCF = SchemaUtil.getEmptyColumnFamily(table);
-        return (Bytes.compareTo(emptyKeyValueCF, ref.getFamily()) == 0 &&
-                Bytes.compareTo(QueryConstants.EMPTY_COLUMN_BYTES, ref.getQualifier()) == 0);
+        return (Bytes.compareTo(emptyKeyValueCF, 0, emptyKeyValueCF.length, ref.getFamilyWritable()
+                .get(), ref.getFamilyWritable().getOffset(), ref.getFamilyWritable().getLength()) == 0 && Bytes
+                .compareTo(QueryConstants.EMPTY_COLUMN_BYTES, 0,
+                    QueryConstants.EMPTY_COLUMN_BYTES.length, ref.getQualifierWritable().get(), ref
+                            .getQualifierWritable().getOffset(), ref.getQualifierWritable()
+                            .getLength()) == 0);
     }
 
     public static List<Mutation> generateIndexData(final PTable table, PTable index,
@@ -567,6 +571,10 @@ public class IndexUtil {
                     return cell.getMvccVersion();
                 }
 
+                @Override public long getSequenceId() {
+                    return cell.getSequenceId();
+                }
+
                 @Override
                 public byte[] getValueArray() {
                     return cell.getValueArray();
@@ -593,7 +601,7 @@ public class IndexUtil {
                 }
 
                 @Override
-                public short getTagsLength() {
+                public int getTagsLength() {
                     return cell.getTagsLength();
                 }
 
@@ -615,12 +623,6 @@ public class IndexUtil {
                 @Override
                 public byte[] getRow() {
                     return cell.getRow();
-                }
-
-                @Override
-                @Deprecated
-                public int getTagsLengthUnsigned() {
-                    return cell.getTagsLengthUnsigned();
                 }
             };
             // Wrap cell in cell that offsets row key

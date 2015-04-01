@@ -47,6 +47,7 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.stats.StatisticsCollectionScope;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.util.SchemaUtil;
 
@@ -282,8 +283,8 @@ public class ParseNodeFactory {
         return new CreateTableStatement(tableName, props, columns, pkConstraint, splits, tableType, ifNotExists, baseTableName, tableTypeIdNode, bindCount);
     }
 
-    public CreateIndexStatement createIndex(NamedNode indexName, NamedTableNode dataTable, IndexKeyConstraint ikConstraint, List<ColumnName> includeColumns, List<ParseNode> splits, ListMultimap<String,Pair<String,Object>> props, boolean ifNotExists, IndexType indexType, int bindCount) {
-        return new CreateIndexStatement(indexName, dataTable, ikConstraint, includeColumns, splits, props, ifNotExists, indexType, bindCount);
+    public CreateIndexStatement createIndex(NamedNode indexName, NamedTableNode dataTable, IndexKeyConstraint ikConstraint, List<ColumnName> includeColumns, List<ParseNode> splits, ListMultimap<String,Pair<String,Object>> props, boolean ifNotExists, IndexType indexType,boolean async, int bindCount) {
+        return new CreateIndexStatement(indexName, dataTable, ikConstraint, includeColumns, splits, props, ifNotExists, indexType, async, bindCount);
     }
 
     public CreateSequenceStatement createSequence(TableName tableName, ParseNode startsWith,
@@ -325,8 +326,8 @@ public class ParseNodeFactory {
         return new AlterIndexStatement(indexTableNode, dataTableName, ifExists, state);
     }
 
-    public TraceStatement trace(boolean isTraceOn) {
-        return new TraceStatement(isTraceOn);
+    public TraceStatement trace(boolean isTraceOn, double samplingRate) {
+        return new TraceStatement(isTraceOn, samplingRate);
     }
 
     public TableName table(String schemaName, String tableName) {
@@ -357,8 +358,8 @@ public class ParseNodeFactory {
         return new DivideParseNode(children);
     }
 
-    public UpdateStatisticsStatement updateStatistics(NamedTableNode table, StatisticsCollectionScope scope) {
-      return new UpdateStatisticsStatement(table, scope);
+    public UpdateStatisticsStatement updateStatistics(NamedTableNode table, StatisticsCollectionScope scope, Map<String,Object> props) {
+      return new UpdateStatisticsStatement(table, scope, props);
     }
 
 
@@ -577,7 +578,8 @@ public class ParseNodeFactory {
 
     public ParseNode negate(ParseNode child) {
         // Prevents reparsing of -1 from becoming 1*-1 and 1*1*-1 with each re-parsing
-        if (LiteralParseNode.ONE.equals(child)) {
+        if (LiteralParseNode.ONE.equals(child) && ((LiteralParseNode)child).getType().isCoercibleTo(
+                PLong.INSTANCE)) {
             return LiteralParseNode.MINUS_ONE;
         }
         return new MultiplyParseNode(Arrays.asList(child,LiteralParseNode.MINUS_ONE));

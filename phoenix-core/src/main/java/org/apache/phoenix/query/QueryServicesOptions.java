@@ -41,6 +41,7 @@ import static org.apache.phoenix.query.QueryServices.MAX_SERVER_CACHE_TIME_TO_LI
 import static org.apache.phoenix.query.QueryServices.MAX_SERVER_METADATA_CACHE_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MAX_SPOOL_TO_DISK_BYTES_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MAX_TENANT_MEMORY_PERC_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.METRICS_ENABLED;
 import static org.apache.phoenix.query.QueryServices.MIN_STATS_UPDATE_FREQ_MS_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.NUM_RETRIES_FOR_SCHEMA_UPDATE_CHECK;
@@ -66,6 +67,10 @@ import java.util.Map.Entry;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Coprocessor;
+import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
+import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
+import org.apache.hadoop.hbase.ipc.controller.ClientRpcControllerFactory;
+import org.apache.hadoop.hbase.ipc.controller.ServerRpcControllerFactory;
 import org.apache.hadoop.hbase.regionserver.wal.WALCellCodec;
 import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.trace.util.Tracing;
@@ -137,14 +142,15 @@ public class QueryServicesOptions {
     public static final long DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_INTERVAL = 10000; // 10 secs
     public static final long DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_TIME = 300000; // 5 mins
 
-    public static final int DEFAULT_INDEX_MAX_PRIORITY = 1050;
     /**
      * HConstants#HIGH_QOS is the max we will see to a standard table. We go higher to differentiate
      * and give some room for things in the middle
      */
-    public static final int DEFAULT_INDEX_MIN_PRIORITY = 1000;
-    public static final int DEFAULT_INDEX_HANDLER_COUNT = 30;
+    public static final int DEFAULT_INDEX_PRIORITY = 1000;
+    public static final int DEFAULT_METADATA_PRIORITY = 2000;
     public static final boolean DEFAULT_ALLOW_LOCAL_INDEX = true;
+    public static final int DEFAULT_INDEX_HANDLER_COUNT = 30;
+    public static final int DEFAULT_METADATA_HANDLER_COUNT = 30;
 
     public static final int DEFAULT_TRACING_PAGE_SIZE = 100;
     /**
@@ -181,7 +187,10 @@ public class QueryServicesOptions {
 
     // TODO Change this to true as part of PHOENIX-1543
     public static final boolean DEFAULT_AUTO_COMMIT = false;
-
+    public static final boolean DEFAULT_IS_METRICS_ENABLED = true;
+    
+    private static final String DEFAULT_CLIENT_RPC_CONTROLLER_FACTORY = ClientRpcControllerFactory.class.getName();
+    
     private final Configuration config;
 
     private QueryServicesOptions(Configuration config) {
@@ -232,7 +241,9 @@ public class QueryServicesOptions {
             .setIfUnset(SCAN_RESULT_CHUNK_SIZE, DEFAULT_SCAN_RESULT_CHUNK_SIZE)
             .setIfUnset(ALLOW_ONLINE_TABLE_SCHEMA_UPDATE, DEFAULT_ALLOW_ONLINE_TABLE_SCHEMA_UPDATE)
             .setIfUnset(NUM_RETRIES_FOR_SCHEMA_UPDATE_CHECK, DEFAULT_RETRIES_FOR_SCHEMA_UPDATE_CHECK)
-            .setIfUnset(DELAY_FOR_SCHEMA_UPDATE_CHECK, DEFAULT_DELAY_FOR_SCHEMA_UPDATE_CHECK);
+            .setIfUnset(DELAY_FOR_SCHEMA_UPDATE_CHECK, DEFAULT_DELAY_FOR_SCHEMA_UPDATE_CHECK)
+            .setIfUnset(METRICS_ENABLED, DEFAULT_IS_METRICS_ENABLED)
+            .setIfUnset(RpcControllerFactory.CUSTOM_CONTROLLER_CONF_KEY, DEFAULT_CLIENT_RPC_CONTROLLER_FACTORY)
             ;
         // HBase sets this to 1, so we reset it to something more appropriate.
         // Hopefully HBase will change this, because we can't know if a user set
@@ -431,7 +442,11 @@ public class QueryServicesOptions {
     public int getSpillableGroupByNumSpillFiles() {
         return config.getInt(GROUPBY_SPILL_FILES_ATTRIB, DEFAULT_GROUPBY_SPILL_FILES);
     }
-
+    
+    public boolean isMetricsEnabled() {
+        return config.getBoolean(METRICS_ENABLED, DEFAULT_IS_METRICS_ENABLED);
+    }
+    
     public QueryServicesOptions setMaxServerCacheTTLMs(int ttl) {
         return set(MAX_SERVER_CACHE_TIME_TO_LIVE_MS_ATTRIB, ttl);
     }
@@ -498,6 +513,11 @@ public class QueryServicesOptions {
 
     public QueryServicesOptions setDelayInMillisForSchemaChangeCheck(long delayInMillis) {
         config.setLong(DELAY_FOR_SCHEMA_UPDATE_CHECK, delayInMillis);
+        return this;
+    
+    }
+    public QueryServicesOptions setMetricsEnabled(boolean flag) {
+        config.setBoolean(METRICS_ENABLED, flag);
         return this;
     }
 

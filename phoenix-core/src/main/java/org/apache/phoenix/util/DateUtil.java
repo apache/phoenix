@@ -17,6 +17,9 @@
  */
 package org.apache.phoenix.util;
 
+import static org.apache.phoenix.query.QueryConstants.MAX_ALLOWED_NANOS;
+import static org.apache.phoenix.query.QueryConstants.MILLIS_TO_NANOS_CONVERTOR;
+
 import java.math.BigDecimal;
 import java.sql.Date;
 import java.sql.Time;
@@ -29,7 +32,6 @@ import java.util.List;
 import java.util.TimeZone;
 
 import org.apache.commons.lang.time.FastDateFormat;
-import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.types.PDataType;
 import org.joda.time.DateTimeZone;
@@ -181,8 +183,19 @@ public class DateUtil {
      * end up losing the sub-second part of timestamp. 
      */
     public static Timestamp getTimestamp(long millis, int nanos) {
+        if (nanos > MAX_ALLOWED_NANOS || nanos < 0) {
+            throw new IllegalArgumentException("nanos > " + MAX_ALLOWED_NANOS + " or < 0");
+        }
         Timestamp ts = new Timestamp(millis);
-        ts.setNanos(ts.getNanos() + nanos);
+        if (ts.getNanos() + nanos > MAX_ALLOWED_NANOS) {
+            int millisToNanosConvertor = BigDecimal.valueOf(MILLIS_TO_NANOS_CONVERTOR).intValue();
+            int overFlowMs = (ts.getNanos() + nanos) / millisToNanosConvertor;
+            int overFlowNanos = (ts.getNanos() + nanos) - (overFlowMs * millisToNanosConvertor);
+            ts = new Timestamp(millis + overFlowMs);
+            ts.setNanos(ts.getNanos() + overFlowNanos);
+        } else {
+            ts.setNanos(ts.getNanos() + nanos);
+        }
         return ts;
     }
 
@@ -190,7 +203,7 @@ public class DateUtil {
      * Utility function to convert a {@link BigDecimal} value to {@link Timestamp}.
      */
     public static Timestamp getTimestamp(BigDecimal bd) {
-        return DateUtil.getTimestamp(bd.longValue(), ((bd.remainder(BigDecimal.ONE).multiply(BigDecimal.valueOf(QueryConstants.MILLIS_TO_NANOS_CONVERTOR))).intValue()));
+        return DateUtil.getTimestamp(bd.longValue(), ((bd.remainder(BigDecimal.ONE).multiply(BigDecimal.valueOf(MILLIS_TO_NANOS_CONVERTOR))).intValue()));
     }
 
     public static interface DateTimeParser {

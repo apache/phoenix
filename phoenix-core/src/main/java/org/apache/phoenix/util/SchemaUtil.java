@@ -403,7 +403,7 @@ public class SchemaUtil {
         if (QueryConstants.SYSTEM_SCHEMA_NAME.equals(schemaName)) return true;
         return false;
     }
-
+    
     // Given the splits and the rowKeySchema, find out the keys that 
     public static byte[][] processSplits(byte[][] splits, LinkedHashSet<PColumn> pkColumns, Integer saltBucketNum, boolean defaultRowKeyOrder) throws SQLException {
         // FIXME: shouldn't this return if splits.length == 0?
@@ -632,6 +632,9 @@ public class SchemaUtil {
     }
     
     public static String getEscapedFullColumnName(String fullColumnName) {
+        if(fullColumnName.startsWith(ESCAPE_CHARACTER)) {
+            return fullColumnName;
+        }
         int index = fullColumnName.indexOf(QueryConstants.NAME_SEPARATOR);
         if (index < 0) {
             return getEscapedArgument(fullColumnName); 
@@ -677,5 +680,16 @@ public class SchemaUtil {
     public static String getQuotedFullColumnName(@Nullable String columnFamilyName, String columnName) {
         checkArgument(!isNullOrEmpty(columnName), "Column name cannot be null or empty");
         return columnFamilyName == null ? ("\"" + columnName + "\"") : ("\"" + columnFamilyName + "\"" + QueryConstants.NAME_SEPARATOR + "\"" + columnName + "\"");
+    }
+    
+    /**
+     * Replaces all occurrences of {@link #ESCAPE_CHARACTER} with an empty character. 
+     * @param fullColumnName
+     * @return 
+     */
+    public static String getUnEscapedFullColumnName(String fullColumnName) {
+        checkArgument(!isNullOrEmpty(fullColumnName), "Column name cannot be null or empty");
+        fullColumnName = fullColumnName.replaceAll(ESCAPE_CHARACTER, "");
+       	return fullColumnName.trim();
     }
 }

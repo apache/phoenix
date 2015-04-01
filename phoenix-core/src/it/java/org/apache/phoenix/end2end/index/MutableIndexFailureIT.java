@@ -304,7 +304,8 @@ public class MutableIndexFailureIT extends BaseTest {
         Collection<ServerName> rss = cluster.getClusterStatus().getServers();
         HBaseAdmin admin = this.util.getHBaseAdmin();
         List<HRegionInfo> regions = admin.getTableRegions(catalogTable);
-        ServerName catalogRS = cluster.getServerHoldingRegion(regions.get(0).getRegionName());
+        ServerName catalogRS = cluster.getServerHoldingRegion(regions.get(0).getTable(),
+                regions.get(0).getRegionName());
         ServerName metaRS = cluster.getServerHoldingMeta();
         ServerName rsToBeKilled = null;
         
@@ -324,7 +325,8 @@ public class MutableIndexFailureIT extends BaseTest {
         this.util.waitFor(30000, 200, new Waiter.Predicate<Exception>() {
             @Override
             public boolean evaluate() throws Exception {
-              ServerName sn = cluster.getServerHoldingRegion(indexRegion.getRegionName());
+              ServerName sn = cluster.getServerHoldingRegion(indexRegion.getTable(),
+                      indexRegion.getRegionName());
               return (sn != null && sn.equals(dstRS));
             }
           });

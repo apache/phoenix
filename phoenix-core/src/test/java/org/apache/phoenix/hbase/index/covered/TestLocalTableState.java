@@ -76,7 +76,7 @@ public class TestLocalTableState {
       public Boolean answer(InvocationOnMock invocation) throws Throwable {
         List<KeyValue> list = (List<KeyValue>) invocation.getArguments()[0];
         KeyValue kv = new KeyValue(row, fam, qual, ts, Type.Put, stored);
-        kv.setMvccVersion(0);
+        kv.setSequenceId(0);
         list.add(kv);
         return false;
       }
@@ -115,7 +115,7 @@ public class TestLocalTableState {
     Mockito.when(region.getScanner(Mockito.any(Scan.class))).thenReturn(scanner);
     final byte[] stored = Bytes.toBytes("stored-value");
     final KeyValue storedKv = new KeyValue(row, fam, qual, ts, Type.Put, stored);
-    storedKv.setMvccVersion(2);
+    storedKv.setSequenceId(2);
     Mockito.when(scanner.next(Mockito.any(List.class))).thenAnswer(new Answer<Boolean>() {
       @Override
       public Boolean answer(InvocationOnMock invocation) throws Throwable {
@@ -129,7 +129,7 @@ public class TestLocalTableState {
     LocalTableState table = new LocalTableState(env, state, m);
     // add the kvs from the mutation
     KeyValue kv = KeyValueUtil.ensureKeyValue(m.get(fam, qual).get(0));
-    kv.setMvccVersion(0);
+    kv.setSequenceId(0);
     table.addPendingUpdates(kv);
 
     // setup the lookup
@@ -161,7 +161,7 @@ public class TestLocalTableState {
     Mockito.when(region.getScanner(Mockito.any(Scan.class))).thenReturn(scanner);
     final KeyValue storedKv =
         new KeyValue(row, fam, qual, ts, Type.Put, Bytes.toBytes("stored-value"));
-    storedKv.setMvccVersion(2);
+    storedKv.setSequenceId(2);
     Mockito.when(scanner.next(Mockito.any(List.class))).thenAnswer(new Answer<Boolean>() {
       @Override
       public Boolean answer(InvocationOnMock invocation) throws Throwable {

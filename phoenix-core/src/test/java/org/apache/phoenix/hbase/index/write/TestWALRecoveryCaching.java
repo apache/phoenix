@@ -216,7 +216,7 @@ public class TestWALRecoveryCaching {
         LOG.info("\t== Offline: " + server.getServerName());
         continue;
       }
-      List<HRegionInfo> regions = ProtobufUtil.getOnlineRegions(server);
+      List<HRegionInfo> regions = ProtobufUtil.getOnlineRegions(server.getRSRpcServices());
       LOG.info("\t" + server.getServerName() + " regions: " + regions);
     }
 
@@ -262,9 +262,9 @@ public class TestWALRecoveryCaching {
   }
 
   /**
-   * @param miniHBaseCluster
+   * @param cluster
    * @param server
-   * @param bs
+   * @param table
    * @return
    */
   private List<HRegion> getRegionsFromServerForTable(MiniHBaseCluster cluster, ServerName server,
@@ -281,9 +281,9 @@ public class TestWALRecoveryCaching {
   }
 
   /**
-   * @param miniHBaseCluster
-   * @param indexedTableName
-   * @param tableNameString
+   * @param cluster
+   * @param indexTable
+   * @param primaryTable
    */
   private ServerName ensureTablesLiveOnSameServer(MiniHBaseCluster cluster, byte[] indexTable,
       byte[] primaryTable) throws Exception {
@@ -366,7 +366,7 @@ public class TestWALRecoveryCaching {
     List<HRegion> indexRegions = cluster.getRegions(table);
     Set<ServerName> indexServers = new HashSet<ServerName>();
     for (HRegion region : indexRegions) {
-      indexServers.add(cluster.getServerHoldingRegion(region.getRegionName()));
+      indexServers.add(cluster.getServerHoldingRegion(null, region.getRegionName()));
     }
     return indexServers;
   }
