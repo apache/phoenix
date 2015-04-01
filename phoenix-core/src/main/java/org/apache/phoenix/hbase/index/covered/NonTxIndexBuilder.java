@@ -63,16 +63,19 @@ public class NonTxIndexBuilder extends BaseIndexBuilder {
 
     @Override
     public Collection<Pair<Mutation, byte[]>> getIndexUpdate(Mutation mutation) throws IOException {
+    	// create a state manager, so we can manage each batch
+        LocalTableState state = new LocalTableState(env, localTable, mutation);
+    	codec.setContext(state, mutation);
         // build the index updates for each group
-        IndexUpdateManager updateMap = new IndexUpdateManager();
+        IndexUpdateManager manager = new IndexUpdateManager();
 
-        batchMutationAndAddUpdates(updateMap, mutation);
+        batchMutationAndAddUpdates(manager, state, mutation);
 
         if (LOG.isDebugEnabled()) {
-            LOG.debug("Found index updates for Mutation: " + mutation + "\n" + updateMap);
+            LOG.debug("Found index updates for Mutation: " + mutation + "\n" + manager);
         }
 
-        return updateMap.toMap();
+        return manager.toMap();
     }
 
     /**
@@ -90,12 +93,9 @@ public class NonTxIndexBuilder extends BaseIndexBuilder {
      *            mutation to batch
      * @throws IOException
      */
-    private void batchMutationAndAddUpdates(IndexUpdateManager manager, Mutation m) throws IOException {
+    private void batchMutationAndAddUpdates(IndexUpdateManager manager, LocalTableState state, Mutation m) throws IOException {
         // split the mutation into timestamp-based batches
         Collection<Batch> batches = createTimestampBatchesFromMutation(m);
-
-        // create a state manager, so we can manage each batch
-        LocalTableState state = new LocalTableState(env, localTable, m);
 
         // go through each batch of keyvalues and build separate index entries for each
         boolean cleanupCurrentState = true;
