@@ -41,6 +41,7 @@ import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.expression.visitor.StatelessTraverseNoExpressionVisitor;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.parse.BindParseNode;
 import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.parse.CreateTableStatement;
 import org.apache.phoenix.parse.ParseNode;
@@ -50,11 +51,15 @@ import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.query.DelegateConnectionQueryServices;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.MetaDataClient;
+import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PMetaData;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.QueryUtil;
 
@@ -62,6 +67,7 @@ import com.google.common.collect.Iterators;
 
 
 public class CreateTableCompiler {
+    private static final PDatum VARBINARY_DATUM = new VarbinaryDatum();
     private final PhoenixStatement statement;
     
     public CreateTableCompiler(PhoenixStatement statement) {
@@ -151,6 +157,9 @@ public class CreateTableCompiler {
         ExpressionCompiler expressionCompiler = new ExpressionCompiler(context);
         for (int i = 0; i < splits.length; i++) {
             ParseNode node = splitNodes.get(i);
+            if (node instanceof BindParseNode) {
+                context.getBindManager().addParamMetaData((BindParseNode) node, VARBINARY_DATUM);
+            }
             if (node.isStateless()) {
                 Expression expression = node.accept(expressionCompiler);
                 if (expression.evaluate(null, ptr)) {;
@@ -299,6 +308,34 @@ public class CreateTableCompiler {
                 throw new RuntimeException(e); // Impossible
             }
             return Boolean.TRUE;
+        }
+        
+    }
+    private static class VarbinaryDatum implements PDatum {
+
+        @Override
+        public boolean isNullable() {
+            return false;
+        }
+
+        @Override
+        public PDataType getDataType() {
+            return PVarbinary.INSTANCE;
+        }
+
+        @Override
+        public Integer getMaxLength() {
+            return null;
+        }
+
+        @Override
+        public Integer getScale() {
+            return null;
+        }
+
+        @Override
+        public SortOrder getSortOrder() {
+            return SortOrder.getDefault();
         }
         
     }
