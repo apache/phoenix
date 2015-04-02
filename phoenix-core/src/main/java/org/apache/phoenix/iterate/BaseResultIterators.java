@@ -524,7 +524,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                             // Add any concatIterators that were successful so far
                             // as we need these to be in order
                             addIterator(iterators, concatIterators);
-                            concatIterators = Collections.emptyList();
+                            concatIterators = Lists.newArrayList();
                             submitWork(newNestedScans, newFutures, allIterators, newNestedScans.size());
                             allFutures.add(newFutures);
                             for (List<Pair<Scan,Future<PeekingResultIterator>>> newFuture : reverseIfNecessary(newFutures, isReverse)) {
