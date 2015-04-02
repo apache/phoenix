@@ -81,9 +81,14 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
 	        stmt.setInt(1, 1);
 	        stmt.setInt(2, 1);
 	        stmt.execute();
+	        
+	        // verify no rows returned 
+	     	ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM t");
+	     	assertFalse(rs.next());
+	     	
 	        conn.commit();
 	        // verify row exists
-	        ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM t");
+	        rs = conn.createStatement().executeQuery("SELECT * FROM t");
 	        assertTrue(rs.next());
 	        assertEquals(1,rs.getInt(1));
 	        assertEquals(1,rs.getInt(1));
@@ -92,6 +97,21 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
         finally {
         	conn.close();
         }
+	}
+	
+	@Test
+	public void testUpsertWithAutocommit() throws Exception {
+		Connection conn = DriverManager.getConnection(getUrl());
+		String ddl = "CREATE TABLE t (k1 INTEGER PRIMARY KEY, k2 INTEGER) transactional=true";
+		try {
+			conn.setAutoCommit(true);
+			conn.createStatement().execute(ddl);
+			// verify no rows returned
+			ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM t");
+			assertFalse(rs.next());
+		} finally {
+			conn.close();
+		}
 	}
 	
 	@Test

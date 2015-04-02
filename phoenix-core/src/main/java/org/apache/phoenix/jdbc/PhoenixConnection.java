@@ -453,7 +453,10 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         }
     }
     
-    public void addTxParticipant(TransactionAware txnAware) {
+    public void addTxParticipant(TransactionAware txnAware) throws SQLException {
+    	if (!isTransactionStarted()) {
+    		startTransaction();
+    	}
         txContext.addTransactionAware(txnAware);
     }
     
