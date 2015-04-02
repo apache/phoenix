@@ -483,12 +483,12 @@ public class IndexUtil {
             if (dataRegion != null) {
                 joinResult = dataRegion.get(get);
             } else {
-                TableName indexTable =
-                        TableName.valueOf(MetaDataUtil.getLocalIndexPhysicalName(c.getEnvironment()
-                                .getRegion().getTableDesc().getName()));
+                TableName dataTable =
+                        TableName.valueOf(MetaDataUtil.getUserTableName(c.getEnvironment()
+                                .getRegion().getTableDesc().getNameAsString()));
                 HTableInterface table = null;
                 try {
-                    table = c.getEnvironment().getTable(indexTable);
+                    table = c.getEnvironment().getTable(dataTable);
                     joinResult = table.get(get);
                 } finally {
                     if (table != null) table.close();
