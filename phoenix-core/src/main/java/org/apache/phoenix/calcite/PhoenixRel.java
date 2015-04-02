@@ -1,10 +1,14 @@
 package org.apache.phoenix.calcite;
 
+import java.util.List;
+
 import org.apache.calcite.plan.Convention;
 import org.apache.calcite.rel.RelNode;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
+import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.ColumnExpression;
+import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableRef;
 
@@ -51,5 +55,6 @@ public interface PhoenixRel extends RelNode {
     ImplementorContext getCurrentContext();
     PTable createProjectedTable();
     RowProjector createRowProjector();
+    TupleProjector project(List<Expression> exprs);
   }
 }

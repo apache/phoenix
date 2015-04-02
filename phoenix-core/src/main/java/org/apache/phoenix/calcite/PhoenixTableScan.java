@@ -121,7 +121,11 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
             if (projects == null) {
                 tupleProjector = createTupleProjector(implementor, phoenixTable.getTable());
             } else {
-                tupleProjector = PhoenixProject.project(implementor, this.projects);
+                List<Expression> exprs = Lists.newArrayList();
+                for (RexNode project : this.projects) {
+                    exprs.add(CalciteUtils.toExpression(project, implementor));
+                }
+                tupleProjector = implementor.project(exprs);
             }
             TupleProjector.serializeProjectorIntoScan(context.getScan(), tupleProjector);
             PTable projectedTable = implementor.createProjectedTable();

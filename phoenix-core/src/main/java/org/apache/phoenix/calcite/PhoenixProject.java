@@ -54,36 +54,13 @@ public class PhoenixProject extends Project implements PhoenixRel {
         assert getConvention() == getInput().getConvention();
         QueryPlan plan = implementor.visitInput(0, (PhoenixRel) getInput());
         
-        TupleProjector tupleProjector = project(implementor, getProjects());
+        List<Expression> exprs = Lists.newArrayList();
+        for (RexNode project : getProjects()) {
+            exprs.add(CalciteUtils.toExpression(project, implementor));
+        }
+        TupleProjector tupleProjector = implementor.project(exprs);
         PTable projectedTable = implementor.createProjectedTable();
         implementor.setTableRef(new TableRef(projectedTable));
         return new TupleProjectionPlan(plan, tupleProjector, null, implementor.createRowProjector());
-    }
-    
-    protected static TupleProjector project(Implementor implementor, List<RexNode> projects) {
-        KeyValueSchema.KeyValueSchemaBuilder builder = new KeyValueSchema.KeyValueSchemaBuilder(0);
-        Expression[] exprs = new Expression[projects.size()];
-        List<PColumn> columns = Lists.<PColumn>newArrayList();
-        for (int i = 0; i < projects.size(); i++) {
-            String name = projects.get(i).toString();
-            Expression expr = CalciteUtils.toExpression(projects.get(i), implementor);
-            builder.addField(expr);
-            exprs[i] = expr;
-            columns.add(new PColumnImpl(PNameFactory.newName(name), PNameFactory.newName(TupleProjector.VALUE_COLUMN_FAMILY),
-                    expr.getDataType(), expr.getMaxLength(), expr.getScale(), expr.isNullable(),
-                    i, expr.getSortOrder(), null, null, false, name));
-        }
-        try {
-            PTable pTable = PTableImpl.makePTable(null, PName.EMPTY_NAME, PName.EMPTY_NAME,
-                    PTableType.SUBQUERY, null, MetaDataProtocol.MIN_TABLE_TIMESTAMP, PTable.INITIAL_SEQ_NUM,
-                    null, null, columns, null, null, Collections.<PTable>emptyList(),
-                    false, Collections.<PName>emptyList(), null, null, false, false, false, null,
-                    null, null);
-            implementor.setTableRef(new TableRef(CalciteUtils.createTempAlias(), pTable, HConstants.LATEST_TIMESTAMP, false));
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
-        
-        return new TupleProjector(builder.build(), exprs);        
     }
 }

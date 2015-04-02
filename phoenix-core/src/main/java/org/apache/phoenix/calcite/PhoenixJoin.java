@@ -123,7 +123,7 @@ public class PhoenixJoin extends Join implements PhoenixRel {
         return HashJoinPlan.create(SelectStatement.SELECT_STAR, leftPlan, hashJoinInfo, new HashJoinPlan.HashSubPlan[] {new HashJoinPlan.HashSubPlan(0, rightPlan, rightExprs, false, null, null)});
     }
     
-    private boolean isHashJoinDoable() {
+    public boolean isHashJoinDoable() {
         // TODO check memory limit
         RelNode rel = getLeft();
         if (rel instanceof RelSubset) {

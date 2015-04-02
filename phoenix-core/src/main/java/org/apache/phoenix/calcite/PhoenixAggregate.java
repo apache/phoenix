@@ -7,6 +7,7 @@ import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptCost;
 import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelTraitSet;
+import org.apache.calcite.plan.volcano.RelSubset;
 import org.apache.calcite.rel.InvalidRelException;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Aggregate;
@@ -27,7 +28,8 @@ import org.apache.phoenix.execute.AggregatePlan;
 import org.apache.phoenix.execute.ClientAggregatePlan;
 import org.apache.phoenix.execute.HashJoinPlan;
 import org.apache.phoenix.execute.ScanPlan;
-import org.apache.phoenix.expression.CoerceExpression;
+import org.apache.phoenix.execute.TupleProjectionPlan;
+import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.expression.aggregator.ClientAggregators;
@@ -36,12 +38,9 @@ import org.apache.phoenix.expression.function.AggregateFunction;
 import org.apache.phoenix.expression.function.SingleAggregateFunction;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.SelectStatement;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.TableRef;
-import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PDecimal;
-import org.apache.phoenix.schema.types.PVarchar;
-
 import com.google.common.collect.Lists;
 
 /**
@@ -49,6 +48,8 @@ import com.google.common.collect.Lists;
  * relational expression in Phoenix.
  */
 public class PhoenixAggregate extends Aggregate implements PhoenixRel {
+    private static double SERVER_AGGREGATE_FACTOR = 0.2;
+    
     public PhoenixAggregate(RelOptCluster cluster, RelTraitSet traits, RelNode child, boolean indicator, ImmutableBitSet groupSet, List<ImmutableBitSet> groupSets, List<AggregateCall> aggCalls) throws InvalidRelException {
         super(cluster, traits, child, indicator, groupSet, groupSets, aggCalls);
         assert getConvention() == PhoenixRel.CONVENTION;
@@ -68,7 +69,11 @@ public class PhoenixAggregate extends Aggregate implements PhoenixRel {
     
     @Override
     public RelOptCost computeSelfCost(RelOptPlanner planner) {
-        return super.computeSelfCost(planner).multiplyBy(PHOENIX_FACTOR);
+        RelOptCost cost = super.computeSelfCost(planner);
+        if (isServerAggregate()) {
+            cost = cost.multiplyBy(SERVER_AGGREGATE_FACTOR);
+        }
+        return cost.multiplyBy(PHOENIX_FACTOR);
     }
 
     @Override
@@ -117,25 +122,13 @@ public class PhoenixAggregate extends Aggregate implements PhoenixRel {
         String groupExprAttribName = BaseScannerRegionObserver.UNORDERED_GROUP_BY_EXPRESSIONS;
         // TODO sort group by keys. not sure if there is a way to avoid this sorting,
         //      otherwise we would have add an extra projection.
-        List<Expression> exprs = Lists.newArrayListWithExpectedSize(ordinals.size());
-        List<Expression> keyExprs = exprs;
+        // TODO convert key types. can be avoided?
+        List<Expression> keyExprs = Lists.newArrayListWithExpectedSize(ordinals.size());
         for (int i = 0; i < ordinals.size(); i++) {
             Expression expr = implementor.newColumnExpression(ordinals.get(i));
-            exprs.add(expr);
-            PDataType keyType = getKeyType(expr);
-            if (keyType == expr.getDataType()) {
-                continue;
-            }
-            if (keyExprs == exprs) {
-                keyExprs = Lists.newArrayList(exprs);
-            }
-            try {
-                keyExprs.set(i, CoerceExpression.create(expr, keyType));
-            } catch (SQLException e) {
-                throw new RuntimeException(e);
-            }
+            keyExprs.add(expr);
         }
-        GroupBy groupBy = new GroupBy.GroupByBuilder().setScanAttribName(groupExprAttribName).setExpressions(exprs).setKeyExpressions(keyExprs).build();
+        GroupBy groupBy = new GroupBy.GroupByBuilder().setScanAttribName(groupExprAttribName).setExpressions(keyExprs).setKeyExpressions(keyExprs).build();
         
         // TODO sort aggFuncs. same problem with group by key sorting.
         List<SingleAggregateFunction> aggFuncs = Lists.newArrayList();
@@ -152,46 +145,39 @@ public class PhoenixAggregate extends Aggregate implements PhoenixRel {
         context.getAggregationManager().setAggregators(clientAggregators);
         
         SelectStatement select = SelectStatement.SELECT_STAR;
-        RowProjector rowProjector = createRowProjector(keyExprs, aggFuncs);
+        QueryPlan aggPlan;
         if (basePlan == null) {
-            return new ClientAggregatePlan(context, select, tableRef, rowProjector, null, null, OrderBy.EMPTY_ORDER_BY, groupBy, null, plan);
+            aggPlan = new ClientAggregatePlan(context, select, tableRef, implementor.createRowProjector(), null, null, OrderBy.EMPTY_ORDER_BY, groupBy, null, plan);
+        } else {
+            aggPlan = new AggregatePlan(context, select, basePlan.getTableRef(), implementor.createRowProjector(), null, OrderBy.EMPTY_ORDER_BY, null, groupBy, null);
+            if (plan instanceof HashJoinPlan) {        
+                HashJoinPlan hashJoinPlan = (HashJoinPlan) plan;
+                aggPlan = HashJoinPlan.create(select, aggPlan, hashJoinPlan.getJoinInfo(), hashJoinPlan.getSubPlans());
+            }
         }
         
-        QueryPlan aggPlan = new AggregatePlan(context, select, basePlan.getTableRef(), rowProjector, null, OrderBy.EMPTY_ORDER_BY, null, groupBy, null);
-        if (plan instanceof ScanPlan)
-            return aggPlan;
-        
-        HashJoinPlan hashJoinPlan = (HashJoinPlan) plan;
-        return HashJoinPlan.create(select, aggPlan, hashJoinPlan.getJoinInfo(), hashJoinPlan.getSubPlans());
-    }
-    
-    private static RowProjector createRowProjector(List<Expression> keyExprs, List<SingleAggregateFunction> aggFuncs) {
-        List<ColumnProjector> columnProjectors = Lists.<ColumnProjector>newArrayList();
+        List<Expression> exprs = Lists.newArrayList();
         for (int i = 0; i < keyExprs.size(); i++) {
             Expression keyExpr = keyExprs.get(i);
             RowKeyValueAccessor accessor = new RowKeyValueAccessor(keyExprs, i);
             Expression expr = new RowKeyColumnExpression(keyExpr, accessor, keyExpr.getDataType());
-            columnProjectors.add(new ExpressionProjector(expr.toString(), "", expr, false));
+            exprs.add(expr);
         }
         for (SingleAggregateFunction aggFunc : aggFuncs) {
-            columnProjectors.add(new ExpressionProjector(aggFunc.toString(), "", aggFunc, false));
+            exprs.add(aggFunc);
         }
-        return new RowProjector(columnProjectors, 0, false);                
+        TupleProjector tupleProjector = implementor.project(exprs);
+        PTable projectedTable = implementor.createProjectedTable();
+        implementor.setTableRef(new TableRef(projectedTable));
+        return new TupleProjectionPlan(aggPlan, tupleProjector, null, implementor.createRowProjector());
     }
     
-    private static PDataType getKeyType(Expression expression) {
-        PDataType type = expression.getDataType();
-        if (!expression.isNullable() || !type.isFixedWidth()) {
-            return type;
+    public boolean isServerAggregate() {
+        RelNode rel = getInput();
+        if (rel instanceof RelSubset) {
+            rel = ((RelSubset) rel).getBest();
         }
-        if (type.isCastableTo(PDecimal.INSTANCE)) {
-            return PDecimal.INSTANCE;
-        }
-        if (type.isCastableTo(PVarchar.INSTANCE)) {
-            return PVarchar.INSTANCE;
-        }
-        // This might happen if someone tries to group by an array
-        throw new IllegalStateException("Multiple occurrences of type " + type + " may not occur in a GROUP BY clause");
+        return (rel instanceof PhoenixTableScan) || (rel instanceof PhoenixJoin && ((PhoenixJoin) rel).isHashJoinDoable());        
     }
     
     private static int getMinNullableIndex(List<SingleAggregateFunction> aggFuncs, boolean isUngroupedAggregation) {

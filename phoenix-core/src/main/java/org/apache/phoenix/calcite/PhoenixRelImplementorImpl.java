@@ -1,20 +1,30 @@
 package org.apache.phoenix.calcite;
 
 import java.sql.SQLException;
+import java.util.Collections;
 import java.util.List;
 import java.util.Stack;
 
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.calcite.PhoenixRel.ImplementorContext;
 import org.apache.phoenix.compile.ColumnProjector;
 import org.apache.phoenix.compile.ExpressionProjector;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.TupleProjectionCompiler;
+import org.apache.phoenix.coprocessor.MetaDataProtocol;
+import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.ColumnExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.schema.ColumnRef;
+import org.apache.phoenix.schema.KeyValueSchema;
 import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PColumnImpl;
+import org.apache.phoenix.schema.PName;
+import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableImpl;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableRef;
 
 import com.google.common.collect.Lists;
@@ -88,6 +98,32 @@ class PhoenixRelImplementorImpl implements PhoenixRel.Implementor {
         }
         // TODO get estimate row size
         return new RowProjector(columnProjectors, 0, false);        
+    }
+    
+    @Override
+    public TupleProjector project(List<Expression> exprs) {
+        KeyValueSchema.KeyValueSchemaBuilder builder = new KeyValueSchema.KeyValueSchemaBuilder(0);
+        List<PColumn> columns = Lists.<PColumn>newArrayList();
+        for (int i = 0; i < exprs.size(); i++) {
+            Expression expr = exprs.get(i);
+            String name = expr.toString();
+            builder.addField(expr);
+            columns.add(new PColumnImpl(PNameFactory.newName(name), PNameFactory.newName(TupleProjector.VALUE_COLUMN_FAMILY),
+                    expr.getDataType(), expr.getMaxLength(), expr.getScale(), expr.isNullable(),
+                    i, expr.getSortOrder(), null, null, false, name));
+        }
+        try {
+            PTable pTable = PTableImpl.makePTable(null, PName.EMPTY_NAME, PName.EMPTY_NAME,
+                    PTableType.SUBQUERY, null, MetaDataProtocol.MIN_TABLE_TIMESTAMP, PTable.INITIAL_SEQ_NUM,
+                    null, null, columns, null, null, Collections.<PTable>emptyList(),
+                    false, Collections.<PName>emptyList(), null, null, false, false, false, null,
+                    null, null);
+            this.setTableRef(new TableRef(CalciteUtils.createTempAlias(), pTable, HConstants.LATEST_TIMESTAMP, false));
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+        
+        return new TupleProjector(builder.build(), exprs.toArray(new Expression[exprs.size()]));        
     }
 
 }

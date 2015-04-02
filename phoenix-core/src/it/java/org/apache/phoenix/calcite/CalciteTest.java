@@ -256,6 +256,7 @@ public class CalciteTest extends BaseClientManagedTimeIT {
                           {"00A323122312312", "a", "00D300000000XHP"}, 
                           {"00A423122312312", "a", "00D300000000XHP"}})
                 .close();
+        
         start().sql("select t1.entity_id, t2.a_string, t3.organization_id from aTable t1 join aTable t2 on t1.entity_id = t2.entity_id and t1.organization_id = t2.organization_id join atable t3 on t1.entity_id = t3.entity_id and t1.organization_id = t3.organization_id") 
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixProject(ENTITY_ID=[$19], A_STRING=[$2], ORGANIZATION_ID=[$36])\n" +
@@ -286,6 +287,31 @@ public class CalciteTest extends BaseClientManagedTimeIT {
                           {"a", 4L},
                           {"b", 4L},
                           {"c", 1L}})
+                .close();
+        
+        start().sql("select count(entity_id), a_string from atable group by a_string")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                           "  PhoenixProject(EXPR$0=[$1], A_STRING=[$0])\n" +
+                           "    PhoenixAggregate(group=[{0}], EXPR$0=[COUNT()])\n" +
+                           "      PhoenixTableScan(table=[[phoenix, ATABLE]], project=[[$2]])\n")
+                .resultIs(new Object[][] {
+                          {4L, "a"},
+                          {4L, "b"},
+                          {1L, "c"}})
+                .close();
+        
+        start().sql("select s.name, count(\"item_id\") from " + JOIN_SUPPLIER_TABLE_FULL_NAME + " s join " + JOIN_ITEM_TABLE_FULL_NAME + " i on s.\"supplier_id\" = i.\"supplier_id\" group by s.name")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                           "  PhoenixAggregate(group=[{0}], EXPR$1=[COUNT()])\n" +
+                           "    PhoenixProject(NAME=[$1])\n" +
+                           "      PhoenixJoin(condition=[=($0, $2)], joinType=[inner])\n" +
+                           "        PhoenixTableScan(table=[[phoenix, SUPPLIERTABLE]], project=[[$0, $1]])\n" +
+                           "        PhoenixTableScan(table=[[phoenix, ITEMTABLE]], project=[[$5]])\n")
+                .resultIs(new Object[][] {
+                          {"S1", 2L},
+                          {"S2", 2L},
+                          {"S5", 1L},
+                          {"S6", 1L}})
                 .close();
     }
     
