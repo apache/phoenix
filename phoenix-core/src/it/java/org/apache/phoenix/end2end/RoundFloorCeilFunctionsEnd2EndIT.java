@@ -29,10 +29,12 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Time;
 import java.sql.Timestamp;
+import java.util.Properties;
 
 import org.apache.phoenix.expression.function.CeilFunction;
 import org.apache.phoenix.expression.function.FloorFunction;
 import org.apache.phoenix.expression.function.RoundFunction;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.DateUtil;
 import org.junit.Before;
 import org.junit.Test;
@@ -439,5 +441,117 @@ public class RoundFloorCeilFunctionsEnd2EndIT extends BaseHBaseManagedTimeIT {
 		assertEquals(0, Floats.compare(1.26f, rs.getFloat(3)));
 		assertEquals(0, Floats.compare(1.264f, rs.getFloat(4)));
 	}	
+	
+	@Test
+	public void testTimestampAggregateFunctions() throws Exception {
+		String dateString = "2015-03-08 09:09:11.665";
+		Properties props = new Properties();
+		props.setProperty(QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB, "GMT+1");
+		Connection conn = DriverManager.getConnection(getUrl(), props);
+		try {
+			conn.prepareStatement(
+					"create table TIME_AGG_TABLE("
+							+ "ID unsigned_int NOT NULL, "
+							+ "THE_DATE TIMESTAMP, "
+							+ "constraint PK primary key (ID))").execute();
+			PreparedStatement stmt = conn.prepareStatement("upsert into "
+					+ "TIME_AGG_TABLE(" + "    ID, " + "    THE_DATE)"
+					+ "VALUES (?, ?)");
+			stmt.setInt(1, 1);
+			stmt.setTimestamp(2, DateUtil.parseTimestamp(dateString));
+			stmt.execute();
+			conn.commit();
+
+			ResultSet rs = conn.prepareStatement(
+					"SELECT THE_DATE ,TRUNC(THE_DATE,'DAY') AS day_from_dt "
+							+ ",TRUNC(THE_DATE,'HOUR') AS hour_from_dt "
+							+ ",TRUNC(THE_DATE,'MINUTE') AS min_from_dt "
+							+ ",TRUNC(THE_DATE,'SECOND') AS sec_from_dt "
+							+ ",TRUNC(THE_DATE,'MILLISECOND') AS mil_from_dt "
+							+ "FROM TIME_AGG_TABLE").executeQuery();
+			assertTrue(rs.next());
+			assertEquals(DateUtil.parseTimestamp("2015-03-08 09:09:11.665"),
+					rs.getTimestamp("THE_DATE"));
+			assertEquals(DateUtil.parseTimestamp("2015-03-08 00:00:00.0"),
+					rs.getTimestamp("day_from_dt"));
+			assertEquals(DateUtil.parseTimestamp("2015-03-08 09:00:00.0"),
+					rs.getTimestamp("hour_from_dt"));
+			assertEquals(DateUtil.parseTimestamp("2015-03-08 09:09:00.0"),
+					rs.getTimestamp("min_from_dt"));
+			assertEquals(DateUtil.parseTimestamp("2015-03-08 09:09:11.0"),
+					rs.getTimestamp("sec_from_dt"));
+			assertEquals(DateUtil.parseTimestamp("2015-03-08 09:09:11.665"),
+					rs.getTimestamp("mil_from_dt"));
+			rs.close();
+
+			rs = conn.prepareStatement(
+					"SELECT THE_DATE ,ROUND(THE_DATE,'DAY') AS day_from_dt "
+							+ ",ROUND(THE_DATE,'HOUR') AS hour_from_dt "
+							+ ",ROUND(THE_DATE,'MINUTE') AS min_from_dt "
+							+ ",ROUND(THE_DATE,'SECOND') AS sec_from_dt "
+							+ ",ROUND(THE_DATE,'MILLISECOND') AS mil_from_dt "
+							+ "FROM TIME_AGG_TABLE").executeQuery();
+			assertTrue(rs.next());
+			assertEquals(DateUtil.parseTimestamp("2015-03-08 09:09:11.665"),
+					rs.getTimestamp("THE_DATE"));
+			assertEquals(DateUtil.parseTimestamp("2015-03-08 00:00:00.0"),
+					rs.getTimestamp("day_from_dt"));
+			assertEquals(DateUtil.parseTimestamp("2015-03-08 09:00:00.0"),
+					rs.getTimestamp("hour_from_dt"));
+			assertEquals(DateUtil.parseTimestamp("2015-03-08 09:09:00.0"),
+					rs.getTimestamp("min_from_dt"));
+			assertEquals(DateUtil.parseTimestamp("2015-03-08 09:09:12.0"),
+					rs.getTimestamp("sec_from_dt"));
+			assertEquals(DateUtil.parseTimestamp("2015-03-08 09:09:11.665"),
+					rs.getTimestamp("mil_from_dt"));
+			rs.close();
+
+			rs = conn.prepareStatement(
+					"SELECT THE_DATE ,FLOOR(THE_DATE,'DAY') AS day_from_dt "
+							+ ",FLOOR(THE_DATE,'HOUR') AS hour_from_dt "
+							+ ",FLOOR(THE_DATE,'MINUTE') AS min_from_dt "
+							+ ",FLOOR(THE_DATE,'SECOND') AS sec_from_dt "
+							+ ",FLOOR(THE_DATE,'MILLISECOND') AS mil_from_dt "
+							+ "FROM TIME_AGG_TABLE").executeQuery();
+			assertTrue(rs.next());
+			assertEquals(DateUtil.parseTimestamp("2015-03-08 09:09:11.665"),
+					rs.getTimestamp("THE_DATE"));
+			assertEquals(DateUtil.parseTimestamp("2015-03-08 00:00:00.0"),
+					rs.getTimestamp("day_from_dt"));
+			assertEquals(DateUtil.parseTimestamp("2015-03-08 09:00:00.0"),
+					rs.getTimestamp("hour_from_dt"));
+			assertEquals(DateUtil.parseTimestamp("2015-03-08 09:09:00.0"),
+					rs.getTimestamp("min_from_dt"));
+			assertEquals(DateUtil.parseTimestamp("2015-03-08 09:09:11.0"),
+					rs.getTimestamp("sec_from_dt"));
+			assertEquals(DateUtil.parseTimestamp("2015-03-08 09:09:11.665"),
+					rs.getTimestamp("mil_from_dt"));
+			rs.close();
+
+			rs = conn.prepareStatement(
+					"SELECT THE_DATE ,CEIL(THE_DATE,'DAY') AS day_from_dt "
+							+ ",CEIL(THE_DATE,'HOUR') AS hour_from_dt "
+							+ ",CEIL(THE_DATE,'MINUTE') AS min_from_dt "
+							+ ",CEIL(THE_DATE,'SECOND') AS sec_from_dt "
+							+ ",CEIL(THE_DATE,'MILLISECOND') AS mil_from_dt "
+							+ "FROM TIME_AGG_TABLE").executeQuery();
+			assertTrue(rs.next());
+			assertEquals(DateUtil.parseTimestamp("2015-03-08 09:09:11.665"),
+					rs.getTimestamp("THE_DATE"));
+			assertEquals(DateUtil.parseTimestamp("2015-03-09 00:00:00.0"),
+					rs.getTimestamp("day_from_dt"));
+			assertEquals(DateUtil.parseTimestamp("2015-03-08 10:00:00.0"),
+					rs.getTimestamp("hour_from_dt"));
+			assertEquals(DateUtil.parseTimestamp("2015-03-08 09:10:00.0"),
+					rs.getTimestamp("min_from_dt"));
+			assertEquals(DateUtil.parseTimestamp("2015-03-08 09:09:12.0"),
+					rs.getTimestamp("sec_from_dt"));
+			assertEquals(DateUtil.parseTimestamp("2015-03-08 09:09:11.665"),
+					rs.getTimestamp("mil_from_dt"));
+			rs.close();
+		} finally {
+			conn.close();
+		}
+	}
 
 }
