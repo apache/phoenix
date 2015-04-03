@@ -335,6 +335,19 @@ public class CalciteTest extends BaseClientManagedTimeIT {
                 .close();
     }
     
+    @Test public void testDistinct() {
+        start().sql("select distinct a_string from aTable")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                           "  PhoenixAggregate(group=[{0}])\n" +
+                           "    PhoenixProject(A_STRING=[$2])\n" +
+                           "      PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
+                .resultIs(new Object[][]{
+                          {"a"}, 
+                          {"b"}, 
+                          {"c"}})
+                .close();;
+    }
+    
     @Test public void testSubquery() {
         start().sql("SELECT \"order_id\", quantity FROM " + JOIN_ORDER_TABLE_FULL_NAME + " o WHERE quantity = (SELECT max(quantity) FROM " + JOIN_ORDER_TABLE_FULL_NAME + " q WHERE o.\"item_id\" = q.\"item_id\")")
                .explainIs("PhoenixToEnumerableConverter\n" +
