@@ -67,7 +67,6 @@ import java.util.Map.Entry;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Coprocessor;
-import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
 import org.apache.hadoop.hbase.ipc.controller.ClientRpcControllerFactory;
@@ -192,8 +191,6 @@ public class QueryServicesOptions {
     
     private static final String DEFAULT_CLIENT_RPC_CONTROLLER_FACTORY = ClientRpcControllerFactory.class.getName();
     
-    public static final String DEFAULT_CONSISTENCY_LEVEL = Consistency.STRONG.toString();
-
     private final Configuration config;
 
     private QueryServicesOptions(Configuration config) {

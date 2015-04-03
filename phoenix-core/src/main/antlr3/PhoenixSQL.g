@@ -70,7 +70,6 @@ tokens
     KEY='key';
     ALTER='alter';
     COLUMN='column';
-    SESSION='session';
     TABLE='table';
     ADD='add';
     SPLIT='split';
@@ -373,7 +372,6 @@ non_select_node returns [BindableStatement ret]
     |   s=alter_index_node
     |   s=alter_table_node
     |   s=trace_node
-    |   s=alter_session_node
     |	s=create_sequence_node
     |	s=drop_sequence_node
     |   s=update_statistics_node
@@ -512,12 +510,6 @@ alter_index_node returns [AlterIndexStatement ret]
 trace_node returns [TraceStatement ret]
     :   TRACE ((flag = ON  ( WITH SAMPLING s = sampling_rate)?) | flag = OFF)
        {ret = factory.trace(Tracing.isTraceOn(flag.getText()), s == null ? Tracing.isTraceOn(flag.getText()) ? 1.0 : 0.0 : (((BigDecimal)s.getValue())).doubleValue());}
-    ;
-
-// Parse an alter session statement.
-alter_session_node returns [AlterSessionStatement ret]
-    :   ALTER SESSION (SET p=properties)
-       {ret = factory.alterSession(p);}
     ;
 
 // Parse an alter table statement.
