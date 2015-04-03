@@ -142,6 +142,11 @@ public class PhoenixRuntime {
     public static final String AUTO_COMMIT_ATTRIB = "AutoCommit";
 
     /**
+     * Use this connection property to explicitly set read consistency level on a new connection.
+     */
+    public static final String CONSISTENCY_ATTRIB = "Consistency";
+
+    /**
      * Use this as the zookeeper quorum name to have a connection-less connection. This enables
      * Phoenix-compatible HFiles to be created in a map/reduce job by creating tables,
      * upserting data into them, and getting the uncommitted state through {@link #getUncommittedData(Connection)}

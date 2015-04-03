@@ -26,6 +26,7 @@ import static org.junit.Assert.assertTrue;
 import java.util.Map;
 import java.util.Properties;
 
+import org.apache.hadoop.hbase.client.Consistency;
 import org.junit.Test;
 
 public class JDBCUtilTest {
@@ -100,5 +101,19 @@ public class JDBCUtilTest {
         Properties props = new Properties();
         props.setProperty("AutoCommit", "false");
         assertFalse(JDBCUtil.getAutoCommit("localhost", props, false));
+    }
+
+    @Test
+    public void testGetConsistency_TIMELINE_InUrl() {
+        assertTrue(JDBCUtil.getConsistencyLevel("localhost;Consistency=TIMELINE", new Properties(),
+                Consistency.STRONG.toString()) == Consistency.TIMELINE);
+    }
+
+    @Test
+    public void testGetConsistency_TIMELINE_InProperties() {
+        Properties props = new Properties();
+        props.setProperty(PhoenixRuntime.CONSISTENCY_ATTRIB, "TIMELINE");
+        assertTrue(JDBCUtil.getConsistencyLevel("localhost", props, Consistency.STRONG.toString())
+                == Consistency.TIMELINE);
     }
 }

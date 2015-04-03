@@ -23,6 +23,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
 
+import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FilterList;
@@ -98,6 +99,11 @@ public abstract class ExplainTable {
         StringBuilder buf = new StringBuilder(prefix);
         ScanRanges scanRanges = context.getScanRanges();
         boolean hasSkipScanFilter = false;
+        Scan scan = context.getScan();
+
+        if (scan.getConsistency() != Consistency.STRONG){
+            buf.append("TIMELINE-CONSISTENCY ");
+        }
         if (hint.hasHint(Hint.SMALL)) {
             buf.append("SMALL ");
         }
@@ -115,7 +121,6 @@ public abstract class ExplainTable {
         }
         planSteps.add(buf.toString());
         
-        Scan scan = context.getScan();
         Filter filter = scan.getFilter();
         PageFilter pageFilter = null;
         if (filter != null) {

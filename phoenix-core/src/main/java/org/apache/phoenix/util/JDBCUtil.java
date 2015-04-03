@@ -26,6 +26,7 @@ import java.util.Properties;
 
 import javax.annotation.Nullable;
 
+import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PName;
@@ -54,12 +55,15 @@ public class JDBCUtil {
      * @return the property value or null if not found
      */
     public static String findProperty(String url, Properties info, String propName) {
-        String urlPropName = ";" + propName + "=";
+        String urlPropName = PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR + propName.toUpperCase() + "=";
+        String upperCaseURL = url.toUpperCase();
         String propValue = info.getProperty(propName);
         if (propValue == null) {
-            int begIndex = url.indexOf(urlPropName);
+            int begIndex = upperCaseURL.indexOf(urlPropName);
             if (begIndex >= 0) {
-                int endIndex = url.indexOf(';',begIndex + urlPropName.length());
+                int endIndex =
+                        upperCaseURL.indexOf(PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR, begIndex
+                                + urlPropName.length());
                 if (endIndex < 0) {
                     endIndex = url.length();
                 }
@@ -70,10 +74,13 @@ public class JDBCUtil {
     }
 
     public static String removeProperty(String url, String propName) {
-        String urlPropName = ";" + propName + "=";
-        int begIndex = url.indexOf(urlPropName);
+        String urlPropName = PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR + propName.toUpperCase() + "=";
+        String upperCaseURL = url.toUpperCase();
+        int begIndex = upperCaseURL.indexOf(urlPropName);
         if (begIndex >= 0) {
-            int endIndex = url.indexOf(';', begIndex + urlPropName.length());
+            int endIndex =
+                    upperCaseURL.indexOf(PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR, begIndex
+                            + urlPropName.length());
             if (endIndex < 0) {
                 endIndex = url.length();
             }
@@ -93,7 +100,7 @@ public class JDBCUtil {
 		for (String propName : info.stringPropertyNames()) {
 			result.put(propName, info.getProperty(propName));
 		}
-		String[] urlPropNameValues = url.split(";");
+		String[] urlPropNameValues = url.split(Character.toString(PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR));
 		if (urlPropNameValues.length > 1) {
 			for (int i = 1; i < urlPropNameValues.length; i++) {
 				String[] urlPropNameValue = urlPropNameValues[i].split("=");
@@ -153,5 +160,26 @@ public class JDBCUtil {
             return defaultValue;
         }
         return Boolean.valueOf(autoCommit);
+    }
+
+    /**
+     * Retrieve the value of the optional consistency read setting from JDBC url or connection
+     * properties.
+     *
+     * @param url JDBC url used for connecting to Phoenix
+     * @param info connection properties
+     * @param defaultValue default to return if ReadConsistency property is not set in the url
+     *                     or connection properties
+     * @return the boolean value supplied for the AutoCommit in the connection URL or properties,
+     * or the supplied default value if no AutoCommit attribute was provided
+     */
+    public static Consistency getConsistencyLevel(String url, Properties info, String defaultValue) {
+        String consistency = findProperty(url, info, PhoenixRuntime.CONSISTENCY_ATTRIB);
+
+        if(consistency != null && consistency.equalsIgnoreCase(Consistency.TIMELINE.toString())){
+            return Consistency.TIMELINE;
+        }
+
+        return Consistency.STRONG;
     }
 }

@@ -330,6 +330,10 @@ public class ParseNodeFactory {
         return new TraceStatement(isTraceOn, samplingRate);
     }
 
+    public AlterSessionStatement alterSession(Map<String,Object> props) {
+        return new AlterSessionStatement(props);
+    }
+
     public TableName table(String schemaName, String tableName) {
         return TableName.createNormalized(schemaName,tableName);
     }
