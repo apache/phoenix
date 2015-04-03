@@ -22,6 +22,7 @@ import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.function.AggregateFunction;
 import org.apache.phoenix.expression.function.CountAggregateFunction;
 import org.apache.phoenix.expression.function.FunctionExpression;
+import org.apache.phoenix.expression.function.MaxAggregateFunction;
 import org.apache.phoenix.expression.function.SumAggregateFunction;
 
 import com.google.common.collect.Lists;
@@ -127,6 +128,13 @@ public class CalciteUtils {
             public FunctionExpression newFunction(SqlFunction sqlFunc,
                     List<Expression> args) {
                 return new SumAggregateFunction(args);
+            }
+        });
+        FUNCTION_MAP.put("MAX", new FunctionFactory() {
+            @Override
+            public FunctionExpression newFunction(SqlFunction sqlFunc,
+                    List<Expression> args) {
+                return new MaxAggregateFunction(args, null);
             }
         });
     }

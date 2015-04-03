@@ -336,9 +336,9 @@ public class CalciteTest extends BaseClientManagedTimeIT {
     }
     
     @Test public void testSubquery() {
-        start().sql("SELECT \"order_id\" FROM " + JOIN_ORDER_TABLE_FULL_NAME + " o WHERE quantity = (SELECT max(quantity) FROM " + JOIN_ORDER_TABLE_FULL_NAME + " q WHERE o.\"item_id\" = q.\"item_id\")")
+        start().sql("SELECT \"order_id\", quantity FROM " + JOIN_ORDER_TABLE_FULL_NAME + " o WHERE quantity = (SELECT max(quantity) FROM " + JOIN_ORDER_TABLE_FULL_NAME + " q WHERE o.\"item_id\" = q.\"item_id\")")
                .explainIs("PhoenixToEnumerableConverter\n" +
-                          "  PhoenixProject(order_id=[$0])\n" +
+                          "  PhoenixProject(order_id=[$0], QUANTITY=[$4])\n" +
                           "    PhoenixJoin(condition=[AND(=($2, $6), =($4, $7))], joinType=[inner])\n" +
                           "      PhoenixTableScan(table=[[phoenix, ORDERTABLE]])\n" +
                           "      PhoenixAggregate(group=[{0}], EXPR$0=[MAX($1)])\n" +
@@ -348,6 +348,11 @@ public class CalciteTest extends BaseClientManagedTimeIT {
                           "            PhoenixAggregate(group=[{0}])\n" +
                           "              PhoenixProject(item_id=[$2])\n" +
                           "                PhoenixTableScan(table=[[phoenix, ORDERTABLE]])\n")
+               .resultIs(new Object[][]{
+                         {"000000000000001", 1000},
+                         {"000000000000003", 3000},
+                         {"000000000000004", 4000},
+                         {"000000000000005", 5000}})
                .close();
     }
 
