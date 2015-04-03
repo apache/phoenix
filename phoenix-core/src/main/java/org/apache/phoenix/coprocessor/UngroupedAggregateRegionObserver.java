@@ -229,7 +229,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
         } 
         
         if (j != null)  {
-            theScanner = new HashJoinRegionScanner(theScanner, p, j, ScanUtil.getTenantId(scan), c.getEnvironment());
+            TupleProjector postJoinProjector = TupleProjector.deserializeProjectorFromScan(scan, false);
+            theScanner = new HashJoinRegionScanner(theScanner, p, postJoinProjector, j, ScanUtil.getTenantId(scan), c.getEnvironment());
         }
         
         int batchSize = 0;

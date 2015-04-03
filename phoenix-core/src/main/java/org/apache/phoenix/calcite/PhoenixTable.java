@@ -70,7 +70,7 @@ public class PhoenixTable extends AbstractTable implements TranslatableTable {
     @Override
     public RelNode toRel(RelOptTable.ToRelContext context, RelOptTable relOptTable) {
         final RelOptCluster cluster = context.getCluster();
-        return new PhoenixTableScan(cluster, cluster.traitSetOf(PhoenixRel.CONVENTION), relOptTable, null, null, null);
+        return new PhoenixTableScan(cluster, cluster.traitSetOf(PhoenixRel.CONVENTION), relOptTable, null);
     }
 
     @Override

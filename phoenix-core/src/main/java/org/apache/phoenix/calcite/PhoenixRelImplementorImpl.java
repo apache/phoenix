@@ -16,6 +16,7 @@ import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.ColumnExpression;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.KeyValueSchema;
 import org.apache.phoenix.schema.PColumn;
@@ -35,7 +36,7 @@ class PhoenixRelImplementorImpl implements PhoenixRel.Implementor {
 	
 	public PhoenixRelImplementorImpl() {
 	    this.contextStack = new Stack<ImplementorContext>();
-	    pushContext(new ImplementorContext(true));
+	    pushContext(new ImplementorContext(true, false));
 	}
 	
     @Override
@@ -105,8 +106,8 @@ class PhoenixRelImplementorImpl implements PhoenixRel.Implementor {
         KeyValueSchema.KeyValueSchemaBuilder builder = new KeyValueSchema.KeyValueSchemaBuilder(0);
         List<PColumn> columns = Lists.<PColumn>newArrayList();
         for (int i = 0; i < exprs.size(); i++) {
+            String name = ParseNodeFactory.createTempAlias();
             Expression expr = exprs.get(i);
-            String name = expr.toString();
             builder.addField(expr);
             columns.add(new PColumnImpl(PNameFactory.newName(name), PNameFactory.newName(TupleProjector.VALUE_COLUMN_FAMILY),
                     expr.getDataType(), expr.getMaxLength(), expr.getScale(), expr.isNullable(),

@@ -147,8 +147,9 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
         } 
 
         if (j != null) {
+            TupleProjector postJoinProjector = TupleProjector.deserializeProjectorFromScan(scan, false);
             innerScanner =
-                    new HashJoinRegionScanner(innerScanner, p, j, ScanUtil.getTenantId(scan),
+                    new HashJoinRegionScanner(innerScanner, p, postJoinProjector, j, ScanUtil.getTenantId(scan),
                             c.getEnvironment());
         }
 

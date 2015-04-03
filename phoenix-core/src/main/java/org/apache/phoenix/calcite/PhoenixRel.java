@@ -29,17 +29,38 @@ public interface PhoenixRel extends RelNode {
    */
   double PHOENIX_FACTOR = 0.5;
 
+  /** Relative cost of server plan versus client plan.
+   *
+   * <p>Multiply by the value (which is less than unity), and you will get a cheaper cost.
+   * Server is cheaper.
+   */
+  double SERVER_FACTOR = 0.2;
+  
+  enum PlanType {
+      SERVER_ONLY_FLAT,
+      SERVER_ONLY_COMPLEX,
+      CLIENT_SERVER,
+  }
+  
+  PlanType getPlanType();
+
   QueryPlan implement(Implementor implementor);
   
   class ImplementorContext {
       private boolean retainPKColumns;
+      private boolean forceProject;
       
-      public ImplementorContext(boolean retainPKColumns) {
+      public ImplementorContext(boolean retainPKColumns, boolean forceProject) {
           this.retainPKColumns = retainPKColumns;
+          this.forceProject = forceProject;
       }
       
       public boolean isRetainPKColumns() {
           return this.retainPKColumns;
+      }
+      
+      public boolean forceProject() {
+          return this.forceProject;
       }
   }
 

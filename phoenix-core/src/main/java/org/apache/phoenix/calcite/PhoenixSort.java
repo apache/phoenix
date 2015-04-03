@@ -29,4 +29,9 @@ public class PhoenixSort extends Sort implements PhoenixRel {
         implementor.visitInput(0, (PhoenixRel) getInput());
         throw new UnsupportedOperationException();
     }
+
+    @Override
+    public PlanType getPlanType() {
+        return PlanType.CLIENT_SERVER;
+    }
 }

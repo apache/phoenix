@@ -1,5 +1,6 @@
 package org.apache.phoenix.calcite;
 
+import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.calcite.adapter.enumerable.EnumerableRel;
@@ -20,12 +21,11 @@ import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.convert.ConverterImpl;
 import org.apache.calcite.rel.type.RelDataType;
-import org.apache.calcite.tools.FrameworkConfig;
-import org.apache.calcite.tools.Frameworks;
-import org.apache.calcite.tools.Planner;
-import org.apache.calcite.tools.Program;
-import org.apache.calcite.tools.Programs;
+import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.compile.RowProjector;
+import org.apache.phoenix.execute.DelegateQueryPlan;
+import org.apache.phoenix.iterate.ResultIterator;
 
 /**
  * Scan of a Phoenix table.
@@ -73,7 +73,21 @@ public class PhoenixToEnumerableConverter extends ConverterImpl implements Enume
     
     static QueryPlan makePlan(PhoenixRel rel) {
         final PhoenixRel.Implementor phoenixImplementor = new PhoenixRelImplementorImpl();
-        return phoenixImplementor.visitInput(0, rel);
+        final QueryPlan plan = phoenixImplementor.visitInput(0, rel);
+        return new DelegateQueryPlan(plan) {
+            @Override
+            public ResultIterator iterator() throws SQLException {
+                return delegate.iterator();
+            }
+            @Override
+            public ExplainPlan getExplainPlan() throws SQLException {
+                return delegate.getExplainPlan();
+            }
+            @Override
+            public RowProjector getProjector() {
+                return phoenixImplementor.createRowProjector();
+            }
+        };
     }
 
     static Expression stash(EnumerableRelImplementor implementor, Object o, Class clazz) {

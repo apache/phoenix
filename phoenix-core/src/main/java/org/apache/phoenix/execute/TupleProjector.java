@@ -54,6 +54,7 @@ public class TupleProjector {
     public static final byte[] VALUE_COLUMN_QUALIFIER = new byte[0];
     
     private static final String SCAN_PROJECTOR = "scanProjector";
+    private static final String POST_JOIN_PROJECTOR = "postJoinProjector";
     
     private final KeyValueSchema schema;
     private final Expression[] expressions;
@@ -100,7 +101,15 @@ public class TupleProjector {
         this.valueSet = bitSet;
     }
     
+    public static boolean hasProjector(Scan scan, boolean scanProjector) {
+        return scan.getAttribute(scanProjector ? SCAN_PROJECTOR : POST_JOIN_PROJECTOR) != null;
+    }
+    
     public static void serializeProjectorIntoScan(Scan scan, TupleProjector projector) {
+        serializeProjectorIntoScan(scan, projector, true);
+    }
+    
+    public static void serializeProjectorIntoScan(Scan scan, TupleProjector projector, boolean scanProjector) {
         ByteArrayOutputStream stream = new ByteArrayOutputStream();
         try {
             DataOutputStream output = new DataOutputStream(stream);
@@ -111,7 +120,7 @@ public class TupleProjector {
             	WritableUtils.writeVInt(output, ExpressionType.valueOf(projector.expressions[i]).ordinal());
             	projector.expressions[i].write(output);
             }
-            scan.setAttribute(SCAN_PROJECTOR, stream.toByteArray());
+            scan.setAttribute(scanProjector ? SCAN_PROJECTOR : POST_JOIN_PROJECTOR, stream.toByteArray());
         } catch (IOException e) {
             throw new RuntimeException(e);
         } finally {
@@ -125,7 +134,11 @@ public class TupleProjector {
     }
     
     public static TupleProjector deserializeProjectorFromScan(Scan scan) {
-        byte[] proj = scan.getAttribute(SCAN_PROJECTOR);
+        return deserializeProjectorFromScan(scan, true);
+    }
+    
+    public static TupleProjector deserializeProjectorFromScan(Scan scan, boolean scanProjector) {
+        byte[] proj = scan.getAttribute(scanProjector ? SCAN_PROJECTOR : POST_JOIN_PROJECTOR);
         if (proj == null) {
             return null;
         }

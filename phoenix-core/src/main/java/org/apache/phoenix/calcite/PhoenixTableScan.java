@@ -13,7 +13,6 @@ import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelWriter;
 import org.apache.calcite.rel.core.TableScan;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
-import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rex.RexNode;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
@@ -46,15 +45,10 @@ import com.google.common.collect.Lists;
  */
 public class PhoenixTableScan extends TableScan implements PhoenixRel {
     public final RexNode filter;
-    public final List<RexNode> projects;
 
-    protected PhoenixTableScan(RelOptCluster cluster, RelTraitSet traits, RelOptTable table, RexNode filter, List<RexNode> projects, RelDataType rowType) {
+    protected PhoenixTableScan(RelOptCluster cluster, RelTraitSet traits, RelOptTable table, RexNode filter) {
         super(cluster, traits, table);
         this.filter = filter;
-        this.projects = projects;
-        if (rowType != null) {
-            this.rowType = rowType;
-        }
     }
 
     @Override
@@ -70,14 +64,12 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
             planner.addRule(rule);
         }
         planner.addRule(PhoenixFilterScanMergeRule.INSTANCE);
-        planner.addRule(PhoenixProjectScanMergeRule.INSTANCE);
     }
 
     @Override
     public RelWriter explainTerms(RelWriter pw) {
         return super.explainTerms(pw)
-            .itemIf("filter", filter, filter != null)
-            .itemIf("project", projects, projects != null);
+            .itemIf("filter", filter, filter != null);
     }
 
     @Override
@@ -86,10 +78,6 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
         if (filter != null && !filter.isAlwaysTrue()) {
             final Double selectivity = RelMetadataQuery.getSelectivity(this, filter);
             cost = cost.multiplyBy(selectivity);
-        }
-        if (projects != null) {
-            final double projectFieldRatio = ((double) projects.size()) / getRowType().getFieldCount();
-            cost = cost.multiplyBy(projectFieldRatio);
         }
         return cost;
     }
@@ -117,24 +105,16 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
                 WhereCompiler.setScanFilter(context, select, filterExpr, true, false);
             }
             projectAllColumnFamilies(context.getScan(), phoenixTable.getTable());
-            TupleProjector tupleProjector;
-            if (projects == null) {
-                tupleProjector = createTupleProjector(implementor, phoenixTable.getTable());
-            } else {
-                List<Expression> exprs = Lists.newArrayList();
-                for (RexNode project : this.projects) {
-                    exprs.add(CalciteUtils.toExpression(project, implementor));
-                }
-                tupleProjector = implementor.project(exprs);
+            if (implementor.getCurrentContext().forceProject()) {
+                TupleProjector tupleProjector = createTupleProjector(implementor, phoenixTable.getTable());
+                TupleProjector.serializeProjectorIntoScan(context.getScan(), tupleProjector);
+                PTable projectedTable = implementor.createProjectedTable();
+                implementor.setTableRef(new TableRef(projectedTable));
             }
-            TupleProjector.serializeProjectorIntoScan(context.getScan(), tupleProjector);
-            PTable projectedTable = implementor.createProjectedTable();
-            implementor.setTableRef(new TableRef(projectedTable));
-            RowProjector rowProjector = implementor.createRowProjector();
             Integer limit = null;
             OrderBy orderBy = OrderBy.EMPTY_ORDER_BY;
             ParallelIteratorFactory iteratorFactory = null;
-            return new ScanPlan(context, select, tableRef, rowProjector, limit, orderBy, iteratorFactory, true);
+            return new ScanPlan(context, select, tableRef, RowProjector.EMPTY_PROJECTOR, limit, orderBy, iteratorFactory, true);
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -160,5 +140,10 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
         for (PColumnFamily family : table.getColumnFamilies()) {
             scan.addFamily(family.getName().getBytes());
         }
+    }
+
+    @Override
+    public PlanType getPlanType() {
+        return PlanType.SERVER_ONLY_FLAT;
     }
 }

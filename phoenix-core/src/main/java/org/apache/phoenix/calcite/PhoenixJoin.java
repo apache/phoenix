@@ -78,7 +78,7 @@ public class PhoenixJoin extends Join implements PhoenixRel {
         JoinInfo joinInfo = JoinInfo.of(left, right, getCondition());
         List<Expression> leftExprs = Lists.<Expression> newArrayList();
         List<Expression> rightExprs = Lists.<Expression> newArrayList();
-        implementor.pushContext(new ImplementorContext(implementor.getCurrentContext().isRetainPKColumns()));
+        implementor.pushContext(new ImplementorContext(implementor.getCurrentContext().isRetainPKColumns(), true));
         QueryPlan leftPlan = implementor.visitInput(0, left);
         PTable leftTable = implementor.getTableRef().getTable();
         for (Iterator<Integer> iter = joinInfo.leftKeys.iterator(); iter.hasNext();) {
@@ -89,7 +89,7 @@ public class PhoenixJoin extends Join implements PhoenixRel {
             leftExprs.add(LiteralExpression.newConstant(0));
         }
         implementor.popContext();
-        implementor.pushContext(new ImplementorContext(false));
+        implementor.pushContext(new ImplementorContext(false, true));
         QueryPlan rightPlan = implementor.visitInput(1, right);
         PTable rightTable = implementor.getTableRef().getTable();
         for (Iterator<Integer> iter = joinInfo.rightKeys.iterator(); iter.hasNext();) {
@@ -123,13 +123,13 @@ public class PhoenixJoin extends Join implements PhoenixRel {
         return HashJoinPlan.create(SelectStatement.SELECT_STAR, leftPlan, hashJoinInfo, new HashJoinPlan.HashSubPlan[] {new HashJoinPlan.HashSubPlan(0, rightPlan, rightExprs, false, null, null)});
     }
     
-    public boolean isHashJoinDoable() {
+    private boolean isHashJoinDoable() {
         // TODO check memory limit
         RelNode rel = getLeft();
         if (rel instanceof RelSubset) {
             rel = ((RelSubset) rel).getBest();
         }
-        return (rel instanceof PhoenixTableScan) && getJoinType() != JoinRelType.RIGHT;
+        return (rel instanceof PhoenixRel && ((PhoenixRel) rel).getPlanType() == PlanType.SERVER_ONLY_FLAT) && getJoinType() != JoinRelType.RIGHT;
     }
     
     private JoinType convertJoinType(JoinRelType type) {
@@ -151,5 +151,10 @@ public class PhoenixJoin extends Join implements PhoenixRel {
         }
         
         return ret;
+    }
+
+    @Override
+    public PlanType getPlanType() {
+        return PlanType.SERVER_ONLY_COMPLEX;
     }
 }

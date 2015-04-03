@@ -89,6 +89,16 @@ public class CalciteUtils {
 			}
 			
 		});
+		EXPRESSION_MAP.put(SqlKind.CAST, new ExpressionFactory() {
+
+            @Override
+            public Expression newExpression(RexNode node,
+                    Implementor implementor) {
+                // TODO replace with real implementation
+                return toExpression(((RexCall) node).getOperands().get(0), implementor);
+            }
+		    
+		});
 	}
 	
     private static final Map<String, FunctionFactory> FUNCTION_MAP = Maps

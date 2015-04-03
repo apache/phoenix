@@ -34,4 +34,9 @@ public class PhoenixUnion extends Union implements PhoenixRel {
         }
         throw new UnsupportedOperationException();
     }
+
+    @Override
+    public PlanType getPlanType() {
+        return PlanType.CLIENT_SERVER;
+    }
 }
