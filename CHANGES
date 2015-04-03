@@ -1,5 +1,11 @@
 Release Notes - Phoenix - Version 3.3.1
 
+** Improvement
+    * [PHOENIX-1799] - Provide parameter metadata for prepared create table statements
+
+** Sub-task
+    * [PHOENIX-1776] - The literal -1.0 (floating point) should not be converted to -1 (Integer)
+
 ** Bug
     * [PHOENIX-1672] - RegionScanner.nextRaw contract not implemented correctly
     * [PHOENIX-1677] - Immutable index deadlocks when number of guideposts are one half of thread pool size
@@ -10,6 +16,7 @@ Release Notes - Phoenix - Version 3.3.1
     * [PHOENIX-1723] - PTinyint.isCoercibleTo fails to test -1 with type PTinyint
     * [PHOENIX-1741] - PUnsignedTimestamp should define its codec 
     * [PHOENIX-1753] - Query with RVC that doesn't lead with the row key can return incorrect results
+    * [PHOENIX-1798] - UnsupportedOperationException throws from BaseResultIterators.getIterators
 
 Release Notes - Phoenix - Version 3.3.0
 
