@@ -36,6 +36,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.call.CallRunner;
@@ -73,6 +74,7 @@ import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.parse.AddColumnStatement;
 import org.apache.phoenix.parse.AliasedNode;
 import org.apache.phoenix.parse.AlterIndexStatement;
+import org.apache.phoenix.parse.AlterSessionStatement;
 import org.apache.phoenix.parse.BindableStatement;
 import org.apache.phoenix.parse.ColumnDef;
 import org.apache.phoenix.parse.ColumnName;
@@ -127,6 +129,7 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.PhoenixContextExecutor;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
@@ -716,6 +719,54 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         }
     }
 
+    private static class ExecutableAlterSessionStatement extends AlterSessionStatement implements CompilableStatement {
+
+        public ExecutableAlterSessionStatement(Map<String,Object> props) {
+            super(props);
+        }
+
+        @SuppressWarnings("unchecked")
+        @Override
+        public MutationPlan compilePlan(final PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
+            final StatementContext context = new StatementContext(stmt);
+            return new MutationPlan() {
+
+                @Override
+                public StatementContext getContext() {
+                    return context;
+                }
+
+                @Override
+                public ParameterMetaData getParameterMetaData() {
+                    return PhoenixParameterMetaData.EMPTY_PARAMETER_META_DATA;
+                }
+
+                @Override
+                public ExplainPlan getExplainPlan() throws SQLException {
+                    return new ExplainPlan(Collections.singletonList("ALTER SESSION"));
+                }
+
+                @Override
+                public PhoenixConnection getConnection() {
+                    return stmt.getConnection();
+                }
+
+                @Override
+                public MutationState execute() throws SQLException {
+                    Object consistency = getProps().get(PhoenixRuntime.CONSISTENCY_ATTRIB.toUpperCase());
+                    if(consistency != null) {
+                        if (((String)consistency).equalsIgnoreCase(Consistency.TIMELINE.toString())){
+                            getConnection().setConsistency(Consistency.TIMELINE);
+                        } else {
+                            getConnection().setConsistency(Consistency.STRONG);
+                        }
+                    }
+                    return new MutationState(0, context.getConnection());
+                }
+            };
+        }
+    }
+
     private static class ExecutableUpdateStatisticsStatement extends UpdateStatisticsStatement implements
             CompilableStatement {
         public ExecutableUpdateStatisticsStatement(NamedTableNode table, StatisticsCollectionScope scope, Map<String,Object> props) {
@@ -912,6 +963,11 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         @Override
         public TraceStatement trace(boolean isTraceOn, double samplingRate) {
             return new ExecutableTraceStatement(isTraceOn, samplingRate);
+        }
+
+        @Override
+        public AlterSessionStatement alterSession(Map<String, Object> props) {
+            return new ExecutableAlterSessionStatement(props);
         }
 
         @Override

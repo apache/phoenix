@@ -178,6 +178,12 @@ public abstract class BaseQueryPlan implements QueryPlan {
         // is resolved.
         // TODO: include time range in explain plan?
         PhoenixConnection connection = context.getConnection();
+
+        // set read consistency
+        if (context.getCurrentTable() != null
+                && context.getCurrentTable().getTable().getType() != PTableType.SYSTEM) {
+            scan.setConsistency(connection.getConsistency());
+        }
         if (context.getScanTimeRange() == null) {
           Long scn = connection.getSCN();
           if (scn == null) {

@@ -55,6 +55,7 @@ import java.util.concurrent.Executor;
 import javax.annotation.Nullable;
 
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.phoenix.call.CallRunner;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -137,7 +138,8 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     private Sampler<?> sampler;
     private boolean readOnly = false;
     private Map<String, String> customTracingAnnotations = emptyMap(); 
- 
+    private Consistency consistency = Consistency.STRONG;
+
     static {
         Tracing.addTraceMetricsSource();
     }
@@ -205,6 +207,9 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
                 this.services.getProps().getBoolean(
                         QueryServices.AUTO_COMMIT_ATTRIB,
                         QueryServicesOptions.DEFAULT_AUTO_COMMIT));
+        this.consistency = JDBCUtil.getConsistencyLevel(url, this.info, this.services.getProps()
+                 .get(QueryServices.CONSISTENCY_ATTRIB,
+                         QueryServicesOptions.DEFAULT_CONSISTENCY_LEVEL));
         this.tenantId = tenantId;
         this.mutateBatchSize = JDBCUtil.getMutateBatchSize(url, this.info, this.services.getProps());
         datePattern = this.services.getProps().get(QueryServices.DATE_FORMAT_ATTRIB, DateUtil.DEFAULT_DATE_FORMAT);
@@ -509,6 +514,10 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         return isAutoCommit;
     }
 
+    public Consistency getConsistency() {
+        return this.consistency;
+    }
+
     @Override
     public String getCatalog() throws SQLException {
         return "";
@@ -645,6 +654,10 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     @Override
     public void setAutoCommit(boolean isAutoCommit) throws SQLException {
         this.isAutoCommit = isAutoCommit;
+    }
+
+    public void setConsistency(Consistency val) {
+        this.consistency = val;
     }
 
     @Override
