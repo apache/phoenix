@@ -7,6 +7,7 @@ Release Notes - Phoenix - Version 4.3.1
     * [PHOENIX-1722] - Speedup CONVERT_TZ function
     * [PHOENIX-1746] - Pass through guidepost config params on UPDATE STATISTICS call
     * [PHOENIX-1770] - psql.py returns 0 even if an error has occurred
+    * [PHOENIX-1799] - Provide parameter metadata for prepared create table statements
 
 ** Sub-task
     * [PHOENIX-1115] - Provide a SQL command to turn tracing on/off
@@ -32,6 +33,9 @@ Release Notes - Phoenix - Version 4.3.1
     * [PHOENIX-1783] - Fix IDE compiler errors for JodaTimezoneCacheTest
     * [PHOENIX-1790] - Fix test failures due to incorrect shadowing of @AfterClass methods.
     * [PHOENIX-1795] - Set handlerCount, numQueues and maxQueueLength of index and metadata queues correctly 
+    * [PHOENIX-1798] - UnsupportedOperationException throws from BaseResultIterators.getIterators
+    * [PHOENIX-1800] - Fix failing test case SaltedViewIT#testSaltedUpdatableViewWithLocalIndex
+    * [PHOENIX-1806] - null value will be find out as result when the pk is constraint
 
 ** Test
     * [PHOENIX-1739] - Ensure RuntimeException nests SQLException so that proper exception gets thrown
