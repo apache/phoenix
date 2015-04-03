@@ -220,8 +220,8 @@ public class PhoenixServerRpcIT extends BaseOwnClusterHBaseManagedTimeIT {
                     "CREATE TABLE " + DATA_TABLE_FULL_NAME + " (k VARCHAR NOT NULL PRIMARY KEY, v VARCHAR)");
             // query the table from another connection, so that SYSTEM.STATS will be used 
             conn.createStatement().execute("SELECT * FROM "+DATA_TABLE_FULL_NAME);
-            // verify that that metadata queue is used once 
-            Mockito.verify(TestPhoenixIndexRpcSchedulerFactory.getMetadataRpcExecutor()).dispatch(Mockito.any(CallRunner.class));
+            // verify that that metadata queue is at least once 
+            Mockito.verify(TestPhoenixIndexRpcSchedulerFactory.getMetadataRpcExecutor(), Mockito.atLeastOnce()).dispatch(Mockito.any(CallRunner.class));
         }
         finally {
             conn.close();
