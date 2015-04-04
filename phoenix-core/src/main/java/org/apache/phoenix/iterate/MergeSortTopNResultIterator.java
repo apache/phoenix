@@ -91,7 +91,6 @@ public class MergeSortTopNResultIterator extends MergeSortResultIterator {
     @Override
     public void explain(List<String> planSteps) {
         resultIterators.explain(planSteps);
-        planSteps.add("    SERVER" + (limit == -1 ? "" : " TOP " + limit + " ROW" + (limit == 1 ? "" : "S")) + " SORTED BY " + orderByColumns.toString());
         planSteps.add("CLIENT MERGE SORT");
     }
 
