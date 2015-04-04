@@ -132,7 +132,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
     }
     
     public BaseResultIterators(QueryPlan plan, Integer perScanLimit) throws SQLException {
-        super(plan.getContext(), plan.getTableRef(), plan.getGroupBy(), plan.getOrderBy(), plan.getStatement().getHint());
+        super(plan.getContext(), plan.getTableRef(), plan.getGroupBy(), plan.getOrderBy(), plan.getStatement().getHint(), plan.getLimit());
         this.plan = plan;
         StatementContext context = plan.getContext();
         TableRef tableRef = plan.getTableRef();

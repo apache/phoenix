@@ -180,7 +180,7 @@ public class KeyOnlyIT extends BaseOwnClusterClientManagedTimeIT {
         
         rs = conn.createStatement().executeQuery("EXPLAIN " + query);
         assertEquals("CLIENT SERIAL 1-WAY FULL SCAN OVER KEYONLY\n" + 
-                "    SERVER FILTER BY FIRST KEY ONLY AND PageFilter 1\n" + 
+                "    SERVER FILTER BY FIRST KEY ONLY\n" + 
                 "    SERVER 1 ROW LIMIT\n" + 
                 "CLIENT 1 ROW LIMIT", QueryUtil.getExplainPlan(rs));
         conn.close();

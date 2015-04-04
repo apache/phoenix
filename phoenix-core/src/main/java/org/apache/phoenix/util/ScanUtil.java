@@ -24,6 +24,7 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableSet;
@@ -45,13 +46,14 @@ import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.KeyRange.Bound;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
-import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.ValueSchema.Field;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PVarbinary;
 
+import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 
 /**
@@ -642,5 +644,18 @@ public class ScanUtil {
             }
         }
         return tenantId;
+    }
+
+    public static Iterator<Filter> getFilterIterator(Scan scan) {
+        Iterator<Filter> filterIterator;
+        Filter topLevelFilter = scan.getFilter();
+        if (topLevelFilter == null) {
+            filterIterator = Iterators.emptyIterator();
+        } else if (topLevelFilter instanceof FilterList) {
+            filterIterator = ((FilterList) topLevelFilter).getFilters().iterator();
+        } else {
+            filterIterator = Iterators.singletonIterator(topLevelFilter);
+        }
+        return filterIterator;
     }
 }
