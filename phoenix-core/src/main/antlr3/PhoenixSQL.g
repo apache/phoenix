@@ -425,7 +425,7 @@ create_sequence_node returns [CreateSequenceStatement ret]
     ;
 
 int_literal_or_bind returns [ParseNode ret]
-    : n=int_literal { $ret = n; }
+    : n=int_or_long_literal { $ret = n; }
     | b=bind_expression { $ret = b; }
     ;
 
@@ -630,7 +630,7 @@ delete_node returns [DeleteStatement ret]
 
 limit returns [LimitNode ret]
     : b=bind_expression { $ret = factory.limit(b); }
-    | l=int_literal { $ret = factory.limit(l); }
+    | l=int_or_long_literal { $ret = factory.limit(l); }
     ;
     
 sampling_rate returns [LiteralParseNode ret]
@@ -894,18 +894,14 @@ literal_or_bind returns [ParseNode ret]
 
 // Get a string, integer, double, date, boolean, or NULL value.
 literal returns [LiteralParseNode ret]
-    :   t=STRING_LITERAL {
-            ret = factory.literal(t.getText()); 
+    :   s=STRING_LITERAL {
+            ret = factory.literal(s.getText()); 
         }
-    |   l=int_literal { ret = l; }
-    |   l=long_literal { ret = l; }
-    |   l=double_literal { ret = l; }
-    |   t=DECIMAL {
-            try {
-                ret = factory.literal(new BigDecimal(t.getText()));
-            } catch (NumberFormatException e) { // Shouldn't happen since we just parsed a decimal
-                throwRecognitionException(t);
-            }
+    |   n=NUMBER {
+            ret = factory.wholeNumber(n.getText());
+        }
+    |   d=DECIMAL  {
+            ret = factory.realNumber(d.getText());
         }
     |   NULL {ret = factory.literal(null);}
     |   TRUE {ret = factory.literal(Boolean.TRUE);} 
@@ -919,42 +915,9 @@ literal returns [LiteralParseNode ret]
         }
     ;
     
-int_literal returns [LiteralParseNode ret]
+int_or_long_literal returns [LiteralParseNode ret]
     :   n=NUMBER {
-            try {
-                Long v = Long.valueOf(n.getText());
-                if (v >= Integer.MIN_VALUE && v <= Integer.MAX_VALUE) {
-                    ret = factory.literal(v.intValue());
-                } else {
-                    ret = factory.literal(v);
-                }
-            } catch (NumberFormatException e) { // Shouldn't happen since we just parsed a number
-                throwRecognitionException(n);
-            }
-        }
-    ;
-
-long_literal returns [LiteralParseNode ret]
-    :   l=LONG {
-            try {
-                String lt = l.getText();
-                Long v = Long.valueOf(lt.substring(0, lt.length() - 1));
-                ret = factory.literal(v);
-            } catch (NumberFormatException e) { // Shouldn't happen since we just parsed a number
-                throwRecognitionException(l);
-            }
-        }
-    ;
-
-double_literal returns [LiteralParseNode ret]
-    :   d=DOUBLE {
-            try {
-                String dt = d.getText();
-                Double v = Double.valueOf(dt.substring(0, dt.length() - 1));
-                ret = factory.literal(v);
-            } catch (NumberFormatException e) { // Shouldn't happen since we just parsed a number
-                throwRecognitionException(d);
-            }
+            ret = factory.intOrLong(n.getText());
         }
     ;
 
@@ -1004,17 +967,9 @@ NUMBER
     :   POSINTEGER
     ;
 
-LONG
-    :   POSINTEGER ('L'|'l')
-    ;
-
 // Exponential format is not supported.
 DECIMAL
     :   POSINTEGER? '.' POSINTEGER
-    ;
-
-DOUBLE
-    :   DECIMAL ('D'|'d')
     ;
 
 DOUBLE_QUOTE

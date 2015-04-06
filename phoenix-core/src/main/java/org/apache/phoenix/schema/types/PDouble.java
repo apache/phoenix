@@ -27,7 +27,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.primitives.Doubles;
 
 public class PDouble extends PRealNumber<Double> {
-
   public static final PDouble INSTANCE = new PDouble();
 
   private PDouble() {

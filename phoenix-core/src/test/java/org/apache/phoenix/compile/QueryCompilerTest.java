@@ -27,6 +27,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -42,11 +43,14 @@ import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.aggregator.Aggregator;
 import org.apache.phoenix.expression.aggregator.CountAggregator;
 import org.apache.phoenix.expression.aggregator.ServerAggregators;
 import org.apache.phoenix.expression.function.TimeUnit;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.query.QueryConstants;
@@ -1584,5 +1588,47 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         stmt.executeQuery("select * from T where REGEXP_SUBSTR(v, '.\\\\d\\\\D\\\\s\\\\S\\\\w\\\\W') = 'val'");
     }
     
+    private static void assertLiteralEquals(Object o, RowProjector p, int i) {
+        assertTrue(i < p.getColumnCount());
+        Expression e = p.getColumnProjector(i).getExpression();
+        assertTrue(e instanceof LiteralExpression);
+        LiteralExpression l = (LiteralExpression)e;
+        Object lo = l.getValue();
+        assertEquals(o, lo);
+    }
+    
+    @Test
+    public void testIntAndLongMinValue() throws Exception {
+        BigDecimal oneLessThanMinLong = BigDecimal.valueOf(Long.MIN_VALUE).subtract(BigDecimal.ONE);
+        BigDecimal oneMoreThanMaxLong = BigDecimal.valueOf(Long.MAX_VALUE).add(BigDecimal.ONE);
+        String query = "SELECT " + 
+            Integer.MIN_VALUE + "," + Long.MIN_VALUE + "," + 
+            (Integer.MIN_VALUE+1) + "," + (Long.MIN_VALUE+1) + "," + 
+            ((long)Integer.MIN_VALUE - 1) + "," + oneLessThanMinLong + "," +
+            Integer.MAX_VALUE + "," + Long.MAX_VALUE + "," +
+            (Integer.MAX_VALUE - 1) + "," + (Long.MAX_VALUE - 1) + "," +
+            ((long)Integer.MAX_VALUE + 1) + "," + oneMoreThanMaxLong +
+        " FROM " + PhoenixDatabaseMetaData.SYSTEM_STATS_NAME + " LIMIT 1";
+        List<Object> binds = Collections.emptyList();
+        QueryPlan plan = getQueryPlan(query, binds);
+        RowProjector p = plan.getProjector();
+        // Negative integers end up as longs once the * -1 occurs
+        assertLiteralEquals((long)Integer.MIN_VALUE, p, 0);
+        // Min long still stays as long
+        assertLiteralEquals(Long.MIN_VALUE, p, 1);
+        assertLiteralEquals((long)Integer.MIN_VALUE + 1, p, 2);
+        assertLiteralEquals(Long.MIN_VALUE + 1, p, 3);
+        assertLiteralEquals((long)Integer.MIN_VALUE - 1, p, 4);
+        // Can't fit into long, so becomes BigDecimal
+        assertLiteralEquals(oneLessThanMinLong, p, 5);
+        // Positive integers stay as ints
+        assertLiteralEquals(Integer.MAX_VALUE, p, 6);
+        assertLiteralEquals(Long.MAX_VALUE, p, 7);
+        assertLiteralEquals(Integer.MAX_VALUE - 1, p, 8);
+        assertLiteralEquals(Long.MAX_VALUE - 1, p, 9);
+        assertLiteralEquals((long)Integer.MAX_VALUE + 1, p, 10);
+        assertLiteralEquals(oneMoreThanMaxLong, p, 11);
+    }
+
    
 }
