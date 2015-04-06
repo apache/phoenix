@@ -18,6 +18,7 @@
 package org.apache.phoenix.parse;
 
 import java.lang.reflect.Constructor;
+import java.math.BigDecimal;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.util.Arrays;
@@ -73,6 +74,8 @@ public class ParseNodeFactory {
         AvgAggregateFunction.class
         );
     private static final Map<BuiltInFunctionKey, BuiltInFunctionInfo> BUILT_IN_FUNCTION_MAP = Maps.newHashMap();
+    private static final BigDecimal MAX_LONG = BigDecimal.valueOf(Long.MAX_VALUE);
+
 
     /**
      *
@@ -451,6 +454,39 @@ public class ParseNodeFactory {
         return new LiteralParseNode(value);
     }
 
+    public LiteralParseNode realNumber(String text) {
+        return new LiteralParseNode(new BigDecimal(text, PDataType.DEFAULT_MATH_CONTEXT));
+    }
+    
+    public LiteralParseNode wholeNumber(String text) {
+        int length = text.length();
+        // We know it'll fit into long, might still fit into int
+        if (length <= PDataType.LONG_PRECISION-1) {
+            long l = Long.parseLong(text);
+            if (l <= Integer.MAX_VALUE) {
+                // Fits into int
+                return new LiteralParseNode((int)l);
+            }
+            return new LiteralParseNode(l);
+        }
+        // Might still fit into long
+        BigDecimal d = new BigDecimal(text, PDataType.DEFAULT_MATH_CONTEXT);
+        if (d.compareTo(MAX_LONG) <= 0) {
+            return new LiteralParseNode(d.longValueExact());
+        }
+        // Doesn't fit into long
+        return new LiteralParseNode(d);
+    }
+
+    public LiteralParseNode intOrLong(String text) {
+        long l = Long.parseLong(text);
+        if (l <= Integer.MAX_VALUE) {
+            // Fits into int
+            return new LiteralParseNode((int)l);
+        }
+        return new LiteralParseNode(l);
+    }
+
     public CastParseNode cast(ParseNode expression, String dataType, Integer maxLength, Integer scale) {
         return new CastParseNode(expression, dataType, maxLength, scale, false);
     }
@@ -582,6 +618,12 @@ public class ParseNodeFactory {
         if (LiteralParseNode.ONE.equals(child) && ((LiteralParseNode)child).getType().isCoercibleTo(
                 PLong.INSTANCE)) {
             return LiteralParseNode.MINUS_ONE;
+        }
+        // Special case to convert Long.MIN_VALUE back to a Long. We can't initially represent it
+        // as a Long in the parser because we only represent positive values as constants in the
+        // parser, and ABS(Long.MIN_VALUE) is too big to fit into a Long. So we convert it back here.
+        if (LiteralParseNode.MIN_LONG_AS_BIG_DECIMAL.equals(child)) {
+            return LiteralParseNode.MIN_LONG;
         }
         return new MultiplyParseNode(Arrays.asList(child,LiteralParseNode.MINUS_ONE));
     }

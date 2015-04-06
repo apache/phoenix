@@ -503,6 +503,7 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
   public final static Integer LONG_PRECISION = 19;
   public final static Integer SHORT_PRECISION = 5;
   public final static Integer BYTE_PRECISION = 3;
+  public final static Integer DOUBLE_PRECISION = 15;
 
   public static final int ARRAY_TYPE_BASE = 3000;
   public static final String ARRAY_TYPE_SUFFIX = "ARRAY";
