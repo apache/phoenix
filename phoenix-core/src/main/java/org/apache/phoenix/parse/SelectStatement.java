@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.parse;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -81,6 +82,14 @@ public class SelectStatement implements FilterableStatement {
                 select.getOrderBy(), select.getLimit(), select.getBindCount(), select.isAggregate(), select.hasSequence());
     }
     
+    // Copy constructor for sub select statements in a union
+    public static SelectStatement create(SelectStatement select, 
+            List<OrderByNode> orderBy, LimitNode limit, boolean isAggregate) {
+        return new SelectStatement(select.getFrom(), select.getHint(), select.isDistinct(), 
+                select.getSelect(), select.getWhere(), select.getGroupBy(), select.getHaving(), 
+                orderBy, limit, select.getBindCount(), isAggregate, select.hasSequence());
+    }
+
     private final TableNode fromTable;
     private final HintNode hint;
     private final boolean isDistinct;
@@ -93,6 +102,7 @@ public class SelectStatement implements FilterableStatement {
     private final int bindCount;
     private final boolean isAggregate;
     private final boolean hasSequence;
+    private final List<SelectStatement> selects = new ArrayList<SelectStatement>();
     
     @Override
     public final String toString() {
@@ -205,7 +215,7 @@ public class SelectStatement implements FilterableStatement {
     
     protected SelectStatement(TableNode from, HintNode hint, boolean isDistinct, List<AliasedNode> select,
             ParseNode where, List<ParseNode> groupBy, ParseNode having, List<OrderByNode> orderBy, LimitNode limit,
-            int bindCount, boolean isAggregate, boolean hasSequence) {
+            int bindCount, boolean isAggregate, boolean hasSequence, List<SelectStatement> selects) {
         this.fromTable = from;
         this.hint = hint == null ? HintNode.EMPTY_HINT_NODE : hint;
         this.isDistinct = isDistinct;
@@ -218,6 +228,16 @@ public class SelectStatement implements FilterableStatement {
         this.bindCount = bindCount;
         this.isAggregate = isAggregate || groupBy.size() != countConstants(groupBy) || this.having != null;
         this.hasSequence = hasSequence;
+        if (!selects.isEmpty()) {
+            this.selects.addAll(selects);
+        }
+    }
+
+    public SelectStatement(TableNode from, HintNode hint, boolean isDistinct, List<AliasedNode> select,
+            ParseNode where, List<ParseNode> groupBy, ParseNode having, List<OrderByNode> orderBy, LimitNode limit,
+            int bindCount, boolean isAggregate, boolean hasSequence) {
+        this(from, hint, isDistinct, select, where, groupBy, having, orderBy, limit, bindCount, isAggregate, hasSequence,
+                Collections.<SelectStatement>emptyList());
     }
     
     @Override
@@ -297,5 +317,13 @@ public class SelectStatement implements FilterableStatement {
             return null;
         
         return ((DerivedTableNode) fromTable).getSelect();
+    }
+
+    public boolean isUnion() {
+        return !getSelects().isEmpty();
+    }
+
+    public List<SelectStatement> getSelects() {
+        return selects;
     }
 }

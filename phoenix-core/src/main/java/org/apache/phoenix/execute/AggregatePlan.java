@@ -177,6 +177,7 @@ public class AggregatePlan extends BaseQueryPlan {
         }
         ParallelIterators parallelIterators = new ParallelIterators(this, null, wrapParallelIteratorFactory());
         splits = parallelIterators.getSplits();
+        scans = parallelIterators.getScans();
 
         AggregatingResultIterator aggResultIterator;
         // No need to merge sort for ungrouped aggregation
