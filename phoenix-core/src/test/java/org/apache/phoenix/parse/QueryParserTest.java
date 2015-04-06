@@ -635,19 +635,6 @@ public class QueryParserTest {
     }
 
     @Test
-    public void testInvalidUpsertSelectHint() throws Exception {
-        String sql = (
-                (
-                        "upsert into t select /*+ NO_INDEX */ k from t where k in ( 1,2 )"));
-        try {
-            parseQuery(sql);
-            fail();
-        } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.PARSER_ERROR.getErrorCode(), e.getErrorCode());
-        }
-    }
-
-    @Test
     public void testTableNameStartsWithUnderscore() throws Exception {
         String sql = (
                 (

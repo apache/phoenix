@@ -19,6 +19,7 @@ package org.apache.phoenix.parse;
 
 import java.lang.reflect.Constructor;
 import java.sql.SQLException;
+import java.sql.SQLFeatureNotSupportedException;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -607,6 +608,13 @@ public class ParseNodeFactory {
         return new OrderByNode(expression, nullsLast, orderAscending);
     }
 
+    public SelectStatement select(TableNode from, HintNode hint, boolean isDistinct, List<AliasedNode> select, ParseNode where,
+            List<ParseNode> groupBy, ParseNode having, List<OrderByNode> orderBy, LimitNode limit, int bindCount, boolean isAggregate, 
+            boolean hasSequence, List<SelectStatement> selects) {
+
+        return new SelectStatement(from, hint, isDistinct, select, where, groupBy == null ? Collections.<ParseNode>emptyList() : groupBy, having,
+                orderBy == null ? Collections.<OrderByNode>emptyList() : orderBy, limit, bindCount, isAggregate, hasSequence, selects);
+    } 
 
     public SelectStatement select(TableNode from, HintNode hint, boolean isDistinct, List<AliasedNode> select, ParseNode where,
             List<ParseNode> groupBy, ParseNode having, List<OrderByNode> orderBy, LimitNode limit, int bindCount, boolean isAggregate, boolean hasSequence) {
@@ -614,7 +622,7 @@ public class ParseNodeFactory {
         return new SelectStatement(from, hint, isDistinct, select, where, groupBy == null ? Collections.<ParseNode>emptyList() : groupBy, having,
                 orderBy == null ? Collections.<OrderByNode>emptyList() : orderBy, limit, bindCount, isAggregate, hasSequence);
     }
-
+    
     public UpsertStatement upsert(NamedTableNode table, HintNode hint, List<ColumnName> columns, List<ParseNode> values, SelectStatement select, int bindCount) {
         return new UpsertStatement(table, hint, columns, values, select, bindCount);
     }
@@ -677,7 +685,7 @@ public class ParseNodeFactory {
     public SelectStatement select(SelectStatement statement, HintNode hint) {
         return hint == null || hint.isEmpty() ? statement : select(statement.getFrom(), hint, statement.isDistinct(), statement.getSelect(),
                 statement.getWhere(), statement.getGroupBy(), statement.getHaving(), statement.getOrderBy(), statement.getLimit(),
-                statement.getBindCount(), statement.isAggregate(), statement.hasSequence());
+                statement.getBindCount(), statement.isAggregate(), statement.hasSequence(), statement.getSelects());
     }
 
     public SelectStatement select(SelectStatement statement, HintNode hint, ParseNode where) {
@@ -686,13 +694,36 @@ public class ParseNodeFactory {
                 statement.hasSequence());
     }
 
+    public SelectStatement select(SelectStatement statement, List<OrderByNode> orderBy, LimitNode limit, int bindCount, boolean isAggregate) {
+        return select(statement.getFrom(), statement.getHint(), statement.isDistinct(), statement.getSelect(),
+            statement.getWhere(), statement.getGroupBy(), statement.getHaving(), orderBy, limit,
+            bindCount, isAggregate || statement.isAggregate(), statement.hasSequence());
+
+    }
+
     public SelectStatement select(SelectStatement statement, LimitNode limit) {
         return select(statement.getFrom(), statement.getHint(), statement.isDistinct(), statement.getSelect(),
-                statement.getWhere(), statement.getGroupBy(), statement.getHaving(), statement.getOrderBy(), limit,
-                statement.getBindCount(), statement.isAggregate(), statement.hasSequence());
+            statement.getWhere(), statement.getGroupBy(), statement.getHaving(), statement.getOrderBy(), limit,
+            statement.getBindCount(), statement.isAggregate(), statement.hasSequence());
+    }
+
+    public SelectStatement select(SelectStatement statement, List<OrderByNode> orderBy, LimitNode limit) {
+        return select(statement.getFrom(), statement.getHint(), statement.isDistinct(), statement.getSelect(),
+            statement.getWhere(), statement.getGroupBy(), statement.getHaving(), orderBy, limit,
+            statement.getBindCount(), statement.isAggregate(), statement.hasSequence());
+    }
+
+    public SelectStatement select(List<SelectStatement> statements, List<OrderByNode> orderBy, LimitNode limit, int bindCount, boolean isAggregate) {
+        if (statements.size() == 1)
+            return select(statements.get(0), orderBy, limit, bindCount, isAggregate);
+        
+        return select(null, HintNode.EMPTY_HINT_NODE, false, Lists.newArrayList(aliasedNode(null, wildcard())), 
+                null, null, null, orderBy, limit, bindCount, false, false, statements);
     }
 
     public SubqueryParseNode subquery(SelectStatement select, boolean expectSingleRow) {
+        if (select.isUnion()) 
+            throw new RuntimeException(new SQLFeatureNotSupportedException());
         return new SubqueryParseNode(select, expectSingleRow);
     }
 

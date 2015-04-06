@@ -160,6 +160,12 @@ public enum SQLExceptionCode {
      STATELESS_EXPRESSION_NOT_ALLOWED_IN_INDEX(522, "42899", "Stateless expression not allowed in an index"),
 
      /** 
+      * Union All related errors
+      */
+     SELECT_COLUMN_NUM_IN_UNIONALL_DIFFS(525, "42902", "SELECT column number differs in a Union All query is not allowed"),
+     SELECT_COLUMN_TYPE_IN_UNIONALL_DIFFS(526, "42903", "SELECT column types differ in a Union All query is not allowed"),
+
+     /** 
      * HBase and Phoenix specific implementation defined sub-classes.
      * Column family related exceptions.
      * 

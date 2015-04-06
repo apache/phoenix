@@ -37,15 +37,22 @@ import org.apache.phoenix.schema.tuple.Tuple;
 public class MergeSortTopNResultIterator extends MergeSortResultIterator {
 
     private final int limit;
+    private final boolean clientSideOnly;
     private int count = 0;
     private final List<OrderByExpression> orderByColumns;
     private final ImmutableBytesWritable ptr1 = new ImmutableBytesWritable();
     private final ImmutableBytesWritable ptr2 = new ImmutableBytesWritable();
     
-    public MergeSortTopNResultIterator(ResultIterators iterators, Integer limit, List<OrderByExpression> orderByColumns) {
+    public MergeSortTopNResultIterator(ResultIterators iterators, Integer limit,
+            List<OrderByExpression> orderByColumns, boolean clientSideOnly) {
         super(iterators);
         this.limit = limit == null ? -1 : limit;
         this.orderByColumns = orderByColumns;
+        this.clientSideOnly = clientSideOnly;
+    }
+
+    public MergeSortTopNResultIterator(ResultIterators iterators, Integer limit, List<OrderByExpression> orderByColumns) {
+        this(iterators, limit, orderByColumns, false);
     }
 
     @Override
