@@ -28,7 +28,6 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.SQLFeatureNotSupportedException;
 import java.sql.Statement;
 import java.util.Collections;
 import java.util.Map;
@@ -424,6 +423,73 @@ public class UnionAllIT extends BaseOwnClusterHBaseManagedTimeIT {
     }
 
     @Test
+    public void testUnionAllInDerivedTable() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(false);
+
+        try {
+            String ddl = "CREATE TABLE test_table " +
+                    "  (a_string varchar not null, col1 integer" +
+                    "  CONSTRAINT pk PRIMARY KEY (a_string))\n";
+            createTestTable(getUrl(), ddl);
+
+            String dml = "UPSERT INTO test_table VALUES(?, ?)";
+            PreparedStatement stmt = conn.prepareStatement(dml);
+            stmt.setString(1, "a");
+            stmt.setInt(2, 10);
+            stmt.execute();
+            stmt.setString(1, "b");
+            stmt.setInt(2, 20);
+            stmt.execute();
+            conn.commit();
+
+            ddl = "CREATE TABLE b_table " +
+                    "  (a_string varchar not null, col2 integer" +
+                    "  CONSTRAINT pk PRIMARY KEY (a_string))\n";
+            createTestTable(getUrl(), ddl);
+
+            dml = "UPSERT INTO b_table VALUES(?, ?)";
+            stmt = conn.prepareStatement(dml);
+            stmt.setString(1, "a");
+            stmt.setInt(2, 30);
+            stmt.execute();
+            stmt.setString(1, "c");
+            stmt.setInt(2, 60);
+            stmt.execute();
+            conn.commit();
+
+            String query = "select a_string from " +
+                    "(select a_string, col1 from test_table union all select a_string, col2 from b_table order by a_string)";
+            ResultSet rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals("a", rs.getString(1));
+            assertTrue(rs.next());
+            assertEquals("a", rs.getString(1));
+            assertTrue(rs.next());
+            assertEquals("b", rs.getString(1));
+            assertTrue(rs.next());
+            assertEquals("c", rs.getString(1));
+            assertFalse(rs.next());
+            
+            query = "select c from " +
+                    "(select a_string, col1 c from test_table union all select a_string, col2 c from b_table order by c)";
+            rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals(10, rs.getInt(1));
+            assertTrue(rs.next());
+            assertEquals(20, rs.getInt(1));
+            assertTrue(rs.next());
+            assertEquals(30, rs.getInt(1));
+            assertTrue(rs.next());
+            assertEquals(60, rs.getInt(1));
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
+
+    @Test
     public void testUnionAllInSubquery() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -435,40 +501,43 @@ public class UnionAllIT extends BaseOwnClusterHBaseManagedTimeIT {
                     "  CONSTRAINT pk PRIMARY KEY (a_string))\n";
             createTestTable(getUrl(), ddl);
 
-            ddl = "CREATE TABLE b_table " +
-                    "  (a_string varchar not null, col1 integer" +
-                    "  CONSTRAINT pk PRIMARY KEY (a_string))\n";
-            createTestTable(getUrl(), ddl);
-
-            ddl = "select a_string, col1 from test_table where a_string in (select a_string from test_table union all select a_string from b_table)";
-            conn.createStatement().executeQuery(ddl);
-        }  catch (SQLFeatureNotSupportedException e) {
-        } finally {
-            conn.close();
-        }
-    }
-
-    @Test
-    public void testUnionAllInSubqueryDerived() throws Exception {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        conn.setAutoCommit(false);
-
-        try {
-            String ddl = "CREATE TABLE test_table " +
-                    "  (a_string varchar not null, col1 integer" +
-                    "  CONSTRAINT pk PRIMARY KEY (a_string))\n";
-            createTestTable(getUrl(), ddl);
+            String dml = "UPSERT INTO test_table VALUES(?, ?)";
+            PreparedStatement stmt = conn.prepareStatement(dml);
+            stmt.setString(1, "a");
+            stmt.setInt(2, 10);
+            stmt.execute();
+            stmt.setString(1, "b");
+            stmt.setInt(2, 20);
+            stmt.execute();
+            conn.commit();
 
             ddl = "CREATE TABLE b_table " +
                     "  (a_string varchar not null, col1 integer" +
                     "  CONSTRAINT pk PRIMARY KEY (a_string))\n";
             createTestTable(getUrl(), ddl);
 
-            ddl = "select a_string, col1 from test_table where a_string in (select a_string from  " +
-                    "(select * from test_table union all select * from b_table))";
-            conn.createStatement().executeQuery(ddl);
-        }  catch (SQLException e) { 
+            dml = "UPSERT INTO b_table VALUES(?, ?)";
+            stmt = conn.prepareStatement(dml);
+            stmt.setString(1, "a");
+            stmt.setInt(2, 30);
+            stmt.execute();
+            stmt.setString(1, "c");
+            stmt.setInt(2, 60);
+            stmt.execute();
+            conn.commit();
+
+            String[] queries = new String[2];
+            queries[0] = "select a_string, col1 from test_table where a_string in " +
+                    "(select a_string aa from b_table where a_string != 'a' union all select a_string bb from b_table)";
+            queries[1] = "select a_string, col1 from test_table where a_string in (select a_string from  " +
+                    "(select a_string from b_table where a_string != 'a' union all select a_string from b_table))";
+            for (String query : queries) {
+                ResultSet rs = conn.createStatement().executeQuery(query);
+                assertTrue(rs.next());
+                assertEquals("a", rs.getString(1));
+                assertEquals(10, rs.getInt(2));
+                assertFalse(rs.next());
+            }
         } finally {
             conn.close();
         }

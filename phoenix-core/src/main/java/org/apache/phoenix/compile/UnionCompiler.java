@@ -26,6 +26,7 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.parse.AliasedNode;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnImpl;
 import org.apache.phoenix.schema.PName;
@@ -66,12 +67,13 @@ public class UnionCompiler {
         return selectPlans;
     }
 
-    public static TableRef contructSchemaTable(PhoenixStatement statement, QueryPlan plan) throws SQLException {
+    public static TableRef contructSchemaTable(PhoenixStatement statement, QueryPlan plan, List<AliasedNode> selectNodes) throws SQLException {
         List<PColumn> projectedColumns = new ArrayList<PColumn>();
         for (int i=0; i< plan.getProjector().getColumnCount(); i++) {
             ColumnProjector colProj = plan.getProjector().getColumnProjector(i);
             Expression sourceExpression = colProj.getExpression();
-            PColumnImpl projectedColumn = new PColumnImpl(PNameFactory.newName(colProj.getName()), UNION_FAMILY_NAME,
+            String name = selectNodes == null ? colProj.getName() : selectNodes.get(i).getAlias();
+            PColumnImpl projectedColumn = new PColumnImpl(PNameFactory.newName(name), UNION_FAMILY_NAME,
                     sourceExpression.getDataType(), sourceExpression.getMaxLength(), sourceExpression.getScale(), sourceExpression.isNullable(),
                     i, sourceExpression.getSortOrder(), 500, null, false, sourceExpression.toString());
             projectedColumns.add(projectedColumn);
