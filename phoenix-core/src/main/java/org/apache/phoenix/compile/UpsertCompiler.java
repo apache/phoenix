@@ -73,6 +73,7 @@ import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.MetaDataEntityNotFoundException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnImpl;
+import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
@@ -768,14 +769,25 @@ public class UpsertCompiler {
                                 constantExpression.getDataType(), column.getDataType(), "expression: "
                                         + constantExpression.toString() + " in column " + column);
                         }
-                        if (!column.getDataType().isSizeCompatible(ptr, value, constantExpression.getDataType(),
+                        if ((column.getDataType() != PChar.INSTANCE) && // Char is truncated later
+                                !column.getDataType().isSizeCompatible(ptr, value, constantExpression.getDataType(),
                                 constantExpression.getMaxLength(), constantExpression.getScale(), 
                                 column.getMaxLength(), column.getScale())) { 
                             throw new SQLExceptionInfo.Builder(
                                 SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY).setColumnName(column.getName().getString())
                                 .setMessage("value=" + constantExpression.toString()).build().buildException();
                         }
+                        // Truncate string to the CHAR max length value on Upsert
+                        if (column != null && constantExpression != null &&
+                                column.getDataType() == PChar.INSTANCE) {
+                            Integer maxStr = constantExpression.getMaxLength();
+                            Integer maxCol = column.getMaxLength();
+                            if (maxStr != null && maxCol != null &&
+                                    maxStr.intValue() > maxCol.intValue())
+                                ptr.set(Arrays.copyOf(ptr.get(), maxCol.intValue()));
+                        }
                     }
+
                     column.getDataType().coerceBytes(ptr, value,
                             constantExpression.getDataType(), constantExpression.getMaxLength(), constantExpression.getScale(), constantExpression.getSortOrder(),
                             column.getMaxLength(), column.getScale(),column.getSortOrder());
