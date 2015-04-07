@@ -469,7 +469,7 @@ public class FromCompiler {
                     if (node instanceof WildcardParseNode
                             || node instanceof TableWildcardParseNode
                             || node instanceof FamilyWildcardParseNode)
-                        throw new SQLException("Encountered wildcard in subqueries.");
+                        throw new SQLFeatureNotSupportedException("Wildcard in subqueries not supported.");
 
                     alias = SchemaUtil.normalizeIdentifier(node.getAlias());
                 }
