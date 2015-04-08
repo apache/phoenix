@@ -108,7 +108,7 @@
 
     <!-- Test Dependencies -->
     <mockito-all.version>1.8.5</mockito-all.version>
-    <junit.version>4.12-beta-3</junit.version>
+    <junit.version>4.12</junit.version>
 
     <!-- Plugin versions -->
     <maven-eclipse-plugin.version>2.9</maven-eclipse-plugin.version>
