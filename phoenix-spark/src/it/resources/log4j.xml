@@ -26,6 +26,14 @@
     <level value="ERROR"/>
   </logger>
 
+  <logger name="org.spark-project.jetty">
+    <level value="ERROR"/>
+  </logger>
+
+  <logger name="akka">
+    <level value="ERROR"/>
+  </logger>
+
   <logger name="BlockStateChange">
     <level value="ERROR"/>
   </logger>

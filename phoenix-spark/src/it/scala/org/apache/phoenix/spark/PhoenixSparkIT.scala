@@ -18,6 +18,8 @@ import java.util.Date
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hbase.{HConstants, HBaseTestingUtility}
+import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT
+import org.apache.phoenix.query.BaseTest
 import org.apache.phoenix.schema.ColumnNotFoundException
 import org.apache.phoenix.schema.types.PVarchar
 import org.apache.phoenix.util.ColumnInfo
@@ -25,53 +27,46 @@ import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.types.{StringType, StructField}
 import org.apache.spark.{SparkConf, SparkContext}
 import org.joda.time.DateTime
-import org.scalatest.{BeforeAndAfterAll, FunSuite, Matchers}
+import org.scalatest._
 import org.apache.phoenix.spark._
 
 import scala.collection.mutable.ListBuffer
 
-class PhoenixRDDTest extends FunSuite with Matchers with BeforeAndAfterAll {
-  lazy val hbaseTestingUtility = {
-    new HBaseTestingUtility()
-  }
+/*
+  Note: If running directly from an IDE, these are the recommended VM parameters:
+  -Xmx1536m -XX:MaxPermSize=512m -XX:ReservedCodeCacheSize=512m
+ */
+
+// Helper object to access the protected abstract static methods hidden in BaseHBaseManagedTimeIT
+object PhoenixSparkITHelper extends BaseHBaseManagedTimeIT {
+  def getTestClusterConfig = BaseHBaseManagedTimeIT.getTestClusterConfig
+  def doSetup = BaseHBaseManagedTimeIT.doSetup()
+  def doTeardown = BaseHBaseManagedTimeIT.doTeardown()
+  def getUrl = BaseTest.getUrl
+}
+
+class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
+  var conn: Connection = _
+  var sc: SparkContext = _
 
   lazy val hbaseConfiguration = {
-    val conf = hbaseTestingUtility.getConfiguration
-
+    val conf = PhoenixSparkITHelper.getTestClusterConfig
+    // The zookeeper quorum address defaults to "localhost" which is incorrect, let's fix it
     val quorum = conf.get("hbase.zookeeper.quorum")
     val clientPort = conf.get("hbase.zookeeper.property.clientPort")
     val znodeParent = conf.get("zookeeper.znode.parent")
-
-    // This is an odd one - the Zookeeper Quorum entry in the config is totally wrong. It's
-    // just reporting localhost.
-    conf.set(org.apache.hadoop.hbase.HConstants.ZOOKEEPER_QUORUM, s"$quorum:$clientPort:$znodeParent")
-
+    conf.set(HConstants.ZOOKEEPER_QUORUM, s"$quorum:$clientPort:$znodeParent")
     conf
   }
 
   lazy val quorumAddress = {
-    hbaseConfiguration.get("hbase.zookeeper.quorum")
+    hbaseConfiguration.get(HConstants.ZOOKEEPER_QUORUM)
   }
-
-  lazy val zookeeperClientPort = {
-    hbaseConfiguration.get("hbase.zookeeper.property.clientPort")
-  }
-
-  lazy val zookeeperZnodeParent = {
-    hbaseConfiguration.get("zookeeper.znode.parent")
-  }
-
-  lazy val hbaseConnectionString = {
-    s"$quorumAddress:$zookeeperClientPort:$zookeeperZnodeParent"
-  }
-
-  var conn: Connection = _
 
   override def beforeAll() {
-    hbaseTestingUtility.startMiniCluster()
+    PhoenixSparkITHelper.doSetup
 
-    conn = DriverManager.getConnection(s"jdbc:phoenix:$hbaseConnectionString")
-
+    conn = DriverManager.getConnection(PhoenixSparkITHelper.getUrl)
     conn.setAutoCommit(true)
 
     // each SQL statement used to set up Phoenix must be on a single line. Yes, that
@@ -82,23 +77,23 @@ class PhoenixRDDTest extends FunSuite with Matchers with BeforeAndAfterAll {
 
     for (sql <- setupSql) {
       val stmt = conn.createStatement()
-
       stmt.execute(sql)
-
-      stmt.close()
     }
-
     conn.commit()
+
+    val conf = new SparkConf()
+      .setAppName("PhoenixSparkIT")
+      .setMaster("local[2]") // 2 threads, some parallelism
+      .set("spark.ui.showConsoleProgress", "false") // Disable printing stage progress
+
+    sc = new SparkContext(conf)
   }
 
   override def afterAll() {
     conn.close()
-    hbaseTestingUtility.shutdownMiniCluster()
+    sc.stop()
+    PhoenixSparkITHelper.doTeardown
   }
-
-  val conf = new SparkConf().set("spark.ui.showConsoleProgress", "false")
-
-  val sc = new SparkContext("local[1]", "PhoenixSparkTest", conf)
 
   def buildSql(table: String, columns: Seq[String], predicate: Option[String]): String = {
     val query = "SELECT %s FROM \"%s\"" format(columns.map(f => "\"" + f + "\"").mkString(", "), table)
@@ -154,7 +149,7 @@ class PhoenixRDDTest extends FunSuite with Matchers with BeforeAndAfterAll {
   test("Can create schema RDD and execute query on case sensitive table (no config)") {
     val sqlContext = new SQLContext(sc)
 
-    val df1 = sqlContext.phoenixTableAsDataFrame("table3", Array("id", "col1"), zkUrl = Some(hbaseConnectionString))
+    val df1 = sqlContext.phoenixTableAsDataFrame("table3", Array("id", "col1"), zkUrl = Some(quorumAddress))
 
     df1.registerTempTable("table3")
 
@@ -287,7 +282,6 @@ class PhoenixRDDTest extends FunSuite with Matchers with BeforeAndAfterAll {
     while(rs.next()) {
       results.append((rs.getLong(1), rs.getString(2), rs.getInt(3)))
     }
-    stmt.close()
 
     // Verify they match
     (0 to results.size - 1).foreach { i =>
@@ -305,7 +299,7 @@ class PhoenixRDDTest extends FunSuite with Matchers with BeforeAndAfterAll {
       .saveToPhoenix(
         "OUTPUT_TEST_TABLE",
         Seq("ID","COL1","COL2","COL3"),
-        zkUrl = Some(hbaseConnectionString)
+        zkUrl = Some(quorumAddress)
       )
 
     // Load the results back
@@ -315,7 +309,6 @@ class PhoenixRDDTest extends FunSuite with Matchers with BeforeAndAfterAll {
     while(rs.next()) {
       results.append(rs.getDate(1))
     }
-    stmt.close()
 
     // Verify the epochs are equal
     results(0).getTime shouldEqual dt.getMillis
