@@ -22,7 +22,12 @@
       <groupId>org.apache.phoenix</groupId>
       <artifactId>phoenix-core</artifactId>
     </dependency>
-
+    <dependency>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-core</artifactId>
+      <classifier>tests</classifier>
+      <scope>test</scope>
+    </dependency>
     <!-- Force import of Spark's servlet API for unit tests -->
     <dependency>
       <groupId>javax.servlet</groupId>
@@ -46,7 +51,7 @@
     <dependency>
       <groupId>org.scalatest</groupId>
       <artifactId>scalatest_${scala.binary.version}</artifactId>
-      <version>2.2.2</version>
+      <version>2.2.4</version>
       <scope>test</scope>
     </dependency>
 
@@ -447,6 +452,8 @@
   </dependencies>
 
   <build>
+    <testSourceDirectory>src/it/scala</testSourceDirectory>
+    <testResources><testResource><directory>src/it/resources</directory></testResource></testResources>
     <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
@@ -500,9 +507,7 @@
               <goal>test</goal>
             </goals>
             <configuration>
-              <parallel>true</parallel>
-              <tagsToExclude>Integration-Test</tagsToExclude>
-              <argLine>-Xmx2g -XX:MaxPermSize=512m -XX:ReservedCodeCacheSize=512m</argLine>
+              <skipTests>true</skipTests>
             </configuration>
           </execution>
           <execution>
@@ -512,8 +517,9 @@
               <goal>test</goal>
             </goals>
             <configuration>
-              <parallel>false</parallel>
-              <tagsToInclude>Integration-Test</tagsToInclude>
+              <parallel>true</parallel>
+              <tagsToExclude>Integration-Test</tagsToExclude>
+              <argLine>-Xmx1536m -XX:MaxPermSize=512m -XX:ReservedCodeCacheSize=512m</argLine>
             </configuration>
           </execution>
         </executions>
