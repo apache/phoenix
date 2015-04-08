@@ -52,7 +52,7 @@ public class IndexMetaDataCacheFactory implements ServerCacheFactory {
                 IndexMaintainer.deserialize(cachePtr, GenericKeyValueBuilder.INSTANCE);
         final Transaction txn;
         try {
-            txn = TransactionUtil.decodeTxnState(txState);
+            txn = txState.length!=0 ? TransactionUtil.decodeTxnState(txState) : null;
         } catch (IOException e) {
             throw new SQLException(e);
         }

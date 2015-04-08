@@ -137,6 +137,7 @@ import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableProperty;
+import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.stats.PTableStats;
 import org.apache.phoenix.schema.stats.StatisticsUtil;
 import org.apache.phoenix.schema.types.PBoolean;
@@ -1644,7 +1645,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 // invalid property - neither of HTableProp, HColumnProp or PhoenixTableProp
                                 // FIXME: This isn't getting triggered as currently a property gets evaluated 
                                 // as HTableProp if its neither HColumnProp or PhoenixTableProp.
-                                throw new SQLExceptionInfo.Builder(SQLExceptionCode.SET_UNSUPPORTED_PROP_ON_ALTER_TABLE)
+                                throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_ALTER_PROPERTY)
                                 .setMessage("Column Family: " + family + ", Property: " + propName).build()
                                 .buildException();
                             }
@@ -2062,12 +2063,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     
     @Override
     public MutationState updateData(MutationPlan plan) throws SQLException {
-        PTable table = plan.getContext().getCurrentTable().getTable();
-        HTableDescriptor desc = this.getTableDescriptor(table.getPhysicalName().getBytes());
-        if (table.isTransactional()) {
+        TableRef currentTable = plan.getContext().getCurrentTable();
+		if (currentTable!=null && currentTable.getTable().isTransactional()) {
             return new MutationState(1, plan.getConnection());
         }
-
         return plan.execute();
     }
 
