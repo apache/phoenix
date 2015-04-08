@@ -422,11 +422,11 @@ public class MutationState implements SQLCloseable {
                     }
                     
                     SQLException sqlE = null;
-                    HTableInterface hTable = connection.getQueryServices().getTable(table.getPhysicalName().getBytes());
+                    HTableInterface hTable = connection.getQueryServices().getTable(htableName);
                     try {
                         // Don't add immutable indexes (those are the only ones that would participate
                         // during a commit), as we don't need conflict detection for these.
-                        if (table.isTransactional() && table.getType() != PTableType.INDEX) {
+                        if (table.isTransactional() && isDataTable) {
                             TransactionAwareHTable txnAware = TransactionUtil.getTransactionAwareHTable(hTable);
                             connection.addTxParticipant(txnAware);
                             hTable = txnAware;
