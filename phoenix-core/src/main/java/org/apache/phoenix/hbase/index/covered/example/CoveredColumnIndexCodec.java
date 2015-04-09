@@ -24,11 +24,12 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.hbase.index.builder.BaseIndexCodec;
+import org.apache.phoenix.hbase.index.covered.IndexMetaData;
 import org.apache.phoenix.hbase.index.covered.IndexUpdate;
 import org.apache.phoenix.hbase.index.covered.LocalTableState;
 import org.apache.phoenix.hbase.index.covered.TableState;
 import org.apache.phoenix.hbase.index.scanner.Scanner;
-import org.apache.phoenix.index.BaseIndexCodec;
 
 import com.google.common.collect.Lists;
 
@@ -59,7 +60,7 @@ public class CoveredColumnIndexCodec extends BaseIndexCodec {
     }
 
     @Override
-    public Iterable<IndexUpdate> getIndexUpserts(TableState state) {
+    public Iterable<IndexUpdate> getIndexUpserts(TableState state, IndexMetaData context) {
         List<IndexUpdate> updates = new ArrayList<IndexUpdate>();
         for (ColumnGroup group : groups) {
             IndexUpdate update = getIndexUpdateForGroup(group, state);
@@ -113,7 +114,7 @@ public class CoveredColumnIndexCodec extends BaseIndexCodec {
     }
 
     @Override
-    public Iterable<IndexUpdate> getIndexDeletes(TableState state) {
+    public Iterable<IndexUpdate> getIndexDeletes(TableState state, IndexMetaData context) {
         List<IndexUpdate> deletes = new ArrayList<IndexUpdate>();
         for (ColumnGroup group : groups) {
             deletes.add(getDeleteForGroup(group, state));
@@ -360,7 +361,4 @@ public class CoveredColumnIndexCodec extends BaseIndexCodec {
         // simple check for the moment.
         return groups.size() > 0;
     }
-
-    @Override
-    public void setContext(TableState state, Mutation mutation) throws IOException {}
 }

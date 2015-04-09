@@ -14,7 +14,7 @@ import java.io.IOException;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.phoenix.index.BaseIndexCodec;
+import org.apache.phoenix.hbase.index.builder.BaseIndexCodec;
 
 /**
  * Codec for creating index updates from the current state of a table.
@@ -49,10 +49,11 @@ public interface IndexCodec {
      * @param state
      *            the current state of the table that needs to be cleaned up. Generally, you only care about the latest
      *            column values, for each column you are indexing for each index table.
+     * @param context TODO
      * @return the pairs of (deletes, index table name) that should be applied.
      * @throws IOException
      */
-    public Iterable<IndexUpdate> getIndexDeletes(TableState state) throws IOException;
+    public Iterable<IndexUpdate> getIndexDeletes(TableState state, IndexMetaData context) throws IOException;
 
     // table state has the pending update already applied, before calling
     // get the new index entries
@@ -68,10 +69,11 @@ public interface IndexCodec {
      * @param state
      *            the current state of the table that needs to an index update Generally, you only care about the latest
      *            column values, for each column you are indexing for each index table.
+     * @param context TODO
      * @return the pairs of (updates,index table name) that should be applied.
      * @throws IOException
      */
-    public Iterable<IndexUpdate> getIndexUpserts(TableState state) throws IOException;
+    public Iterable<IndexUpdate> getIndexUpserts(TableState state, IndexMetaData context) throws IOException;
 
     /**
      * This allows the codec to dynamically change whether or not indexing should take place for a table. If it doesn't
@@ -88,19 +90,4 @@ public interface IndexCodec {
      * @throws IOException
      */
     public boolean isEnabled(Mutation m) throws IOException;
-
-    /**
-     * Get the batch identifier of the given mutation. Generally, updates to the table will take place in a batch of
-     * updates; if we know that the mutation is part of a batch, we can build the state much more intelligently.
-     * <p>
-     * <b>If you have batches that have multiple updates to the same row state, you must specify a batch id for each
-     * batch. Otherwise, we cannot guarantee index correctness</b>
-     * 
-     * @param m
-     *            mutation that may or may not be part of the batch
-     * @return <tt>null</tt> if the mutation is not part of a batch or an id for the batch.
-     */
-    public byte[] getBatchId(Mutation m);
-
-    public void setContext(TableState state, Mutation mutation) throws IOException;
 }

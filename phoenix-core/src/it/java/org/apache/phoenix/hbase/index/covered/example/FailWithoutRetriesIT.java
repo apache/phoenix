@@ -24,7 +24,6 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HTable;
-import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.RetriesExhaustedWithDetailsException;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -32,10 +31,11 @@ import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.hbase.index.IndexTestingUtils;
 import org.apache.phoenix.hbase.index.Indexer;
 import org.apache.phoenix.hbase.index.TableName;
+import org.apache.phoenix.hbase.index.builder.BaseIndexCodec;
+import org.apache.phoenix.hbase.index.covered.IndexMetaData;
 import org.apache.phoenix.hbase.index.covered.IndexUpdate;
 import org.apache.phoenix.hbase.index.covered.TableState;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
-import org.apache.phoenix.index.BaseIndexCodec;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Rule;
@@ -63,18 +63,14 @@ public class FailWithoutRetriesIT {
     public static class FailingTestCodec extends BaseIndexCodec {
 
         @Override
-        public Iterable<IndexUpdate> getIndexDeletes(TableState state) throws IOException {
+        public Iterable<IndexUpdate> getIndexDeletes(TableState state, IndexMetaData context) throws IOException {
             throw new RuntimeException("Intentionally failing deletes for " + FailWithoutRetriesIT.class.getName());
         }
 
         @Override
-        public Iterable<IndexUpdate> getIndexUpserts(TableState state) throws IOException {
+        public Iterable<IndexUpdate> getIndexUpserts(TableState state, IndexMetaData context) throws IOException {
             throw new RuntimeException("Intentionally failing upserts for " + FailWithoutRetriesIT.class.getName());
         }
-
-        @Override
-        public void setContext(TableState state, Mutation mutation) throws IOException {}
-
     }
 
     @BeforeClass

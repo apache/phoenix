@@ -30,6 +30,7 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.hbase.index.Indexer;
+import org.apache.phoenix.hbase.index.covered.IndexMetaData;
 
 /**
  * Interface to build updates ({@link Mutation}s) to the index tables, based on the primary table
@@ -64,6 +65,7 @@ public interface IndexBuilder extends Stoppable {
    * Implementers must ensure that this method is thread-safe - it could (and probably will) be
    * called concurrently for different mutations, which may or may not be part of the same batch.
    * @param mutation update to the primary table to be indexed.
+ * @param context TODO
    * @return a Map of the mutations to make -> target index table name
    * @throws IOException on failure
    */
@@ -76,7 +78,7 @@ public interface IndexBuilder extends Stoppable {
   Noop Failure mode
   */
   
-  public Collection<Pair<Mutation, byte[]>> getIndexUpdate(Mutation mutation) throws IOException;
+  public Collection<Pair<Mutation, byte[]>> getIndexUpdate(Mutation mutation, IndexMetaData context) throws IOException;
 
     /**
      * Build an index update to cleanup the index when we remove {@link KeyValue}s via the normal flush or compaction
@@ -94,12 +96,13 @@ public interface IndexBuilder extends Stoppable {
      *  
      * @param filtered {@link KeyValue}s that previously existed, but won't be included
      * in further output from HBase.
+     * @param context TODO
      * 
      * @return a {@link Map} of the mutations to make -> target index table name
      * @throws IOException on failure
      */
   public Collection<Pair<Mutation, byte[]>> getIndexUpdateForFilteredRows(
-      Collection<KeyValue> filtered)
+      Collection<KeyValue> filtered, IndexMetaData context)
       throws IOException;
 
   /**
@@ -115,10 +118,13 @@ public interface IndexBuilder extends Stoppable {
    * <i>after</i> the {@link #getIndexUpdate} methods. Therefore, you will likely need an attribute
    * on your {@link Put}/{@link Delete} to indicate it is a batch operation.
    * @param miniBatchOp the full batch operation to be written
+ * @param context TODO
  * @throws IOException 
    */
-  public void batchStarted(MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException;
+  public void batchStarted(MiniBatchOperationInProgress<Mutation> miniBatchOp, IndexMetaData context) throws IOException;
 
+  public IndexMetaData getIndexMetaData(MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException;
+  
   /**
    * This allows the codec to dynamically change whether or not indexing should take place for a
    * table. If it doesn't take place, we can save a lot of time on the regular Put patch. By making
@@ -133,11 +139,4 @@ public interface IndexBuilder extends Stoppable {
  * @throws IOException 
    */
   public boolean isEnabled(Mutation m) throws IOException;
-
-  /**
-   * @param m mutation that has been received by the indexer and is waiting to be indexed
-   * @return the ID of batch to which the Mutation belongs, or <tt>null</tt> if the mutation is not
-   *         part of a batch.
-   */
-  public byte[] getBatchId(Mutation m);
 }

@@ -36,6 +36,7 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.hbase.index.covered.Batch;
+import org.apache.phoenix.hbase.index.covered.IndexMetaData;
 import org.apache.phoenix.hbase.index.covered.LocalTableState;
 import org.apache.phoenix.hbase.index.covered.NonTxIndexBuilder;
 import org.apache.phoenix.hbase.index.covered.update.IndexUpdateManager;
@@ -118,8 +119,7 @@ public class CoveredColumnIndexer extends NonTxIndexBuilder {
 
   @Override
   public Collection<Pair<Mutation, byte[]>> getIndexUpdateForFilteredRows(
-      Collection<KeyValue> filtered) throws IOException {
-
+      Collection<KeyValue> filtered, IndexMetaData indexMetaData) throws IOException {
     // stores all the return values
     IndexUpdateManager updateMap = new IndexUpdateManager();
     // batch the updates by row to make life easier and ordered
@@ -146,7 +146,7 @@ public class CoveredColumnIndexer extends NonTxIndexBuilder {
       for (Batch entry : timeBatch) {
         //just set the timestamp on the table - it already has all the future state
         state.setCurrentTimestamp(entry.getTimestamp());
-        this.addDeleteUpdatesToMap(updateMap, state, entry.getTimestamp());
+        this.addDeleteUpdatesToMap(updateMap, state, entry.getTimestamp(), indexMetaData);
       }
     }
     return updateMap.toMap();

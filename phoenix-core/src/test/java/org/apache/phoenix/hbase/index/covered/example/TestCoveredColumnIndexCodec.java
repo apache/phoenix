@@ -38,6 +38,7 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.hbase.index.covered.IndexMetaData;
 import org.apache.phoenix.hbase.index.covered.IndexCodec;
 import org.apache.phoenix.hbase.index.covered.IndexUpdate;
 import org.apache.phoenix.hbase.index.covered.LocalTableState;
@@ -180,14 +181,14 @@ public class TestCoveredColumnIndexCodec {
 
     // check the codec for deletes it should send
     LocalTableState state = new LocalTableState(env, table, p);
-    Iterable<IndexUpdate> updates = codec.getIndexDeletes(state);
+    Iterable<IndexUpdate> updates = codec.getIndexDeletes(state, IndexMetaData.NULL_INDEX_META_DATA);
     assertFalse("Found index updates without any existing kvs in table!", updates.iterator().next()
         .isValid());
 
     // get the updates with the pending update
     state.setCurrentTimestamp(1);
     state.addPendingUpdates(kvs);
-    updates = codec.getIndexUpserts(state);
+    updates = codec.getIndexUpserts(state, IndexMetaData.NULL_INDEX_META_DATA);
     assertTrue("Didn't find index updates for pending primary table update!", updates.iterator()
         .hasNext());
     for (IndexUpdate update : updates) {
@@ -210,7 +211,7 @@ public class TestCoveredColumnIndexCodec {
     state = new LocalTableState(env, table, d);
     state.setCurrentTimestamp(2);
     // check the cleanup of the current table, after the puts (mocking a 'next' update)
-    updates = codec.getIndexDeletes(state);
+    updates = codec.getIndexDeletes(state, IndexMetaData.NULL_INDEX_META_DATA);
     for (IndexUpdate update : updates) {
       assertTrue("Didn't have any index cleanup, even though there is current state",
         update.isValid());
@@ -240,7 +241,7 @@ public class TestCoveredColumnIndexCodec {
     state.setCurrentTimestamp(d.getTimeStamp());
     // now we shouldn't see anything when getting the index update
     state.addPendingUpdates(d.getFamilyCellMap().get(FAMILY));
-    Iterable<IndexUpdate> updates = codec.getIndexUpserts(state);
+    Iterable<IndexUpdate> updates = codec.getIndexUpserts(state, IndexMetaData.NULL_INDEX_META_DATA);
     for (IndexUpdate update : updates) {
       assertFalse("Had some index updates, though it should have been covered by the delete",
         update.isValid());

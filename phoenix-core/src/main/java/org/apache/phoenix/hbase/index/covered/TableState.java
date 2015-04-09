@@ -80,6 +80,4 @@ public interface TableState {
    * @return the keyvalues in the pending update to the table.
    */
   Collection<Cell> getPendingUpdate();
-  
-  Map<String,Object> getContext();
 }

@@ -112,7 +112,7 @@ import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.PhoenixIndexBuilder;
 import org.apache.phoenix.index.PhoenixIndexCodec;
-import org.apache.phoenix.index.PhoenixTxIndexBuilder;
+import org.apache.phoenix.index.PhoenixTransactionalIndexer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
@@ -705,11 +705,18 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             // all-or-none mutate class which break when this coprocessor is installed (PHOENIX-1318).
             if ((tableType != PTableType.INDEX && tableType != PTableType.VIEW)
                     && !SchemaUtil.isMetaTable(tableName)
-                    && !SchemaUtil.isStatsTable(tableName)
-                    && !descriptor.hasCoprocessor(Indexer.class.getName())) {
-                Map<String, String> opts = Maps.newHashMapWithExpectedSize(1);
-                opts.put(NonTxIndexBuilder.CODEC_CLASS_NAME_KEY, PhoenixIndexCodec.class.getName());
-                Indexer.enableIndexing(descriptor, isTransactional ? PhoenixTxIndexBuilder.class : PhoenixIndexBuilder.class, opts, priority);
+                    && !SchemaUtil.isStatsTable(tableName)) {
+                if (isTransactional) {
+                    if (!descriptor.hasCoprocessor(PhoenixTransactionalIndexer.class.getName())) {
+                        descriptor.addCoprocessor(PhoenixTransactionalIndexer.class.getName(), null, priority, null);
+                    }
+                } else {
+                    if (!descriptor.hasCoprocessor(Indexer.class.getName())) {
+                        Map<String, String> opts = Maps.newHashMapWithExpectedSize(1);
+                        opts.put(NonTxIndexBuilder.CODEC_CLASS_NAME_KEY, PhoenixIndexCodec.class.getName());
+                        Indexer.enableIndexing(descriptor, PhoenixIndexBuilder.class, opts, priority);
+                    }
+                }
             }
             if (SchemaUtil.isStatsTable(tableName) && !descriptor.hasCoprocessor(MultiRowMutationEndpoint.class.getName())) {
                 descriptor.addCoprocessor(MultiRowMutationEndpoint.class.getName(),

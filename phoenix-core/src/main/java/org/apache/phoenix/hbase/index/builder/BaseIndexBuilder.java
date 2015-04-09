@@ -21,6 +21,7 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.hbase.index.covered.IndexMetaData;
 import org.apache.phoenix.hbase.index.covered.IndexCodec;
 import org.apache.phoenix.hbase.index.covered.NonTxIndexBuilder;
 
@@ -40,8 +41,6 @@ public abstract class BaseIndexBuilder implements IndexBuilder {
     protected RegionCoprocessorEnvironment env;
     protected IndexCodec codec;
 
-    abstract protected boolean useRawScanToPrimeBlockCache();
-    
     @Override
     public void extendBaseIndexBuilderInstead() {}
 
@@ -65,8 +64,13 @@ public abstract class BaseIndexBuilder implements IndexBuilder {
     }
 
     @Override
-    public void batchStarted(MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
+    public void batchStarted(MiniBatchOperationInProgress<Mutation> miniBatchOp, IndexMetaData context) throws IOException {
         // noop
+    }
+    
+    @Override
+    public IndexMetaData getIndexMetaData(MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
+        return IndexMetaData.NULL_INDEX_META_DATA;
     }
 
     @Override
@@ -98,20 +102,9 @@ public abstract class BaseIndexBuilder implements IndexBuilder {
     }
 
     @Override
-    public Collection<Pair<Mutation, byte[]>> getIndexUpdateForFilteredRows(Collection<KeyValue> filtered)
+    public Collection<Pair<Mutation, byte[]>> getIndexUpdateForFilteredRows(Collection<KeyValue> filtered, IndexMetaData context)
             throws IOException {
         throw new UnsupportedOperationException();
-    }
-
-    /**
-     * {@inheritDoc}
-     * <p>
-     * By default, assumes that all mutations should <b>not be batched</b>. That is to say, each mutation always applies
-     * to different rows, even if they are in the same batch, or are independent updates.
-     */
-    @Override
-    public byte[] getBatchId(Mutation m) {
-        return this.codec.getBatchId(m);
     }
 
     @Override

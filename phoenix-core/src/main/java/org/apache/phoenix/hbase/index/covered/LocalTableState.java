@@ -36,8 +36,6 @@ import org.apache.phoenix.hbase.index.scanner.Scanner;
 import org.apache.phoenix.hbase.index.scanner.ScannerBuilder;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 
-import com.google.common.collect.Maps;
-
 /**
  * Manage the state of the HRegion's view of the table, for the single row.
  * <p>
@@ -58,7 +56,6 @@ public class LocalTableState implements TableState {
     private List<Cell> kvs = new ArrayList<Cell>();
     private List<? extends IndexedColumnGroup> hints;
     private CoveredColumns columnSet;
-    private final Map<String,Object> context = Maps.newHashMap();
 
     public LocalTableState(RegionCoprocessorEnvironment environment, LocalHBaseState table, Mutation update) {
         this.env = environment;
@@ -132,7 +129,7 @@ public class LocalTableState implements TableState {
      * state for any of the columns you are indexing.
      * <p>
      * <i>NOTE:</i> This method should <b>not</b> be used during
-     * {@link IndexCodec#getIndexDeletes(TableState)} as the pending update will not yet have been
+     * {@link IndexCodec#getIndexDeletes(TableState, BatchState)} as the pending update will not yet have been
      * applied - you are merely attempting to cleanup the current state and therefore do <i>not</i>
      * need to track the indexed columns.
      * <p>
@@ -274,10 +271,5 @@ public class LocalTableState implements TableState {
         Pair<Scanner, IndexUpdate> pair = getIndexedColumnsTableState(indexedColumns);
         ValueGetter valueGetter = IndexManagementUtil.createGetterFromScanner(pair.getFirst(), getCurrentRowKey());
         return new Pair<ValueGetter, IndexUpdate>(valueGetter, pair.getSecond());
-    }
-
-    @Override
-    public Map<String, Object> getContext() {
-        return context;
     }
 }

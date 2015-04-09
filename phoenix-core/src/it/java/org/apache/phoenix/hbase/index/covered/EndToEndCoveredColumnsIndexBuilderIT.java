@@ -172,15 +172,15 @@ public class EndToEndCoveredColumnsIndexBuilderIT {
     private Queue<TableStateVerifier> verifiers = new ArrayDeque<TableStateVerifier>();
 
     @Override
-    public Iterable<IndexUpdate> getIndexDeletes(TableState state) {
+    public Iterable<IndexUpdate> getIndexDeletes(TableState state, IndexMetaData context) {
       verify(state);
-      return super.getIndexDeletes(state);
+      return super.getIndexDeletes(state, context);
     }
 
     @Override
-    public Iterable<IndexUpdate> getIndexUpserts(TableState state) {
+    public Iterable<IndexUpdate> getIndexUpserts(TableState state, IndexMetaData context) {
       verify(state);
-      return super.getIndexUpserts(state);
+      return super.getIndexUpserts(state, context);
     }
 
     private void verify(TableState state) {
