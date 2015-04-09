@@ -113,6 +113,7 @@ tokens
     TRACE='trace';
     ASYNC='async';
     SAMPLING='sampling';
+    UNION='union';
 }
 
 
@@ -351,19 +352,14 @@ statement returns [BindableStatement ret]
 
 // Parses a select statement which must be the only statement (expects an EOF after the statement).
 query returns [SelectStatement ret]
-    :   SELECT s=hinted_select_node EOF {$ret=s;}
+    :   s=select_node EOF {$ret=s;}
     ;
 
 // Parses a single SQL statement (expects an EOF after the select statement).
 oneStatement returns [BindableStatement ret]
-    :   (SELECT s=hinted_select_node {$ret=s;} 
-    |    ns=non_select_node {$ret=ns;}
-        )
-    ;
-
-non_select_node returns [BindableStatement ret]
 @init{ contextStack.push(new ParseContext()); }
-    :  (s=upsert_node
+    :  (s=select_node
+    |	s=upsert_node
     |   s=delete_node
     |   s=create_table_node
     |   s=create_view_node
@@ -429,7 +425,7 @@ create_sequence_node returns [CreateSequenceStatement ret]
     ;
 
 int_literal_or_bind returns [ParseNode ret]
-    : n=int_literal { $ret = n; }
+    : n=int_or_long_literal { $ret = n; }
     | b=bind_expression { $ret = b; }
     ;
 
@@ -578,40 +574,42 @@ dyn_column_name_or_def returns [ColumnDef ret]
             SortOrder.getDefault()); }
     ;
 
-select_expression returns [SelectStatement ret]
-    :  SELECT s=select_node {$ret = s;}
+subquery_expression returns [ParseNode ret]
+    :  s=select_node {$ret = factory.subquery(s, false);}
     ;
     
-subquery_expression returns [ParseNode ret]
-    :  s=select_expression {$ret = factory.subquery(s, false);}
+single_select returns [SelectStatement ret]
+@init{ contextStack.push(new ParseContext()); }
+    :   SELECT (h=hintClause)? 
+        (d=DISTINCT | ALL)? sel=select_list
+        FROM from=parseFrom
+        (WHERE where=expression)?
+        (GROUP BY group=group_by)?
+        (HAVING having=expression)?
+        { ParseContext context = contextStack.peek(); $ret = factory.select(from, h, d!=null, sel, where, group, having, null, null, getBindCount(), context.isAggregate(), context.hasSequences(), null); }
+    ;
+finally{ contextStack.pop(); }
+
+unioned_selects returns [List<SelectStatement> ret]
+@init{ret = new ArrayList<SelectStatement>();}
+    :   s=single_select {ret.add(s);} (UNION ALL s=single_select {ret.add(s);})*
     ;
     
 // Parse a full select expression structure.
 select_node returns [SelectStatement ret]
 @init{ contextStack.push(new ParseContext()); }
-    :   (d=DISTINCT | ALL)? sel=select_list
-        FROM from=parseFrom
-        (WHERE where=expression)?
-        (GROUP BY group=group_by)?
-        (HAVING having=expression)?
+    :   u=unioned_selects
         (ORDER BY order=order_by)?
         (LIMIT l=limit)?
-        { ParseContext context = contextStack.peek(); $ret = factory.select(from, null, d!=null, sel, where, group, having, order, l, getBindCount(), context.isAggregate(), context.hasSequences()); }
+        { ParseContext context = contextStack.peek(); $ret = factory.select(u, order, l, getBindCount(), context.isAggregate()); }
     ;
 finally{ contextStack.pop(); }
-
-// Parse a full select expression structure.
-hinted_select_node returns [SelectStatement ret]
-    :   (hint=hintClause)? 
-        s=select_node
-        { $ret = factory.select(s, hint); }
-    ;
 
 // Parse a full upsert expression structure.
 upsert_node returns [UpsertStatement ret]
     :   UPSERT (hint=hintClause)? INTO t=from_table_name
         (LPAREN p=upsert_column_refs RPAREN)?
-        ((VALUES LPAREN v=one_or_more_expressions RPAREN) | s=select_expression)
+        ((VALUES LPAREN v=one_or_more_expressions RPAREN) | s=select_node)
         {ret = factory.upsert(factory.namedTable(null,t,p == null ? null : p.getFirst()), hint, p == null ? null : p.getSecond(), v, s, getBindCount()); }
     ;
 
@@ -632,7 +630,7 @@ delete_node returns [DeleteStatement ret]
 
 limit returns [LimitNode ret]
     : b=bind_expression { $ret = factory.limit(b); }
-    | l=int_literal { $ret = factory.limit(l); }
+    | l=int_or_long_literal { $ret = factory.limit(l); }
     ;
     
 sampling_rate returns [LiteralParseNode ret]
@@ -697,7 +695,7 @@ table_factor returns [TableNode ret]
     :   LPAREN t=table_list RPAREN { $ret = t; }
     |   n=bind_name ((AS)? alias=identifier)? { $ret = factory.bindTable(alias, factory.table(null,n)); } // TODO: review
     |   f=from_table_name ((AS)? alias=identifier)? (LPAREN cdefs=dyn_column_defs RPAREN)? { $ret = factory.namedTable(alias,f,cdefs); }
-    |   LPAREN SELECT s=hinted_select_node RPAREN ((AS)? alias=identifier)? { $ret = factory.derivedTable(alias, s); }
+    |   LPAREN s=select_node RPAREN ((AS)? alias=identifier)? { $ret = factory.derivedTable(alias, s); }
     ;
 
 join_type returns [JoinTableNode.JoinType ret]
@@ -896,18 +894,14 @@ literal_or_bind returns [ParseNode ret]
 
 // Get a string, integer, double, date, boolean, or NULL value.
 literal returns [LiteralParseNode ret]
-    :   t=STRING_LITERAL {
-            ret = factory.literal(t.getText()); 
+    :   s=STRING_LITERAL {
+            ret = factory.literal(s.getText()); 
         }
-    |   l=int_literal { ret = l; }
-    |   l=long_literal { ret = l; }
-    |   l=double_literal { ret = l; }
-    |   t=DECIMAL {
-            try {
-                ret = factory.literal(new BigDecimal(t.getText()));
-            } catch (NumberFormatException e) { // Shouldn't happen since we just parsed a decimal
-                throwRecognitionException(t);
-            }
+    |   n=NUMBER {
+            ret = factory.wholeNumber(n.getText());
+        }
+    |   d=DECIMAL  {
+            ret = factory.realNumber(d.getText());
         }
     |   NULL {ret = factory.literal(null);}
     |   TRUE {ret = factory.literal(Boolean.TRUE);} 
@@ -921,42 +915,9 @@ literal returns [LiteralParseNode ret]
         }
     ;
     
-int_literal returns [LiteralParseNode ret]
+int_or_long_literal returns [LiteralParseNode ret]
     :   n=NUMBER {
-            try {
-                Long v = Long.valueOf(n.getText());
-                if (v >= Integer.MIN_VALUE && v <= Integer.MAX_VALUE) {
-                    ret = factory.literal(v.intValue());
-                } else {
-                    ret = factory.literal(v);
-                }
-            } catch (NumberFormatException e) { // Shouldn't happen since we just parsed a number
-                throwRecognitionException(n);
-            }
-        }
-    ;
-
-long_literal returns [LiteralParseNode ret]
-    :   l=LONG {
-            try {
-                String lt = l.getText();
-                Long v = Long.valueOf(lt.substring(0, lt.length() - 1));
-                ret = factory.literal(v);
-            } catch (NumberFormatException e) { // Shouldn't happen since we just parsed a number
-                throwRecognitionException(l);
-            }
-        }
-    ;
-
-double_literal returns [LiteralParseNode ret]
-    :   d=DOUBLE {
-            try {
-                String dt = d.getText();
-                Double v = Double.valueOf(dt.substring(0, dt.length() - 1));
-                ret = factory.literal(v);
-            } catch (NumberFormatException e) { // Shouldn't happen since we just parsed a number
-                throwRecognitionException(d);
-            }
+            ret = factory.intOrLong(n.getText());
         }
     ;
 
@@ -1006,17 +967,9 @@ NUMBER
     :   POSINTEGER
     ;
 
-LONG
-    :   POSINTEGER ('L'|'l')
-    ;
-
 // Exponential format is not supported.
 DECIMAL
     :   POSINTEGER? '.' POSINTEGER
-    ;
-
-DOUBLE
-    :   DECIMAL ('D'|'d')
     ;
 
 DOUBLE_QUOTE

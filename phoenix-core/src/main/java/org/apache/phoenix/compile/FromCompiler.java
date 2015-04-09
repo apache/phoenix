@@ -65,6 +65,7 @@ import org.apache.phoenix.schema.PColumnImpl;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
@@ -72,7 +73,6 @@ import org.apache.phoenix.schema.ProjectedColumn;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
-import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.LogUtil;
@@ -163,6 +163,8 @@ public class FromCompiler {
     public static ColumnResolver getResolverForQuery(SelectStatement statement, PhoenixConnection connection)
     		throws SQLException {
     	TableNode fromNode = statement.getFrom();
+    	if (fromNode == null)
+    	    return EMPTY_TABLE_RESOLVER;
         if (fromNode instanceof NamedTableNode)
             return new SingleTableColumnResolver(connection, (NamedTableNode) fromNode, true, 1);
 
@@ -467,7 +469,7 @@ public class FromCompiler {
                     if (node instanceof WildcardParseNode
                             || node instanceof TableWildcardParseNode
                             || node instanceof FamilyWildcardParseNode)
-                        throw new SQLException("Encountered wildcard in subqueries.");
+                        throw new SQLFeatureNotSupportedException("Wildcard in subqueries not supported.");
 
                     alias = SchemaUtil.normalizeIdentifier(node.getAlias());
                 }

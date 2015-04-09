@@ -31,8 +31,6 @@ import org.apache.phoenix.schema.tuple.Tuple;
  * returning the rows ordered by the OrderByExpression. The input
  * iterators must be ordered by the OrderByExpression.
  *
- * 
- * @since 0.1
  */
 public class MergeSortTopNResultIterator extends MergeSortResultIterator {
 

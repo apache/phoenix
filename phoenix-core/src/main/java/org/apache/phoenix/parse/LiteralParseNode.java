@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.parse;
 
+import java.math.BigDecimal;
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
@@ -39,6 +40,10 @@ public class LiteralParseNode extends TerminalParseNode {
     public static final ParseNode ONE = new LiteralParseNode(1);
     public static final ParseNode MINUS_ONE = new LiteralParseNode(-1L);
     public static final ParseNode TRUE = new LiteralParseNode(true);
+    // Parser representation of Long.MIN_VALUE, as ABS(Long.MIN_VALUE) is too big to fit into a Long
+    public static final ParseNode MIN_LONG_AS_BIG_DECIMAL = new LiteralParseNode(BigDecimal.valueOf(Long.MIN_VALUE).abs());
+    // See ParseNodeFactory.negate(), as MIN_LONG_AS_BIG_DECIMAL will be converted MIN_LONG if negated.
+    public static final ParseNode MIN_LONG = new LiteralParseNode(Long.MIN_VALUE);
     
     private final Object value;
     private final PDataType type;

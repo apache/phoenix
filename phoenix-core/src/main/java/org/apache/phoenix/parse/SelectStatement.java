@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.parse;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -41,7 +42,7 @@ public class SelectStatement implements FilterableStatement {
                     Collections.<AliasedNode>singletonList(new AliasedNode(null, LiteralParseNode.ONE)),
                     null, Collections.<ParseNode>emptyList(),
                     null, Collections.<OrderByNode>emptyList(),
-                    null, 0, false, false);
+                    null, 0, false, false, Collections.<SelectStatement>emptyList());
     public static final SelectStatement COUNT_ONE =
             new SelectStatement(
                     null, null, false,
@@ -53,14 +54,14 @@ public class SelectStatement implements FilterableStatement {
                                 new BuiltInFunctionInfo(CountAggregateFunction.class, CountAggregateFunction.class.getAnnotation(BuiltInFunction.class))))),
                     null, Collections.<ParseNode>emptyList(), 
                     null, Collections.<OrderByNode>emptyList(), 
-                    null, 0, true, false);
+                    null, 0, true, false, Collections.<SelectStatement>emptyList());
     public static SelectStatement create(SelectStatement select, HintNode hint) {
         if (select.getHint() == hint || hint.isEmpty()) {
             return select;
         }
         return new SelectStatement(select.getFrom(), hint, select.isDistinct(), 
                 select.getSelect(), select.getWhere(), select.getGroupBy(), select.getHaving(), 
-                select.getOrderBy(), select.getLimit(), select.getBindCount(), select.isAggregate(), select.hasSequence());
+                select.getOrderBy(), select.getLimit(), select.getBindCount(), select.isAggregate(), select.hasSequence(), select.getSelects());
     }
     
     public SelectStatement combine(ParseNode where) {
@@ -72,15 +73,23 @@ public class SelectStatement implements FilterableStatement {
         }
         return new SelectStatement(this.getFrom(), this.getHint(), this.isDistinct(), 
                 this.getSelect(), where, this.getGroupBy(), this.getHaving(), 
-                this.getOrderBy(), this.getLimit(), this.getBindCount(), this.isAggregate(), this.hasSequence());
+                this.getOrderBy(), this.getLimit(), this.getBindCount(), this.isAggregate(), this.hasSequence(), this.selects);
     }
     
     public static SelectStatement create(SelectStatement select, List<AliasedNode> selects) {
         return new SelectStatement(select.getFrom(), select.getHint(), select.isDistinct(), 
                 selects, select.getWhere(), select.getGroupBy(), select.getHaving(), 
-                select.getOrderBy(), select.getLimit(), select.getBindCount(), select.isAggregate(), select.hasSequence());
+                select.getOrderBy(), select.getLimit(), select.getBindCount(), select.isAggregate(), select.hasSequence(), select.getSelects());
     }
     
+    // Copy constructor for sub select statements in a union
+    public static SelectStatement create(SelectStatement select, 
+            List<OrderByNode> orderBy, LimitNode limit, boolean isAggregate) {
+        return new SelectStatement(select.getFrom(), select.getHint(), select.isDistinct(), 
+                select.getSelect(), select.getWhere(), select.getGroupBy(), select.getHaving(), 
+                orderBy, limit, select.getBindCount(), isAggregate, select.hasSequence(), select.getSelects());
+    }
+
     private final TableNode fromTable;
     private final HintNode hint;
     private final boolean isDistinct;
@@ -93,6 +102,8 @@ public class SelectStatement implements FilterableStatement {
     private final int bindCount;
     private final boolean isAggregate;
     private final boolean hasSequence;
+    private final boolean hasWildcard;
+    private final List<SelectStatement> selects = new ArrayList<SelectStatement>();
     
     @Override
     public final String toString() {
@@ -205,7 +216,7 @@ public class SelectStatement implements FilterableStatement {
     
     protected SelectStatement(TableNode from, HintNode hint, boolean isDistinct, List<AliasedNode> select,
             ParseNode where, List<ParseNode> groupBy, ParseNode having, List<OrderByNode> orderBy, LimitNode limit,
-            int bindCount, boolean isAggregate, boolean hasSequence) {
+            int bindCount, boolean isAggregate, boolean hasSequence, List<SelectStatement> selects) {
         this.fromTable = from;
         this.hint = hint == null ? HintNode.EMPTY_HINT_NODE : hint;
         this.isDistinct = isDistinct;
@@ -218,6 +229,18 @@ public class SelectStatement implements FilterableStatement {
         this.bindCount = bindCount;
         this.isAggregate = isAggregate || groupBy.size() != countConstants(groupBy) || this.having != null;
         this.hasSequence = hasSequence;
+        boolean hasWildcard = false;
+        for (AliasedNode aliasedNode : select) {
+            ParseNode node = aliasedNode.getNode();
+            if (node instanceof WildcardParseNode || node instanceof TableWildcardParseNode || node instanceof FamilyWildcardParseNode) {
+                hasWildcard = true;
+                break;
+            }
+        }
+        this.hasWildcard = hasWildcard;
+        if (!selects.isEmpty()) {
+            this.selects.addAll(selects);
+        }
     }
     
     @Override
@@ -297,5 +320,17 @@ public class SelectStatement implements FilterableStatement {
             return null;
         
         return ((DerivedTableNode) fromTable).getSelect();
+    }
+
+    public boolean isUnion() {
+        return !getSelects().isEmpty();
+    }
+
+    public List<SelectStatement> getSelects() {
+        return selects;
+    }
+    
+    public boolean hasWildcard() {
+        return hasWildcard;
     }
 }
