@@ -23,77 +23,18 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
-import co.cask.tephra.TransactionManager;
-import co.cask.tephra.TxConstants;
-import co.cask.tephra.distributed.TransactionService;
-import co.cask.tephra.metrics.TxMetricsCollector;
-import co.cask.tephra.persist.InMemoryTransactionStateStorage;
-
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
-import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.exception.SQLExceptionCode;
-import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.DateUtil;
-import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
-import org.apache.twill.discovery.DiscoveryService;
-import org.apache.twill.discovery.ZKDiscoveryService;
-import org.apache.twill.zookeeper.RetryStrategies;
-import org.apache.twill.zookeeper.ZKClientService;
-import org.apache.twill.zookeeper.ZKClientServices;
-import org.apache.twill.zookeeper.ZKClients;
 import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.ClassRule;
 import org.junit.Test;
-import org.junit.rules.TemporaryFolder;
-
-import com.google.common.collect.Maps;
 
 public class TransactionIT extends BaseHBaseManagedTimeIT {
 	
 	private static final String FULL_TABLE_NAME = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + TRANSACTIONAL_DATA_TABLE;
-	@ClassRule
-	public static TemporaryFolder tmpFolder = new TemporaryFolder();
-	
-	@BeforeClass
-    @Shadower(classBeingShadowed = BaseHBaseManagedTimeIT.class)
-	public static void doSetup() throws Exception {
-	    Map<String,String> props = Maps.newHashMapWithExpectedSize(1);
-        // drop HBase tables because TransactionProcessor will not allow you to delete rows
-        props.put(QueryServices.DROP_METADATA_ATTRIB, Boolean.toString(true));
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
-        
-		config.setBoolean(TxConstants.Manager.CFG_DO_PERSIST, false);
-		config.set(TxConstants.Service.CFG_DATA_TX_CLIENT_RETRY_STRATEGY, "n-times");
-		config.setInt(TxConstants.Service.CFG_DATA_TX_CLIENT_ATTEMPTS, 1);
-		config.set(TxConstants.Manager.CFG_TX_SNAPSHOT_DIR, tmpFolder.newFolder().getAbsolutePath());
-		
-		ConnectionInfo connInfo = ConnectionInfo.create(getUrl());
-	    ZKClientService zkClient = ZKClientServices.delegate(
-	      ZKClients.reWatchOnExpire(
-	        ZKClients.retryOnFailure(
-	          ZKClientService.Builder.of(connInfo.getZookeeperConnectionString())
-	            .setSessionTimeout(config.getInt(HConstants.ZK_SESSION_TIMEOUT,
-	            		HConstants.DEFAULT_ZK_SESSION_TIMEOUT))
-	            .build(),
-	          RetryStrategies.exponentialDelay(500, 2000, TimeUnit.MILLISECONDS)
-	        )
-	      )
-	    );
-	    zkClient.startAndWait();
-
-	    DiscoveryService discovery = new ZKDiscoveryService(zkClient);
-	    final TransactionManager txManager = new TransactionManager(config, new InMemoryTransactionStateStorage(), new TxMetricsCollector());
-	    TransactionService txService = new TransactionService(config, zkClient, discovery, txManager);
-	    txService.startAndWait();
-	}
 	
 	@Before
     public void setUp() throws SQLException {
@@ -111,17 +52,17 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
         stmt.setDate(6, date);
     }
 	
-	private void validateRowKeyColumns(ResultSet rs, int i) throws SQLException {
-		assertTrue(rs.next());
-		assertEquals(rs.getString(1), "varchar" + String.valueOf(i));
-		assertEquals(rs.getString(2), "char" + String.valueOf(i));
-		assertEquals(rs.getInt(3), i);
-		assertEquals(rs.getInt(4), i);
-		assertEquals(rs.getBigDecimal(5), new BigDecimal(i*0.5d));
-		Date date = new Date(DateUtil.parseDate("2015-01-01 00:00:00").getTime() + (i - 1) * TestUtil.NUM_MILLIS_IN_DAY);
-		assertEquals(rs.getDate(6), date);
-	}
-	
+//	private void validateRowKeyColumns(ResultSet rs, int i) throws SQLException {
+//		assertTrue(rs.next());
+//		assertEquals(rs.getString(1), "varchar" + String.valueOf(i));
+//		assertEquals(rs.getString(2), "char" + String.valueOf(i));
+//		assertEquals(rs.getInt(3), i);
+//		assertEquals(rs.getInt(4), i);
+//		assertEquals(rs.getBigDecimal(5), new BigDecimal(i*0.5d));
+//		Date date = new Date(DateUtil.parseDate("2015-01-01 00:00:00").getTime() + (i - 1) * TestUtil.NUM_MILLIS_IN_DAY);
+//		assertEquals(rs.getDate(6), date);
+//	}
+//	
 //	@Test
 //	public void testUpsert() throws Exception {
 //		Connection conn = DriverManager.getConnection(getUrl());

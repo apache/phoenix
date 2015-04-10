@@ -108,7 +108,7 @@ public class QueryServicesOptions {
     public static final int DEFAULT_SCAN_CACHE_SIZE = 1000;
     public static final int DEFAULT_MAX_INTRA_REGION_PARALLELIZATION = DEFAULT_MAX_QUERY_CONCURRENCY;
     public static final int DEFAULT_DISTINCT_VALUE_COMPRESS_THRESHOLD = 1024 * 1024 * 1; // 1 Mb
-    public static final int DEFAULT_INDEX_MUTATE_BATCH_SIZE_THRESHOLD = 5;
+    public static final int DEFAULT_INDEX_MUTATE_BATCH_SIZE_THRESHOLD = 3;
     public static final long DEFAULT_MAX_SPOOL_TO_DISK_BYTES = 1024000000;
     // Only the first chunked batches are fetched in parallel, so this default
     // should be on the relatively bigger side of things. Bigger means more

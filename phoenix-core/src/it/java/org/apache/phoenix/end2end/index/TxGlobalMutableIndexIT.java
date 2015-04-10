@@ -27,6 +27,7 @@ import org.junit.BeforeClass;
 import com.google.common.collect.Maps;
 
 public class TxGlobalMutableIndexIT extends GlobalMutableIndexIT {
+    
     @BeforeClass
     @Shadower(classBeingShadowed = BaseMutableIndexIT.class)
     public static void doSetup() throws Exception {

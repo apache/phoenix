@@ -49,7 +49,6 @@ import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.covered.update.ColumnTracker;
 import org.apache.phoenix.hbase.index.covered.update.IndexedColumnGroup;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
-import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.hbase.index.write.IndexWriter;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.types.PVarbinary;
@@ -57,6 +56,7 @@ import org.apache.phoenix.trace.TracingUtils;
 import org.apache.phoenix.trace.util.NullSpan;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.ServerUtil;
 import org.cloudera.htrace.Span;
 import org.cloudera.htrace.Trace;
 import org.cloudera.htrace.TraceScope;
@@ -127,8 +127,9 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
                 this.writer.write(indexUpdates);
             }
         } catch (Throwable t) {
-            LOG.error("Failed to update index with entries:" + indexUpdates, t);
-            IndexManagementUtil.rethrowIndexingException(t);
+            String msg = "Failed to update index with entries:" + indexUpdates;
+            LOG.error(msg, t);
+            ServerUtil.throwIOException(msg, t);
         }
     }
 
@@ -166,6 +167,7 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
             stored.addAll(m);
         }
         
+        Collection<Pair<Mutation, byte[]>> indexUpdates = new ArrayList<Pair<Mutation, byte[]>>(mutations.size() * 2 * indexMaintainers.size());
         try {
             if (!mutableColumns.isEmpty()) {
                 List<KeyRange> keys = Lists.newArrayListWithExpectedSize(mutations.size());
@@ -182,12 +184,22 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
                 txTable.startTx(tx);
                 scanner = txTable.getScanner(scan);
             }
-        } finally {
-            if (txTable != null) txTable.close();
-        }
-        
-        Collection<Pair<Mutation, byte[]>> indexUpdates = new ArrayList<Pair<Mutation, byte[]>>(mutations.size() * 2 * indexMaintainers.size());
-        if (scanner == null) {
+            if (scanner != null) {
+                Result result;
+                while ((result = scanner.next()) != null) {
+                    TxTableState state = new TxTableState(env, mutableColumns, updateAttributes, tx.getWritePointer(), result);
+                    Iterable<IndexUpdate> deletes = codec.getIndexDeletes(state, indexMetaData);
+                    for (IndexUpdate delete : deletes) {
+                        indexUpdates.add(new Pair<Mutation, byte[]>(delete.getUpdate(),delete.getTableName()));
+                    }
+                    Mutation m = mutations.get(new ImmutableBytesPtr(result.getRow()));
+                    state.applyMutation(m);
+                    Iterable<IndexUpdate> updates = codec.getIndexUpserts(state, indexMetaData);
+                    for (IndexUpdate update : updates) {
+                        indexUpdates.add(new Pair<Mutation, byte[]>(update.getUpdate(),update.getTableName()));
+                    }
+                }
+            }
             for (Mutation m : mutations.values()) {
                 TxTableState state = new TxTableState(env, mutableColumns, updateAttributes, tx.getWritePointer(), m);
                 state.applyMutation(m);
@@ -196,22 +208,10 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
                     indexUpdates.add(new Pair<Mutation, byte[]>(update.getUpdate(),update.getTableName()));
                 }
             }
-        } else {
-            Result result;
-            while ((result = scanner.next()) != null) {
-                TxTableState state = new TxTableState(env, mutableColumns, updateAttributes, tx.getWritePointer(), result);
-                Iterable<IndexUpdate> deletes = codec.getIndexDeletes(state, indexMetaData);
-                for (IndexUpdate delete : deletes) {
-                    indexUpdates.add(new Pair<Mutation, byte[]>(delete.getUpdate(),delete.getTableName()));
-                }
-                Mutation m = mutations.get(new ImmutableBytesPtr(result.getRow()));
-                state.applyMutation(m);
-                Iterable<IndexUpdate> updates = codec.getIndexUpserts(state, indexMetaData);
-                for (IndexUpdate update : updates) {
-                    indexUpdates.add(new Pair<Mutation, byte[]>(update.getUpdate(),update.getTableName()));
-                }
-            }
+        } finally {
+            if (txTable != null) txTable.close();
         }
+        
         return indexUpdates;
     }
 

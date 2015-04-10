@@ -178,21 +178,25 @@ public abstract class BaseQueryPlan implements QueryPlan {
         // The time stamp comes from the server at compile time when the meta data
         // is resolved.
         // TODO: include time range in explain plan?
+        PTable table = context.getCurrentTable().getTable();
         PhoenixConnection connection = context.getConnection();
-        if (context.getScanTimeRange() == null) {
-          Long scn = connection.getSCN();
-          if (scn == null) {
-            scn = context.getCurrentTime();
-          }
-          ScanUtil.setTimeRange(scan, scn);
-        } else {
-            ScanUtil.setTimeRange(scan, context.getScanTimeRange());
+        // Timestamp is managed by Transaction Manager for transactional tables
+        if (!table.isTransactional()) {
+            if (context.getScanTimeRange() == null) {
+              Long scn = connection.getSCN();
+              if (scn == null) {
+                scn = context.getCurrentTime();
+              }
+              ScanUtil.setTimeRange(scan, scn);
+            } else {
+                ScanUtil.setTimeRange(scan, context.getScanTimeRange());
+            }
         }
         ScanUtil.setTenantId(scan, connection.getTenantId() == null ? null : connection.getTenantId().getBytes());
         String customAnnotations = LogUtil.customAnnotationsToString(connection);
         ScanUtil.setCustomAnnotations(scan, customAnnotations == null ? null : customAnnotations.getBytes());
         // Set local index related scan attributes. 
-        if (context.getCurrentTable().getTable().getIndexType() == IndexType.LOCAL) {
+        if (table.getIndexType() == IndexType.LOCAL) {
             ScanUtil.setLocalIndex(scan);
             Set<PColumn> dataColumns = context.getDataColumns();
             // If any data columns to join back from data table are present then we set following attributes

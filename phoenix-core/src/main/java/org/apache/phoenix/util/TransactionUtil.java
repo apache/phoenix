@@ -37,6 +37,10 @@ public class TransactionUtil {
     
     private static final TransactionCodec codec = new TransactionCodec();
     
+    public static long translateMillis(long serverTimeStamp) {
+        return serverTimeStamp * 1000000;
+    }
+    
     public static byte[] encodeTxnState(Transaction txn) throws SQLException {
         try {
             return codec.encode(txn);

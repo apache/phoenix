@@ -28,7 +28,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
-import co.cask.tephra.TxConstants;
 import co.cask.tephra.hbase98.TransactionAwareHTable;
 
 import org.apache.hadoop.hbase.HConstants;
@@ -38,6 +37,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.cache.ServerCacheClient;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
@@ -417,6 +417,7 @@ public class MutationState implements SQLCloseable {
                             mutation.setAttribute(PhoenixIndexCodec.INDEX_UUID, uuidValue);
                             if (attribValue != null) {
                                 mutation.setAttribute(PhoenixIndexCodec.INDEX_MD, attribValue);
+                                mutation.setAttribute(BaseScannerRegionObserver.TX_STATE, txState);
                             }
                         }
                     }

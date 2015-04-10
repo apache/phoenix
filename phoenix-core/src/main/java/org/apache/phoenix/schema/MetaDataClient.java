@@ -1336,6 +1336,7 @@ public class MetaDataClient {
                     storeNulls = connection.getQueryServices().getProps().getBoolean(
                                     QueryServices.DEFAULT_STORE_NULLS_ATTRIB,
                                     QueryServicesOptions.DEFAULT_STORE_NULLS);
+                    tableProps.put(PhoenixDatabaseMetaData.STORE_NULLS, Boolean.valueOf(storeNulls));
                 }
             } else {
                 storeNulls = storeNullsProp;
@@ -1351,9 +1352,20 @@ public class MetaDataClient {
                     transactional = connection.getQueryServices().getProps().getBoolean(
                                     QueryServices.DEFAULT_TRANSACTIONAL_ATTRIB,
                                     QueryServicesOptions.DEFAULT_TRANSACTIONAL);
+                    tableProps.put(PhoenixDatabaseMetaData.TRANSACTIONAL, Boolean.valueOf(transactional));
                 } else {
                     transactional = transactionalProp;
                 }
+            }
+            if (transactional) { // FIXME: remove once Tephra handles column deletes
+                if (Boolean.FALSE.equals(storeNullsProp)) {
+                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.STORE_NULLS_FOR_TRANSACTIONAL)
+                    .setSchemaName(schemaName).setTableName(tableName)
+                    .build().buildException();
+                }
+                // Force STORE_NULLS to true when transactional as Tephra cannot deal with column deletes
+                storeNulls = true;
+                tableProps.put(PhoenixDatabaseMetaData.STORE_NULLS, Boolean.TRUE);
             }
 
             // Delay this check as it is supported to have IMMUTABLE_ROWS and SALT_BUCKETS defined on views
