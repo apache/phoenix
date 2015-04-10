@@ -65,7 +65,7 @@ public class XMLConfigParser {
             return scenarios;
         }
 
-        scenarios = (List<Scenario>) Collections.synchronizedCollection(new ArrayList<Scenario>());
+        scenarios = Collections.synchronizedList(new ArrayList<Scenario>());
         for (Path path : getPaths(getFilePattern())) {
             try {
                 List<Scenario> scenarioList = XMLConfigParser.readDataModel(path).getScenarios();
