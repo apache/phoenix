@@ -37,11 +37,10 @@ import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
 public class IndexExpressionIT extends BaseHBaseManagedTimeIT {
-
-    private static final int NUM_MILLIS_IN_DAY = 86400000;
 
     @Test
     public void testImmutableIndexCreateAndUpdate() throws Exception {
@@ -76,7 +75,7 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeIT {
         stmt.setInt(3, i);
         stmt.setLong(4, i);
         stmt.setBigDecimal(5, new BigDecimal(i*0.5d));
-        Date date = new Date(DateUtil.parseDate("2015-01-01 00:00:00").getTime() + (i - 1) * NUM_MILLIS_IN_DAY);
+        Date date = new Date(DateUtil.parseDate("2015-01-01 00:00:00").getTime() + (i - 1) * TestUtil.NUM_MILLIS_IN_DAY);
         stmt.setDate(6, date);
         stmt.setString(7, "a.varchar" + String.valueOf(i));
         stmt.setString(8, "a.char" + String.valueOf(i));
@@ -99,7 +98,7 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeIT {
                 + "_A.VARCHAR" + String.valueOf(i) + "_" + StringUtils.rightPad("B.CHAR" + String.valueOf(i), 10, ' '),
                 rs.getString(1));
         assertEquals(i * 3, rs.getInt(2));
-        Date date = new Date(DateUtil.parseDate("2015-01-01 00:00:00").getTime() + (i) * NUM_MILLIS_IN_DAY);
+        Date date = new Date(DateUtil.parseDate("2015-01-01 00:00:00").getTime() + (i) * TestUtil.NUM_MILLIS_IN_DAY);
         assertEquals(date, rs.getDate(3));
         assertEquals(date, rs.getDate(4));
         assertEquals(date, rs.getDate(5));

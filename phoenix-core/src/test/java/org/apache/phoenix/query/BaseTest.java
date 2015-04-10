@@ -81,6 +81,7 @@ import static org.apache.phoenix.util.TestUtil.STABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.TABLE_WITH_ARRAY;
 import static org.apache.phoenix.util.TestUtil.TABLE_WITH_SALTING;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.apache.phoenix.util.TestUtil.TRANSACTIONAL_DATA_TABLE;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
@@ -158,7 +159,27 @@ import com.google.common.collect.Sets;
  *
  */
 public abstract class BaseTest {
-    private static final Map<String,String> tableDDLMap;
+    private static final String TEST_TABLE_SCHEMA = "(" +
+	                "   varchar_pk VARCHAR NOT NULL, " +
+	                "   char_pk CHAR(6) NOT NULL, " +
+	                "   int_pk INTEGER NOT NULL, "+ 
+	                "   long_pk BIGINT NOT NULL, " +
+	                "   decimal_pk DECIMAL(31, 10) NOT NULL, " +
+	                "   date_pk DATE NOT NULL, " +
+	                "   a.varchar_col1 VARCHAR, " +
+	                "   a.char_col1 CHAR(10), " +
+	                "   a.int_col1 INTEGER, " +
+	                "   a.long_col1 BIGINT, " +
+	                "   a.decimal_col1 DECIMAL(31, 10), " +
+	                "   a.date1 DATE, " +
+	                "   b.varchar_col2 VARCHAR, " +
+	                "   b.char_col2 CHAR(10), " +
+	                "   b.int_col2 INTEGER, " +
+	                "   b.long_col2 BIGINT, " +
+	                "   b.decimal_col2 DECIMAL(31, 10), " +
+	                "   b.date2 DATE " +
+	                "   CONSTRAINT pk PRIMARY KEY (varchar_pk, char_pk, int_pk, long_pk DESC, decimal_pk, date_pk)) ";
+	private static final Map<String,String> tableDDLMap;
     private static final Logger logger = LoggerFactory.getLogger(BaseTest.class);
 
     static {
@@ -374,48 +395,9 @@ public abstract class BaseTest {
         builder.put("KVBigIntValueTest", "create table KVBigIntValueTest" +
                 "   (pk integer not null primary key,\n" +
                 "    kv bigint)\n");
-        builder.put(INDEX_DATA_TABLE, "create table " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE + "(" +
-                "   varchar_pk VARCHAR NOT NULL, " +
-                "   char_pk CHAR(6) NOT NULL, " +
-                "   int_pk INTEGER NOT NULL, "+ 
-                "   long_pk BIGINT NOT NULL, " +
-                "   decimal_pk DECIMAL(31, 10) NOT NULL, " +
-                "   date_pk DATE NOT NULL, " +
-                "   a.varchar_col1 VARCHAR, " +
-                "   a.char_col1 CHAR(10), " +
-                "   a.int_col1 INTEGER, " +
-                "   a.long_col1 BIGINT, " +
-                "   a.decimal_col1 DECIMAL(31, 10), " +
-                "   a.date1 DATE, " +
-                "   b.varchar_col2 VARCHAR, " +
-                "   b.char_col2 CHAR(10), " +
-                "   b.int_col2 INTEGER, " +
-                "   b.long_col2 BIGINT, " +
-                "   b.decimal_col2 DECIMAL(31, 10), " +
-                "   b.date2 DATE " +
-                "   CONSTRAINT pk PRIMARY KEY (varchar_pk, char_pk, int_pk, long_pk DESC, decimal_pk, date_pk)) " +
-                "IMMUTABLE_ROWS=true");
-        builder.put(MUTABLE_INDEX_DATA_TABLE, "create table " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + MUTABLE_INDEX_DATA_TABLE + "(" +
-                "   varchar_pk VARCHAR NOT NULL, " +
-                "   char_pk CHAR(6) NOT NULL, " +
-                "   int_pk INTEGER NOT NULL, "+ 
-                "   long_pk BIGINT NOT NULL, " +
-                "   decimal_pk DECIMAL(31, 10) NOT NULL, " +
-                "   date_pk DATE NOT NULL, " +
-                "   a.varchar_col1 VARCHAR, " +
-                "   a.char_col1 CHAR(10), " +
-                "   a.int_col1 INTEGER, " +
-                "   a.long_col1 BIGINT, " +
-                "   a.decimal_col1 DECIMAL(31, 10), " +
-                "   a.date1 DATE, " +
-                "   b.varchar_col2 VARCHAR, " +
-                "   b.char_col2 CHAR(10), " +
-                "   b.int_col2 INTEGER, " +
-                "   b.long_col2 BIGINT, " +
-                "   b.decimal_col2 DECIMAL(31, 10), " +
-                "   b.date2 DATE " +
-                "   CONSTRAINT pk PRIMARY KEY (varchar_pk, char_pk, int_pk, long_pk DESC, decimal_pk, date_pk)) "
-                );
+        builder.put(INDEX_DATA_TABLE, "create table " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE + TEST_TABLE_SCHEMA + "IMMUTABLE_ROWS=true");
+        builder.put(MUTABLE_INDEX_DATA_TABLE, "create table " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + MUTABLE_INDEX_DATA_TABLE + TEST_TABLE_SCHEMA);
+        builder.put(TRANSACTIONAL_DATA_TABLE, "create table " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + TRANSACTIONAL_DATA_TABLE + TEST_TABLE_SCHEMA + "TRANSACTIONAL=true");
         builder.put("SumDoubleTest","create table SumDoubleTest" +
                 "   (id varchar not null primary key, d DOUBLE, f FLOAT, ud UNSIGNED_DOUBLE, uf UNSIGNED_FLOAT, i integer, de decimal)");
         builder.put(JOIN_ORDER_TABLE_FULL_NAME, "create table " + JOIN_ORDER_TABLE_FULL_NAME +

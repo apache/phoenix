@@ -95,6 +95,8 @@ public class TestUtil {
     public static final String DEFAULT_INDEX_TABLE_NAME = "I";
     public static final String DEFAULT_DATA_TABLE_FULL_NAME = SchemaUtil.getTableName(DEFAULT_SCHEMA_NAME, "T");
     public static final String DEFAULT_INDEX_TABLE_FULL_NAME = SchemaUtil.getTableName(DEFAULT_SCHEMA_NAME, "I");
+    
+	public static final int NUM_MILLIS_IN_DAY = 86400000;
 
     private TestUtil() {
     }
@@ -188,6 +190,7 @@ public class TestUtil {
     public static final String INDEX_DATA_SCHEMA = "INDEX_TEST";
     public static final String INDEX_DATA_TABLE = "INDEX_DATA_TABLE";
     public static final String MUTABLE_INDEX_DATA_TABLE = "MUTABLE_INDEX_DATA_TABLE";
+    public static final String TRANSACTIONAL_DATA_TABLE = "TRANSACTIONAL_DATA_TABLE";
     public static final String JOIN_SCHEMA = "Join";
     public static final String JOIN_ORDER_TABLE = "OrderTable";
     public static final String JOIN_CUSTOMER_TABLE = "CustomerTable";
@@ -565,3 +568,4 @@ public class TestUtil {
         conn.close();
     }
 }
+
