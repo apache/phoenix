@@ -29,12 +29,17 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.OrderByExpression;
-import org.apache.phoenix.parse.FilterableStatement;
+import org.apache.phoenix.parse.ColumnParseNode;
+import org.apache.phoenix.parse.LiteralParseNode;
 import org.apache.phoenix.parse.OrderByNode;
+import org.apache.phoenix.parse.ParseNode;
+import org.apache.phoenix.parse.SelectStatement;
+import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.types.PInteger;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
@@ -77,8 +82,9 @@ public class OrderByCompiler {
      * @throws SQLException
      */
     public static OrderBy compile(StatementContext context,
-                                  FilterableStatement statement,
+                                  SelectStatement statement,
                                   GroupBy groupBy, Integer limit, 
+                                  RowProjector projector,
                                   boolean isInRowKeyOrder) throws SQLException {
         List<OrderByNode> orderByNodes = statement.getOrderBy();
         if (orderByNodes.isEmpty()) {
@@ -91,7 +97,28 @@ public class OrderByCompiler {
         LinkedHashSet<OrderByExpression> orderByExpressions = Sets.newLinkedHashSetWithExpectedSize(orderByNodes.size());
         for (OrderByNode node : orderByNodes) {
             boolean isAscending = node.isAscending();
-            Expression expression = node.getNode().accept(visitor);
+            ParseNode parseNode = node.getNode();
+            Expression expression = null;
+            if (parseNode instanceof LiteralParseNode && ((LiteralParseNode)parseNode).getType() == PInteger.INSTANCE){
+                Integer index = (Integer)((LiteralParseNode)parseNode).getValue();
+                int size = projector.getColumnProjectors().size();
+                if (index > size || index <= 0 ) {
+                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.PARAM_INDEX_OUT_OF_BOUND)
+                    .setMessage("").build().buildException();
+                }
+                ColumnProjector colProj = projector.getColumnProjector(index-1);
+                TableName  tableName = null;
+                if (statement.getSelects().size() > 0 )
+                    tableName = TableName.create(context.getCurrentTable().getTable().getName().toString(), null);
+                else {
+                    tableName =  TableName.create(context.getResolver().getTables().get(0).getTable().getSchemaName().toString(), 
+                            context.getResolver().getTables().get(0).getTable().getTableName().toString());
+                }
+                ColumnParseNode colParseNode = new ColumnParseNode(tableName, colProj.getName(), null);
+                expression = colParseNode.accept(visitor);
+            } else {
+                expression = node.getNode().accept(visitor);
+            }
             if (!expression.isStateless() && visitor.addEntry(expression, isAscending ? SortOrder.ASC : SortOrder.DESC)) {
                 // Detect mix of aggregate and non aggregates (i.e. ORDER BY txns, SUM(txns)
                 if (!visitor.isAggregate()) {
@@ -134,7 +161,6 @@ public class OrderByCompiler {
 
         return new OrderBy(Lists.newArrayList(orderByExpressions.iterator()));
     }
-
 
     private OrderByCompiler() {
     }
