@@ -33,6 +33,7 @@ import java.util.Properties;
 
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
+import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
@@ -80,10 +81,15 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
     @Test
     public void testOrderByDropped() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        conn.createStatement().execute("CREATE TABLE foo (k VARCHAR NOT NULL PRIMARY KEY, v VARCHAR) IMMUTABLE_ROWS=true");
-        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
-        QueryPlan plan = stmt.optimizeQuery("SELECT * FROM foo ORDER BY 1,2,3");
-        assertEquals(OrderBy.EMPTY_ORDER_BY,plan.getOrderBy());
+        try{ 
+            conn.createStatement().execute("CREATE TABLE foo (k VARCHAR NOT NULL PRIMARY KEY, v VARCHAR) IMMUTABLE_ROWS=true");
+            PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
+            QueryPlan plan = stmt.optimizeQuery("SELECT * FROM foo ORDER BY 1,2,3");
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.PARAM_INDEX_OUT_OF_BOUND.getErrorCode(), e.getErrorCode());
+        } finally {
+            conn.close();
+        }
     }
 
     @Test
