@@ -68,7 +68,7 @@ public class PhoenixRules {
                 sort.getTraitSet().replace(out)
                     .replace(sort.getCollation());
             return new PhoenixSort(rel.getCluster(), traitSet,
-                convert(sort.getInput(), sort.getInput().getTraitSet().replace(RelCollationImpl.EMPTY)),
+                convert(sort.getInput(), sort.getInput().getTraitSet().replace(out)),
                 sort.getCollation(), sort.offset, sort.fetch);
         }
     }

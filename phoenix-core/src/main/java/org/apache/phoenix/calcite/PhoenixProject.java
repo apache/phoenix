@@ -6,13 +6,11 @@ import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptCost;
 import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelTraitSet;
-import org.apache.calcite.plan.volcano.RelSubset;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Project;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rex.RexNode;
 import org.apache.phoenix.compile.QueryPlan;
-import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.execute.ScanPlan;
 import org.apache.phoenix.execute.TupleProjectionPlan;
 import org.apache.phoenix.execute.TupleProjector;
@@ -71,13 +69,8 @@ public class PhoenixProject extends Project implements PhoenixRel {
 
     @Override
     public PlanType getPlanType() {
-        RelNode rel = getInput();
-        if (rel instanceof RelSubset) {
-            rel = ((RelSubset) rel).getBest();
-        }
-        // TODO this is based on the assumption that there is no two Project 
-        // in a row and Project can be pushed down to the input node if it is 
-        // a server plan.
-        return !(rel instanceof PhoenixRel) ? PlanType.CLIENT_SERVER : ((PhoenixRel) rel).getPlanType();
+        RelNode rel = CalciteUtils.getBestRel(getInput());
+        return rel instanceof PhoenixRel && !(rel instanceof PhoenixProject) ?
+                    ((PhoenixRel) rel).getPlanType() : PlanType.CLIENT_SERVER;
     }
 }

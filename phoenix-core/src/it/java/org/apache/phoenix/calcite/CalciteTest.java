@@ -345,7 +345,91 @@ public class CalciteTest extends BaseClientManagedTimeIT {
                           {"a"}, 
                           {"b"}, 
                           {"c"}})
-                .close();;
+                .close();
+    }
+    
+    @Test public void testSort() {
+        start().sql("select organization_id, entity_id, a_string from aTable order by a_string, entity_id")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                           "  PhoenixSort(sort0=[$2], sort1=[$1], dir0=[ASC], dir1=[ASC])\n" +
+                           "    PhoenixProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1], A_STRING=[$2])\n" +
+                           "      PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
+                .resultIs(new Object[][] {
+                          {"00D300000000XHP", "00A123122312312", "a"}, 
+                          {"00D300000000XHP", "00A223122312312", "a"}, 
+                          {"00D300000000XHP", "00A323122312312", "a"}, 
+                          {"00D300000000XHP", "00A423122312312", "a"}, 
+                          {"00D300000000XHP", "00B523122312312", "b"}, 
+                          {"00D300000000XHP", "00B623122312312", "b"}, 
+                          {"00D300000000XHP", "00B723122312312", "b"}, 
+                          {"00D300000000XHP", "00B823122312312", "b"}, 
+                          {"00D300000000XHP", "00C923122312312", "c"}})
+                .close();
+        
+        start().sql("select organization_id, entity_id, a_string from aTable order by organization_id, entity_id")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                           "  PhoenixSort(sort0=[$0], sort1=[$1], dir0=[ASC], dir1=[ASC])\n" +
+                           "    PhoenixProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1], A_STRING=[$2])\n" +
+                           "      PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
+                .resultIs(new Object[][] {
+                          {"00D300000000XHP", "00A123122312312", "a"}, 
+                          {"00D300000000XHP", "00A223122312312", "a"}, 
+                          {"00D300000000XHP", "00A323122312312", "a"}, 
+                          {"00D300000000XHP", "00A423122312312", "a"}, 
+                          {"00D300000000XHP", "00B523122312312", "b"}, 
+                          {"00D300000000XHP", "00B623122312312", "b"}, 
+                          {"00D300000000XHP", "00B723122312312", "b"}, 
+                          {"00D300000000XHP", "00B823122312312", "b"}, 
+                          {"00D300000000XHP", "00C923122312312", "c"}})
+                .close();
+        
+        start().sql("select count(entity_id), a_string from atable group by a_string order by count(entity_id), a_string desc")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                           "  PhoenixProject(EXPR$0=[$1], A_STRING=[$0])\n" +
+                           "    PhoenixSort(sort0=[$1], sort1=[$0], dir0=[ASC], dir1=[DESC])\n" +
+                           "      PhoenixAggregate(group=[{0}], EXPR$0=[COUNT()])\n" +
+                           "        PhoenixProject(A_STRING=[$2])\n" +
+                           "          PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
+                .resultIs(new Object[][] {
+                          {1L, "c"},
+                          {4L, "b"},
+                          {4L, "a"}})
+                .close();
+        
+        start().sql("select s.name, count(\"item_id\") from " + JOIN_SUPPLIER_TABLE_FULL_NAME + " s join " + JOIN_ITEM_TABLE_FULL_NAME + " i on s.\"supplier_id\" = i.\"supplier_id\" group by s.name order by count(\"item_id\"), s.name desc")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                           "  PhoenixSort(sort0=[$1], sort1=[$0], dir0=[ASC], dir1=[DESC])\n" +
+                           "    PhoenixAggregate(group=[{0}], EXPR$1=[COUNT()])\n" +
+                           "      PhoenixProject(NAME=[$1])\n" +
+                           "        PhoenixJoin(condition=[=($0, $2)], joinType=[inner])\n" +
+                           "          PhoenixProject(supplier_id=[$0], NAME=[$1])\n" +
+                           "            PhoenixTableScan(table=[[phoenix, SUPPLIERTABLE]])\n" +
+                           "          PhoenixProject(supplier_id=[$5])\n" +
+                           "            PhoenixTableScan(table=[[phoenix, ITEMTABLE]])\n")
+                .resultIs(new Object[][] {
+                          {"S6", 1L},
+                          {"S5", 1L},
+                          {"S2", 2L},
+                          {"S1", 2L}})
+                .close();
+        
+        start().sql("SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" order by item.name desc")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                           "  PhoenixSort(sort0=[$1], dir0=[DESC])\n" +
+                           "    PhoenixProject(item_id=[$0], NAME=[$1], supplier_id=[$3], NAME0=[$4])\n" +
+                           "      PhoenixJoin(condition=[=($2, $3)], joinType=[inner])\n" +
+                           "        PhoenixProject(item_id=[$0], NAME=[$1], supplier_id=[$5])\n" +
+                           "          PhoenixTableScan(table=[[phoenix, ITEMTABLE]])\n" +
+                           "        PhoenixProject(supplier_id=[$0], NAME=[$1])\n" +
+                           "          PhoenixTableScan(table=[[phoenix, SUPPLIERTABLE]])\n")
+                .resultIs(new Object[][] {
+                          {"0000000006", "T6", "0000000006", "S6"}, 
+                          {"0000000005", "T5", "0000000005", "S5"}, 
+                          {"0000000004", "T4", "0000000002", "S2"}, 
+                          {"0000000003", "T3", "0000000002", "S2"},
+                          {"0000000002", "T2", "0000000001", "S1"},
+                          {"0000000001", "T1", "0000000001", "S1"}})
+                .close();
     }
     
     @Test public void testSubquery() {

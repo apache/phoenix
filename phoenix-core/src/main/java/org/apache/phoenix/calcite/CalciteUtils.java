@@ -5,6 +5,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.apache.calcite.plan.volcano.RelSubset;
+import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexLiteral;
@@ -15,6 +17,7 @@ import org.apache.calcite.sql.SqlKind;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.calcite.PhoenixRel.Implementor;
+import org.apache.phoenix.calcite.PhoenixRel.PlanType;
 import org.apache.phoenix.expression.ComparisonExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.ExpressionType;
@@ -38,6 +41,13 @@ public class CalciteUtils {
   
     public static String createTempAlias() {
         return "$" + tempAliasCounter.incrementAndGet();
+    }
+    
+    public static RelNode getBestRel(RelNode rel) {
+        if (rel instanceof RelSubset)
+            return ((RelSubset) rel).getBest();
+        
+        return rel;
     }
 
 	private static final Map<SqlKind, ExpressionFactory> EXPRESSION_MAP = Maps

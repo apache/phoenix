@@ -58,7 +58,7 @@ public class OrderByCompiler {
         
         private final List<OrderByExpression> orderByExpressions;
         
-        private OrderBy(List<OrderByExpression> orderByExpressions) {
+        public OrderBy(List<OrderByExpression> orderByExpressions) {
             this.orderByExpressions = ImmutableList.copyOf(orderByExpressions);
         }
 

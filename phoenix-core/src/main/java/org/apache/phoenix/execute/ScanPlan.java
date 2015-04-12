@@ -73,6 +73,10 @@ public class ScanPlan extends BaseQueryPlan {
     private List<List<Scan>> scans;
     private boolean allowPageFilter;
 
+    public static ScanPlan create(ScanPlan plan, OrderBy newOrderBy) throws SQLException {
+        return new ScanPlan(plan.getContext(), plan.getStatement(), plan.getTableRef(), plan.getProjector(), plan.getLimit(), newOrderBy, plan.parallelIteratorFactory, plan.allowPageFilter);
+    }
+    
     public ScanPlan(StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector, Integer limit, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory, boolean allowPageFilter) throws SQLException {
         super(context, statement, table, projector, context.getBindManager().getParameterMetaData(), limit, orderBy, GroupBy.EMPTY_GROUP_BY,
                 parallelIteratorFactory != null ? parallelIteratorFactory :

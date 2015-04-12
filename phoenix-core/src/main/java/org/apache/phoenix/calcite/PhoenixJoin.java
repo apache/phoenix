@@ -9,7 +9,6 @@ import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptCost;
 import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelTraitSet;
-import org.apache.calcite.plan.volcano.RelSubset;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.rel.core.JoinInfo;
@@ -125,11 +124,10 @@ public class PhoenixJoin extends Join implements PhoenixRel {
     
     private boolean isHashJoinDoable() {
         // TODO check memory limit
-        RelNode rel = getLeft();
-        if (rel instanceof RelSubset) {
-            rel = ((RelSubset) rel).getBest();
-        }
-        return (rel instanceof PhoenixRel && ((PhoenixRel) rel).getPlanType() == PlanType.SERVER_ONLY_FLAT) && getJoinType() != JoinRelType.RIGHT;
+        RelNode rel = CalciteUtils.getBestRel(getLeft());
+        return rel instanceof PhoenixRel
+                && ((PhoenixRel) rel).getPlanType() == PlanType.SERVER_ONLY_FLAT 
+                && getJoinType() != JoinRelType.RIGHT;
     }
     
     private JoinType convertJoinType(JoinRelType type) {
@@ -155,6 +153,6 @@ public class PhoenixJoin extends Join implements PhoenixRel {
 
     @Override
     public PlanType getPlanType() {
-        return PlanType.SERVER_ONLY_COMPLEX;
+        return isHashJoinDoable() ? PlanType.SERVER_ONLY_COMPLEX : PlanType.CLIENT_SERVER;
     }
 }

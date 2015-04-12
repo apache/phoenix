@@ -7,7 +7,6 @@ import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptCost;
 import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelTraitSet;
-import org.apache.calcite.plan.volcano.RelSubset;
 import org.apache.calcite.rel.InvalidRelException;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Aggregate;
@@ -103,8 +102,9 @@ public class PhoenixAggregate extends Aggregate implements PhoenixRel {
                 basePlan = (ScanPlan) delegate;
             }
         }
-        // TopN, we can not merge with the base plan.
-        if (!plan.getOrderBy().getOrderByExpressions().isEmpty() && plan.getLimit() != null) {
+        // We can not merge with the base plan that has a limit already.
+        // But if there is order-by without a limit, we can simply ignore the order-by.
+        if (plan.getLimit() != null) {
             basePlan = null;
         }
         PhoenixStatement stmt = plan.getContext().getStatement();
@@ -183,12 +183,9 @@ public class PhoenixAggregate extends Aggregate implements PhoenixRel {
     }
     
     private boolean isServerAggregateDoable() {
-        RelNode rel = getInput();
-        if (rel instanceof RelSubset) {
-            rel = ((RelSubset) rel).getBest();
-        }
-        
-        return rel instanceof PhoenixRel && ((PhoenixRel) rel).getPlanType() != PlanType.CLIENT_SERVER;
+        RelNode rel = CalciteUtils.getBestRel(getInput());
+        return rel instanceof PhoenixRel 
+                && ((PhoenixRel) rel).getPlanType() != PlanType.CLIENT_SERVER;
     }
 
     @Override

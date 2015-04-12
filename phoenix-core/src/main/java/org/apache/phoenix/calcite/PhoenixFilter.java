@@ -34,9 +34,6 @@ public class PhoenixFilter extends Filter implements PhoenixRel {
     public QueryPlan implement(Implementor implementor) {
         assert getConvention() == getInput().getConvention();
         QueryPlan plan = implementor.visitInput(0, (PhoenixRel) getInput());
-        // TODO: what to do with the Expression?
-        // Already determined this filter cannot be pushed down, so
-        // this will be run 
         Expression expr = CalciteUtils.toExpression(condition, implementor);
         return new ClientScanPlan(plan.getContext(), plan.getStatement(), plan.getTableRef(),
                 plan.getProjector(), null, expr, OrderBy.EMPTY_ORDER_BY, plan);
