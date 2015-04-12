@@ -532,8 +532,8 @@ public class QueryCompiler {
         Set<SubqueryParseNode> subqueries = Sets.<SubqueryParseNode> newHashSet();
         Expression where = WhereCompiler.compile(context, select, viewWhere, subqueries);
         context.setResolver(resolver); // recover resolver
-        OrderBy orderBy = OrderByCompiler.compile(context, select, groupBy, limit, isInRowKeyOrder); 
         RowProjector projector = ProjectionCompiler.compile(context, select, groupBy, asSubquery ? Collections.<PDatum>emptyList() : targetColumns);
+        OrderBy orderBy = OrderByCompiler.compile(context, select, groupBy, limit, projector, isInRowKeyOrder); 
         // Final step is to build the query plan
         if (!asSubquery) {
             int maxRows = statement.getMaxRows();
