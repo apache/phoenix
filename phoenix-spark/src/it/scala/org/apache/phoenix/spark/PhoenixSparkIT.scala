@@ -17,7 +17,7 @@ import java.sql.{Connection, DriverManager}
 import java.util.Date
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.hbase.{HConstants, HBaseTestingUtility}
+import org.apache.hadoop.hbase.{HBaseConfiguration, HConstants, HBaseTestingUtility}
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT
 import org.apache.phoenix.query.BaseTest
 import org.apache.phoenix.schema.ColumnNotFoundException
@@ -327,15 +327,6 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
     // Verify the epochs are equal
     results(0).getTime shouldEqual dt.getMillis
     results(1).getTime shouldEqual date.getTime
-  }
-
-  test("Not specifying a zkUrl or a config quorum URL should fail") {
-    intercept[UnsupportedOperationException] {
-      val sqlContext = new SQLContext(sc)
-      val badConf = new Configuration(hbaseConfiguration)
-      badConf.unset(HConstants.ZOOKEEPER_QUORUM)
-      sqlContext.phoenixTableAsDataFrame("TABLE1", Array("ID", "COL1"), conf = badConf)
-    }
   }
 
   test("Can infer schema without defining columns") {

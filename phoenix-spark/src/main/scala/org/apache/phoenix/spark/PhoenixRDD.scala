@@ -14,7 +14,7 @@
 package org.apache.phoenix.spark
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.hbase.HConstants
+import org.apache.hadoop.hbase.{HBaseConfiguration, HConstants}
 import org.apache.hadoop.io.NullWritable
 import org.apache.phoenix.mapreduce.PhoenixInputFormat
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil
@@ -79,7 +79,7 @@ class PhoenixRDD(sc: SparkContext, table: String, columns: Seq[String],
 
     // This is just simply not serializable, so don't try, but clone it because
     // PhoenixConfigurationUtil mutates it.
-    val config = new Configuration(conf)
+    val config = HBaseConfiguration.create(conf)
 
     PhoenixConfigurationUtil.setInputQuery(config, buildSql(table, columns, predicate))
     if(!columns.isEmpty) {

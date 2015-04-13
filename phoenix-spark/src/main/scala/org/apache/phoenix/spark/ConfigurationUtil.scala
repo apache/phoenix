@@ -14,7 +14,7 @@
 package org.apache.phoenix.spark
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.hbase.HConstants
+import org.apache.hadoop.hbase.{HBaseConfiguration, HConstants}
 import org.apache.phoenix.mapreduce.util.{ColumnInfoToStringEncoderDecoder, PhoenixConfigurationUtil}
 import org.apache.phoenix.util.ColumnInfo
 import scala.collection.JavaConversions._
@@ -23,10 +23,10 @@ object ConfigurationUtil extends Serializable {
 
   def getOutputConfiguration(tableName: String, columns: Seq[String], zkUrl: Option[String], conf: Option[Configuration]): Configuration = {
 
-    // Use a Configuration object if passed in, otherwise make a new one
+    // Create an HBaseConfiguration object from the passed in config, if present
     val config = conf match {
-      case Some(c) => c
-      case _ => new Configuration()
+      case Some(c) => HBaseConfiguration.create(c)
+      case _ => HBaseConfiguration.create()
     }
 
     // Set the table to save to

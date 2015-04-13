@@ -45,7 +45,7 @@ class DataFrameFunctions(data: DataFrame) extends Logging with Serializable {
       classOf[NullWritable],
       classOf[PhoenixRecordWritable],
       classOf[PhoenixOutputFormat[PhoenixRecordWritable]],
-      conf
+      config
     )
   }
 }
