@@ -30,7 +30,6 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.Date;
@@ -499,9 +498,15 @@ public class OrderByIT extends BaseClientManagedTimeIT {
             stmt.execute();
             conn.commit();
 
-            String query = "SELECT col1+col2, col4, TRUNC(col3, 'HOUR') FROM e_table ORDER BY 1, 2";
-            conn.createStatement().executeQuery(query);
-            fail();
+            String query = "SELECT col1+col2, col4, a_string FROM e_table ORDER BY 1, 2";
+            ResultSet rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals("a", rs.getString(3));
+            assertTrue(rs.next());
+            assertEquals("c", rs.getString(3));
+            assertTrue(rs.next());
+            assertEquals("b", rs.getString(3));
+            assertFalse(rs.next());
         } catch (SQLException e) {
         } finally {
             conn.close();

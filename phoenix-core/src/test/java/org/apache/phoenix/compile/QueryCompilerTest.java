@@ -41,6 +41,7 @@ import java.util.Properties;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.expression.Expression;
@@ -52,6 +53,7 @@ import org.apache.phoenix.expression.function.TimeUnit;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.AmbiguousColumnException;
@@ -1450,8 +1452,8 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         conn.createStatement().execute("CREATE TABLE t (k1 varchar, k2 varchar, v varchar, constraint pk primary key(k1,k2))");
         ResultSet rs;
         String[] queries = {
-                "SELECT DISTINCT v FROM T ORDER BY v LIMIT 3",
-                "SELECT v FROM T GROUP BY v,k1 ORDER BY v LIMIT 3",
+//                "SELECT DISTINCT v FROM T ORDER BY v LIMIT 3",
+//                "SELECT v FROM T GROUP BY v,k1 ORDER BY v LIMIT 3",
                 "SELECT DISTINCT count(*) FROM T GROUP BY k1 LIMIT 3",
                 "SELECT count(1) FROM T GROUP BY v,k1 LIMIT 3",
                 "SELECT max(v) FROM T GROUP BY k1,k2 HAVING count(k1) > 1 LIMIT 3",
@@ -1461,7 +1463,8 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         for (int i = 0; i < queries.length; i++) {
             query = queries[i];
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-            assertFalse("Did not expected to find GROUP BY limit optimization in: " + query, QueryUtil.getExplainPlan(rs).contains(" LIMIT 3 GROUPS"));
+            String explainPlan = QueryUtil.getExplainPlan(rs);
+            assertFalse("Did not expected to find GROUP BY limit optimization in: " + query, explainPlan.contains(" LIMIT 3 GROUPS"));
         }
     }
     
@@ -1631,4 +1634,103 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     }
 
    
+    @Test
+    public void testOrderByOrderPreservingFwd() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute("CREATE TABLE t (k1 date not null, k2 date not null, k3 date not null, v varchar, constraint pk primary key(k1,k2,k3))");
+        String[] queries = {
+                "SELECT * FROM T ORDER BY (k1,k2), k3",
+                "SELECT * FROM T ORDER BY k1,k2,k3",
+                "SELECT * FROM T ORDER BY k1,k2",
+                "SELECT * FROM T ORDER BY k1",
+                "SELECT * FROM T ORDER BY CAST(k1 AS TIMESTAMP)",
+                "SELECT * FROM T ORDER BY (k1,k2,k3)",
+                "SELECT * FROM T ORDER BY TRUNC(k1, 'DAY'), CEIL(k2, 'HOUR')",
+                "SELECT * FROM T ORDER BY INVERT(k1) DESC",
+                };
+        String query;
+        for (int i = 0; i < queries.length; i++) {
+            query = queries[i];
+            QueryPlan plan = conn.createStatement().unwrap(PhoenixStatement.class).compileQuery(query);
+            assertTrue("Expected order by to be compiled out: " + query, plan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+        }
+    }
+    
+    @Test
+    public void testOrderByOrderPreservingRev() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute("CREATE TABLE t (k1 date not null, k2 date not null, k3 date not null, v varchar, constraint pk primary key(k1,k2 DESC,k3))");
+        String[] queries = {
+                "SELECT * FROM T ORDER BY INVERT(k1),k2",
+                "SELECT * FROM T ORDER BY INVERT(k1)",
+                 "SELECT * FROM T ORDER BY TRUNC(k1, 'DAY') DESC, CEIL(k2, 'HOUR') DESC",
+                "SELECT * FROM T ORDER BY k1 DESC",
+                };
+        String query;
+        for (int i = 0; i < queries.length; i++) {
+            query = queries[i];
+            QueryPlan plan = conn.createStatement().unwrap(PhoenixStatement.class).compileQuery(query);
+            assertTrue("Expected order by to be compiled out: " + query, plan.getOrderBy() == OrderBy.REV_ROW_KEY_ORDER_BY);
+        }
+    }
+    
+    @Test
+    public void testNotOrderByOrderPreserving() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute("CREATE TABLE t (k1 date not null, k2 date not null, k3 date not null, v varchar, constraint pk primary key(k1,k2,k3))");
+        String[] queries = {
+                "SELECT * FROM T ORDER BY k1,k3",
+                "SELECT * FROM T ORDER BY SUBSTR(TO_CHAR(k1),1,4)",
+                "SELECT * FROM T ORDER BY k2",
+                "SELECT * FROM T ORDER BY INVERT(k1),k3",
+                "SELECT * FROM T ORDER BY CASE WHEN k1 = CURRENT_DATE() THEN 0 ELSE 1 END",
+                "SELECT * FROM T ORDER BY TO_CHAR(k1)",
+                };
+        String query;
+        for (int i = 0; i < queries.length; i++) {
+            query = queries[i];
+            QueryPlan plan = conn.createStatement().unwrap(PhoenixStatement.class).compileQuery(query);
+            assertFalse("Expected order by not to be compiled out: " + query, plan.getOrderBy().getOrderByExpressions().isEmpty());
+        }
+    }
+    
+    @Test
+    public void testGroupByOrderPreserving() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute("CREATE TABLE t (k1 date not null, k2 date not null, k3 date not null, v varchar, constraint pk primary key(k1,k2,k3))");
+        String[] queries = {
+                "SELECT 1 FROM T GROUP BY k3, (k1,k2)",
+                "SELECT 1 FROM T GROUP BY k2,k1,k3",
+                "SELECT 1 FROM T GROUP BY k1,k2",
+                "SELECT 1 FROM T GROUP BY k1",
+                "SELECT 1 FROM T GROUP BY CAST(k1 AS TIMESTAMP)",
+                "SELECT 1 FROM T GROUP BY (k1,k2,k3)",
+                "SELECT 1 FROM T GROUP BY TRUNC(k2, 'DAY'), CEIL(k1, 'HOUR')",
+                };
+        String query;
+        for (int i = 0; i < queries.length; i++) {
+            query = queries[i];
+            QueryPlan plan = conn.createStatement().unwrap(PhoenixStatement.class).compileQuery(query);
+            assertTrue("Expected group by to be order preserving: " + query, plan.getGroupBy().isOrderPreserving());
+        }
+    }
+    
+    @Test
+    public void testNotGroupByOrderPreserving() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute("CREATE TABLE t (k1 date not null, k2 date not null, k3 date not null, v varchar, constraint pk primary key(k1,k2,k3))");
+        String[] queries = {
+                "SELECT 1 FROM T GROUP BY k1,k3",
+                "SELECT 1 FROM T GROUP BY k2",
+                "SELECT 1 FROM T GROUP BY INVERT(k1),k3",
+                "SELECT 1 FROM T GROUP BY CASE WHEN k1 = CURRENT_DATE() THEN 0 ELSE 1 END",
+                "SELECT 1 FROM T GROUP BY TO_CHAR(k1)",
+                };
+        String query;
+        for (int i = 0; i < queries.length; i++) {
+            query = queries[i];
+            QueryPlan plan = conn.createStatement().unwrap(PhoenixStatement.class).compileQuery(query);
+            assertFalse("Expected group by not to be order preserving: " + query, plan.getGroupBy().isOrderPreserving());
+        }
+    }    
 }
