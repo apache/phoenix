@@ -26,6 +26,7 @@ import org.apache.phoenix.schema.types.PArrayDataType.PArrayDataTypeBytesArrayBu
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.StringUtil;
 import org.jcodings.Encoding;
 import org.jcodings.specific.UTF8Encoding;
 import org.joni.Matcher;
@@ -133,21 +134,10 @@ public class JONIPattern extends AbstractBasePattern implements AbstractBaseSpli
             ImmutableBytesWritable outPtr) {
         Preconditions.checkNotNull(srcPtr);
         Preconditions.checkNotNull(outPtr);
-        byte[] srcBytes = srcPtr.get();
-        int offsetInBytes;
-        if (offsetInStr == 0) {
-            offsetInBytes = 0;
-        } else {
-            String sourceStr = (String) PVarchar.INSTANCE.toObject(srcPtr);
-            if (srcPtr.get().length == 0 && sourceStr == null) sourceStr = "";
-            int srcStrLen = sourceStr.length();
-            if (offsetInStr < 0) offsetInStr += srcStrLen;
-            if (offsetInStr < 0 || offsetInStr >= srcStrLen) return false;
-            String strBeforeOffset = sourceStr.substring(0, offsetInStr);
-            offsetInBytes = PVarchar.INSTANCE.toBytes(strBeforeOffset).length;
-        }
-        offsetInBytes += srcPtr.getOffset();
-        substr(srcBytes, offsetInBytes, srcPtr.getOffset() + srcPtr.getLength(), outPtr);
+        int offsetInBytes = StringUtil.calculateUTF8Offset(srcPtr.get(), srcPtr.getOffset(),
+            srcPtr.getLength(), SortOrder.ASC, offsetInStr);
+        if (offsetInBytes < 0) return false;
+        substr(srcPtr.get(), offsetInBytes, srcPtr.getOffset() + srcPtr.getLength(), outPtr);
         return true;
     }
 
