@@ -498,6 +498,7 @@ public abstract class BaseTest {
         config.set(TxConstants.Service.CFG_DATA_TX_CLIENT_RETRY_STRATEGY, "n-times");
         config.setInt(TxConstants.Service.CFG_DATA_TX_CLIENT_ATTEMPTS, 1);
         config.set(TxConstants.Manager.CFG_TX_SNAPSHOT_DIR, tmpFolder.newFolder().getAbsolutePath());
+        config.setInt(TxConstants.Manager.CFG_TX_TIMEOUT, 600);
 //        config.set(TxConstants.Service.CFG_DATA_TX_ZOOKEEPER_QUORUM, ConnectionInfo.getZookeeperConnectionString(getUrl()));
 //        config.set(TxConstants.Manager.CFG_TX_SNAPSHOT_DIR, "/tmp");
 
