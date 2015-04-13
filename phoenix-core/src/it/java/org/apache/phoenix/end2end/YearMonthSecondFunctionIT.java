@@ -258,4 +258,30 @@ public class YearMonthSecondFunctionIT extends BaseHBaseManagedTimeIT {
         assertEquals(new Date(date.getTime()-500), rs.getDate(2));
         assertFalse(rs.next());
     }
+
+    @Test
+    public void testMinuteFuncAgainstColumns() throws Exception {
+        String ddl =
+                "CREATE TABLE IF NOT EXISTS T1 (k1 INTEGER NOT NULL, dates DATE, timestamps TIMESTAMP, times TIME, " +
+                        "unsignedDates UNSIGNED_DATE, unsignedTimestamps UNSIGNED_TIMESTAMP, unsignedTimes UNSIGNED_TIME CONSTRAINT pk PRIMARY KEY (k1))";
+        conn.createStatement().execute(ddl);
+        String dml = "UPSERT INTO T1 VALUES (1, TO_DATE('2004-03-01 00:10:10'), TO_TIMESTAMP('2006-04-12 00:20:20'), TO_TIME('2008-05-16 10:30:30'), " +
+                "TO_DATE('2010-06-20 00:40:40:789', 'yyyy-MM-dd HH:mm:ss:SSS'), TO_TIMESTAMP('2012-07-28'), TO_TIME('2015-12-25 00:50:50'))";
+        conn.createStatement().execute(dml);
+        dml = "UPSERT INTO T1 VALUES (2, TO_DATE('2004-03-01 00:10:10'), TO_TIMESTAMP('2006-04-12 00:50:20'), TO_TIME('2008-05-16 10:30:30'), " +
+                "TO_DATE('2010-06-20 00:40:40:789', 'yyyy-MM-dd HH:mm:ss:SSS'), TO_TIMESTAMP('2012-07-28'), TO_TIME('2015-12-25 00:50:50'))";
+        conn.createStatement().execute(dml);
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery("SELECT k1, MINUTE(dates), MINUTE(times), MINUTE(unsignedDates), MINUTE(unsignedTimestamps), " +
+                "MINUTE(unsignedTimes) FROM T1 where MINUTE(timestamps)=20");
+        assertTrue(rs.next());
+        assertEquals(1, rs.getInt(1));
+        assertEquals(10, rs.getInt(2));
+        assertEquals(30, rs.getInt(3));
+        assertEquals(40, rs.getInt(4));
+        assertEquals(0, rs.getInt(5));
+        assertEquals(50, rs.getInt(6));
+        assertFalse(rs.next());
+    }
 }
