@@ -60,7 +60,7 @@ public class YearMonthSecondFunctionIT extends BaseHBaseManagedTimeIT {
     public void testYearFunctionDate() throws SQLException {
 
         assertEquals(2015, callYearFunction("YEAR(current_date())"));
-        
+
         assertEquals(2015, callYearFunction("YEAR(now())"));
 
         assertEquals(2008, callYearFunction("YEAR(TO_DATE('2008-01-01', 'yyyy-MM-dd', 'local'))"));
@@ -113,6 +113,12 @@ public class YearMonthSecondFunctionIT extends BaseHBaseManagedTimeIT {
         String dml = "UPSERT INTO T1 VALUES (1, TO_DATE('2004-03-01 00:00:00'), TO_TIMESTAMP('2006-02-01 00:00:00'), TO_TIME('2008-02-01 00:00:00'), " +
                 "TO_DATE('2010-03-01 00:00:00:896', 'yyyy-MM-dd HH:mm:ss:SSS'), TO_TIMESTAMP('2012-02-01'), TO_TIME('2015-02-01 00:00:00'))";
         conn.createStatement().execute(dml);
+        dml = "UPSERT INTO T1 VALUES (2, TO_DATE('2005-03-01 00:00:00'), TO_TIMESTAMP('2006-02-01 00:00:00'), TO_TIME('2008-02-01 00:00:00'), " +
+                "TO_DATE('2010-03-01 00:00:00:896', 'yyyy-MM-dd HH:mm:ss:SSS'), TO_TIMESTAMP('2012-02-01'), TO_TIME('2015-02-01 00:00:00'))";
+        conn.createStatement().execute(dml);
+        dml = "UPSERT INTO T1 VALUES (3, TO_DATE('2006-03-01 00:00:00'), TO_TIMESTAMP('2006-02-01 00:00:00'), TO_TIME('2008-02-01 00:00:00'), " +
+                "TO_DATE('2010-03-01 00:00:00:896', 'yyyy-MM-dd HH:mm:ss:SSS'), TO_TIMESTAMP('2012-02-01'), TO_TIME('2015-02-01 00:00:00'))";
+        conn.createStatement().execute(dml);
         conn.commit();
 
         ResultSet rs = conn.createStatement().executeQuery("SELECT k1, YEAR(timestamps), YEAR(times), Year(unsignedDates), YEAR(unsignedTimestamps), " +
@@ -134,6 +140,12 @@ public class YearMonthSecondFunctionIT extends BaseHBaseManagedTimeIT {
                         "unsignedDates UNSIGNED_DATE, unsignedTimestamps UNSIGNED_TIMESTAMP, unsignedTimes UNSIGNED_TIME CONSTRAINT pk PRIMARY KEY (k1))";
         conn.createStatement().execute(ddl);
         String dml = "UPSERT INTO T1 VALUES (1, TO_DATE('2004-03-10 00:00:00'), TO_TIMESTAMP('2006-04-12 00:00:00'), TO_TIME('2008-05-16 00:00:00'), " +
+                "TO_DATE('2010-06-20 00:00:00:789', 'yyyy-MM-dd HH:mm:ss:SSS'), TO_TIMESTAMP('2012-07-28'), TO_TIME('2015-12-25 00:00:00'))";
+        conn.createStatement().execute(dml);
+        dml = "UPSERT INTO T1 VALUES (2, TO_DATE('2004-04-10 00:00:00'), TO_TIMESTAMP('2006-04-12 00:00:00'), TO_TIME('2008-05-16 00:00:00'), " +
+                "TO_DATE('2010-06-20 00:00:00:789', 'yyyy-MM-dd HH:mm:ss:SSS'), TO_TIMESTAMP('2012-07-28'), TO_TIME('2015-12-25 00:00:00'))";
+        conn.createStatement().execute(dml);
+        dml = "UPSERT INTO T1 VALUES (3, TO_DATE('2004-05-10 00:00:00'), TO_TIMESTAMP('2006-04-12 00:00:00'), TO_TIME('2008-05-16 00:00:00'), " +
                 "TO_DATE('2010-06-20 00:00:00:789', 'yyyy-MM-dd HH:mm:ss:SSS'), TO_TIMESTAMP('2012-07-28'), TO_TIME('2015-12-25 00:00:00'))";
         conn.createStatement().execute(dml);
         conn.commit();
@@ -159,6 +171,12 @@ public class YearMonthSecondFunctionIT extends BaseHBaseManagedTimeIT {
         String dml = "UPSERT INTO T1 VALUES (1, TO_DATE('2004-03-01 00:00:10'), TO_TIMESTAMP('2006-04-12 00:00:20'), TO_TIME('2008-05-16 10:00:30'), " +
                 "TO_DATE('2010-06-20 00:00:40:789', 'yyyy-MM-dd HH:mm:ss:SSS'), TO_TIMESTAMP('2012-07-28'), TO_TIME('2015-12-25 00:00:50'))";
         conn.createStatement().execute(dml);
+        dml = "UPSERT INTO T1 VALUES (2, TO_DATE('2004-03-01 00:00:10'), TO_TIMESTAMP('2006-04-12 00:20:30'), TO_TIME('2008-05-16 10:00:30'), " +
+                "TO_DATE('2010-06-20 00:00:40:789', 'yyyy-MM-dd HH:mm:ss:SSS'), TO_TIMESTAMP('2012-07-28'), TO_TIME('2015-12-25 00:00:50'))";
+        conn.createStatement().execute(dml);
+        dml = "UPSERT INTO T1 VALUES (3, TO_DATE('2004-03-01 00:00:10'), TO_TIMESTAMP('2006-04-12 00:50:30'), TO_TIME('2008-05-16 10:00:30'), " +
+                "TO_DATE('2010-06-20 00:00:40:789', 'yyyy-MM-dd HH:mm:ss:SSS'), TO_TIMESTAMP('2012-07-28'), TO_TIME('2015-12-25 00:00:50'))";
+        conn.createStatement().execute(dml);
         conn.commit();
 
         ResultSet rs = conn.createStatement().executeQuery("SELECT k1, SECOND(dates), SECOND(times), SECOND(unsignedDates), SECOND(unsignedTimestamps), " +
@@ -178,14 +196,18 @@ public class YearMonthSecondFunctionIT extends BaseHBaseManagedTimeIT {
         String ddl =
                 "CREATE TABLE IF NOT EXISTS T1 (k1 INTEGER NOT NULL, dates DATE, timestamps TIMESTAMP, times TIME CONSTRAINT pk PRIMARY KEY (k1))";
         conn.createStatement().execute(ddl);
-        String dml = "UPSERT INTO T1 VALUES (1, TO_DATE('2004-02-01 00:00:10'), TO_TIMESTAMP('2006-04-12 00:00:20'), TO_TIME('2008-05-16 10:00:30'))";
+        String dml = "UPSERT INTO T1 VALUES (1, TO_DATE('2004-01-10 10:00:10'), TO_TIMESTAMP('2006-04-12 08:00:20'), TO_TIME('2008-05-16 10:00:30'))";
+        conn.createStatement().execute(dml);
+        dml = "UPSERT INTO T1 VALUES (2, TO_DATE('2004-01-10 10:00:10'), TO_TIMESTAMP('2006-05-18 08:00:20'), TO_TIME('2008-05-16 10:00:30'))";
+        conn.createStatement().execute(dml);
+        dml = "UPSERT INTO T1 VALUES (3, TO_DATE('2004-01-10 10:00:10'), TO_TIMESTAMP('2006-05-18 08:00:20'), TO_TIME('2008-05-16 10:00:30'))";
         conn.createStatement().execute(dml);
         conn.commit();
 
         ResultSet rs = conn.createStatement().executeQuery("SELECT k1, WEEK(dates), WEEK(times) FROM T1 where WEEK(timestamps)=15");
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
-        assertEquals(5, rs.getInt(2));
+        assertEquals(2, rs.getInt(2));
         assertEquals(20, rs.getInt(3));
         assertFalse(rs.next());
     }
@@ -198,14 +220,19 @@ public class YearMonthSecondFunctionIT extends BaseHBaseManagedTimeIT {
         String dml = "UPSERT INTO T1 VALUES (1, TO_DATE('Sat, 3 Feb 2008 03:05:06 GMT', 'EEE, d MMM yyyy HH:mm:ss z', 'UTC'), TO_TIMESTAMP('2006-04-12 15:10:20'), " +
                 "TO_TIME('2008-05-16 20:40:30'))";
         conn.createStatement().execute(dml);
+        dml = "UPSERT INTO T1 VALUES (2, TO_DATE('Sat, 3 Feb 2008 03:05:06 GMT', 'EEE, d MMM yyyy HH:mm:ss z', 'UTC'), TO_TIMESTAMP('2006-04-12 10:10:20'), " +
+                "TO_TIME('2008-05-16 20:40:30'))";
+        conn.createStatement().execute(dml);
+        dml = "UPSERT INTO T1 VALUES (3, TO_DATE('Sat, 3 Feb 2008 03:05:06 GMT', 'EEE, d MMM yyyy HH:mm:ss z', 'UTC'), TO_TIMESTAMP('2006-04-12 08:10:20'), " +
+                "TO_TIME('2008-05-16 20:40:30'))";
+        conn.createStatement().execute(dml);
         conn.commit();
 
-        ResultSet rs = conn.createStatement().executeQuery("SELECT k1, HOUR(dates), HOUR(timestamps), HOUR(times) FROM T1");
+        ResultSet rs = conn.createStatement().executeQuery("SELECT k1, HOUR(dates), HOUR(times) FROM T1 where HOUR(timestamps)=15");
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
         assertEquals(3, rs.getInt(2));
-        assertEquals(15, rs.getInt(3));
-        assertEquals(20, rs.getInt(4));
+        assertEquals(20, rs.getInt(3));
         assertFalse(rs.next());
     }
 
@@ -219,6 +246,9 @@ public class YearMonthSecondFunctionIT extends BaseHBaseManagedTimeIT {
         PreparedStatement stmt = conn.prepareStatement(dml);
         stmt.setInt(1, 1);
         stmt.setDate(2, new Date(date.getTime()-500));
+        stmt.execute();
+        stmt.setInt(1, 2);
+        stmt.setDate(2, new Date(date.getTime()+600000));
         stmt.execute();
         conn.commit();
 
