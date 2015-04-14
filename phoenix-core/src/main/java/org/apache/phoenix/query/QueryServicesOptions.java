@@ -61,6 +61,7 @@ import static org.apache.phoenix.query.QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB
 import static org.apache.phoenix.query.QueryServices.STATS_USE_CURRENT_TIME_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.THREAD_POOL_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.THREAD_TIMEOUT_MS_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.USE_BYTE_BASED_REGEX_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.USE_INDEXES_ATTRIB;
 
 import java.util.Map.Entry;
@@ -68,10 +69,8 @@ import java.util.Map.Entry;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Coprocessor;
 import org.apache.hadoop.hbase.client.Consistency;
-import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
 import org.apache.hadoop.hbase.ipc.controller.ClientRpcControllerFactory;
-import org.apache.hadoop.hbase.ipc.controller.ServerRpcControllerFactory;
 import org.apache.hadoop.hbase.regionserver.wal.WALCellCodec;
 import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.trace.util.Tracing;
@@ -194,6 +193,8 @@ public class QueryServicesOptions {
     
     public static final String DEFAULT_CONSISTENCY_LEVEL = Consistency.STRONG.toString();
 
+    public static final boolean DEFAULT_USE_BYTE_BASED_REGEX = true;
+
     private final Configuration config;
 
     private QueryServicesOptions(Configuration config) {
@@ -247,6 +248,7 @@ public class QueryServicesOptions {
             .setIfUnset(DELAY_FOR_SCHEMA_UPDATE_CHECK, DEFAULT_DELAY_FOR_SCHEMA_UPDATE_CHECK)
             .setIfUnset(METRICS_ENABLED, DEFAULT_IS_METRICS_ENABLED)
             .setIfUnset(RpcControllerFactory.CUSTOM_CONTROLLER_CONF_KEY, DEFAULT_CLIENT_RPC_CONTROLLER_FACTORY)
+            .setIfUnset(USE_BYTE_BASED_REGEX_ATTRIB, DEFAULT_USE_BYTE_BASED_REGEX)
             ;
         // HBase sets this to 1, so we reset it to something more appropriate.
         // Hopefully HBase will change this, because we can't know if a user set
@@ -450,6 +452,10 @@ public class QueryServicesOptions {
         return config.getBoolean(METRICS_ENABLED, DEFAULT_IS_METRICS_ENABLED);
     }
     
+    public boolean isUseByteBasedRegex() {
+        return config.getBoolean(USE_BYTE_BASED_REGEX_ATTRIB, DEFAULT_USE_BYTE_BASED_REGEX);
+    }
+
     public QueryServicesOptions setMaxServerCacheTTLMs(int ttl) {
         return set(MAX_SERVER_CACHE_TIME_TO_LIVE_MS_ATTRIB, ttl);
     }
@@ -524,4 +530,8 @@ public class QueryServicesOptions {
         return this;
     }
 
+    public QueryServicesOptions setUseByteBasedRegex(boolean flag) {
+        config.setBoolean(USE_BYTE_BASED_REGEX_ATTRIB, flag);
+        return this;
+    }
 }

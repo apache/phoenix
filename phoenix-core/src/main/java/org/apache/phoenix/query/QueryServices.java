@@ -50,6 +50,8 @@ public interface QueryServices extends SQLCloseable {
     public static final String AUTO_COMMIT_ATTRIB = "phoenix.connection.autoCommit";
     // consistency configuration setting
     public static final String CONSISTENCY_ATTRIB = "phoenix.connection.consistency";
+    // joni byte regex engine setting
+    public static final String USE_BYTE_BASED_REGEX_ATTRIB = "phoenix.regex.byteBased";
 
     /**
 	 * max size to spool the the result into
