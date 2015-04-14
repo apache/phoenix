@@ -1173,7 +1173,7 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
     return object;
   }
 
-  public void pad(ImmutableBytesWritable ptr, Integer maxLength) {
+  public void pad(ImmutableBytesWritable ptr, Integer maxLength, SortOrder sortOrder) {
   }
 
   public static PDataType arrayBaseType(PDataType arrayType) {

@@ -35,7 +35,7 @@ public class PBinary extends PDataType<byte[]> {
   }
 
   @Override
-  public void pad(ImmutableBytesWritable ptr, Integer maxLength) {
+  public void pad(ImmutableBytesWritable ptr, Integer maxLength, SortOrder sortOrder) {
     if (ptr.getLength() >= maxLength) {
       return;
     }

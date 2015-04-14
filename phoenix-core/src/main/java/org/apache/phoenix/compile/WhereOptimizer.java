@@ -1210,7 +1210,7 @@ public class WhereOptimizer {
                     Integer length = getColumn().getMaxLength();
                     if (length != null) {
                         // Go through type to pad as the fill character depends on the type.
-                        type.pad(ptr, length);
+                        type.pad(ptr, length, SortOrder.getDefault());
                     }
                 }
                 byte[] key = ByteUtil.copyKeyBytesIfNecessary(ptr);

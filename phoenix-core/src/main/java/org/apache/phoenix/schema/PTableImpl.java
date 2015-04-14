@@ -703,7 +703,7 @@ public class PTableImpl implements PTable {
                 Integer	maxLength = column.getMaxLength();
             	if (!isNull && type.isFixedWidth() && maxLength != null) {
     				if (ptr.getLength() <= maxLength) {
-                        type.pad(ptr, maxLength);
+                        type.pad(ptr, maxLength, SortOrder.getDefault());
                     } else if (ptr.getLength() > maxLength) {
                         throw new DataExceedsCapacityException(name.getString() + "." + column.getName().getString() + " may not exceed " + maxLength + " bytes (" + type.toObject(byteValue) + ")");
                     }
