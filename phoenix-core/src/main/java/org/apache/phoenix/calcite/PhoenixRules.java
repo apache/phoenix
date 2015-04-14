@@ -2,16 +2,14 @@ package org.apache.phoenix.calcite;
 
 import org.apache.calcite.adapter.enumerable.EnumerableConvention;
 import org.apache.calcite.plan.*;
-import org.apache.calcite.rel.InvalidRelException;
-import org.apache.calcite.rel.RelCollationImpl;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.convert.ConverterRule;
-import org.apache.calcite.rel.core.Join;
-import org.apache.calcite.rel.core.Sort;
-import org.apache.calcite.rel.core.Union;
 import org.apache.calcite.rel.logical.LogicalAggregate;
 import org.apache.calcite.rel.logical.LogicalFilter;
+import org.apache.calcite.rel.logical.LogicalJoin;
 import org.apache.calcite.rel.logical.LogicalProject;
+import org.apache.calcite.rel.logical.LogicalSort;
+import org.apache.calcite.rel.logical.LogicalUnion;
 import org.apache.calcite.util.trace.CalciteTrace;
 
 import java.util.logging.Logger;
@@ -58,16 +56,16 @@ public class PhoenixRules {
         public static final PhoenixSortRule INSTANCE = new PhoenixSortRule();
 
         private PhoenixSortRule() {
-            super(Sort.class, Convention.NONE, PhoenixRel.CONVENTION,
+            super(LogicalSort.class, Convention.NONE, PhoenixRel.CONVENTION,
                 "PhoenixSortRule");
         }
 
         public RelNode convert(RelNode rel) {
-            final Sort sort = (Sort) rel;
+            final LogicalSort sort = (LogicalSort) rel;
             final RelTraitSet traitSet =
                 sort.getTraitSet().replace(out)
                     .replace(sort.getCollation());
-            return new PhoenixSort(rel.getCluster(), traitSet,
+            return new PhoenixClientSort(rel.getCluster(), traitSet,
                 convert(sort.getInput(), sort.getInput().getTraitSet().replace(out)),
                 sort.getCollation(), sort.offset, sort.fetch);
         }
@@ -111,7 +109,7 @@ public class PhoenixRules {
         public RelNode convert(RelNode rel) {
             final LogicalProject project = (LogicalProject) rel;
             final RelTraitSet traitSet = project.getTraitSet().replace(out);
-            return new PhoenixProject(project.getCluster(), traitSet,
+            return new PhoenixClientProject(project.getCluster(), traitSet,
                 convert(project.getInput(), project.getInput().getTraitSet().replace(out)), project.getProjects(),
                 project.getRowType());
         }
@@ -133,8 +131,7 @@ public class PhoenixRules {
             final LogicalAggregate agg = (LogicalAggregate) rel;
             final RelTraitSet traitSet =
                 agg.getTraitSet().replace(out);
-            try {
-                return new PhoenixAggregate(
+            return new PhoenixClientAggregate(
                     rel.getCluster(),
                     traitSet,
                     convert(agg.getInput(), agg.getInput().getTraitSet().replace(out)),
@@ -142,10 +139,6 @@ public class PhoenixRules {
                     agg.getGroupSet(),
                     agg.getGroupSets(),
                     agg.getAggCallList());
-            } catch (InvalidRelException e) {
-                LOGGER.warning(e.toString());
-                return null;
-            }
         }
     }
 
@@ -157,12 +150,12 @@ public class PhoenixRules {
         public static final PhoenixUnionRule INSTANCE = new PhoenixUnionRule();
 
         private PhoenixUnionRule() {
-            super(Union.class, Convention.NONE, PhoenixRel.CONVENTION,
+            super(LogicalUnion.class, Convention.NONE, PhoenixRel.CONVENTION,
                 "PhoenixUnionRule");
         }
 
         public RelNode convert(RelNode rel) {
-            final Union union = (Union) rel;
+            final LogicalUnion union = (LogicalUnion) rel;
             final RelTraitSet traitSet = union.getTraitSet().replace(out);
             return new PhoenixUnion(rel.getCluster(), traitSet, convertList(union.getInputs(), out),
                 union.all);
@@ -177,15 +170,15 @@ public class PhoenixRules {
         public static final PhoenixJoinRule INSTANCE = new PhoenixJoinRule();
 
         private PhoenixJoinRule() {
-            super(Join.class, Convention.NONE, PhoenixRel.CONVENTION,
+            super(LogicalJoin.class, Convention.NONE, PhoenixRel.CONVENTION,
                 "PhoenixJoinRule");
         }
 
         public RelNode convert(RelNode rel) {
-            final Join join = (Join) rel;
+            final LogicalJoin join = (LogicalJoin) rel;
             final RelTraitSet traitSet =
                 join.getTraitSet().replace(out);
-            return new PhoenixJoin(rel.getCluster(), traitSet,
+            return new PhoenixClientJoin(rel.getCluster(), traitSet,
                 convert(join.getLeft(), join.getLeft().getTraitSet().replace(out)),
                 convert(join.getRight(), join.getRight().getTraitSet().replace(out)),
                 join.getCondition(),

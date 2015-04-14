@@ -38,9 +38,4 @@ public class PhoenixFilter extends Filter implements PhoenixRel {
         return new ClientScanPlan(plan.getContext(), plan.getStatement(), plan.getTableRef(),
                 plan.getProjector(), null, expr, OrderBy.EMPTY_ORDER_BY, plan);
     }
-
-    @Override
-    public PlanType getPlanType() {
-        return PlanType.CLIENT_SERVER;
-    }
 }

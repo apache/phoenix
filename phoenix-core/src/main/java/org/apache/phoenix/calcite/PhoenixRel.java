@@ -35,14 +35,6 @@ public interface PhoenixRel extends RelNode {
    * Server is cheaper.
    */
   double SERVER_FACTOR = 0.2;
-  
-  enum PlanType {
-      SERVER_ONLY_FLAT,
-      SERVER_ONLY_COMPLEX,
-      CLIENT_SERVER,
-  }
-  
-  PlanType getPlanType();
 
   QueryPlan implement(Implementor implementor);
   

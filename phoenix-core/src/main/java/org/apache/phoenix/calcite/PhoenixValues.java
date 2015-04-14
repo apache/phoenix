@@ -34,9 +34,4 @@ public class PhoenixValues extends Values implements PhoenixRel {
     public QueryPlan implement(Implementor implementor) {
         throw new UnsupportedOperationException();
     }
-
-    @Override
-    public PlanType getPlanType() {
-        return PlanType.SERVER_ONLY_FLAT;
-    }
 }

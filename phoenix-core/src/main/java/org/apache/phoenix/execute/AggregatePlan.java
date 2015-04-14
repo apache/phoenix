@@ -72,8 +72,8 @@ public class AggregatePlan extends BaseQueryPlan {
     private List<KeyRange> splits;
     private List<List<Scan>> scans;
     
-    public static AggregatePlan create(AggregatePlan plan, OrderBy newOrderBy) {
-        return new AggregatePlan(plan.getContext(), plan.getStatement(), plan.getTableRef(), plan.getProjector(), plan.getLimit(), newOrderBy, plan.parallelIteratorFactory, plan.getGroupBy(), plan.getHaving());
+    public static AggregatePlan create(AggregatePlan plan, OrderBy newOrderBy, Integer newLimit) {
+        return new AggregatePlan(plan.getContext(), plan.getStatement(), plan.getTableRef(), plan.getProjector(), newLimit, newOrderBy, plan.parallelIteratorFactory, plan.getGroupBy(), plan.getHaving());
     }
 
     public AggregatePlan(

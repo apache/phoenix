@@ -16,6 +16,11 @@ import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rex.RexNode;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.phoenix.calcite.rules.PhoenixCompactClientSortRule;
+import org.apache.phoenix.calcite.rules.PhoenixServerAggregateRule;
+import org.apache.phoenix.calcite.rules.PhoenixServerJoinRule;
+import org.apache.phoenix.calcite.rules.PhoenixServerProjectRule;
+import org.apache.phoenix.calcite.rules.PhoenixServerSortRule;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
@@ -64,6 +69,17 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
             planner.addRule(rule);
         }
         planner.addRule(PhoenixFilterScanMergeRule.INSTANCE);
+        planner.addRule(PhoenixServerProjectRule.PROJECT_SCAN);
+        planner.addRule(PhoenixServerProjectRule.PROJECT_SERVERJOIN);
+        planner.addRule(PhoenixServerJoinRule.JOIN_SCAN);
+        planner.addRule(PhoenixServerJoinRule.JOIN_SERVERPROJECT_SCAN);
+        planner.addRule(PhoenixServerAggregateRule.AGGREGATE_SCAN);
+        planner.addRule(PhoenixServerAggregateRule.AGGREGATE_SERVERJOIN);
+        planner.addRule(PhoenixServerAggregateRule.AGGREGATE_SERVERPROJECT);
+        planner.addRule(PhoenixServerSortRule.SORT_SCAN);
+        planner.addRule(PhoenixServerSortRule.SORT_SERVERJOIN);
+        planner.addRule(PhoenixServerSortRule.SORT_SERVERPROJECT);
+        // TODO planner.addRule(PhoenixCompactClientSortRule.SORT_SERVERAGGREGATE);
     }
 
     @Override
@@ -140,10 +156,5 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
         for (PColumnFamily family : table.getColumnFamilies()) {
             scan.addFamily(family.getName().getBytes());
         }
-    }
-
-    @Override
-    public PlanType getPlanType() {
-        return PlanType.SERVER_ONLY_FLAT;
     }
 }
