@@ -67,7 +67,7 @@ public class JONIPattern extends AbstractBasePattern implements AbstractBaseSpli
         outPtr.set(ret ? PDataType.TRUE_BYTES : PDataType.FALSE_BYTES);
     }
 
-    public boolean matches(byte[] bytes, int offset, int len) {
+    private boolean matches(byte[] bytes, int offset, int len) {
         int range = offset + len;
         Matcher matcher = pattern.matcher(bytes, offset, range);
         int ret = matcher.match(offset, range, Option.DEFAULT);
