@@ -967,9 +967,14 @@ NUMBER
     :   POSINTEGER
     ;
 
-// Exponential format is not supported.
 DECIMAL
-    :   POSINTEGER? '.' POSINTEGER
+    :   '.' POSINTEGER (Exponent)?
+    |   POSINTEGER '.' Exponent
+    |   POSINTEGER ('.' (POSINTEGER (Exponent)?)? | Exponent)
+    ;
+
+Exponent
+    :    ('e' | 'E') ( PLUS | MINUS )? POSINTEGER
     ;
 
 DOUBLE_QUOTE
