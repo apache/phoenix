@@ -21,6 +21,8 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.text.Format;
+import java.util.LinkedList;
+import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -754,5 +756,94 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
         }
         buf.append(']');
         return buf.toString();
+    }
+
+    static public class PArrayDataTypeBytesArrayBuilder<T> {
+        static private final int BYTE_ARRAY_DEFAULT_SIZE = 128;
+
+        private PDataType baseType;
+        private SortOrder sortOrder;
+        private List<Integer> offsetPos;
+        private TrustedByteArrayOutputStream byteStream;
+        private DataOutputStream oStream;
+        private int nulls;
+
+        public PArrayDataTypeBytesArrayBuilder(PDataType baseType, SortOrder sortOrder) {
+            this.baseType = baseType;
+            this.sortOrder = sortOrder;
+            offsetPos = new LinkedList<Integer>();
+            byteStream = new TrustedByteArrayOutputStream(BYTE_ARRAY_DEFAULT_SIZE);
+            oStream = new DataOutputStream(byteStream);
+            nulls = 0;
+        }
+
+        private void close() {
+            try {
+                if (byteStream != null) byteStream.close();
+                if (oStream != null) oStream.close();
+                byteStream = null;
+                oStream = null;
+            } catch (IOException ioe) {
+            }
+        }
+
+        public boolean appendElem(byte[] bytes) {
+            return appendElem(bytes, 0, bytes.length);
+        }
+
+        public boolean appendElem(byte[] bytes, int offset, int len) {
+            if (oStream == null || byteStream == null) return false;
+            try {
+                if (!baseType.isFixedWidth()) {
+                    if (len == 0) {
+                        offsetPos.add(byteStream.size());
+                        nulls++;
+                    } else {
+                        nulls = serializeNulls(oStream, nulls);
+                        offsetPos.add(byteStream.size());
+                        if (sortOrder == SortOrder.DESC) {
+                            SortOrder.invert(bytes, offset, bytes, offset, len);
+                        }
+                        oStream.write(bytes, offset, len);
+                        oStream.write(QueryConstants.SEPARATOR_BYTE);
+                    }
+                } else {
+                    if (sortOrder == SortOrder.DESC) {
+                        SortOrder.invert(bytes, offset, bytes, offset, len);
+                    }
+                    oStream.write(bytes, offset, len);
+                }
+                return true;
+            } catch (IOException e) {
+            }
+            return false;
+        }
+
+        public byte[] getBytesAndClose() {
+            try {
+                if (!baseType.isFixedWidth()) {
+                    int noOfElements = offsetPos.size();
+                    int[] offsetPosArray = new int[noOfElements];
+                    int index = 0;
+                    for (Integer i : offsetPos) {
+                        offsetPosArray[index] = i;
+                        ++index;
+                    }
+                    PArrayDataType.writeEndSeperatorForVarLengthArray(oStream);
+                    noOfElements =
+                            PArrayDataType.serailizeOffsetArrayIntoStream(oStream, byteStream,
+                                noOfElements, offsetPosArray[offsetPosArray.length - 1],
+                                offsetPosArray);
+                    serializeHeaderInfoIntoStream(oStream, noOfElements);
+                }
+                ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+                ptr.set(byteStream.getBuffer(), 0, byteStream.size());
+                return ByteUtil.copyKeyBytesIfNecessary(ptr);
+            } catch (IOException e) {
+            } finally {
+                close();
+            }
+            return null;
+        }
     }
 }

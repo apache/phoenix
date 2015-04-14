@@ -49,6 +49,8 @@
         <include>org.codehaus.jackson:jackson-core-asl</include>
         <include>commons-collections:commons-collections</include>
         <include>joda-time:joda-time</include>
+        <include>org.jruby.joni:joni</include>
+        <include>org.jruby.jcodings:jcodings</include>
       </includes>
     </dependencySet>
   </dependencySets>
