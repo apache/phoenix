@@ -12,9 +12,11 @@ import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Sort;
 import org.apache.calcite.rex.RexNode;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
+import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.schema.SortOrder;
+
 import com.google.common.collect.Lists;
 
 /**
@@ -31,12 +33,14 @@ abstract public class PhoenixSort extends Sort implements PhoenixRel {
         assert getConvention() == PhoenixRel.CONVENTION;
     }
     
-    protected OrderBy getOrderBy(Implementor implementor) {
+    protected OrderBy getOrderBy(Implementor implementor, TupleProjector tupleProjector) {
         assert !getCollation().getFieldCollations().isEmpty();
         
         List<OrderByExpression> orderByExpressions = Lists.newArrayList();
         for (RelFieldCollation fieldCollation : getCollation().getFieldCollations()) {
-            Expression expr = implementor.newColumnExpression(fieldCollation.getFieldIndex());
+            Expression expr = tupleProjector == null ? 
+                      implementor.newColumnExpression(fieldCollation.getFieldIndex()) 
+                    : tupleProjector.getExpressions()[fieldCollation.getFieldIndex()];
             boolean isAscending = fieldCollation.getDirection() == Direction.ASCENDING;
             if (expr.getSortOrder() == SortOrder.DESC) {
                 isAscending = !isAscending;

@@ -13,7 +13,6 @@ import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.execute.HashJoinPlan;
 import org.apache.phoenix.execute.ScanPlan;
-import org.apache.phoenix.parse.SelectStatement;
 
 public class PhoenixServerSort extends PhoenixSort {
 
@@ -42,19 +41,22 @@ public class PhoenixServerSort extends PhoenixSort {
             throw new UnsupportedOperationException();
             
         QueryPlan plan = implementor.visitInput(0, (PhoenixRel) getInput());
-        assert (plan instanceof ScanPlan || plan instanceof HashJoinPlan) 
+        assert (plan instanceof ScanPlan 
+                    || plan instanceof HashJoinPlan) 
                 && plan.getLimit() == null;
         
         ScanPlan basePlan;
+        HashJoinPlan hashJoinPlan = null;
         if (plan instanceof ScanPlan) {
             basePlan = (ScanPlan) plan;
         } else {
-            QueryPlan delegate = ((HashJoinPlan) plan).getDelegate();
+            hashJoinPlan = (HashJoinPlan) plan;
+            QueryPlan delegate = hashJoinPlan.getDelegate();
             assert delegate instanceof ScanPlan;
             basePlan = (ScanPlan) delegate;
         }
         
-        OrderBy orderBy = super.getOrderBy(implementor);
+        OrderBy orderBy = super.getOrderBy(implementor, null);
         Integer limit = super.getLimit(implementor);
         QueryPlan newPlan;
         try {
@@ -63,9 +65,8 @@ public class PhoenixServerSort extends PhoenixSort {
             throw new RuntimeException(e);
         }
         
-        if (plan instanceof HashJoinPlan) {        
-            HashJoinPlan hashJoinPlan = (HashJoinPlan) plan;
-            newPlan = HashJoinPlan.create((SelectStatement) (plan.getStatement()), newPlan, hashJoinPlan.getJoinInfo(), hashJoinPlan.getSubPlans());
+        if (hashJoinPlan != null) {        
+            newPlan = HashJoinPlan.create(hashJoinPlan.getStatement(), newPlan, hashJoinPlan.getJoinInfo(), hashJoinPlan.getSubPlans());
         }
         return newPlan;
     }

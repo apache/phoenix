@@ -81,7 +81,7 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
         planner.addRule(PhoenixServerSortRule.SORT_SCAN);
         planner.addRule(PhoenixServerSortRule.SORT_SERVERJOIN);
         planner.addRule(PhoenixServerSortRule.SORT_SERVERPROJECT);
-        // TODO planner.addRule(PhoenixCompactClientSortRule.SORT_SERVERAGGREGATE);
+        planner.addRule(PhoenixCompactClientSortRule.SORT_SERVERAGGREGATE);
     }
 
     @Override

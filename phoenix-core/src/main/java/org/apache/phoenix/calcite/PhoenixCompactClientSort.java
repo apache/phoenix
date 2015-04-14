@@ -11,7 +11,8 @@ import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.execute.HashJoinPlan;
 import org.apache.phoenix.execute.AggregatePlan;
-import org.apache.phoenix.parse.SelectStatement;
+import org.apache.phoenix.execute.TupleProjectionPlan;
+import org.apache.phoenix.execute.TupleProjector;
 
 public class PhoenixCompactClientSort extends PhoenixSort {
 
@@ -40,26 +41,38 @@ public class PhoenixCompactClientSort extends PhoenixSort {
             throw new UnsupportedOperationException();
             
         QueryPlan plan = implementor.visitInput(0, (PhoenixRel) getInput());
-        assert (plan instanceof AggregatePlan || plan instanceof HashJoinPlan) 
-                && plan.getLimit() == null;
+        assert plan instanceof TupleProjectionPlan;
+        
+        // PhoenixServerAggregate wraps the AggregatePlan with a TupleProjectionPlan,
+        // so we need to unwrap the TupleProjectionPlan.
+        TupleProjectionPlan tupleProjectionPlan = (TupleProjectionPlan) plan;
+        assert tupleProjectionPlan.getPostFilter() == null;
+        QueryPlan innerPlan = tupleProjectionPlan.getDelegate();
+        TupleProjector tupleProjector = tupleProjectionPlan.getTupleProjector();
+        assert (innerPlan instanceof AggregatePlan 
+                    || innerPlan instanceof HashJoinPlan)
+                && innerPlan.getLimit() == null; 
         
         AggregatePlan basePlan;
-        if (plan instanceof AggregatePlan) {
-            basePlan = (AggregatePlan) plan;
+        HashJoinPlan hashJoinPlan = null;
+        if (innerPlan instanceof AggregatePlan) {
+            basePlan = (AggregatePlan) innerPlan;
         } else {
-            QueryPlan delegate = ((HashJoinPlan) plan).getDelegate();
+            hashJoinPlan = (HashJoinPlan) innerPlan;
+            QueryPlan delegate = hashJoinPlan.getDelegate();
             assert delegate instanceof AggregatePlan;
             basePlan = (AggregatePlan) delegate;
         }
         
-        OrderBy orderBy = super.getOrderBy(implementor);
+        OrderBy orderBy = super.getOrderBy(implementor, tupleProjector);
         Integer limit = super.getLimit(implementor);
         QueryPlan newPlan = AggregatePlan.create((AggregatePlan) basePlan, orderBy, limit);
         
-        if (plan instanceof HashJoinPlan) {        
-            HashJoinPlan hashJoinPlan = (HashJoinPlan) plan;
-            newPlan = HashJoinPlan.create((SelectStatement) (plan.getStatement()), newPlan, hashJoinPlan.getJoinInfo(), hashJoinPlan.getSubPlans());
+        if (hashJoinPlan != null) {        
+            newPlan = HashJoinPlan.create(hashJoinPlan.getStatement(), newPlan, hashJoinPlan.getJoinInfo(), hashJoinPlan.getSubPlans());
         }
+        // Recover the wrapping of TupleProjectionPlan
+        newPlan = new TupleProjectionPlan(newPlan, tupleProjector, null);
         return newPlan;
     }
 

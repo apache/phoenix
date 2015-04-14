@@ -18,7 +18,6 @@ import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.execute.AggregatePlan;
 import org.apache.phoenix.execute.HashJoinPlan;
 import org.apache.phoenix.execute.ScanPlan;
-import org.apache.phoenix.parse.SelectStatement;
 
 public class PhoenixServerAggregate extends PhoenixAggregate {
 
@@ -45,14 +44,17 @@ public class PhoenixServerAggregate extends PhoenixAggregate {
         assert getConvention() == getInput().getConvention();
         
         QueryPlan plan = implementor.visitInput(0, (PhoenixRel) getInput());
-        assert (plan instanceof ScanPlan || plan instanceof HashJoinPlan) 
+        assert (plan instanceof ScanPlan 
+                    || plan instanceof HashJoinPlan)
                 && plan.getLimit() == null;
         
         ScanPlan basePlan;
+        HashJoinPlan hashJoinPlan = null;
         if (plan instanceof ScanPlan) {
             basePlan = (ScanPlan) plan;
         } else {
-            QueryPlan delegate = ((HashJoinPlan) plan).getDelegate();
+            hashJoinPlan = (HashJoinPlan) plan;
+            QueryPlan delegate = hashJoinPlan.getDelegate();
             assert delegate instanceof ScanPlan;
             basePlan = (ScanPlan) delegate;
         }
@@ -62,9 +64,8 @@ public class PhoenixServerAggregate extends PhoenixAggregate {
         super.serializeAggregators(implementor, context, groupBy.isEmpty());
         
         QueryPlan aggPlan = new AggregatePlan(context, basePlan.getStatement(), basePlan.getTableRef(), RowProjector.EMPTY_PROJECTOR, null, OrderBy.EMPTY_ORDER_BY, null, groupBy, null);
-        if (plan instanceof HashJoinPlan) {        
-            HashJoinPlan hashJoinPlan = (HashJoinPlan) plan;
-            aggPlan = HashJoinPlan.create((SelectStatement) (plan.getStatement()), aggPlan, hashJoinPlan.getJoinInfo(), hashJoinPlan.getSubPlans());
+        if (hashJoinPlan != null) {        
+            aggPlan = HashJoinPlan.create(hashJoinPlan.getStatement(), aggPlan, hashJoinPlan.getJoinInfo(), hashJoinPlan.getSubPlans());
         }
         
         return PhoenixAggregate.wrapWithProject(implementor, aggPlan, groupBy.getKeyExpressions(), Arrays.asList(context.getAggregationManager().getAggregators().getFunctions()));

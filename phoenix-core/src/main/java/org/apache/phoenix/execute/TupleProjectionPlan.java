@@ -40,6 +40,14 @@ public class TupleProjectionPlan extends DelegateQueryPlan {
         this.tupleProjector = tupleProjector;
         this.postFilter = postFilter;
     }
+    
+    public TupleProjector getTupleProjector() {
+        return this.tupleProjector;
+    }
+    
+    public Expression getPostFilter() {
+        return this.postFilter;
+    }
 
     @Override
     public ExplainPlan getExplainPlan() throws SQLException {

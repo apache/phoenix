@@ -54,7 +54,6 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.job.JobManager.JobCallable;
 import org.apache.phoenix.join.HashCacheClient;
 import org.apache.phoenix.join.HashJoinInfo;
-import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.SelectStatement;
@@ -117,6 +116,11 @@ public class HashJoinPlan extends DelegateQueryPlan {
     
     public SubPlan[] getSubPlans() {
         return this.subPlans;
+    }
+    
+    @Override
+    public Integer getLimit() {
+        return this.joinInfo == null ? null : this.joinInfo.getLimit();
     }
 
     @Override
@@ -232,7 +236,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
     }
 
     @Override
-    public FilterableStatement getStatement() {
+    public SelectStatement getStatement() {
         return statement;
     }
 
