@@ -190,6 +190,8 @@
               <exclude>dev/release_files/**</exclude>
               <exclude>**/target/**</exclude>
               <exclude>**/*.versionsBackup</exclude>
+              <!-- properties files need no license -->
+              <exclude>**/*.properties</exclude>
               <!-- exclude docs -->
               <exclude>docs/**</exclude>
               <!-- exclude examples -->
