@@ -987,6 +987,20 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
     }
     
     @Test
+    public void testSystemTableHasDoubleForExponentialNumber() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String ddl = "CREATE TABLE test (id VARCHAR not null primary key, num FLOAT)";
+        conn.createStatement().execute(ddl);
+        String dml = "UPSERT INTO test(id,num) VALUES ('testid', 1.2E3)";
+        conn.createStatement().execute(dml);
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery("SELECT 1.2E3 FROM SYSTEM.CATALOG LIMIT 1");
+        assertTrue(rs.next());
+        assertTrue(rs.getObject(1) instanceof Double);
+    }
+    
+    @Test
     public void testFloatingPointWithExponentialNotation() throws Exception {
     	Float[] expected = {1.5E7f, 1.5E-7f, -1.5E-7f, 12E-5f, -.12E+34f};
     	String[] values = {"1.5e7", "1.5e-7", "-1.5e-7", "12E-5", "-.12E+34"};
