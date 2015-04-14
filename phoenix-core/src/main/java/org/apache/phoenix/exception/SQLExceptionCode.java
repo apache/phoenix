@@ -86,6 +86,7 @@ public enum SQLExceptionCode {
     SUBQUERY_RETURNS_DIFFERENT_NUMBER_OF_FIELDS(216, "22016", "Sub-query must return the same number of fields as the left-hand-side expression of 'IN'."),
     AMBIGUOUS_JOIN_CONDITION(217, "22017", "Amibiguous or non-equi join condition specified. Consider using table list with where clause."),
     CONSTRAINT_VIOLATION(218, "22018", "Constraint violatioin."),
+    INVALID_JSON_DATA(219, "22000", "Invalid json data."),
     
     /**
      * Constraint Violation (errorcode 03, sqlstate 23)
@@ -147,7 +148,7 @@ public enum SQLExceptionCode {
     ORDER_BY_ARRAY_NOT_SUPPORTED(515, "42893", "ORDER BY of an array type is not allowed"),
     NON_EQUALITY_ARRAY_COMPARISON(516, "42894", "Array types may only be compared using = or !="),
     INVALID_NOT_NULL_CONSTRAINT(517, "42895", "Invalid not null constraint on non primary key column"),
-
+    NON_EQUALITY_COMPARISON(523, "42900", "Could not identify an equality operator"),
     /**
      *  Invalid Transaction State (errorcode 05, sqlstate 25)
      */

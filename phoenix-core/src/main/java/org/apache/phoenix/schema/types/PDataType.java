@@ -307,6 +307,21 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
     return getClass() == o.getClass();
   }
 
+    /**
+     * @return true if {@link PDataType} can be declared as primary key otherwise false.
+     */
+    public boolean canBePrimaryKey() {
+        return true;
+    }
+
+    /**
+     * @return true if {@link PDataType} supports equality operators (=,!=,<,>,<=,>=) otherwise
+     *         false.
+     */
+    public boolean isEqualitySupported() {
+        return true;
+    }
+  
   /**
    * @return true when {@code lhs} equals any of {@code rhs}.
    */
@@ -793,7 +808,7 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
   public final boolean isNull(byte[] value) {
     return value == null || value.length == 0;
   }
-
+  
   public byte[] toBytes(Object object, SortOrder sortOrder) {
     Preconditions.checkNotNull(sortOrder);
     byte[] bytes = toBytes(object);
@@ -1152,17 +1167,17 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
       return null;
     }
     for (PDataType type : PDataType.values()) {
-      if (type.isArrayType()) {
-        PhoenixArray arr = (PhoenixArray) value;
-        if ((type.getSqlType() == arr.baseType.sqlType + PDataType.ARRAY_TYPE_BASE)
-            && type.getJavaClass().isInstance(value)) {
-          return type;
+        if(type.getJavaClass().isInstance(value)){
+    		if (type.isArrayType()) {
+    			PhoenixArray arr = (PhoenixArray) value;
+    			if ((type.getSqlType() == arr.baseType.sqlType
+    					+ PDataType.ARRAY_TYPE_BASE)) {
+    				return type;
+    			}
+    		} else {
+    			return type;
+    		}
         }
-      } else {
-        if (type.getJavaClass().isInstance(value)) {
-          return type;
-        }
-      }
     }
     throw new UnsupportedOperationException(
         "Unsupported literal value [" + value + "] of type " + value.getClass().getName());

@@ -37,6 +37,7 @@ import java.util.Properties;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
@@ -132,7 +133,17 @@ public class PhoenixRuntimeTest extends BaseConnectionlessQueryTest {
                 // create a table by using the type name as returned by PDataType
                 sb.append("CREATE TABLE " + tableName + " (");
                 sb.append(columnName + " " + sqlTypeName + " NOT NULL PRIMARY KEY, V1 VARCHAR)");
-                conn.createStatement().execute(sb.toString());
+                if(!pType.canBePrimaryKey()) {
+	                try{
+	                    conn.createStatement().execute(sb.toString());
+	                    fail("<"+pType.toString()+ "> should throw exception since primary key is not supported");
+	                }catch(SQLException sqe){
+	                    assertEquals(SQLExceptionCode.INVALID_PRIMARY_KEY_CONSTRAINT.getErrorCode(), sqe.getErrorCode());
+	                }
+	                continue;
+	            }else {
+	                conn.createStatement().execute(sb.toString());
+	            }
 
                 // generate the optimized query plan by going through the pk of the table.
                 PreparedStatement stmt = conn.prepareStatement("SELECT * FROM " + tableName + " WHERE " + columnName  + " = ?");
