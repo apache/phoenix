@@ -903,6 +903,9 @@ literal returns [LiteralParseNode ret]
     |   d=DECIMAL  {
             ret = factory.realNumber(d.getText());
         }
+    |   dbl=DOUBLE  {
+            ret = factory.literal(Double.valueOf(dbl.getText()));
+        }    
     |   NULL {ret = factory.literal(null);}
     |   TRUE {ret = factory.literal(Boolean.TRUE);} 
     |   FALSE {ret = factory.literal(Boolean.FALSE);}
@@ -967,9 +970,18 @@ NUMBER
     :   POSINTEGER
     ;
 
-// Exponential format is not supported.
 DECIMAL
-    :   POSINTEGER? '.' POSINTEGER
+	:	POSINTEGER? '.' POSINTEGER
+	;
+	
+DOUBLE
+    :   '.' POSINTEGER Exponent
+    |   POSINTEGER '.' Exponent
+    |   POSINTEGER ('.' (POSINTEGER (Exponent)?)? | Exponent)
+    ;
+
+Exponent
+    :    ('e' | 'E') ( PLUS | MINUS )? POSINTEGER
     ;
 
 DOUBLE_QUOTE
