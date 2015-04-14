@@ -26,6 +26,7 @@ import java.sql.Timestamp;
 import java.util.HashMap;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.phoenix.schema.json.PhoenixJson;
 import org.apache.phoenix.schema.types.PBinary;
 import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDecimal;
@@ -34,7 +35,6 @@ import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.junit.Test;
-
 import org.apache.phoenix.schema.types.PDataType;
 
 /**
@@ -49,6 +49,7 @@ public class CoerceExpressionTest {
 	private static final HashMap<Class, Object> map = new HashMap<Class, Object>();
 	
 	static {
+		map.put(PhoenixJson.class, "[1,2]");
 		map.put(String.class, "a");
 		map.put(Long.class, 1l);	
 		map.put(Integer.class, 1);

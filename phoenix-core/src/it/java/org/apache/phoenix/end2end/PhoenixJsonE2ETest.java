@@ -1,0 +1,246 @@
+/**
+ * 
+ */
+package org.apache.phoenix.end2end;
+
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.fail;
+
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.HashMap;
+import java.util.Map.Entry;
+import java.util.Properties;
+import java.util.Set;
+
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.schema.json.PhoenixJson;
+import org.apache.phoenix.schema.types.PJsonDataType;
+import org.apache.phoenix.util.PropertiesUtil;
+import org.junit.Test;
+
+/**
+ * End to end test for JSON data type for {@link PJsonDataType} and
+ * {@link PhoenixJson}.
+ */
+public class PhoenixJsonE2ETest extends BaseHBaseManagedTimeIT {
+	
+	@Test
+	public void testJsonUpsertForJsonHavingChineseAndControlAndQuoteChars() throws Exception {
+		String json = "{\"k1\":\"\\n \\\"jumps \\r'普派'\",\"k2\":true, \"k3\":2}";
+		String selectQuery = "SELECT col1 FROM testJson WHERE pk = 'valueOne'";
+		String pk = "valueOne";
+		Connection conn = getConnection();
+		try {
+
+			populateTable(json, pk, conn);
+
+			PreparedStatement stmt = conn.prepareStatement(selectQuery);
+			ResultSet rs = stmt.executeQuery();
+			assertTrue(rs.next());
+			assertEquals("Json data read from DB is not as expected.", json,
+					rs.getString(1));
+			assertFalse(rs.next());
+
+		} finally {
+			conn.close();
+		}
+	}
+	
+	@Test
+	public void testJsonUpsertValue() throws Exception {
+		String json = "{\"k1\":\"val\",\"k2\":true, \"k3\":2}";
+		String selectQuery = "SELECT col1 FROM testJson WHERE pk = 'valueOne'";
+		String pk = "valueOne";
+		Connection conn = getConnection();
+		try {
+
+			populateTable(json, pk, conn);
+
+			PreparedStatement stmt = conn.prepareStatement(selectQuery);
+			ResultSet rs = stmt.executeQuery();
+			assertTrue(rs.next());
+			assertEquals("Json data read from DB is not as expected.", json,
+					rs.getString(1));
+			assertFalse(rs.next());
+
+		} finally {
+			conn.close();
+		}
+	}
+	
+
+
+	@Test
+	public void testJsonArrayUpsertValue() throws Exception {
+		Connection conn = getConnection();
+		try {
+			String ddl = "CREATE TABLE testJson"
+					+ "  (pk VARCHAR NOT NULL PRIMARY KEY, " + "col1 json)";
+			createTestTable(getUrl(), ddl);
+
+			HashMap<String, String> jsonDataMap = new HashMap<String, String>();
+
+			jsonDataMap.put("justIntegerArray", "[1,2,3]");
+			jsonDataMap.put("justBooleanArray", "[true,false]");
+			jsonDataMap.put("justStringArray", "[\"One\",\"Two\"]");
+			jsonDataMap.put("mixedArray", "[\"One\",2, true, null]");
+			jsonDataMap.put("arrayInsideAKey", "{\"k1\":{\"k2\":[1,2,3]}}");
+
+			Set<Entry<String, String>> entrySet = jsonDataMap.entrySet();
+			for (Entry<String, String> entry : entrySet) {
+				populateTable(entry.getValue(), entry.getKey(), conn);
+
+				String selectQuery = "SELECT col1 FROM testJson WHERE pk = '"
+						+ entry.getKey() + "'";
+				PreparedStatement stmt = conn.prepareStatement(selectQuery);
+				ResultSet rs = stmt.executeQuery();
+				assertTrue(rs.next());
+				assertEquals(
+						"Json array data read from DB is not as expected for "
+								+ entry.getKey(), entry.getValue(),
+						rs.getString(1));
+				assertFalse(rs.next());
+			}
+		} finally {
+			conn.close();
+		}
+	}
+
+	@Test
+	public void testInvalidJsonUpsertValue() throws Exception {
+		String json = "{\"k1\"}";
+		Connection conn = getConnection();
+		try {
+			String ddl = "CREATE TABLE testJson"
+					+ "  (pk VARCHAR NOT NULL PRIMARY KEY, " + "col1 json)";
+			createTestTable(getUrl(), ddl);
+
+			String query = "UPSERT INTO testJson(pk, col1) VALUES(?,?)";
+			PreparedStatement stmt = conn.prepareStatement(query);
+			stmt.setString(1, "valueOne");
+			stmt.setString(2, json);
+			try {
+				stmt.execute();
+			} catch (SQLException sqe) {
+				assertEquals(
+						"SQL error code is not as expected when Json is invalid.",
+						201, sqe.getErrorCode());
+				assertEquals("SQL state is not expected when Json is invalid.",
+						"22000", sqe.getSQLState());
+			}
+			conn.commit();
+
+		} finally {
+			conn.close();
+		}
+	}
+
+	@Test
+	public void testInvalidJsonStringCastAsJson() throws Exception {
+		String json = "{\"k1\":\"val\",\"k2\":true, \"k3\":2}";
+		String pk = "valueOne";
+		String selectQuery = "SELECT cast(pk as json) FROM testJson WHERE pk = 'valueOne'";
+		Connection conn = getConnection();
+		try {
+			populateTable(json, pk, conn);
+
+			PreparedStatement stmt = conn.prepareStatement(selectQuery);
+			ResultSet rs = stmt.executeQuery();
+			assertTrue(rs.next());
+			assertEquals(PhoenixJson.class.getName(), rs.getMetaData()
+					.getColumnClassName(1));
+			try {
+				rs.getString(1);
+				fail("casting invalid json string to json should fail.");
+			} catch (SQLException sqe) {
+				assertEquals(SQLExceptionCode.ILLEGAL_DATA.getErrorCode(),
+						sqe.getErrorCode());
+			}
+
+		} finally {
+			conn.close();
+		}
+	}
+
+	private Connection getConnection() throws SQLException {
+		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+		Connection conn = DriverManager.getConnection(getUrl(), props);
+		conn.setAutoCommit(false);
+		return conn;
+	}
+
+	@Test
+	public void testValidJsonStringCastAsJson() throws Exception {
+		Connection conn = getConnection();
+		String json = "{\"k1\":\"val\",\"k2\":true, \"k3\":2}";
+		try {
+			populateTable(json, json, conn);
+
+			String selectQuery = "SELECT cast(pk as json) FROM testJson";
+			PreparedStatement stmt = conn.prepareStatement(selectQuery);
+			ResultSet rs = stmt.executeQuery();
+			assertTrue(rs.next());
+			assertEquals(PhoenixJson.class.getName(), rs.getMetaData()
+					.getColumnClassName(1));
+			String stringCastToJson = null;
+			try {
+				stringCastToJson = rs.getString(1);
+			} catch (SQLException sqe) {
+				fail("casting valid json string to json should not fail.");
+			}
+
+			assertEquals(json, stringCastToJson);
+			rs.close();
+		} finally {
+			conn.close();
+		}
+	}
+
+	@Test
+	public void testJsonCastAsString() throws Exception {
+		Connection conn = getConnection();
+		String json = "{\"k1\":\"val\",\"k2\":true, \"k3\":2}";
+		String pk = "valueOne";
+		String selectQuery = "SELECT cast(col1 as varchar) FROM testJson WHERE pk = 'valueOne'";
+		try {
+			populateTable(json, pk, conn);
+
+			PreparedStatement stmt = conn.prepareStatement(selectQuery);
+			ResultSet rs = stmt.executeQuery();
+			assertTrue(rs.next());
+			assertNotEquals(PhoenixJson.class.getName(), rs.getMetaData()
+					.getColumnClassName(1));
+			assertEquals(String.class.getName(), rs.getMetaData()
+					.getColumnClassName(1));
+			assertEquals("Json data read from DB is not as expected.", json,
+					rs.getString(1));
+			assertFalse(rs.next());
+
+		} finally {
+			conn.close();
+		}
+	}
+
+	private void populateTable(String json, String pk, Connection conn)
+			throws SQLException {
+		String ddl = "CREATE TABLE testJson"
+				+ "  (pk VARCHAR NOT NULL PRIMARY KEY, " + "col1 json)";
+		createTestTable(getUrl(), ddl);
+
+		String query = "UPSERT INTO testJson(pk, col1) VALUES(?,?)";
+		PreparedStatement stmt = conn.prepareStatement(query);
+		stmt.setString(1, pk);
+		stmt.setString(2, json);
+		stmt.execute();
+		conn.commit();
+	}
+
+}

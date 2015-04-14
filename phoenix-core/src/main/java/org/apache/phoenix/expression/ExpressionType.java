@@ -43,6 +43,8 @@ import org.apache.phoenix.expression.function.FloorFunction;
 import org.apache.phoenix.expression.function.HourFunction;
 import org.apache.phoenix.expression.function.IndexStateNameFunction;
 import org.apache.phoenix.expression.function.InvertFunction;
+import org.apache.phoenix.expression.function.JsonExtractPathFunction;
+import org.apache.phoenix.expression.function.JsonExtractPathTextFunction;
 import org.apache.phoenix.expression.function.LTrimFunction;
 import org.apache.phoenix.expression.function.LastValueFunction;
 import org.apache.phoenix.expression.function.LengthFunction;
@@ -204,7 +206,9 @@ public enum ExpressionType {
     SecondFunction(SecondFunction.class),
     WeekFunction(WeekFunction.class),
     HourFunction(HourFunction.class),
-    NowFunction(NowFunction.class)
+    NowFunction(NowFunction.class),
+    JsonExtractPathFunction(JsonExtractPathFunction.class),
+    JsonExtractPathTextFunction(JsonExtractPathTextFunction.class)
     ;
 
     ExpressionType(Class<? extends Expression> clazz) {
