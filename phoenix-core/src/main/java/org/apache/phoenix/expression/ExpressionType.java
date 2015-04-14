@@ -21,6 +21,7 @@ import java.util.Map;
 
 import org.apache.phoenix.expression.function.ArrayAllComparisonExpression;
 import org.apache.phoenix.expression.function.ArrayAnyComparisonExpression;
+import org.apache.phoenix.expression.function.ArrayAppendFunction;
 import org.apache.phoenix.expression.function.ArrayElemRefExpression;
 import org.apache.phoenix.expression.function.ArrayIndexFunction;
 import org.apache.phoenix.expression.function.ArrayLengthFunction;
@@ -211,7 +212,8 @@ public enum ExpressionType {
     NowFunction(NowFunction.class),
     InstrFunction(InstrFunction.class),
     MinuteFunction(MinuteFunction.class),
-    DayOfMonthFunction(DayOfMonthFunction.class)
+    DayOfMonthFunction(DayOfMonthFunction.class),
+    ArrayAppendFunction(ArrayAppendFunction.class)
     ;
 
     ExpressionType(Class<? extends Expression> clazz) {
