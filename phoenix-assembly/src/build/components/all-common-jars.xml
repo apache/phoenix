@@ -71,5 +71,16 @@
       </excludes>
       <fileMode>0644</fileMode>
     </fileSet>
+    <fileSet>
+      <directory>${project.basedir}/../phoenix-spark/target/</directory>
+      <outputDirectory>lib</outputDirectory>
+      <includes>
+          <include>phoenix-*.jar</include>
+      </includes>
+      <excludes>
+          <exclude></exclude>
+      </excludes>
+      <fileMode>0644</fileMode>
+    </fileSet>
   </fileSets>
 </component>
