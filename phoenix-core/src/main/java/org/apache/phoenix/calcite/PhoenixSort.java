@@ -11,6 +11,7 @@ import org.apache.calcite.rel.RelFieldCollation.NullDirection;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Sort;
 import org.apache.calcite.rex.RexNode;
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.Expression;
@@ -52,7 +53,15 @@ abstract public class PhoenixSort extends Sort implements PhoenixRel {
     }
     
     protected Integer getLimit(Implementor implementor) {
-        // TODO
-        return null;
+        if (this.fetch == null)
+            return null;
+        
+        Expression expr = CalciteUtils.toExpression(this.fetch, implementor);
+        if (!expr.isStateless())
+            throw new UnsupportedOperationException("Stateful limit expression not supported");
+
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+        expr.evaluate(null, ptr);
+        return ((Number) (expr.getDataType().toObject(ptr))).intValue();
     }
 }
