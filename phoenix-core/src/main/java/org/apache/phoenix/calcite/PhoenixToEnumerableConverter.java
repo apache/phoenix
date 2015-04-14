@@ -31,7 +31,7 @@ import org.apache.phoenix.iterate.ResultIterator;
  * Scan of a Phoenix table.
  */
 public class PhoenixToEnumerableConverter extends ConverterImpl implements EnumerableRel {
-    protected PhoenixToEnumerableConverter(
+    public PhoenixToEnumerableConverter(
         RelOptCluster cluster,
         RelTraitSet traits,
         RelNode input) {

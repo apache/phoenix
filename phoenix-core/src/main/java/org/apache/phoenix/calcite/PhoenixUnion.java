@@ -14,7 +14,7 @@ import org.apache.phoenix.compile.QueryPlan;
  * relational expression in Phoenix.
  */
 public class PhoenixUnion extends Union implements PhoenixRel {
-    protected PhoenixUnion(RelOptCluster cluster, RelTraitSet traits, List<RelNode> inputs, boolean all) {
+    public PhoenixUnion(RelOptCluster cluster, RelTraitSet traits, List<RelNode> inputs, boolean all) {
         super(cluster, traits, inputs, all);
         assert getConvention() == PhoenixRel.CONVENTION;
     }

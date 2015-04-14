@@ -1,4 +1,4 @@
-package org.apache.phoenix.calcite;
+package org.apache.phoenix.calcite.rules;
 
 import org.apache.calcite.adapter.enumerable.EnumerableConvention;
 import org.apache.calcite.plan.*;
@@ -11,6 +11,17 @@ import org.apache.calcite.rel.logical.LogicalProject;
 import org.apache.calcite.rel.logical.LogicalSort;
 import org.apache.calcite.rel.logical.LogicalUnion;
 import org.apache.calcite.util.trace.CalciteTrace;
+import org.apache.phoenix.calcite.PhoenixAggregate;
+import org.apache.phoenix.calcite.PhoenixClientAggregate;
+import org.apache.phoenix.calcite.PhoenixClientJoin;
+import org.apache.phoenix.calcite.PhoenixClientProject;
+import org.apache.phoenix.calcite.PhoenixClientSort;
+import org.apache.phoenix.calcite.PhoenixFilter;
+import org.apache.phoenix.calcite.PhoenixProject;
+import org.apache.phoenix.calcite.PhoenixRel;
+import org.apache.phoenix.calcite.PhoenixSort;
+import org.apache.phoenix.calcite.PhoenixToEnumerableConverter;
+import org.apache.phoenix.calcite.PhoenixUnion;
 
 import java.util.logging.Logger;
 
@@ -19,8 +30,8 @@ import java.util.logging.Logger;
  * {@link PhoenixRel#CONVENTION PHOENIX}
  * calling convention.
  */
-public class PhoenixRules {
-    private PhoenixRules() {}
+public class PhoenixConverterRules {
+    private PhoenixConverterRules() {}
 
     protected static final Logger LOGGER = CalciteTrace.getPlannerTracer();
 

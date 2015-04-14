@@ -1,9 +1,11 @@
-package org.apache.phoenix.calcite;
+package org.apache.phoenix.calcite.rules;
 
 import com.google.common.base.Predicate;
+
 import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.rel.core.Filter;
+import org.apache.phoenix.calcite.PhoenixTableScan;
 
 public class PhoenixFilterScanMergeRule extends RelOptRule {
 

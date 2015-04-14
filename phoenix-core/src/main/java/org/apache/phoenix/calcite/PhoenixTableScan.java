@@ -17,6 +17,8 @@ import org.apache.calcite.rex.RexNode;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.calcite.rules.PhoenixCompactClientSortRule;
+import org.apache.phoenix.calcite.rules.PhoenixFilterScanMergeRule;
+import org.apache.phoenix.calcite.rules.PhoenixConverterRules;
 import org.apache.phoenix.calcite.rules.PhoenixServerAggregateRule;
 import org.apache.phoenix.calcite.rules.PhoenixServerJoinRule;
 import org.apache.phoenix.calcite.rules.PhoenixServerProjectRule;
@@ -51,7 +53,7 @@ import com.google.common.collect.Lists;
 public class PhoenixTableScan extends TableScan implements PhoenixRel {
     public final RexNode filter;
 
-    protected PhoenixTableScan(RelOptCluster cluster, RelTraitSet traits, RelOptTable table, RexNode filter) {
+    public PhoenixTableScan(RelOptCluster cluster, RelTraitSet traits, RelOptTable table, RexNode filter) {
         super(cluster, traits, table);
         this.filter = filter;
     }
@@ -64,7 +66,7 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
 
     @Override
     public void register(RelOptPlanner planner) {
-        RelOptRule[] rules = PhoenixRules.RULES;
+        RelOptRule[] rules = PhoenixConverterRules.RULES;
         for (RelOptRule rule : rules) {
             planner.addRule(rule);
         }
