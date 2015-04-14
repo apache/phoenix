@@ -31,6 +31,7 @@ import org.apache.phoenix.expression.function.CeilTimestampExpression;
 import org.apache.phoenix.expression.function.CoalesceFunction;
 import org.apache.phoenix.expression.function.ConvertTimezoneFunction;
 import org.apache.phoenix.expression.function.CountAggregateFunction;
+import org.apache.phoenix.expression.function.DayOfMonthFunction;
 import org.apache.phoenix.expression.function.DecodeFunction;
 import org.apache.phoenix.expression.function.DistinctCountAggregateFunction;
 import org.apache.phoenix.expression.function.DistinctValueAggregateFunction;
@@ -52,6 +53,7 @@ import org.apache.phoenix.expression.function.LpadFunction;
 import org.apache.phoenix.expression.function.MD5Function;
 import org.apache.phoenix.expression.function.MaxAggregateFunction;
 import org.apache.phoenix.expression.function.MinAggregateFunction;
+import org.apache.phoenix.expression.function.MinuteFunction;
 import org.apache.phoenix.expression.function.MonthFunction;
 import org.apache.phoenix.expression.function.NowFunction;
 import org.apache.phoenix.expression.function.NthValueFunction;
@@ -207,7 +209,9 @@ public enum ExpressionType {
     WeekFunction(WeekFunction.class),
     HourFunction(HourFunction.class),
     NowFunction(NowFunction.class),
-    InstrFunction(InstrFunction.class)
+    InstrFunction(InstrFunction.class),
+    MinuteFunction(MinuteFunction.class),
+    DayOfMonthFunction(DayOfMonthFunction.class)
     ;
 
     ExpressionType(Class<? extends Expression> clazz) {
