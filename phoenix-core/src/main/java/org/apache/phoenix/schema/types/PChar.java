@@ -41,13 +41,13 @@ public class PChar extends PDataType<String> {
   }
 
     @Override
-    public void pad(ImmutableBytesWritable ptr, Integer maxLength) {
+    public void pad(ImmutableBytesWritable ptr, Integer maxLength, SortOrder sortOrder) {
       if (ptr.getLength() >= maxLength) {
         return;
       }
       byte[] newBytes = new byte[maxLength];
       System.arraycopy(ptr.get(), ptr.getOffset(), newBytes, 0, ptr.getLength());
-      Arrays.fill(newBytes, ptr.getLength(), maxLength, StringUtil.SPACE_UTF8);
+      Arrays.fill(newBytes, ptr.getLength(), maxLength, sortOrder == SortOrder.ASC ? StringUtil.SPACE_UTF8 : StringUtil.INVERTED_SPACE_UTF8);
       ptr.set(newBytes);
     }
 
