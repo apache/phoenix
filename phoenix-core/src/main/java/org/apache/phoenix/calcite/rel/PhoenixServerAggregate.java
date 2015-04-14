@@ -1,4 +1,4 @@
-package org.apache.phoenix.calcite;
+package org.apache.phoenix.calcite.rel;
 
 import java.util.Arrays;
 import java.util.List;
@@ -19,7 +19,7 @@ import org.apache.phoenix.execute.AggregatePlan;
 import org.apache.phoenix.execute.HashJoinPlan;
 import org.apache.phoenix.execute.ScanPlan;
 
-public class PhoenixServerAggregate extends PhoenixAggregate {
+public class PhoenixServerAggregate extends PhoenixAbstractAggregate {
 
     public PhoenixServerAggregate(RelOptCluster cluster, RelTraitSet traits,
             RelNode child, boolean indicator, ImmutableBitSet groupSet,
@@ -68,7 +68,7 @@ public class PhoenixServerAggregate extends PhoenixAggregate {
             aggPlan = HashJoinPlan.create(hashJoinPlan.getStatement(), aggPlan, hashJoinPlan.getJoinInfo(), hashJoinPlan.getSubPlans());
         }
         
-        return PhoenixAggregate.wrapWithProject(implementor, aggPlan, groupBy.getKeyExpressions(), Arrays.asList(context.getAggregationManager().getAggregators().getFunctions()));
+        return PhoenixAbstractAggregate.wrapWithProject(implementor, aggPlan, groupBy.getKeyExpressions(), Arrays.asList(context.getAggregationManager().getAggregators().getFunctions()));
     }
 
 }

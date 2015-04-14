@@ -2,12 +2,12 @@ package org.apache.phoenix.calcite.rules;
 
 import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.plan.RelOptRuleCall;
-import org.apache.phoenix.calcite.PhoenixClientSort;
-import org.apache.phoenix.calcite.PhoenixRel;
-import org.apache.phoenix.calcite.PhoenixServerJoin;
-import org.apache.phoenix.calcite.PhoenixServerProject;
-import org.apache.phoenix.calcite.PhoenixServerSort;
-import org.apache.phoenix.calcite.PhoenixTableScan;
+import org.apache.phoenix.calcite.rel.PhoenixClientSort;
+import org.apache.phoenix.calcite.rel.PhoenixRel;
+import org.apache.phoenix.calcite.rel.PhoenixServerJoin;
+import org.apache.phoenix.calcite.rel.PhoenixServerProject;
+import org.apache.phoenix.calcite.rel.PhoenixServerSort;
+import org.apache.phoenix.calcite.rel.PhoenixTableScan;
 
 public class PhoenixServerSortRule extends RelOptRule {
     

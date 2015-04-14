@@ -1,4 +1,4 @@
-package org.apache.phoenix.calcite;
+package org.apache.phoenix.calcite.rel;
 
 import java.sql.SQLException;
 import java.util.Iterator;
@@ -15,6 +15,7 @@ import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.util.Util;
+import org.apache.phoenix.calcite.CalciteUtils;
 import org.apache.phoenix.compile.JoinCompiler;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.execute.HashJoinPlan;
@@ -30,7 +31,7 @@ import org.apache.phoenix.schema.TableRef;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 
-public class PhoenixServerJoin extends PhoenixJoin {
+public class PhoenixServerJoin extends PhoenixAbstractJoin {
 
     public PhoenixServerJoin(RelOptCluster cluster, RelTraitSet traits,
             RelNode left, RelNode right, RexNode condition,
@@ -63,7 +64,7 @@ public class PhoenixServerJoin extends PhoenixJoin {
         }
         RelOptCost cost = planner.getCostFactory().makeCost(rowCount, 0, 0);
 
-        return cost.multiplyBy(PHOENIX_FACTOR);
+        return cost.multiplyBy(SERVER_FACTOR).multiplyBy(PHOENIX_FACTOR);
     }
     
     @Override

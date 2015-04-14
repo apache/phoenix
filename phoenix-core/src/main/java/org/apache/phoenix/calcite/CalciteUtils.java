@@ -14,7 +14,7 @@ import org.apache.calcite.sql.SqlFunction;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.phoenix.calcite.PhoenixRel.Implementor;
+import org.apache.phoenix.calcite.rel.PhoenixRel.Implementor;
 import org.apache.phoenix.expression.ComparisonExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.ExpressionType;
@@ -139,13 +139,13 @@ public class CalciteUtils {
         });
     }
 
-	static Expression toExpression(RexNode node, Implementor implementor) {
+	public static Expression toExpression(RexNode node, Implementor implementor) {
 		ExpressionFactory eFactory = getFactory(node);
 		Expression expression = eFactory.newExpression(node, implementor);
 		return expression;
 	}
 	
-	static AggregateFunction toAggregateFunction(SqlAggFunction aggFunc, List<Integer> args, Implementor implementor) {
+	public static AggregateFunction toAggregateFunction(SqlAggFunction aggFunc, List<Integer> args, Implementor implementor) {
 	    FunctionFactory fFactory = getFactory(aggFunc);
 	    List<Expression> exprs = Lists.newArrayListWithExpectedSize(args.size());
 	    for (Integer index : args) {

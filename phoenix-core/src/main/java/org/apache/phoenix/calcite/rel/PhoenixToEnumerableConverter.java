@@ -1,4 +1,4 @@
-package org.apache.phoenix.calcite;
+package org.apache.phoenix.calcite.rel;
 
 import java.sql.SQLException;
 import java.util.List;
@@ -21,6 +21,7 @@ import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.convert.ConverterImpl;
 import org.apache.calcite.rel.type.RelDataType;
+import org.apache.phoenix.calcite.BuiltInMethod;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;

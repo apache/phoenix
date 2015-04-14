@@ -1,4 +1,4 @@
-package org.apache.phoenix.calcite;
+package org.apache.phoenix.calcite.rel;
 
 import java.sql.SQLException;
 import java.util.Arrays;
@@ -23,7 +23,7 @@ import org.apache.phoenix.execute.ClientAggregatePlan;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.schema.TableRef;
 
-public class PhoenixClientAggregate extends PhoenixAggregate {
+public class PhoenixClientAggregate extends PhoenixAbstractAggregate {
 
     public PhoenixClientAggregate(RelOptCluster cluster, RelTraitSet traits,
             RelNode child, boolean indicator, ImmutableBitSet groupSet,
@@ -63,7 +63,7 @@ public class PhoenixClientAggregate extends PhoenixAggregate {
         
         QueryPlan aggPlan = new ClientAggregatePlan(context, plan.getStatement(), tableRef, RowProjector.EMPTY_PROJECTOR, null, null, OrderBy.EMPTY_ORDER_BY, groupBy, null, plan);
         
-        return PhoenixAggregate.wrapWithProject(implementor, aggPlan, groupBy.getKeyExpressions(), Arrays.asList(context.getAggregationManager().getAggregators().getFunctions()));
+        return PhoenixAbstractAggregate.wrapWithProject(implementor, aggPlan, groupBy.getKeyExpressions(), Arrays.asList(context.getAggregationManager().getAggregators().getFunctions()));
     }
 
 }

@@ -1,4 +1,4 @@
-package org.apache.phoenix.calcite;
+package org.apache.phoenix.calcite.rel;
 
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptCost;
@@ -14,7 +14,7 @@ import org.apache.phoenix.execute.AggregatePlan;
 import org.apache.phoenix.execute.TupleProjectionPlan;
 import org.apache.phoenix.execute.TupleProjector;
 
-public class PhoenixCompactClientSort extends PhoenixSort {
+public class PhoenixCompactClientSort extends PhoenixAbstractSort {
 
     public PhoenixCompactClientSort(RelOptCluster cluster, RelTraitSet traits,
             RelNode child, RelCollation collation, RexNode offset, RexNode fetch) {

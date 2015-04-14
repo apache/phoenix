@@ -1,4 +1,4 @@
-package org.apache.phoenix.calcite;
+package org.apache.phoenix.calcite.rel;
 
 import java.util.List;
 
@@ -8,6 +8,7 @@ import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Aggregate;
 import org.apache.calcite.rel.core.AggregateCall;
 import org.apache.calcite.util.ImmutableBitSet;
+import org.apache.phoenix.calcite.CalciteUtils;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.StatementContext;
@@ -30,9 +31,9 @@ import com.google.common.collect.Lists;
  * Implementation of {@link org.apache.calcite.rel.core.Aggregate}
  * relational expression in Phoenix.
  */
-abstract public class PhoenixAggregate extends Aggregate implements PhoenixRel {
+abstract public class PhoenixAbstractAggregate extends Aggregate implements PhoenixRel {
     
-    protected PhoenixAggregate(RelOptCluster cluster, RelTraitSet traits, RelNode child, boolean indicator, ImmutableBitSet groupSet, List<ImmutableBitSet> groupSets, List<AggregateCall> aggCalls) {
+    protected PhoenixAbstractAggregate(RelOptCluster cluster, RelTraitSet traits, RelNode child, boolean indicator, ImmutableBitSet groupSet, List<ImmutableBitSet> groupSets, List<AggregateCall> aggCalls) {
         super(cluster, traits, child, indicator, groupSet, groupSets, aggCalls);
         assert getConvention() == PhoenixRel.CONVENTION;
 

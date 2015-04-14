@@ -19,6 +19,8 @@ import org.apache.calcite.schema.TranslatableTable;
 import org.apache.calcite.schema.impl.AbstractTable;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.util.ImmutableBitSet;
+import org.apache.phoenix.calcite.rel.PhoenixRel;
+import org.apache.phoenix.calcite.rel.PhoenixTableScan;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
@@ -78,7 +80,9 @@ public class PhoenixTable extends AbstractTable implements TranslatableTable {
         return new Statistic() {
             @Override
             public Double getRowCount() {
-                return 100d;
+                // TODO
+                String tableName = pTable.getTableName().getString();
+                return tableName.equals("ITEMTABLE") ? 70d : tableName.equals("SUPPLIERTABLE") ? 60d : 100d;
             }
 
             @Override

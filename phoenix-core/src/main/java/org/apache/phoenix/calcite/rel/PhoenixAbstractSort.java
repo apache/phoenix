@@ -1,4 +1,4 @@
-package org.apache.phoenix.calcite;
+package org.apache.phoenix.calcite.rel;
 
 import java.util.List;
 
@@ -12,6 +12,7 @@ import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Sort;
 import org.apache.calcite.rex.RexNode;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.phoenix.calcite.CalciteUtils;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.Expression;
@@ -26,10 +27,10 @@ import com.google.common.collect.Lists;
  *
  * <p>Like {@code Sort}, it also supports LIMIT and OFFSET.
  */
-abstract public class PhoenixSort extends Sort implements PhoenixRel {
+abstract public class PhoenixAbstractSort extends Sort implements PhoenixRel {
     protected static final double CLIENT_MERGE_FACTOR = 0.5;
     
-    public PhoenixSort(RelOptCluster cluster, RelTraitSet traits, RelNode child, RelCollation collation, RexNode offset, RexNode fetch) {
+    public PhoenixAbstractSort(RelOptCluster cluster, RelTraitSet traits, RelNode child, RelCollation collation, RexNode offset, RexNode fetch) {
         super(cluster, traits, child, collation, offset, fetch);
         assert getConvention() == PhoenixRel.CONVENTION;
     }

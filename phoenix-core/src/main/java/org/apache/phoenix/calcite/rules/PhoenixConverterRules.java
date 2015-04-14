@@ -11,17 +11,19 @@ import org.apache.calcite.rel.logical.LogicalProject;
 import org.apache.calcite.rel.logical.LogicalSort;
 import org.apache.calcite.rel.logical.LogicalUnion;
 import org.apache.calcite.util.trace.CalciteTrace;
-import org.apache.phoenix.calcite.PhoenixAggregate;
-import org.apache.phoenix.calcite.PhoenixClientAggregate;
-import org.apache.phoenix.calcite.PhoenixClientJoin;
-import org.apache.phoenix.calcite.PhoenixClientProject;
-import org.apache.phoenix.calcite.PhoenixClientSort;
-import org.apache.phoenix.calcite.PhoenixFilter;
-import org.apache.phoenix.calcite.PhoenixProject;
-import org.apache.phoenix.calcite.PhoenixRel;
-import org.apache.phoenix.calcite.PhoenixSort;
-import org.apache.phoenix.calcite.PhoenixToEnumerableConverter;
-import org.apache.phoenix.calcite.PhoenixUnion;
+import org.apache.phoenix.calcite.rel.PhoenixAbstractAggregate;
+import org.apache.phoenix.calcite.rel.PhoenixClientAggregate;
+import org.apache.phoenix.calcite.rel.PhoenixClientProject;
+import org.apache.phoenix.calcite.rel.PhoenixClientSort;
+import org.apache.phoenix.calcite.rel.PhoenixFilter;
+import org.apache.phoenix.calcite.rel.PhoenixAbstractProject;
+import org.apache.phoenix.calcite.rel.PhoenixJoin;
+import org.apache.phoenix.calcite.rel.PhoenixRel;
+import org.apache.phoenix.calcite.rel.PhoenixAbstractSort;
+import org.apache.phoenix.calcite.rel.PhoenixToEnumerableConverter;
+import org.apache.phoenix.calcite.rel.PhoenixUnion;
+
+import com.google.common.base.Predicate;
 
 import java.util.logging.Logger;
 
@@ -50,24 +52,41 @@ public class PhoenixConverterRules {
     abstract static class PhoenixConverterRule extends ConverterRule {
         protected final Convention out;
         public PhoenixConverterRule(
-            Class<? extends RelNode> clazz,
-            RelTrait in,
-            Convention out,
-            String description) {
+                Class<? extends RelNode> clazz,
+                RelTrait in,
+                Convention out,
+                String description) {
             super(clazz, in, out, description);
+            this.out = out;
+        }
+        
+        public <R extends RelNode> PhoenixConverterRule(
+                Class<R> clazz,
+                Predicate<? super R> predicate,
+                RelTrait in,
+                Convention out,
+                String description) {
+            super(clazz, predicate, in, out, description);
             this.out = out;
         }
     }
 
     /**
      * Rule to convert a {@link org.apache.calcite.rel.core.Sort} to a
-     * {@link PhoenixSort}.
+     * {@link PhoenixAbstractSort}.
      */
     private static class PhoenixSortRule extends PhoenixConverterRule {
+        private static Predicate<LogicalSort> NON_EMPTY_COLLATION = new Predicate<LogicalSort>() {
+            @Override
+            public boolean apply(LogicalSort input) {
+                return !input.getCollation().getFieldCollations().isEmpty();
+            }            
+        };
+        
         public static final PhoenixSortRule INSTANCE = new PhoenixSortRule();
 
         private PhoenixSortRule() {
-            super(LogicalSort.class, Convention.NONE, PhoenixRel.CONVENTION,
+            super(LogicalSort.class, NON_EMPTY_COLLATION, Convention.NONE, PhoenixRel.CONVENTION,
                 "PhoenixSortRule");
         }
 
@@ -107,7 +126,7 @@ public class PhoenixConverterRules {
 
     /**
      * Rule to convert a {@link org.apache.calcite.rel.logical.LogicalProject}
-     * to a {@link PhoenixProject}.
+     * to a {@link PhoenixAbstractProject}.
      */
     private static class PhoenixProjectRule extends PhoenixConverterRule {
         private static final PhoenixProjectRule INSTANCE = new PhoenixProjectRule();
@@ -128,7 +147,7 @@ public class PhoenixConverterRules {
 
     /**
      * Rule to convert a {@link org.apache.calcite.rel.logical.LogicalAggregate}
-     * to an {@link PhoenixAggregate}.
+     * to an {@link PhoenixAbstractAggregate}.
      */
     private static class PhoenixAggregateRule extends PhoenixConverterRule {
         public static final RelOptRule INSTANCE = new PhoenixAggregateRule();
@@ -175,7 +194,7 @@ public class PhoenixConverterRules {
 
     /**
      * Rule to convert a {@link org.apache.calcite.rel.core.Sort} to a
-     * {@link PhoenixSort}.
+     * {@link PhoenixAbstractSort}.
      */
     private static class PhoenixJoinRule extends PhoenixConverterRule {
         public static final PhoenixJoinRule INSTANCE = new PhoenixJoinRule();
@@ -189,7 +208,7 @@ public class PhoenixConverterRules {
             final LogicalJoin join = (LogicalJoin) rel;
             final RelTraitSet traitSet =
                 join.getTraitSet().replace(out);
-            return new PhoenixClientJoin(rel.getCluster(), traitSet,
+            return new PhoenixJoin(rel.getCluster(), traitSet,
                 convert(join.getLeft(), join.getLeft().getTraitSet().replace(out)),
                 convert(join.getRight(), join.getRight().getTraitSet().replace(out)),
                 join.getCondition(),
@@ -343,7 +362,7 @@ public class PhoenixConverterRules {
 
     /**
      * Rule to convert a relational expression from
-     * {@link org.apache.phoenix.calcite.PhoenixRel#CONVENTION} to
+     * {@link org.apache.phoenix.calcite.rel.PhoenixRel#CONVENTION} to
      * {@link org.apache.calcite.adapter.enumerable.EnumerableConvention}.
      */
     public static class PhoenixToEnumerableConverterRule extends ConverterRule {

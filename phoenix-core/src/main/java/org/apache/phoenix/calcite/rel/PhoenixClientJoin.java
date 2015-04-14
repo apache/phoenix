@@ -1,4 +1,4 @@
-package org.apache.phoenix.calcite;
+package org.apache.phoenix.calcite.rel;
 
 import java.util.Set;
 
@@ -10,12 +10,11 @@ import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rex.RexNode;
-import org.apache.calcite.util.Util;
 import org.apache.phoenix.compile.QueryPlan;
 
 import com.google.common.collect.ImmutableSet;
 
-public class PhoenixClientJoin extends PhoenixJoin {
+public class PhoenixClientJoin extends PhoenixAbstractJoin {
 
     public PhoenixClientJoin(RelOptCluster cluster, RelTraitSet traits,
             RelNode left, RelNode right, RexNode condition,
@@ -39,7 +38,7 @@ public class PhoenixClientJoin extends PhoenixJoin {
             if (Double.isInfinite(inputRowCount)) {
                 rowCount = inputRowCount;
             } else {
-                rowCount += Util.nLogN(inputRowCount);
+                rowCount += inputRowCount;
             }
         }
         RelOptCost cost = planner.getCostFactory().makeCost(rowCount, 0, 0);

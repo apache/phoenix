@@ -1,4 +1,4 @@
-package org.apache.phoenix.calcite;
+package org.apache.phoenix.calcite.rel;
 
 import java.util.List;
 
@@ -13,7 +13,7 @@ import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.execute.TupleProjectionPlan;
 import org.apache.phoenix.execute.TupleProjector;
 
-public class PhoenixClientProject extends PhoenixProject {
+public class PhoenixClientProject extends PhoenixAbstractProject {
 
     public PhoenixClientProject(RelOptCluster cluster, RelTraitSet traits,
             RelNode input, List<? extends RexNode> projects, RelDataType rowType) {

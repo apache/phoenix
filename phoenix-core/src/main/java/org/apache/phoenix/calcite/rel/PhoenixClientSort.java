@@ -1,4 +1,4 @@
-package org.apache.phoenix.calcite;
+package org.apache.phoenix.calcite.rel;
 
 import java.sql.SQLException;
 
@@ -20,7 +20,7 @@ import org.apache.phoenix.execute.ClientScanPlan;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.schema.TableRef;
 
-public class PhoenixClientSort extends PhoenixSort {
+public class PhoenixClientSort extends PhoenixAbstractSort {
 
     public PhoenixClientSort(RelOptCluster cluster, RelTraitSet traits,
             RelNode child, RelCollation collation, RexNode offset, RexNode fetch) {

@@ -1,4 +1,4 @@
-package org.apache.phoenix.calcite;
+package org.apache.phoenix.calcite.rel;
 
 import java.sql.SQLException;
 import java.util.List;
@@ -16,6 +16,9 @@ import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rex.RexNode;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.phoenix.calcite.CalciteUtils;
+import org.apache.phoenix.calcite.PhoenixTable;
+import org.apache.phoenix.calcite.rules.PhoenixClientJoinRule;
 import org.apache.phoenix.calcite.rules.PhoenixCompactClientSortRule;
 import org.apache.phoenix.calcite.rules.PhoenixFilterScanMergeRule;
 import org.apache.phoenix.calcite.rules.PhoenixConverterRules;
@@ -82,6 +85,7 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
         planner.addRule(PhoenixServerSortRule.SORT_SERVERJOIN);
         planner.addRule(PhoenixServerSortRule.SORT_SERVERPROJECT);
         planner.addRule(PhoenixCompactClientSortRule.SORT_SERVERAGGREGATE);
+        planner.addRule(PhoenixClientJoinRule.INSTANCE);
     }
 
     @Override

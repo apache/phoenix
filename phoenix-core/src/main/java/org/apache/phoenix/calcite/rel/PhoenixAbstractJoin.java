@@ -1,4 +1,4 @@
-package org.apache.phoenix.calcite;
+package org.apache.phoenix.calcite.rel;
 
 import java.util.Set;
 
@@ -14,8 +14,8 @@ import org.apache.phoenix.parse.JoinTableNode.JoinType;
  * Implementation of {@link org.apache.calcite.rel.core.Join}
  * relational expression in Phoenix.
  */
-abstract public class PhoenixJoin extends Join implements PhoenixRel {
-    public PhoenixJoin(RelOptCluster cluster, RelTraitSet traits, RelNode left, RelNode right, RexNode condition, JoinRelType joinType, Set<String> variablesStopped) {
+abstract public class PhoenixAbstractJoin extends Join implements PhoenixRel {
+    public PhoenixAbstractJoin(RelOptCluster cluster, RelTraitSet traits, RelNode left, RelNode right, RexNode condition, JoinRelType joinType, Set<String> variablesStopped) {
         super( cluster, traits, left, right, condition, joinType, variablesStopped);
         assert getConvention() == PhoenixRel.CONVENTION;
     }

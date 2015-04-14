@@ -1,4 +1,4 @@
-package org.apache.phoenix.calcite;
+package org.apache.phoenix.calcite.rel;
 
 import java.sql.SQLException;
 import java.util.Collections;
@@ -6,7 +6,8 @@ import java.util.List;
 import java.util.Stack;
 
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.phoenix.calcite.PhoenixRel.ImplementorContext;
+import org.apache.phoenix.calcite.CalciteUtils;
+import org.apache.phoenix.calcite.rel.PhoenixRel.ImplementorContext;
 import org.apache.phoenix.compile.ColumnProjector;
 import org.apache.phoenix.compile.ExpressionProjector;
 import org.apache.phoenix.compile.QueryPlan;
@@ -30,7 +31,7 @@ import org.apache.phoenix.schema.TableRef;
 
 import com.google.common.collect.Lists;
 
-class PhoenixRelImplementorImpl implements PhoenixRel.Implementor {
+public class PhoenixRelImplementorImpl implements PhoenixRel.Implementor {
 	private TableRef tableRef;
 	private Stack<ImplementorContext> contextStack;
 	

@@ -2,10 +2,10 @@ package org.apache.phoenix.calcite.rules;
 
 import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.plan.RelOptRuleCall;
-import org.apache.phoenix.calcite.PhoenixClientSort;
-import org.apache.phoenix.calcite.PhoenixCompactClientSort;
-import org.apache.phoenix.calcite.PhoenixRel;
-import org.apache.phoenix.calcite.PhoenixServerAggregate;
+import org.apache.phoenix.calcite.rel.PhoenixClientSort;
+import org.apache.phoenix.calcite.rel.PhoenixCompactClientSort;
+import org.apache.phoenix.calcite.rel.PhoenixRel;
+import org.apache.phoenix.calcite.rel.PhoenixServerAggregate;
 
 public class PhoenixCompactClientSortRule extends RelOptRule {
     

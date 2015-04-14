@@ -1,4 +1,4 @@
-package org.apache.phoenix.calcite;
+package org.apache.phoenix.calcite.rel;
 
 import java.util.List;
 
@@ -14,7 +14,7 @@ import org.apache.phoenix.execute.HashJoinPlan;
 import org.apache.phoenix.execute.ScanPlan;
 import org.apache.phoenix.execute.TupleProjector;
 
-public class PhoenixServerProject extends PhoenixProject {
+public class PhoenixServerProject extends PhoenixAbstractProject {
 
     public PhoenixServerProject(RelOptCluster cluster, RelTraitSet traits,
             RelNode input, List<? extends RexNode> projects, RelDataType rowType) {
