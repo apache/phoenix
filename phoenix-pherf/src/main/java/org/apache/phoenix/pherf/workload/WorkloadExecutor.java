@@ -79,7 +79,7 @@ public class WorkloadExecutor {
      */
     public void executeDataLoad() throws Exception {
         logger.info("\n\nStarting Data Loader...");
-        DataLoader dataLoader = new DataLoader(properties, parser);
+        DataLoader dataLoader = new DataLoader(parser);
         dataLoader.execute();
     }
 
