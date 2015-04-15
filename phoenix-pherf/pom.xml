@@ -314,6 +314,16 @@
         </dependency>
         <dependency>
             <groupId>org.apache.hbase</groupId>
+<<<<<<< HEAD
+=======
+            <artifactId>hbase-hadoop-compat</artifactId>
+            <version>${hbase.version}</version>
+            <type>test-jar</type>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.hbase</groupId>
+>>>>>>> Converted DataIngestTest to use mini cluster.
             <artifactId>hbase-hadoop2-compat</artifactId>
             <version>${hbase.version}</version>
             <scope>test</scope>
@@ -341,6 +351,7 @@
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-minicluster</artifactId>
         </dependency>
+
     </dependencies>
     <build>
         <plugins>
