@@ -189,7 +189,8 @@ public class QueryServicesOptions {
     public static final boolean DEFAULT_IS_METRICS_ENABLED = true;
     
     private static final String DEFAULT_CLIENT_RPC_CONTROLLER_FACTORY = ClientRpcControllerFactory.class.getName();
-    public static final boolean DEFAULT_USE_BYTE_BASED_REGEX = true;
+    
+    public static final boolean DEFAULT_USE_BYTE_BASED_REGEX = false;
 
     private final Configuration config;
 
