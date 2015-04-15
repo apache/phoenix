@@ -1,0 +1,4 @@
+STAT_NAME,STAT_VALUE,TIME_STAMP
+org.apache.phoenix.pherf:type=PherfWriteThreads,6,Mon Jan 05 15:14:00 PST 2015
+org.apache.phoenix.pherf:type=PherfWriteThreads,6,Mon Jan 05 15:14:00 PST 2015
+org.apache.phoenix.pherf:type=PherfWriteThreads,6,Mon Jan 05 15:14:00 PST 2015
