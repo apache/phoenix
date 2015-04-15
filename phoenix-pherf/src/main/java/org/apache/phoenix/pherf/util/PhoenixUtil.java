@@ -65,9 +65,8 @@ public class PhoenixUtil {
     		props.setProperty("TenantId", tenantId);
    			logger.debug("\nSetting tenantId to " + tenantId);
     	}
+
         String url = "jdbc:phoenix:" + zookeeper + (testEnabled ? ";test=true" : "");
-        // jdbc:phoenix:localhost:62129;test=true
-        // jdbc:phoenix:localhost;test=true
         Connection connection = DriverManager.getConnection(url, props);
         return connection;
     }
