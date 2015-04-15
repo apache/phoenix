@@ -159,6 +159,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 					doubleArr);
 			PhoenixArray resultArray = (PhoenixArray) rs.getArray(1);
 			assertEquals(resultArray, array);
+            assertEquals("[25.343, 36.763, 37.56, 386.63]", rs.getString(1));
 			assertEquals(rs.getString("B_string"), B_VALUE);
 			assertTrue(Floats.compare(rs.getFloat(3), 0.01f) == 0);
 			assertFalse(rs.next());
@@ -206,6 +207,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 			array = conn.createArrayOf("DOUBLE", doubleArr);
 			Array resultArray = rs.getArray(1);
 			assertEquals(resultArray, array);
+            assertEquals("[25.343, 36.763, 37.56, 386.63]", rs.getString(1));
 			assertEquals(rs.getString("B_string"), B_VALUE);
 			assertTrue(Floats.compare(rs.getFloat(3), 0.01f) == 0);
 			assertFalse(rs.next());
@@ -248,6 +250,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 			array = conn.createArrayOf("DOUBLE", doubleArr);
 			Array resultArray = rs.getArray(1);
 			assertEquals(resultArray, array);
+            assertEquals("[25.343, 36.763, 37.56, 386.63]", rs.getString(1));
 			assertEquals(rs.getString("B_string"), B_VALUE);
 			assertTrue(Floats.compare(rs.getFloat(3), 0.01f) == 0);
 			assertFalse(rs.next());
@@ -280,6 +283,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 			Array array = conn.createArrayOf("VARCHAR", strArr);
 			PhoenixArray resultArray = (PhoenixArray) rs.getArray(1);
 			assertEquals(resultArray, array);
+            assertEquals("['ABC', 'CEDF', 'XYZWER', 'AB']", rs.getString(1));
 			assertFalse(rs.next());
 		} finally {
 			conn.close();
@@ -654,6 +658,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
             intArr[2] = 1;
             Array resultArr = conn.createArrayOf("INTEGER", intArr);
             assertEquals(resultArr, array);
+            assertEquals("[1, 2, 1]", rs.getString(2));
             assertFalse(rs.next());
         } finally {
             conn.close();
@@ -685,6 +690,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
             strArr[2] = "b";
             Array resultArr = conn.createArrayOf("VARCHAR", strArr);
             assertEquals(resultArr, array);
+            assertEquals("['abc', 'defgh', 'b']", rs.getString(2));
             assertFalse(rs.next());
         } finally {
             conn.close();
@@ -719,6 +725,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
             strArr[5] = "b";
             Array resultArr = conn.createArrayOf("VARCHAR", strArr);
             assertEquals(resultArr, array);
+            assertEquals("['abc', null, 'bcd', null, null, 'b']", rs.getString(2));
             assertFalse(rs.next());
         } finally {
             conn.close();
@@ -824,6 +831,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         assertTrue(rs.next());
         PhoenixArray strArr = (PhoenixArray)rs.getArray(1);
         assertEquals(array, strArr);
+        assertEquals("['abc', 'def', 'ghi', 'jkll', null, null, 'xxx']", rs.getString(1));
         conn.close();
     }
 
@@ -917,6 +925,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         array = conn.createArrayOf("DOUBLE", d);
         PhoenixArray arr = (PhoenixArray)rs.getArray(1);
         assertEquals(array, arr);
+        assertEquals("[1.0, 2.0]", rs.getString(1));
         conn.close();
     }
 
@@ -951,6 +960,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         String[] array3 = (String[])arr.getArray();
         assertEquals(array2[0], array3[0]);
         assertEquals(array2[1], array3[1]);
+        assertEquals("['1', '2']", rs.getString(1));
         conn.close();
     }
 
@@ -1018,6 +1028,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 			Array array = conn.createArrayOf("DOUBLE", doubleArr);
 			PhoenixArray resultArray = (PhoenixArray) rs.getArray(1);
 			assertEquals(resultArray, array);
+            assertEquals("[25.343, 36.763, 37.56, 386.63]", rs.getString(1));
 			assertFalse(rs.next());
 		} finally {
 			conn.close();
@@ -1298,6 +1309,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 			assertTrue(rs.next());
 			PhoenixArray resultArray = (PhoenixArray) rs.getArray(1);
 			assertNull(resultArray);
+			assertEquals("null", rs.getString(1));
 		} finally {
 			conn.close();
 		}
@@ -1655,6 +1667,22 @@ public class ArrayIT extends BaseClientManagedTimeIT {
                 conn.close();
             }
         }
+
+    }
+    
+    @Test
+    public void testArraySelectGetString() throws Exception {
+        long ts = nextTimestamp();
+        String tenantId = getOrganizationId();
+        createTableWithArray(getUrl(),
+                getDefaultSplits(tenantId), null, ts - 2);
+        initTablesWithArrays(tenantId, null, ts, false, getUrl());
+        String query = "SELECT a_string_array, a_long_array, a_short_array FROM table_with_array WHERE ?=organization_id";
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
+                Long.toString(ts + 2)); // Execute at timestamp 2
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        analyzeTable(conn, TABLE_WITH_ARRAY);
 
     }
 
