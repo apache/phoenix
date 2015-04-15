@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<ns3:dataModelResult xmlns:ns2="org.apache.phoenix.pherf.configuration.DataModel" xmlns:ns3="org.apache.phoenix.pherf.result" zookeeper="mytestzk">
+    <scenarioResult rowCount="999" tableName="MY_TABLE_NAME">
+        <querySetResult concurrency="50" executionDurationInMs="10000" executionType="SERIAL" numberOfExecutions="10">
+            <queryResults id="7529a24d-45cc-4ae7-9934-abadf8fbb606" queryGroup="g123" statement="Select * from FHA" tenantId="tennantID123">
+                <threadTimes threadName="thread1">
+                    <runTimesInMs elapsedDurationInMs="10" resultRowCount="1000" startTime="2015-04-21T15:06:07.861-07:00"/>
+                    <runTimesInMs elapsedDurationInMs="20" resultRowCount="2000" startTime="2015-04-21T15:05:07.861-07:00"/>
+                    <runTimesInMs elapsedDurationInMs="30" resultRowCount="3000" startTime="2015-04-21T15:04:07.861-07:00"/>
+                </threadTimes>
+            </queryResults>
+            <queryResults id="1229a494-070c-4c4c-a459-f98c5153b438" statement="Select a, b, c * from FHA2">
+                <threadTimes threadName="thread1">
+                    <runTimesInMs elapsedDurationInMs="10" resultRowCount="1000" startTime="2015-04-21T15:06:07.861-07:00"/>
+                    <runTimesInMs elapsedDurationInMs="20" resultRowCount="2000" startTime="2015-04-21T15:05:07.861-07:00"/>
+                    <runTimesInMs elapsedDurationInMs="30" resultRowCount="3000" startTime="2015-04-21T15:04:07.861-07:00"/>
+                </threadTimes>
+            </queryResults>
+        </querySetResult>
+    </scenarioResult>
+</ns3:dataModelResult>

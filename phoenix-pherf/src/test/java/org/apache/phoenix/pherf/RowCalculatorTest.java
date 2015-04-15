@@ -18,18 +18,12 @@
 
 package org.apache.phoenix.pherf;
 
-import org.apache.phoenix.pherf.configuration.DataModel;
-import org.apache.phoenix.pherf.configuration.XMLConfigParser;
-import org.apache.phoenix.pherf.loaddata.DataLoader;
 import org.apache.phoenix.pherf.util.RowCalculator;
-import org.junit.BeforeClass;
 import org.junit.Test;
 
 import static junit.framework.Assert.assertEquals;
-import static junit.framework.Assert.fail;
 
-public class DataLoaderTest extends BaseTestWithCluster {
-
+public class RowCalculatorTest {
     /**
      * Test rows divide evenly with large rows and small threadpool
      * @throws Exception

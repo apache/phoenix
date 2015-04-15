@@ -18,6 +18,7 @@
 
 package org.apache.phoenix.pherf;
 
+import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.pherf.configuration.Column;
 import org.apache.phoenix.pherf.configuration.DataTypeMapping;
 import org.apache.phoenix.pherf.configuration.Scenario;
@@ -26,6 +27,7 @@ import org.apache.phoenix.pherf.loaddata.DataLoader;
 import org.apache.phoenix.pherf.rules.DataValue;
 import org.apache.phoenix.pherf.rules.RulesApplier;
 import org.apache.phoenix.pherf.schema.SchemaReader;
+import org.apache.phoenix.pherf.util.PhoenixUtil;
 import org.junit.Test;
 
 import java.nio.file.Path;
@@ -36,13 +38,15 @@ import java.util.Map;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
-public class DataIngestTest extends BaseTestWithCluster {
+public class DataIngestTest extends BaseHBaseManagedTimeIT {
+    protected static PhoenixUtil util = new PhoenixUtil(true);
     static final String matcherScenario = ".*scenario/.*test.*xml";
     static final String matcherSchema = ".*datamodel/.*test.*sql";
 
     @Test
     public void generateData() throws Exception {
-        SchemaReader reader = new SchemaReader(matcherSchema);
+        util.setZookeeper("cmarcel-ltm1");
+        SchemaReader reader = new SchemaReader(util, matcherSchema);
         XMLConfigParser parser = new XMLConfigParser(matcherScenario);
 
         // 1. Generate table schema from file
@@ -67,8 +71,8 @@ public class DataIngestTest extends BaseTestWithCluster {
             assertTrue("Failed to retrieve data for column type: " + column.getType(), data != null);
 
             // Test that we still retrieve the GENERAL_CHAR rule even after an override is applied to another CHAR type.
-            // FIELD_HISTORY_ARCHIVE_ID Column does not  specify an override so we should get the default rule.
-            if ((column.getType() == DataTypeMapping.CHAR) && (column.getName().equals("FIELD_HISTORY_ARCHIVE_ID"))) {
+            // NEWVAL_STRING Column does not  specify an override so we should get the default rule.
+            if ((column.getType() == DataTypeMapping.VARCHAR) && (column.getName().equals("NEWVAL_STRING"))) {
                 assertTrue("Failed to retrieve data for column type: ", data.getDistribution() == Integer.MIN_VALUE);
             }
         }
