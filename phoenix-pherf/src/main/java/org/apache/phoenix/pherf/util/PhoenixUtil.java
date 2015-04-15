@@ -38,12 +38,25 @@ public class PhoenixUtil {
 	private static final Logger logger = LoggerFactory.getLogger(PhoenixUtil.class);
 	private static String zookeeper;
 	private static int rowCountOverride = 0;
-	
+    private final boolean testEnabled;
+
+    public PhoenixUtil() {
+        this(false);
+    }
+
+    public PhoenixUtil(final boolean testEnabled) {
+        this.testEnabled = testEnabled;
+    }
+
     public Connection getConnection() throws Exception{
     	return getConnection(null);
     }
-	
-    public Connection getConnection(String tenantId) throws Exception{
+
+    public Connection getConnection(String tenantId) throws Exception {
+        return getConnection(tenantId, testEnabled);
+    }
+
+    public Connection getConnection(String tenantId, boolean testEnable) throws Exception{
 		if (null == zookeeper) {
 			throw new IllegalArgumentException("Zookeeper must be set before initializing connection!");
 		}
@@ -52,7 +65,7 @@ public class PhoenixUtil {
     		props.setProperty("TenantId", tenantId);
    			logger.debug("\nSetting tenantId to " + tenantId);
     	}
-    	Connection connection = DriverManager.getConnection("jdbc:phoenix:" + zookeeper, props);
+    	Connection connection = DriverManager.getConnection("jdbc:phoenix:" + zookeeper + ";test=" + testEnable, props);
         return connection;
     }
 
