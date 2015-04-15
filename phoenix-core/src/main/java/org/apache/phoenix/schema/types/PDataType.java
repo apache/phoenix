@@ -1098,8 +1098,10 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
   public String toStringLiteral(Object o, Format formatter) {
       if (formatter != null) {
           return formatter.format(o);
-        }
-        return o.toString();
+      } else if(null == o) {
+          return String.valueOf(o);
+      }
+      return o.toString();
   }
 
   private static final PhoenixArrayFactory DEFAULT_ARRAY_FACTORY = new PhoenixArrayFactory() {
@@ -1173,7 +1175,7 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
     return object;
   }
 
-  public void pad(ImmutableBytesWritable ptr, Integer maxLength, SortOrder sortOrder) {
+  public void pad(ImmutableBytesWritable ptr, Integer maxLength) {
   }
 
   public static PDataType arrayBaseType(PDataType arrayType) {
