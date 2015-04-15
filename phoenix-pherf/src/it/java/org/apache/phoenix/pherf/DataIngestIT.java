@@ -37,15 +37,16 @@ import java.util.Map;
 
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
-public class DataIngestTest extends BaseHBaseManagedTimeIT {
+public class DataIngestIT extends BaseHBaseManagedTimeIT {
     protected static PhoenixUtil util = new PhoenixUtil(true);
     static final String matcherScenario = ".*scenario/.*test.*xml";
     static final String matcherSchema = ".*datamodel/.*test.*sql";
 
     @Test
     public void generateData() throws Exception {
-        util.setZookeeper("cmarcel-ltm1");
+        util.setZookeeper("localhost");
         SchemaReader reader = new SchemaReader(util, matcherSchema);
         XMLConfigParser parser = new XMLConfigParser(matcherScenario);
 
@@ -59,7 +60,7 @@ public class DataIngestTest extends BaseHBaseManagedTimeIT {
         Scenario scenario = parser.getScenarios().get(0);
         List<Column> columnListFromPhoenix = util.getColumnsFromPhoenix(scenario.getSchemaName(), scenario.getTableNameWithoutSchemaName(), util.getConnection());
         assertTrue("Could not get phoenix columns.", columnListFromPhoenix.size() > 0);
-        DataLoader loader = new DataLoader(parser);
+        DataLoader loader = new DataLoader(util,parser);
         RulesApplier rulesApplier = loader.getRulesApplier();
         List<Map> modelList = rulesApplier.getModelList();
         assertTrue("Could not generate the modelList", modelList.size() > 0);
@@ -77,6 +78,11 @@ public class DataIngestTest extends BaseHBaseManagedTimeIT {
             }
         }
 
-        loader.execute();
+        // Load up the data.
+        try {
+            loader.execute();
+        } catch (Exception e) {
+            fail("Failed to lead data. An exception was thrown: " + e.getMessage());
+        }
     }
 }

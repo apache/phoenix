@@ -41,7 +41,6 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.phoenix.pherf.PherfConstants;
 import org.apache.phoenix.pherf.configuration.Column;
-import org.apache.phoenix.pherf.configuration.DataModel;
 import org.apache.phoenix.pherf.configuration.Scenario;
 import org.apache.phoenix.pherf.configuration.XMLConfigParser;
 import org.apache.phoenix.pherf.exception.PherfException;
@@ -53,7 +52,7 @@ import org.apache.phoenix.pherf.util.PhoenixUtil;
 
 public class DataLoader {
     private static final Logger logger = LoggerFactory.getLogger(DataLoader.class);
-    private final PhoenixUtil pUtil = new PhoenixUtil();
+    private final PhoenixUtil pUtil;
     private final XMLConfigParser parser;
     private final RulesApplier rulesApplier;
     private final ResultUtil resultUtil;
@@ -63,16 +62,22 @@ public class DataLoader {
     private final int batchSize;
 
     public DataLoader(XMLConfigParser parser) throws Exception {
-        this(new ResourceList().getProperties(), parser);
+        this(new PhoenixUtil(), parser);
     }
 
+    public DataLoader(PhoenixUtil phoenixUtil, XMLConfigParser parser) throws Exception{
+        this(phoenixUtil, new ResourceList().getProperties(), parser);
+    }
     /**
      * Default the writers to use up all available cores for threads.
      *
+     *
+     * @param phoenixUtil
      * @param parser
      * @throws Exception
      */
-    public DataLoader(Properties properties, XMLConfigParser parser) throws Exception {
+    public DataLoader(PhoenixUtil phoenixUtil, Properties properties, XMLConfigParser parser) throws Exception {
+        this.pUtil = phoenixUtil;
         this.parser = parser;
         this.rulesApplier = new RulesApplier(this.parser);
         this.resultUtil = new ResultUtil();
@@ -85,7 +90,6 @@ public class DataLoader {
 
     public void execute() throws Exception {
         try {
-            DataModel model = getParser().getDataModels().get(0);
             DataLoadTimeSummary dataLoadTimeSummary = new DataLoadTimeSummary();
             DataLoadThreadTime dataLoadThreadTime = new DataLoadThreadTime();
 
