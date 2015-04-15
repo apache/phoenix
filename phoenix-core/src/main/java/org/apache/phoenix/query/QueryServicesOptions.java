@@ -193,7 +193,7 @@ public class QueryServicesOptions {
     
     public static final String DEFAULT_CONSISTENCY_LEVEL = Consistency.STRONG.toString();
 
-    public static final boolean DEFAULT_USE_BYTE_BASED_REGEX = true;
+    public static final boolean DEFAULT_USE_BYTE_BASED_REGEX = false;
 
     private final Configuration config;
 
