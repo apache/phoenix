@@ -56,7 +56,7 @@ public class PhoenixUtil {
         return getConnection(tenantId, testEnabled);
     }
 
-    public Connection getConnection(String tenantId, boolean testEnable) throws Exception{
+    public Connection getConnection(String tenantId, boolean testEnabled) throws Exception{
 		if (null == zookeeper) {
 			throw new IllegalArgumentException("Zookeeper must be set before initializing connection!");
 		}
@@ -65,7 +65,10 @@ public class PhoenixUtil {
     		props.setProperty("TenantId", tenantId);
    			logger.debug("\nSetting tenantId to " + tenantId);
     	}
-    	Connection connection = DriverManager.getConnection("jdbc:phoenix:" + zookeeper + ";test=" + testEnable, props);
+        String url = "jdbc:phoenix:" + zookeeper + (testEnabled ? ";test=true" : "");
+        // jdbc:phoenix:localhost:62129;test=true
+        // jdbc:phoenix:localhost;test=true
+        Connection connection = DriverManager.getConnection(url, props);
         return connection;
     }
 
