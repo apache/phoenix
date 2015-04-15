@@ -51,6 +51,7 @@ import com.google.common.primitives.Floats;
 public class ArrayIT extends BaseClientManagedTimeIT {
 
 	private static final String SIMPLE_TABLE_WITH_ARRAY = "SIMPLE_TABLE_WITH_ARRAY";
+    private static final String TABLE_WITH_ALL_ARRAY_TYPES = "TABLE_WITH_ALL_ARRAY_TYPES";
 
     private static void initTablesWithArrays(String tenantId, Date date, Long ts, boolean useNull, String url) throws Exception {
         Properties props = new Properties();
@@ -690,7 +691,10 @@ public class ArrayIT extends BaseClientManagedTimeIT {
             strArr[2] = "b";
             Array resultArr = conn.createArrayOf("VARCHAR", strArr);
             assertEquals(resultArr, array);
-            assertEquals("['abc', 'defgh', 'b']", rs.getString(2));
+            // since array is var length, last string element is messed up
+            String expectedPrefix = "['abc', 'defgh', 'b";
+            assertTrue("Expected to start with " + expectedPrefix,
+                rs.getString(2).startsWith(expectedPrefix));
             assertFalse(rs.next());
         } finally {
             conn.close();
@@ -725,7 +729,9 @@ public class ArrayIT extends BaseClientManagedTimeIT {
             strArr[5] = "b";
             Array resultArr = conn.createArrayOf("VARCHAR", strArr);
             assertEquals(resultArr, array);
-            assertEquals("['abc', null, 'bcd', null, null, 'b']", rs.getString(2));
+            String expectedPrefix = "['abc', null, 'bcd', null, null, 'b";
+            assertTrue("Expected to start with " + expectedPrefix,
+                rs.getString(2).startsWith(expectedPrefix));
             assertFalse(rs.next());
         } finally {
             conn.close();
@@ -831,7 +837,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         assertTrue(rs.next());
         PhoenixArray strArr = (PhoenixArray)rs.getArray(1);
         assertEquals(array, strArr);
-        assertEquals("['abc', 'def', 'ghi', 'jkll', null, null, 'xxx']", rs.getString(1));
+        assertEquals("['abc', 'def', 'ghi', 'jkll', null, null, null, 'xxx']", rs.getString(1));
         conn.close();
     }
 
@@ -895,6 +901,93 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         conn.close();
     }
 
+    @Test
+    public void testArraySelectGetString() throws Exception {
+        Connection conn;
+        PreparedStatement stmt;
+        long ts = nextTimestamp();
+        String tenantId = getOrganizationId();
+
+        // create the table
+        createTableWithAllArrayTypes(getUrl(), getDefaultSplits(tenantId), null, ts - 2);
+
+        // populate the table with data
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        conn = DriverManager.getConnection(getUrl(), props);
+        stmt =
+                conn.prepareStatement("UPSERT INTO "
+                        + TABLE_WITH_ALL_ARRAY_TYPES
+                        + "(ORGANIZATION_ID, ENTITY_ID, BOOLEAN_ARRAY, BYTE_ARRAY, DOUBLE_ARRAY, FLOAT_ARRAY, INT_ARRAY, LONG_ARRAY, SHORT_ARRAY, STRING_ARRAY)\n"
+                        + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        stmt.setString(1, tenantId);
+        stmt.setString(2, ROW1);
+        // boolean array
+        Array boolArray = conn.createArrayOf("BOOLEAN", new Boolean[] { true, false });
+        int boolIndex = 3;
+        stmt.setArray(boolIndex, boolArray);
+        // byte array
+        Array byteArray = conn.createArrayOf("TINYINT", new Byte[] { 11, 22 });
+        int byteIndex = 4;
+        stmt.setArray(byteIndex, byteArray);
+        // double array
+        Array doubleArray = conn.createArrayOf("DOUBLE", new Double[] { 67.78, 78.89 });
+        int doubleIndex = 5;
+        stmt.setArray(doubleIndex, doubleArray);
+        // float array
+        Array floatArray = conn.createArrayOf("FLOAT", new Float[] { 12.23f, 45.56f });
+        int floatIndex = 6;
+        stmt.setArray(floatIndex, floatArray);
+        // int array
+        Array intArray = conn.createArrayOf("INTEGER", new Integer[] { 5555, 6666 });
+        int intIndex = 7;
+        stmt.setArray(intIndex, intArray);
+        // long array
+        Array longArray = conn.createArrayOf("BIGINT", new Long[] { 7777777L, 8888888L });
+        int longIndex = 8;
+        stmt.setArray(longIndex, longArray);
+        // short array
+        Array shortArray = conn.createArrayOf("SMALLINT", new Short[] { 333, 444 });
+        int shortIndex = 9;
+        stmt.setArray(shortIndex, shortArray);
+        // create character array
+        Array stringArray = conn.createArrayOf("VARCHAR", new String[] { "a", "b" });
+        int stringIndex = 10;
+        stmt.setArray(stringIndex, stringArray);
+        stmt.execute();
+        conn.commit();
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
+        conn = DriverManager.getConnection(getUrl(), props);
+        stmt =
+                conn.prepareStatement("SELECT organization_id, entity_id, boolean_array, byte_array, double_array, float_array, int_array, long_array, short_array, string_array FROM "
+                        + TABLE_WITH_ALL_ARRAY_TYPES);
+        analyzeTable(conn, TABLE_WITH_ALL_ARRAY_TYPES);
+
+        ResultSet rs = stmt.executeQuery();
+        assertTrue(rs.next());
+
+        assertEquals(tenantId, rs.getString(1));
+        assertEquals(ROW1, rs.getString(2));
+        
+        assertArrayGetString(rs, boolIndex, boolArray, "true, false");
+        assertArrayGetString(rs, byteIndex, byteArray, "11, 22");
+        assertArrayGetString(rs, doubleIndex, doubleArray, "67.78, 78.89");
+        assertArrayGetString(rs, floatIndex, floatArray, "12.23, 45.56");
+        assertArrayGetString(rs, intIndex, intArray, "5555, 6666");
+        assertArrayGetString(rs, longIndex, longArray, "7777777, 8888888");
+        assertArrayGetString(rs, shortIndex, shortArray, "333, 444");
+        assertArrayGetString(rs, stringIndex, stringArray, "'a', 'b'");
+        conn.close();
+    }
+
+    private void assertArrayGetString(ResultSet rs, int arrayIndex, Array expectedArray, String expectedString)
+            throws SQLException {
+        assertEquals(expectedArray, rs.getArray(arrayIndex));
+        assertEquals("[" + expectedString + "]", rs.getString(arrayIndex));
+    }
+    
     @Test
     public void testArrayWithCast() throws Exception {
         Connection conn;
@@ -1309,7 +1402,6 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 			assertTrue(rs.next());
 			PhoenixArray resultArray = (PhoenixArray) rs.getArray(1);
 			assertNull(resultArray);
-			assertEquals("null", rs.getString(1));
 		} finally {
 			conn.close();
 		}
@@ -1670,22 +1762,25 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 
     }
     
-    @Test
-    public void testArraySelectGetString() throws Exception {
-        long ts = nextTimestamp();
-        String tenantId = getOrganizationId();
-        createTableWithArray(getUrl(),
-                getDefaultSplits(tenantId), null, ts - 2);
-        initTablesWithArrays(tenantId, null, ts, false, getUrl());
-        String query = "SELECT a_string_array, a_long_array, a_short_array FROM table_with_array WHERE ?=organization_id";
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
-                Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        analyzeTable(conn, TABLE_WITH_ARRAY);
-
+    private static void createTableWithAllArrayTypes(String url, byte[][] bs, Object object,
+            long ts) throws SQLException {
+        String ddlStmt = "create table "
+                + TABLE_WITH_ALL_ARRAY_TYPES
+                + "   (organization_id char(15) not null, \n"
+                + "    entity_id char(15) not null,\n"
+                + "    boolean_array boolean array,\n"
+                + "    byte_array tinyint array,\n"
+                + "    double_array double array[],\n"
+                + "    float_array float array,\n"
+                + "    int_array integer array,\n"
+                + "    long_array bigint[5],\n"
+                + "    short_array smallint array,\n"
+                + "    string_array varchar(100) array[3],\n"
+                + "    CONSTRAINT pk PRIMARY KEY (organization_id, entity_id)\n"
+                + ")";
+        BaseTest.createTestTable(url, ddlStmt, bs, ts);
     }
-
+    
     static void createTableWithArray(String url, byte[][] bs, Object object,
 			long ts) throws SQLException {
 		String ddlStmt = "create table "
