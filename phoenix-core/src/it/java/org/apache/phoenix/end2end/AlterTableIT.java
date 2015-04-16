@@ -2005,7 +2005,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             conn.createStatement().execute(ddl);
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.SET_UNSUPPORTED_PROP_ON_ALTER_TABLE.getErrorCode(),e.getErrorCode());
+            assertEquals(SQLExceptionCode.CANNOT_ALTER_PROPERTY.getErrorCode(),e.getErrorCode());
         }
     }
 

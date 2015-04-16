@@ -2071,9 +2071,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     @Override
     public MutationState updateData(MutationPlan plan) throws SQLException {
         TableRef currentTable = plan.getContext().getCurrentTable();
-		if (currentTable!=null && currentTable.getTable().isTransactional()) {
-            return new MutationState(1, plan.getConnection());
-        }
         return plan.execute();
     }
 

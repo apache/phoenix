@@ -35,7 +35,6 @@ import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
@@ -60,7 +59,6 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
     @Shadower(classBeingShadowed = BaseHBaseManagedTimeIT.class)
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
-        props.put(QueryServices.DROP_METADATA_ATTRIB, Boolean.toString(true));
         props.put(TxConstants.ALLOW_EMPTY_VALUES_KEY, Boolean.toString(true));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
@@ -107,17 +105,7 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
 	        // verify no rows returned 
 			rs = conn.createStatement().executeQuery(selectSql);
 	     	assertFalse(rs.next());
-	     	
 	        conn.commit();
-	        
-	        Scan scan = new Scan();
-	        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-	        HTableInterface table = pconn.getQueryServices().getTable(Bytes.toBytes(FULL_TABLE_NAME));
-	        ResultScanner results = table.getScanner(scan);
-	        for (Result res : results) {
-	        	System.err.println(res.toString());
-	        }
-	        results.close();
 	        
 	        // verify row exists
 	        rs = conn.createStatement().executeQuery(selectSql);
