@@ -20,7 +20,6 @@
 ############################################################################
 
 import os
-import sys
 import fnmatch
 
 def find(pattern, classPaths):
@@ -95,3 +94,18 @@ def setPath():
      testjar = find(PHOENIX_TESTS_JAR_PATTERN, phoenix_class_path)
 
  return ""
+
+def shell_quote(args):
+    """
+    Return the platform specific shell quoted string. Handles Windows and *nix platforms.
+
+    :param args: array of shell arguments
+    :return: shell quoted string
+    """
+    if os.name == 'nt':
+        import subprocess
+        return subprocess.list2cmdline(args)
+    else:
+        # pipes module isn't available on Windows
+        import pipes
+        return " ".join([pipes.quote(v) for v in args])
