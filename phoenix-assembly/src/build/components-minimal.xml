@@ -45,6 +45,8 @@
       <excludes>
         <exclude>org.apache.phoenix:phoenix-flume</exclude>
         <exclude>org.apache.phoenix:phoenix-pig</exclude>
+        <exclude>org.apache.phoenix:phoenix-server</exclude>
+        <exclude>org.apache.phoenix:phoenix-server-client</exclude>
       </excludes>
     </dependencySet>
   </dependencySets>

@@ -150,5 +150,13 @@
       <groupId>org.apache.phoenix</groupId>
       <artifactId>phoenix-spark</artifactId>
     </dependency>
+    <dependency>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-server</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-server-client</artifactId>
+    </dependency>
   </dependencies>
 </project>
