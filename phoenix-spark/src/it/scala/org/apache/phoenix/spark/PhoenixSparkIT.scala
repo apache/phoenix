@@ -17,14 +17,14 @@ import java.sql.{Connection, DriverManager}
 import java.util.Date
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.hbase.{HConstants, HBaseTestingUtility}
+import org.apache.hadoop.hbase.{HBaseConfiguration, HConstants, HBaseTestingUtility}
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT
 import org.apache.phoenix.query.BaseTest
 import org.apache.phoenix.schema.ColumnNotFoundException
 import org.apache.phoenix.schema.types.PVarchar
 import org.apache.phoenix.util.ColumnInfo
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.types.{StringType, StructField}
+import org.apache.spark.sql.{SaveMode, execution, SQLContext}
+import org.apache.spark.sql.types.{LongType, DataType, StringType, StructField}
 import org.apache.spark.{SparkConf, SparkContext}
 import org.joda.time.DateTime
 import org.scalatest._
@@ -139,7 +139,10 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
 
     df2.registerTempTable("sql_table_2")
 
-    val sqlRdd = sqlContext.sql("SELECT t1.ID, t1.COL1, t2.ID, t2.TABLE1_ID FROM sql_table_1 AS t1 INNER JOIN sql_table_2 AS t2 ON (t2.TABLE1_ID = t1.ID)")
+    val sqlRdd = sqlContext.sql("""
+        |SELECT t1.ID, t1.COL1, t2.ID, t2.TABLE1_ID FROM sql_table_1 AS t1
+        |INNER JOIN sql_table_2 AS t2 ON (t2.TABLE1_ID = t1.ID)""".stripMargin
+    )
 
     val count = sqlRdd.count()
 
@@ -149,7 +152,9 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
   test("Can create schema RDD and execute query on case sensitive table (no config)") {
     val sqlContext = new SQLContext(sc)
 
-    val df1 = sqlContext.phoenixTableAsDataFrame("table3", Array("id", "col1"), zkUrl = Some(quorumAddress))
+
+    val df1 = sqlContext.phoenixTableAsDataFrame("table3", Array("id", "col1"),
+      zkUrl = Some(quorumAddress))
 
     df1.registerTempTable("table3")
 
@@ -163,7 +168,8 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
   test("Can create schema RDD and execute constrained query") {
     val sqlContext = new SQLContext(sc)
 
-    val df1 = sqlContext.phoenixTableAsDataFrame("TABLE1", Array("ID", "COL1"), conf = hbaseConfiguration)
+    val df1 = sqlContext.phoenixTableAsDataFrame("TABLE1", Array("ID", "COL1"),
+      conf = hbaseConfiguration)
 
     df1.registerTempTable("sql_table_1")
 
@@ -173,7 +179,10 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
 
     df2.registerTempTable("sql_table_2")
 
-    val sqlRdd = sqlContext.sql("SELECT t1.ID, t1.COL1, t2.ID, t2.TABLE1_ID FROM sql_table_1 AS t1 INNER JOIN sql_table_2 AS t2 ON (t2.TABLE1_ID = t1.ID)")
+    val sqlRdd = sqlContext.sql("""
+      |SELECT t1.ID, t1.COL1, t2.ID, t2.TABLE1_ID FROM sql_table_1 AS t1
+      |INNER JOIN sql_table_2 AS t2 ON (t2.TABLE1_ID = t1.ID)""".stripMargin
+    )
 
     val count = sqlRdd.count()
 
@@ -194,7 +203,7 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
 
       // we have to execute an action before the predicate failure can occur
       val count = sqlRdd.count()
-    }.getCause shouldBe a [ColumnNotFoundException]
+    }.getCause shouldBe a[ColumnNotFoundException]
   }
 
   test("Can create schema RDD with predicate that will never match") {
@@ -216,10 +225,15 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
   test("Can create schema RDD with complex predicate") {
     val sqlContext = new SQLContext(sc)
 
-    val df1 = sqlContext.phoenixTableAsDataFrame("DATE_PREDICATE_TEST_TABLE", Array("ID", "TIMESERIES_KEY"),
-      predicate = Some("ID > 0 AND TIMESERIES_KEY BETWEEN CAST(TO_DATE('1990-01-01 00:00:01', 'yyyy-MM-dd HH:mm:ss') AS TIMESTAMP) AND CAST(TO_DATE('1990-01-30 00:00:01', 'yyyy-MM-dd HH:mm:ss') AS TIMESTAMP)"),
+    val df1 = sqlContext.phoenixTableAsDataFrame(
+      "DATE_PREDICATE_TEST_TABLE",
+      Array("ID", "TIMESERIES_KEY"),
+      predicate = Some("""
+        |ID > 0 AND TIMESERIES_KEY BETWEEN
+        |CAST(TO_DATE('1990-01-01 00:00:01', 'yyyy-MM-dd HH:mm:ss') AS TIMESTAMP) AND
+        |CAST(TO_DATE('1990-01-30 00:00:01', 'yyyy-MM-dd HH:mm:ss') AS TIMESTAMP)""".stripMargin),
       conf = hbaseConfiguration)
-    
+
     df1.registerTempTable("date_predicate_test_table")
 
     val sqlRdd = df1.sqlContext.sql("SELECT * FROM date_predicate_test_table")
@@ -248,7 +262,7 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
 
     count shouldEqual 1L
   }
-  
+
   test("Can read a table as an RDD") {
     val rdd1 = sc.phoenixTableAsRDD("ARRAY_TEST_TABLE", Seq("ID", "VCARRAY"),
       conf = hbaseConfiguration)
@@ -271,7 +285,7 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
       .parallelize(dataSet)
       .saveToPhoenix(
         "OUTPUT_TEST_TABLE",
-        Seq("ID","COL1","COL2"),
+        Seq("ID", "COL1", "COL2"),
         hbaseConfiguration
       )
 
@@ -279,7 +293,7 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
     val stmt = conn.createStatement()
     val rs = stmt.executeQuery("SELECT ID, COL1, COL2 FROM OUTPUT_TEST_TABLE")
     val results = ListBuffer[(Long, String, Int)]()
-    while(rs.next()) {
+    while (rs.next()) {
       results.append((rs.getLong(1), rs.getString(2), rs.getInt(3)))
     }
 
@@ -306,7 +320,7 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
     val stmt = conn.createStatement()
     val rs = stmt.executeQuery("SELECT COL3 FROM OUTPUT_TEST_TABLE WHERE ID = 1 OR ID = 2 ORDER BY ID ASC")
     val results = ListBuffer[java.sql.Date]()
-    while(rs.next()) {
+    while (rs.next()) {
       results.append(rs.getDate(1))
     }
 
@@ -315,12 +329,89 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
     results(1).getTime shouldEqual date.getTime
   }
 
-  test("Not specifying a zkUrl or a config quorum URL should fail") {
-    intercept[UnsupportedOperationException] {
-      val sqlContext = new SQLContext(sc)
-      val badConf = new Configuration(hbaseConfiguration)
-      badConf.unset(HConstants.ZOOKEEPER_QUORUM)
-      sqlContext.phoenixTableAsDataFrame("TABLE1", Array("ID", "COL1"), conf = badConf)
+  test("Can infer schema without defining columns") {
+    val sqlContext = new SQLContext(sc)
+    val df = sqlContext.phoenixTableAsDataFrame("TABLE2", Seq(), conf = hbaseConfiguration)
+    df.schema("ID").dataType shouldEqual LongType
+    df.schema("TABLE1_ID").dataType shouldEqual LongType
+    df.schema("t2col1").dataType shouldEqual StringType
+  }
+
+  test("Spark SQL can use Phoenix as a data source with no schema specified") {
+    val sqlContext = new SQLContext(sc)
+    val df = sqlContext.load("org.apache.phoenix.spark", Map("table" -> "TABLE1",
+      "zkUrl" -> quorumAddress))
+    df.count() shouldEqual 2
+    df.schema("ID").dataType shouldEqual LongType
+    df.schema("COL1").dataType shouldEqual StringType
+  }
+
+  test("Spark SQL can use Phoenix as a data source with PrunedFilteredScan") {
+    val sqlContext = new SQLContext(sc)
+    val df = sqlContext.load("org.apache.phoenix.spark", Map("table" -> "TABLE1",
+      "zkUrl" -> quorumAddress))
+    val res = df.filter(df("COL1") === "test_row_1" && df("ID") === 1L).select(df("ID"))
+
+    // Make sure we got the right value back
+    assert(res.first().getLong(0) == 1L)
+
+    /*
+      NOTE: There doesn't appear to be any way of verifying from the Spark query planner that
+      filtering is being pushed down and done server-side. However, since PhoenixRelation
+      implements PrunedFilteredScan, debugging has shown that both the SELECT columns and WHERE
+      predicates are being passed along to us, which we then forward it to Phoenix.
+      TODO: investigate further to find a way to verify server-side pushdown
+     */
+  }
+
+  test("Can persist a dataframe using 'DataFrame.saveToPhoenix'") {
+    // Load from TABLE1
+    val sqlContext = new SQLContext(sc)
+    val df = sqlContext.load("org.apache.phoenix.spark", Map("table" -> "TABLE1",
+      "zkUrl" -> quorumAddress))
+
+    // Save to TABLE1_COPY
+    df.saveToPhoenix("TABLE1_COPY", zkUrl = Some(quorumAddress))
+
+    // Verify results
+    val stmt = conn.createStatement()
+    val rs = stmt.executeQuery("SELECT * FROM TABLE1_COPY")
+
+    val checkResults = List((1L, "test_row_1"), (2, "test_row_2"))
+    val results = ListBuffer[(Long, String)]()
+    while (rs.next()) {
+      results.append((rs.getLong(1), rs.getString(2)))
     }
+    stmt.close()
+
+    results.toList shouldEqual checkResults
+  }
+
+  test("Can persist a dataframe using 'DataFrame.save()") {
+    // Clear TABLE1_COPY
+    var stmt = conn.createStatement()
+    stmt.executeUpdate("DELETE FROM TABLE1_COPY")
+    stmt.close()
+
+    // Load TABLE1, save as TABLE1_COPY
+    val sqlContext = new SQLContext(sc)
+    val df = sqlContext.load("org.apache.phoenix.spark", Map("table" -> "TABLE1",
+      "zkUrl" -> quorumAddress))
+
+    // Save to TABLE21_COPY
+    df.save("org.apache.phoenix.spark", SaveMode.Overwrite, Map("table" -> "TABLE1_COPY", "zkUrl" -> quorumAddress))
+
+    // Verify results
+    stmt = conn.createStatement()
+    val rs = stmt.executeQuery("SELECT * FROM TABLE1_COPY")
+
+    val checkResults = List((1L, "test_row_1"), (2, "test_row_2"))
+    val results = ListBuffer[(Long, String)]()
+    while (rs.next()) {
+      results.append((rs.getLong(1), rs.getString(2)))
+    }
+    stmt.close()
+
+    results.toList shouldEqual checkResults
   }
 }

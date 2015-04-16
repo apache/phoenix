@@ -428,6 +428,11 @@
         <artifactId>phoenix-pig</artifactId>
         <version>${project.version}</version>
       </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-spark</artifactId>
+        <version>${project.version}</version>
+      </dependency>
 
       <!-- HBase dependencies -->
       <dependency>

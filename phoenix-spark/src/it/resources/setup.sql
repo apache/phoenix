@@ -15,6 +15,7 @@
 -- limitations under the License.
 
 CREATE TABLE table1 (id BIGINT NOT NULL PRIMARY KEY, col1 VARCHAR)
+CREATE TABLE table1_copy (id BIGINT NOT NULL PRIMARY KEY, col1 VARCHAR)
 CREATE TABLE table2 (id BIGINT NOT NULL PRIMARY KEY, table1_id BIGINT, "t2col1" VARCHAR)
 UPSERT INTO table1 (id, col1) VALUES (1, 'test_row_1')
 UPSERT INTO table2 (id, table1_id, "t2col1") VALUES (1, 1, 'test_child_1')

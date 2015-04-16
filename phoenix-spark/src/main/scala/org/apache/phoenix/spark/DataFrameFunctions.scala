@@ -20,22 +20,22 @@ import org.apache.phoenix.mapreduce.PhoenixOutputFormat
 import org.apache.phoenix.mapreduce.util.{ColumnInfoToStringEncoderDecoder, PhoenixConfigurationUtil}
 import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.DataFrame
 
-class ProductRDDFunctions[A <: Product](data: RDD[A]) extends Logging with Serializable {
+class DataFrameFunctions(data: DataFrame) extends Logging with Serializable {
 
-  def saveToPhoenix(tableName: String, cols: Seq[String],
-                    conf: Configuration = new Configuration, zkUrl: Option[String] = None)
-                    : Unit = {
+  def saveToPhoenix(tableName: String, conf: Configuration = new Configuration,
+                    zkUrl: Option[String] = None): Unit = {
 
-    val config = ConfigurationUtil.getOutputConfiguration(tableName, cols, zkUrl, Some(conf))
+    val config = ConfigurationUtil.getOutputConfiguration(tableName, data.schema.fieldNames, zkUrl, Some(conf))
 
     // Encode the column info to a serializable type
     val encodedColumns = ConfigurationUtil.encodeColumns(config)
 
-    // Map each element of the product to a new (NullWritable, PhoenixRecordWritable)
-    val phxRDD: RDD[(NullWritable, PhoenixRecordWritable)] = data.map { e =>
+    // Map the row object into a PhoenixRecordWritable
+    val phxRDD: RDD[(NullWritable, PhoenixRecordWritable)] = data.map { row =>
       val rec = new PhoenixRecordWritable(encodedColumns)
-      e.productIterator.foreach { rec.add(_) }
+      row.toSeq.foreach { e => rec.add(e) }
       (null, rec)
     }
 
