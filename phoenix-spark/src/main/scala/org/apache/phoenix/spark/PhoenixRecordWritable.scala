@@ -31,7 +31,7 @@ class PhoenixRecordWritable(var encodedColumns: String) extends DBWritable {
 
   override def write(statement: PreparedStatement): Unit = {
     // Decode the ColumnInfo list
-    val columns = ColumnInfoToStringEncoderDecoder.decode(encodedColumns).toList
+    val columns = ConfigurationUtil.decodeColumns(encodedColumns)
 
     // Make sure we at least line up in size
     if(upsertValues.length != columns.length) {
