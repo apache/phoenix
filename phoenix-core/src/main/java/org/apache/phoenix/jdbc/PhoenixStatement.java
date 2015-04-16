@@ -243,6 +243,10 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
                         if (connection.getAutoCommit()) {
                             connection.commit(); // Forces new read point for next statement
                         }
+                        else {
+                        	// send mutations to hbase, so they are visible to subsequent reads
+                        	connection.getMutationState().send();
+                        }
                         if (logger.isDebugEnabled()) {
                             String explainPlan = QueryUtil.getExplainPlan(resultIterator);
                             logger.debug(LogUtil.addCustomAnnotations("Explain plan: " + explainPlan, connection));

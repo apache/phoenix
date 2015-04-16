@@ -86,7 +86,7 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
 	}
 	
 	@Test
-	public void testUpsert() throws Exception {
+	public void testReadOwnWrites() throws Exception {
 		String selectSql = "SELECT * FROM "+FULL_TABLE_NAME;
 		Connection conn = DriverManager.getConnection(getUrl());
 		try {
@@ -102,12 +102,15 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
 			setRowKeyColumns(stmt, 2);
 			stmt.execute();
 	        
-	        // verify no rows returned 
+	        // verify rows can be read even though commit has not been called
 			rs = conn.createStatement().executeQuery(selectSql);
-	     	assertFalse(rs.next());
+			validateRowKeyColumns(rs, 1);
+	        validateRowKeyColumns(rs, 2);
+	        assertFalse(rs.next());
+	        
 	        conn.commit();
 	        
-	        // verify row exists
+	        // verify rows can be read after commit
 	        rs = conn.createStatement().executeQuery(selectSql);
 	        validateRowKeyColumns(rs, 1);
 	        validateRowKeyColumns(rs, 2);
