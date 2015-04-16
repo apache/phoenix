@@ -1104,6 +1104,11 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
         return o.toString();
     }
 
+    public String toStringLiteral(Object o) {
+        // use default formatter when one is unspecified
+        return toStringLiteral(o, null);
+    }
+
   private static final PhoenixArrayFactory DEFAULT_ARRAY_FACTORY = new PhoenixArrayFactory() {
     @Override public PhoenixArray newArray(PDataType type, Object[] elements) {
       return new PhoenixArray(type, elements);

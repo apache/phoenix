@@ -20,9 +20,7 @@ package org.apache.phoenix.schema.types;
 import java.sql.Array;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.text.Format;
 import java.util.Arrays;
-import java.util.Formatter;
 import java.util.Map;
 
 import org.apache.phoenix.util.SQLCloseable;
@@ -236,20 +234,20 @@ public class PhoenixArray implements Array,SQLCloseable {
 	
 	@Override
 	public String toString() {
-		StringBuilder sb = new StringBuilder(TO_STRING_BEGIN);
+        StringBuilder sb = new StringBuilder(TO_STRING_BEGIN);
 		boolean isFirst = true;
-		final Format defaultFormat = null;
-		for (Object o : (Object[]) array) {
+        for (int i = 0; i < getDimensions(); i++) {
+            Object o = getElement(i);
 			if (isFirst) {
 				isFirst = false;
 			} else {
 				sb.append(TO_STRING_SEPARATOR);
 			}
-			sb.append(this.baseType.toStringLiteral(o, defaultFormat));
+			sb.append(this.baseType.toStringLiteral(o));
 		}
 		sb.append(TO_STRING_END);
 		return sb.toString();
-	}
+    }
 	
 	public boolean isNull(int pos) {
 	    if(this.baseType.toBytes(((Object[])array)[pos]).length == 0) {
@@ -287,18 +285,19 @@ public class PhoenixArray implements Array,SQLCloseable {
 		public PrimitiveIntPhoenixArray(PDataType dataType, Object[] elements) {
 			super(dataType, elements);
 		}
+
 		@Override
-		public Object convertObjectArrayToPrimitiveArray(Object[] elements) {
-			intArr = new int[elements.length];
-			int i = 0;
-			for(Object o : elements) {
-			    if (o != null) {
-			        intArr[i] = (Integer)o;
-			    }
-			    i++;
-			}
-      return intArr;
-		}
+        public Object convertObjectArrayToPrimitiveArray(Object[] elements) {
+            intArr = new int[elements.length];
+            int i = 0;
+            for (Object o : elements) {
+                if (o != null) {
+                    intArr[i] = (Integer) o;
+                }
+                i++;
+            }
+            return intArr;
+        }
 		
 		@Override
         public int estimateByteSize(int pos) {
@@ -308,23 +307,6 @@ public class PhoenixArray implements Array,SQLCloseable {
 		@Override
         public byte[] toBytes(int pos) {
 			return this.baseType.toBytes(intArr[pos]);
-		}
-		
-		@Override
-		public String toString() {
-			StringBuilder sb = new StringBuilder(TO_STRING_BEGIN);
-			boolean isFirst = true;
-			final Format defaultFormat = null;
-			for (Integer o : intArr) {
-				if (isFirst) {
-					isFirst = false;
-				} else {
-					sb.append(TO_STRING_SEPARATOR);
-				}
-				sb.append(this.baseType.toStringLiteral(o, defaultFormat));
-			}
-			sb.append(TO_STRING_END);
-			return sb.toString();
 		}
 		
 		@Override
@@ -383,22 +365,6 @@ public class PhoenixArray implements Array,SQLCloseable {
 		}
 
 		@Override
-		public String toString() {
-			StringBuilder sb = new StringBuilder(TO_STRING_BEGIN);
-			boolean isFirst = true;
-			final Format defaultFormat = null;
-			for (Short o : shortArr) {
-				if (isFirst) {
-					isFirst = false;
-				} else {
-					sb.append(TO_STRING_SEPARATOR);
-				}
-				sb.append(this.baseType.toStringLiteral(o, defaultFormat));
-			}
-			sb.append(TO_STRING_END);
-			return sb.toString();
-		}
-		@Override
 		public boolean equals(Object obj) {
       if (obj == null) return false;
       if (this == obj) return true;
@@ -452,22 +418,6 @@ public class PhoenixArray implements Array,SQLCloseable {
 			return this.baseType.toBytes(longArr[pos]);
 		}
 
-		@Override
-		public String toString() {
-			StringBuilder sb = new StringBuilder(TO_STRING_BEGIN);
-			boolean isFirst = true;
-			final Format defaultFormat = null;
-			for (Long o : longArr) {
-				if (isFirst) {
-					isFirst = false;
-				} else {
-					sb.append(TO_STRING_SEPARATOR);
-				}
-				sb.append(this.baseType.toStringLiteral(o, defaultFormat));
-			}
-			sb.append(TO_STRING_END);
-			return sb.toString();
-		}
 		@Override
 		public boolean equals(Object obj) {
       if (obj == null) return false;
@@ -524,22 +474,6 @@ public class PhoenixArray implements Array,SQLCloseable {
 		}
 
 		@Override
-		public String toString() {
-			StringBuilder sb = new StringBuilder(TO_STRING_BEGIN);
-			boolean isFirst = true;
-			final Format defaultFormat = null;
-			for (Double o : doubleArr) {
-				if (isFirst) {
-					isFirst = false;
-				} else {
-					sb.append(TO_STRING_SEPARATOR);
-				}
-				sb.append(this.baseType.toStringLiteral(o, defaultFormat));
-			}
-			sb.append(TO_STRING_END);
-			return sb.toString();
-		}
-		@Override
 		public boolean equals(Object obj) {
       if (obj == null) return false;
       if (this == obj) return true;
@@ -595,22 +529,6 @@ public class PhoenixArray implements Array,SQLCloseable {
 		}
 
 		@Override
-		public String toString() {
-			StringBuilder sb = new StringBuilder(TO_STRING_BEGIN);
-			boolean isFirst = true;
-			final Format defaultFormat = null;
-			for (Float o : floatArr) {
-				if (isFirst) {
-					isFirst = false;
-				} else {
-					sb.append(TO_STRING_SEPARATOR);
-				}
-				sb.append(this.baseType.toStringLiteral(o, defaultFormat));
-			}
-			sb.append(TO_STRING_END);
-			return sb.toString();
-		}
-		@Override
 		public boolean equals(Object obj) {
       if (obj == null) return false;
       if (this == obj) return true;
@@ -663,23 +581,6 @@ public class PhoenixArray implements Array,SQLCloseable {
 		@Override
         public byte[] toBytes(int pos) {
 			return this.baseType.toBytes(byteArr[pos]);
-		}
-		
-		@Override
-		public String toString() {
-			StringBuilder sb = new StringBuilder(TO_STRING_BEGIN);
-			boolean isFirst = true;
-			final Format defaultFormat = null;
-			for (Byte o : byteArr) {
-				if (isFirst) {
-					isFirst = false;
-				} else {
-					sb.append(TO_STRING_SEPARATOR);
-				}
-				sb.append(this.baseType.toStringLiteral(o, defaultFormat));
-			}
-			sb.append(TO_STRING_END);
-			return sb.toString();
 		}
 		
 		@Override
