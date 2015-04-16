@@ -232,21 +232,21 @@ public class PhoenixArray implements Array,SQLCloseable {
 		return this.baseType.toBytes(((Object[])array)[pos]);
 	}
 	
-	@Override
-	public String toString() {
+    @Override
+    public String toString() {
         StringBuilder sb = new StringBuilder(TO_STRING_BEGIN);
-		boolean isFirst = true;
+        boolean isFirst = true;
         for (int i = 0; i < getDimensions(); i++) {
             Object o = getElement(i);
-			if (isFirst) {
-				isFirst = false;
-			} else {
-				sb.append(TO_STRING_SEPARATOR);
-			}
-			sb.append(this.baseType.toStringLiteral(o));
-		}
-		sb.append(TO_STRING_END);
-		return sb.toString();
+            if (isFirst) {
+                isFirst = false;
+            } else {
+                sb.append(TO_STRING_SEPARATOR);
+            }
+            sb.append(this.baseType.toStringLiteral(o));
+        }
+        sb.append(TO_STRING_END);
+        return sb.toString();
     }
 	
 	public boolean isNull(int pos) {
