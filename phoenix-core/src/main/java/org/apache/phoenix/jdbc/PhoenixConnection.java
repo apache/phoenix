@@ -662,7 +662,10 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
 
     @Override
     public void setCatalog(String catalog) throws SQLException {
-        throw new SQLFeatureNotSupportedException();
+        if (!this.getCatalog().equalsIgnoreCase(catalog)) {
+            // allow noop calls to pass through.
+            throw new SQLFeatureNotSupportedException();
+        }
     }
 
     @Override
