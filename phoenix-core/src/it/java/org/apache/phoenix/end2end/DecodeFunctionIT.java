@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -111,12 +112,8 @@ public class DecodeFunctionIT extends BaseHBaseManagedTimeIT {
 
 		conn.createStatement().execute(ddl);
 
-		try {
-			conn.createStatement().executeQuery("SELECT * FROM test_table WHERE some_column = DECODE('8', NULL)");
-            fail();
-        } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.ILLEGAL_DATA.getErrorCode(), e.getErrorCode());
-        }
+		ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM test_table WHERE some_column = DECODE('8', NULL)");
+		assertFalse(rs.next());
 	}
 
 	@Test

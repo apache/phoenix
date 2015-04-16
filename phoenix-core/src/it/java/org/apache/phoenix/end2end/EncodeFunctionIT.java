@@ -116,12 +116,8 @@ public class EncodeFunctionIT extends BaseHBaseManagedTimeIT {
         String ddl = "CREATE TABLE TEST_TABLE ( pk VARCHAR(10) NOT NULL CONSTRAINT PK PRIMARY KEY (pk))";
         conn.createStatement().execute(ddl);
 
-        try {
-            conn.createStatement().executeQuery("SELECT * FROM TEST_TABLE WHERE pk = ENCODE(1, NULL)");
-            fail();
-        } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.ILLEGAL_DATA.getErrorCode(), e.getErrorCode());
-        }
+        ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM TEST_TABLE WHERE pk = ENCODE(1, NULL)");
+        assertFalse(rs.next());
     }
 
     @Test
