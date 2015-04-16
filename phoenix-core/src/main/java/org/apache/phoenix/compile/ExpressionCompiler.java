@@ -316,9 +316,6 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         children = node.validate(children, context);
         Expression expression = node.create(children, context);
         ImmutableBytesWritable ptr = context.getTempPtr();
-        if (ExpressionUtil.isConstant(expression)) {
-            return ExpressionUtil.getConstantExpression(expression, ptr);
-        }
         BuiltInFunctionInfo info = node.getInfo();
         for (int i = 0; i < info.getRequiredArgCount(); i++) { 
             // Optimization to catch cases where a required argument is null resulting in the function
@@ -330,6 +327,9 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                     return ExpressionUtil.getNullExpression(expression);
                 }
             }
+        }
+        if (ExpressionUtil.isConstant(expression)) {
+            return ExpressionUtil.getConstantExpression(expression, ptr);
         }
         expression = addExpression(expression);
         expression = wrapGroupByExpression(expression);
