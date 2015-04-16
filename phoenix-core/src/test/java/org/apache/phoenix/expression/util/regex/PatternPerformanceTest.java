@@ -101,10 +101,11 @@ public class PatternPerformanceTest {
     private void testSubstr(AbstractBasePattern pattern, String name) {
         timer.reset();
         for (int i = 0; i < maxTimes; ++i) {
-            boolean ret = pattern.substr(dataPtr[i % 3], 0, resultPtr);
+            ImmutableBytesWritable ptr = dataPtr[i % 3];
+            resultPtr.set(ptr.get(),ptr.getOffset(),ptr.getLength());
+            pattern.substr(resultPtr, 0);
             if (ENABLE_ASSERT) {
-                assertTrue(ret
-                        && (i % 3 != 2 || ":THU".equals(PVarchar.INSTANCE.toObject(resultPtr))));
+                assertTrue((i % 3 != 2 || ":THU".equals(PVarchar.INSTANCE.toObject(resultPtr))));
             }
         }
         timer.printTime(name);

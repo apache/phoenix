@@ -22,8 +22,8 @@ import java.io.IOException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
-import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.util.regex.AbstractBasePattern;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
@@ -31,6 +31,7 @@ import org.apache.phoenix.parse.RegexpSubstrParseNode;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PVarchar;
 
@@ -56,11 +57,11 @@ public abstract class RegexpSubstrFunction extends PrefixFunction {
     public static final String NAME = "REGEXP_SUBSTR";
 
     private AbstractBasePattern pattern;
-    private boolean isOffsetConstant;
+    private Integer offset;
     private Integer maxLength;
 
     private static final PDataType TYPE = PVarchar.INSTANCE;
-
+    
     public RegexpSubstrFunction() { }
 
     public RegexpSubstrFunction(List<Expression> children) {
@@ -71,25 +72,30 @@ public abstract class RegexpSubstrFunction extends PrefixFunction {
     protected abstract AbstractBasePattern compilePatternSpec(String value);
 
     private void init() {
-        Object patternString = ((LiteralExpression)children.get(1)).getValue();
-        if (patternString != null) {
-            pattern = compilePatternSpec((String) patternString);
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+        Expression patternExpr = getPatternExpression();
+        if (patternExpr.isStateless() && patternExpr.getDeterminism() == Determinism.ALWAYS && patternExpr.evaluate(null, ptr)) {
+            String patternStr = (String) patternExpr.getDataType().toObject(ptr, patternExpr.getSortOrder());
+            if (patternStr != null) {
+                pattern = compilePatternSpec(patternStr);
+            }
         }
         // If the source string has a fixed width, then the max length would be the length 
         // of the source string minus the offset, or the absolute value of the offset if 
         // it's negative. Offset number is a required argument. However, if the source string
         // is not fixed width, the maxLength would be null.
-        isOffsetConstant = getOffsetExpression() instanceof LiteralExpression;
-        Number offsetNumber = (Number)((LiteralExpression)getOffsetExpression()).getValue();
-        if (offsetNumber != null) {
-            int offset = offsetNumber.intValue();
-            PDataType type = getSourceStrExpression().getDataType();
-            if (type.isFixedWidth()) {
-                if (offset >= 0) {
-                    Integer maxLength = getSourceStrExpression().getMaxLength();
-                    this.maxLength = maxLength - offset - (offset == 0 ? 0 : 1);
-                } else {
-                    this.maxLength = -offset;
+        Expression offsetExpr = getOffsetExpression();
+        if (offsetExpr.isStateless() && offsetExpr.getDeterminism() == Determinism.ALWAYS && offsetExpr.evaluate(null, ptr)) {
+            offset = (Integer)PInteger.INSTANCE.toObject(ptr, offsetExpr.getDataType(), offsetExpr.getSortOrder());
+            if (offset != null) {
+                PDataType type = getSourceStrExpression().getDataType();
+                if (type.isFixedWidth()) {
+                    if (offset >= 0) {
+                        Integer maxLength = getSourceStrExpression().getMaxLength();
+                        this.maxLength = maxLength - offset - (offset == 0 ? 0 : 1);
+                    } else {
+                        this.maxLength = -offset;
+                    }
                 }
             }
         }
@@ -97,25 +103,45 @@ public abstract class RegexpSubstrFunction extends PrefixFunction {
 
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
+        AbstractBasePattern pattern = this.pattern;
         if (pattern == null) {
+            Expression patternExpr = getPatternExpression();
+            if (!patternExpr.evaluate(tuple, ptr)) {
+                return false;
+            }
+            if (ptr.getLength() == 0) {
+                return true;
+            }
+            pattern = compilePatternSpec((String) patternExpr.getDataType().toObject(ptr, patternExpr.getSortOrder()));
+        }
+        int offset;
+        if (this.offset == null) {
+            Expression offsetExpression = getOffsetExpression();
+            if (!offsetExpression.evaluate(tuple, ptr)) {
+                return false;
+            }
+            if (ptr.getLength() == 0) {
+                return true;
+            }
+            offset = offsetExpression.getDataType().getCodec().decodeInt(ptr, offsetExpression.getSortOrder());
+        } else {
+            offset = this.offset;
+        }
+        Expression strExpression = getSourceStrExpression();
+        if (!strExpression.evaluate(tuple, ptr)) {
             return false;
         }
-        ImmutableBytesWritable srcPtr = new ImmutableBytesWritable();
-        if (!getSourceStrExpression().evaluate(tuple, srcPtr)) {
-            return false;
+        if (ptr.get().length == 0) {
+            return true;
         }
-        TYPE.coerceBytes(srcPtr, TYPE, getSourceStrExpression().getSortOrder(), SortOrder.ASC);
 
-        Expression offsetExpression = getOffsetExpression();
-        if (!offsetExpression.evaluate(tuple, ptr)) {
-            return false;
-        }
-        int offset = offsetExpression.getDataType().getCodec().decodeInt(ptr, offsetExpression.getSortOrder());
+        TYPE.coerceBytes(ptr, strExpression.getDataType(), strExpression.getSortOrder(), SortOrder.ASC);
 
         // Account for 1 versus 0-based offset
         offset = offset - (offset <= 0 ? 0 : 1);
 
-        return pattern.substr(srcPtr, offset, ptr);
+        pattern.substr(ptr, offset);
+        return true;
     }
 
     @Override
@@ -125,14 +151,9 @@ public abstract class RegexpSubstrFunction extends PrefixFunction {
 
     @Override
     public OrderPreserving preservesOrder() {
-        if (isOffsetConstant) {
-            LiteralExpression literal = (LiteralExpression) getOffsetExpression();
-            Number offsetNumber = (Number) literal.getValue();
-            if (offsetNumber != null) { 
-                int offset = offsetNumber.intValue();
-                if (offset == 0 || offset == 1) {
-                    return OrderPreserving.YES_IF_LAST;
-                }
+        if (offset != null) {
+            if (offset == 0 || offset == 1) {
+                return OrderPreserving.YES_IF_LAST;
             }
         }
         return OrderPreserving.NO;
@@ -153,6 +174,10 @@ public abstract class RegexpSubstrFunction extends PrefixFunction {
         return children.get(2);
     }
 
+    private Expression getPatternExpression() {
+        return children.get(1);
+    }
+
     private Expression getSourceStrExpression() {
         return children.get(0);
     }
@@ -161,7 +186,7 @@ public abstract class RegexpSubstrFunction extends PrefixFunction {
     public PDataType getDataType() {
         // ALways VARCHAR since we do not know in advanced how long the 
         // matched string will be.
-        return PVarchar.INSTANCE;
+        return TYPE;
     }
 
     @Override

@@ -130,15 +130,15 @@ public class JONIPattern extends AbstractBasePattern implements AbstractBaseSpli
     }
 
     @Override
-    public boolean substr(ImmutableBytesWritable srcPtr, int offsetInStr,
-            ImmutableBytesWritable outPtr) {
-        Preconditions.checkNotNull(srcPtr);
-        Preconditions.checkNotNull(outPtr);
-        int offsetInBytes = StringUtil.calculateUTF8Offset(srcPtr.get(), srcPtr.getOffset(),
-            srcPtr.getLength(), SortOrder.ASC, offsetInStr);
-        if (offsetInBytes < 0) return false;
-        substr(srcPtr.get(), offsetInBytes, srcPtr.getOffset() + srcPtr.getLength(), outPtr);
-        return true;
+    public void substr(ImmutableBytesWritable ptr, int offsetInStr) {
+        Preconditions.checkNotNull(ptr);
+        int offsetInBytes = StringUtil.calculateUTF8Offset(ptr.get(), ptr.getOffset(),
+                ptr.getLength(), SortOrder.ASC, offsetInStr);
+        if (offsetInBytes < 0) {
+            ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
+        } else {
+            substr(ptr.get(), offsetInBytes, ptr.getOffset() + ptr.getLength(), ptr);
+        }
     }
 
     private boolean substr(byte[] srcBytes, int offset, int range, ImmutableBytesWritable outPtr) {
