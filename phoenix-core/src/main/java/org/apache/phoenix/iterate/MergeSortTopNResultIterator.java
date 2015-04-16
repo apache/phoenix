@@ -31,8 +31,6 @@ import org.apache.phoenix.schema.tuple.Tuple;
  * returning the rows ordered by the OrderByExpression. The input
  * iterators must be ordered by the OrderByExpression.
  *
- * 
- * @since 0.1
  */
 public class MergeSortTopNResultIterator extends MergeSortResultIterator {
 
@@ -91,7 +89,6 @@ public class MergeSortTopNResultIterator extends MergeSortResultIterator {
     @Override
     public void explain(List<String> planSteps) {
         resultIterators.explain(planSteps);
-        planSteps.add("    SERVER" + (limit == -1 ? "" : " TOP " + limit + " ROW" + (limit == 1 ? "" : "S")) + " SORTED BY " + orderByColumns.toString());
         planSteps.add("CLIENT MERGE SORT");
     }
 

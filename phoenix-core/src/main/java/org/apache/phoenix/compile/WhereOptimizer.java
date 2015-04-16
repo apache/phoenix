@@ -71,7 +71,6 @@ import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
@@ -543,6 +542,10 @@ public class WhereOptimizer {
                 int span = position - initialPosition;
                 return new SingleKeySlot(new RowValueConstructorKeyPart(table.getPKColumns().get(initialPosition), rvc, span, childSlots), initialPosition, span, EVERYTHING_RANGES);
             }
+            // If we don't clear the child list, we end up passing some of
+            // the child expressions of previous matches up the tree, causing
+            // those expressions to form the scan start/stop key. PHOENIX-1753
+            childSlots.clear();
             return null;
         }
 
@@ -1068,9 +1071,6 @@ public class WhereOptimizer {
             }
             
             public final KeySlot intersect(KeySlot that) {
-                Preconditions.checkArgument(!this.keyRanges.isEmpty());
-                Preconditions.checkArgument(!that.keyRanges.isEmpty());
-
                 if (this.getPKSpan() == 1 && that.getPKSpan() == 1) {
                     if (this.getPKPosition() != that.getPKPosition()) {
                         throw new IllegalArgumentException("Position must be equal for intersect");
@@ -1102,8 +1102,6 @@ public class WhereOptimizer {
                     } else {
                         assert(this.getPKSpan() > 1);
                         assert(this.getPKPosition() <= that.getPKPosition());
-                        int position = this.getPKPosition();
-                        int thatPosition = that.getPKPosition();
                         List<KeyRange> newKeyRanges = Lists.newArrayListWithExpectedSize(this.getKeyRanges().size());
                         // We know we have a set of RVCs (i.e. multi-span key ranges)
                         // Get the PK slot value in the RVC for the position of the other KeySlot
@@ -1112,16 +1110,20 @@ public class WhereOptimizer {
                         for (KeyRange keyRange : this.getKeyRanges()) {
                             assert(keyRange.isSingleKey());
                             byte[] key = keyRange.getLowerRange();
-                            schema.iterator(key, ptr); // initialize for iteration
-                            while (position < thatPosition) { // skip to part of RVC that overlaps
-                                schema.next(ptr, position++, key.length);
+                            int position = this.getPKPosition();
+                            int thatPosition = that.getPKPosition();
+                            ptr.set(key);
+                            if (schema.position(ptr, position, thatPosition)) {
+                                // Create a range just for the overlapping column
+                                List<KeyRange> slotKeyRanges = Collections.singletonList(KeyRange.getKeyRange(ByteUtil.copyKeyBytesIfNecessary(ptr)));
+                                // Intersect with other ranges and add to list if it overlaps
+                                if (!isDegenerate(KeyRange.intersect(slotKeyRanges, that.getKeyRanges()))) {
+                                    newKeyRanges.add(keyRange);
+                                }
                             }
-                            // Create a range just for the overlapping column
-                            List<KeyRange> slotKeyRanges = Collections.singletonList(KeyRange.getKeyRange(ByteUtil.copyKeyBytesIfNecessary(ptr)));
-                            // Intersect with other ranges and add to list if it overlaps
-                            if (!isDegenerate(KeyRange.intersect(slotKeyRanges, that.getKeyRanges()))) {
-                                newKeyRanges.add(keyRange);
-                            }
+                        }
+                        if (isDegenerate(newKeyRanges)) {
+                            return null;
                         }
                         return new KeySlot(
                                 new BaseKeyPart(this.getKeyPart().getColumn(),
@@ -1208,7 +1210,7 @@ public class WhereOptimizer {
                     Integer length = getColumn().getMaxLength();
                     if (length != null) {
                         // Go through type to pad as the fill character depends on the type.
-                        type.pad(ptr, length);
+                        type.pad(ptr, length, getColumn().getSortOrder());
                     }
                 }
                 byte[] key = ByteUtil.copyKeyBytesIfNecessary(ptr);

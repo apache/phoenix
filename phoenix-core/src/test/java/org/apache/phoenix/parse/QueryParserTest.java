@@ -635,19 +635,6 @@ public class QueryParserTest {
     }
 
     @Test
-    public void testInvalidUpsertSelectHint() throws Exception {
-        String sql = (
-                (
-                        "upsert into t select /*+ NO_INDEX */ k from t where k in ( 1,2 )"));
-        try {
-            parseQuery(sql);
-            fail();
-        } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.PARSER_ERROR.getErrorCode(), e.getErrorCode());
-        }
-    }
-
-    @Test
     public void testTableNameStartsWithUnderscore() throws Exception {
         String sql = (
                 (
@@ -746,6 +733,24 @@ public class QueryParserTest {
                 (
                         "select * from t where d = UNSIGNED_TIMESTAMP '2013-11-04 09:12:00'"));
         parseQuery(sql);
+    }
+    
+    @Test
+    public void testParseDateEquality() throws Exception {
+        SQLParser parser = new SQLParser(new StringReader(
+            "select a from b\n" +
+            "where date '2014-01-04' = date '2014-01-04'"
+            ));
+        parser.parseStatement();
+    }
+
+    @Test
+    public void testParseDateIn() throws Exception {
+        SQLParser parser = new SQLParser(new StringReader(
+            "select a from b\n" +
+            "where date '2014-01-04' in (date '2014-01-04')"
+            ));
+        parser.parseStatement();
     }
     
     @Test

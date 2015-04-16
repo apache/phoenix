@@ -480,7 +480,7 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeIT {
             String expectedPlan = "CLIENT PARALLEL 1-WAY "
                     + (localIndex ? "RANGE SCAN OVER _LOCAL_IDX_" + fullDataTableName + " [-32768]"
                             : "FULL SCAN OVER INDEX_TEST.IDX")
-                    + "\n    SERVER FILTER BY FIRST KEY ONLY\n    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [TO_BIGINT((A.INT_COL1 + B.INT_COL2))]\nCLIENT MERGE SORT";
+                    + "\n    SERVER FILTER BY FIRST KEY ONLY\n    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [TO_BIGINT(\"(A.INT_COL1 + B.INT_COL2)\")]\nCLIENT MERGE SORT";
             assertEquals(expectedPlan, QueryUtil.getExplainPlan(rs));
             rs = conn.createStatement().executeQuery(groupBySql);
             assertTrue(rs.next());
@@ -531,7 +531,7 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeIT {
             String expectedPlan = "CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
                     + (localIndex ? "_LOCAL_IDX_" + fullDataTableName + " [-32768,0] - [-32768,*]"
                             : "INDEX_TEST.IDX [0] - [*]")
-                    + "\n    SERVER FILTER BY FIRST KEY ONLY\n    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [TO_BIGINT((A.INT_COL1 + 1))]\nCLIENT MERGE SORT";
+                    + "\n    SERVER FILTER BY FIRST KEY ONLY\n    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [TO_BIGINT(\"(A.INT_COL1 + 1)\")]\nCLIENT MERGE SORT";
             assertEquals(expectedPlan, QueryUtil.getExplainPlan(rs));
             rs = conn.createStatement().executeQuery(sql);
             assertTrue(rs.next());
@@ -1202,54 +1202,60 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testViewUsesTableIndex() throws Exception {
-        ResultSet rs;
         Connection conn = DriverManager.getConnection(getUrl());
-        String ddl = "CREATE TABLE t (k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, s1 VARCHAR, s2 VARCHAR, s3 VARCHAR, s4 VARCHAR CONSTRAINT pk PRIMARY KEY (k1, k2))";
-        conn.createStatement().execute(ddl);
-        conn.createStatement().execute("CREATE INDEX i1 ON t(k2, s2, s3, s1)");
-        conn.createStatement().execute("CREATE INDEX i2 ON t(k2, s2||'_'||s3, s1, s4)");
-        
-        ddl = "CREATE VIEW v AS SELECT * FROM t WHERE s1 = 'foo'";
-        conn.createStatement().execute(ddl);
-        conn.createStatement().execute("UPSERT INTO t VALUES(1,1,'foo','abc','cab')");
-        conn.createStatement().execute("UPSERT INTO t VALUES(2,2,'bar','xyz','zyx')");
-        conn.commit();
-        
-        rs = conn.createStatement().executeQuery("SELECT count(*) FROM v");
-        assertTrue(rs.next());
-        assertEquals(1, rs.getLong(1));
-        assertFalse(rs.next());
-        
-        //i2 should be used since it contains s3||'_'||s4 i
-        String query = "SELECT s2||'_'||s3 FROM v WHERE k2=1 AND (s2||'_'||s3)='abc_cab'";
-        rs = conn.createStatement(  ).executeQuery("EXPLAIN " + query);
-        String queryPlan = QueryUtil.getExplainPlan(rs);
-        assertEquals(
-                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER I2 [1,'abc_cab','foo']\n" + 
-                "    SERVER FILTER BY FIRST KEY ONLY", queryPlan);
-        rs = conn.createStatement().executeQuery(query);
-        assertTrue(rs.next());
-        assertEquals("abc_cab", rs.getString(1));
-        assertFalse(rs.next());
-        
-        conn.createStatement().execute("ALTER VIEW v DROP COLUMN s4");
-        //i2 cannot be used since s4 has been dropped from the view, so i1 will be used 
-        rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-        queryPlan = QueryUtil.getExplainPlan(rs);
-        assertEquals(
-                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER I1 [1]\n" + 
-                "    SERVER FILTER BY FIRST KEY ONLY AND ((\"S2\" || '_' || \"S3\") = 'abc_cab' AND \"S1\" = 'foo')", queryPlan);
-        rs = conn.createStatement().executeQuery(query);
-        assertTrue(rs.next());
-        assertEquals("abc_cab", rs.getString(1));
-        assertFalse(rs.next());    
+        try 
+        {
+        	ResultSet rs;
+	        String ddl = "CREATE TABLE t (k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, s1 VARCHAR, s2 VARCHAR, s3 VARCHAR, s4 VARCHAR CONSTRAINT pk PRIMARY KEY (k1, k2))";
+	        conn.createStatement().execute(ddl);
+	        conn.createStatement().execute("CREATE INDEX i1 ON t(k2, s2, s3, s1)");
+	        conn.createStatement().execute("CREATE INDEX i2 ON t(k2, s2||'_'||s3, s1, s4)");
+	        
+	        ddl = "CREATE VIEW v AS SELECT * FROM t WHERE s1 = 'foo'";
+	        conn.createStatement().execute(ddl);
+	        conn.createStatement().execute("UPSERT INTO t VALUES(1,1,'foo','abc','cab')");
+	        conn.createStatement().execute("UPSERT INTO t VALUES(2,2,'bar','xyz','zyx')");
+	        conn.commit();
+	        
+	        rs = conn.createStatement().executeQuery("SELECT count(*) FROM v");
+	        assertTrue(rs.next());
+	        assertEquals(1, rs.getLong(1));
+	        assertFalse(rs.next());
+	        
+	        //i2 should be used since it contains s3||'_'||s4 i
+	        String query = "SELECT s2||'_'||s3 FROM v WHERE k2=1 AND (s2||'_'||s3)='abc_cab'";
+	        rs = conn.createStatement(  ).executeQuery("EXPLAIN " + query);
+	        String queryPlan = QueryUtil.getExplainPlan(rs);
+	        assertEquals(
+	                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER I2 [1,'abc_cab','foo']\n" + 
+	                "    SERVER FILTER BY FIRST KEY ONLY", queryPlan);
+	        rs = conn.createStatement().executeQuery(query);
+	        assertTrue(rs.next());
+	        assertEquals("abc_cab", rs.getString(1));
+	        assertFalse(rs.next());
+	        
+	        conn.createStatement().execute("ALTER VIEW v DROP COLUMN s4");
+	        //i2 cannot be used since s4 has been dropped from the view, so i1 will be used 
+	        rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+	        queryPlan = QueryUtil.getExplainPlan(rs);
+	        assertEquals(
+	                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER I1 [1]\n" + 
+	                "    SERVER FILTER BY FIRST KEY ONLY AND ((\"S2\" || '_' || \"S3\") = 'abc_cab' AND \"S1\" = 'foo')", queryPlan);
+	        rs = conn.createStatement().executeQuery(query);
+	        assertTrue(rs.next());
+	        assertEquals("abc_cab", rs.getString(1));
+	        assertFalse(rs.next());    
+        }
+        finally {
+        	conn.close();
+        }
     }
     
 	@Test
 	public void testExpressionThrowsException() throws Exception {
 		Connection conn = DriverManager.getConnection(getUrl());
-		String ddl = "CREATE TABLE t (k1 INTEGER PRIMARY KEY, k2 INTEGER)";
 		try {
+			String ddl = "CREATE TABLE t (k1 INTEGER PRIMARY KEY, k2 INTEGER)";
 			conn.createStatement().execute(ddl);
 			ddl = "CREATE INDEX i on t(k1/k2)";
 			conn.createStatement().execute(ddl);
@@ -1261,6 +1267,79 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeIT {
 			conn.commit();
 			fail();
 		} catch (CommitException e) {
+		} finally {
+			conn.close();
+		}
+	}
+	
+	@Test
+	public void testImmutableCaseSensitiveFunctionIndex() throws Exception {
+		helpTestCaseSensitiveFunctionIndex(false, false);
+	}
+
+	@Test
+	public void testImmutableLocalCaseSensitiveFunctionIndex() throws Exception {
+		helpTestCaseSensitiveFunctionIndex(false, true);
+	}
+
+	@Test
+	public void testMutableCaseSensitiveFunctionIndex() throws Exception {
+		helpTestCaseSensitiveFunctionIndex(true, false);
+	}
+
+	@Test
+	public void testMutableLocalCaseSensitiveFunctionIndex() throws Exception {
+		helpTestCaseSensitiveFunctionIndex(true, true);
+	}
+
+	protected void helpTestCaseSensitiveFunctionIndex(boolean mutable,
+			boolean localIndex) throws Exception {
+		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+		Connection conn = DriverManager.getConnection(getUrl(), props);
+		try {
+			conn.createStatement().execute(
+					"CREATE TABLE t (k VARCHAR NOT NULL PRIMARY KEY, v VARCHAR) "
+							+ (mutable ? "IMMUTABLE_ROWS=true" : ""));
+			String query = "SELECT * FROM t";
+			ResultSet rs = conn.createStatement().executeQuery(query);
+			assertFalse(rs.next());
+			String ddl = "CREATE " + (localIndex ? "LOCAL" : "")
+					+ " INDEX idx ON t (REGEXP_SUBSTR(v,'id:\\\\w+'))";
+			PreparedStatement stmt = conn.prepareStatement(ddl);
+			stmt.execute();
+			query = "SELECT * FROM idx";
+			rs = conn.createStatement().executeQuery(query);
+			assertFalse(rs.next());
+
+			stmt = conn.prepareStatement("UPSERT INTO t VALUES(?,?)");
+			stmt.setString(1, "k1");
+			stmt.setString(2, "{id:id1}");
+			stmt.execute();
+			stmt.setString(1, "k2");
+			stmt.setString(2, "{id:id2}");
+			stmt.execute();
+			conn.commit();
+			
+			query = "SELECT k FROM t WHERE REGEXP_SUBSTR(v,'id:\\\\w+') = 'id:id1'";
+			rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+			if (localIndex) {
+				assertEquals(
+						"CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_T [-32768,'id:id1']\n"
+								+ "    SERVER FILTER BY FIRST KEY ONLY\nCLIENT MERGE SORT",
+						QueryUtil.getExplainPlan(rs));
+			} else {
+				assertEquals(
+						"CLIENT PARALLEL 1-WAY RANGE SCAN OVER IDX ['id:id1']\n"
+								+ "    SERVER FILTER BY FIRST KEY ONLY",
+						QueryUtil.getExplainPlan(rs));
+			}
+
+			rs = conn.createStatement().executeQuery(query);
+			assertTrue(rs.next());
+			assertEquals("k1", rs.getString(1));
+			assertFalse(rs.next());
+		} finally {
+			conn.close();
 		}
 	}
 

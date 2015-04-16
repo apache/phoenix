@@ -17,6 +17,9 @@
  */
 package org.apache.phoenix.iterate;
 
+import static org.apache.phoenix.monitoring.PhoenixMetrics.CountMetric.NUM_SPOOL_FILE;
+import static org.apache.phoenix.monitoring.PhoenixMetrics.SizeMetric.SPOOL_FILE_SIZE;
+
 import java.io.BufferedInputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -43,8 +46,6 @@ import org.apache.phoenix.util.ResultUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.TupleUtil;
 
-
-
 /**
  *
  * Result iterator that spools the results of a scan to disk once an in-memory threshold has been reached.
@@ -55,7 +56,7 @@ import org.apache.phoenix.util.TupleUtil;
  */
 public class SpoolingResultIterator implements PeekingResultIterator {
     private final PeekingResultIterator spoolFrom;
-
+    
     public static class SpoolingResultIteratorFactory implements ParallelIteratorFactory {
         private final QueryServices services;
 
@@ -115,6 +116,8 @@ public class SpoolingResultIterator implements PeekingResultIterator {
                 chunk.resize(data.length);
                 spoolFrom = new InMemoryResultIterator(data, chunk);
             } else {
+                NUM_SPOOL_FILE.increment();
+                SPOOL_FILE_SIZE.update(spoolTo.getFile().length());
                 spoolFrom = new OnDiskResultIterator(spoolTo.getFile());
                 if (spoolTo.getFile() != null) {
                     spoolTo.getFile().deleteOnExit();

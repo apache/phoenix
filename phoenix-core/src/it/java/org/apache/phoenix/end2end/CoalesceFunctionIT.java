@@ -78,7 +78,7 @@ public class CoalesceFunctionIT extends BaseHBaseManagedTimeIT {
 
         ResultSet rs = conn.createStatement().executeQuery(
                 "SELECT "
-                + "COALESCE(SUM(COUNT), 0L) " //explicitly def long
+                + "COALESCE(SUM(COUNT), CAST(0 AS BIGINT)) " //explicitly def long
                 + "FROM TEST_COALESCE "
                 + "GROUP BY ID");
 

@@ -36,10 +36,10 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.regionserver.HRegion;
-import org.apache.hadoop.hbase.regionserver.wal.HLog;
-import org.apache.hadoop.hbase.regionserver.wal.HLogFactory;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.FSUtils;
+import org.apache.hadoop.hbase.wal.WAL;
+import org.apache.hadoop.hbase.wal.WALFactory;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.junit.After;
@@ -70,13 +70,14 @@ public class TestPerRegionIndexWriteCache {
   @SuppressWarnings("deprecation")
 @Before
   public void setUp() throws Exception {
-      FileSystem newFS = FileSystem.get(TEST_UTIL.getConfiguration());
       Path hbaseRootDir = TEST_UTIL.getDataTestDir();
-      
+      TEST_UTIL.getConfiguration().set("hbase.rootdir", hbaseRootDir.toString());
+
+      FileSystem newFS = FileSystem.newInstance(TEST_UTIL.getConfiguration());
       HRegionInfo hri = new HRegionInfo(tableName, null, null, false);
-      Path basedir = FSUtils.getTableDir(hbaseRootDir, tableName); 
-      HLog wal = HLogFactory.createHLog(newFS, 
-          hbaseRootDir, "logs", TEST_UTIL.getConfiguration());
+      Path basedir = FSUtils.getTableDir(hbaseRootDir, tableName);
+      WALFactory walFactory = new WALFactory(TEST_UTIL.getConfiguration(), null, "TestPerRegionIndexWriteCache");
+      WAL wal = walFactory.getWAL(Bytes.toBytes("logs"));
       HTableDescriptor htd = new HTableDescriptor(tableName);
       HColumnDescriptor a = new HColumnDescriptor(Bytes.toBytes("a"));
       htd.addFamily(a);

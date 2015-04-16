@@ -48,6 +48,10 @@ public interface QueryServices extends SQLCloseable {
     public static final String HBASE_CLIENT_PRINCIPAL = "hbase.myclient.principal";
     public static final String SPOOL_DIRECTORY = "phoenix.spool.directory";
     public static final String AUTO_COMMIT_ATTRIB = "phoenix.connection.autoCommit";
+    // consistency configuration setting
+    public static final String CONSISTENCY_ATTRIB = "phoenix.connection.consistency";
+    // joni byte regex engine setting
+    public static final String USE_BYTE_BASED_REGEX_ATTRIB = "phoenix.regex.byteBased";
 
     /**
 	 * max size to spool the the result into
@@ -123,9 +127,8 @@ public interface QueryServices extends SQLCloseable {
     // Index will be partially re-built from index disable time stamp - following overlap time
     public static final String INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_TIME_ATTRIB =
         "phoenix.index.failure.handling.rebuild.overlap.time";
-    public static final String MIN_INDEX_PRIOIRTY_ATTRIB = "phoenix.regionserver.index.priority.min";
-    public static final String MAX_INDEX_PRIOIRTY_ATTRIB = "phoenix.regionserver.index.priority.max";
-    public static final String INDEX_HANDLER_COUNT_ATTRIB = "phoenix.regionserver.index.handler.count";
+    public static final String INDEX_PRIOIRTY_ATTRIB = "phoenix.index.rpc.priority";
+    public static final String METADATA_PRIOIRTY_ATTRIB = "phoenix.metadata.rpc.priority";
     public static final String ALLOW_LOCAL_INDEX_ATTRIB = "phoenix.index.allowLocalIndex";
 
     // Config parameters for for configuring tracing
@@ -152,6 +155,11 @@ public interface QueryServices extends SQLCloseable {
     public static final String DELAY_FOR_SCHEMA_UPDATE_CHECK = "phoenix.schema.change.delay";
     public static final String DEFAULT_KEEP_DELETED_CELLS_ATTRIB = "phoenix.table.default.keep.deleted.cells";
     public static final String DEFAULT_STORE_NULLS_ATTRIB = "phoenix.table.default.store.nulls";
+    public static final String METRICS_ENABLED = "phoenix.query.metrics.enabled";
+    
+    // rpc queue configs
+    public static final String INDEX_HANDLER_COUNT_ATTRIB = "phoenix.rpc.index.handler.count";
+    public static final String METADATA_HANDLER_COUNT_ATTRIB = "phoenix.rpc.metadata.handler.count";
 
     /**
      * Get executor service used for parallel scans

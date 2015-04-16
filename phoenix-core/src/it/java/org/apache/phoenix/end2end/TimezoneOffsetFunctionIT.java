@@ -23,9 +23,14 @@ import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Timestamp;
+import java.util.Calendar;
+import java.util.TimeZone;
 
-import org.apache.phoenix.schema.IllegalDataException;
+import org.apache.phoenix.exception.SQLExceptionCode;
 import org.junit.Test;
 
 
@@ -70,12 +75,9 @@ public class TimezoneOffsetFunctionIT extends BaseHBaseManagedTimeIT {
 			rs.next();
 			assertEquals(0, rs.getInt(3));
 			fail();
-		} catch (IllegalDataException e) {
-			assertTrue(true);
-			return;
-		}
-		fail();
-
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.ILLEGAL_DATA.getErrorCode(), e.getErrorCode());
+        }
 	}
 
 	@Test
@@ -156,5 +158,28 @@ public class TimezoneOffsetFunctionIT extends BaseHBaseManagedTimeIT {
 		rs.getInt(3);
 		assertTrue(rs.wasNull());
 	}
+	
+	@Test
+	public void testInsertingRetrivingTimestamp() throws Exception {
+	    Connection conn = DriverManager.getConnection(getUrl());
+        String ddl = "CREATE TABLE T (K INTEGER NOT NULL PRIMARY KEY, V TIMESTAMP)";
+        conn.createStatement().execute(ddl);
+        String dml = "UPSERT INTO T VALUES (?, ?)";
+        PreparedStatement stmt = conn.prepareStatement(dml);
+        stmt.setInt(1, 1);
+        Calendar cal = Calendar.getInstance();
+        cal.setTimeZone(TimeZone.getTimeZone("US/Hawaii"));
+        long time = System.currentTimeMillis();
+        stmt.setTimestamp(2, new Timestamp(time), cal);
+        stmt.executeUpdate();
+        conn.commit();
+        String query = "SELECT V FROM T";
+        ResultSet rs = conn.createStatement().executeQuery(query);
+        rs.next();
+        assertEquals(new Timestamp(time), rs.getTimestamp(1));
+        assertEquals(new Timestamp(time), rs.getTimestamp("V"));
+        assertEquals(new Timestamp(time), rs.getTimestamp(1, cal));
+        assertEquals(new Timestamp(time), rs.getTimestamp("V", cal));
+    }
 
 }

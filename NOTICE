@@ -23,3 +23,8 @@ Copyright (c) 2003-2008, Terrence Parr.
 
 JUnit (http://www.junit.org/) included under the Common Public License v1.0.
 See the full text here: http://junit.sourceforge.net/cpl-v10.html
+
+The phoenix-spark module has been adapted from the phoenix-spark library
+distributed under the terms of the Apache 2 license. Original source copyright:
+Copyright 2014 Simply Measured, Inc.
+Copyright 2015 Interset Software Inc.

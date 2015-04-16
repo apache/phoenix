@@ -17,6 +17,9 @@
  */
 package org.apache.phoenix.schema;
 
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.exception.SQLExceptionInfo;
+
 /**
  * 
  * Exception thrown when an invalid or illegal data value is found
@@ -28,18 +31,17 @@ public class IllegalDataException extends ConstraintViolationException {
 	private static final long serialVersionUID = 1L;
 
     public IllegalDataException() {
+        this((String)null);
     }
-
+    
     public IllegalDataException(String message) {
-        super(message);
+        super(new SQLExceptionInfo.Builder(
+                SQLExceptionCode.ILLEGAL_DATA).setMessage(message)
+                .build().buildException());
     }
 
     public IllegalDataException(Throwable cause) {
-        super(cause);
+        super(cause);  // Already wrapped - don't rewrap
     }
-
-    public IllegalDataException(String message, Throwable cause) {
-        super(message, cause);
-    }
-
+    
 }

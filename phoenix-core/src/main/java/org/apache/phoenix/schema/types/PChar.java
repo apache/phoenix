@@ -23,7 +23,7 @@ import java.util.Arrays;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.exception.ValueTypeIncompatibleException;
+import org.apache.phoenix.exception.DataExceedsCapacityException;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.StringUtil;
 
@@ -41,13 +41,13 @@ public class PChar extends PDataType<String> {
   }
 
     @Override
-    public void pad(ImmutableBytesWritable ptr, Integer maxLength) {
+    public void pad(ImmutableBytesWritable ptr, Integer maxLength, SortOrder sortOrder) {
       if (ptr.getLength() >= maxLength) {
         return;
       }
       byte[] newBytes = new byte[maxLength];
       System.arraycopy(ptr.get(), ptr.getOffset(), newBytes, 0, ptr.getLength());
-      Arrays.fill(newBytes, ptr.getLength(), maxLength, StringUtil.SPACE_UTF8);
+      Arrays.fill(newBytes, ptr.getLength(), maxLength, sortOrder == SortOrder.ASC ? StringUtil.SPACE_UTF8 : StringUtil.INVERTED_SPACE_UTF8);
       ptr.set(newBytes);
     }
 
@@ -61,7 +61,7 @@ public class PChar extends PDataType<String> {
         return object;
       }
       if (s.length() > maxLength) {
-        throw new ValueTypeIncompatibleException(this,maxLength,null);
+        throw new DataExceedsCapacityException(this,maxLength,null);
       }
       return Strings.padEnd(s, maxLength, ' ');
     }

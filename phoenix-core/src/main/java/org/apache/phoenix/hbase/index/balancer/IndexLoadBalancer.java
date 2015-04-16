@@ -45,7 +45,7 @@ import org.apache.hadoop.hbase.master.RegionState;
 import org.apache.hadoop.hbase.master.RegionStates;
 import org.apache.hadoop.hbase.master.balancer.StochasticLoadBalancer;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.hadoop.util.ReflectionUtils;
 
 /**
@@ -121,6 +121,11 @@ public class IndexLoadBalancer implements LoadBalancer {
     @Override
     public void setConf(Configuration configuration) {
         this.conf = configuration;
+    }
+
+    @Override
+    public void onConfigurationChange(Configuration conf) {
+        setConf(conf);
     }
 
     @Override

@@ -3,11 +3,16 @@
 *.war
 *.jar
 
+# python
+*.pyc
+
 # eclipse stuffs
 .settings/*
 */.settings/
 .classpath
 .project
+*/.externalToolBuilders
+*/maven-eclipse.xml
 
 # intellij stuff
 .idea/

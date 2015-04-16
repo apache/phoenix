@@ -17,14 +17,15 @@
  */
 package org.apache.phoenix.schema.types;
 
-import com.google.common.base.Preconditions;
-import com.google.common.primitives.Doubles;
+import java.math.BigDecimal;
+
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.schema.SortOrder;
 
-import java.math.BigDecimal;
+import com.google.common.base.Preconditions;
+import com.google.common.primitives.Doubles;
 
-public class PUnsignedDouble extends PDataType<PDouble> {
+public class PUnsignedDouble extends PRealNumber<PDouble> {
 
   public static final PUnsignedDouble INSTANCE = new PUnsignedDouble();
 

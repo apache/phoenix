@@ -49,7 +49,7 @@ public final class PhoenixMapReduceUtil {
           PhoenixConfigurationUtil.setInputClass(configuration,inputClass);
           PhoenixConfigurationUtil.setSchemaType(configuration, SchemaType.TABLE);
     }
-    
+       
     /**
      * 
      * @param job         
@@ -64,8 +64,18 @@ public final class PhoenixMapReduceUtil {
           PhoenixConfigurationUtil.setInputQuery(configuration, inputQuery);
           PhoenixConfigurationUtil.setInputClass(configuration,inputClass);
           PhoenixConfigurationUtil.setSchemaType(configuration, SchemaType.QUERY);
+          
      }
     
+    /**
+     * A method to override which HBase cluster for {@link PhoenixInputFormat} to read from
+     * @param job MapReduce Job
+     * @param quorum an HBase cluster's ZooKeeper quorum
+     */
+    public static void setInputCluster(final Job job, final String quorum) {
+        final Configuration configuration = job.getConfiguration();
+        PhoenixConfigurationUtil.setInputCluster(configuration, quorum);
+    }
     /**
      * 
      * @param job
@@ -93,6 +103,16 @@ public final class PhoenixMapReduceUtil {
           final Configuration configuration = job.getConfiguration();
           PhoenixConfigurationUtil.setOutputTableName(configuration, tableName);
           PhoenixConfigurationUtil.setUpsertColumnNames(configuration,fieldNames);
+    }
+    
+    /**
+     * A method to override which HBase cluster for {@link PhoenixOutputFormat} to write to
+     * @param job MapReduce Job
+     * @param quorum an HBase cluster's ZooKeeper quorum
+     */
+    public static void setOutputCluster(final Job job, final String quorum) {
+        final Configuration configuration = job.getConfiguration();
+        PhoenixConfigurationUtil.setOutputCluster(configuration, quorum);
     }
 
     

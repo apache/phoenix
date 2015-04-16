@@ -23,9 +23,9 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
 
+import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.Filter;
-import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
 import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -35,15 +35,17 @@ import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.filter.BooleanExpressionFilter;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.KeyRange.Bound;
-import org.apache.phoenix.schema.types.PInteger;
-import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.StringUtil;
 
 import com.google.common.collect.Iterators;
@@ -56,17 +58,19 @@ public abstract class ExplainTable {
     protected final GroupBy groupBy;
     protected final OrderBy orderBy;
     protected final HintNode hint;
+    protected final Integer limit;
    
     public ExplainTable(StatementContext context, TableRef table) {
-        this(context,table,GroupBy.EMPTY_GROUP_BY, OrderBy.EMPTY_ORDER_BY, HintNode.EMPTY_HINT_NODE);
+        this(context,table,GroupBy.EMPTY_GROUP_BY, OrderBy.EMPTY_ORDER_BY, HintNode.EMPTY_HINT_NODE, null);
     }
 
-    public ExplainTable(StatementContext context, TableRef table, GroupBy groupBy, OrderBy orderBy, HintNode hintNode) {
+    public ExplainTable(StatementContext context, TableRef table, GroupBy groupBy, OrderBy orderBy, HintNode hintNode, Integer limit) {
         this.context = context;
         this.tableRef = table;
         this.groupBy = groupBy;
         this.orderBy = orderBy;
         this.hint = hintNode;
+        this.limit = limit;
     }
 
     private boolean explainSkipScan(StringBuilder buf) {
@@ -97,7 +101,11 @@ public abstract class ExplainTable {
     protected void explain(String prefix, List<String> planSteps) {
         StringBuilder buf = new StringBuilder(prefix);
         ScanRanges scanRanges = context.getScanRanges();
-        boolean hasSkipScanFilter = false;
+        Scan scan = context.getScan();
+
+        if (scan.getConsistency() != Consistency.STRONG){
+            buf.append("TIMELINE-CONSISTENCY ");
+        }
         if (hint.hasHint(Hint.SMALL)) {
             buf.append("SMALL ");
         }
@@ -107,7 +115,7 @@ public abstract class ExplainTable {
         if (scanRanges.isEverything()) {
             buf.append("FULL SCAN ");
         } else {
-            hasSkipScanFilter = explainSkipScan(buf);
+            explainSkipScan(buf);
         }
         buf.append("OVER " + tableRef.getTable().getPhysicalName().getString());
         if (!scanRanges.isPointLookup()) {
@@ -115,49 +123,31 @@ public abstract class ExplainTable {
         }
         planSteps.add(buf.toString());
         
-        Scan scan = context.getScan();
-        Filter filter = scan.getFilter();
-        PageFilter pageFilter = null;
-        if (filter != null) {
-            int offset = 0;
-            boolean hasFirstKeyOnlyFilter = false;
-            String filterDesc = "";
-            if (hasSkipScanFilter) {
-                if (filter instanceof FilterList) {
-                    List<Filter> filterList = ((FilterList) filter).getFilters();
-                    if (filterList.get(0) instanceof FirstKeyOnlyFilter) {
-                        hasFirstKeyOnlyFilter = true;
-                        offset = 1;
-                    }
-                    if (filterList.size() > offset+1) {
-                        filterDesc = filterList.get(offset+1).toString();
-                        pageFilter = getPageFilter(filterList);
-                    }
-                }
-            } else if (filter instanceof FilterList) {
-                List<Filter> filterList = ((FilterList) filter).getFilters();
-                if (filterList.get(0) instanceof FirstKeyOnlyFilter) {
-                    hasFirstKeyOnlyFilter = true;
-                    offset = 1;
-                }
-                if (filterList.size() > offset) {
-                    filterDesc = filterList.get(offset).toString();
-                    pageFilter = getPageFilter(filterList);
-                }
-            } else {
+        Iterator<Filter> filterIterator = ScanUtil.getFilterIterator(scan);
+        if (filterIterator.hasNext()) {
+            PageFilter pageFilter = null;
+            FirstKeyOnlyFilter firstKeyOnlyFilter = null;
+            BooleanExpressionFilter whereFilter = null;
+            do {
+                Filter filter = filterIterator.next();
                 if (filter instanceof FirstKeyOnlyFilter) {
-                    hasFirstKeyOnlyFilter = true;
-                } else {
-                    filterDesc = filter.toString();
+                    firstKeyOnlyFilter = (FirstKeyOnlyFilter)filter;
+                } else if (filter instanceof PageFilter) {
+                    pageFilter = (PageFilter)filter;
+                } else if (filter instanceof BooleanExpressionFilter) {
+                    whereFilter = (BooleanExpressionFilter)filter;
                 }
-            }
-            if (filterDesc.length() > 0) {
-                planSteps.add("    SERVER FILTER BY " + (hasFirstKeyOnlyFilter ? "FIRST KEY ONLY AND " : "") + filterDesc);
-            } else if (hasFirstKeyOnlyFilter) {
+            } while (filterIterator.hasNext());
+            if (whereFilter != null) {
+                planSteps.add("    SERVER FILTER BY " + (firstKeyOnlyFilter == null ? "" : "FIRST KEY ONLY AND ") + whereFilter.toString());
+            } else if (firstKeyOnlyFilter != null) {
                 planSteps.add("    SERVER FILTER BY FIRST KEY ONLY");
             }
-            if (pageFilter != null) {
-                planSteps.add("    SERVER " + pageFilter.getPageSize() + " ROW LIMIT");
+            if (!orderBy.getOrderByExpressions().isEmpty() && groupBy.isEmpty()) { // with GROUP BY, sort happens client-side
+                planSteps.add("    SERVER" + (limit == null ? "" : " TOP " + limit + " ROW" + (limit == 1 ? "" : "S"))
+                        + " SORTED BY " + orderBy.getOrderByExpressions().toString());
+            } else if (pageFilter != null) {
+                planSteps.add("    SERVER " + pageFilter.getPageSize() + " ROW LIMIT");                
             }
         }
         Integer groupByLimit = null;
@@ -166,13 +156,6 @@ public abstract class ExplainTable {
             groupByLimit = (Integer) PInteger.INSTANCE.toObject(groupByLimitBytes);
         }
         groupBy.explain(planSteps, groupByLimit);
-    }
-
-    private PageFilter getPageFilter(List<Filter> filterList) {
-        for (Filter filter : filterList) {
-            if (filter instanceof PageFilter) return (PageFilter)filter;
-        }
-        return null;
     }
 
     private void appendPKColumnValue(StringBuilder buf, byte[] range, Boolean isNull, int slotIndex) {

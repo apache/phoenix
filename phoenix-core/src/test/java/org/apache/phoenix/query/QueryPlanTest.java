@@ -207,13 +207,11 @@ public class QueryPlanTest extends BaseConnectionlessQueryTest {
         String query = "EXPLAIN SELECT * FROM TENANT_VIEW LIMIT 1";
         ResultSet rs = conn.createStatement().executeQuery(query);
         assertEquals("CLIENT SERIAL 1-WAY RANGE SCAN OVER BASE_MULTI_TENANT_TABLE ['tenantId']\n" + 
-                "    SERVER FILTER BY PageFilter 1\n" + 
                 "    SERVER 1 ROW LIMIT\n" + 
                 "CLIENT 1 ROW LIMIT", QueryUtil.getExplainPlan(rs));
         query = "EXPLAIN SELECT * FROM TENANT_VIEW LIMIT " + Integer.MAX_VALUE;
         rs = conn.createStatement().executeQuery(query);
         assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER BASE_MULTI_TENANT_TABLE ['tenantId']\n" + 
-                "    SERVER FILTER BY PageFilter " + Integer.MAX_VALUE + "\n" + 
                 "    SERVER " + Integer.MAX_VALUE + " ROW LIMIT\n" + 
                 "CLIENT " + Integer.MAX_VALUE + " ROW LIMIT", QueryUtil.getExplainPlan(rs));
         query = "EXPLAIN SELECT * FROM TENANT_VIEW WHERE username = 'Joe' LIMIT 1";

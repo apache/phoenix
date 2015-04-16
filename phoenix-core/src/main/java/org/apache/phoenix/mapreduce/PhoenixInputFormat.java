@@ -22,6 +22,7 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.List;
+import java.util.Properties;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -39,6 +40,7 @@ import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.util.PhoenixRuntime;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
@@ -96,10 +98,16 @@ public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWr
      * @throws IOException
      * @throws SQLException
      */
-    private QueryPlan getQueryPlan(final JobContext context,final Configuration configuration) throws IOException {
+    private QueryPlan getQueryPlan(final JobContext context, final Configuration configuration)
+            throws IOException {
         Preconditions.checkNotNull(context);
-        try{
-            final Connection connection = ConnectionUtil.getConnection(configuration);
+        try {
+            final String currentScnValue = configuration.get(PhoenixConfigurationUtil.CURRENT_SCN_VALUE);
+            final Properties overridingProps = new Properties();
+            if(currentScnValue != null) {
+                overridingProps.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, currentScnValue);
+            }
+            final Connection connection = ConnectionUtil.getInputConnection(configuration, overridingProps);
             final String selectStatement = PhoenixConfigurationUtil.getSelectStatement(configuration);
             Preconditions.checkNotNull(selectStatement);
             final Statement statement = connection.createStatement();
@@ -109,9 +117,11 @@ public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWr
             // Initialize the query plan so it sets up the parallel scans
             queryPlan.iterator();
             return queryPlan;
-        } catch(Exception exception) {
-            LOG.error(String.format("Failed to get the query plan with error [%s]",exception.getMessage()));
+        } catch (Exception exception) {
+            LOG.error(String.format("Failed to get the query plan with error [%s]",
+                exception.getMessage()));
             throw new RuntimeException(exception);
         }
-   }
+    }
+
 }

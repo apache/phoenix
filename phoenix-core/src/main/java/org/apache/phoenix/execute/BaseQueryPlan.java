@@ -66,7 +66,7 @@ import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.ScanUtil;
-import org.cloudera.htrace.TraceScope;
+import org.apache.htrace.TraceScope;
 
 import com.google.common.collect.Lists;
 
@@ -178,6 +178,12 @@ public abstract class BaseQueryPlan implements QueryPlan {
         // is resolved.
         // TODO: include time range in explain plan?
         PhoenixConnection connection = context.getConnection();
+
+        // set read consistency
+        if (context.getCurrentTable() != null
+                && context.getCurrentTable().getTable().getType() != PTableType.SYSTEM) {
+            scan.setConsistency(connection.getConsistency());
+        }
         if (context.getScanTimeRange() == null) {
           Long scn = connection.getSCN();
           if (scn == null) {

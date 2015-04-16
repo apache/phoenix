@@ -18,6 +18,8 @@
 package org.apache.phoenix.iterate;
 
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.EXPECTED_UPPER_REGION_KEY;
+import static org.apache.phoenix.monitoring.PhoenixMetrics.CountMetric.FAILED_QUERY;
+import static org.apache.phoenix.monitoring.PhoenixMetrics.CountMetric.QUERY_TIMEOUT;
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
 
 import java.sql.SQLException;
@@ -101,7 +103,6 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
     protected final String scanId;
     // TODO: too much nesting here - breakup into new classes.
     private final List<List<List<Pair<Scan,Future<PeekingResultIterator>>>>> allFutures;
-
     
     static final Function<HRegionLocation, KeyRange> TO_KEY_RANGE = new Function<HRegionLocation, KeyRange>() {
         @Override
@@ -131,7 +132,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
     }
     
     public BaseResultIterators(QueryPlan plan, Integer perScanLimit) throws SQLException {
-        super(plan.getContext(), plan.getTableRef(), plan.getGroupBy(), plan.getOrderBy(), plan.getStatement().getHint());
+        super(plan.getContext(), plan.getTableRef(), plan.getGroupBy(), plan.getOrderBy(), plan.getStatement().getHint(), plan.getLimit());
         this.plan = plan;
         StatementContext context = plan.getContext();
         TableRef tableRef = plan.getTableRef();
@@ -519,7 +520,8 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         SQLException toThrow = null;
         // Get query time out from Statement and convert from seconds back to milliseconds
         int queryTimeOut = context.getStatement().getQueryTimeout() * 1000;
-        long maxQueryEndTime = System.currentTimeMillis() + queryTimeOut;
+        final long startTime = System.currentTimeMillis();
+        final long maxQueryEndTime = startTime + queryTimeOut;
         try {
             submitWork(scans, futures, allIterators, splits.size());
             boolean clearedCache = false;
@@ -554,7 +556,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                             // Add any concatIterators that were successful so far
                             // as we need these to be in order
                             addIterator(iterators, concatIterators);
-                            concatIterators = Collections.emptyList();
+                            concatIterators = Lists.newArrayList();
                             submitWork(newNestedScans, newFutures, allIterators, newNestedScans.size());
                             allFutures.add(newFutures);
                             for (List<Pair<Scan,Future<PeekingResultIterator>>> newFuture : reverseIfNecessary(newFutures, isReverse)) {
@@ -575,10 +577,10 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 }
                 addIterator(iterators, concatIterators);
             }
-
             success = true;
             return iterators;
         } catch (TimeoutException e) {
+            QUERY_TIMEOUT.increment();
             // thrown when a thread times out waiting for the future.get() call to return
             toThrow = new SQLExceptionInfo.Builder(SQLExceptionCode.OPERATION_TIMED_OUT)
                     .setMessage(". Query couldn't be completed in the alloted time: " + queryTimeOut + " ms")
@@ -612,6 +614,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 }
             } finally {
                 if (toThrow != null) {
+                    FAILED_QUERY.increment();
                     throw toThrow;
                 }
             }
@@ -678,7 +681,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
     abstract protected String getName();    
     abstract protected void submitWork(List<List<Scan>> nestedScans, List<List<Pair<Scan,Future<PeekingResultIterator>>>> nestedFutures,
             List<PeekingResultIterator> allIterators, int estFlattenedSize);
-
+    
     @Override
     public int size() {
         return this.scans.size();

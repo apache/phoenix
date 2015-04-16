@@ -43,6 +43,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.generated.PGuidePostsProtos;
 import org.apache.phoenix.coprocessor.generated.PGuidePostsProtos.PGuidePosts;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
+import org.apache.phoenix.exception.DataExceedsCapacityException;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.IndexMaintainer;
@@ -521,7 +522,7 @@ public class PTableImpl implements PTable {
                 if (maxLength != null && type.isFixedWidth() && byteValue.length <= maxLength) {
                     byteValue = StringUtil.padChar(byteValue, maxLength);
                 } else if (maxLength != null && byteValue.length > maxLength) {
-                    throw new ConstraintViolationException(name.getString() + "." + column.getName().getString() + " may not exceed " + maxLength + " bytes (" + SchemaUtil.toString(type, byteValue) + ")");
+                    throw new DataExceedsCapacityException(name.getString() + "." + column.getName().getString() + " may not exceed " + maxLength + " bytes (" + SchemaUtil.toString(type, byteValue) + ")");
                 }
                 os.write(byteValue, 0, byteValue.length);
             }
@@ -702,9 +703,9 @@ public class PTableImpl implements PTable {
                 Integer	maxLength = column.getMaxLength();
             	if (!isNull && type.isFixedWidth() && maxLength != null) {
     				if (ptr.getLength() <= maxLength) {
-                        type.pad(ptr, maxLength);
+                        type.pad(ptr, maxLength, column.getSortOrder());
                     } else if (ptr.getLength() > maxLength) {
-                        throw new ConstraintViolationException(name.getString() + "." + column.getName().getString() + " may not exceed " + maxLength + " bytes (" + type.toObject(byteValue) + ")");
+                        throw new DataExceedsCapacityException(name.getString() + "." + column.getName().getString() + " may not exceed " + maxLength + " bytes (" + type.toObject(byteValue) + ")");
                     }
             	}
                 removeIfPresent(unsetValues, family, qualifier);

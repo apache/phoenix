@@ -56,7 +56,7 @@ import org.apache.hadoop.hbase.regionserver.Store;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
-import org.apache.phoenix.exception.ValueTypeIncompatibleException;
+import org.apache.phoenix.exception.DataExceedsCapacityException;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.ExpressionType;
@@ -162,8 +162,10 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
         long ts = scan.getTimeRange().getMax();
         StatisticsCollector stats = null;
         if(ScanUtil.isAnalyzeTable(scan)) {
+            byte[] gp_width_bytes = scan.getAttribute(BaseScannerRegionObserver.GUIDEPOST_WIDTH_BYTES);
+            byte[] gp_per_region_bytes = scan.getAttribute(BaseScannerRegionObserver.GUIDEPOST_PER_REGION);
             // Let this throw, as this scan is being done for the sole purpose of collecting stats
-            stats = new StatisticsCollector(c.getEnvironment(), region.getRegionInfo().getTable().getNameAsString(), ts);
+            stats = new StatisticsCollector(c.getEnvironment(), region.getRegionInfo().getTable().getNameAsString(), ts, gp_width_bytes, gp_per_region_bytes);
         }
         if (ScanUtil.isLocalIndex(scan)) {
             /*
@@ -323,7 +325,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
                                                 column.getDataType(), expression.getMaxLength(),
                                                 expression.getScale(), column.getMaxLength(),
                                                 column.getScale())) {
-                                            throw new ValueTypeIncompatibleException(
+                                            throw new DataExceedsCapacityException(
                                                 column.getDataType(), column.getMaxLength(),
                                                 column.getScale());
                                         }

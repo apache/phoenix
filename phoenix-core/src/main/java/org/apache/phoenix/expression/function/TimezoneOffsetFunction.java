@@ -18,22 +18,18 @@
 
 package org.apache.phoenix.expression.function;
 
-import java.sql.Date;
 import java.sql.SQLException;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.TimeZone;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.cache.JodaTimezoneCache;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.FunctionParseNode;
-import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.joda.time.DateTimeZone;
 
 /**
  * Returns offset (shift in minutes) of timezone at particular datetime in minutes.
@@ -45,7 +41,6 @@ public class TimezoneOffsetFunction extends ScalarFunction {
 
     public static final String NAME = "TIMEZONE_OFFSET";
     private static final int MILLIS_TO_MINUTES = 60 * 1000;
-    private final Map<String, TimeZone> cachedTimeZones = new HashMap<String, TimeZone>();
 
     public TimezoneOffsetFunction() {
     }
@@ -64,24 +59,14 @@ public class TimezoneOffsetFunction extends ScalarFunction {
         if (!children.get(0).evaluate(tuple, ptr)) {
             return false;
         }
-
-        String timezone = Bytes.toString(ptr.get(), ptr.getOffset(), ptr.getLength());
+        DateTimeZone timezoneInstance = JodaTimezoneCache.getInstance(ptr);
 
         if (!children.get(1).evaluate(tuple, ptr)) {
             return false;
         }
+        long date = PDate.INSTANCE.getCodec().decodeLong(ptr, children.get(1).getSortOrder());
 
-        if (!cachedTimeZones.containsKey(timezone)) {
-            TimeZone tz = TimeZone.getTimeZone(timezone);
-            if (!tz.getID().equals(timezone)) {
-                throw new IllegalDataException("Invalid timezone " + timezone);
-            }
-            cachedTimeZones.put(timezone, tz);
-        }
-
-		Date date = (Date) PDate.INSTANCE.toObject(ptr, children.get(1).getSortOrder());
-		int offset = cachedTimeZones.get(timezone).getOffset(date.getTime());
-
+        int offset = timezoneInstance.getOffset(date);
         ptr.set(PInteger.INSTANCE.toBytes(offset / MILLIS_TO_MINUTES));
         return true;
     }

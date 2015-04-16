@@ -118,7 +118,12 @@ import org.apache.hadoop.hbase.IntegrationTestingUtility;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.coprocessor.RegionServerObserver;
 import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
+import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
+import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
+import org.apache.hadoop.hbase.ipc.controller.ServerRpcControllerFactory;
+import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.regionserver.LocalIndexMerger;
+import org.apache.hadoop.hbase.regionserver.RSRpcServices;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.BaseClientManagedTimeIT;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
@@ -457,7 +462,9 @@ public abstract class BaseTest {
     }
     
     private static final String ORG_ID = "00D300000000XHP";
-    private static final int NUM_SLAVES_BASE = 1;
+    protected static int NUM_SLAVES_BASE = 1;
+    private static final String DEFAULT_SERVER_RPC_CONTROLLER_FACTORY = ServerRpcControllerFactory.class.getName();
+    private static final String DEFAULT_RPC_SCHEDULER_FACTORY = PhoenixRpcSchedulerFactory.class.getName();
     
     protected static String getZKClientPort(Configuration conf) {
         return conf.get(QueryServices.ZOOKEEPER_PORT_ATTRIB);
@@ -485,8 +492,7 @@ public abstract class BaseTest {
     }
     
     /**
-     * Set up the test hbase cluster. 
-     * @param props TODO
+     * Set up the test hbase cluster.
      * @return url to be used by clients to connect to the cluster.
      */
     protected static String setUpTestCluster(@Nonnull Configuration conf, ReadOnlyProps overrideProps) {
@@ -532,9 +538,13 @@ public abstract class BaseTest {
     }
             
     protected static void setUpTestDriver(ReadOnlyProps props) throws Exception {
-        String url = checkClusterInitialized(props);
+        setUpTestDriver(props, props);
+    }
+    
+    protected static void setUpTestDriver(ReadOnlyProps serverProps, ReadOnlyProps clientProps) throws Exception {
+        String url = checkClusterInitialized(serverProps);
         if (driver == null) {
-            driver = initAndRegisterDriver(url, props);
+            driver = initAndRegisterDriver(url, clientProps);
         }
     }
 
@@ -558,7 +568,7 @@ public abstract class BaseTest {
         setUpConfigForMiniCluster(conf, overrideProps);
         utility = new HBaseTestingUtility(conf);
         try {
-            utility.startMiniCluster();
+            utility.startMiniCluster(NUM_SLAVES_BASE);
             // add shutdown hook to kill the mini cluster
             Runtime.getRuntime().addShutdownHook(new Thread() {
                 @Override
@@ -610,6 +620,9 @@ public abstract class BaseTest {
         }
         //no point doing sanity checks when running tests.
         conf.setBoolean("hbase.table.sanity.checks", false);
+        // set the server rpc controller and rpc scheduler factory, used to configure the cluster
+        conf.set(RpcControllerFactory.CUSTOM_CONTROLLER_CONF_KEY, DEFAULT_SERVER_RPC_CONTROLLER_FACTORY);
+        conf.set(RSRpcServices.REGION_SERVER_RPC_SCHEDULER_FACTORY_CLASS, DEFAULT_RPC_SCHEDULER_FACTORY);
         
         // override any defaults based on overrideProps
         for (Entry<String,String> entry : overrideProps) {
@@ -631,7 +644,7 @@ public abstract class BaseTest {
          * the threads limit imposed by the OS. 
          */
         conf.setInt(HConstants.REGION_SERVER_HANDLER_COUNT, 5);
-        conf.setInt(HConstants.REGION_SERVER_META_HANDLER_COUNT, 2);
+        conf.setInt("hbase.regionserver.metahandler.count", 2);
         conf.setInt(HConstants.MASTER_HANDLER_COUNT, 2);
         conf.setClass("hbase.coprocessor.regionserver.classes", LocalIndexMerger.class,
             RegionServerObserver.class);
@@ -769,6 +782,7 @@ public abstract class BaseTest {
     
     protected static void deletePriorTables(long ts, String tenantId, String url) throws Exception {
         Properties props = new Properties();
+        props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(1024));
         if (ts != HConstants.LATEST_TIMESTAMP) {
             props.setProperty(CURRENT_SCN_ATTRIB, Long.toString(ts));
         }
@@ -842,6 +856,8 @@ public abstract class BaseTest {
                 conn = DriverManager.getConnection(url, props);
                 lastTenantId = tenantId;
             }
+
+            logger.info("DROP SEQUENCE STATEMENT: DROP SEQUENCE " + SchemaUtil.getEscapedTableName(rs.getString(2), rs.getString(3)));
             conn.createStatement().execute("DROP SEQUENCE " + SchemaUtil.getEscapedTableName(rs.getString(2), rs.getString(3)));
         }
     }

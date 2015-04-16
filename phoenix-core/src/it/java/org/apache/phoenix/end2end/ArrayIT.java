@@ -463,7 +463,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
             props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
             conn = DriverManager.getConnection(getUrl(), props);
             String query = "SELECT a_double_array[1]  FROM " + SIMPLE_TABLE_WITH_ARRAY
-                    + " WHERE a_double_array[2] = 89.96d or a_char_array[0] = 'a'";
+                    + " WHERE a_double_array[2] = 89.96 or a_char_array[0] = 'a'";
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
             assertTrue(rs.next());
@@ -493,7 +493,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
             props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
             conn = DriverManager.getConnection(getUrl(), props);
             String query = "SELECT a_double_array[1]  FROM " + SIMPLE_TABLE_WITH_ARRAY
-                    + " WHERE 89.96d = ANY(a_double_array)";
+                    + " WHERE CAST(89.96 AS DOUBLE) = ANY(a_double_array)";
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
             assertTrue(rs.next());
@@ -522,7 +522,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
             props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
             conn = DriverManager.getConnection(getUrl(), props);
             String query = "SELECT a_double_array[1]  FROM " + SIMPLE_TABLE_WITH_ARRAY
-                    + " WHERE 64.87d = ALL(a_double_array)";
+                    + " WHERE CAST(64.87 as DOUBLE) = ALL(a_double_array)";
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
             assertFalse(rs.next());
@@ -546,7 +546,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
             props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
             conn = DriverManager.getConnection(getUrl(), props);
             String query = "SELECT a_double_array[1]  FROM " + SIMPLE_TABLE_WITH_ARRAY
-                    + " WHERE  a_char_array[0] = 'f' or 89.96d > ANY(a_double_array)";
+                    + " WHERE  a_char_array[0] = 'f' or CAST(89.96 AS DOUBLE) > ANY(a_double_array)";
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
             assertTrue(rs.next());
@@ -575,7 +575,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
             props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
             conn = DriverManager.getConnection(getUrl(), props);
             String query = "SELECT a_double_array[1], a_double_array[2]  FROM " + SIMPLE_TABLE_WITH_ARRAY
-                    + " WHERE  a_char_array[0] = 'f' or 100.0d > ALL(a_double_array)";
+                    + " WHERE  a_char_array[0] = 'f' or CAST(100.0 AS DOUBLE) > ALL(a_double_array)";
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
             assertTrue(rs.next());
@@ -1001,7 +1001,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 		createTableWithArray(getUrl(),
 				getDefaultSplits(tenantId), null, ts - 2);
 		initTablesWithArrays(tenantId, null, ts, false, getUrl());
-		String query = "SELECT a_double_array FROM TABLE_WITH_ARRAY WHERE a_double_array = ARRAY [ 25.343d, 36.763d, 37.56d,386.63d]";
+		String query = "SELECT a_double_array FROM TABLE_WITH_ARRAY WHERE a_double_array = CAST(ARRAY [ 25.343, 36.763, 37.56,386.63] AS DOUBLE ARRAY)";
 		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
 				Long.toString(ts + 2)); // Execute at timestamp 2

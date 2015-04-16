@@ -52,7 +52,7 @@ public final class SqlQueryToColumnInfoFunction implements Function<String,List<
         Connection connection = null;
         List<ColumnInfo> columnInfos = null;
         try {
-            connection = ConnectionUtil.getConnection(this.configuration);
+            connection = ConnectionUtil.getInputConnection(this.configuration);
             final Statement  statement = connection.createStatement();
             final PhoenixStatement pstmt = statement.unwrap(PhoenixStatement.class);
             final QueryPlan queryPlan = pstmt.compileQuery(sqlQuery);

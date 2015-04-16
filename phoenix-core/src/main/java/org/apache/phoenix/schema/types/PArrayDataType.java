@@ -21,6 +21,8 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.text.Format;
+import java.util.LinkedList;
+import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -456,6 +458,91 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
         return null;
     }
 
+    public static boolean appendItemToArray(ImmutableBytesWritable ptr, int length, int offset, byte[] arrayBytes, PDataType baseType, int arrayLength, Integer maxLength, SortOrder sortOrder) {
+        int elementLength = maxLength == null ? ptr.getLength() : maxLength;
+
+        //padding
+        if (elementLength > ptr.getLength()) {
+            baseType.pad(ptr, elementLength, sortOrder);
+        }
+
+        int elementOffset = ptr.getOffset();
+        byte[] elementBytes = ptr.get();
+
+        byte[] newArray;
+        if (!baseType.isFixedWidth()) {
+
+            int offsetArrayPosition = Bytes.toInt(arrayBytes, offset + length - Bytes.SIZEOF_INT - Bytes.SIZEOF_INT - Bytes.SIZEOF_BYTE, Bytes.SIZEOF_INT);
+            int offsetArrayLength = length - offsetArrayPosition - Bytes.SIZEOF_INT - Bytes.SIZEOF_INT - Bytes.SIZEOF_BYTE;
+
+            //checks whether offset array consists of shorts or integers
+            boolean useInt = offsetArrayLength / Math.abs(arrayLength) == Bytes.SIZEOF_INT;
+            boolean convertToInt = false;
+
+            int newElementPosition = offsetArrayPosition - 2 * Bytes.SIZEOF_BYTE;
+
+            if (!useInt) {
+                if (PArrayDataType.useShortForOffsetArray(newElementPosition)) {
+                    newArray = new byte[length + elementLength + Bytes.SIZEOF_SHORT + Bytes.SIZEOF_BYTE];
+                } else {
+                    newArray = new byte[length + elementLength + arrayLength * Bytes.SIZEOF_SHORT + Bytes.SIZEOF_INT + Bytes.SIZEOF_BYTE];
+                    convertToInt = true;
+                }
+            } else {
+                newArray = new byte[length + elementLength + Bytes.SIZEOF_INT + Bytes.SIZEOF_BYTE];
+            }
+
+            int newOffsetArrayPosition = newElementPosition + elementLength + 3 * Bytes.SIZEOF_BYTE;
+
+            System.arraycopy(arrayBytes, offset, newArray, 0, newElementPosition);
+            System.arraycopy(elementBytes, elementOffset, newArray, newElementPosition, elementLength);
+
+            arrayLength = (Math.abs(arrayLength) + 1) * (int) Math.signum(arrayLength);
+            if (useInt) {
+                System.arraycopy(arrayBytes, offset + offsetArrayPosition, newArray, newOffsetArrayPosition, offsetArrayLength);
+                Bytes.putInt(newArray, newOffsetArrayPosition + offsetArrayLength, newElementPosition);
+
+                writeEndBytes(newArray, newOffsetArrayPosition, offsetArrayLength, arrayLength, arrayBytes[offset + length - 1], true);
+            } else {
+                if (!convertToInt) {
+                    System.arraycopy(arrayBytes, offset + offsetArrayPosition, newArray, newOffsetArrayPosition, offsetArrayLength);
+                    Bytes.putShort(newArray, newOffsetArrayPosition + offsetArrayLength, (short) (newElementPosition - Short.MAX_VALUE));
+
+                    writeEndBytes(newArray, newOffsetArrayPosition, offsetArrayLength, arrayLength, arrayBytes[offset + length - 1], false);
+                } else {
+                    int off = newOffsetArrayPosition;
+                    for (int arrayIndex = 0; arrayIndex < Math.abs(arrayLength) - 1; arrayIndex++) {
+                        Bytes.putInt(newArray, off, getOffset(arrayBytes, arrayIndex, true, offsetArrayPosition));
+                        off += Bytes.SIZEOF_INT;
+                    }
+
+                    Bytes.putInt(newArray, off, newElementPosition);
+                    Bytes.putInt(newArray, off + Bytes.SIZEOF_INT, newOffsetArrayPosition);
+                    Bytes.putInt(newArray, off + 2 * Bytes.SIZEOF_INT, -arrayLength);
+                    Bytes.putByte(newArray, off + 3 * Bytes.SIZEOF_INT, arrayBytes[offset + length - 1]);
+
+                }
+            }
+        } else {
+            newArray = new byte[length + elementLength];
+
+            System.arraycopy(arrayBytes, offset, newArray, 0, length);
+            System.arraycopy(elementBytes, elementOffset, newArray, length, elementLength);
+        }
+
+        ptr.set(newArray);
+
+        return true;
+    }
+
+    private static void writeEndBytes(byte[] array, int newOffsetArrayPosition, int offsetArrayLength, int arrayLength, byte header, boolean useInt) {
+        int byteSize = useInt ? Bytes.SIZEOF_INT : Bytes.SIZEOF_SHORT;
+
+        Bytes.putInt(array, newOffsetArrayPosition + offsetArrayLength + byteSize, newOffsetArrayPosition);
+        Bytes.putInt(array, newOffsetArrayPosition + offsetArrayLength + byteSize + Bytes.SIZEOF_INT, arrayLength);
+        Bytes.putByte(array, newOffsetArrayPosition + offsetArrayLength + byteSize + 2 * Bytes.SIZEOF_INT, header);
+    }
+
     public static int serailizeOffsetArrayIntoStream(DataOutputStream oStream, TrustedByteArrayOutputStream byteStream,
             int noOfElements, int maxOffset, int[] offsetPos) throws IOException {
         int offsetPosition = (byteStream.size());
@@ -669,5 +756,94 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
         }
         buf.append(']');
         return buf.toString();
+    }
+
+    static public class PArrayDataTypeBytesArrayBuilder<T> {
+        static private final int BYTE_ARRAY_DEFAULT_SIZE = 128;
+
+        private PDataType baseType;
+        private SortOrder sortOrder;
+        private List<Integer> offsetPos;
+        private TrustedByteArrayOutputStream byteStream;
+        private DataOutputStream oStream;
+        private int nulls;
+
+        public PArrayDataTypeBytesArrayBuilder(PDataType baseType, SortOrder sortOrder) {
+            this.baseType = baseType;
+            this.sortOrder = sortOrder;
+            offsetPos = new LinkedList<Integer>();
+            byteStream = new TrustedByteArrayOutputStream(BYTE_ARRAY_DEFAULT_SIZE);
+            oStream = new DataOutputStream(byteStream);
+            nulls = 0;
+        }
+
+        private void close() {
+            try {
+                if (byteStream != null) byteStream.close();
+                if (oStream != null) oStream.close();
+                byteStream = null;
+                oStream = null;
+            } catch (IOException ioe) {
+            }
+        }
+
+        public boolean appendElem(byte[] bytes) {
+            return appendElem(bytes, 0, bytes.length);
+        }
+
+        public boolean appendElem(byte[] bytes, int offset, int len) {
+            if (oStream == null || byteStream == null) return false;
+            try {
+                if (!baseType.isFixedWidth()) {
+                    if (len == 0) {
+                        offsetPos.add(byteStream.size());
+                        nulls++;
+                    } else {
+                        nulls = serializeNulls(oStream, nulls);
+                        offsetPos.add(byteStream.size());
+                        if (sortOrder == SortOrder.DESC) {
+                            SortOrder.invert(bytes, offset, bytes, offset, len);
+                        }
+                        oStream.write(bytes, offset, len);
+                        oStream.write(QueryConstants.SEPARATOR_BYTE);
+                    }
+                } else {
+                    if (sortOrder == SortOrder.DESC) {
+                        SortOrder.invert(bytes, offset, bytes, offset, len);
+                    }
+                    oStream.write(bytes, offset, len);
+                }
+                return true;
+            } catch (IOException e) {
+            }
+            return false;
+        }
+
+        public byte[] getBytesAndClose() {
+            try {
+                if (!baseType.isFixedWidth()) {
+                    int noOfElements = offsetPos.size();
+                    int[] offsetPosArray = new int[noOfElements];
+                    int index = 0;
+                    for (Integer i : offsetPos) {
+                        offsetPosArray[index] = i;
+                        ++index;
+                    }
+                    PArrayDataType.writeEndSeperatorForVarLengthArray(oStream);
+                    noOfElements =
+                            PArrayDataType.serailizeOffsetArrayIntoStream(oStream, byteStream,
+                                noOfElements, offsetPosArray[offsetPosArray.length - 1],
+                                offsetPosArray);
+                    serializeHeaderInfoIntoStream(oStream, noOfElements);
+                }
+                ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+                ptr.set(byteStream.getBuffer(), 0, byteStream.size());
+                return ByteUtil.copyKeyBytesIfNecessary(ptr);
+            } catch (IOException e) {
+            } finally {
+                close();
+            }
+            return null;
+        }
     }
 }
