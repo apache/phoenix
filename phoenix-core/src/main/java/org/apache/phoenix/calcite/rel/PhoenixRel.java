@@ -4,6 +4,8 @@ import java.util.List;
 
 import org.apache.calcite.plan.Convention;
 import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.rel.metadata.RelMetadataProvider;
+import org.apache.phoenix.calcite.metadata.PhoenixRelMetadataProvider;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.execute.TupleProjector;
@@ -21,6 +23,9 @@ import org.apache.phoenix.schema.TableRef;
 public interface PhoenixRel extends RelNode {
   /** Calling convention for relational operations that occur in Phoenix. */
   Convention CONVENTION = new Convention.Impl("PHOENIX", PhoenixRel.class);
+  
+  /** Metadata Provider for PhoenixRel */
+  RelMetadataProvider METADATA_PROVIDER = new PhoenixRelMetadataProvider();
 
   /** Relative cost of Phoenix versus Enumerable convention.
    *

@@ -517,6 +517,64 @@ public class CalciteTest extends BaseClientManagedTimeIT {
                 .close();
     }
     
+    @Test public void testLimit() {
+        start().sql("select organization_id, entity_id, a_string from aTable limit 5")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                           "  PhoenixLimit(fetch=[5])\n" +
+                           "    PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1], A_STRING=[$2])\n" +
+                           "      PhoenixTableScan(table=[[phoenix, ATABLE]], statelessFetch=[5])\n")
+                .resultIs(new Object[][] {
+                          {"00D300000000XHP", "00A123122312312", "a"}, 
+                          {"00D300000000XHP", "00A223122312312", "a"}, 
+                          {"00D300000000XHP", "00A323122312312", "a"}, 
+                          {"00D300000000XHP", "00A423122312312", "a"}, 
+                          {"00D300000000XHP", "00B523122312312", "b"}})
+                .close();
+        
+        start().sql("select count(entity_id), a_string from atable group by a_string limit 2")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                           "  PhoenixClientProject(EXPR$0=[$1], A_STRING=[$0])\n" +
+                           "    PhoenixLimit(fetch=[2])\n" +
+                           "      PhoenixServerAggregate(group=[{0}], EXPR$0=[COUNT()])\n" +
+                           "        PhoenixServerProject(A_STRING=[$2])\n" +
+                           "          PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
+                .resultIs(new Object[][] {
+                          {4L, "a"},
+                          {4L, "b"}})
+                .close();
+        
+        start().sql("select s.name, count(\"item_id\") from " + JOIN_SUPPLIER_TABLE_FULL_NAME + " s join " + JOIN_ITEM_TABLE_FULL_NAME + " i on s.\"supplier_id\" = i.\"supplier_id\" group by s.name limit 3")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                           "  PhoenixLimit(fetch=[3])\n" +
+                           "    PhoenixServerAggregate(group=[{0}], EXPR$1=[COUNT()])\n" +
+                           "      PhoenixServerProject(NAME=[$2])\n" +
+                           "        PhoenixServerJoin(condition=[=($1, $0)], joinType=[inner])\n" +
+                           "          PhoenixServerProject(supplier_id=[$5])\n" +
+                           "            PhoenixTableScan(table=[[phoenix, ITEMTABLE]])\n" +
+                           "          PhoenixServerProject(supplier_id=[$0], NAME=[$1])\n" +
+                           "            PhoenixTableScan(table=[[phoenix, SUPPLIERTABLE]])\n")
+                .resultIs(new Object[][] {
+                          {"S1", 2L},
+                          {"S2", 2L},
+                          {"S5", 1L}})
+                .close();
+        
+        start().sql("SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" limit 3")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                           "  PhoenixClientProject(item_id=[$0], NAME=[$1], supplier_id=[$3], NAME0=[$4])\n" +
+                           "    PhoenixLimit(fetch=[3])\n" +
+                           "      PhoenixServerJoin(condition=[=($2, $3)], joinType=[inner])\n" +
+                           "        PhoenixServerProject(item_id=[$0], NAME=[$1], supplier_id=[$5])\n" +
+                           "          PhoenixTableScan(table=[[phoenix, ITEMTABLE]])\n" +
+                           "        PhoenixServerProject(supplier_id=[$0], NAME=[$1])\n" +
+                           "          PhoenixTableScan(table=[[phoenix, SUPPLIERTABLE]])\n")
+                .resultIs(new Object[][] {
+                          {"0000000001", "T1", "0000000001", "S1"}, 
+                          {"0000000002", "T2", "0000000001", "S1"}, 
+                          {"0000000003", "T3", "0000000002", "S2"}})
+                .close();
+    }
+    
     @Test public void testSubquery() {
         start().sql("SELECT \"order_id\", quantity FROM " + JOIN_ORDER_TABLE_FULL_NAME + " o WHERE quantity = (SELECT max(quantity) FROM " + JOIN_ORDER_TABLE_FULL_NAME + " q WHERE o.\"item_id\" = q.\"item_id\")")
                .explainIs("PhoenixToEnumerableConverter\n" +

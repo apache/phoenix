@@ -28,7 +28,6 @@ import org.apache.phoenix.parse.JoinTableNode.JoinType;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableRef;
 
-import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 
 public class PhoenixServerJoin extends PhoenixAbstractJoin {
@@ -43,7 +42,7 @@ public class PhoenixServerJoin extends PhoenixAbstractJoin {
     @Override
     public PhoenixServerJoin copy(RelTraitSet traits, RexNode condition, RelNode left,
             RelNode right, JoinRelType joinRelType, boolean semiJoinDone) {
-        return new PhoenixServerJoin(getCluster(), traits, left, right, condition, joinRelType, ImmutableSet.<String>of());
+        return new PhoenixServerJoin(getCluster(), traits, left, right, condition, joinRelType, variablesStopped);
     }
 
     @Override

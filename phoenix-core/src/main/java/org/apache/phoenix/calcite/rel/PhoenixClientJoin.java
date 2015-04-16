@@ -12,8 +12,6 @@ import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rex.RexNode;
 import org.apache.phoenix.compile.QueryPlan;
 
-import com.google.common.collect.ImmutableSet;
-
 public class PhoenixClientJoin extends PhoenixAbstractJoin {
 
     public PhoenixClientJoin(RelOptCluster cluster, RelTraitSet traits,
@@ -26,7 +24,7 @@ public class PhoenixClientJoin extends PhoenixAbstractJoin {
     @Override
     public PhoenixClientJoin copy(RelTraitSet traits, RexNode condition, RelNode left,
             RelNode right, JoinRelType joinRelType, boolean semiJoinDone) {
-        return new PhoenixClientJoin(getCluster(), traits, left, right, condition, joinRelType, ImmutableSet.<String>of());
+        return new PhoenixClientJoin(getCluster(), traits, left, right, condition, joinRelType, variablesStopped);
     }
 
     @Override

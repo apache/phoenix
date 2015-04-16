@@ -117,11 +117,6 @@ public class HashJoinPlan extends DelegateQueryPlan {
     public SubPlan[] getSubPlans() {
         return this.subPlans;
     }
-    
-    @Override
-    public Integer getLimit() {
-        return this.joinInfo == null ? null : this.joinInfo.getLimit();
-    }
 
     @Override
     public ResultIterator iterator() throws SQLException {

@@ -155,6 +155,21 @@ public class CalciteUtils {
 	    return (AggregateFunction) (fFactory.newFunction(aggFunc, exprs));
 	}
 	
+	public static Object evaluateStatelessExpression(RexNode node) {
+	    try {
+	        Expression expression = toExpression(node, null);
+	        if (expression.isStateless()) {
+	            ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+	            expression.evaluate(null, ptr);
+	            return expression.getDataType().toObject(ptr);
+	        }
+	    } catch (Exception e) {
+	        // Expression is not stateless. do nothing.
+	    }
+	    
+	    return null;
+	}
+	
 	public static interface ExpressionFactory {
 		public Expression newExpression(RexNode node, Implementor implementor);
 	}

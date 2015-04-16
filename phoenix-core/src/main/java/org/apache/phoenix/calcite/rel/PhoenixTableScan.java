@@ -18,6 +18,7 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.calcite.CalciteUtils;
 import org.apache.phoenix.calcite.PhoenixTable;
+import org.apache.phoenix.calcite.rules.PhoenixAddScanLimitRule;
 import org.apache.phoenix.calcite.rules.PhoenixClientJoinRule;
 import org.apache.phoenix.calcite.rules.PhoenixCompactClientSortRule;
 import org.apache.phoenix.calcite.rules.PhoenixFilterScanMergeRule;
@@ -55,10 +56,17 @@ import com.google.common.collect.Lists;
  */
 public class PhoenixTableScan extends TableScan implements PhoenixRel {
     public final RexNode filter;
+    
+    /**
+     * This will not make a difference in implement(), but rather give a more accurate
+     * estimate of the row count.
+     */
+    public final Integer statelessFetch;
 
-    public PhoenixTableScan(RelOptCluster cluster, RelTraitSet traits, RelOptTable table, RexNode filter) {
+    public PhoenixTableScan(RelOptCluster cluster, RelTraitSet traits, RelOptTable table, RexNode filter, Integer statelessFetch) {
         super(cluster, traits, table);
         this.filter = filter;
+        this.statelessFetch = statelessFetch;
     }
 
     @Override
@@ -74,6 +82,8 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
             planner.addRule(rule);
         }
         planner.addRule(PhoenixFilterScanMergeRule.INSTANCE);
+        planner.addRule(PhoenixAddScanLimitRule.LIMIT_SCAN);
+        planner.addRule(PhoenixAddScanLimitRule.LIMIT_SERVERPROJECT_SCAN);
         planner.addRule(PhoenixServerProjectRule.PROJECT_SCAN);
         planner.addRule(PhoenixServerProjectRule.PROJECT_SERVERJOIN);
         planner.addRule(PhoenixServerJoinRule.JOIN_SCAN);
@@ -91,23 +101,28 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
     @Override
     public RelWriter explainTerms(RelWriter pw) {
         return super.explainTerms(pw)
-            .itemIf("filter", filter, filter != null);
+            .itemIf("filter", filter, filter != null)
+            .itemIf("statelessFetch", statelessFetch, statelessFetch != null);
     }
 
     @Override
     public RelOptCost computeSelfCost(RelOptPlanner planner) {
-        RelOptCost cost = super.computeSelfCost(planner).multiplyBy(PHOENIX_FACTOR);
-        if (filter != null && !filter.isAlwaysTrue()) {
-            final Double selectivity = RelMetadataQuery.getSelectivity(this, filter);
-            cost = cost.multiplyBy(selectivity);
-        }
-        return cost;
+        double rowCount = RelMetadataQuery.getRowCount(this);
+        return planner.getCostFactory()
+                .makeCost(rowCount, rowCount + 1, 0)
+                .multiplyBy(PHOENIX_FACTOR);
     }
     
     @Override
     public double getRows() {
-        return super.getRows()
-                * RelMetadataQuery.getSelectivity(this, filter);
+        double rows = super.getRows();
+        if (filter != null && !filter.isAlwaysTrue()) {
+            rows = rows * RelMetadataQuery.getSelectivity(this, filter);
+        }        
+        if (statelessFetch == null)
+            return rows;
+        
+        return Math.min(statelessFetch, rows);
     }
 
     @Override

@@ -3,6 +3,8 @@ package org.apache.phoenix.calcite.rel;
 import java.util.List;
 
 import org.apache.calcite.plan.RelOptCluster;
+import org.apache.calcite.plan.RelOptCost;
+import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelCollation;
 import org.apache.calcite.rel.RelFieldCollation;
@@ -10,8 +12,9 @@ import org.apache.calcite.rel.RelFieldCollation.Direction;
 import org.apache.calcite.rel.RelFieldCollation.NullDirection;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Sort;
+import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rex.RexNode;
-import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.calcite.util.Util;
 import org.apache.phoenix.calcite.CalciteUtils;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.execute.TupleProjector;
@@ -30,14 +33,35 @@ import com.google.common.collect.Lists;
 abstract public class PhoenixAbstractSort extends Sort implements PhoenixRel {
     protected static final double CLIENT_MERGE_FACTOR = 0.5;
     
+    private final Integer statelessFetch;
+    
     public PhoenixAbstractSort(RelOptCluster cluster, RelTraitSet traits, RelNode child, RelCollation collation, RexNode offset, RexNode fetch) {
         super(cluster, traits, child, collation, offset, fetch);
+        Object value = fetch == null ? null : CalciteUtils.evaluateStatelessExpression(fetch);
+        this.statelessFetch = value == null ? null : ((Number) value).intValue();        
         assert getConvention() == PhoenixRel.CONVENTION;
+        assert !getCollation().getFieldCollations().isEmpty();
+    }
+
+    @Override 
+    public RelOptCost computeSelfCost(RelOptPlanner planner) {
+        // Fix rowCount for super class's computeSelfCost() with input's row count.
+        double rowCount = RelMetadataQuery.getRowCount(getInput());
+        double bytesPerRow = getRowType().getFieldCount() * 4;
+        return planner.getCostFactory().makeCost(
+                Util.nLogN(rowCount) * bytesPerRow, rowCount, 0);
+    }
+
+    @Override 
+    public double getRows() {
+        double rows = super.getRows();        
+        if (this.statelessFetch == null)
+            return rows;
+
+        return Math.min(this.statelessFetch, rows);
     }
     
     protected OrderBy getOrderBy(Implementor implementor, TupleProjector tupleProjector) {
-        assert !getCollation().getFieldCollations().isEmpty();
-        
         List<OrderByExpression> orderByExpressions = Lists.newArrayList();
         for (RelFieldCollation fieldCollation : getCollation().getFieldCollations()) {
             Expression expr = tupleProjector == null ? 
@@ -57,12 +81,9 @@ abstract public class PhoenixAbstractSort extends Sort implements PhoenixRel {
         if (this.fetch == null)
             return null;
         
-        Expression expr = CalciteUtils.toExpression(this.fetch, implementor);
-        if (!expr.isStateless())
+        if (this.statelessFetch == null)
             throw new UnsupportedOperationException("Stateful limit expression not supported");
 
-        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-        expr.evaluate(null, ptr);
-        return ((Number) (expr.getDataType().toObject(ptr))).intValue();
+        return this.statelessFetch;
     }
 }
