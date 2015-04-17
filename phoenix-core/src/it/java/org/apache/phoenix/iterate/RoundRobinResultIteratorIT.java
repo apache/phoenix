@@ -84,7 +84,7 @@ public class RoundRobinResultIteratorIT extends BaseHBaseManagedTimeIT {
             admin.split(tableName);
             CountDownLatch latch = new CountDownLatch(1);
             int nTries = 0;
-            long waitTimeMillis = 1000;
+            long waitTimeMillis = 2000;
             while (nRegions == nRegionsBeforeSplit && nTries < 10) {
                 latch.await(waitTimeMillis, TimeUnit.MILLISECONDS);
                 nRegions = services.getAllTableRegions(tableNameBytes).size();
