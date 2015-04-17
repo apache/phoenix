@@ -91,12 +91,13 @@ public class PhoenixConverterRules {
 
         public RelNode convert(RelNode rel) {
             final LogicalSort sort = (LogicalSort) rel;
-            final RelTraitSet traitSet =
-                sort.getTraitSet().replace(out)
-                    .replace(sort.getCollation());
-            return new PhoenixClientSort(rel.getCluster(), traitSet,
-                convert(sort.getInput(), sort.getInput().getTraitSet().replace(out)),
-                sort.getCollation(), sort.offset, sort.fetch);
+            return PhoenixClientSort.create(
+                convert(
+                        sort.getInput(), 
+                        sort.getInput().getTraitSet().replace(out)),
+                sort.getCollation(), 
+                sort.offset, 
+                sort.fetch);
         }
     }
 
@@ -121,11 +122,12 @@ public class PhoenixConverterRules {
 
         public RelNode convert(RelNode rel) {
             final LogicalSort sort = (LogicalSort) rel;
-            final RelTraitSet traitSet =
-                sort.getTraitSet().replace(out);
-            return new PhoenixLimit(rel.getCluster(), traitSet,
-                convert(sort.getInput(), sort.getInput().getTraitSet().replace(out)),
-                sort.getCollation(), sort.offset, sort.fetch);
+            return PhoenixLimit.create(
+                convert(
+                        sort.getInput(), 
+                        sort.getInput().getTraitSet().replace(out)),
+                sort.offset, 
+                sort.fetch);
         }
     }
 
@@ -143,11 +145,10 @@ public class PhoenixConverterRules {
 
         public RelNode convert(RelNode rel) {
             final LogicalFilter filter = (LogicalFilter) rel;
-            final RelTraitSet traitSet = filter.getTraitSet().replace(out);
-            return new PhoenixFilter(
-                rel.getCluster(),
-                traitSet,
-                convert(filter.getInput(), filter.getInput().getTraitSet().replace(out)),
+            return PhoenixFilter.create(
+                convert(
+                        filter.getInput(), 
+                        filter.getInput().getTraitSet().replace(out)),
                 filter.getCondition());
         }
     }
@@ -166,9 +167,11 @@ public class PhoenixConverterRules {
 
         public RelNode convert(RelNode rel) {
             final LogicalProject project = (LogicalProject) rel;
-            final RelTraitSet traitSet = project.getTraitSet().replace(out);
-            return new PhoenixClientProject(project.getCluster(), traitSet,
-                convert(project.getInput(), project.getInput().getTraitSet().replace(out)), project.getProjects(),
+            return PhoenixClientProject.create(
+                convert(
+                        project.getInput(), 
+                        project.getInput().getTraitSet().replace(out)), 
+                project.getProjects(),
                 project.getRowType());
         }
     }
@@ -187,12 +190,10 @@ public class PhoenixConverterRules {
 
         public RelNode convert(RelNode rel) {
             final LogicalAggregate agg = (LogicalAggregate) rel;
-            final RelTraitSet traitSet =
-                agg.getTraitSet().replace(out);
-            return new PhoenixClientAggregate(
-                    rel.getCluster(),
-                    traitSet,
-                    convert(agg.getInput(), agg.getInput().getTraitSet().replace(out)),
+            return PhoenixClientAggregate.create(
+                    convert(
+                            agg.getInput(), 
+                            agg.getInput().getTraitSet().replace(out)),
                     agg.indicator,
                     agg.getGroupSet(),
                     agg.getGroupSets(),
@@ -214,9 +215,9 @@ public class PhoenixConverterRules {
 
         public RelNode convert(RelNode rel) {
             final LogicalUnion union = (LogicalUnion) rel;
-            final RelTraitSet traitSet = union.getTraitSet().replace(out);
-            return new PhoenixUnion(rel.getCluster(), traitSet, convertList(union.getInputs(), out),
-                union.all);
+            return PhoenixUnion.create(
+                    convertList(union.getInputs(), out),
+                    union.all);
         }
     }
 
@@ -234,14 +235,16 @@ public class PhoenixConverterRules {
 
         public RelNode convert(RelNode rel) {
             final LogicalJoin join = (LogicalJoin) rel;
-            final RelTraitSet traitSet =
-                join.getTraitSet().replace(out);
-            return new PhoenixJoin(rel.getCluster(), traitSet,
-                convert(join.getLeft(), join.getLeft().getTraitSet().replace(out)),
-                convert(join.getRight(), join.getRight().getTraitSet().replace(out)),
-                join.getCondition(),
-                join.getJoinType(),
-                join.getVariablesStopped());
+            return PhoenixJoin.create(
+                    convert(
+                            join.getLeft(), 
+                            join.getLeft().getTraitSet().replace(out)),
+                    convert(
+                            join.getRight(), 
+                            join.getRight().getTraitSet().replace(out)),
+                    join.getCondition(),
+                    join.getJoinType(),
+                    join.getVariablesStopped());
         }
     }
 
@@ -403,10 +406,7 @@ public class PhoenixConverterRules {
         }
 
         @Override public RelNode convert(RelNode rel) {
-            RelTraitSet newTraitSet = rel.getTraitSet().replace(getOutConvention());
-            // TODO Is there a better place to do this?
-            rel.getCluster().setMetadataProvider(PhoenixRel.METADATA_PROVIDER);
-            return new PhoenixToEnumerableConverter(rel.getCluster(), newTraitSet, rel);
+            return PhoenixToEnumerableConverter.create(rel);
         }
     }
 }

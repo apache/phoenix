@@ -20,8 +20,17 @@ import org.apache.phoenix.execute.HashJoinPlan;
 import org.apache.phoenix.execute.ScanPlan;
 
 public class PhoenixServerAggregate extends PhoenixAbstractAggregate {
+    
+    public static PhoenixServerAggregate create(RelNode input, boolean indicator, 
+            ImmutableBitSet groupSet, List<ImmutableBitSet> groupSets, 
+            List<AggregateCall> aggCalls) {
+        RelOptCluster cluster = input.getCluster();
+        RelTraitSet traits = cluster.traitSetOf(PhoenixRel.CONVENTION);
+        return new PhoenixServerAggregate(cluster, traits, input, indicator, 
+                groupSet, groupSets, aggCalls);
+    }
 
-    public PhoenixServerAggregate(RelOptCluster cluster, RelTraitSet traits,
+    private PhoenixServerAggregate(RelOptCluster cluster, RelTraitSet traits,
             RelNode child, boolean indicator, ImmutableBitSet groupSet,
             List<ImmutableBitSet> groupSets, List<AggregateCall> aggCalls) {
         super(cluster, traits, child, indicator, groupSet, groupSets, aggCalls);

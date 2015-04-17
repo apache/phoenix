@@ -18,7 +18,14 @@ import org.apache.phoenix.expression.Expression;
  * relational expression in Phoenix.
  */
 public class PhoenixFilter extends Filter implements PhoenixRel {
-    public PhoenixFilter(RelOptCluster cluster, RelTraitSet traits, RelNode input, RexNode condition) {
+    
+    public static PhoenixFilter create(RelNode input, RexNode condition) {
+        RelOptCluster cluster = input.getCluster();
+        RelTraitSet traits = input.getTraitSet().replace(PhoenixRel.CONVENTION);
+        return new PhoenixFilter(cluster, traits, input, condition);
+    }
+    
+    private PhoenixFilter(RelOptCluster cluster, RelTraitSet traits, RelNode input, RexNode condition) {
         super(cluster, traits, input, condition);
         assert getConvention() == PhoenixRel.CONVENTION;
     }

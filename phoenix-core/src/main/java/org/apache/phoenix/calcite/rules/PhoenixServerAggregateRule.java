@@ -31,9 +31,9 @@ public class PhoenixServerAggregateRule extends RelOptRule {
     public void onMatch(RelOptRuleCall call) {
         PhoenixClientAggregate aggregate = call.rel(0);
         PhoenixRel input = call.rel(1);
-        call.transformTo(new PhoenixServerAggregate(aggregate.getCluster(),
-                aggregate.getTraitSet(), input, aggregate.indicator, 
-                aggregate.getGroupSet(), aggregate.getGroupSets(), aggregate.getAggCallList()));
+        call.transformTo(PhoenixServerAggregate.create(input, aggregate.indicator, 
+                aggregate.getGroupSet(), aggregate.getGroupSets(), 
+                aggregate.getAggCallList()));
     }
 
 }

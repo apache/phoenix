@@ -46,8 +46,8 @@ public class PhoenixServerJoinRule extends RelOptRule {
         PhoenixJoin join = call.rel(0);
         PhoenixRel left = call.rel(1);
         PhoenixRel right = call.rel(call.getRelList().size() - 1);
-        call.transformTo(new PhoenixServerJoin(join.getCluster(),
-                join.getTraitSet(), left, right, join.getCondition(), 
+        call.transformTo(PhoenixServerJoin.create(
+                left, right, join.getCondition(), 
                 join.getJoinType(), join.getVariablesStopped()));
     }
 

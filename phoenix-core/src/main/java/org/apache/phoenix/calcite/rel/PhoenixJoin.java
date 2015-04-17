@@ -15,8 +15,15 @@ import org.apache.phoenix.compile.QueryPlan;
 import com.google.common.collect.ImmutableSet;
 
 public class PhoenixJoin extends Join implements PhoenixRel {
+    
+    public static PhoenixJoin create(RelNode left, RelNode right, 
+            RexNode condition, JoinRelType joinType, Set<String> variablesStopped) {
+        RelOptCluster cluster = left.getCluster();
+        RelTraitSet traits = cluster.traitSetOf(PhoenixRel.CONVENTION);
+        return new PhoenixJoin(cluster, traits, left, right, condition, joinType, variablesStopped);
+    }
 
-    public PhoenixJoin(RelOptCluster cluster, RelTraitSet traits, RelNode left,
+    private PhoenixJoin(RelOptCluster cluster, RelTraitSet traits, RelNode left,
             RelNode right, RexNode condition, JoinRelType joinType,
             Set<String> variablesStopped) {
         super(cluster, traits, left, right, condition, joinType,

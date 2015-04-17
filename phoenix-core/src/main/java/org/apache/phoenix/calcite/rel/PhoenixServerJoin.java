@@ -31,8 +31,15 @@ import org.apache.phoenix.schema.TableRef;
 import com.google.common.collect.Lists;
 
 public class PhoenixServerJoin extends PhoenixAbstractJoin {
+    
+    public static PhoenixServerJoin create(RelNode left, RelNode right, 
+            RexNode condition, JoinRelType joinType, Set<String> variablesStopped) {
+        RelOptCluster cluster = left.getCluster();
+        RelTraitSet traits = left.getTraitSet().replace(PhoenixRel.CONVENTION);
+        return new PhoenixServerJoin(cluster, traits, left, right, condition, joinType, variablesStopped);
+    }
 
-    public PhoenixServerJoin(RelOptCluster cluster, RelTraitSet traits,
+    private PhoenixServerJoin(RelOptCluster cluster, RelTraitSet traits,
             RelNode left, RelNode right, RexNode condition,
             JoinRelType joinType, Set<String> variablesStopped) {
         super(cluster, traits, left, right, condition, joinType,

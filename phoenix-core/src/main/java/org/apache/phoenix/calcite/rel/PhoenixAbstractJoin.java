@@ -15,7 +15,8 @@ import org.apache.phoenix.parse.JoinTableNode.JoinType;
  * relational expression in Phoenix.
  */
 abstract public class PhoenixAbstractJoin extends Join implements PhoenixRel {
-    public PhoenixAbstractJoin(RelOptCluster cluster, RelTraitSet traits, RelNode left, RelNode right, RexNode condition, JoinRelType joinType, Set<String> variablesStopped) {
+
+    protected PhoenixAbstractJoin(RelOptCluster cluster, RelTraitSet traits, RelNode left, RelNode right, RexNode condition, JoinRelType joinType, Set<String> variablesStopped) {
         super( cluster, traits, left, right, condition, joinType, variablesStopped);
         assert getConvention() == PhoenixRel.CONVENTION;
     }

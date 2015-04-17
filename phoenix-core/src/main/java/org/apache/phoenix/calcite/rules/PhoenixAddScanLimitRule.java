@@ -60,9 +60,8 @@ public class PhoenixAddScanLimitRule extends RelOptRule {
         PhoenixTableScan scan = call.rel(relCount - 1);
         assert limit.statelessFetch != null : "predicate should have ensured fetch is stateless";
         assert scan.statelessFetch == null : "predicate should have ensured table scan has no stateless fetch";
-        PhoenixTableScan newScan = new PhoenixTableScan(
-                scan.getCluster(), scan.getTraitSet(), scan.getTable(),
-                scan.filter, limit.statelessFetch);
+        PhoenixTableScan newScan = PhoenixTableScan.create(
+                scan.getCluster(), scan.getTable(), scan.filter, limit.statelessFetch);
         PhoenixRel newInput = project == null ? 
                   newScan 
                 : project.copy(project.getTraitSet(), newScan, 

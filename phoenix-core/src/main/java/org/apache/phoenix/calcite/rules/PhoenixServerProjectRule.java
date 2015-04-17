@@ -27,8 +27,8 @@ public class PhoenixServerProjectRule extends RelOptRule {
     public void onMatch(RelOptRuleCall call) {
         PhoenixClientProject project = call.rel(0);
         PhoenixRel input = call.rel(1);
-        call.transformTo(new PhoenixServerProject(project.getCluster(),
-                project.getTraitSet(), input, project.getProjects(), project.getRowType()));
+        call.transformTo(PhoenixServerProject.create(
+                input, project.getProjects(), project.getRowType()));
     }
 
 }

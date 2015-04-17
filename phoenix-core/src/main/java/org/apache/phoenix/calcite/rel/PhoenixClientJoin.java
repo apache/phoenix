@@ -13,8 +13,15 @@ import org.apache.calcite.rex.RexNode;
 import org.apache.phoenix.compile.QueryPlan;
 
 public class PhoenixClientJoin extends PhoenixAbstractJoin {
+    
+    public static PhoenixClientJoin create(RelNode left, RelNode right, 
+            RexNode condition, JoinRelType joinType, Set<String> variablesStopped) {
+        RelOptCluster cluster = left.getCluster();
+        RelTraitSet traits = cluster.traitSetOf(PhoenixRel.CONVENTION);
+        return new PhoenixClientJoin(cluster, traits, left, right, condition, joinType, variablesStopped);
+    }
 
-    public PhoenixClientJoin(RelOptCluster cluster, RelTraitSet traits,
+    private PhoenixClientJoin(RelOptCluster cluster, RelTraitSet traits,
             RelNode left, RelNode right, RexNode condition,
             JoinRelType joinType, Set<String> variablesStopped) {
         super(cluster, traits, left, right, condition, joinType,

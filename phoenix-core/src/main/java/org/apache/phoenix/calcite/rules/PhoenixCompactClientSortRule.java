@@ -23,8 +23,8 @@ public class PhoenixCompactClientSortRule extends RelOptRule {
     public void onMatch(RelOptRuleCall call) {
         PhoenixClientSort sort = call.rel(0);
         PhoenixRel input = call.rel(1);
-        call.transformTo(new PhoenixCompactClientSort(sort.getCluster(),
-                sort.getTraitSet(), input, sort.getCollation(), sort.offset, sort.fetch));
+        call.transformTo(PhoenixCompactClientSort.create(
+                input, sort.getCollation(), sort.offset, sort.fetch));
     }
 
 }

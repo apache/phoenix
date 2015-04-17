@@ -18,7 +18,13 @@ import com.google.common.collect.ImmutableList;
  * relational expression in Phoenix.
  */
 public class PhoenixValues extends Values implements PhoenixRel {
-    public PhoenixValues(RelOptCluster cluster, RelDataType rowType, ImmutableList<ImmutableList<RexLiteral>> tuples, RelTraitSet traits) {
+    
+    public static PhoenixValues create(RelOptCluster cluster, RelDataType rowType, ImmutableList<ImmutableList<RexLiteral>> tuples) {
+        RelTraitSet traits = cluster.traitSetOf(PhoenixRel.CONVENTION);
+        return new PhoenixValues(cluster, rowType, tuples, traits);
+    }
+    
+    private PhoenixValues(RelOptCluster cluster, RelDataType rowType, ImmutableList<ImmutableList<RexLiteral>> tuples, RelTraitSet traits) {
         super(cluster, rowType, tuples, traits);
         assert getConvention() == PhoenixRel.CONVENTION;
     }

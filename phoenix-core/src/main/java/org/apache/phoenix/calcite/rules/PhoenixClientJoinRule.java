@@ -5,9 +5,7 @@ import java.util.List;
 
 import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.plan.RelOptRuleCall;
-import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelCollation;
-import org.apache.calcite.rel.RelCollationTraitDef;
 import org.apache.calcite.rel.RelCollations;
 import org.apache.calcite.rel.RelFieldCollation;
 import org.apache.calcite.rel.RelFieldCollation.Direction;
@@ -17,8 +15,6 @@ import org.apache.calcite.rel.core.JoinInfo;
 import org.apache.phoenix.calcite.rel.PhoenixClientJoin;
 import org.apache.phoenix.calcite.rel.PhoenixClientSort;
 import org.apache.phoenix.calcite.rel.PhoenixJoin;
-import org.apache.phoenix.calcite.rel.PhoenixRel;
-
 import com.google.common.collect.Lists;
 
 public class PhoenixClientJoinRule extends RelOptRule {
@@ -43,21 +39,19 @@ public class PhoenixClientJoinRule extends RelOptRule {
             for (Iterator<Integer> iter = joinInfo.leftKeys.iterator(); iter.hasNext();) {
                 leftFieldCollations.add(new RelFieldCollation(iter.next(), Direction.ASCENDING,NullDirection.FIRST));
             }
-            RelCollation leftCollation = RelCollationTraitDef.INSTANCE.canonize(RelCollations.of(leftFieldCollations));
-            RelTraitSet leftTraitSet = left.getTraitSet().replace(PhoenixRel.CONVENTION).replace(leftCollation);
-            newLeft = new PhoenixClientSort(left.getCluster(), leftTraitSet, left, leftCollation, null, null);
+            RelCollation leftCollation = RelCollations.of(leftFieldCollations);
+            newLeft = PhoenixClientSort.create(left, leftCollation, null, null);
 
             List<RelFieldCollation> rightFieldCollations = Lists.newArrayList();
             for (Iterator<Integer> iter = joinInfo.rightKeys.iterator(); iter.hasNext();) {
                 rightFieldCollations.add(new RelFieldCollation(iter.next(), Direction.ASCENDING,NullDirection.FIRST));
             }
-            RelCollation rightCollation = RelCollationTraitDef.INSTANCE.canonize(RelCollations.of(rightFieldCollations));
-            RelTraitSet rightTraitSet = right.getTraitSet().replace(PhoenixRel.CONVENTION).replace(rightCollation);
-            newRight = new PhoenixClientSort(right.getCluster(), rightTraitSet, right, rightCollation, null, null);
+            RelCollation rightCollation = RelCollations.of(rightFieldCollations);
+            newRight = PhoenixClientSort.create(right, rightCollation, null, null);
         }
 
-        call.transformTo(new PhoenixClientJoin(join.getCluster(),
-                join.getTraitSet(), newLeft, newRight, join.getCondition(), 
+        call.transformTo(PhoenixClientJoin.create(
+                newLeft, newRight, join.getCondition(), 
                 join.getJoinType(), join.getVariablesStopped()));
     }
 

@@ -7,6 +7,7 @@ import org.apache.calcite.plan.RelOptCost;
 import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelCollation;
+import org.apache.calcite.rel.RelCollationTraitDef;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rex.RexNode;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
@@ -15,8 +16,17 @@ import org.apache.phoenix.execute.HashJoinPlan;
 import org.apache.phoenix.execute.ScanPlan;
 
 public class PhoenixServerSort extends PhoenixAbstractSort {
+    
+    public static PhoenixServerSort create(RelNode input, RelCollation collation, 
+            RexNode offset, RexNode fetch) {
+        RelOptCluster cluster = input.getCluster();
+        collation = RelCollationTraitDef.INSTANCE.canonize(collation);
+        RelTraitSet traits =
+            input.getTraitSet().replace(PhoenixRel.CONVENTION).replace(collation);
+        return new PhoenixServerSort(cluster, traits, input, collation, offset, fetch);
+    }
 
-    public PhoenixServerSort(RelOptCluster cluster, RelTraitSet traits,
+    private PhoenixServerSort(RelOptCluster cluster, RelTraitSet traits,
             RelNode child, RelCollation collation, RexNode offset, RexNode fetch) {
         super(cluster, traits, child, collation, offset, fetch);
     }

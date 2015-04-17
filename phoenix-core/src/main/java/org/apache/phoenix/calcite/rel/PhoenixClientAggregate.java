@@ -24,8 +24,17 @@ import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.schema.TableRef;
 
 public class PhoenixClientAggregate extends PhoenixAbstractAggregate {
+    
+    public static PhoenixClientAggregate create(RelNode input, boolean indicator, 
+            ImmutableBitSet groupSet, List<ImmutableBitSet> groupSets, 
+            List<AggregateCall> aggCalls) {
+        RelOptCluster cluster = input.getCluster();
+        RelTraitSet traits = cluster.traitSetOf(PhoenixRel.CONVENTION);
+        return new PhoenixClientAggregate(cluster, traits, input, indicator, 
+                groupSet, groupSets, aggCalls);
+    }
 
-    public PhoenixClientAggregate(RelOptCluster cluster, RelTraitSet traits,
+    private PhoenixClientAggregate(RelOptCluster cluster, RelTraitSet traits,
             RelNode child, boolean indicator, ImmutableBitSet groupSet,
             List<ImmutableBitSet> groupSets, List<AggregateCall> aggCalls) {
         super(cluster, traits, child, indicator, groupSet, groupSets, aggCalls);

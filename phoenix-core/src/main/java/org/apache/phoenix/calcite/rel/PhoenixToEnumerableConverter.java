@@ -3,6 +3,7 @@ package org.apache.phoenix.calcite.rel;
 import java.sql.SQLException;
 import java.util.List;
 
+import org.apache.calcite.adapter.enumerable.EnumerableConvention;
 import org.apache.calcite.adapter.enumerable.EnumerableRel;
 import org.apache.calcite.adapter.enumerable.EnumerableRelImplementor;
 import org.apache.calcite.adapter.enumerable.JavaRowFormat;
@@ -32,7 +33,14 @@ import org.apache.phoenix.iterate.ResultIterator;
  * Scan of a Phoenix table.
  */
 public class PhoenixToEnumerableConverter extends ConverterImpl implements EnumerableRel {
-    public PhoenixToEnumerableConverter(
+
+    public static PhoenixToEnumerableConverter create(RelNode input) {
+        RelOptCluster cluster = input.getCluster();
+        RelTraitSet traits = input.getTraitSet().replace(EnumerableConvention.INSTANCE);
+        return new PhoenixToEnumerableConverter(cluster, traits, input);
+    }
+
+    private PhoenixToEnumerableConverter(
         RelOptCluster cluster,
         RelTraitSet traits,
         RelNode input) {

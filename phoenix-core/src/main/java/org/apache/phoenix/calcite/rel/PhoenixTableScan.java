@@ -9,6 +9,8 @@ import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.plan.RelOptTable;
 import org.apache.calcite.plan.RelTraitSet;
+import org.apache.calcite.rel.RelCollation;
+import org.apache.calcite.rel.RelCollationTraitDef;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelWriter;
 import org.apache.calcite.rel.core.TableScan;
@@ -49,6 +51,8 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.SchemaUtil;
 
+import com.google.common.base.Supplier;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 
 /**
@@ -62,8 +66,24 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
      * estimate of the row count.
      */
     public final Integer statelessFetch;
+    
+    public static PhoenixTableScan create(RelOptCluster cluster, final RelOptTable table, 
+            RexNode filter, Integer statelessFetch) {
+        final RelTraitSet traits =
+                cluster.traitSetOf(PhoenixRel.CONVENTION)
+                .replaceIfs(RelCollationTraitDef.INSTANCE,
+                        new Supplier<List<RelCollation>>() {
+                    public List<RelCollation> get() {
+                        if (table != null) {
+                            return table.unwrap(PhoenixTable.class).getStatistic().getCollations();
+                        }
+                        return ImmutableList.of();
+                    }
+                });
+        return new PhoenixTableScan(cluster, traits, table, filter, statelessFetch);
+    }
 
-    public PhoenixTableScan(RelOptCluster cluster, RelTraitSet traits, RelOptTable table, RexNode filter, Integer statelessFetch) {
+    private PhoenixTableScan(RelOptCluster cluster, RelTraitSet traits, RelOptTable table, RexNode filter, Integer statelessFetch) {
         super(cluster, traits, table);
         this.filter = filter;
         this.statelessFetch = statelessFetch;

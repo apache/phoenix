@@ -31,8 +31,8 @@ public class PhoenixServerSortRule extends RelOptRule {
     public void onMatch(RelOptRuleCall call) {
         PhoenixClientSort sort = call.rel(0);
         PhoenixRel input = call.rel(1);
-        call.transformTo(new PhoenixServerSort(sort.getCluster(),
-                sort.getTraitSet(), input, sort.getCollation(), sort.offset, sort.fetch));
+        call.transformTo(PhoenixServerSort.create(
+                input, sort.getCollation(), sort.offset, sort.fetch));
     }
 
 }

@@ -35,7 +35,7 @@ abstract public class PhoenixAbstractSort extends Sort implements PhoenixRel {
     
     private final Integer statelessFetch;
     
-    public PhoenixAbstractSort(RelOptCluster cluster, RelTraitSet traits, RelNode child, RelCollation collation, RexNode offset, RexNode fetch) {
+    protected PhoenixAbstractSort(RelOptCluster cluster, RelTraitSet traits, RelNode child, RelCollation collation, RexNode offset, RexNode fetch) {
         super(cluster, traits, child, collation, offset, fetch);
         Object value = fetch == null ? null : CalciteUtils.evaluateStatelessExpression(fetch);
         this.statelessFetch = value == null ? null : ((Number) value).intValue();        

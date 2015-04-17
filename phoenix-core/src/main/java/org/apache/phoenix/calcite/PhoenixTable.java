@@ -72,7 +72,9 @@ public class PhoenixTable extends AbstractTable implements TranslatableTable {
     @Override
     public RelNode toRel(RelOptTable.ToRelContext context, RelOptTable relOptTable) {
         final RelOptCluster cluster = context.getCluster();
-        return new PhoenixTableScan(cluster, cluster.traitSetOf(PhoenixRel.CONVENTION), relOptTable, null, null);
+        // TODO Is there a better place to do this?
+        cluster.setMetadataProvider(PhoenixRel.METADATA_PROVIDER);
+        return PhoenixTableScan.create(cluster, relOptTable, null, null);
     }
 
     @Override
