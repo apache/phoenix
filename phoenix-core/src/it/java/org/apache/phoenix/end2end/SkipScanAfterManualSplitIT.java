@@ -69,7 +69,7 @@ public class SkipScanAfterManualSplitIT extends BaseHBaseManagedTimeIT {
         // props.put(QueryServices.THREAD_POOL_SIZE_ATTRIB, Integer.toString(64));
         props.put(QueryServices.THREAD_POOL_SIZE_ATTRIB, Integer.toString(32));
         // enables manual splitting on salted tables
-        props.put(QueryServices.ROW_KEY_ORDER_SALTED_TABLE_ATTRIB, Boolean.toString(false));
+        props.put(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.toString(false));
         props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(1000));
         props.put(QueryServices.DROP_METADATA_ATTRIB, Boolean.toString(true));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));

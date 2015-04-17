@@ -631,6 +631,11 @@ public class SortMergeJoinPlan implements QueryPlan {
             
         }
     }
+    
+    @Override
+    public boolean useRoundRobinIterator() {
+        return false;
+    }
 
 }
 

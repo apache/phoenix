@@ -56,6 +56,7 @@ import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnAlreadyExistsException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
@@ -1732,5 +1733,64 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             QueryPlan plan = conn.createStatement().unwrap(PhoenixStatement.class).compileQuery(query);
             assertFalse("Expected group by not to be order preserving: " + query, plan.getGroupBy().isOrderPreserving());
         }
-    }    
+    }
+    
+    @Test
+    public void testUseRoundRobinIterator() throws Exception {
+        Properties props = new Properties();
+        props.setProperty(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.toString(false));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute("CREATE TABLE t (k1 char(2) not null, k2 varchar not null, k3 integer not null, v varchar, constraint pk primary key(k1,k2,k3))");
+        String[] queries = {
+                "SELECT 1 FROM T ",
+                "SELECT 1 FROM T WHERE V = 'c'",
+                "SELECT 1 FROM T WHERE (k1,k2, k3) > ('a', 'ab', 1)",
+                };
+        String query;
+        for (int i = 0; i < queries.length; i++) {
+            query = queries[i];
+            QueryPlan plan = conn.createStatement().unwrap(PhoenixStatement.class).compileQuery(query);
+            assertTrue("Expected plan to use round robin iterator " + query, plan.useRoundRobinIterator());
+        }
+    }
+    
+    @Test
+    public void testForcingRowKeyOrderNotUseRoundRobinIterator() throws Exception {
+        Properties props = new Properties();
+        props.setProperty(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.toString(true));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute("CREATE TABLE t (k1 char(2) not null, k2 varchar not null, k3 integer not null, v varchar, constraint pk primary key(k1,k2,k3))");
+        String[] queries = {
+                "SELECT 1 FROM T ",
+                "SELECT 1 FROM T WHERE V = 'c'",
+                "SELECT 1 FROM T WHERE (k1, k2, k3) > ('a', 'ab', 1)",
+                };
+        String query;
+        for (int i = 0; i < queries.length; i++) {
+            query = queries[i];
+            QueryPlan plan = conn.createStatement().unwrap(PhoenixStatement.class).compileQuery(query);
+            assertFalse("Expected plan to not use round robin iterator " + query, plan.useRoundRobinIterator());
+        }
+    }
+    
+    @Test
+    public void testPlanForOrderByOrGroupByNotUseRoundRobin() throws Exception {
+        Properties props = new Properties();
+        props.setProperty(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.toString(false));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute("CREATE TABLE t (k1 char(2) not null, k2 varchar not null, k3 integer not null, v varchar, constraint pk primary key(k1,k2,k3))");
+        String[] queries = {
+                "SELECT 1 FROM T ORDER BY K1",
+                "SELECT 1 FROM T WHERE V = 'c' ORDER BY K1, K2",
+                "SELECT 1 FROM T WHERE (k1,k2, k3) > ('a', 'ab', 1) ORDER BY V",
+                "SELECT 1 FROM T GROUP BY V",
+                "SELECT 1 FROM T GROUP BY K1, V, K2 ORDER BY V",
+                };
+        String query;
+        for (int i = 0; i < queries.length; i++) {
+            query = queries[i];
+            QueryPlan plan = conn.createStatement().unwrap(PhoenixStatement.class).compileQuery(query);
+            assertFalse("Expected plan to not use round robin iterator " + query, plan.useRoundRobinIterator());
+        }
+    }
 }

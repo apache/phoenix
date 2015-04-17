@@ -55,4 +55,9 @@ public class DegenerateQueryPlan extends BaseQueryPlan {
         return null;
     }
 
+    @Override
+    public boolean useRoundRobinIterator() {
+        return false;
+    }
+
 }
