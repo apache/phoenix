@@ -18,6 +18,8 @@
 package org.apache.phoenix.execute;
 
 
+import static org.apache.phoenix.util.ScanUtil.shouldRowsBeInRowKeyOrder;
+
 import java.sql.SQLException;
 import java.util.List;
 
@@ -38,6 +40,7 @@ import org.apache.phoenix.iterate.ParallelIteratorFactory;
 import org.apache.phoenix.iterate.ParallelIterators;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.iterate.ResultIterators;
+import org.apache.phoenix.iterate.RoundRobinResultIterator;
 import org.apache.phoenix.iterate.SequenceResultIterator;
 import org.apache.phoenix.iterate.SerialIterators;
 import org.apache.phoenix.iterate.SpoolingResultIterator;
@@ -54,6 +57,7 @@ import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.StatisticsUtil;
 import org.apache.phoenix.util.LogUtil;
+import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -128,7 +132,7 @@ public class ScanPlan extends BaseQueryPlan {
     private static ParallelIteratorFactory buildResultIteratorFactory(StatementContext context,
             TableRef table, OrderBy orderBy, Integer limit, boolean allowPageFilter) throws SQLException {
 
-        if (isSerial(context, table, orderBy, limit, allowPageFilter)) {
+        if (isSerial(context, table, orderBy, limit, allowPageFilter) || ScanUtil.isRoundRobinPossible(orderBy, context)) {
             return ParallelIteratorFactory.NOOP_FACTORY;
         }
         ParallelIteratorFactory spoolingResultIteratorFactory =
@@ -182,13 +186,10 @@ public class ScanPlan extends BaseQueryPlan {
         if (isOrdered) {
             scanner = new MergeSortTopNResultIterator(iterators, limit, orderBy.getOrderByExpressions());
         } else {
-            if ((isSalted || table.getIndexType() == IndexType.LOCAL) &&
-                    (context.getConnection().getQueryServices().getProps().getBoolean(
-                            QueryServices.ROW_KEY_ORDER_SALTED_TABLE_ATTRIB,
-                            QueryServicesOptions.DEFAULT_ROW_KEY_ORDER_SALTED_TABLE) ||
-                     orderBy == OrderBy.FWD_ROW_KEY_ORDER_BY ||
-                     orderBy == OrderBy.REV_ROW_KEY_ORDER_BY)) { // ORDER BY was optimized out b/c query is in row key order
+            if ((isSalted || table.getIndexType() == IndexType.LOCAL) && shouldRowsBeInRowKeyOrder(orderBy, context)) { 
                 scanner = new MergeSortRowKeyResultIterator(iterators, isSalted ? SaltingUtil.NUM_SALTING_BYTES : 0, orderBy == OrderBy.REV_ROW_KEY_ORDER_BY);
+            } else if (useRoundRobinIterator()) {
+                scanner = new RoundRobinResultIterator(iterators, this);
             } else {
                 scanner = new ConcatResultIterator(iterators);
             }
@@ -202,4 +203,10 @@ public class ScanPlan extends BaseQueryPlan {
         }
         return scanner;
     }
+    
+    @Override
+    public boolean useRoundRobinIterator() throws SQLException {
+        return ScanUtil.isRoundRobinPossible(orderBy, context);
+    }
+
 }

@@ -249,8 +249,7 @@ public class IndexToolIT {
         if(isLocal) {
             final String localIndexName = MetaDataUtil.getLocalIndexTableName(dataTable);
             expectedExplainPlan = String.format("CLIENT 1-CHUNK PARALLEL 1-WAY RANGE SCAN OVER %s [-32768]"
-                + "\n    SERVER FILTER BY FIRST KEY ONLY"
-                + "\nCLIENT MERGE SORT", localIndexName);
+                + "\n    SERVER FILTER BY FIRST KEY ONLY", localIndexName);
         } else {
             expectedExplainPlan = String.format("CLIENT 1-CHUNK PARALLEL 1-WAY FULL SCAN OVER %s"
                     + "\n    SERVER FILTER BY FIRST KEY ONLY",indxTable);

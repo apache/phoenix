@@ -600,7 +600,7 @@ public class SkipScanBigFilterTest extends BaseConnectionlessQueryTest {
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(1);
         // enables manual splitting on salted tables
-        props.put(QueryServices.ROW_KEY_ORDER_SALTED_TABLE_ATTRIB, Boolean.toString(false));
+        props.put(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.toString(false));
         initDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
     
