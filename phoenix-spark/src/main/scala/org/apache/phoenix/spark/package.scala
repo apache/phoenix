@@ -15,7 +15,7 @@ package org.apache.phoenix
 
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.{DataFrame, SQLContext}
 
 package object spark {
   implicit def toProductRDDFunctions[A <: Product](rdd: RDD[A]): ProductRDDFunctions[A] = {
@@ -28,5 +28,9 @@ package object spark {
 
   implicit def toSparkSqlContextFunctions(sqlContext: SQLContext): SparkSqlContextFunctions = {
     new SparkSqlContextFunctions(sqlContext)
+  }
+
+  implicit def toDataFrameFunctions(data: DataFrame): DataFrameFunctions = {
+    new DataFrameFunctions(data)
   }
 }

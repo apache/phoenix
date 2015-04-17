@@ -105,6 +105,11 @@ public class PhoenixRuntime {
      * Root for the JDBC URL that the Phoenix accepts accepts.
      */
     public final static String JDBC_PROTOCOL = "jdbc:phoenix";
+    /**
+     * Root for the JDBC URL used by the thin driver. Duplicated here to avoid dependencies
+     * between modules.
+     */
+    public final static String JDBC_THIN_PROTOCOL = "jdbc:phoenix:thin";
     public final static char JDBC_PROTOCOL_TERMINATOR = ';';
     public final static char JDBC_PROTOCOL_SEPARATOR = ':';
 

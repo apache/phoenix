@@ -18,6 +18,7 @@
 package org.apache.phoenix.execute;
 
 import java.sql.ParameterMetaData;
+import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.client.Scan;
@@ -100,6 +101,11 @@ public abstract class DelegateQueryPlan implements QueryPlan {
     @Override
     public boolean isRowKeyOrdered() {
         return delegate.isRowKeyOrdered();
+    }
+    
+    @Override
+    public boolean useRoundRobinIterator() throws SQLException {
+        return delegate.useRoundRobinIterator();
     }
 
 }

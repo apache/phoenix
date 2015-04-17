@@ -492,6 +492,11 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
                 public boolean isRowKeyOrdered() {
                     return true;
                 }
+
+                @Override
+                public boolean useRoundRobinIterator() throws SQLException {
+                    return false;
+                }
             };
         }
     }
