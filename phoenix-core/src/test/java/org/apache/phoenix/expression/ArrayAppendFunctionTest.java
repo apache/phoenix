@@ -27,7 +27,21 @@ import java.util.List;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.function.ArrayAppendFunction;
 import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.schema.types.*;
+import org.apache.phoenix.schema.types.PBoolean;
+import org.apache.phoenix.schema.types.PChar;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.schema.types.PDouble;
+import org.apache.phoenix.schema.types.PFloat;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.schema.types.PSmallint;
+import org.apache.phoenix.schema.types.PTime;
+import org.apache.phoenix.schema.types.PTimestamp;
+import org.apache.phoenix.schema.types.PTinyint;
+import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.schema.types.PhoenixArray;
 import org.junit.Test;
 
 import com.google.common.collect.Lists;
@@ -118,15 +132,16 @@ public class ArrayAppendFunctionTest {
     }
 
     @Test
-    public void testArrayAppendFunction5() throws Exception {
-        Boolean[] o = new Boolean[]{true, false, false, true};
-        Boolean[] o2 = new Boolean[]{true, false, false, true, false};
+    public void testArrayAppendFunctionBoolean() throws Exception {
+        Boolean[] o = new Boolean[] { true, false, false, true };
+        Boolean[] o2 = new Boolean[] { true, false, false, true, false };
         Boolean element = false;
         PDataType baseType = PBoolean.INSTANCE;
 
-        PhoenixArray arr = new PhoenixArray(baseType, o);
-        PhoenixArray expected = new PhoenixArray(baseType, o2);
-        test(arr, element, PDataType.fromTypeId(baseType.getSqlType() + PDataType.ARRAY_TYPE_BASE), null, null, baseType, null, null, expected, SortOrder.ASC, SortOrder.ASC);
+        PhoenixArray arr = new PhoenixArray.PrimitiveBooleanPhoenixArray(baseType, o);
+        PhoenixArray expected = new PhoenixArray.PrimitiveBooleanPhoenixArray(baseType, o2);
+        test(arr, element, PDataType.fromTypeId(baseType.getSqlType() + PDataType.ARRAY_TYPE_BASE),
+            null, null, baseType, null, null, expected, SortOrder.ASC, SortOrder.ASC);
     }
 
     @Test

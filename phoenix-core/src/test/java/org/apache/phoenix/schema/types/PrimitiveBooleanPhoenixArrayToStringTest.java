@@ -18,6 +18,12 @@ public class PrimitiveBooleanPhoenixArrayToStringTest extends BasePhoenixArrayTo
     }
 
     @Override
+    protected String getNullString() {
+        // primitive arrays don't use null
+        return "false";
+    }
+
+    @Override
     protected Object getElement1() {
         return true;
     }
