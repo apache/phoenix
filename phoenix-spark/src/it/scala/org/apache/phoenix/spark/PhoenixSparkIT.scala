@@ -74,6 +74,7 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
     val setupSqlSource = getClass.getClassLoader.getResourceAsStream("setup.sql")
 
     val setupSql = scala.io.Source.fromInputStream(setupSqlSource).getLines()
+      .filter(line => ! line.startsWith("--") && ! line.isEmpty)
 
     for (sql <- setupSql) {
       val stmt = conn.createStatement()
