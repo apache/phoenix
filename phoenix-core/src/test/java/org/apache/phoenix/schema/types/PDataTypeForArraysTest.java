@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.schema;
+package org.apache.phoenix.schema.types;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
