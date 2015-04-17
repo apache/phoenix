@@ -54,10 +54,7 @@ import java.util.concurrent.Executor;
 
 import javax.annotation.Nullable;
 
-import co.cask.tephra.TransactionAware;
-import co.cask.tephra.TransactionContext;
-import co.cask.tephra.TransactionFailureException;
-import co.cask.tephra.TransactionSystemClient;
+import co.cask.tephra.Transaction;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.call.CallRunner;
@@ -97,7 +94,6 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
-import org.apache.phoenix.util.TransactionUtil;
 import org.cloudera.htrace.Sampler;
 import org.cloudera.htrace.TraceScope;
 
@@ -139,7 +135,6 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     private final String timestampPattern;
     private TraceScope traceScope = null;
     
-    private TransactionContext txContext;
     private boolean isClosed = false;
     private Sampler<?> sampler;
     private boolean readOnly = false;
@@ -156,23 +151,22 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     }
 
     public PhoenixConnection(PhoenixConnection connection) throws SQLException {
-        this(connection.getQueryServices(), connection.getURL(), connection.getClientInfo(), connection.getMetaDataCache());
+        this(connection.getQueryServices(), connection.getURL(), connection.getClientInfo(), connection.getMetaDataCache(), connection.getMutationState().getTransaction());
         this.isAutoCommit = connection.isAutoCommit;
         this.sampler = connection.sampler;
     }
     
-    public PhoenixConnection(PhoenixConnection connection, long scn) throws SQLException {
-        this(connection.getQueryServices(), connection, scn);
-        this.sampler = connection.sampler;
-    }
-    
     public PhoenixConnection(ConnectionQueryServices services, PhoenixConnection connection, long scn) throws SQLException {
-        this(services, connection.getURL(), newPropsWithSCN(scn,connection.getClientInfo()), connection.getMetaDataCache());
+        this(services, connection.getURL(), newPropsWithSCN(scn,connection.getClientInfo()), connection.getMetaDataCache(), connection.getMutationState().getTransaction());
         this.isAutoCommit = connection.isAutoCommit;
         this.sampler = connection.sampler;
     }
     
     public PhoenixConnection(ConnectionQueryServices services, String url, Properties info, PMetaData metaData) throws SQLException {
+        this(services, url, info, metaData, null);
+    }
+    
+    public PhoenixConnection(ConnectionQueryServices services, String url, Properties info, PMetaData metaData, Transaction txn) throws SQLException {
         this.url = url;
         // Copy so client cannot change
         this.info = info == null ? new Properties() : PropertiesUtil.deepCopy(info);
@@ -242,16 +236,12 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
             }
             
         });
-        this.mutationState = new MutationState(maxSize, this);
+        this.mutationState = new MutationState(maxSize, this, txn);
         this.services.addConnection(this);
 
         // setup tracing, if its enabled
         this.sampler = Tracing.getConfiguredSampler(this);
         this.customTracingAnnotations = getImmutableCustomTracingAnnotations();
-    }
-    
-    public TransactionContext getTransactionContext() {
-        return txContext;
     }
     
     private ImmutableMap<String, String> getImmutableCustomTracingAnnotations() {
@@ -437,60 +427,15 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         }
     }
 
-    public void startTransaction() throws SQLException {
-        if (txContext == null) {
-            boolean success = false;
-            try {
-                TransactionSystemClient txServiceClient = this.getQueryServices().getTransactionSystemClient();
-                this.txContext = new TransactionContext(txServiceClient);
-                txContext.start();
-                success = true;
-            } catch (TransactionFailureException e) {
-                throw new SQLException(e); // TODO: error code
-            } finally {
-                if (!success) endTransaction();
-            }
-        }
-    }
-    
-    public void addTxParticipant(TransactionAware txnAware) throws SQLException {
-    	if (!isTransactionStarted()) {
-    		startTransaction();
-    	}
-        txContext.addTransactionAware(txnAware);
-    }
-    
-    private boolean isTransactionStarted() {
-        return txContext != null;
-    }
-    
-    private void endTransaction() {
-        txContext = null;
-    }
-    
     @Override
     public void commit() throws SQLException {
         CallRunner.run(new CallRunner.CallableThrowable<Void, SQLException>() {
             @Override
             public Void call() throws SQLException {
-                mutationState.send();
-                if (isTransactionStarted()) {
-					try {
-						txContext.finish();
-					} catch (TransactionFailureException e) {
-						try {
-						    txContext.abort(e);
-							throw TransactionUtil.getSQLException(e);
-						} catch (TransactionFailureException e1) {
-                            throw TransactionUtil.getSQLException(e);
-						}
-					} finally {
-					    endTransaction();
-					}
-                }
+                mutationState.commit();
                 return null;
             }
-        }, Tracing.withTracing(this, "sending mutations"));
+        }, Tracing.withTracing(this, "committing"));
     }
 
     @Override
@@ -690,16 +635,13 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
 
     @Override
     public void rollback() throws SQLException {
-        mutationState.clear();
-        if (isTransactionStarted()) {
-            try {
-                txContext.abort();
-            } catch (TransactionFailureException e) {
-                throw new SQLException(e); // TODO: error code
-            } finally {
-                endTransaction();
+        CallRunner.run(new CallRunner.CallableThrowable<Void, SQLException>() {
+            @Override
+            public Void call() throws SQLException {
+                mutationState.rollback();
+                return null;
             }
-        }
+        }, Tracing.withTracing(this, "rolling back"));
     }
 
     @Override

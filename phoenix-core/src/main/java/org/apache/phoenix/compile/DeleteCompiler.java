@@ -494,7 +494,7 @@ public class DeleteCompiler {
                         ImmutableBytesWritable ptr = context.getTempPtr();
                         PTable table = tableRef.getTable();
                         table.getIndexMaintainers(ptr, context.getConnection());
-                        byte[] txState = table.isTransactional() ? TransactionUtil.encodeTxnState(connection.getTransactionContext().getCurrentTransaction()) : ByteUtil.EMPTY_BYTE_ARRAY;
+                        byte[] txState = table.isTransactional() ? TransactionUtil.encodeTxnState(connection.getMutationState().getTransaction()) : ByteUtil.EMPTY_BYTE_ARRAY;
                         ServerCache cache = null;
                         try {
                             if (ptr.getLength() > 0) {

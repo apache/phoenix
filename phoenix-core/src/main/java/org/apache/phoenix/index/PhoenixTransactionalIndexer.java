@@ -187,13 +187,13 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
             if (scanner != null) {
                 Result result;
                 while ((result = scanner.next()) != null) {
-                    TxTableState state = new TxTableState(env, mutableColumns, updateAttributes, tx.getWritePointer(), result);
+                    Mutation m = mutations.remove(new ImmutableBytesPtr(result.getRow()));
+                    TxTableState state = new TxTableState(env, mutableColumns, updateAttributes, tx.getWritePointer(), m, result);
                     Iterable<IndexUpdate> deletes = codec.getIndexDeletes(state, indexMetaData);
                     for (IndexUpdate delete : deletes) {
                         indexUpdates.add(new Pair<Mutation, byte[]>(delete.getUpdate(),delete.getTableName()));
                     }
-                    Mutation m = mutations.get(new ImmutableBytesPtr(result.getRow()));
-                    state.applyMutation(m);
+                    state.applyMutation();
                     Iterable<IndexUpdate> updates = codec.getIndexUpserts(state, indexMetaData);
                     for (IndexUpdate update : updates) {
                         indexUpdates.add(new Pair<Mutation, byte[]>(update.getUpdate(),update.getTableName()));
@@ -202,7 +202,7 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
             }
             for (Mutation m : mutations.values()) {
                 TxTableState state = new TxTableState(env, mutableColumns, updateAttributes, tx.getWritePointer(), m);
-                state.applyMutation(m);
+                state.applyMutation();
                 Iterable<IndexUpdate> updates = codec.getIndexUpserts(state, indexMetaData);
                 for (IndexUpdate update : updates) {
                     indexUpdates.add(new Pair<Mutation, byte[]>(update.getUpdate(),update.getTableName()));
@@ -217,7 +217,7 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
 
 
     private static class TxTableState implements TableState {
-        private final byte[] rowKey;
+        private final Mutation mutation;
         private final long currentTimestamp;
         private final RegionCoprocessorEnvironment env;
         private final Map<String, byte[]> attributes;
@@ -225,24 +225,28 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
         private final Set<ColumnReference> indexedColumns;
         private final Map<ColumnReference, ImmutableBytesWritable> valueMap;
         
-        private TxTableState(RegionCoprocessorEnvironment env, Set<ColumnReference> indexedColumns, Map<String, byte[]> attributes, long currentTimestamp, byte[] rowKey) {
+        private TxTableState(RegionCoprocessorEnvironment env, Set<ColumnReference> indexedColumns, Map<String, byte[]> attributes, long currentTimestamp, Mutation mutation) {
             this.env = env;
             this.currentTimestamp = currentTimestamp;
             this.indexedColumns = indexedColumns;
             this.attributes = attributes;
-            this.rowKey = rowKey;
+            this.mutation = mutation;
             int estimatedSize = indexedColumns.size();
             this.valueMap = Maps.newHashMapWithExpectedSize(estimatedSize);
             this.pendingUpdates = Lists.newArrayListWithExpectedSize(estimatedSize);
+            try {
+                CellScanner scanner = mutation.cellScanner();
+                while (scanner.advance()) {
+                    Cell cell = scanner.current();
+                    pendingUpdates.add(cell);
+                }
+            } catch (IOException e) {
+                throw new RuntimeException(e); // Impossible
+            }
         }
         
-        public TxTableState(RegionCoprocessorEnvironment env, Set<ColumnReference> indexedColumns, Map<String, byte[]> attributes, long currentTimestamp, Mutation m) {
-            this(env, indexedColumns, attributes, currentTimestamp, m.getRow());
-            applyMutation(m);
-        }
-        
-        public TxTableState(RegionCoprocessorEnvironment env, Set<ColumnReference> indexedColumns, Map<String, byte[]> attributes, long currentTimestamp, Result r) {
-            this(env, indexedColumns, attributes, currentTimestamp, r.getRow());
+        public TxTableState(RegionCoprocessorEnvironment env, Set<ColumnReference> indexedColumns, Map<String, byte[]> attributes, long currentTimestamp, Mutation m, Result r) {
+            this(env, indexedColumns, attributes, currentTimestamp, m);
 
             for (ColumnReference ref : indexedColumns) {
                 Cell cell = r.getColumnLatestCell(ref.getFamily(), ref.getQualifier());
@@ -271,7 +275,7 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
 
         @Override
         public byte[] getCurrentRowKey() {
-            return rowKey;
+            return mutation.getRow();
         }
 
         @Override
@@ -279,32 +283,28 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
             return Collections.emptyList();
         }
 
-        public void applyMutation(Mutation m) {
-            if (m instanceof Delete) {
+        public void applyMutation() {
+            if (mutation instanceof Delete) {
                 valueMap.clear();
             } else {
-                CellScanner scanner = m.cellScanner();
-                try {
-                    while (scanner.advance()) {
-                        Cell cell = scanner.current();
-                        if (cell.getTypeByte() == KeyValue.Type.DeleteColumn.getCode()) {
-                            ColumnReference ref = new ColumnReference(cell.getFamilyArray(), cell.getFamilyOffset(), cell.getFamilyLength(), cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength());
-                            valueMap.remove(ref);
-                        } else if (cell.getTypeByte() == KeyValue.Type.DeleteFamily.getCode()) {
-                            for (ColumnReference ref : indexedColumns) {
-                                if (ref.matchesFamily(cell.getFamilyArray(), cell.getFamilyOffset(), cell.getFamilyLength())) {
-                                    valueMap.remove(ref);
-                                }
+                for (Cell cell : pendingUpdates) {
+                    if (cell.getTypeByte() == KeyValue.Type.DeleteColumn.getCode()) {
+                        ColumnReference ref = new ColumnReference(cell.getFamilyArray(), cell.getFamilyOffset(), cell.getFamilyLength(), cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength());
+                        valueMap.remove(ref);
+                    } else if (cell.getTypeByte() == KeyValue.Type.DeleteFamily.getCode()) {
+                        for (ColumnReference ref : indexedColumns) {
+                            if (ref.matchesFamily(cell.getFamilyArray(), cell.getFamilyOffset(), cell.getFamilyLength())) {
+                                valueMap.remove(ref);
                             }
-                        } else {
-                            ColumnReference ref = new ColumnReference(cell.getFamilyArray(), cell.getFamilyOffset(), cell.getFamilyLength(), cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength());
+                        }
+                    } else {
+                        ColumnReference ref = new ColumnReference(cell.getFamilyArray(), cell.getFamilyOffset(), cell.getFamilyLength(), cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength());
+                        if (indexedColumns.contains(ref)) {
                             ImmutableBytesWritable ptr = new ImmutableBytesWritable();
                             ptr.set(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength());
                             valueMap.put(ref, ptr);
                         }
                     }
-                } catch (IOException e) {
-                    throw new RuntimeException(e); // Impossible
                 }
             }
         }
@@ -328,7 +328,7 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
 
                 @Override
                 public byte[] getRowKey() {
-                    return rowKey;
+                    return mutation.getRow();
                 }
                 
             };

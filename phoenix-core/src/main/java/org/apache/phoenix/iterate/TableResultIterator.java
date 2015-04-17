@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.List;
 
+import co.cask.tephra.Transaction;
 import co.cask.tephra.hbase98.TransactionAwareHTable;
 
 import org.apache.hadoop.hbase.client.HTableInterface;
@@ -87,9 +88,10 @@ public class TableResultIterator extends ExplainTable implements ResultIterator 
         PTable table = tableRef.getTable();
         HTableInterface htable = context.getConnection().getQueryServices().getTable(table.getPhysicalName().getBytes());
         if (table.isTransactional()) {
-            TransactionAwareHTable txnAware = TransactionUtil.getTransactionAwareHTable(htable);
-            context.getConnection().addTxParticipant(txnAware);
-            htable = txnAware;
+            TransactionAwareHTable txAware = TransactionUtil.getTransactionAwareHTable(htable);
+            Transaction tx = context.getConnection().getMutationState().getTransaction(); 
+            txAware.startTx(tx);
+            htable = txAware;
         }
         this.htable = htable;
         if (creationMode == ScannerCreation.IMMEDIATE) {

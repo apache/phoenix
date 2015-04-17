@@ -87,6 +87,10 @@ public class PhoenixIndexCodec extends BaseIndexCodec {
             indexUpdate.setTable(maintainer.getIndexTableName());
             Put put = maintainer.buildUpdateMutation(KV_BUILDER, valueGetter, ptr, state.getCurrentTimestamp(), env
                     .getRegion().getStartKey(), env.getRegion().getEndKey());
+            if (put == null) {
+                throw new IllegalStateException("Null put for " + env.getRegion().getRegionInfo().getTable().getNameAsString() 
+                        + ": " + Bytes.toStringBinary(ptr.get(), ptr.getOffset(), ptr.getLength()));
+            }
             indexUpdate.setUpdate(put);
             indexUpdates.add(indexUpdate);
         }
@@ -112,6 +116,10 @@ public class PhoenixIndexCodec extends BaseIndexCodec {
             indexUpdate.setTable(maintainer.getIndexTableName());
             Delete delete = maintainer.buildDeleteMutation(KV_BUILDER, valueGetter, ptr, state.getPendingUpdate(),
                     state.getCurrentTimestamp(), env.getRegion().getStartKey(), env.getRegion().getEndKey());
+            if (delete == null) {
+                throw new IllegalStateException("Null put for " + env.getRegion().getRegionInfo().getTable().getNameAsString() 
+                        + ": " + Bytes.toStringBinary(ptr.get(), ptr.getOffset(), ptr.getLength()));
+            }
             indexUpdate.setUpdate(delete);
             indexUpdates.add(indexUpdate);
         }

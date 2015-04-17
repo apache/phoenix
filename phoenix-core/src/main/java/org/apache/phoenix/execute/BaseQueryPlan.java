@@ -269,7 +269,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
         scan.setAttribute(BaseScannerRegionObserver.LOCAL_INDEX_BUILD, ByteUtil.copyKeyBytesIfNecessary(ptr));
         if (dataTable.isTransactional()) {
             PhoenixConnection conn = context.getConnection();
-            scan.setAttribute(BaseScannerRegionObserver.TX_STATE, TransactionUtil.encodeTxnState(conn.getTransactionContext().getCurrentTransaction()));
+            scan.setAttribute(BaseScannerRegionObserver.TX_STATE, TransactionUtil.encodeTxnState(conn.getMutationState().getTransaction()));
         }
     }
 

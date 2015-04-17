@@ -28,6 +28,11 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
+import co.cask.tephra.Transaction;
+import co.cask.tephra.TransactionAware;
+import co.cask.tephra.TransactionContext;
+import co.cask.tephra.TransactionFailureException;
+import co.cask.tephra.TransactionSystemClient;
 import co.cask.tephra.hbase98.TransactionAwareHTable;
 
 import org.apache.hadoop.hbase.HConstants;
@@ -88,17 +93,39 @@ public class MutationState implements SQLCloseable {
     //   rows - map from rowkey to columns
     //      columns - map from column to value
     private final Map<TableRef, Map<ImmutableBytesPtr,Map<PColumn,byte[]>>> mutations = Maps.newHashMapWithExpectedSize(3); // TODO: Sizing?
+    private final Transaction tx;
+    private final List<TransactionAware> txAwares;
+    private final TransactionContext txContext;
+    
     private long sizeOffset;
     private int numRows = 0;
+    private boolean txStarted = false;
     
     public MutationState(int maxSize, PhoenixConnection connection) {
-        this(maxSize,connection,0);
+        this(maxSize,connection,null);
+    }
+    
+    public MutationState(int maxSize, PhoenixConnection connection, Transaction tx) {
+        this(maxSize,connection, tx, 0);
     }
     
     public MutationState(int maxSize, PhoenixConnection connection, long sizeOffset) {
+        this(maxSize, connection, null, sizeOffset);
+    }
+    
+    public MutationState(int maxSize, PhoenixConnection connection, Transaction tx, long sizeOffset) {
         this.maxSize = maxSize;
         this.connection = connection;
         this.sizeOffset = sizeOffset;
+        this.tx = tx;
+        if (tx == null) {
+          this.txAwares = Collections.emptyList();
+          TransactionSystemClient txServiceClient = this.connection.getQueryServices().getTransactionSystemClient();
+          this.txContext = new TransactionContext(txServiceClient);
+        } else {
+            txAwares = Lists.newArrayList();
+            txContext = null;
+        }
     }
     
     public MutationState(TableRef table, Map<ImmutableBytesPtr,Map<PColumn,byte[]>> mutations, long sizeOffset, long maxSize, PhoenixConnection connection) {
@@ -107,18 +134,53 @@ public class MutationState implements SQLCloseable {
         this.mutations.put(table, mutations);
         this.sizeOffset = sizeOffset;
         this.numRows = mutations.size();
+        this.txAwares = Lists.newArrayList();
+        this.txContext = null;
+        this.tx = connection.getMutationState().getTransaction();
         throwIfTooBig();
     }
     
-    private MutationState(List<Map.Entry<TableRef, Map<ImmutableBytesPtr,Map<PColumn,byte[]>>>> entries, long sizeOffset, long maxSize, PhoenixConnection connection) {
-        this.maxSize = maxSize;
-        this.connection = connection;
-        this.sizeOffset = sizeOffset;
+    private MutationState(MutationState state, List<Map.Entry<TableRef, Map<ImmutableBytesPtr,Map<PColumn,byte[]>>>> entries) {
+        this.maxSize = state.maxSize;
+        this.connection = state.connection;
+        this.sizeOffset = state.sizeOffset;
+        this.tx = state.tx;
+        this.txAwares = state.txAwares;
+        this.txContext = state.txContext;
         for (Map.Entry<TableRef, Map<ImmutableBytesPtr,Map<PColumn,byte[]>>> entry : entries) {
             numRows += entry.getValue().size();
             this.mutations.put(entry.getKey(), entry.getValue());
         }
         throwIfTooBig();
+    }
+    
+    private void addTxParticipant(TransactionAware txAware) throws SQLException {
+        if (txContext == null) {
+            txAwares.add(txAware);
+            assert(tx != null);
+            txAware.startTx(tx);
+        } else {
+            txContext.addTransactionAware(txAware);
+        }
+    }
+    
+    public Transaction getTransaction() {
+        return tx != null ? tx : txContext != null ? txContext.getCurrentTransaction() : null;
+    }
+    
+    public void startTransaction() throws SQLException {
+        if (txContext == null) {
+            throw new SQLException("No transaction context"); // TODO: error code
+        }
+        
+        try {
+            if (!txStarted) {
+                txContext.start();
+                txStarted = true;
+            }
+        } catch (TransactionFailureException e) {
+            throw new SQLException(e); // TODO: error code
+        }
     }
     
     private void throwIfTooBig() {
@@ -140,6 +202,15 @@ public class MutationState implements SQLCloseable {
     public void join(MutationState newMutation) {
         if (this == newMutation) { // Doesn't make sense
             return;
+        }
+        // TODO: what if new and old have txContext as that's really an error
+        // Really it's an error if newMutation txContext is not null
+        if (txContext != null) {
+            for (TransactionAware txAware : txAwares) {
+                txContext.addTransactionAware(txAware);
+            }
+        } else {
+            txAwares.addAll(newMutation.txAwares);
         }
         this.sizeOffset += newMutation.sizeOffset;
         // Merge newMutation with this one, keeping state from newMutation for any overlaps
@@ -394,7 +465,10 @@ public class MutationState implements SQLCloseable {
                     if (hasIndexMaintainers && isDataTable) {
                         byte[] attribValue = null;
                         byte[] uuidValue;
-                        byte[] txState = table.isTransactional() ? TransactionUtil.encodeTxnState(connection.getTransactionContext().getCurrentTransaction()) : ByteUtil.EMPTY_BYTE_ARRAY;
+                        byte[] txState = ByteUtil.EMPTY_BYTE_ARRAY;
+                        if (table.isTransactional()) {
+                            txState = TransactionUtil.encodeTxnState(getTransaction());
+                        }
                         if (IndexMetaDataCacheClient.useIndexMetadataCache(connection, mutations, tempPtr.getLength() + txState.length)) {
                             IndexMetaDataCacheClient client = new IndexMetaDataCacheClient(connection, tableRef);
                             cache = client.addIndexMetadataCache(mutations, tempPtr, txState);
@@ -421,15 +495,17 @@ public class MutationState implements SQLCloseable {
                             }
                         }
                     }
-                    
+                
                     SQLException sqlE = null;
                     HTableInterface hTable = connection.getQueryServices().getTable(htableName);
                     try {
-                        // Don't add immutable indexes (those are the only ones that would participate
-                        // during a commit), as we don't need conflict detection for these.
-                        if (table.isTransactional() && isDataTable) {
+                        if (table.isTransactional()) {
                             TransactionAwareHTable txnAware = TransactionUtil.getTransactionAwareHTable(hTable);
-                            connection.addTxParticipant(txnAware);
+                            // Don't add immutable indexes (those are the only ones that would participate
+                            // during a commit), as we don't need conflict detection for these.
+                            if (isDataTable) {
+                                addTxParticipant(txnAware);
+                            }
                             hTable = txnAware;
                         }
                         logMutationSize(hTable, mutations, connection);
@@ -465,7 +541,7 @@ public class MutationState implements SQLCloseable {
                         }
                         // Throw to client with both what was committed so far and what is left to be committed.
                         // That way, client can either undo what was done or try again with what was not done.
-                        sqlE = new CommitException(e, this, new MutationState(committedList, this.sizeOffset, this.maxSize, this.connection));
+                        sqlE = new CommitException(e, this, new MutationState(this, committedList));
                     } finally {
                         try {
                             if (cache != null) {
@@ -507,5 +583,45 @@ public class MutationState implements SQLCloseable {
     
     @Override
     public void close() throws SQLException {
+    }
+
+    public void rollback() throws SQLException {
+        clear();
+        txAwares.clear();
+        if (txContext != null) {
+            try {
+                if (txStarted) {
+                    txContext.abort();
+                }
+            } catch (TransactionFailureException e) {
+                throw new SQLException(e); // TODO: error code
+            } finally {
+                txStarted = false;
+            }
+        }
+    }
+    
+    public void commit() throws SQLException {
+        try {
+            send();
+        } finally {
+            txAwares.clear();
+            if (txContext != null) {
+                try {
+                    if (txStarted) {
+                        txContext.finish();
+                    }
+                } catch (TransactionFailureException e) {
+                    try {
+                        txContext.abort(e);
+                        throw TransactionUtil.getSQLException(e);
+                    } catch (TransactionFailureException e1) {
+                        throw TransactionUtil.getSQLException(e);
+                    }
+                } finally {
+                    txStarted = false;
+                }
+            }
+        }
     }
 }

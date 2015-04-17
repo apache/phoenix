@@ -234,9 +234,9 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
                     final long startTime = System.currentTimeMillis();
                     try {
                         QueryPlan plan = stmt.compilePlan(PhoenixStatement.this, Sequence.ValueOp.RESERVE_SEQUENCE);
+                        startTransaction(plan);
                         plan = connection.getQueryServices().getOptimizer().optimize(
                                 PhoenixStatement.this, plan);
-                        startTransaction(plan);
                          // this will create its own trace internally, so we don't wrap this
                          // whole thing in tracing
                         ResultIterator resultIterator = plan.iterator();
@@ -279,10 +279,10 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         }
     }
     
-    private void startTransaction(StatementPlan plan) throws SQLException {
+    public void startTransaction(StatementPlan plan) throws SQLException {
         for (TableRef ref : plan.getContext().getResolver().getTables()) {
             if (ref.getTable().isTransactional()) {
-                connection.startTransaction();
+                connection.getMutationState().startTransaction();
                 break;
             }
         }
