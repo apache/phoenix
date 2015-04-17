@@ -17,11 +17,12 @@
  */
 package org.apache.phoenix.schema.types;
 
-import com.google.common.base.Preconditions;
-import com.google.common.primitives.Booleans;
+import java.sql.Types;
+
 import org.apache.phoenix.schema.SortOrder;
 
-import java.sql.Types;
+import com.google.common.base.Preconditions;
+import com.google.common.primitives.Booleans;
 
 public class PBoolean extends PDataType<Boolean> {
 
@@ -137,4 +138,15 @@ public class PBoolean extends PDataType<Boolean> {
   public Object getSampleValue(Integer maxLength, Integer arrayLength) {
     return RANDOM.get().nextBoolean();
   }
+  
+    @Override
+    public PhoenixArrayFactory getArrayFactory() {
+        return new PhoenixArrayFactory() {
+
+            @Override
+            public PhoenixArray newArray(PDataType type, Object[] elements) {
+                return new PhoenixArray.PrimitiveBooleanPhoenixArray(type, elements);
+            }
+        };
+    }
 }

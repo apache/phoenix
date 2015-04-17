@@ -28,10 +28,6 @@ public abstract class BasePhoenixArrayToStringTest {
 
     @Test
     public void testMultipleObjectArray() {
-        // Object[] arr = createArray(getBaseJavaType(), 3);
-        // arr[0] = getElement1();
-        // arr[1] = getElement2();
-        // arr[2] = getElement3();
         helpTestToString(getBaseType(),
             new Object[] { getElement1(), getElement2(), getElement3() }, "[" + getString1() + ", "
                     + getString2() + ", " + getString3() + "]");
@@ -75,7 +71,14 @@ public abstract class BasePhoenixArrayToStringTest {
 
     protected void helpTestToString(PDataType type, Object[] array, String expected) {
         PhoenixArray arr = PArrayDataType.instantiatePhoenixArray(type, array);
+        boolean isPrimitive = isPrimitive(arr);
+        assertEquals("Expected " + getBaseType() + " array to be " + (isPrimitive ? "" : "not ")
+                + "primitive.", isPrimitive, !arr.getClass().equals(PhoenixArray.class));
         assertEquals(expected, arr.toString());
+    }
+
+    protected boolean isPrimitive(PhoenixArray arr) {
+        return arr.isPrimitiveType();
     }
 
 }

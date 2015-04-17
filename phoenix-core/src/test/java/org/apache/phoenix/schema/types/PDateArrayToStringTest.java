@@ -28,6 +28,13 @@ public class PDateArrayToStringTest extends BasePhoenixArrayToStringTest {
     }
 
     @Override
+    protected boolean isPrimitive(PhoenixArray arr) {
+        // dates have codec like primitive times but date is not primitive/scalar && there's no
+        // primitive date array
+        return false;
+    }
+
+    @Override
     protected Object getElement1() {
         return parseDate(DATE1);
     }
