@@ -615,18 +615,25 @@ public class PhoenixArray implements Array,SQLCloseable {
 		public PrimitiveBooleanPhoenixArray(PDataType dataType, Object[] elements) {
 			super(dataType, elements);
 		}
+
 		@Override
-		public Object convertObjectArrayToPrimitiveArray(Object[] elements) {
-			booleanArr = new boolean[elements.length];
-			int i = 0;
-            for(Object o : elements) {
+		public boolean isPrimitiveType() {
+	        // boolean is primitive although PBoolean has no codec
+		    return true;
+		}
+		
+        @Override
+        public Object convertObjectArrayToPrimitiveArray(Object[] elements) {
+            booleanArr = new boolean[elements.length];
+            int i = 0;
+            for (Object o : elements) {
                 if (o != null) {
-                    booleanArr[i] = (Boolean)o;
+                    booleanArr[i] = (Boolean) o;
                 }
                 i++;
             }
-      return booleanArr;
-		}
+            return booleanArr;
+        }
 		
 		@Override
         public int estimateByteSize(int pos) {
