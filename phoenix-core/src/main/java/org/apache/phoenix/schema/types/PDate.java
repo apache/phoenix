@@ -148,14 +148,15 @@ public class PDate extends PDataType<Date> {
   }
 
   @Override
-  public String toStringLiteral(Object o, Format formatter) {
-      if (formatter == null) {
-          // If default formatter has not been overridden,
-          // use default one.
-          formatter = DateUtil.DEFAULT_DATE_FORMATTER;
+    public String toStringLiteral(Object o, Format formatter) {
+        if (formatter == null) {
+            // If default formatter has not been overridden,
+            // use default one.
+            formatter = DateUtil.DEFAULT_DATE_FORMATTER;
         }
-        return "'" + StringUtil.escapeStringConstant(super.toStringLiteral(o, formatter)) + "'";
-  }
+        return null == o ? String.valueOf(o) : "'"
+                + StringUtil.escapeStringConstant(super.toStringLiteral(o, formatter)) + "'";
+    }
 
   @Override
   public void coerceBytes(ImmutableBytesWritable ptr, Object object, PDataType actualType,
