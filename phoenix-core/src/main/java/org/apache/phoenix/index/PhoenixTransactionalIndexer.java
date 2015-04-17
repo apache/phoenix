@@ -191,7 +191,8 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
                     TxTableState state = new TxTableState(env, mutableColumns, updateAttributes, tx.getWritePointer(), m, result);
                     Iterable<IndexUpdate> deletes = codec.getIndexDeletes(state, indexMetaData);
                     for (IndexUpdate delete : deletes) {
-                        indexUpdates.add(new Pair<Mutation, byte[]>(delete.getUpdate(),delete.getTableName()));
+                    	if (delete.isValid()) 
+                    		indexUpdates.add(new Pair<Mutation, byte[]>(delete.getUpdate(),delete.getTableName()));
                     }
                     state.applyMutation();
                     Iterable<IndexUpdate> updates = codec.getIndexUpserts(state, indexMetaData);
