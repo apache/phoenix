@@ -36,6 +36,8 @@
       <includes>
         <include>org.apache.phoenix:phoenix-core</include>
         <include>org.iq80.snappy:snappy</include>
+        <include>org.jruby.joni:joni</include>
+        <include>org.jruby.jcodings:jcodings</include>
       </includes>
     </dependencySet>
     <dependencySet>

@@ -28,3 +28,13 @@ The phoenix-spark module has been adapted from the phoenix-spark library
 distributed under the terms of the Apache 2 license. Original source copyright:
 Copyright 2014 Simply Measured, Inc.
 Copyright 2015 Interset Software Inc.
+
+The file bin/daemon.py is based on the file of the same name in python-daemon 2.0.5
+(https://pypi.python.org/pypi/python-daemon/) distributed under the terms of
+the Apache 2 license. Original source copyright:
+# Copyright © 2008–2015 Ben Finney <ben+python@benfinney.id.au>
+# Copyright © 2007–2008 Robert Niederreiter, Jens Klein
+# Copyright © 2004–2005 Chad J. Schroeder
+# Copyright © 2003 Clark Evans
+# Copyright © 2002 Noah Spurrier
+# Copyright © 2001 Jürgen Hermann

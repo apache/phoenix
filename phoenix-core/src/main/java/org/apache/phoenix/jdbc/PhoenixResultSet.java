@@ -65,8 +65,9 @@ import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PTinyint;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
-import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.SQLCloseable;
+
+import com.google.common.annotations.VisibleForTesting;
 
 
 
@@ -1254,5 +1255,10 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable, org.apache.pho
     @Override
     public <T> T getObject(String columnLabel, Class<T> type) throws SQLException {
         return (T) getObject(columnLabel); // Just ignore type since we only support built-in types
+    }
+    
+    @VisibleForTesting
+    public ResultIterator getUnderlyingIterator() {
+        return scanner;
     }
 }

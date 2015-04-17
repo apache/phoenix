@@ -27,27 +27,10 @@ class ProductRDDFunctions[A <: Product](data: RDD[A]) extends Logging with Seria
                     conf: Configuration = new Configuration, zkUrl: Option[String] = None)
                     : Unit = {
 
-    // Setup Phoenix output configuration, make a local copy
-    val config = new Configuration(conf)
-    PhoenixConfigurationUtil.setOutputTableName(config, tableName)
-    PhoenixConfigurationUtil.setUpsertColumnNames(config, cols.mkString(","))
-
-    // Override the Zookeeper URL if present. Throw exception if no address given.
-    zkUrl match {
-      case Some(url) => config.set(HConstants.ZOOKEEPER_QUORUM, url )
-      case _ => {
-        if(config.get(HConstants.ZOOKEEPER_QUORUM) == null) {
-          throw new UnsupportedOperationException(
-            s"One of zkUrl or '${HConstants.ZOOKEEPER_QUORUM}' config property must be provided"
-          )
-        }
-      }
-    }
+    val config = ConfigurationUtil.getOutputConfiguration(tableName, cols, zkUrl, Some(conf))
 
     // Encode the column info to a serializable type
-    val encodedColumns = ColumnInfoToStringEncoderDecoder.encode(
-      PhoenixConfigurationUtil.getUpsertColumnMetadataList(config)
-    )
+    val encodedColumns = ConfigurationUtil.encodeColumns(config)
 
     // Map each element of the product to a new (NullWritable, PhoenixRecordWritable)
     val phxRDD: RDD[(NullWritable, PhoenixRecordWritable)] = data.map { e =>

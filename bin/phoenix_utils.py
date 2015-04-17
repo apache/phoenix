@@ -63,6 +63,10 @@ def setPath():
  hbase_conf_path = os.getenv('HBASE_CONF_PATH','.')
  global testjar
  testjar = find(PHOENIX_TESTS_JAR_PATTERN, phoenix_test_jar_path)
+ global phoenix_queryserver_jar
+ phoenix_queryserver_jar = find("phoenix-server-*-runnable.jar", os.path.join(current_dir, "..", "phoenix-server", "target", "*"))
+ global phoenix_thin_client_jar
+ phoenix_thin_client_jar = find("phoenix-*-query-server-thin-client.jar", os.path.join(current_dir, "..", "phoenix-server-client", "target", "*"))
 
  if phoenix_client_jar == "":
      phoenix_client_jar = findFileInPathWithoutRecursion(PHOENIX_CLIENT_JAR_PATTERN, os.path.join(current_dir, ".."))

@@ -186,5 +186,10 @@ public class UnionPlan implements QueryPlan {
     public List<QueryPlan> getPlans() {
         return this.plans;
     }
+
+    @Override
+    public boolean useRoundRobinIterator() throws SQLException {
+        return false;
+    }
 }
 

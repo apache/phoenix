@@ -59,6 +59,7 @@ public final class QueryServicesTestImpl extends BaseQueryServicesImpl {
      * value overwhelms our mini clusters.
      */
     public static final int DEFAULT_SEQUENCE_TABLE_SALT_BUCKETS = 4;
+    public static final boolean DEFAULT_FORCE_ROWKEY_ORDER = true;
 
     
     public QueryServicesTestImpl(ReadOnlyProps defaultProps) {
@@ -79,7 +80,6 @@ public final class QueryServicesTestImpl extends BaseQueryServicesImpl {
                 .setMaxMemoryWaitMs(DEFAULT_MAX_MEMORY_WAIT_MS)
                 .setMaxTenantMemoryPerc(DEFAULT_MAX_TENANT_MEMORY_PERC)
                 .setMaxServerCacheSize(DEFAULT_MAX_HASH_CACHE_SIZE)
-                .setRowKeyOrderSaltedTable(true)
                 .setMaxServerCacheTTLMs(DEFAULT_MAX_SERVER_CACHE_TIME_TO_LIVE_MS)
                 .setMasterInfoPort(DEFAULT_MASTER_INFO_PORT)
                 .setRegionServerInfoPort(DEFAULT_REGIONSERVER_INFO_PORT)
@@ -88,7 +88,8 @@ public final class QueryServicesTestImpl extends BaseQueryServicesImpl {
                 .setWALEditCodec(DEFAULT_WAL_EDIT_CODEC)
                 .setDropMetaData(DEFAULT_DROP_METADATA)
                 .setMaxClientMetaDataCacheSize(DEFAULT_MAX_CLIENT_METADATA_CACHE_SIZE)
-                .setMaxServerMetaDataCacheSize(DEFAULT_MAX_SERVER_METADATA_CACHE_SIZE);
+                .setMaxServerMetaDataCacheSize(DEFAULT_MAX_SERVER_METADATA_CACHE_SIZE)
+                .setForceRowKeyOrder(DEFAULT_FORCE_ROWKEY_ORDER);
     }
     
     public QueryServicesTestImpl(ReadOnlyProps defaultProps, ReadOnlyProps overrideProps) {
