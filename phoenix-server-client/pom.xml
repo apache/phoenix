@@ -39,7 +39,7 @@
               <attach>false</attach>
               <finalName>phoenix-${project.version}</finalName>
               <descriptors>
-                <descriptor>src/build/query-server-thin-client.xml</descriptor>
+                <descriptor>src/build/thin-client.xml</descriptor>
               </descriptors>
             </configuration>
           </execution>
@@ -54,7 +54,7 @@
       <artifactId>calcite-avatica</artifactId>
     </dependency>
     <dependency>
-      <!-- TODO: don't really want to depend on sqlline, but our bin scripts are primitive -->
+      <!-- a dependency for the thin-client uberjar -->
       <groupId>sqlline</groupId>
       <artifactId>sqlline</artifactId>
     </dependency>
