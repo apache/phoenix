@@ -49,7 +49,9 @@ def findFileInPathWithoutRecursion(pattern, path):
     return ""
 
 def setPath():
- PHOENIX_CLIENT_JAR_PATTERN = "phoenix-*-client*.jar"
+ PHOENIX_CLIENT_JAR_PATTERN = "phoenix-*-client.jar"
+ PHOENIX_THIN_CLIENT_JAR_PATTERN = "phoenix-*-thin-client.jar"
+ PHOENIX_QUERYSERVER_JAR_PATTERN = "phoenix-server-*-runnable.jar"
  PHOENIX_TESTS_JAR_PATTERN = "phoenix-core-*-tests*.jar"
  global current_dir
  current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -64,12 +66,18 @@ def setPath():
  global testjar
  testjar = find(PHOENIX_TESTS_JAR_PATTERN, phoenix_test_jar_path)
  global phoenix_queryserver_jar
- phoenix_queryserver_jar = find("phoenix-server-*-runnable.jar", os.path.join(current_dir, "..", "phoenix-server", "target", "*"))
+ phoenix_queryserver_jar = find(PHOENIX_QUERYSERVER_JAR_PATTERN, os.path.join(current_dir, "..", "phoenix-server", "target", "*"))
  global phoenix_thin_client_jar
- phoenix_thin_client_jar = find("phoenix-*-query-server-thin-client.jar", os.path.join(current_dir, "..", "phoenix-server-client", "target", "*"))
+ phoenix_thin_client_jar = find(PHOENIX_THIN_CLIENT_JAR_PATTERN, os.path.join(current_dir, "..", "phoenix-server-client", "target", "*"))
 
  if phoenix_client_jar == "":
      phoenix_client_jar = findFileInPathWithoutRecursion(PHOENIX_CLIENT_JAR_PATTERN, os.path.join(current_dir, ".."))
+
+ if phoenix_thin_client_jar == "":
+     phoenix_thin_client_jar = findFileInPathWithoutRecursion(PHOENIX_THIN_CLIENT_JAR_PATTERN, os.path.join(current_dir, ".."))
+
+ if phoenix_queryserver_jar == "":
+     phoenix_queryserver_jar = findFileInPathWithoutRecursion(PHOENIX_QUERYSERVER_JAR_PATTERN, os.path.join(current_dir, "..", "lib"))
 
  if testjar == "":
      testjar = findFileInPathWithoutRecursion(PHOENIX_TESTS_JAR_PATTERN, os.path.join(current_dir, ".."))
