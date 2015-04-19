@@ -195,18 +195,22 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
                     		indexUpdates.add(new Pair<Mutation, byte[]>(delete.getUpdate(),delete.getTableName()));
                     }
                     state.applyMutation();
-                    Iterable<IndexUpdate> updates = codec.getIndexUpserts(state, indexMetaData);
-                    for (IndexUpdate update : updates) {
-                        indexUpdates.add(new Pair<Mutation, byte[]>(update.getUpdate(),update.getTableName()));
+                    Iterable<IndexUpdate> puts = codec.getIndexUpserts(state, indexMetaData);
+                    for (IndexUpdate put : puts) {
+                        if (put.isValid()) {
+                            indexUpdates.add(new Pair<Mutation, byte[]>(put.getUpdate(),put.getTableName()));
+                        }
                     }
                 }
             }
             for (Mutation m : mutations.values()) {
                 TxTableState state = new TxTableState(env, mutableColumns, updateAttributes, tx.getWritePointer(), m);
                 state.applyMutation();
-                Iterable<IndexUpdate> updates = codec.getIndexUpserts(state, indexMetaData);
-                for (IndexUpdate update : updates) {
-                    indexUpdates.add(new Pair<Mutation, byte[]>(update.getUpdate(),update.getTableName()));
+                Iterable<IndexUpdate> puts = codec.getIndexUpserts(state, indexMetaData);
+                for (IndexUpdate put : puts) {
+                    if (put.isValid()) {
+                        indexUpdates.add(new Pair<Mutation, byte[]>(put.getUpdate(),put.getTableName()));
+                    }
                 }
             }
         } finally {
