@@ -309,11 +309,17 @@ public class PhoenixRuntime {
         };
     }
 
+    /**
+     * 
+     * @param conn
+     * @param name requires a pre-normalized table name or a pre-normalized schema and table name
+     * @return
+     * @throws SQLException
+     */
     public static PTable getTable(Connection conn, String name) throws SQLException {
         PTable table = null;
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
         try {
-            name = SchemaUtil.normalizeIdentifier(name);
             table = pconn.getMetaDataCache().getTable(new PTableKey(pconn.getTenantId(), name));
         } catch (TableNotFoundException e) {
             String schemaName = SchemaUtil.getSchemaNameFromFullName(name);
