@@ -17,17 +17,11 @@
  */
 package org.apache.phoenix.end2end;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.queryserver.server.Main;
 
-import java.util.concurrent.TimeUnit;
-
 /** Wraps up the query server for tests. */
 public class QueryServerThread extends Thread {
-
-  private static final Log LOG = LogFactory.getLog(QueryServerThread.class);
 
   private final Main main;
 
