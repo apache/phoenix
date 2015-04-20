@@ -61,6 +61,7 @@ else:
 hbase_config_path = os.getenv('HBASE_CONF_DIR', phoenix_utils.hbase_conf_path)
 
 # default paths ## TODO: add windows support
+java_home = os.getenv('JAVA_HOME')
 hbase_pid_dir = os.path.join(tempfile.gettempdir(), 'phoenix')
 phoenix_log_dir = os.path.join(tempfile.gettempdir(), 'phoenix')
 phoenix_file_basename = 'phoenix-%s-server' % getpass.getuser()
@@ -68,15 +69,17 @@ phoenix_log_file = '%s.log' % phoenix_file_basename
 phoenix_out_file = '%s.out' % phoenix_file_basename
 phoenix_pid_file = '%s.pid' % phoenix_file_basename
 
-# load hbase-env.sh to extract HBASE_PID_DIR
+# load hbase-env.sh to extract JAVA_HOME, HBASE_PID_DIR, HBASE_LOG_DIR
 hbase_env_path = os.path.join(hbase_config_path, 'hbase-env.sh')
 hbase_env = {}
 if os.path.isfile(hbase_env_path):
     p = subprocess.Popen(['bash', '-c', 'source %s && env' % hbase_env_path], stdout = subprocess.PIPE)
     for x in p.stdout:
-        (k, v) = x.split('=')
-        hbase_env[k] = v
+        (k, _, v) = x.partition('=')
+        hbase_env[k.strip()] = v.strip()
 
+if hbase_env.has_key('JAVA_HOME'):
+    java_home = hbase_env['JAVA_HOME']
 if hbase_env.has_key('HBASE_PID_DIR'):
     hbase_pid_dir = hbase_env['HBASE_PID_DIR']
 if hbase_env.has_key('HBASE_LOG_DIR'):
@@ -86,9 +89,14 @@ log_file_path = os.path.join(phoenix_log_dir, phoenix_log_file)
 out_file_path = os.path.join(phoenix_log_dir, phoenix_out_file)
 pid_file_path = os.path.join(hbase_pid_dir, phoenix_pid_file)
 
+if java_home:
+    java = os.path.join(java_home, 'bin', 'java')
+else:
+    java = 'java'
+
 #    " -Xdebug -Xrunjdwp:transport=dt_socket,address=5005,server=y,suspend=n " + \
 #    " -XX:+UnlockCommercialFeatures -XX:+FlightRecorder -XX:FlightRecorderOptions=defaultrecording=true,dumponexit=true" + \
-java_cmd = 'java -cp ' + hbase_config_path + os.pathsep + phoenix_utils.phoenix_queryserver_jar + \
+java_cmd = '%(java)s -cp ' + hbase_config_path + os.pathsep + phoenix_utils.phoenix_queryserver_jar + \
     " -Dproc_phoenixserver" + \
     " -Dlog4j.configuration=file:" + os.path.join(phoenix_utils.current_dir, "log4j.properties") + \
     " -Dpsql.root.logger=%(root_logger)s" + \
@@ -111,7 +119,7 @@ if command == 'start':
         with context:
             # this block is the main() for the forked daemon process
             child = None
-            cmd = java_cmd % {'root_logger': 'INFO,DRFA', 'log_dir': phoenix_log_dir, 'log_file': phoenix_log_file}
+            cmd = java_cmd % {'java': java, 'root_logger': 'INFO,DRFA', 'log_dir': phoenix_log_dir, 'log_file': phoenix_log_file}
 
             # notify the child when we're killed
             def handler(signum, frame):
@@ -142,6 +150,6 @@ elif command == 'stop':
 
 else:
     # run in the foreground using defaults from log4j.properties
-    cmd = java_cmd % {'root_logger': 'INFO,console', 'log_dir': '.', 'log_file': 'psql.log'}
+    cmd = java_cmd % {'java': java, 'root_logger': 'INFO,console', 'log_dir': '.', 'log_file': 'psql.log'}
     child = subprocess.Popen(cmd.split())
     sys.exit(child.wait())
