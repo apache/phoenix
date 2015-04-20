@@ -141,6 +141,52 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
         }
 	}
 	
+    @Test
+    public void testDelete() throws Exception {
+        String selectSQL = "SELECT * FROM " + FULL_TABLE_NAME;
+        Connection conn1 = DriverManager.getConnection(getUrl());
+        Connection conn2 = DriverManager.getConnection(getUrl());
+        try {
+            conn1.setAutoCommit(false);
+            ResultSet rs = conn1.createStatement().executeQuery(selectSQL);
+            assertFalse(rs.next());
+            
+            String upsert = "UPSERT INTO " + FULL_TABLE_NAME + "(varchar_pk, char_pk, int_pk, long_pk, decimal_pk, date_pk) VALUES(?, ?, ?, ?, ?, ?)";
+            PreparedStatement stmt = conn1.prepareStatement(upsert);
+            // upsert two rows
+            setRowKeyColumns(stmt, 1);
+            stmt.execute();
+            conn1.commit();
+            
+            setRowKeyColumns(stmt, 2);
+            stmt.execute();
+            
+            // verify rows can be read even though commit has not been called
+            int rowsDeleted = conn1.createStatement().executeUpdate("DELETE FROM " + FULL_TABLE_NAME);
+            assertEquals(2, rowsDeleted);
+            
+            // Delete and second upsert not committed yet, so there should be one row.
+            // FIXME: aggregate queries don't appear to honor the transaction information
+            // rs = conn2.createStatement().executeQuery("SELECT count(*) FROM " + FULL_TABLE_NAME);
+            rs = conn2.createStatement().executeQuery("SELECT * FROM " + FULL_TABLE_NAME);
+            assertTrue(rs.next());
+            // FIXME: (see above)
+            // assertEquals(1, rs.getInt(1));
+            assertFalse(rs.next());
+            
+            conn1.commit();
+            
+            // verify rows are deleted after commit
+            // FIXME: this is failing, I think because Tephra isn't handling deletes like we need it to
+            // TODO: confirm this works once we get the patch from Gary.
+            rs = conn1.createStatement().executeQuery(selectSQL);
+            assertFalse(rs.next());
+        }
+        finally {
+            conn1.close();
+        }
+    }
+    
 	@Test
 	public void testAutoCommitQuerySingleTable() throws Exception {
 		Connection conn = DriverManager.getConnection(getUrl());

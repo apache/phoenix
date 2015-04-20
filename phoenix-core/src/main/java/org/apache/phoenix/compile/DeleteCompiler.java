@@ -291,12 +291,13 @@ public class DeleteCompiler {
         boolean noQueryReqd = false;
         boolean runOnServer = false;
         SelectStatement select = null;
+        ColumnResolver resolverToBe = null;
         Set<PTable> immutableIndex = Collections.emptySet();
         DeletingParallelIteratorFactory parallelIteratorFactory = null;
         while (true) {
             try {
-                ColumnResolver resolver = FromCompiler.getResolverForMutation(delete, connection);
-                tableRefToBe = resolver.getTables().get(0);
+                resolverToBe = FromCompiler.getResolverForMutation(delete, connection);
+                tableRefToBe = resolverToBe.getTables().get(0);
                 PTable table = tableRefToBe.getTable();
                 // Cannot update:
                 // - read-only VIEW 
@@ -332,17 +333,17 @@ public class DeleteCompiler {
                         Collections.<ParseNode>emptyList(), null, 
                         delete.getOrderBy(), delete.getLimit(),
                         delete.getBindCount(), false, false);
-                select = StatementNormalizer.normalize(select, resolver);
-                SelectStatement transformedSelect = SubqueryRewriter.transform(select, resolver, connection);
+                select = StatementNormalizer.normalize(select, resolverToBe);
+                SelectStatement transformedSelect = SubqueryRewriter.transform(select, resolverToBe, connection);
                 if (transformedSelect != select) {
-                    resolver = FromCompiler.getResolverForQuery(transformedSelect, connection);
-                    select = StatementNormalizer.normalize(transformedSelect, resolver);
+                    resolverToBe = FromCompiler.getResolverForQuery(transformedSelect, connection);
+                    select = StatementNormalizer.normalize(transformedSelect, resolverToBe);
                 }
                 parallelIteratorFactory = hasLimit ? null : new DeletingParallelIteratorFactory(connection);
                 QueryOptimizer optimizer = new QueryOptimizer(services);
                 queryPlans = Lists.newArrayList(mayHaveImmutableIndexes
-                        ? optimizer.getApplicablePlans(statement, select, resolver, Collections.<PColumn>emptyList(), parallelIteratorFactory)
-                        : optimizer.getBestPlan(statement, select, resolver, Collections.<PColumn>emptyList(), parallelIteratorFactory));
+                        ? optimizer.getApplicablePlans(statement, select, resolverToBe, Collections.<PColumn>emptyList(), parallelIteratorFactory)
+                        : optimizer.getBestPlan(statement, select, resolverToBe, Collections.<PColumn>emptyList(), parallelIteratorFactory));
                 if (mayHaveImmutableIndexes) { // FIXME: this is ugly
                     // Lookup the table being deleted from in the cache, as it's possible that the
                     // optimizer updated the cache if it found indexes that were out of date.
@@ -367,6 +368,7 @@ public class DeleteCompiler {
             }
             break;
         }
+        final ColumnResolver resolver = resolverToBe;
         final boolean hasImmutableIndexes = !immutableIndex.isEmpty();
         // tableRefs is parallel with queryPlans
         TableRef[] tableRefs = new TableRef[hasImmutableIndexes ? immutableIndex.size() : 1];
@@ -559,6 +561,14 @@ public class DeleteCompiler {
     
                     @Override
                     public MutationState execute() throws SQLException {
+                        // Repeated from PhoenixStatement.executeQuery which this call bypasses.
+                        // Send mutations to hbase, so they are visible to subsequent reads.
+                        // Use original plan for data table so that data and immutable indexes will be sent.
+                        boolean isTransactional = connection.getMutationState().startTransaction(resolver.getTables().iterator());
+                        if (isTransactional) {
+                            // Use real query plan  so that we have the right context object.
+                            plan.getContext().setTransaction(connection.getMutationState().getTransaction());
+                        }
                         ResultIterator iterator = plan.iterator();
                         if (!hasLimit) {
                             Tuple tuple;
