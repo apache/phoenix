@@ -72,6 +72,7 @@ import org.cloudera.htrace.TraceScope;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.common.base.Predicate;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -140,20 +141,6 @@ public class MutationState implements SQLCloseable {
         throwIfTooBig();
     }
     
-    private MutationState(MutationState state, List<Map.Entry<TableRef, Map<ImmutableBytesPtr,Map<PColumn,byte[]>>>> entries) {
-        this.maxSize = state.maxSize;
-        this.connection = state.connection;
-        this.sizeOffset = state.sizeOffset;
-        this.tx = state.tx;
-        this.txAwares = state.txAwares;
-        this.txContext = state.txContext;
-        for (Map.Entry<TableRef, Map<ImmutableBytesPtr,Map<PColumn,byte[]>>> entry : entries) {
-            numRows += entry.getValue().size();
-            this.mutations.put(entry.getKey(), entry.getValue());
-        }
-        throwIfTooBig();
-    }
-    
     private void addTxParticipant(TransactionAware txAware) throws SQLException {
         if (txContext == null) {
             txAwares.add(txAware);
@@ -168,7 +155,7 @@ public class MutationState implements SQLCloseable {
         return tx != null ? tx : txContext != null ? txContext.getCurrentTransaction() : null;
     }
     
-    public void startTransaction() throws SQLException {
+    public boolean startTransaction() throws SQLException {
         if (txContext == null) {
             throw new SQLException("No transaction context"); // TODO: error code
         }
@@ -177,10 +164,12 @@ public class MutationState implements SQLCloseable {
             if (!txStarted) {
                 txContext.start();
                 txStarted = true;
+                return true;
             }
         } catch (TransactionFailureException e) {
             throw new SQLException(e); // TODO: error code
         }
+        return false;
     }
     
     private void throwIfTooBig() {
@@ -372,46 +361,50 @@ public class MutationState implements SQLCloseable {
      * @return the server time to use for the upsert
      * @throws SQLException if the table or any columns no longer exist
      */
-    private long[] validate() throws SQLException {
+    private long[] validateAll() throws SQLException {
         int i = 0;
-        Long scn = connection.getSCN();
-        MetaDataClient client = new MetaDataClient(connection);
         long[] timeStamps = new long[this.mutations.size()];
         for (Map.Entry<TableRef, Map<ImmutableBytesPtr,Map<PColumn,byte[]>>> entry : mutations.entrySet()) {
             TableRef tableRef = entry.getKey();
-            long serverTimeStamp = tableRef.getTimeStamp();
-            PTable table = tableRef.getTable();
-            // If we're auto committing, we've already validated the schema when we got the ColumnResolver,
-            // so no need to do it again here.
-            if (!connection.getAutoCommit()) {
-                MetaDataMutationResult result = client.updateCache(table.getSchemaName().getString(), table.getTableName().getString());
-                long timestamp = result.getMutationTime();
-                if (timestamp != QueryConstants.UNSET_TIMESTAMP) {
-                    serverTimeStamp = timestamp;
-                    if (result.wasUpdated()) {
-                        // TODO: use bitset?
-                        table = result.getTable();
-                        PColumn[] columns = new PColumn[table.getColumns().size()];
-                        for (Map.Entry<ImmutableBytesPtr,Map<PColumn,byte[]>> rowEntry : entry.getValue().entrySet()) {
-                            Map<PColumn,byte[]> valueEntry = rowEntry.getValue();
-                            if (valueEntry != PRow.DELETE_MARKER) {
-                                for (PColumn column : valueEntry.keySet()) {
-                                    columns[column.getPosition()] = column;
-                                }
-                            }
-                        }
-                        for (PColumn column : columns) {
-                            if (column != null) {
-                                table.getColumnFamily(column.getFamilyName().getString()).getColumn(column.getName().getString());
-                            }
-                        }
-                        tableRef.setTable(table);
-                    }
-                }
-            }
-            timeStamps[i++] = scn == null ? serverTimeStamp == QueryConstants.UNSET_TIMESTAMP ? HConstants.LATEST_TIMESTAMP : serverTimeStamp : scn;
+            timeStamps[i++] = validate(tableRef, entry.getValue());
         }
         return timeStamps;
+    }
+    
+    private long validate(TableRef tableRef, Map<ImmutableBytesPtr,Map<PColumn,byte[]>> values) throws SQLException {
+        Long scn = connection.getSCN();
+        MetaDataClient client = new MetaDataClient(connection);
+        long serverTimeStamp = tableRef.getTimeStamp();
+        PTable table = tableRef.getTable();
+        // If we're auto committing, we've already validated the schema when we got the ColumnResolver,
+        // so no need to do it again here.
+        if (!connection.getAutoCommit()) {
+            MetaDataMutationResult result = client.updateCache(table.getSchemaName().getString(), table.getTableName().getString());
+            long timestamp = result.getMutationTime();
+            if (timestamp != QueryConstants.UNSET_TIMESTAMP) {
+                serverTimeStamp = timestamp;
+                if (result.wasUpdated()) {
+                    // TODO: use bitset?
+                    table = result.getTable();
+                    PColumn[] columns = new PColumn[table.getColumns().size()];
+                    for (Map.Entry<ImmutableBytesPtr,Map<PColumn,byte[]>> rowEntry : values.entrySet()) {
+                        Map<PColumn,byte[]> valueEntry = rowEntry.getValue();
+                        if (valueEntry != PRow.DELETE_MARKER) {
+                            for (PColumn column : valueEntry.keySet()) {
+                                columns[column.getPosition()] = column;
+                            }
+                        }
+                    }
+                    for (PColumn column : columns) {
+                        if (column != null) {
+                            table.getColumnFamily(column.getFamilyName().getString()).getColumn(column.getName().getString());
+                        }
+                    }
+                    tableRef.setTable(table);
+                }
+            }
+        }
+        return scn == null ? serverTimeStamp == QueryConstants.UNSET_TIMESTAMP ? HConstants.LATEST_TIMESTAMP : serverTimeStamp : scn;
     }
     
     private static void logMutationSize(HTableInterface htable, List<Mutation> mutations, PhoenixConnection connection) {
@@ -429,25 +422,31 @@ public class MutationState implements SQLCloseable {
     }
     
     @SuppressWarnings("deprecation")
-    public void send() throws SQLException {
+    private void send(Iterator<TableRef> tableRefs) throws SQLException {
         int i = 0;
+        long[] serverTimeStamps = null;
         byte[] tenantId = connection.getTenantId() == null ? null : connection.getTenantId().getBytes();
-        long[] serverTimeStamps = validate();
-        Iterator<Map.Entry<TableRef, Map<ImmutableBytesPtr,Map<PColumn,byte[]>>>> iterator = this.mutations.entrySet().iterator();
-        List<Map.Entry<TableRef, Map<ImmutableBytesPtr,Map<PColumn,byte[]>>>> committedList = Lists.newArrayListWithCapacity(this.mutations.size());
+        // Validate up front if not transactional so that we 
+        if (tableRefs == null) {
+            serverTimeStamps = validateAll();
+            tableRefs = mutations.keySet().iterator();
+        }
 
         // add tracing for this operation
         TraceScope trace = Tracing.startNewSpan(connection, "Committing mutations to tables");
         Span span = trace.getSpan();
-        while (iterator.hasNext()) {
-            Map.Entry<TableRef, Map<ImmutableBytesPtr,Map<PColumn,byte[]>>> entry = iterator.next();
-            Map<ImmutableBytesPtr,Map<PColumn,byte[]>> valuesMap = entry.getValue();
-            TableRef tableRef = entry.getKey();
+        while (tableRefs.hasNext()) {
+            TableRef tableRef = tableRefs.next();
+            Map<ImmutableBytesPtr,Map<PColumn,byte[]>> valuesMap = mutations.get(tableRef);
+            if (valuesMap == null) {
+                continue;
+            }
             PTable table = tableRef.getTable();
             table.getIndexMaintainers(tempPtr, connection);
             boolean hasIndexMaintainers = tempPtr.getLength() > 0;
             boolean isDataTable = true;
-            long serverTimestamp = serverTimeStamps[i++];
+            // Validate as we go if transactional since we can undo if a problem occurs (which is unlikely)
+            long serverTimestamp = serverTimeStamps == null ? validate(tableRef, valuesMap) : serverTimeStamps[i++];
             Iterator<Pair<byte[],List<Mutation>>> mutationsIterator = addRowMutations(tableRef, valuesMap, serverTimestamp, false);
             while (mutationsIterator.hasNext()) {
                 Pair<byte[],List<Mutation>> pair = mutationsIterator.next();
@@ -518,7 +517,6 @@ public class MutationState implements SQLCloseable {
                         MUTATION_COMMIT_TIME.update(duration);
                         shouldRetry = false;
                         if (logger.isDebugEnabled()) logger.debug(LogUtil.addCustomAnnotations("Total time for batch call of  " + mutations.size() + " mutations into " + table.getName().getString() + ": " + duration + " ms", connection));
-                        committedList.add(entry);
                     } catch (Exception e) {
                         SQLException inferredE = ServerUtil.parseServerExceptionOrNull(e);
                         if (inferredE != null) {
@@ -541,7 +539,7 @@ public class MutationState implements SQLCloseable {
                         }
                         // Throw to client with both what was committed so far and what is left to be committed.
                         // That way, client can either undo what was done or try again with what was not done.
-                        sqlE = new CommitException(e, this, new MutationState(this, committedList));
+                        sqlE = new CommitException(e, this);
                     } finally {
                         try {
                             if (cache != null) {
@@ -567,9 +565,9 @@ public class MutationState implements SQLCloseable {
                 isDataTable = false;
             }
             if (tableRef.getTable().getType() != PTableType.INDEX) {
-                numRows -= entry.getValue().size();
+                numRows -= valuesMap.size();
             }
-            iterator.remove(); // Remove batches as we process them
+            valuesMap.remove(tableRef); // Remove batches as we process them
         }
         trace.close();
         assert(numRows==0);
@@ -623,5 +621,31 @@ public class MutationState implements SQLCloseable {
                 }
             }
         }
+    }
+
+    /**
+     * Send mutations to hbase, so they are visible to subsequent reads,
+     * starting a transaction if transactional and one has not yet been started.
+     * @param tableRefs
+     * @return true if at least partially transactional and false otherwise.
+     * @throws SQLException
+     */
+    public boolean startTransaction(Iterator<TableRef> tableRefs) throws SQLException {
+        Iterator<TableRef> filteredTableRefs = Iterators.filter(tableRefs, new Predicate<TableRef>(){
+            @Override
+            public boolean apply(TableRef tableRef) {
+                return tableRef.getTable().isTransactional();
+            }
+        });
+        if (filteredTableRefs.hasNext()) {
+            startTransaction();
+            send(filteredTableRefs);
+            return true;
+        }
+        return false;
+    }
+        
+    public void send() throws SQLException {
+        send(null);
     }
 }

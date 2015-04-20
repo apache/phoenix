@@ -97,10 +97,7 @@ public class TableRef {
     
     @Override
     public int hashCode() {
-        final int prime = 31;
-        int result = alias == null ? 0 : alias.hashCode();
-        result = prime * result + this.table.getName().getString().hashCode();
-        return result;
+        return this.table.getName().getString().hashCode();
     }
 
     @Override
@@ -109,7 +106,8 @@ public class TableRef {
         if (obj == null) return false;
         if (getClass() != obj.getClass()) return false;
         TableRef other = (TableRef)obj;
-        if ((alias == null && other.alias != null) || (alias != null && !alias.equals(other.alias))) return false;
+        // If alias is null, it matches any other alias
+        if (alias != null && other.alias != null && !alias.equals(other.alias)) return false;
         if (!table.getName().getString().equals(other.table.getName().getString())) return false;
         return true;
     }

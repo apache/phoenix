@@ -146,7 +146,7 @@ public class TupleProjectionCompiler {
             projectedColumns.add(column);
         }
         
-        return PTableImpl.makePTable(table.getTenantId(), table.getSchemaName(), table.getName(), PTableType.PROJECTED,
+        return PTableImpl.makePTable(table.getTenantId(), table.getSchemaName(), table.getTableName(), PTableType.PROJECTED,
                 table.getIndexState(), table.getTimeStamp(), table.getSequenceNumber(), table.getPKName(),
                 table.getBucketNum(), projectedColumns, table.getParentSchemaName(),
                 table.getParentName(), table.getIndexes(), table.isImmutableRows(), Collections.<PName>emptyList(), null, null,

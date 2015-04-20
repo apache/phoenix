@@ -477,6 +477,7 @@ public class UpsertCompiler {
             break;
         }
         
+        final QueryPlan originalQueryPlan = queryPlanToBe;
         RowProjector projectorToBe = null;
         // Optimize only after all checks have been performed
         if (valueNodes == null) {
@@ -674,6 +675,14 @@ public class UpsertCompiler {
 
                 @Override
                 public MutationState execute() throws SQLException {
+                    // Repeated from PhoenixStatement.executeQuery which this call bypasses.
+                    // Send mutations to hbase, so they are visible to subsequent reads.
+                    // Use original plan for data table so that data and immutable indexes will be sent.
+                    boolean isTransactional = connection.getMutationState().startTransaction(originalQueryPlan.getContext().getResolver().getTables().iterator());
+                    if (isTransactional) {
+                        // Use real query plan  so that we have the right context object.
+                        queryPlan.getContext().setTransaction(connection.getMutationState().getTransaction());
+                    }
                     ResultIterator iterator = queryPlan.iterator();
                     if (parallelIteratorFactory == null) {
                         return upsertSelect(statement, tableRef, projector, iterator, columnIndexes, pkSlotIndexes);

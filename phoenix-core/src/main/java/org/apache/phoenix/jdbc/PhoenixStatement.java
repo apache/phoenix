@@ -234,19 +234,17 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
                     final long startTime = System.currentTimeMillis();
                     try {
                         QueryPlan plan = stmt.compilePlan(PhoenixStatement.this, Sequence.ValueOp.RESERVE_SEQUENCE);
-                        startTransaction(plan);
-                        plan = connection.getQueryServices().getOptimizer().optimize(
-                                PhoenixStatement.this, plan);
+                        // Send mutations to hbase, so they are visible to subsequent reads.
+                        // Use original plan for data table so that data and immutable indexes will be sent
+                        boolean isTransactional = connection.getMutationState().startTransaction(plan.getContext().getResolver().getTables().iterator());
+                        plan = connection.getQueryServices().getOptimizer().optimize(PhoenixStatement.this, plan);
+                        if (isTransactional) {
+                            // After optimize so that we have the right context object
+                            plan.getContext().setTransaction(connection.getMutationState().getTransaction());
+                        }
                          // this will create its own trace internally, so we don't wrap this
                          // whole thing in tracing
                         ResultIterator resultIterator = plan.iterator();
-                        if (connection.getAutoCommit()) {
-                            connection.commit(); // Forces new read point for next statement
-                        }
-                        else {
-                        	// send mutations to hbase, so they are visible to subsequent reads
-                        	connection.getMutationState().send();
-                        }
                         if (logger.isDebugEnabled()) {
                             String explainPlan = QueryUtil.getExplainPlan(resultIterator);
                             logger.debug(LogUtil.addCustomAnnotations("Explain plan: " + explainPlan, connection));
@@ -257,6 +255,10 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
                         setLastResultSet(rs);
                         setLastUpdateCount(NO_UPDATE);
                         setLastUpdateOperation(stmt.getOperation());
+                        // If transactional, this will move the read pointer forward
+                        if (connection.getAutoCommit()) {
+                            connection.commit();
+                        }
                         return rs;
                     } catch (RuntimeException e) {
                         // FIXME: Expression.evaluate does not throw SQLException
@@ -279,13 +281,14 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         }
     }
     
-    public void startTransaction(StatementPlan plan) throws SQLException {
+    private boolean startTransaction(StatementPlan plan) throws SQLException {
         for (TableRef ref : plan.getContext().getResolver().getTables()) {
             if (ref.getTable().isTransactional()) {
                 connection.getMutationState().startTransaction();
-                break;
+                return true;
             }
         }
+        return false;
     }
     
     protected int executeMutation(final CompilableStatement stmt) throws SQLException {

@@ -25,15 +25,11 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Map;
 
-import org.apache.hadoop.hbase.client.HTableInterface;
-import org.apache.hadoop.hbase.client.Result;
-import org.apache.hadoop.hbase.client.ResultScanner;
-import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.util.Bytes;
+import co.cask.tephra.TxConstants;
+
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.exception.SQLExceptionCode;
-import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -42,19 +38,43 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import co.cask.tephra.TxConstants;
-
 import com.google.common.collect.Maps;
 
 public class TransactionIT extends BaseHBaseManagedTimeIT {
 	
 	private static final String FULL_TABLE_NAME = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + TRANSACTIONAL_DATA_TABLE;
 	
-	@Before
+    @Before
     public void setUp() throws SQLException {
-		ensureTableCreated(getUrl(), TRANSACTIONAL_DATA_TABLE);
+        Connection conn = DriverManager.getConnection(getUrl());
+        try {
+            conn.createStatement().execute(
+                  "create table "+ FULL_TABLE_NAME + "("
+                + "   varchar_pk VARCHAR NOT NULL, "
+                + "   char_pk CHAR(6) NOT NULL, "
+                + "   int_pk INTEGER NOT NULL, "
+                + "   long_pk BIGINT NOT NULL, "
+                + "   decimal_pk DECIMAL(31, 10) NOT NULL, "
+                + "   date_pk DATE NOT NULL, "
+                + "   a.varchar_col1 VARCHAR, "
+                + "   a.char_col1 CHAR(10), "
+                + "   a.int_col1 INTEGER, "
+                + "   a.long_col1 BIGINT, "
+                + "   a.decimal_col1 DECIMAL(31, 10), "
+                + "   a.date1 DATE, "
+                + "   b.varchar_col2 VARCHAR, "
+                + "   b.char_col2 CHAR(10), "
+                + "   b.int_col2 INTEGER, "
+                + "   b.long_col2 BIGINT, "
+                + "   b.decimal_col2 DECIMAL(31, 10), "
+                + "   b.date2 DATE "
+                + "   CONSTRAINT pk PRIMARY KEY (varchar_pk, char_pk, int_pk, long_pk DESC, decimal_pk, date_pk)) "
+                + "TRANSACTIONAL=true");
+        } finally {
+            conn.close();
+        }
     }
-	
+
 	@BeforeClass
     @Shadower(classBeingShadowed = BaseHBaseManagedTimeIT.class)
     public static void doSetup() throws Exception {
@@ -122,18 +142,31 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
 	}
 	
 	@Test
-	public void testAutocommitQueryEmptyTable() throws Exception {
+	public void testAutoCommitQuerySingleTable() throws Exception {
 		Connection conn = DriverManager.getConnection(getUrl());
 		try {
 			conn.setAutoCommit(true);
 			// verify no rows returned
-			ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM "+FULL_TABLE_NAME);
+			ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + FULL_TABLE_NAME);
 			assertFalse(rs.next());
 		} finally {
 			conn.close();
 		}
 	}
 	
+    @Test
+    public void testAutoCommitQueryMultiTables() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        try {
+            conn.setAutoCommit(true);
+            // verify no rows returned
+            ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + FULL_TABLE_NAME + " a JOIN " + FULL_TABLE_NAME + " b ON (a.long_pk = b.int_pk)");
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
+    
 	@Test
 	public void testColConflicts() throws Exception {
 		Connection conn1 = DriverManager.getConnection(getUrl());

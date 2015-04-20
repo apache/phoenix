@@ -22,20 +22,13 @@ import java.sql.SQLException;
 public class CommitException extends SQLException {
     private static final long serialVersionUID = 1L;
     private final MutationState uncommittedState;
-    private final MutationState committedState;
 
-    public CommitException(Exception e, MutationState uncommittedState, MutationState committedState) {
+    public CommitException(Exception e, MutationState uncommittedState) {
         super(e);
         this.uncommittedState = uncommittedState;
-        this.committedState = committedState;
     }
 
     public MutationState getUncommittedState() {
         return uncommittedState;
     }
-
-    public MutationState getCommittedState() {
-        return committedState;
-    }
-
 }
