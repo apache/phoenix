@@ -638,8 +638,14 @@ public class MutationState implements SQLCloseable {
             }
         });
         if (filteredTableRefs.hasNext()) {
+            // FIXME: strip table alias to prevent equality check from failing due to alias mismatch on null alias.
+            // We really should be keying the tables based on the physical table name.
+            List<TableRef> strippedAliases = Lists.newArrayListWithExpectedSize(mutations.keySet().size());
+            while (filteredTableRefs.hasNext()) {
+                strippedAliases.add(new TableRef(filteredTableRefs.next(), null));
+            }
             startTransaction();
-            send(filteredTableRefs);
+            send(strippedAliases.iterator());
             return true;
         }
         return false;
