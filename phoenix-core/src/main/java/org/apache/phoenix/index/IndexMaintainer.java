@@ -781,8 +781,10 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         return put;
     }
 
-    public boolean isRowDeleted(Collection<Cell> pendingUpdates) {
+    private enum DeleteType {SINGLE_VERSION, ALL_VERSIONS};
+    private DeleteType getDeleteTypeOrNull(Collection<Cell> pendingUpdates) {
         int nDeleteCF = 0;
+        int nDeleteVersionCF = 0;
         for (Cell kv : pendingUpdates) {
             if (kv.getTypeByte() == KeyValue.Type.DeleteFamily.getCode()) {
                 nDeleteCF++;
@@ -790,12 +792,19 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                   dataEmptyKeyValueCF, 0, dataEmptyKeyValueCF.length) == 0;
                 // This is what a delete looks like on the client side for immutable indexing...
                 if (isEmptyCF) {
-                    return true;
+                    return DeleteType.ALL_VERSIONS;
                 }
+            } else if (kv.getTypeByte() == KeyValue.Type.DeleteFamilyVersion.getCode()) {
+                nDeleteVersionCF++;
             }
         }
         // This is what a delete looks like on the server side for mutable indexing...
-        return nDeleteCF == this.nDataCFs;
+        // Should all be one or the other for DeleteFamily versus DeleteFamilyVersion, but just in case not
+        return nDeleteVersionCF >= this.nDataCFs ? DeleteType.SINGLE_VERSION : nDeleteCF + nDeleteVersionCF >= this.nDataCFs ? DeleteType.ALL_VERSIONS : null;
+    }
+    
+    public boolean isRowDeleted(Collection<Cell> pendingUpdates) {
+        return getDeleteTypeOrNull(pendingUpdates) != null;
     }
     
     private boolean hasIndexedColumnChanged(ValueGetter oldState, Collection<Cell> pendingUpdates) throws IOException {
@@ -841,8 +850,18 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     public Delete buildDeleteMutation(KeyValueBuilder kvBuilder, ValueGetter oldState, ImmutableBytesWritable dataRowKeyPtr, Collection<Cell> pendingUpdates, long ts, byte[] regionStartKey, byte[] regionEndKey) throws IOException {
         byte[] indexRowKey = this.buildRowKey(oldState, dataRowKeyPtr, regionStartKey, regionEndKey);
         // Delete the entire row if any of the indexed columns changed
-        if (oldState == null || isRowDeleted(pendingUpdates) || hasIndexedColumnChanged(oldState, pendingUpdates)) { // Deleting the entire row
-            Delete delete = new Delete(indexRowKey, ts);
+        DeleteType deleteType = null;
+        if (oldState == null || (deleteType=getDeleteTypeOrNull(pendingUpdates)) != null || hasIndexedColumnChanged(oldState, pendingUpdates)) { // Deleting the entire row
+            Delete delete;
+            // If table delete was single version, then index delete should be as well
+            if (deleteType == DeleteType.SINGLE_VERSION) {
+                delete = new Delete(indexRowKey);
+                for (ColumnReference ref : getAllColumns()) { // FIXME: Keep Set<byte[]> for index CFs?
+                    delete.deleteFamilyVersion(ref.getFamily(), ts);
+                }
+            } else {
+                delete = new Delete(indexRowKey, ts);
+            }
             delete.setDurability(!indexWALDisabled ? Durability.USE_DEFAULT : Durability.SKIP_WAL);
             return delete;
         }
@@ -856,7 +875,12 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                         delete = new Delete(indexRowKey);                    
                         delete.setDurability(!indexWALDisabled ? Durability.USE_DEFAULT : Durability.SKIP_WAL);
                     }
-                    delete.deleteColumns(ref.getFamily(), IndexUtil.getIndexColumnName(ref.getFamily(), ref.getQualifier()), ts);
+                    // If point delete for data table, then use point delete for index as well
+                    if (kv.getTypeByte() == KeyValue.Type.DeleteColumn.getCode()) {
+                        delete.deleteColumn(ref.getFamily(), IndexUtil.getIndexColumnName(ref.getFamily(), ref.getQualifier()), ts);
+                    } else {
+                        delete.deleteColumns(ref.getFamily(), IndexUtil.getIndexColumnName(ref.getFamily(), ref.getQualifier()), ts);
+                    }
                 }
             }
         }
