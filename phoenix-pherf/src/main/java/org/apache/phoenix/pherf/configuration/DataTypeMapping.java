@@ -28,6 +28,7 @@ public enum DataTypeMapping {
     DATE("DATE", Types.DATE);
 
     private final String sType;
+
     private final int dType;
 
     private DataTypeMapping(String sType, int dType) {
@@ -40,7 +41,7 @@ public enum DataTypeMapping {
         return this.sType;
     }
 
-    public int getType() {
-        return this.dType;
+    public int getdType() {
+        return dType;
     }
 }

@@ -119,6 +119,7 @@ public class XMLConfigParser {
     }
 
     // TODO Remove static calls
+    @SuppressWarnings("unused")
     public static void writeDataModel(DataModel data, OutputStream output) throws JAXBException {
         // create JAXB context and initializing Marshaller
         JAXBContext jaxbContext = JAXBContext.newInstance(DataModel.class);

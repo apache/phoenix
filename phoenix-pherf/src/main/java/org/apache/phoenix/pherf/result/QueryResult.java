@@ -33,6 +33,7 @@ public class QueryResult extends Query {
         return this.threadTimes;
     }
 
+    @SuppressWarnings("unused")
     public synchronized void setThreadTimes(List<ThreadTime> threadTimes) {
         this.threadTimes = threadTimes;
     }
@@ -46,6 +47,7 @@ public class QueryResult extends Query {
         this.setId(query.getId());
     }
 
+    @SuppressWarnings("unused")
     public QueryResult() {
     }
 

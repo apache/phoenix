@@ -18,15 +18,17 @@
 
 package org.apache.phoenix.pherf.result;
 
-import org.apache.phoenix.pherf.result.file.ResultFileDetails;
-
 import java.util.List;
+
+import org.apache.phoenix.pherf.result.file.ResultFileDetails;
 
 /**
  * Common container for Pherf results.
  */
 public class Result {
     private final List<ResultValue> resultValues;
+
+    // Placeholder for future work
     private final ResultFileDetails type;
     private final String header;
 
@@ -50,5 +52,9 @@ public class Result {
 
     public String getHeader() {
         return header;
+    }
+
+    public ResultFileDetails getType() {
+        return type;
     }
 }

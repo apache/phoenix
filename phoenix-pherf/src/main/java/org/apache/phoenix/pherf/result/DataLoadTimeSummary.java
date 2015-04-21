@@ -31,11 +31,6 @@ public class DataLoadTimeSummary {
 	public void add(String tableName, int rowCount, int durationInMs) {
 		tableLoadTime.add(new TableLoadTime(tableName, rowCount, durationInMs));
 	}
-
-	public void setTableLoadTime(List<TableLoadTime> tableLoadTime) {
-		this.tableLoadTime = tableLoadTime;
-	}
-
 }
 
 class TableLoadTime {
@@ -62,23 +57,11 @@ class TableLoadTime {
 		return durationInMs;
 	}
 
-	public void setDurationInMs(int durationInMs) {
-		this.durationInMs = durationInMs;
-	}
-
 	public String getTableName() {
 		return tableName;
 	}
 
-	public void setTableName(String tableName) {
-		this.tableName = tableName;
-	}
-
 	public int getRowCount() {
 		return rowCount;
-	}
-
-	public void setRowCount(int rowCount) {
-		this.rowCount = rowCount;
 	}
 }

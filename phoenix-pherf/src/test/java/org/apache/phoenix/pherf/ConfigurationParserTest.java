@@ -62,7 +62,8 @@ public class ConfigurationParserTest {
         assertNotNull("Test data XML file is missing", resourceUrl);
 
 		try {
-//            writeXML();
+
+            logger.debug("DataModel: " + writeXML());
 			Path resourcePath = Paths.get(resourceUrl.toURI());
             DataModel data = XMLConfigParser.readDataModel(resourcePath);
             List<Scenario> scenarioList = data.getScenarios();
@@ -138,7 +139,8 @@ public class ConfigurationParserTest {
     /*
         Used for debugging to dump out a simple xml filed based on the bound objects.
      */
-	private void writeXML() {
+	private String writeXML() {
+        DataModel data = new DataModel();
         try {
             DataValue dataValue = new DataValue();
             dataValue.setDistribution(20);
@@ -154,7 +156,6 @@ public class ConfigurationParserTest {
             List<Column> columnList = new ArrayList<>();
             columnList.add(column);
 
-            DataModel data = new DataModel();
             data.setRelease("192");
             data.setDataMappingColumns(columnList);
 
@@ -196,5 +197,6 @@ public class ConfigurationParserTest {
             // some exception occured
             e.printStackTrace();
         }
+        return data.toString();
     }
 }

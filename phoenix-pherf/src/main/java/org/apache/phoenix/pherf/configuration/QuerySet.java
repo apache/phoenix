@@ -40,7 +40,8 @@ public class QuerySet {
 		return query;
 	}
 
-	public void setQuery(List<Query> query) {
+    @SuppressWarnings("unused")
+    public void setQuery(List<Query> query) {
 		this.query = query;
 	}
 
@@ -126,5 +127,14 @@ public class QuerySet {
 
 	public void setExecutionDurationInMs(long executionDurationInMs) {
 		this.executionDurationInMs = executionDurationInMs;
-	}	
+	}
+
+    @Override
+    public String toString() {
+        StringBuilder stringBuilder = new StringBuilder();
+        for (Query q : query) {
+            stringBuilder.append(q.getStatement() + ",");
+        }
+        return stringBuilder.toString();
+    }
 }

@@ -51,6 +51,7 @@ public class MonitorManager implements Runnable {
     private volatile boolean shouldStop = false;
     private volatile boolean isRunning = false;
 
+    @SuppressWarnings("unused")
     public MonitorManager() throws Exception {
         this(PherfConstants.MONITOR_FREQUENCY);
     }

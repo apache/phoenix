@@ -33,6 +33,7 @@ public class ThreadTime {
         return this.runTimesInMs;
     }
 
+    @SuppressWarnings("unused")
     public synchronized void setRunTimesInMs(List<RunTime> runTimesInMs) {
         this.runTimesInMs = runTimesInMs;
     }
