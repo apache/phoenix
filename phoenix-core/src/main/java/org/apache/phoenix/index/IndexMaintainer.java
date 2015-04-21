@@ -819,7 +819,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         	Cell newValue = newState.get(ref);
         	if (newValue != null) { // Indexed column has potentially changed
         	    ImmutableBytesWritable oldValue = oldState.getLatestValue(ref);
-        		boolean newValueSetAsNull = newValue.getTypeByte() == Type.DeleteColumn.getCode();
+        		boolean newValueSetAsNull = (newValue.getTypeByte() == Type.DeleteColumn.getCode() || newValue.getTypeByte() == Type.Delete.getCode());
         		//If the new column value has to be set as null and the older value is null too,
         		//then just skip to the next indexed column.
         		if (newValueSetAsNull && oldValue == null) {
@@ -876,7 +876,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                         delete.setDurability(!indexWALDisabled ? Durability.USE_DEFAULT : Durability.SKIP_WAL);
                     }
                     // If point delete for data table, then use point delete for index as well
-                    if (kv.getTypeByte() == KeyValue.Type.DeleteColumn.getCode()) {
+                    if (kv.getTypeByte() == KeyValue.Type.Delete.getCode()) {
                         delete.deleteColumn(ref.getFamily(), IndexUtil.getIndexColumnName(ref.getFamily(), ref.getQualifier()), ts);
                     } else {
                         delete.deleteColumns(ref.getFamily(), IndexUtil.getIndexColumnName(ref.getFamily(), ref.getQualifier()), ts);
