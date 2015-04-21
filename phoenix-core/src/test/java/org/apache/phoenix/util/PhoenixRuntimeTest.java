@@ -28,6 +28,7 @@ import static org.junit.Assert.fail;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
+import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.util.ArrayList;
 import java.util.List;
@@ -39,6 +40,7 @@ import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.types.PDataType;
 import org.junit.Test;
@@ -213,4 +215,77 @@ public class PhoenixRuntimeTest extends BaseConnectionlessQueryTest {
             // Expected
         }
     }
+    
+    @Test
+    public void testTableNameWithoutSchema() throws Exception {
+        String tableName = "tableName";
+        String tableNameNormalized = tableName.toUpperCase(); 
+        
+        getTableTester(tableNameNormalized, tableName);
+    }
+
+    @Test
+    public void testTableNameWithSchema() throws Exception {
+        String tableName = "tableName";
+        String schemaName = "schemaName";
+        String fullName = schemaName + "." + tableName;
+        String fullNameNormalized = fullName.toUpperCase(); 
+        
+        getTableTester(fullNameNormalized, fullName);
+    }
+    
+    @Test
+    public void testCaseSensitiveTableNameWithoutSchema() throws Exception {
+        String caseSensitiveTableName = "tableName"; 
+        
+        getTableTester(caseSensitiveTableName, quoteString(caseSensitiveTableName));
+    }
+    
+    @Test
+    public void testCaseSensitiveTableNameWithSchema() throws Exception {
+        String caseSensitiveTableName = "tableName"; 
+        String schemaName = "schemaName";
+        String fullNameNormalized = schemaName.toUpperCase() + "." + caseSensitiveTableName;
+        String fullNameQuoted = schemaName + "." + quoteString(caseSensitiveTableName);
+        
+        getTableTester(fullNameNormalized, fullNameQuoted);
+    }
+    
+    @Test
+    public void testCaseSensitiveTableNameWithCaseSensitiveSchema() throws Exception {
+        String caseSensitiveTableName = "tableName";
+        String caseSensitiveSchemaName = "schemaName";
+        String fullName = caseSensitiveSchemaName + "." + caseSensitiveTableName;
+        String fullNameQuoted = quoteString(caseSensitiveSchemaName) + "." + quoteString(caseSensitiveTableName);
+        
+        getTableTester(fullName, fullNameQuoted);
+    }
+
+    @Test
+    public void testCaseSensitiveTableNameWithCaseSensitiveSchemaWithPeriod() throws Exception {
+        String caseSensitiveTableName = "tableName";
+        String caseSensitiveSchemaName = "schema.Name";
+        String fullName = caseSensitiveSchemaName + "." + caseSensitiveTableName;
+        String fullNameQuoted = quoteString(caseSensitiveSchemaName) + "." + quoteString(caseSensitiveTableName);
+        
+        getTableTester(fullName, fullNameQuoted);
+    }
+    
+    private void getTableTester(String normalizedName, String sqlStatementName) throws SQLException {
+        Connection conn = DriverManager.getConnection(getUrl());
+        try {
+            conn.createStatement().execute("CREATE TABLE " + sqlStatementName + " (k VARCHAR PRIMARY KEY)");
+            PTable aTable = PhoenixRuntime.getTable(conn, normalizedName);
+            assertNotNull(aTable);
+        } finally {
+            if (null != conn) {
+                conn.createStatement().execute("DROP TABLE IF EXISTS " + sqlStatementName);
+            }
+        }
+    }
+    
+    private String quoteString(String string) {
+        return "\"" + string + "\"";
+    }
+
 }
