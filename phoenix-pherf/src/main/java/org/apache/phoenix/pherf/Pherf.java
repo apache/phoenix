@@ -116,7 +116,6 @@ public class Pherf {
         }
         PhoenixUtil.setZookeeper(zookeeper);
         PhoenixUtil.setRowCountOverride(rowCountOverride);
-        PhoenixUtil.writeSfdcClientProperty();
     }
 
     public static void main(String[] args) {
