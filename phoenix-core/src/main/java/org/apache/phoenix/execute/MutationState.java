@@ -184,7 +184,7 @@ public class MutationState implements SQLCloseable {
             ImmutableBytesPtr key = rowEntry.getKey();
             PRow row = tableRef.getTable().newRow(connection.getKeyValueBuilder(), timestamp, key);
             List<Mutation> rowMutations, rowMutationsPertainingToIndex;
-            if (rowEntry.getValue() == PRow.DELETE_MARKER) { // means delete
+            if (rowEntry.getValue().getColumnValues() == PRow.DELETE_MARKER) { // means delete
                 row.delete();
                 rowMutations = row.toRowMutations();
                 // Row deletes for index tables are processed by running a re-written query
