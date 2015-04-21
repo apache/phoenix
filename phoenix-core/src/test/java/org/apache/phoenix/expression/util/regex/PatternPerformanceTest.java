@@ -63,7 +63,10 @@ public class PatternPerformanceTest {
             String name) {
         timer.reset();
         for (int i = 0; i < maxTimes; ++i) {
-            pattern.replaceAll(dataPtr[i % 3], replacePtr, resultPtr);
+            ImmutableBytesWritable ptr = dataPtr[i % 3];
+            resultPtr.set(ptr.get(), ptr.getOffset(), ptr.getLength());
+            pattern.replaceAll(resultPtr, replacePtr.get(), replacePtr.getOffset(),
+                replacePtr.getLength());
             if (ENABLE_ASSERT) {
                 String result = (String) PVarchar.INSTANCE.toObject(resultPtr);
                 assertTrue((i % 3 == 1 && ":".equals(result))
@@ -83,7 +86,9 @@ public class PatternPerformanceTest {
     private void testLike(AbstractBasePattern pattern, String name) {
         timer.reset();
         for (int i = 0; i < maxTimes; ++i) {
-            pattern.matches(dataPtr[i % 3], resultPtr);
+            ImmutableBytesWritable ptr = dataPtr[i % 3];
+            resultPtr.set(ptr.get(), ptr.getOffset(), ptr.getLength());
+            pattern.matches(resultPtr);
             if (ENABLE_ASSERT) {
                 Boolean b = (Boolean) PBoolean.INSTANCE.toObject(resultPtr);
                 assertTrue(i % 3 != 2 || b.booleanValue());
@@ -120,7 +125,9 @@ public class PatternPerformanceTest {
     private void testSplit(AbstractBaseSplitter pattern, String name) throws SQLException {
         timer.reset();
         for (int i = 0; i < maxTimes; ++i) {
-            boolean ret = pattern.split(dataPtr[i % 3], resultPtr);
+            ImmutableBytesWritable ptr = dataPtr[i % 3];
+            resultPtr.set(ptr.get(), ptr.getOffset(), ptr.getLength());
+            boolean ret = pattern.split(resultPtr);
             if (ENABLE_ASSERT) {
                 PhoenixArray array = (PhoenixArray) PVarcharArray.INSTANCE.toObject(resultPtr);
                 assertTrue(ret && (i % 3 != 1 || ((String[]) array.getArray()).length == 2));
