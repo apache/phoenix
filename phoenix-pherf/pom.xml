@@ -27,7 +27,6 @@
 
     <artifactId>pherf</artifactId>
     <packaging>jar</packaging>
-    <!--<version>1.0-SNAPSHOT</version>-->
     <name>Phoenix - Pherf</name>
 
     <properties>
@@ -58,8 +57,6 @@
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-surefire-plugin</artifactId>
                         <configuration>
-                            <!-- Some tests require a cluster to be up. Disable them by default until we fix that problem -->
-                            <skipTests>true</skipTests>
                             <systemPropertyVariables>
                                 <java.util.logging.config.file>${logging.location}</java.util.logging.config.file>
                                 <app.home>${project.basedir}</app.home>
