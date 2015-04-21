@@ -113,7 +113,7 @@ public class GlobalIndexOptimizationIT extends BaseHBaseManagedTimeIT {
                     "    SKIP-SCAN-JOIN TABLE 0\n" +
                     "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + TestUtil.DEFAULT_INDEX_TABLE_NAME + " \\['a'\\]\n" +
                     "            SERVER FILTER BY FIRST KEY ONLY\n" +
-                    "    DYNAMIC SERVER FILTER BY \\(\"T_ID\", \"K1\", \"K2\"\\) IN \\(\\(\\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+\\)\\)";
+                    "    DYNAMIC SERVER FILTER BY \\(\"T.T_ID\", \"T.K1\", \"T.K2\"\\) IN \\(\\(\\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+\\)\\)";
             String actual = QueryUtil.getExplainPlan(rs);
             assertTrue("Expected:\n" + expected + "\nbut got\n" + actual, Pattern.matches(expected, actual));
             
@@ -138,7 +138,7 @@ public class GlobalIndexOptimizationIT extends BaseHBaseManagedTimeIT {
                     "    SKIP-SCAN-JOIN TABLE 0\n" +
                     "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + TestUtil.DEFAULT_INDEX_TABLE_NAME + " \\['a'\\]\n" +
                     "            SERVER FILTER BY FIRST KEY ONLY\n" +
-                    "    DYNAMIC SERVER FILTER BY \\(\"T_ID\", \"K1\", \"K2\"\\) IN \\(\\(\\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+\\)\\)";
+                    "    DYNAMIC SERVER FILTER BY \\(\"T.T_ID\", \"T.K1\", \"T.K2\"\\) IN \\(\\(\\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+\\)\\)";
             actual = QueryUtil.getExplainPlan(rs);
             assertTrue("Expected:\n" + expected + "\nbut got\n" + actual, Pattern.matches(expected, actual));
             
@@ -163,12 +163,12 @@ public class GlobalIndexOptimizationIT extends BaseHBaseManagedTimeIT {
             expected = 
                     "CLIENT PARALLEL \\d-WAY FULL SCAN OVER " + TestUtil.DEFAULT_DATA_TABLE_NAME + "\n" +
                     "    SERVER FILTER BY K3 > 1\n" +
-                    "    SERVER SORTED BY \\[V1, T_ID\\]\n" +
+                    "    SERVER SORTED BY \\[T.V1, T.T_ID\\]\n" +
                     "CLIENT MERGE SORT\n" +
                     "    SKIP-SCAN-JOIN TABLE 0\n" +
                     "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + TestUtil.DEFAULT_INDEX_TABLE_NAME + " \\[\\*\\] - \\['z'\\]\n" +
                     "            SERVER FILTER BY FIRST KEY ONLY\n" +
-                    "    DYNAMIC SERVER FILTER BY \\(\"T_ID\", \"K1\", \"K2\"\\) IN \\(\\(\\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+\\)\\)";
+                    "    DYNAMIC SERVER FILTER BY \\(\"T.T_ID\", \"T.K1\", \"T.K2\"\\) IN \\(\\(\\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+\\)\\)";
             actual = QueryUtil.getExplainPlan(rs);
             assertTrue("Expected:\n" + expected + "\nbut got\n" + actual, Pattern.matches(expected, actual));
             
@@ -198,20 +198,16 @@ public class GlobalIndexOptimizationIT extends BaseHBaseManagedTimeIT {
             
             expected = 
                     "CLIENT PARALLEL \\d-WAY FULL SCAN OVER " + TestUtil.DEFAULT_DATA_TABLE_NAME + "\n" +
-                            "    SERVER AGGREGATE INTO DISTINCT ROWS BY \\[T_ID, V1, K3\\]\n" +
+                            "    SERVER AGGREGATE INTO DISTINCT ROWS BY \\[T.V1, T.T_ID, T.K3\\]\n" +
                             "CLIENT MERGE SORT\n" +
                             "    SKIP-SCAN-JOIN TABLE 0\n" +
                             "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + TestUtil.DEFAULT_INDEX_TABLE_NAME + " \\[\\*\\] - \\['z'\\]\n" +
                             "            SERVER FILTER BY FIRST KEY ONLY\n" +
-                            "    DYNAMIC SERVER FILTER BY \\(\"T_ID\", \"K1\", \"K2\"\\) IN \\(\\(\\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+\\)\\)";
+                            "    DYNAMIC SERVER FILTER BY \\(\"T.T_ID\", \"T.K1\", \"T.K2\"\\) IN \\(\\(\\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+\\)\\)";
             actual = QueryUtil.getExplainPlan(rs);
             assertTrue("Expected:\n" + expected + "\nbut got\n" + actual, Pattern.matches(expected, actual));
             
             rs = conn1.createStatement().executeQuery(query);
-            assertTrue(rs.next());
-            assertEquals("b", rs.getString("t_id"));;
-            assertEquals(4, rs.getInt("k3"));
-            assertEquals("z", rs.getString("V1"));
             assertTrue(rs.next());
             assertEquals("f", rs.getString("t_id"));
             assertEquals(3, rs.getInt("k3"));
@@ -224,6 +220,10 @@ public class GlobalIndexOptimizationIT extends BaseHBaseManagedTimeIT {
             assertEquals("q", rs.getString("t_id"));
             assertEquals(1, rs.getInt("k3"));
             assertEquals("c", rs.getString("V1"));
+            assertTrue(rs.next());
+            assertEquals("b", rs.getString("t_id"));;
+            assertEquals(4, rs.getInt("k3"));
+            assertEquals("z", rs.getString("V1"));
             assertFalse(rs.next());
             
             query = "SELECT /*+ INDEX(" + TestUtil.DEFAULT_DATA_TABLE_NAME + " " + TestUtil.DEFAULT_INDEX_TABLE_NAME + ")*/ v1,sum(k3) from " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME + " where v1 <='z'  group by v1 order by v1";
@@ -231,13 +231,12 @@ public class GlobalIndexOptimizationIT extends BaseHBaseManagedTimeIT {
             rs = conn1.createStatement().executeQuery("EXPLAIN " + query);
             expected = 
                     "CLIENT PARALLEL \\d-WAY FULL SCAN OVER T\n" +
-                            "    SERVER AGGREGATE INTO DISTINCT ROWS BY \\[V1\\]\n" +
+                            "    SERVER AGGREGATE INTO DISTINCT ROWS BY \\[T.V1\\]\n" +
                             "CLIENT MERGE SORT\n" +
-                            "CLIENT SORTED BY \\[V1\\]\n" +
                             "    SKIP-SCAN-JOIN TABLE 0\n" +
                             "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER I \\[\\*\\] - \\['z'\\]\n" +
                             "            SERVER FILTER BY FIRST KEY ONLY\n" +
-                            "    DYNAMIC SERVER FILTER BY \\(\"T_ID\", \"K1\", \"K2\"\\) IN \\(\\(\\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+\\)\\)";
+                            "    DYNAMIC SERVER FILTER BY \\(\"T.T_ID\", \"T.K1\", \"T.K2\"\\) IN \\(\\(\\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+\\)\\)";
             actual = QueryUtil.getExplainPlan(rs);
             assertTrue("Expected:\n" + expected + "\nbut got\n" + actual, Pattern.matches(expected, actual));
             
@@ -275,7 +274,7 @@ public class GlobalIndexOptimizationIT extends BaseHBaseManagedTimeIT {
                             "    SKIP-SCAN-JOIN TABLE 0\n" +
                             "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER I \\['tid1','a'\\]\n" +
                             "            SERVER FILTER BY FIRST KEY ONLY\n" +
-                            "    DYNAMIC SERVER FILTER BY \\(\"K1\", \"K2\"\\) IN \\(\\(\\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+\\)\\)";
+                            "    DYNAMIC SERVER FILTER BY \\(\"T.K1\", \"T.K2\"\\) IN \\(\\(\\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+\\)\\)";
             assertTrue("Expected:\n" + expected + "\ndid not match\n" + actual, Pattern.matches(expected, actual));
             
             rs = conn1.createStatement().executeQuery(query);
@@ -323,7 +322,7 @@ public class GlobalIndexOptimizationIT extends BaseHBaseManagedTimeIT {
                     "    SKIP-SCAN-JOIN TABLE 0\n" +
                     "        CLIENT PARALLEL 1-WAY SKIP SCAN ON 2 KEYS OVER _IDX_T \\[-32768,1\\] - \\[-32768,2\\]\n" +
                     "            SERVER FILTER BY FIRST KEY ONLY AND \"K2\" IN \\(3,4\\)\n" +
-                    "    DYNAMIC SERVER FILTER BY \\(\"T_ID\", \"K1\", \"K2\"\\) IN \\(\\(\\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+\\)\\)";
+                    "    DYNAMIC SERVER FILTER BY \\(\"V.T_ID\", \"V.K1\", \"V.K2\"\\) IN \\(\\(\\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+\\)\\)";
             assertTrue("Expected:\n" + expected + "\ndid not match\n" + actual, Pattern.matches(expected,actual));
             
             rs = conn1.createStatement().executeQuery(query);

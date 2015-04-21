@@ -957,4 +957,92 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
         assertTrue(rs.next());
         assertEquals(1.333333333, rs.getDouble(1), 0.001);
     }
+
+    @Test
+    public void testFloatingPointUpsert() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String ddl = "CREATE TABLE test (id VARCHAR not null primary key, name VARCHAR, lat FLOAT)";
+        conn.createStatement().execute(ddl);
+        String dml = "UPSERT INTO test(id,name,lat) VALUES ('testid', 'testname', -1.00)";
+        conn.createStatement().execute(dml);
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery("SELECT lat FROM test");
+        assertTrue(rs.next());
+        assertEquals(-1.0f, rs.getFloat(1), 0.001);
+    }
+
+    @Test
+    public void testFloatingPointMultiplicationUpsert() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String ddl = "CREATE TABLE test (id VARCHAR not null primary key, name VARCHAR, lat FLOAT)";
+        conn.createStatement().execute(ddl);
+        String dml = "UPSERT INTO test(id,name,lat) VALUES ('testid', 'testname', -1.00 * 1)";
+        conn.createStatement().execute(dml);
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery("SELECT lat FROM test");
+        assertTrue(rs.next());
+        assertEquals(-1.0f, rs.getFloat(1), 0.001);
+    }
+    
+    @Test
+    public void testSystemTableHasDoubleForExponentialNumber() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String ddl = "CREATE TABLE test (id VARCHAR not null primary key, num FLOAT)";
+        conn.createStatement().execute(ddl);
+        String dml = "UPSERT INTO test(id,num) VALUES ('testid', 1.2E3)";
+        conn.createStatement().execute(dml);
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery("SELECT 1.2E3 FROM SYSTEM.CATALOG LIMIT 1");
+        assertTrue(rs.next());
+        assertTrue(rs.getObject(1) instanceof Double);
+    }
+    
+    @Test
+    public void testFloatingPointWithExponentialNotation() throws Exception {
+    	Float[] expected = {1.5E7f, 1.5E-7f, -1.5E-7f, 12E-5f, -.12E+34f};
+    	String[] values = {"1.5e7", "1.5e-7", "-1.5e-7", "12E-5", "-.12E+34"};
+        ResultSet rs = createTableWithValues(values, "FLOAT");
+        for (int i = 0; i < expected.length; i++) {
+        	assertEquals(expected[i], rs.getFloat(i+1), 0.001);
+        }
+    }
+    
+    @Test
+    public void testDoubleWithExponentialNotation() throws Exception {
+    	Double[] expected = {1.5E7d, 1.5E-7d, -1.5E-7d, 12E-5d, -.654E-321d, .1234E+56d};
+    	String[] values = {"1.5e7", "1.5e-7", "-1.5e-7", "12E-5", "-.654E-321", ".1234E+56"};
+    	ResultSet rs = createTableWithValues(values, "DOUBLE");
+        for (int i = 0; i < expected.length; i++) {
+        	assertEquals(expected[i], rs.getDouble(i+1), 0.001);
+        }
+    }
+    
+    private ResultSet createTableWithValues(String[] values, String valueType) throws SQLException {
+    	Connection conn = DriverManager.getConnection(getUrl());
+        StringBuilder ddl = new StringBuilder("CREATE TABLE test (id VARCHAR not null primary key");
+        StringBuilder dmll = new StringBuilder("UPSERT INTO test(id,");
+        StringBuilder dmlr = new StringBuilder(") VALUES ('testid'");
+        StringBuilder select = new StringBuilder("SELECT");
+        for(int i = 0; i < values.length; i++) {
+        	ddl.append(", num").append(i).append(" ").append(valueType);
+        	dmll.append("num").append(i).append(",");
+        	dmlr.append(", ").append(values[i]);
+        	select.append(" num").append(i).append(",");
+        }
+        ddl.append(")");
+        dmlr.append(")");
+        dmll.deleteCharAt(dmll.length()-1);
+        select.deleteCharAt(select.length()-1);
+        select.append(" FROM test");
+        conn.createStatement().execute(ddl.toString());
+        conn.createStatement().execute(dmll.toString() + dmlr.toString());
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery(select.toString());
+        rs.next();
+        return rs;
+    }
 }

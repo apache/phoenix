@@ -27,6 +27,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -40,20 +41,25 @@ import java.util.Properties;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.aggregator.Aggregator;
 import org.apache.phoenix.expression.aggregator.CountAggregator;
 import org.apache.phoenix.expression.aggregator.ServerAggregators;
 import org.apache.phoenix.expression.function.TimeUnit;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnAlreadyExistsException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
-import org.apache.phoenix.schema.ConstraintViolationException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.util.ByteUtil;
@@ -1414,7 +1420,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         try {
             stmt.execute();
             fail();
-        } catch (ConstraintViolationException e) {
+        } catch (SQLException e) {
             assertTrue(e.getMessage().contains("Primary key may not be null"));
         }
     }
@@ -1447,8 +1453,8 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         conn.createStatement().execute("CREATE TABLE t (k1 varchar, k2 varchar, v varchar, constraint pk primary key(k1,k2))");
         ResultSet rs;
         String[] queries = {
-                "SELECT DISTINCT v FROM T ORDER BY v LIMIT 3",
-                "SELECT v FROM T GROUP BY v,k1 ORDER BY v LIMIT 3",
+//                "SELECT DISTINCT v FROM T ORDER BY v LIMIT 3",
+//                "SELECT v FROM T GROUP BY v,k1 ORDER BY v LIMIT 3",
                 "SELECT DISTINCT count(*) FROM T GROUP BY k1 LIMIT 3",
                 "SELECT count(1) FROM T GROUP BY v,k1 LIMIT 3",
                 "SELECT max(v) FROM T GROUP BY k1,k2 HAVING count(k1) > 1 LIMIT 3",
@@ -1458,7 +1464,8 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         for (int i = 0; i < queries.length; i++) {
             query = queries[i];
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-            assertFalse("Did not expected to find GROUP BY limit optimization in: " + query, QueryUtil.getExplainPlan(rs).contains(" LIMIT 3 GROUPS"));
+            String explainPlan = QueryUtil.getExplainPlan(rs);
+            assertFalse("Did not expected to find GROUP BY limit optimization in: " + query, explainPlan.contains(" LIMIT 3 GROUPS"));
         }
     }
     
@@ -1565,5 +1572,225 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             stmt.close();
         }
     }
+    
+    @Test
+    public void testRegex() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        Statement stmt = conn.createStatement();
+        stmt.execute("CREATE TABLE t (k1 INTEGER PRIMARY KEY, v VARCHAR)");
+        
+        //character classes
+        stmt.executeQuery("select * from T where REGEXP_SUBSTR(v, '[abc]') = 'val'");
+        stmt.executeQuery("select * from T where REGEXP_SUBSTR(v, '[^abc]') = 'val'");
+        stmt.executeQuery("select * from T where REGEXP_SUBSTR(v, '[a-zA-Z]') = 'val'");
+        stmt.executeQuery("select * from T where REGEXP_SUBSTR(v, '[a-d[m-p]]') = 'val'");
+        stmt.executeQuery("select * from T where REGEXP_SUBSTR(v, '[a-z&&[def]]') = 'val'");
+        stmt.executeQuery("select * from T where REGEXP_SUBSTR(v, '[a-z&&[^bc]]') = 'val'");
+        stmt.executeQuery("select * from T where REGEXP_SUBSTR(v, '[a-z&&[^m-p]]') = 'val'");
+        
+        // predefined character classes
+        stmt.executeQuery("select * from T where REGEXP_SUBSTR(v, '.\\\\d\\\\D\\\\s\\\\S\\\\w\\\\W') = 'val'");
+    }
+    
+    private static void assertLiteralEquals(Object o, RowProjector p, int i) {
+        assertTrue(i < p.getColumnCount());
+        Expression e = p.getColumnProjector(i).getExpression();
+        assertTrue(e instanceof LiteralExpression);
+        LiteralExpression l = (LiteralExpression)e;
+        Object lo = l.getValue();
+        assertEquals(o, lo);
+    }
+    
+    @Test
+    public void testIntAndLongMinValue() throws Exception {
+        BigDecimal oneLessThanMinLong = BigDecimal.valueOf(Long.MIN_VALUE).subtract(BigDecimal.ONE);
+        BigDecimal oneMoreThanMaxLong = BigDecimal.valueOf(Long.MAX_VALUE).add(BigDecimal.ONE);
+        String query = "SELECT " + 
+            Integer.MIN_VALUE + "," + Long.MIN_VALUE + "," + 
+            (Integer.MIN_VALUE+1) + "," + (Long.MIN_VALUE+1) + "," + 
+            ((long)Integer.MIN_VALUE - 1) + "," + oneLessThanMinLong + "," +
+            Integer.MAX_VALUE + "," + Long.MAX_VALUE + "," +
+            (Integer.MAX_VALUE - 1) + "," + (Long.MAX_VALUE - 1) + "," +
+            ((long)Integer.MAX_VALUE + 1) + "," + oneMoreThanMaxLong +
+        " FROM " + PhoenixDatabaseMetaData.SYSTEM_STATS_NAME + " LIMIT 1";
+        List<Object> binds = Collections.emptyList();
+        QueryPlan plan = getQueryPlan(query, binds);
+        RowProjector p = plan.getProjector();
+        // Negative integers end up as longs once the * -1 occurs
+        assertLiteralEquals((long)Integer.MIN_VALUE, p, 0);
+        // Min long still stays as long
+        assertLiteralEquals(Long.MIN_VALUE, p, 1);
+        assertLiteralEquals((long)Integer.MIN_VALUE + 1, p, 2);
+        assertLiteralEquals(Long.MIN_VALUE + 1, p, 3);
+        assertLiteralEquals((long)Integer.MIN_VALUE - 1, p, 4);
+        // Can't fit into long, so becomes BigDecimal
+        assertLiteralEquals(oneLessThanMinLong, p, 5);
+        // Positive integers stay as ints
+        assertLiteralEquals(Integer.MAX_VALUE, p, 6);
+        assertLiteralEquals(Long.MAX_VALUE, p, 7);
+        assertLiteralEquals(Integer.MAX_VALUE - 1, p, 8);
+        assertLiteralEquals(Long.MAX_VALUE - 1, p, 9);
+        assertLiteralEquals((long)Integer.MAX_VALUE + 1, p, 10);
+        assertLiteralEquals(oneMoreThanMaxLong, p, 11);
+    }
 
+   
+    @Test
+    public void testOrderByOrderPreservingFwd() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute("CREATE TABLE t (k1 date not null, k2 date not null, k3 date not null, v varchar, constraint pk primary key(k1,k2,k3))");
+        String[] queries = {
+                "SELECT * FROM T ORDER BY (k1,k2), k3",
+                "SELECT * FROM T ORDER BY k1,k2,k3",
+                "SELECT * FROM T ORDER BY k1,k2",
+                "SELECT * FROM T ORDER BY k1",
+                "SELECT * FROM T ORDER BY CAST(k1 AS TIMESTAMP)",
+                "SELECT * FROM T ORDER BY (k1,k2,k3)",
+                "SELECT * FROM T ORDER BY TRUNC(k1, 'DAY'), CEIL(k2, 'HOUR')",
+                "SELECT * FROM T ORDER BY INVERT(k1) DESC",
+                };
+        String query;
+        for (int i = 0; i < queries.length; i++) {
+            query = queries[i];
+            QueryPlan plan = conn.createStatement().unwrap(PhoenixStatement.class).compileQuery(query);
+            assertTrue("Expected order by to be compiled out: " + query, plan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+        }
+    }
+    
+    @Test
+    public void testOrderByOrderPreservingRev() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute("CREATE TABLE t (k1 date not null, k2 date not null, k3 date not null, v varchar, constraint pk primary key(k1,k2 DESC,k3))");
+        String[] queries = {
+                "SELECT * FROM T ORDER BY INVERT(k1),k2",
+                "SELECT * FROM T ORDER BY INVERT(k1)",
+                 "SELECT * FROM T ORDER BY TRUNC(k1, 'DAY') DESC, CEIL(k2, 'HOUR') DESC",
+                "SELECT * FROM T ORDER BY k1 DESC",
+                };
+        String query;
+        for (int i = 0; i < queries.length; i++) {
+            query = queries[i];
+            QueryPlan plan = conn.createStatement().unwrap(PhoenixStatement.class).compileQuery(query);
+            assertTrue("Expected order by to be compiled out: " + query, plan.getOrderBy() == OrderBy.REV_ROW_KEY_ORDER_BY);
+        }
+    }
+    
+    @Test
+    public void testNotOrderByOrderPreserving() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute("CREATE TABLE t (k1 date not null, k2 date not null, k3 date not null, v varchar, constraint pk primary key(k1,k2,k3))");
+        String[] queries = {
+                "SELECT * FROM T ORDER BY k1,k3",
+                "SELECT * FROM T ORDER BY SUBSTR(TO_CHAR(k1),1,4)",
+                "SELECT * FROM T ORDER BY k2",
+                "SELECT * FROM T ORDER BY INVERT(k1),k3",
+                "SELECT * FROM T ORDER BY CASE WHEN k1 = CURRENT_DATE() THEN 0 ELSE 1 END",
+                "SELECT * FROM T ORDER BY TO_CHAR(k1)",
+                };
+        String query;
+        for (int i = 0; i < queries.length; i++) {
+            query = queries[i];
+            QueryPlan plan = conn.createStatement().unwrap(PhoenixStatement.class).compileQuery(query);
+            assertFalse("Expected order by not to be compiled out: " + query, plan.getOrderBy().getOrderByExpressions().isEmpty());
+        }
+    }
+    
+    @Test
+    public void testGroupByOrderPreserving() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute("CREATE TABLE t (k1 date not null, k2 date not null, k3 date not null, v varchar, constraint pk primary key(k1,k2,k3))");
+        String[] queries = {
+                "SELECT 1 FROM T GROUP BY k3, (k1,k2)",
+                "SELECT 1 FROM T GROUP BY k2,k1,k3",
+                "SELECT 1 FROM T GROUP BY k1,k2",
+                "SELECT 1 FROM T GROUP BY k1",
+                "SELECT 1 FROM T GROUP BY CAST(k1 AS TIMESTAMP)",
+                "SELECT 1 FROM T GROUP BY (k1,k2,k3)",
+                "SELECT 1 FROM T GROUP BY TRUNC(k2, 'DAY'), CEIL(k1, 'HOUR')",
+                };
+        String query;
+        for (int i = 0; i < queries.length; i++) {
+            query = queries[i];
+            QueryPlan plan = conn.createStatement().unwrap(PhoenixStatement.class).compileQuery(query);
+            assertTrue("Expected group by to be order preserving: " + query, plan.getGroupBy().isOrderPreserving());
+        }
+    }
+    
+    @Test
+    public void testNotGroupByOrderPreserving() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute("CREATE TABLE t (k1 date not null, k2 date not null, k3 date not null, v varchar, constraint pk primary key(k1,k2,k3))");
+        String[] queries = {
+                "SELECT 1 FROM T GROUP BY k1,k3",
+                "SELECT 1 FROM T GROUP BY k2",
+                "SELECT 1 FROM T GROUP BY INVERT(k1),k3",
+                "SELECT 1 FROM T GROUP BY CASE WHEN k1 = CURRENT_DATE() THEN 0 ELSE 1 END",
+                "SELECT 1 FROM T GROUP BY TO_CHAR(k1)",
+                };
+        String query;
+        for (int i = 0; i < queries.length; i++) {
+            query = queries[i];
+            QueryPlan plan = conn.createStatement().unwrap(PhoenixStatement.class).compileQuery(query);
+            assertFalse("Expected group by not to be order preserving: " + query, plan.getGroupBy().isOrderPreserving());
+        }
+    }
+    
+    @Test
+    public void testUseRoundRobinIterator() throws Exception {
+        Properties props = new Properties();
+        props.setProperty(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.toString(false));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute("CREATE TABLE t (k1 char(2) not null, k2 varchar not null, k3 integer not null, v varchar, constraint pk primary key(k1,k2,k3))");
+        String[] queries = {
+                "SELECT 1 FROM T ",
+                "SELECT 1 FROM T WHERE V = 'c'",
+                "SELECT 1 FROM T WHERE (k1,k2, k3) > ('a', 'ab', 1)",
+                };
+        String query;
+        for (int i = 0; i < queries.length; i++) {
+            query = queries[i];
+            QueryPlan plan = conn.createStatement().unwrap(PhoenixStatement.class).compileQuery(query);
+            assertTrue("Expected plan to use round robin iterator " + query, plan.useRoundRobinIterator());
+        }
+    }
+    
+    @Test
+    public void testForcingRowKeyOrderNotUseRoundRobinIterator() throws Exception {
+        Properties props = new Properties();
+        props.setProperty(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.toString(true));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute("CREATE TABLE t (k1 char(2) not null, k2 varchar not null, k3 integer not null, v varchar, constraint pk primary key(k1,k2,k3))");
+        String[] queries = {
+                "SELECT 1 FROM T ",
+                "SELECT 1 FROM T WHERE V = 'c'",
+                "SELECT 1 FROM T WHERE (k1, k2, k3) > ('a', 'ab', 1)",
+                };
+        String query;
+        for (int i = 0; i < queries.length; i++) {
+            query = queries[i];
+            QueryPlan plan = conn.createStatement().unwrap(PhoenixStatement.class).compileQuery(query);
+            assertFalse("Expected plan to not use round robin iterator " + query, plan.useRoundRobinIterator());
+        }
+    }
+    
+    @Test
+    public void testPlanForOrderByOrGroupByNotUseRoundRobin() throws Exception {
+        Properties props = new Properties();
+        props.setProperty(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.toString(false));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute("CREATE TABLE t (k1 char(2) not null, k2 varchar not null, k3 integer not null, v varchar, constraint pk primary key(k1,k2,k3))");
+        String[] queries = {
+                "SELECT 1 FROM T ORDER BY K1",
+                "SELECT 1 FROM T WHERE V = 'c' ORDER BY K1, K2",
+                "SELECT 1 FROM T WHERE (k1,k2, k3) > ('a', 'ab', 1) ORDER BY V",
+                "SELECT 1 FROM T GROUP BY V",
+                "SELECT 1 FROM T GROUP BY K1, V, K2 ORDER BY V",
+                };
+        String query;
+        for (int i = 0; i < queries.length; i++) {
+            query = queries[i];
+            QueryPlan plan = conn.createStatement().unwrap(PhoenixStatement.class).compileQuery(query);
+            assertFalse("Expected plan to not use round robin iterator " + query, plan.useRoundRobinIterator());
+        }
+    }
 }

@@ -17,8 +17,6 @@
  */
 package org.apache.phoenix.compile;
 
-import static org.apache.phoenix.schema.SaltingUtil.SALTING_COLUMN;
-
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -35,7 +33,6 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
-import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.AndExpression;
 import org.apache.phoenix.expression.CoerceExpression;
 import org.apache.phoenix.expression.Expression;
@@ -67,18 +64,18 @@ import org.apache.phoenix.parse.TableNode;
 import org.apache.phoenix.parse.TableNodeVisitor;
 import org.apache.phoenix.parse.TableWildcardParseNode;
 import org.apache.phoenix.parse.WildcardParseNode;
-import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
+import org.apache.phoenix.schema.LocalIndexDataColumnRef;
 import org.apache.phoenix.schema.MetaDataEntityNotFoundException;
 import org.apache.phoenix.schema.PColumn;
-import org.apache.phoenix.schema.PColumnImpl;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.ProjectedColumn;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
@@ -95,8 +92,7 @@ import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
-import com.google.common.collect.ArrayListMultimap;
-import com.google.common.collect.ListMultimap;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 
@@ -692,7 +688,7 @@ public class JoinCompiler {
             if (isSubselect())
                 return SubselectRewriter.applyOrderBy(SubselectRewriter.applyPostFilters(subselect, preFilters, tableNode.getAlias()), orderBy, tableNode.getAlias());
 
-            return NODE_FACTORY.select(tableNode, select.getHint(), false, selectNodes, getPreFiltersCombined(), null, null, orderBy, null, 0, false, select.hasSequence());
+            return NODE_FACTORY.select(tableNode, select.getHint(), false, selectNodes, getPreFiltersCombined(), null, null, orderBy, null, 0, false, select.hasSequence(), Collections.<SelectStatement>emptyList());
         }
 
         public boolean hasFilters() {
@@ -722,24 +718,19 @@ public class JoinCompiler {
             }
         }
 
-        public ProjectedPTableWrapper createProjectedTable(boolean retainPKColumns, StatementContext context) throws SQLException {
+        public PTable createProjectedTable(boolean retainPKColumns, StatementContext context) throws SQLException {
             assert(!isSubselect());
-            List<PColumn> projectedColumns = new ArrayList<PColumn>();
-            List<Expression> sourceExpressions = new ArrayList<Expression>();
-            ListMultimap<String, String> columnNameMap = ArrayListMultimap.<String, String>create();
+            List<ColumnRef> sourceColumns = new ArrayList<ColumnRef>();
             PTable table = tableRef.getTable();
-            boolean hasSaltingColumn = retainPKColumns && table.getBucketNum() != null;
             if (retainPKColumns) {
                 for (PColumn column : table.getPKColumns()) {
-                    addProjectedColumn(projectedColumns, sourceExpressions, columnNameMap,
-                            column, column.getFamilyName(), hasSaltingColumn, false, context);
+                    sourceColumns.add(new ColumnRef(tableRef, column.getPosition()));
                 }
             }
             if (isWildCardSelect()) {
                 for (PColumn column : table.getColumns()) {
                     if (!retainPKColumns || !SchemaUtil.isPKColumn(column)) {
-                        addProjectedColumn(projectedColumns, sourceExpressions, columnNameMap,
-                                column, PNameFactory.newName(TupleProjector.VALUE_COLUMN_FAMILY), hasSaltingColumn, false, context);
+                        sourceColumns.add(new ColumnRef(tableRef, column.getPosition()));
                     }
                 }
             } else {
@@ -748,76 +739,27 @@ public class JoinCompiler {
                     if (e.getValue() != ColumnRefType.PREFILTER
                             && columnRef.getTableRef().equals(tableRef)
                             && (!retainPKColumns || !SchemaUtil.isPKColumn(columnRef.getColumn()))) {
-                        PColumn column = columnRef.getColumn();
-                        addProjectedColumn(projectedColumns, sourceExpressions, columnNameMap,
-                                column, PNameFactory.newName(TupleProjector.VALUE_COLUMN_FAMILY), hasSaltingColumn,
-                                columnRef instanceof LocalIndexColumnRef, context);
+                        if (columnRef instanceof LocalIndexColumnRef) {
+                            sourceColumns.add(new LocalIndexDataColumnRef(context, IndexUtil.getIndexColumnName(columnRef.getColumn())));
+                        } else {
+                            sourceColumns.add(columnRef);
+                        }
                     }
                 }
             }
 
-            PTable t = PTableImpl.makePTable(table.getTenantId(), PNameFactory.newName(PROJECTED_TABLE_SCHEMA), table.getName(), PTableType.JOIN,
-                        table.getIndexState(), table.getTimeStamp(), table.getSequenceNumber(), table.getPKName(),
-                        retainPKColumns ? table.getBucketNum() : null, projectedColumns, table.getParentSchemaName(),
-                        table.getParentTableName(), table.getIndexes(), table.isImmutableRows(), Collections.<PName>emptyList(), null, null,
-                        table.isWALDisabled(), table.isMultiTenant(), table.getStoreNulls(), table.getViewType(), table.getViewIndexId(),
-                        table.getIndexType());
-            return new ProjectedPTableWrapper(t, columnNameMap, sourceExpressions);
+            return TupleProjectionCompiler.createProjectedTable(tableRef, sourceColumns, retainPKColumns);
         }
 
-        private void addProjectedColumn(List<PColumn> projectedColumns, List<Expression> sourceExpressions,
-                ListMultimap<String, String> columnNameMap, PColumn sourceColumn, PName familyName, boolean hasSaltingColumn,
-                boolean isLocalIndexColumnRef, StatementContext context)
-        throws SQLException {
-            if (sourceColumn == SALTING_COLUMN)
-                return;
-
-            int position = projectedColumns.size() + (hasSaltingColumn ? 1 : 0);
-            PTable table = tableRef.getTable();
-            String schemaName = table.getSchemaName().getString();
-            String tableName = table.getTableName().getString();
-            String colName = isLocalIndexColumnRef ? IndexUtil.getIndexColumnName(sourceColumn) : sourceColumn.getName().getString();
-            String fullName = getProjectedColumnName(schemaName, tableName, colName);
-            String aliasedName = tableRef.getTableAlias() == null ? fullName : getProjectedColumnName(null, tableRef.getTableAlias(), colName);
-
-            columnNameMap.put(colName, aliasedName);
-            if (!fullName.equals(aliasedName)) {
-                columnNameMap.put(fullName, aliasedName);
-            }
-
-            PName name = PNameFactory.newName(aliasedName);
-            PColumnImpl column = new PColumnImpl(name, familyName, sourceColumn.getDataType(),
-                    sourceColumn.getMaxLength(), sourceColumn.getScale(), sourceColumn.isNullable(),
-                    position, sourceColumn.getSortOrder(), sourceColumn.getArraySize(), sourceColumn.getViewConstant(), sourceColumn.isViewReferenced(), sourceColumn.getExpressionStr());
-            Expression sourceExpression = isLocalIndexColumnRef ?
-                      NODE_FACTORY.column(TableName.create(schemaName, tableName), "\"" + colName + "\"", null).accept(new ExpressionCompiler(context))
-                    : new ColumnRef(tableRef, sourceColumn.getPosition()).newColumnExpression();
-            projectedColumns.add(column);
-            sourceExpressions.add(sourceExpression);
-        }
-
-        public ProjectedPTableWrapper createProjectedTable(RowProjector rowProjector) throws SQLException {
+        public PTable createProjectedTable(RowProjector rowProjector) throws SQLException {
             assert(isSubselect());
-            List<PColumn> projectedColumns = new ArrayList<PColumn>();
-            List<Expression> sourceExpressions = new ArrayList<Expression>();
-            ListMultimap<String, String> columnNameMap = ArrayListMultimap.<String, String>create();
+            TableRef tableRef = FromCompiler.getResolverForCompiledDerivedTable(statement.getConnection(), this.tableRef, rowProjector).getTables().get(0);
+            List<ColumnRef> sourceColumns = new ArrayList<ColumnRef>();
             PTable table = tableRef.getTable();
             for (PColumn column : table.getColumns()) {
-                String colName = getProjectedColumnName(null, tableRef.getTableAlias(), column.getName().getString());
-                Expression sourceExpression = rowProjector.getColumnProjector(column.getPosition()).getExpression();
-                PColumnImpl projectedColumn = new PColumnImpl(PNameFactory.newName(colName), PNameFactory.newName(TupleProjector.VALUE_COLUMN_FAMILY),
-                        sourceExpression.getDataType(), sourceExpression.getMaxLength(), sourceExpression.getScale(), sourceExpression.isNullable(),
-                        column.getPosition(), sourceExpression.getSortOrder(), column.getArraySize(), column.getViewConstant(), column.isViewReferenced(), column.getExpressionStr());
-                projectedColumns.add(projectedColumn);
-                sourceExpressions.add(sourceExpression);
+                sourceColumns.add(new ColumnRef(tableRef, column.getPosition()));
             }
-            PTable t = PTableImpl.makePTable(table.getTenantId(), PNameFactory.newName(PROJECTED_TABLE_SCHEMA), table.getName(), PTableType.JOIN,
-                        table.getIndexState(), table.getTimeStamp(), table.getSequenceNumber(), table.getPKName(),
-                        null, projectedColumns, table.getParentSchemaName(),
-                        table.getParentTableName(), table.getIndexes(), table.isImmutableRows(), Collections.<PName>emptyList(), null, null,
-                        table.isWALDisabled(), table.isMultiTenant(), table.getStoreNulls(), table.getViewType(),
-                        table.getViewIndexId(), table.getIndexType());
-            return new ProjectedPTableWrapper(t, columnNameMap, sourceExpressions);
+            return TupleProjectionCompiler.createProjectedTable(tableRef, sourceColumns, false);
         }
     }
 
@@ -1120,7 +1062,6 @@ public class JoinCompiler {
         }
     }
 
-    private static final String PROJECTED_TABLE_SCHEMA = ".";
     // for creation of new statements
     private static final ParseNodeFactory NODE_FACTORY = new ParseNodeFactory();
 
@@ -1215,7 +1156,7 @@ public class JoinCompiler {
         }
         JoinTable join = compile(statement, select, resolver);
         if (groupByTableRef != null || orderByTableRef != null) {
-            QueryCompiler compiler = new QueryCompiler(statement, select, resolver);
+            QueryCompiler compiler = new QueryCompiler(statement, select, resolver, false);
             List<Object> binds = statement.getParameters();
             StatementContext ctx = new StatementContext(statement, resolver, new Scan(), new SequenceManager(statement));
             QueryPlan plan = compiler.compileJoinQuery(ctx, binds, join, false, false, null);
@@ -1326,150 +1267,37 @@ public class JoinCompiler {
         String tableAlias = tableRef.getTableAlias();
         TableNode from = NODE_FACTORY.namedTable(tableAlias == null ? null : '"' + tableAlias + '"', tName, dynamicCols);
 
-        return NODE_FACTORY.select(from, hintNode, false, selectList, where, groupBy, null, orderBy, null, 0, groupBy != null, hasSequence);
+        return NODE_FACTORY.select(from, hintNode, false, selectList, where, groupBy, null, orderBy, null, 0, groupBy != null, hasSequence, Collections.<SelectStatement>emptyList());
     }
 
-    public class PTableWrapper {
-    	protected PTable table;
-    	protected ListMultimap<String, String> columnNameMap;
-
-    	protected PTableWrapper(PTable table, ListMultimap<String, String> columnNameMap) {
-    		this.table = table;
-    		this.columnNameMap = columnNameMap;
-    	}
-
-    	public PTable getTable() {
-    		return table;
-    	}
-
-    	public ListMultimap<String, String> getColumnNameMap() {
-    		return columnNameMap;
-    	}
-
-    	public List<String> getMappedColumnName(String name) {
-    		return columnNameMap.get(name);
-    	}
-
-        public ColumnResolver createColumnResolver() {
-            return new JoinedTableColumnResolver(this, origResolver);
-        }
-
-        public PTableWrapper mergeProjectedTables(PTableWrapper rWrapper, JoinType type) throws SQLException {
-            PTable left = this.getTable();
-            PTable right = rWrapper.getTable();
-            List<PColumn> merged = Lists.<PColumn> newArrayList();
-            if (type != JoinType.Full) {
-                merged.addAll(left.getColumns());
-            } else {
-                for (PColumn c : left.getColumns()) {
-                    if (SchemaUtil.isPKColumn(c)) {
-                        merged.add(c);
-                    } else {
-                        PColumnImpl column = new PColumnImpl(c.getName(), c.getFamilyName(), c.getDataType(),
-                                c.getMaxLength(), c.getScale(), true, c.getPosition(),
-                                c.getSortOrder(), c.getArraySize(), c.getViewConstant(), c.isViewReferenced(), c.getExpressionStr());
-                        merged.add(column);
-                    }
-                }
+    public static PTable joinProjectedTables(PTable left, PTable right, JoinType type) throws SQLException {
+        Preconditions.checkArgument(left.getType() == PTableType.PROJECTED);
+        Preconditions.checkArgument(right.getType() == PTableType.PROJECTED);
+        List<PColumn> merged = Lists.<PColumn> newArrayList();
+        if (type == JoinType.Full) {
+            for (PColumn c : left.getColumns()) {
+                merged.add(new ProjectedColumn(c.getName(), c.getFamilyName(),
+                        c.getPosition(), true, ((ProjectedColumn) c).getSourceColumnRef()));
             }
-            int position = merged.size();
-            for (PColumn c : right.getColumns()) {
-                if (!SchemaUtil.isPKColumn(c)) {
-                    PColumnImpl column = new PColumnImpl(c.getName(),
-                            PNameFactory.newName(TupleProjector.VALUE_COLUMN_FAMILY), c.getDataType(),
-                            c.getMaxLength(), c.getScale(), type == JoinType.Inner ? c.isNullable() : true, position++,
-                            c.getSortOrder(), c.getArraySize(), c.getViewConstant(), c.isViewReferenced(), c.getExpressionStr());
-                    merged.add(column);
-                }
+        } else {
+            merged.addAll(left.getColumns());
+        }
+        int position = merged.size();
+        for (PColumn c : right.getColumns()) {
+            if (!SchemaUtil.isPKColumn(c)) {
+                PColumn column = new ProjectedColumn(c.getName(), c.getFamilyName(), 
+                        position++, type == JoinType.Inner ? c.isNullable() : true, 
+                        ((ProjectedColumn) c).getSourceColumnRef());
+                merged.add(column);
             }
-            if (left.getBucketNum() != null) {
-                merged.remove(0);
-            }
-            PTable t = PTableImpl.makePTable(left.getTenantId(), left.getSchemaName(),
-                    PNameFactory.newName(SchemaUtil.getTableName(left.getName().getString(), right.getName().getString())), left.getType(), left.getIndexState(), left.getTimeStamp(), left.getSequenceNumber(), left.getPKName(), left.getBucketNum(), merged,
-                    left.getParentSchemaName(), left.getParentTableName(), left.getIndexes(), left.isImmutableRows(), Collections.<PName>emptyList(), null, null, PTable.DEFAULT_DISABLE_WAL, left.isMultiTenant(), left.getStoreNulls(), left.getViewType(), left.getViewIndexId(), left.getIndexType());
-
-            ListMultimap<String, String> mergedMap = ArrayListMultimap.<String, String>create();
-            mergedMap.putAll(this.getColumnNameMap());
-            mergedMap.putAll(rWrapper.getColumnNameMap());
-
-            return new PTableWrapper(t, mergedMap);
         }
-    }
-
-    public class ProjectedPTableWrapper extends PTableWrapper {
-    	private List<Expression> sourceExpressions;
-
-    	protected ProjectedPTableWrapper(PTable table, ListMultimap<String, String> columnNameMap, List<Expression> sourceExpressions) {
-    		super(table, columnNameMap);
-    		this.sourceExpressions = sourceExpressions;
-    	}
-
-    	public Expression getSourceExpression(PColumn column) {
-    		return sourceExpressions.get(column.getPosition() - (table.getBucketNum() == null ? 0 : 1));
-    	}
-
-        public TupleProjector createTupleProjector() {
-            return new TupleProjector(this);
+        if (left.getBucketNum() != null) {
+            merged.remove(0);
         }
-    }
-
-    public static class JoinedTableColumnResolver implements ColumnResolver {
-    	private PTableWrapper table;
-    	private ColumnResolver tableResolver;
-    	private TableRef tableRef;
-
-    	private JoinedTableColumnResolver(PTableWrapper table, ColumnResolver tableResolver) {
-    		this.table = table;
-    		this.tableResolver = tableResolver;
-            this.tableRef = new TableRef(ParseNodeFactory.createTempAlias(), table.getTable(), 0, false);
-    	}
-
-        public PTableWrapper getPTableWrapper() {
-            return table;
-        }
-
-        public TableRef getTableRef() {
-            return tableRef;
-        }
-
-		@Override
-		public List<TableRef> getTables() {
-			return tableResolver.getTables();
-		}
-
-        @Override
-        public TableRef resolveTable(String schemaName, String tableName)
-                throws SQLException {
-            return tableResolver.resolveTable(schemaName, tableName);
-        }
-
-		@Override
-		public ColumnRef resolveColumn(String schemaName, String tableName,
-				String colName) throws SQLException {
-			String name = getProjectedColumnName(schemaName, tableName, colName);
-			try {
-				PColumn column = tableRef.getTable().getColumn(name);
-				return new ColumnRef(tableRef, column.getPosition());
-			} catch (ColumnNotFoundException e) {
-				List<String> names = table.getMappedColumnName(name);
-				if (names.size() == 1) {
-					PColumn column = tableRef.getTable().getColumn(names.get(0));
-					return new ColumnRef(tableRef, column.getPosition());
-				}
-
-				if (names.size() > 1) {
-					throw new AmbiguousColumnException(name);
-				}
-
-				throw e;
-			}
-		}
-    }
-
-    private static String getProjectedColumnName(String schemaName, String tableName,
-			String colName) {
-    	return SchemaUtil.getColumnName(SchemaUtil.getTableName(schemaName, tableName), colName);
+        
+        return PTableImpl.makePTable(left.getTenantId(), left.getSchemaName(),
+                PNameFactory.newName(SchemaUtil.getTableName(left.getName().getString(), right.getName().getString())), left.getType(), left.getIndexState(), left.getTimeStamp(), left.getSequenceNumber(), left.getPKName(), left.getBucketNum(), merged,
+                left.getParentSchemaName(), left.getParentTableName(), left.getIndexes(), left.isImmutableRows(), Collections.<PName>emptyList(), null, null, PTable.DEFAULT_DISABLE_WAL, left.isMultiTenant(), left.getStoreNulls(), left.getViewType(), left.getViewIndexId(), left.getIndexType());
     }
 
 }

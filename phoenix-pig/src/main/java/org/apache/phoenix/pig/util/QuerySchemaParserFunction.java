@@ -59,7 +59,7 @@ public class QuerySchemaParserFunction implements Function<String,Pair<String,St
         Preconditions.checkArgument(!selectStatement.isEmpty(), "Select Query is empty!!");
         Connection connection = null;
         try {
-            connection = ConnectionUtil.getConnection(this.configuration);
+            connection = ConnectionUtil.getInputConnection(this.configuration);
             final Statement  statement = connection.createStatement();
             final PhoenixStatement pstmt = statement.unwrap(PhoenixStatement.class);
             final QueryPlan queryPlan = pstmt.compileQuery(selectStatement);

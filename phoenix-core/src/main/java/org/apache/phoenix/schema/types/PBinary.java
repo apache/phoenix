@@ -23,7 +23,7 @@ import java.text.Format;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Base64;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.exception.ValueTypeIncompatibleException;
+import org.apache.phoenix.exception.DataExceedsCapacityException;
 import org.apache.phoenix.schema.SortOrder;
 
 public class PBinary extends PDataType<byte[]> {
@@ -35,7 +35,7 @@ public class PBinary extends PDataType<byte[]> {
   }
 
   @Override
-  public void pad(ImmutableBytesWritable ptr, Integer maxLength) {
+  public void pad(ImmutableBytesWritable ptr, Integer maxLength, SortOrder sortOrder) {
     if (ptr.getLength() >= maxLength) {
       return;
     }
@@ -54,7 +54,7 @@ public class PBinary extends PDataType<byte[]> {
       return object;
     }
     if (b.length > maxLength) {
-      throw new ValueTypeIncompatibleException(this, maxLength, null);
+      throw new DataExceedsCapacityException(this, maxLength, null);
     }
     byte[] newBytes = new byte[maxLength];
     System.arraycopy(b, 0, newBytes, 0, b.length);

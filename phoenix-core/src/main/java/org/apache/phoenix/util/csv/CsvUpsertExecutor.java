@@ -144,6 +144,11 @@ public class CsvUpsertExecutor implements Closeable {
      */
     void execute(CSVRecord csvRecord) {
         try {
+            if (csvRecord.size() < conversionFunctions.size()) {
+                String message = String.format("CSV record does not have enough values (has %d, but needs %d)",
+                        csvRecord.size(), conversionFunctions.size());
+                throw new IllegalArgumentException(message);
+            }
             for (int fieldIndex = 0; fieldIndex < conversionFunctions.size(); fieldIndex++) {
                 Object sqlValue = conversionFunctions.get(fieldIndex).apply(csvRecord.get(fieldIndex));
                 if (sqlValue != null) {

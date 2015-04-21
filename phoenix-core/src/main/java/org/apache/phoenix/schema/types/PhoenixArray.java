@@ -29,11 +29,16 @@ import org.apache.phoenix.util.SQLCloseable;
  * java.sql.Array implementation for Phoenix
  */
 public class PhoenixArray implements Array,SQLCloseable {
+	private static final String TO_STRING_SEPARATOR = ", ";
+	private static final String TO_STRING_END = "]";
+	private static final String TO_STRING_BEGIN = "[";
+	
 	PDataType baseType;
 	Object array;
 	int numElements;
 	Integer maxLength;
-  protected int hashCode = Integer.MIN_VALUE;
+	protected int hashCode = Integer.MIN_VALUE;
+
 	public PhoenixArray() {
 		// empty constructor
 	}
@@ -227,6 +232,23 @@ public class PhoenixArray implements Array,SQLCloseable {
 		return this.baseType.toBytes(((Object[])array)[pos]);
 	}
 	
+    @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder(TO_STRING_BEGIN);
+        boolean isFirst = true;
+        for (int i = 0; i < getDimensions(); i++) {
+            Object o = getElement(i);
+            if (isFirst) {
+                isFirst = false;
+            } else {
+                sb.append(TO_STRING_SEPARATOR);
+            }
+            sb.append(this.baseType.toStringLiteral(o));
+        }
+        sb.append(TO_STRING_END);
+        return sb.toString();
+    }
+	
 	public boolean isNull(int pos) {
 	    if(this.baseType.toBytes(((Object[])array)[pos]).length == 0) {
 	        return true;
@@ -263,18 +285,19 @@ public class PhoenixArray implements Array,SQLCloseable {
 		public PrimitiveIntPhoenixArray(PDataType dataType, Object[] elements) {
 			super(dataType, elements);
 		}
+
 		@Override
-		public Object convertObjectArrayToPrimitiveArray(Object[] elements) {
-			intArr = new int[elements.length];
-			int i = 0;
-			for(Object o : elements) {
-			    if (o != null) {
-			        intArr[i] = (Integer)o;
-			    }
-			    i++;
-			}
-      return intArr;
-		}
+        public Object convertObjectArrayToPrimitiveArray(Object[] elements) {
+            intArr = new int[elements.length];
+            int i = 0;
+            for (Object o : elements) {
+                if (o != null) {
+                    intArr[i] = (Integer) o;
+                }
+                i++;
+            }
+            return intArr;
+        }
 		
 		@Override
         public int estimateByteSize(int pos) {
@@ -340,7 +363,7 @@ public class PhoenixArray implements Array,SQLCloseable {
         public byte[] toBytes(int pos) {
 			return this.baseType.toBytes(shortArr[pos]);
 		}
-		
+
 		@Override
 		public boolean equals(Object obj) {
       if (obj == null) return false;
@@ -394,7 +417,7 @@ public class PhoenixArray implements Array,SQLCloseable {
         public byte[] toBytes(int pos) {
 			return this.baseType.toBytes(longArr[pos]);
 		}
-		
+
 		@Override
 		public boolean equals(Object obj) {
       if (obj == null) return false;
@@ -449,7 +472,7 @@ public class PhoenixArray implements Array,SQLCloseable {
         public byte[] toBytes(int pos) {
 			return this.baseType.toBytes(doubleArr[pos]);
 		}
-		
+
 		@Override
 		public boolean equals(Object obj) {
       if (obj == null) return false;
@@ -504,7 +527,7 @@ public class PhoenixArray implements Array,SQLCloseable {
         public byte[] toBytes(int pos) {
 			return this.baseType.toBytes(floatArr[pos]);
 		}
-		
+
 		@Override
 		public boolean equals(Object obj) {
       if (obj == null) return false;
@@ -592,18 +615,25 @@ public class PhoenixArray implements Array,SQLCloseable {
 		public PrimitiveBooleanPhoenixArray(PDataType dataType, Object[] elements) {
 			super(dataType, elements);
 		}
+
 		@Override
-		public Object convertObjectArrayToPrimitiveArray(Object[] elements) {
-			booleanArr = new boolean[elements.length];
-			int i = 0;
-            for(Object o : elements) {
+		public boolean isPrimitiveType() {
+	        // boolean is primitive although PBoolean has no codec
+		    return true;
+		}
+		
+        @Override
+        public Object convertObjectArrayToPrimitiveArray(Object[] elements) {
+            booleanArr = new boolean[elements.length];
+            int i = 0;
+            for (Object o : elements) {
                 if (o != null) {
-                    booleanArr[i] = (Boolean)o;
+                    booleanArr[i] = (Boolean) o;
                 }
                 i++;
             }
-      return booleanArr;
-		}
+            return booleanArr;
+        }
 		
 		@Override
         public int estimateByteSize(int pos) {

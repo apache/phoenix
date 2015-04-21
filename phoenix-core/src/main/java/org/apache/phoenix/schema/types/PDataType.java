@@ -503,6 +503,7 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
   public final static Integer LONG_PRECISION = 19;
   public final static Integer SHORT_PRECISION = 5;
   public final static Integer BYTE_PRECISION = 3;
+  public final static Integer DOUBLE_PRECISION = 15;
 
   public static final int ARRAY_TYPE_BASE = 3000;
   public static final String ARRAY_TYPE_SUFFIX = "ARRAY";
@@ -1094,12 +1095,19 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
     return toStringLiteral(o, formatter);
   }
   
-  public String toStringLiteral(Object o, Format formatter) {
-      if (formatter != null) {
-          return formatter.format(o);
+    public String toStringLiteral(Object o, Format formatter) {
+        if (formatter != null) {
+            return formatter.format(o);
+        } else if (null == o) {
+            return String.valueOf(o);
         }
         return o.toString();
-  }
+    }
+
+    public String toStringLiteral(Object o) {
+        // use default formatter when one is unspecified
+        return toStringLiteral(o, null);
+    }
 
   private static final PhoenixArrayFactory DEFAULT_ARRAY_FACTORY = new PhoenixArrayFactory() {
     @Override public PhoenixArray newArray(PDataType type, Object[] elements) {
@@ -1172,7 +1180,7 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
     return object;
   }
 
-  public void pad(ImmutableBytesWritable ptr, Integer maxLength) {
+  public void pad(ImmutableBytesWritable ptr, Integer maxLength, SortOrder sortOrder) {
   }
 
   public static PDataType arrayBaseType(PDataType arrayType) {

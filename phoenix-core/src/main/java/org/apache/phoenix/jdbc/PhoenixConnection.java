@@ -55,6 +55,7 @@ import java.util.concurrent.Executor;
 import javax.annotation.Nullable;
 
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.phoenix.call.CallRunner;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -93,7 +94,8 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
-import org.cloudera.htrace.Sampler;
+import org.apache.htrace.Sampler;
+import org.apache.htrace.TraceScope;
 
 import com.google.common.base.Objects;
 import com.google.common.base.Strings;
@@ -132,11 +134,13 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     private final String timePattern;
     private final String timestampPattern;
     private int statementExecutionCounter;
+    private TraceScope traceScope = null;
     private boolean isClosed = false;
     private Sampler<?> sampler;
     private boolean readOnly = false;
-    private Map<String, String> customTracingAnnotations = emptyMap();
-    
+    private Map<String, String> customTracingAnnotations = emptyMap(); 
+    private Consistency consistency = Consistency.STRONG;
+
     static {
         Tracing.addTraceMetricsSource();
     }
@@ -207,6 +211,9 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
                 this.services.getProps().getBoolean(
                         QueryServices.AUTO_COMMIT_ATTRIB,
                         QueryServicesOptions.DEFAULT_AUTO_COMMIT));
+        this.consistency = JDBCUtil.getConsistencyLevel(url, this.info, this.services.getProps()
+                 .get(QueryServices.CONSISTENCY_ATTRIB,
+                         QueryServicesOptions.DEFAULT_CONSISTENCY_LEVEL));
         this.tenantId = tenantId;
         this.mutateBatchSize = JDBCUtil.getMutateBatchSize(url, this.info, this.services.getProps());
         datePattern = this.services.getProps().get(QueryServices.DATE_FORMAT_ATTRIB, DateUtil.DEFAULT_DATE_FORMAT);
@@ -261,6 +268,10 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         return this.sampler;
     }
     
+    public void setSampler(Sampler<?> sampler) throws SQLException {
+        this.sampler = sampler;
+    }
+
     public Map<String, String> getCustomTracingAnnotations() {
         return customTracingAnnotations;
     }
@@ -416,6 +427,9 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         }
         try {
             try {
+                if (traceScope != null) {
+                    traceScope.close();
+                }
                 closeStatements();
             } finally {
                 services.removeConnection(this);
@@ -507,6 +521,10 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     @Override
     public boolean getAutoCommit() throws SQLException {
         return isAutoCommit;
+    }
+
+    public Consistency getConsistency() {
+        return this.consistency;
     }
 
     @Override
@@ -648,9 +666,16 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         this.isAutoCommit = isAutoCommit;
     }
 
+    public void setConsistency(Consistency val) {
+        this.consistency = val;
+    }
+
     @Override
     public void setCatalog(String catalog) throws SQLException {
-        throw new SQLFeatureNotSupportedException();
+        if (!this.getCatalog().equalsIgnoreCase(catalog)) {
+            // allow noop calls to pass through.
+            throw new SQLFeatureNotSupportedException();
+        }
     }
 
     @Override
@@ -800,5 +825,13 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     
     public void incrementStatementExecutionCounter() {
         statementExecutionCounter++;
+    }
+
+    public TraceScope getTraceScope() {
+        return traceScope;
+    }
+
+    public void setTraceScope(TraceScope traceScope) {
+        this.traceScope = traceScope;
     }
 }

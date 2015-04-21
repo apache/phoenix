@@ -106,9 +106,9 @@ public class ProjectedColumnExpression extends ColumnExpression {
         try {
             KeyValueSchema schema = getSchema();
             TupleProjector.decodeProjectedValue(tuple, ptr);
-            int maxOffset = ptr.getOffset() + ptr.getLength();
             bitSet.clear();
             bitSet.or(ptr);
+            int maxOffset = ptr.getOffset() + ptr.getLength() - bitSet.getEstimatedLength();
             schema.iterator(ptr, position, bitSet);
             Boolean hasValue = schema.next(ptr, position, maxOffset, bitSet);
             if (hasValue == null || !hasValue.booleanValue())

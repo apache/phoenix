@@ -44,4 +44,5 @@ java_cmd = "java -cp " + hbase_config_path + os.pathsep + phoenix_jar_path + os.
     hbase_library_path + " org.apache.phoenix.end2end.End2EndTestDriver " + \
     ' '.join(sys.argv[1:])
 
-subprocess.call(java_cmd, shell=True)
+exitcode = subprocess.call(java_cmd, shell=True)
+sys.exit(exitcode)

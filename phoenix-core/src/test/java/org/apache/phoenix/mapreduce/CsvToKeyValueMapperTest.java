@@ -17,23 +17,25 @@
  */
 package org.apache.phoenix.mapreduce;
 
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Lists;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+
+import java.io.IOException;
+import java.util.List;
+
 import org.apache.commons.csv.CSVRecord;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PIntegerArray;
 import org.apache.phoenix.schema.types.PUnsignedInt;
 import org.apache.phoenix.util.ColumnInfo;
 import org.junit.Test;
 
-import java.io.IOException;
-import java.util.List;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 
 public class CsvToKeyValueMapperTest {
 
@@ -110,10 +112,10 @@ public class CsvToKeyValueMapperTest {
     @Test
     public void testLoadPreUpdateProcessor() {
         Configuration conf = new Configuration();
-        conf.setClass(CsvToKeyValueMapper.UPSERT_HOOK_CLASS_CONFKEY, MockUpsertProcessor.class,
+        conf.setClass(PhoenixConfigurationUtil.UPSERT_HOOK_CLASS_CONFKEY, MockUpsertProcessor.class,
                 ImportPreUpsertKeyValueProcessor.class);
 
-        ImportPreUpsertKeyValueProcessor processor = CsvToKeyValueMapper.loadPreUpsertProcessor(conf);
+        ImportPreUpsertKeyValueProcessor processor = PhoenixConfigurationUtil.loadPreUpsertProcessor(conf);
         assertEquals(MockUpsertProcessor.class, processor.getClass());
     }
 
@@ -121,7 +123,7 @@ public class CsvToKeyValueMapperTest {
     public void testLoadPreUpdateProcessor_NotConfigured() {
 
         Configuration conf = new Configuration();
-        ImportPreUpsertKeyValueProcessor processor = CsvToKeyValueMapper.loadPreUpsertProcessor(conf);
+        ImportPreUpsertKeyValueProcessor processor = PhoenixConfigurationUtil.loadPreUpsertProcessor(conf);
 
         assertEquals(CsvToKeyValueMapper.DefaultImportPreUpsertKeyValueProcessor.class,
                 processor.getClass());
@@ -130,9 +132,9 @@ public class CsvToKeyValueMapperTest {
     @Test(expected=IllegalStateException.class)
     public void testLoadPreUpdateProcessor_ClassNotFound() {
         Configuration conf = new Configuration();
-        conf.set(CsvToKeyValueMapper.UPSERT_HOOK_CLASS_CONFKEY, "MyUndefinedClass");
+        conf.set(PhoenixConfigurationUtil.UPSERT_HOOK_CLASS_CONFKEY, "MyUndefinedClass");
 
-        CsvToKeyValueMapper.loadPreUpsertProcessor(conf);
+        PhoenixConfigurationUtil.loadPreUpsertProcessor(conf);
     }
 
 

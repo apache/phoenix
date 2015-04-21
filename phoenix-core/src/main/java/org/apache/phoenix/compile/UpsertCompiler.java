@@ -420,11 +420,11 @@ public class UpsertCompiler {
                     // Pass scan through if same table in upsert and select so that projection is computed correctly
                     // Use optimizer to choose the best plan
                     try {
-                        QueryCompiler compiler = new QueryCompiler(statement, select, selectResolver, targetColumns, parallelIteratorFactoryToBe, new SequenceManager(statement));
+                        QueryCompiler compiler = new QueryCompiler(statement, select, selectResolver, targetColumns, parallelIteratorFactoryToBe, new SequenceManager(statement), false);
                         queryPlanToBe = compiler.compile();
                         // This is post-fix: if the tableRef is a projected table, this means there are post-processing 
                         // steps and parallelIteratorFactory did not take effect.
-                        if (queryPlanToBe.getTableRef().getTable().getType() == PTableType.JOIN || queryPlanToBe.getTableRef().getTable().getType() == PTableType.SUBQUERY) {
+                        if (queryPlanToBe.getTableRef().getTable().getType() == PTableType.PROJECTED || queryPlanToBe.getTableRef().getTable().getType() == PTableType.SUBQUERY) {
                             parallelIteratorFactoryToBe = null;
                         }
                     } catch (MetaDataEntityNotFoundException e) {

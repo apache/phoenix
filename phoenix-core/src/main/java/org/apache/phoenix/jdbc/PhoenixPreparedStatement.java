@@ -492,8 +492,7 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
 
     @Override
     public void setTimestamp(int parameterIndex, Timestamp x, Calendar cal) throws SQLException {
-        cal.setTime(x);
-        setParameter(parameterIndex,  DateUtil.getTimestamp(cal.getTimeInMillis(), x.getNanos()));
+        setParameter(parameterIndex,  x);
     }
 
     @Override

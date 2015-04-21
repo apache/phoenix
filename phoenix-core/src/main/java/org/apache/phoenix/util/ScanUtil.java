@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.util;
 
+import static org.apache.phoenix.compile.OrderByCompiler.OrderBy.FWD_ROW_KEY_ORDER_BY;
+import static org.apache.phoenix.compile.OrderByCompiler.OrderBy.REV_ROW_KEY_ORDER_BY;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CUSTOM_ANNOTATIONS;
 
 import java.io.IOException;
@@ -24,6 +26,7 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableSet;
@@ -37,7 +40,9 @@ import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.ScanRanges;
+import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.filter.BooleanExpressionFilter;
@@ -45,13 +50,16 @@ import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.KeyRange.Bound;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
-import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.ValueSchema.Field;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PVarbinary;
 
+import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 
 /**
@@ -642,5 +650,34 @@ public class ScanUtil {
             }
         }
         return tenantId;
+    }
+
+    public static Iterator<Filter> getFilterIterator(Scan scan) {
+        Iterator<Filter> filterIterator;
+        Filter topLevelFilter = scan.getFilter();
+        if (topLevelFilter == null) {
+            filterIterator = Iterators.emptyIterator();
+        } else if (topLevelFilter instanceof FilterList) {
+            filterIterator = ((FilterList) topLevelFilter).getFilters().iterator();
+        } else {
+            filterIterator = Iterators.singletonIterator(topLevelFilter);
+        }
+        return filterIterator;
+    }
+    
+    public static boolean isRoundRobinPossible(OrderBy orderBy, StatementContext context) throws SQLException {
+        int fetchSize  = context.getStatement().getFetchSize();
+        /*
+         * Selecting underlying scanners in a round-robin fashion is possible if there is no ordering of rows needed,
+         * not even row key order. Also no point doing round robin of scanners if fetch size
+         * is 1.
+         */
+        return fetchSize > 1 && !shouldRowsBeInRowKeyOrder(orderBy, context) && orderBy.getOrderByExpressions().isEmpty();
+    }
+    
+    public static boolean shouldRowsBeInRowKeyOrder(OrderBy orderBy, StatementContext context) {
+        boolean forceRowKeyOrder = context.getConnection().getQueryServices().getProps()
+                .getBoolean(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, QueryServicesOptions.DEFAULT_FORCE_ROW_KEY_ORDER);
+        return forceRowKeyOrder || orderBy == FWD_ROW_KEY_ORDER_BY || orderBy == REV_ROW_KEY_ORDER_BY;
     }
 }

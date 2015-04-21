@@ -21,8 +21,9 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
-import org.cloudera.htrace.Span;
-import org.cloudera.htrace.TimelineAnnotation;
+import org.apache.htrace.Span;
+import org.apache.htrace.TimelineAnnotation;
+import org.apache.phoenix.util.StringUtil;
 
 /**
  * Fake {@link Span} that doesn't save any state, in place of <tt>null</tt> return values, to avoid
@@ -108,5 +109,10 @@ public class NullSpan implements Span {
   @Override
   public String getProcessId() {
     return null;
+  }
+
+  @Override
+  public String toJson() {
+    return StringUtil.EMPTY_STRING;
   }
 }

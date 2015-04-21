@@ -32,6 +32,7 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.AndExpression;
 import org.apache.phoenix.expression.ArrayConstructorExpression;
+import org.apache.phoenix.expression.ByteBasedLikeExpression;
 import org.apache.phoenix.expression.CaseExpression;
 import org.apache.phoenix.expression.CoerceExpression;
 import org.apache.phoenix.expression.ComparisonExpression;
@@ -60,6 +61,7 @@ import org.apache.phoenix.expression.NotExpression;
 import org.apache.phoenix.expression.OrExpression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.expression.RowValueConstructorExpression;
+import org.apache.phoenix.expression.StringBasedLikeExpression;
 import org.apache.phoenix.expression.StringConcatExpression;
 import org.apache.phoenix.expression.TimestampAddExpression;
 import org.apache.phoenix.expression.TimestampSubtractExpression;
@@ -100,6 +102,8 @@ import org.apache.phoenix.parse.StringConcatParseNode;
 import org.apache.phoenix.parse.SubqueryParseNode;
 import org.apache.phoenix.parse.SubtractParseNode;
 import org.apache.phoenix.parse.UnsupportedAllParseNodeVisitor;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
@@ -312,9 +316,6 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         children = node.validate(children, context);
         Expression expression = node.create(children, context);
         ImmutableBytesWritable ptr = context.getTempPtr();
-        if (ExpressionUtil.isConstant(expression)) {
-            return ExpressionUtil.getConstantExpression(expression, ptr);
-        }
         BuiltInFunctionInfo info = node.getInfo();
         for (int i = 0; i < info.getRequiredArgCount(); i++) { 
             // Optimization to catch cases where a required argument is null resulting in the function
@@ -326,6 +327,9 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                     return ExpressionUtil.getNullExpression(expression);
                 }
             }
+        }
+        if (ExpressionUtil.isConstant(expression)) {
+            return ExpressionUtil.getConstantExpression(expression, ptr);
         }
         expression = addExpression(expression);
         expression = wrapGroupByExpression(expression);
@@ -497,7 +501,16 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                 }
             }
         }
-        Expression expression = LikeExpression.create(children, node.getLikeType());
+        QueryServices services = context.getConnection().getQueryServices();
+        boolean useByteBasedRegex =
+                services.getProps().getBoolean(QueryServices.USE_BYTE_BASED_REGEX_ATTRIB,
+                    QueryServicesOptions.DEFAULT_USE_BYTE_BASED_REGEX);
+        Expression expression;
+        if (useByteBasedRegex) {
+            expression = ByteBasedLikeExpression.create(children, node.getLikeType());
+        } else {
+            expression = StringBasedLikeExpression.create(children, node.getLikeType());
+        }
         if (ExpressionUtil.isConstant(expression)) {
             ImmutableBytesWritable ptr = context.getTempPtr();
             if (!expression.evaluate(null, ptr)) {
@@ -572,7 +585,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
              * indexed columns. Without this check present we wrongly and unnecessarily
              * end up creating a RoundExpression. 
              */
-            if (context.getResolver().getTables().get(0).getTable().getType() != PTableType.INDEX) {
+            if (context.getCurrentTable().getTable().getType() != PTableType.INDEX) {
                 expr =  convertToRoundExpressionIfNeeded(fromDataType, targetDataType, children);
             }
         }

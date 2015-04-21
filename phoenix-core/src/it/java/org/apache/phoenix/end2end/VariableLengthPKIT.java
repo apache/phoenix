@@ -884,8 +884,8 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         try {
             stmt.execute("upsert into PTSDB(INST,HOST,VAL) VALUES ('abc', 'abc-def-ghi', 0.5)");
             fail();
-        } catch (ConstraintViolationException e) {
-            assertTrue(e.getMessage().contains("may not be null"));
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.CONSTRAINT_VIOLATION.getErrorCode(), e.getErrorCode());
         } finally {
             conn.close();
         }
@@ -1090,7 +1090,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
     @Test
     public void testMultiFixedLengthNull() throws Exception {
         long ts = nextTimestamp();
-        String query = "SELECT B_INTEGER,C_INTEGER,COUNT(1) FROM BTABLE GROUP BY C_INTEGER,B_INTEGER";
+        String query = "SELECT B_INTEGER,C_INTEGER,COUNT(1) FROM BTABLE GROUP BY B_INTEGER,C_INTEGER";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);

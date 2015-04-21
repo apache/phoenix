@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.Map.Entry;
 
 import org.apache.commons.lang.ArrayUtils;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -169,7 +170,8 @@ public class CoveredColumnIndexCodec extends BaseIndexCodec {
   /**
    * Get the next batch of primary table values for the given columns
    * @param refs columns to match against
-   * @param state
+   * @param kvs
+   * @param currentRow
    * @return the total length of all values found and the entries to add for the index
    */
   private Pair<Integer, List<ColumnEntry>> getNextEntries(List<CoveredColumn> refs, Scanner kvs,
@@ -186,7 +188,7 @@ public class CoveredColumnIndexCodec extends BaseIndexCodec {
         continue;
       }
       // there is a next value - we only care about the current value, so we can just snag that
-      KeyValue next = kvs.next();
+      Cell next = kvs.next();
       if (ref.matchesFamily(next.getFamily()) && ref.matchesQualifier(next.getQualifier())) {
         byte[] v = next.getValue();
         totalValueLength += v.length;

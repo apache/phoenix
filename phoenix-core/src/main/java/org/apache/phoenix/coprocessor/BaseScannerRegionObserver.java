@@ -29,6 +29,7 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.Type;
+import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
@@ -37,6 +38,8 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.htrace.Span;
+import org.apache.htrace.Trace;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
@@ -47,11 +50,11 @@ import org.apache.phoenix.schema.KeyValueSchema;
 import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
+import org.apache.phoenix.schema.tuple.ResultTuple;
+import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
-import org.cloudera.htrace.Span;
-import org.cloudera.htrace.Trace;
 
 import com.google.common.collect.ImmutableList;
 
@@ -82,6 +85,8 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
     public static final String EXPECTED_UPPER_REGION_KEY = "_ExpectedUpperRegionKey";
     public static final String REVERSE_SCAN = "_ReverseScan";
     public static final String ANALYZE_TABLE = "_ANALYZETABLE";
+    public static final String GUIDEPOST_WIDTH_BYTES = "_GUIDEPOST_WIDTH_BYTES";
+    public static final String GUIDEPOST_PER_REGION = "_GUIDEPOST_PER_REGION";
     /**
      * Attribute name used to pass custom annotations in Scans and Mutations (later). Custom annotations
      * are used to augment log lines emitted by Phoenix. See https://issues.apache.org/jira/browse/PHOENIX-1198.
@@ -216,9 +221,10 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
             final RegionScanner s, final int offset, final Scan scan,
             final ColumnReference[] dataColumns, final TupleProjector tupleProjector,
             final HRegion dataRegion, final IndexMaintainer indexMaintainer,
-            final byte[][] viewConstants, final ImmutableBytesWritable ptr) {
+            final byte[][] viewConstants, final TupleProjector projector,
+            final ImmutableBytesWritable ptr) {
         return getWrappedScanner(c, s, null, null, offset, scan, dataColumns, tupleProjector,
-                dataRegion, indexMaintainer, viewConstants, null, null, ptr);
+                dataRegion, indexMaintainer, viewConstants, null, null, projector, ptr);
     }
     
     /**
@@ -241,7 +247,8 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
             final ColumnReference[] dataColumns, final TupleProjector tupleProjector,
             final HRegion dataRegion, final IndexMaintainer indexMaintainer,
             final byte[][] viewConstants, final KeyValueSchema kvSchema, 
-            final ValueBitSet kvSchemaBitSet, final ImmutableBytesWritable ptr) {
+            final ValueBitSet kvSchemaBitSet, final TupleProjector projector,
+            final ImmutableBytesWritable ptr) {
         return new RegionScanner() {
 
             @Override
@@ -303,6 +310,11 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
                         IndexUtil.wrapResultUsingOffset(c, result, offset, dataColumns,
                             tupleProjector, dataRegion, indexMaintainer, viewConstants, ptr);
                     }
+                    if (projector != null) {
+                        Tuple tuple = projector.projectResults(new ResultTuple(Result.create(result)));
+                        result.clear();
+                        result.add(tuple.getValue(0));
+                    }
                     // There is a scanattribute set to retrieve the specific array element
                     return next;
                 } catch (Throwable t) {
@@ -324,6 +336,11 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
                     if ((offset > 0 || ScanUtil.isLocalIndex(scan))  && !ScanUtil.isAnalyzeTable(scan)) {
                         IndexUtil.wrapResultUsingOffset(c, result, offset, dataColumns,
                             tupleProjector, dataRegion, indexMaintainer, viewConstants, ptr);
+                    }
+                    if (projector != null) {
+                        Tuple tuple = projector.projectResults(new ResultTuple(Result.create(result)));
+                        result.clear();
+                        result.add(tuple.getValue(0));
                     }
                     // There is a scanattribute set to retrieve the specific array element
                     return next;

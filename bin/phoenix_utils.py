@@ -20,7 +20,6 @@
 ############################################################################
 
 import os
-import sys
 import fnmatch
 
 def find(pattern, classPaths):
@@ -49,7 +48,9 @@ def findFileInPathWithoutRecursion(pattern, path):
     return ""
 
 def setPath():
- PHOENIX_CLIENT_JAR_PATTERN = "phoenix-*-client*.jar"
+ PHOENIX_CLIENT_JAR_PATTERN = "phoenix-*-client.jar"
+ PHOENIX_THIN_CLIENT_JAR_PATTERN = "phoenix-*-thin-client.jar"
+ PHOENIX_QUERYSERVER_JAR_PATTERN = "phoenix-server-*-runnable.jar"
  PHOENIX_TESTS_JAR_PATTERN = "phoenix-core-*-tests*.jar"
  global current_dir
  current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -63,9 +64,19 @@ def setPath():
  hbase_conf_path = os.getenv('HBASE_CONF_PATH','.')
  global testjar
  testjar = find(PHOENIX_TESTS_JAR_PATTERN, phoenix_test_jar_path)
+ global phoenix_queryserver_jar
+ phoenix_queryserver_jar = find(PHOENIX_QUERYSERVER_JAR_PATTERN, os.path.join(current_dir, "..", "phoenix-server", "target", "*"))
+ global phoenix_thin_client_jar
+ phoenix_thin_client_jar = find(PHOENIX_THIN_CLIENT_JAR_PATTERN, os.path.join(current_dir, "..", "phoenix-server-client", "target", "*"))
 
  if phoenix_client_jar == "":
      phoenix_client_jar = findFileInPathWithoutRecursion(PHOENIX_CLIENT_JAR_PATTERN, os.path.join(current_dir, ".."))
+
+ if phoenix_thin_client_jar == "":
+     phoenix_thin_client_jar = findFileInPathWithoutRecursion(PHOENIX_THIN_CLIENT_JAR_PATTERN, os.path.join(current_dir, ".."))
+
+ if phoenix_queryserver_jar == "":
+     phoenix_queryserver_jar = findFileInPathWithoutRecursion(PHOENIX_QUERYSERVER_JAR_PATTERN, os.path.join(current_dir, "..", "lib"))
 
  if testjar == "":
      testjar = findFileInPathWithoutRecursion(PHOENIX_TESTS_JAR_PATTERN, os.path.join(current_dir, ".."))
@@ -83,3 +94,18 @@ def setPath():
      testjar = find(PHOENIX_TESTS_JAR_PATTERN, phoenix_class_path)
 
  return ""
+
+def shell_quote(args):
+    """
+    Return the platform specific shell quoted string. Handles Windows and *nix platforms.
+
+    :param args: array of shell arguments
+    :return: shell quoted string
+    """
+    if os.name == 'nt':
+        import subprocess
+        return subprocess.list2cmdline(args)
+    else:
+        # pipes module isn't available on Windows
+        import pipes
+        return " ".join([pipes.quote(v) for v in args])

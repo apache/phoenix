@@ -65,8 +65,9 @@ import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PTinyint;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
-import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.SQLCloseable;
+
+import com.google.common.annotations.VisibleForTesting;
 
 
 
@@ -652,15 +653,7 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable, org.apache.pho
 
     @Override
     public Timestamp getTimestamp(int columnIndex, Calendar cal) throws SQLException {
-        checkCursorState();
-        Timestamp value = (Timestamp)rowProjector.getColumnProjector(columnIndex-1).getValue(currentRow,
-            PTimestamp.INSTANCE, ptr);
-        wasNull = (value == null);
-        if (value == null) {
-            return null;
-        }
-        cal.setTime(value); //this resets the millisecond part of timestamp according to the time zone of the calendar.
-        return DateUtil.getTimestamp(cal.getTimeInMillis(), value.getNanos());
+        return getTimestamp(columnIndex);
     }
 
     @Override
@@ -1262,5 +1255,10 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable, org.apache.pho
     @Override
     public <T> T getObject(String columnLabel, Class<T> type) throws SQLException {
         return (T) getObject(columnLabel); // Just ignore type since we only support built-in types
+    }
+    
+    @VisibleForTesting
+    public ResultIterator getUnderlyingIterator() {
+        return scanner;
     }
 }

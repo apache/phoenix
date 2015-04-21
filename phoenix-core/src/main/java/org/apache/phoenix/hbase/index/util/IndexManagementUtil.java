@@ -101,46 +101,6 @@ public class IndexManagementUtil {
 
     }
 
-    public static class ReferencingColumn {
-        ImmutableBytesPtr family;
-        ImmutableBytesPtr qual;
-
-        public static ReferencingColumn wrap(ColumnReference ref) {
-            ImmutableBytesPtr family = new ImmutableBytesPtr(ref.getFamily());
-            ImmutableBytesPtr qual = new ImmutableBytesPtr(ref.getQualifier());
-            return new ReferencingColumn(family, qual);
-        }
-
-        public ReferencingColumn(ImmutableBytesPtr family, ImmutableBytesPtr qual) {
-            this.family = family;
-            this.qual = qual;
-        }
-
-        @Override
-        public int hashCode() {
-            final int prime = 31;
-            int result = 1;
-            result = prime * result + ((family == null) ? 0 : family.hashCode());
-            result = prime * result + ((qual == null) ? 0 : qual.hashCode());
-            return result;
-        }
-
-        @Override
-        public boolean equals(Object obj) {
-            if (this == obj) return true;
-            if (obj == null) return false;
-            if (getClass() != obj.getClass()) return false;
-            ReferencingColumn other = (ReferencingColumn)obj;
-            if (family == null) {
-                if (other.family != null) return false;
-            } else if (!family.equals(other.family)) return false;
-            if (qual == null) {
-                if (other.qual != null) return false;
-            } else if (!qual.equals(other.qual)) return false;
-            return true;
-        }
-    }
-
     public static ValueGetter createGetterFromScanner(Scanner scanner, byte[] currentRow) {
         return new LazyValueGetter(scanner, currentRow);
     }

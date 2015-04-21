@@ -17,9 +17,12 @@
  */
 package org.apache.phoenix.iterate;
 
+import static org.apache.phoenix.monitoring.PhoenixMetrics.SizeMetric.PARALLEL_SCANS;
+
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
+import java.util.Queue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 
@@ -34,8 +37,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.Lists;
-
-
 /**
  *
  * Class that parallelizes the scan over a table using the ExecutorService provided.  Each region of the table will be scanned in parallel with
@@ -53,11 +54,11 @@ public class ParallelIterators extends BaseResultIterators {
             throws SQLException {
         super(plan, perScanLimit);
         this.iteratorFactory = iteratorFactory;
-    }
+    }   
 
     @Override
     protected void submitWork(List<List<Scan>> nestedScans, List<List<Pair<Scan,Future<PeekingResultIterator>>>> nestedFutures,
-            final List<PeekingResultIterator> allIterators, int estFlattenedSize) {
+            final Queue<PeekingResultIterator> allIterators, int estFlattenedSize) {
         // Pre-populate nestedFutures lists so that we can shuffle the scans
         // and add the future to the right nested list. By shuffling the scans
         // we get better utilization of the cluster since our thread executor
@@ -78,6 +79,7 @@ public class ParallelIterators extends BaseResultIterators {
         // Shuffle so that we start execution across many machines
         // before we fill up the thread pool
         Collections.shuffle(scanLocations);
+        PARALLEL_SCANS.update(scanLocations.size());
         for (ScanLocator scanLocation : scanLocations) {
             final Scan scan = scanLocation.getScan();
             Future<PeekingResultIterator> future = executor.submit(Tracing.wrap(new JobCallable<PeekingResultIterator>() {

@@ -143,7 +143,7 @@ public class PVarchar extends PDataType<String> {
     if (formatter != null) {
       return "'" + formatter.format(o) + "'";
     }
-    return "'" + StringUtil.escapeStringConstant(o.toString()) + "'";
+    return null == o ? String.valueOf(o) : "'" + StringUtil.escapeStringConstant(o.toString()) + "'";
   }
 
   private char[] sampleChars = new char[1];

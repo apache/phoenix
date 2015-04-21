@@ -17,6 +17,10 @@
  */
 package org.apache.phoenix.jdbc;
 
+import static org.apache.phoenix.monitoring.PhoenixMetrics.CountMetric.MUTATION_COUNT;
+import static org.apache.phoenix.monitoring.PhoenixMetrics.CountMetric.QUERY_COUNT;
+import static org.apache.phoenix.monitoring.PhoenixMetrics.SizeMetric.QUERY_TIME;
+
 import java.io.IOException;
 import java.io.Reader;
 import java.sql.ParameterMetaData;
@@ -30,7 +34,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
+import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.call.CallRunner;
@@ -55,6 +61,7 @@ import org.apache.phoenix.compile.StatementNormalizer;
 import org.apache.phoenix.compile.StatementPlan;
 import org.apache.phoenix.compile.SubqueryRewriter;
 import org.apache.phoenix.compile.SubselectRewriter;
+import org.apache.phoenix.compile.TraceQueryPlan;
 import org.apache.phoenix.compile.UpsertCompiler;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.exception.BatchUpdateExecution;
@@ -67,6 +74,7 @@ import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.parse.AddColumnStatement;
 import org.apache.phoenix.parse.AliasedNode;
 import org.apache.phoenix.parse.AlterIndexStatement;
+import org.apache.phoenix.parse.AlterSessionStatement;
 import org.apache.phoenix.parse.BindableStatement;
 import org.apache.phoenix.parse.ColumnDef;
 import org.apache.phoenix.parse.ColumnName;
@@ -93,6 +101,7 @@ import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.parse.TableNode;
+import org.apache.phoenix.parse.TraceStatement;
 import org.apache.phoenix.parse.UpdateStatisticsStatement;
 import org.apache.phoenix.parse.UpsertStatement;
 import org.apache.phoenix.query.KeyRange;
@@ -120,6 +129,7 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.PhoenixContextExecutor;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
@@ -130,8 +140,6 @@ import org.slf4j.LoggerFactory;
 import com.google.common.base.Throwables;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
-
-
 /**
  * 
  * JDBC Statement implementation of Phoenix.
@@ -222,11 +230,13 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
     }
     
     protected PhoenixResultSet executeQuery(final CompilableStatement stmt) throws SQLException {
+        QUERY_COUNT.increment();
         try {
             return CallRunner.run(
                 new CallRunner.CallableThrowable<PhoenixResultSet, SQLException>() {
                 @Override
                     public PhoenixResultSet call() throws SQLException {
+                    final long startTime = System.currentTimeMillis();
                     try {
                         QueryPlan plan = stmt.compilePlan(PhoenixStatement.this, Sequence.ValueOp.RESERVE_SEQUENCE);
                         plan = connection.getQueryServices().getOptimizer().optimize(
@@ -253,6 +263,11 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
                             throw (SQLException) e.getCause();
                         }
                         throw e;
+                    } finally {
+                        // Regardless of whether the query was successfully handled or not, 
+                        // update the time spent so far. If needed, we can separate out the
+                        // success times and failure times.
+                        QUERY_TIME.update(System.currentTimeMillis() - startTime);
                     }
                 }
                 }, PhoenixContextExecutor.inContext());
@@ -268,6 +283,7 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
                 SQLExceptionCode.READ_ONLY_CONNECTION).
                 build().buildException();
         }
+	    MUTATION_COUNT.increment();
         try {
             return CallRunner
                     .run(
@@ -317,9 +333,15 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
     private static class ExecutableSelectStatement extends SelectStatement implements CompilableStatement {
         private ExecutableSelectStatement(TableNode from, HintNode hint, boolean isDistinct, List<AliasedNode> select, ParseNode where,
                 List<ParseNode> groupBy, ParseNode having, List<OrderByNode> orderBy, LimitNode limit, int bindCount, boolean isAggregate, boolean hasSequence) {
-            super(from, hint, isDistinct, select, where, groupBy, having, orderBy, limit, bindCount, isAggregate, hasSequence);
+            this(from, hint, isDistinct, select, where, groupBy, having, orderBy, limit, bindCount, isAggregate, hasSequence, Collections.<SelectStatement>emptyList());
         }
 
+        private ExecutableSelectStatement(TableNode from, HintNode hint, boolean isDistinct, List<AliasedNode> select, ParseNode where,
+                List<ParseNode> groupBy, ParseNode having, List<OrderByNode> orderBy, LimitNode limit, int bindCount, boolean isAggregate,
+                boolean hasSequence, List<SelectStatement> selects) {
+            super(from, hint, isDistinct, select, where, groupBy, having, orderBy, limit, bindCount, isAggregate, hasSequence, selects);
+        }
+        
         @SuppressWarnings("unchecked")
         @Override
         public QueryPlan compilePlan(PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
@@ -473,7 +495,11 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
                 public boolean isRowKeyOrdered() {
                     return true;
                 }
-                
+
+                @Override
+                public boolean useRoundRobinIterator() throws SQLException {
+                    return false;
+                }
             };
         }
     }
@@ -526,8 +552,8 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
     private static class ExecutableCreateIndexStatement extends CreateIndexStatement implements CompilableStatement {
 
         public ExecutableCreateIndexStatement(NamedNode indexName, NamedTableNode dataTable, IndexKeyConstraint ikConstraint, List<ColumnName> includeColumns, List<ParseNode> splits,
-                ListMultimap<String,Pair<String,Object>> props, boolean ifNotExists, IndexType indexType, int bindCount) {
-            super(indexName, dataTable, ikConstraint, includeColumns, splits, props, ifNotExists, indexType, bindCount);
+                ListMultimap<String,Pair<String,Object>> props, boolean ifNotExists, IndexType indexType, boolean async, int bindCount) {
+            super(indexName, dataTable, ikConstraint, includeColumns, splits, props, ifNotExists, indexType, async , bindCount);
         }
 
         @SuppressWarnings("unchecked")
@@ -693,10 +719,71 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         }
     }
     
+    private static class ExecutableTraceStatement extends TraceStatement implements CompilableStatement {
+
+        public ExecutableTraceStatement(boolean isTraceOn, double samplingRate) {
+            super(isTraceOn, samplingRate);
+        }
+
+        @SuppressWarnings("unchecked")
+        @Override
+        public QueryPlan compilePlan(final PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
+            return new TraceQueryPlan(this, stmt);
+        }
+    }
+
+    private static class ExecutableAlterSessionStatement extends AlterSessionStatement implements CompilableStatement {
+
+        public ExecutableAlterSessionStatement(Map<String,Object> props) {
+            super(props);
+        }
+
+        @SuppressWarnings("unchecked")
+        @Override
+        public MutationPlan compilePlan(final PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
+            final StatementContext context = new StatementContext(stmt);
+            return new MutationPlan() {
+
+                @Override
+                public StatementContext getContext() {
+                    return context;
+                }
+
+                @Override
+                public ParameterMetaData getParameterMetaData() {
+                    return PhoenixParameterMetaData.EMPTY_PARAMETER_META_DATA;
+                }
+
+                @Override
+                public ExplainPlan getExplainPlan() throws SQLException {
+                    return new ExplainPlan(Collections.singletonList("ALTER SESSION"));
+                }
+
+                @Override
+                public PhoenixConnection getConnection() {
+                    return stmt.getConnection();
+                }
+
+                @Override
+                public MutationState execute() throws SQLException {
+                    Object consistency = getProps().get(PhoenixRuntime.CONSISTENCY_ATTRIB.toUpperCase());
+                    if(consistency != null) {
+                        if (((String)consistency).equalsIgnoreCase(Consistency.TIMELINE.toString())){
+                            getConnection().setConsistency(Consistency.TIMELINE);
+                        } else {
+                            getConnection().setConsistency(Consistency.STRONG);
+                        }
+                    }
+                    return new MutationState(0, context.getConnection());
+                }
+            };
+        }
+    }
+
     private static class ExecutableUpdateStatisticsStatement extends UpdateStatisticsStatement implements
             CompilableStatement {
-        public ExecutableUpdateStatisticsStatement(NamedTableNode table, StatisticsCollectionScope scope) {
-            super(table, scope);
+        public ExecutableUpdateStatisticsStatement(NamedTableNode table, StatisticsCollectionScope scope, Map<String,Object> props) {
+            super(table, scope, props);
         }
 
         @SuppressWarnings("unchecked")
@@ -819,13 +906,13 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
 
     protected static class ExecutableNodeFactory extends ParseNodeFactory {
         @Override
-        public ExecutableSelectStatement select(TableNode from, HintNode hint, boolean isDistinct, List<AliasedNode> select,
-                                                ParseNode where, List<ParseNode> groupBy, ParseNode having,
-                                                List<OrderByNode> orderBy, LimitNode limit, int bindCount, boolean isAggregate, boolean hasSequence) {
+        public ExecutableSelectStatement select(TableNode from, HintNode hint, boolean isDistinct, List<AliasedNode> select, ParseNode where,
+                List<ParseNode> groupBy, ParseNode having, List<OrderByNode> orderBy, LimitNode limit, int bindCount, boolean isAggregate,
+                boolean hasSequence, List<SelectStatement> selects) {
             return new ExecutableSelectStatement(from, hint, isDistinct, select, where, groupBy == null ? Collections.<ParseNode>emptyList() : groupBy,
-                    having, orderBy == null ? Collections.<OrderByNode>emptyList() : orderBy, limit, bindCount, isAggregate, hasSequence);
+                    having, orderBy == null ? Collections.<OrderByNode>emptyList() : orderBy, limit, bindCount, isAggregate, hasSequence, selects == null ? Collections.<SelectStatement>emptyList() : selects);
         }
-        
+
         @Override
         public ExecutableUpsertStatement upsert(NamedTableNode table, HintNode hintNode, List<ColumnName> columns, List<ParseNode> values, SelectStatement select, int bindCount) {
             return new ExecutableUpsertStatement(table, hintNode, columns, values, select, bindCount);
@@ -857,8 +944,8 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         
         @Override
         public CreateIndexStatement createIndex(NamedNode indexName, NamedTableNode dataTable, IndexKeyConstraint ikConstraint, List<ColumnName> includeColumns, List<ParseNode> splits,
-                ListMultimap<String,Pair<String,Object>> props, boolean ifNotExists, IndexType indexType, int bindCount) {
-            return new ExecutableCreateIndexStatement(indexName, dataTable, ikConstraint, includeColumns, splits, props, ifNotExists, indexType, bindCount);
+                ListMultimap<String,Pair<String,Object>> props, boolean ifNotExists, IndexType indexType, boolean async, int bindCount) {
+            return new ExecutableCreateIndexStatement(indexName, dataTable, ikConstraint, includeColumns, splits, props, ifNotExists, indexType, async, bindCount);
         }
         
         @Override
@@ -885,15 +972,25 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         public AlterIndexStatement alterIndex(NamedTableNode indexTableNode, String dataTableName, boolean ifExists, PIndexState state) {
             return new ExecutableAlterIndexStatement(indexTableNode, dataTableName, ifExists, state);
         }
-        
+
+        @Override
+        public TraceStatement trace(boolean isTraceOn, double samplingRate) {
+            return new ExecutableTraceStatement(isTraceOn, samplingRate);
+        }
+
+        @Override
+        public AlterSessionStatement alterSession(Map<String, Object> props) {
+            return new ExecutableAlterSessionStatement(props);
+        }
+
         @Override
         public ExplainStatement explain(BindableStatement statement) {
             return new ExecutableExplainStatement(statement);
         }
 
         @Override
-        public UpdateStatisticsStatement updateStatistics(NamedTableNode table, StatisticsCollectionScope scope) {
-            return new ExecutableUpdateStatisticsStatement(table, scope);
+        public UpdateStatisticsStatement updateStatistics(NamedTableNode table, StatisticsCollectionScope scope, Map<String,Object> props) {
+            return new ExecutableUpdateStatisticsStatement(table, scope, props);
         }
     }
     

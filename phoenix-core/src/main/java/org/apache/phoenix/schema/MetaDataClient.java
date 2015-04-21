@@ -153,6 +153,7 @@ import org.apache.phoenix.schema.PTable.LinkType;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.stats.PTableStats;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
@@ -163,6 +164,7 @@ import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.StringUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -618,7 +620,7 @@ public class MetaDataClient {
         PTable table = resolver.getTables().get(0).getTable();
         long rowCount = 0;
         if (updateStatisticsStmt.updateColumns()) {
-            rowCount += updateStatisticsInternal(table.getPhysicalName(), table);
+            rowCount += updateStatisticsInternal(table.getPhysicalName(), table, updateStatisticsStmt.getProps());
         }
         if (updateStatisticsStmt.updateIndex()) {
             // TODO: If our table is a VIEW with multiple indexes or a TABLE with local indexes,
@@ -626,7 +628,7 @@ public class MetaDataClient {
             // across all indexes in that case so that we don't re-calculate the same stats
             // multiple times.
             for (PTable index : table.getIndexes()) {
-                rowCount += updateStatisticsInternal(index.getPhysicalName(), index);
+                rowCount += updateStatisticsInternal(index.getPhysicalName(), index, updateStatisticsStmt.getProps());
             }
             // If analyzing the indexes of a multi-tenant table or a table with view indexes
             // then analyze all of those indexes too.
@@ -654,14 +656,14 @@ public class MetaDataClient {
                             return PTableStats.EMPTY_STATS;
                         }
                     };
-                    rowCount += updateStatisticsInternal(name, indexLogicalTable);
+                    rowCount += updateStatisticsInternal(name, indexLogicalTable, updateStatisticsStmt.getProps());
                 }
             }
         }
         return new MutationState((int)rowCount, connection);
     }
 
-    private long updateStatisticsInternal(PName physicalName, PTable logicalTable) throws SQLException {
+    private long updateStatisticsInternal(PName physicalName, PTable logicalTable, Map<String, Object> statsProps) throws SQLException {
         ReadOnlyProps props = connection.getQueryServices().getProps();
         final long msMinBetweenUpdates = props
                 .getLong(QueryServices.MIN_STATS_UPDATE_FREQ_MS_ATTRIB,
@@ -691,6 +693,16 @@ public class MetaDataClient {
             Scan scan = plan.getContext().getScan();
             scan.setCacheBlocks(false);
             scan.setAttribute(BaseScannerRegionObserver.ANALYZE_TABLE, PDataType.TRUE_BYTES);
+            if (statsProps != null) {
+                Object gp_width = statsProps.get(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB);
+                if (gp_width != null) {
+                    scan.setAttribute(BaseScannerRegionObserver.GUIDEPOST_WIDTH_BYTES, PLong.INSTANCE.toBytes(gp_width));
+                }
+                Object gp_per_region = statsProps.get(QueryServices.STATS_GUIDEPOST_PER_REGION_ATTRIB);
+                if (gp_per_region != null) {
+                    scan.setAttribute(BaseScannerRegionObserver.GUIDEPOST_PER_REGION, PInteger.INSTANCE.toBytes(gp_per_region));
+                }
+            }
             MutationState mutationState = plan.execute();
             rowCount = mutationState.getUpdateCount();
         }
@@ -764,7 +776,7 @@ public class MetaDataClient {
                 String tableName = getFullTableName(dataTableRef);
                 String query = "SELECT count(*) FROM " + tableName;
                 final QueryPlan plan = statement.compileQuery(query);
-                TableRef tableRef = plan.getContext().getResolver().getTables().get(0);
+                TableRef tableRef = plan.getTableRef();
                 // Set attribute on scan that UngroupedAggregateRegionObserver will switch on.
                 // We'll detect that this attribute was set the server-side and write the index
                 // rows per region as a result. The value of the attribute will be our persisted
@@ -1025,7 +1037,8 @@ public class MetaDataClient {
                     // can lose information during compilation
                     StringBuilder buf = new StringBuilder();
                     parseNode.toSQL(resolver, buf);
-                    String expressionStr = buf.toString();
+                    // need to escape backslash as this expression will be re-parsed later
+                    String expressionStr = StringUtil.escapeBackslash(buf.toString());
                     
                     ColumnName colName = null;
                     ColumnRef colRef = expressionIndexCompiler.getColumnRef();
@@ -1096,7 +1109,8 @@ public class MetaDataClient {
                         dataTable.getTimeStamp());
                     long[] seqValues = new long[1];
                     SQLException[] sqlExceptions = new SQLException[1];
-                    connection.getQueryServices().incrementSequences(Collections.singletonList(key), timestamp, seqValues, sqlExceptions);
+                    connection.getQueryServices().incrementSequences(Collections.singletonList(key),
+                            Math.max(timestamp, dataTable.getTimeStamp()), seqValues, sqlExceptions);
                     if (sqlExceptions[0] != null) {
                         throw sqlExceptions[0];
                     }
@@ -1128,6 +1142,11 @@ public class MetaDataClient {
             return new MutationState(0,connection);
         }
 
+        // In async process, we return immediately as the MR job needs to be triggered .
+        if(statement.isAsync()) {
+            return new MutationState(0, connection);
+        }
+        
         // If our connection is at a fixed point-in-time, we need to open a new
         // connection so that our new index table is visible.
         if (connection.getSCN() != null) {
@@ -1677,7 +1696,7 @@ public class MetaDataClient {
                 splits = getSplitKeys(connection.getQueryServices().getAllTableRegions(parent.getPhysicalName().getBytes()));
             } else {
                 splits = SchemaUtil.processSplits(splits, pkColumns, saltBucketNum, connection.getQueryServices().getProps().getBoolean(
-                    QueryServices.ROW_KEY_ORDER_SALTED_TABLE_ATTRIB, QueryServicesOptions.DEFAULT_ROW_KEY_ORDER_SALTED_TABLE));
+                        QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, QueryServicesOptions.DEFAULT_FORCE_ROW_KEY_ORDER));
             }
             MetaDataMutationResult result = connection.getQueryServices().createTable(
                     tableMetaData,

@@ -36,6 +36,7 @@ import org.apache.phoenix.iterate.ConcatResultIterator;
 import org.apache.phoenix.iterate.LookAheadResultIterator;
 import org.apache.phoenix.iterate.PeekingResultIterator;
 import org.apache.phoenix.iterate.ResultIterator;
+import org.apache.phoenix.iterate.RoundRobinResultIterator;
 import org.apache.phoenix.iterate.SequenceResultIterator;
 import org.apache.phoenix.iterate.TableResultIterator;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
@@ -100,11 +101,11 @@ public class PhoenixRecordReader<T extends DBWritable> extends RecordReader<Null
         try {
             List<PeekingResultIterator> iterators = Lists.newArrayListWithExpectedSize(scans.size());
             for (Scan scan : scans) {
-                final TableResultIterator tableResultIterator = new TableResultIterator(queryPlan.getContext(), queryPlan.getTableRef(),scan);
+                final TableResultIterator tableResultIterator = new TableResultIterator(queryPlan.getContext(), queryPlan.getTableRef(), scan);
                 PeekingResultIterator peekingResultIterator = LookAheadResultIterator.wrap(tableResultIterator);
                 iterators.add(peekingResultIterator);
             }
-            ResultIterator iterator = ConcatResultIterator.newIterator(iterators);
+            ResultIterator iterator = queryPlan.useRoundRobinIterator() ? RoundRobinResultIterator.newIterator(iterators, queryPlan) : ConcatResultIterator.newIterator(iterators);
             if(queryPlan.getContext().getSequenceManager().getSequenceCount() > 0) {
                 iterator = new SequenceResultIterator(iterator, queryPlan.getContext().getSequenceManager());
             }
@@ -117,8 +118,8 @@ public class PhoenixRecordReader<T extends DBWritable> extends RecordReader<Null
             Throwables.propagate(e);
         }
    }
-
-    @Override
+    
+   @Override
     public boolean nextKeyValue() throws IOException, InterruptedException {
         if (key == null) {
             key = NullWritable.get();

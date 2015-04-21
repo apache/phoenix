@@ -18,6 +18,7 @@
 package org.apache.phoenix.schema;
 
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.phoenix.compile.TupleProjectionCompiler;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -73,9 +74,10 @@ public class TableRef {
         String cq = null;       
         PColumn column = ref.getColumn();
         String name = column.getName().getString();
-        boolean isIndex = table.getType() == PTableType.INDEX;
-        if (table.getType() == PTableType.JOIN || table.getType() == PTableType.SUBQUERY) {
-            cq = column.getName().getString();
+        boolean isIndex = IndexUtil.isIndexColumn(name);
+        if ((table.getType() == PTableType.PROJECTED && TupleProjectionCompiler.PROJECTED_TABLE_SCHEMA.equals(table.getSchemaName()))
+                || table.getType() == PTableType.SUBQUERY) {
+            cq = name;
         }
         else if (SchemaUtil.isPKColumn(column)) {
             cq = isIndex ? IndexUtil.getDataColumnName(name) : name;

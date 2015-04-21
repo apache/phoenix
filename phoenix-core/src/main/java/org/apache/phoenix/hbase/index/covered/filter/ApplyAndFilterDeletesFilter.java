@@ -203,8 +203,8 @@ public class ApplyAndFilterDeletesFilter extends FilterBase {
 
     @Override
     public KeyValue getHint(KeyValue kv) {
-      return KeyValue.createLastOnRow(kv.getBuffer(), kv.getRowOffset(), kv.getRowLength(),
-        kv.getBuffer(), kv.getFamilyOffset(), kv.getFamilyLength(), kv.getBuffer(),
+      return KeyValueUtil.createLastOnRow(kv.getRowArray(), kv.getRowOffset(), kv.getRowLength(),
+        kv.getFamilyArray(), kv.getFamilyOffset(), kv.getFamilyLength(), kv.getQualifierArray(),
         kv.getQualifierOffset(), kv.getQualifierLength());
     }
   }
@@ -257,7 +257,7 @@ public class ApplyAndFilterDeletesFilter extends FilterBase {
       if (deleteColumn == null) {
         return false;
       }
-      if (CellUtil.matchingFamily(deleteColumn, next) && deleteColumn.matchingQualifier(next)) {
+      if (CellUtil.matchingFamily(deleteColumn, next) && CellUtil.matchingQualifier(deleteColumn, next)) {
         // falls within the timestamp range
         if (deleteColumn.getTimestamp() >= next.getTimestamp()) {
           return true;
@@ -278,7 +278,7 @@ public class ApplyAndFilterDeletesFilter extends FilterBase {
       // keyvalue has the exact timestamp or is an older (smaller) timestamp, and we can allow that
       // one.
       if (pointDelete != null && CellUtil.matchingFamily(pointDelete, next)
-          && pointDelete.matchingQualifier(next)) {
+          && CellUtil.matchingQualifier(pointDelete, next)) {
         if (pointDelete.getTimestamp() == next.getTimestamp()) {
           return true;
         }

@@ -16,7 +16,6 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.types.PDataType;
 
 import com.google.common.base.Preconditions;
-import com.google.common.base.Splitter;
 import com.google.common.collect.Lists;
 
 /**
@@ -33,6 +32,9 @@ public class ColumnInfo {
     public ColumnInfo(String columnName, int sqlType) {
         Preconditions.checkNotNull(columnName, "columnName cannot be null");
         Preconditions.checkArgument(!columnName.isEmpty(), "columnName cannot be empty");
+        if(!columnName.startsWith(SchemaUtil.ESCAPE_CHARACTER)) {
+            columnName = SchemaUtil.getEscapedFullColumnName(columnName);
+        }
         this.columnName = columnName;
         this.sqlType = sqlType;
     }
@@ -54,16 +56,17 @@ public class ColumnInfo {
      * @return
      */
     public String getDisplayName() {
-        int index = columnName.indexOf(QueryConstants.NAME_SEPARATOR);
+    	final String unescapedColumnName = SchemaUtil.getUnEscapedFullColumnName(columnName);
+        int index = unescapedColumnName.indexOf(QueryConstants.NAME_SEPARATOR);
         if (index < 0) {
-            return columnName; 
+            return unescapedColumnName; 
         }
-        return columnName.substring(index+1);
+        return unescapedColumnName.substring(index+1).trim();
     }
 
     @Override
     public String toString() {
-        return columnName + STR_SEPARATOR + getPDataType().getSqlTypeName();
+        return getPDataType().getSqlTypeName() + STR_SEPARATOR + columnName ;
     }
 
     @Override
@@ -97,14 +100,15 @@ public class ColumnInfo {
      */
     public static ColumnInfo fromString(String stringRepresentation) {
         List<String> components =
-                Lists.newArrayList(Splitter.on(STR_SEPARATOR).split(stringRepresentation));
+                Lists.newArrayList(stringRepresentation.split(":",2));
+        
         if (components.size() != 2) {
             throw new IllegalArgumentException("Unparseable string: " + stringRepresentation);
         }
 
         return new ColumnInfo(
-                components.get(0),
-                PDataType.fromSqlTypeName(components.get(1)).getSqlType());
+                components.get(1),
+                PDataType.fromSqlTypeName(components.get(0)).getSqlType());
     }
 
 }

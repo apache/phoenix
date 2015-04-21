@@ -21,7 +21,7 @@ import java.math.BigDecimal;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.phoenix.exception.ValueTypeIncompatibleException;
+import org.apache.phoenix.exception.DataExceedsCapacityException;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
@@ -64,7 +64,7 @@ public class DecimalDivideExpression extends DivideExpression {
             result = NumberUtil.setDecimalWidthAndScale(result, getMaxLength(), getScale());
         }
         if (result == null) {
-            throw new ValueTypeIncompatibleException(PDecimal.INSTANCE, getMaxLength(), getScale());
+            throw new DataExceedsCapacityException(PDecimal.INSTANCE, getMaxLength(), getScale());
         }
         ptr.set(PDecimal.INSTANCE.toBytes(result));
         return true;
