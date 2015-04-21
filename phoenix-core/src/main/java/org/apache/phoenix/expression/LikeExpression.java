@@ -236,10 +236,10 @@ public abstract class LikeExpression extends BaseCompoundExpression {
             LiteralExpression likeTypeExpression = (LiteralExpression)children.get(LIKE_TYPE_INDEX);
             this.likeType = LikeType.valueOf((String)likeTypeExpression.getValue());
         }
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         Expression e = getPatternExpression();
-        if (e instanceof LiteralExpression) {
-            LiteralExpression patternExpression = (LiteralExpression)e;
-            String value = (String)patternExpression.getValue();
+        if (e.isStateless() && e.getDeterminism() == Determinism.ALWAYS && e.evaluate(null, ptr)) {
+            String value = (String) PVarchar.INSTANCE.toObject(ptr, e.getDataType(), e.getSortOrder());
             pattern = compilePattern(value);
         }
     }
@@ -294,7 +294,7 @@ public abstract class LikeExpression extends BaseCompoundExpression {
             value = (String) strDataType.toObject(ptr, strSortOrder);
         }
         strDataType.coerceBytes(ptr, strDataType, strSortOrder, SortOrder.ASC);
-        pattern.matches(ptr, ptr);
+        pattern.matches(ptr);
         if (logger.isTraceEnabled()) {
             boolean matched = ((Boolean) PBoolean.INSTANCE.toObject(ptr)).booleanValue();
             logger.trace("LIKE(value='" + value + "'pattern='" + pattern.pattern() + "' is " + matched);

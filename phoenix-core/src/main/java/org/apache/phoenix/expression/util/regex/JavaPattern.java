@@ -44,13 +44,12 @@ public class JavaPattern extends AbstractBasePattern {
     }
 
     @Override
-    public void matches(ImmutableBytesWritable srcPtr, ImmutableBytesWritable outPtr) {
+    public void matches(ImmutableBytesWritable srcPtr) {
         Preconditions.checkNotNull(srcPtr);
-        Preconditions.checkNotNull(outPtr);
         String matcherSourceStr = (String) PVarchar.INSTANCE.toObject(srcPtr);
         if (srcPtr.get().length == 0 && matcherSourceStr == null) matcherSourceStr = "";
         boolean ret = pattern.matcher(matcherSourceStr).matches();
-        outPtr.set(ret ? PDataType.TRUE_BYTES : PDataType.FALSE_BYTES);
+        srcPtr.set(ret ? PDataType.TRUE_BYTES : PDataType.FALSE_BYTES);
     }
 
     @Override
@@ -59,17 +58,16 @@ public class JavaPattern extends AbstractBasePattern {
     }
 
     @Override
-    public void replaceAll(ImmutableBytesWritable srcPtr, ImmutableBytesWritable replacePtr,
-            ImmutableBytesWritable replacedPtr) {
+    public void replaceAll(ImmutableBytesWritable srcPtr, byte[] rStrBytes, int rStrOffset,
+            int rStrLen) {
         Preconditions.checkNotNull(srcPtr);
-        Preconditions.checkNotNull(replacePtr);
-        Preconditions.checkNotNull(replacedPtr);
+        Preconditions.checkNotNull(rStrBytes);
         String sourceStr = (String) PVarchar.INSTANCE.toObject(srcPtr);
-        String replaceStr = (String) PVarchar.INSTANCE.toObject(replacePtr);
-        if (srcPtr.get().length == 0 && sourceStr == null) sourceStr = "";
-        if (replacePtr.get().length == 0 && replaceStr == null) replaceStr = "";
+        String replaceStr = (String) PVarchar.INSTANCE.toObject(rStrBytes, rStrOffset, rStrLen);
+        if (srcPtr.getLength() == 0 && sourceStr == null) sourceStr = "";
+        if (rStrLen == 0 && replaceStr == null) replaceStr = "";
         String replacedStr = pattern.matcher(sourceStr).replaceAll(replaceStr);
-        replacedPtr.set(PVarchar.INSTANCE.toBytes(replacedStr));
+        srcPtr.set(PVarchar.INSTANCE.toBytes(replacedStr));
     }
 
     @Override

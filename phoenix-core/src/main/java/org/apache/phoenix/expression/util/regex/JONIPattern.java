@@ -60,11 +60,10 @@ public class JONIPattern extends AbstractBasePattern implements AbstractBaseSpli
     }
 
     @Override
-    public void matches(ImmutableBytesWritable srcPtr, ImmutableBytesWritable outPtr) {
+    public void matches(ImmutableBytesWritable srcPtr) {
         Preconditions.checkNotNull(srcPtr);
-        Preconditions.checkNotNull(outPtr);
         boolean ret = matches(srcPtr.get(), srcPtr.getOffset(), srcPtr.getLength());
-        outPtr.set(ret ? PDataType.TRUE_BYTES : PDataType.FALSE_BYTES);
+        srcPtr.set(ret ? PDataType.TRUE_BYTES : PDataType.FALSE_BYTES);
     }
 
     private boolean matches(byte[] bytes, int offset, int len) {
@@ -80,15 +79,14 @@ public class JONIPattern extends AbstractBasePattern implements AbstractBaseSpli
     }
 
     @Override
-    public void replaceAll(ImmutableBytesWritable srcPtr, ImmutableBytesWritable replacePtr,
-            ImmutableBytesWritable replacedPtr) {
+    public void replaceAll(ImmutableBytesWritable srcPtr, byte[] rStrBytes, int rStrOffset,
+            int rStrLen) {
         Preconditions.checkNotNull(srcPtr);
-        Preconditions.checkNotNull(replacePtr);
-        Preconditions.checkNotNull(replacedPtr);
+        Preconditions.checkNotNull(rStrBytes);
         byte[] replacedBytes =
-                replaceAll(srcPtr.get(), srcPtr.getOffset(), srcPtr.getLength(), replacePtr.get(),
-                    replacePtr.getOffset(), replacePtr.getLength());
-        replacedPtr.set(replacedBytes);
+                replaceAll(srcPtr.get(), srcPtr.getOffset(), srcPtr.getLength(), rStrBytes,
+                    rStrOffset, rStrLen);
+        srcPtr.set(replacedBytes);
     }
 
     private byte[] replaceAll(byte[] srcBytes, int srcOffset, int srcLen, byte[] replaceBytes,
@@ -154,8 +152,8 @@ public class JONIPattern extends AbstractBasePattern implements AbstractBaseSpli
     }
 
     @Override
-    public boolean split(ImmutableBytesWritable srcPtr, ImmutableBytesWritable outPtr) {
-        return split(srcPtr.get(), srcPtr.getOffset(), srcPtr.getLength(), outPtr);
+    public boolean split(ImmutableBytesWritable srcPtr) {
+        return split(srcPtr.get(), srcPtr.getOffset(), srcPtr.getLength(), srcPtr);
     }
 
     private boolean

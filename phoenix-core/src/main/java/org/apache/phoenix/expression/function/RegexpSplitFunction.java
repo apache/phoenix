@@ -22,8 +22,8 @@ import java.io.IOException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
-import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.util.regex.AbstractBaseSplitter;
 import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.parse.RegexpSplitParseNode;
@@ -53,6 +53,8 @@ public abstract class RegexpSplitFunction extends ScalarFunction {
 
     public static final String NAME = "REGEXP_SPLIT";
 
+    private static final PVarchar TYPE = PVarchar.INSTANCE;
+
     private AbstractBaseSplitter initializedSplitter = null;
 
     public RegexpSplitFunction() {}
@@ -63,11 +65,12 @@ public abstract class RegexpSplitFunction extends ScalarFunction {
     }
 
     private void init() {
-        Expression patternExpression = children.get(1);
-        if (patternExpression instanceof LiteralExpression) {
-            Object patternValue = ((LiteralExpression) patternExpression).getValue();
-            if (patternValue != null) {
-                initializedSplitter = compilePatternSpec(patternValue.toString());
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+        Expression e = getPatternStrExpression();
+        if (e.isStateless() && e.getDeterminism() == Determinism.ALWAYS && e.evaluate(null, ptr)) {
+            String pattern = (String) TYPE.toObject(ptr, TYPE, e.getSortOrder());
+            if (pattern != null) {
+                initializedSplitter = compilePatternSpec(pattern);
             }
         }
     }
@@ -87,31 +90,37 @@ public abstract class RegexpSplitFunction extends ScalarFunction {
 
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-        if (!children.get(0).evaluate(tuple, ptr)) {
-            return false;
-        }
-
-        Expression sourceStrExpression = children.get(0);
-        PVarchar type = PVarchar.INSTANCE;
-        type.coerceBytes(ptr, type, sourceStrExpression.getSortOrder(), SortOrder.ASC);
-
         AbstractBaseSplitter splitter = initializedSplitter;
         if (splitter == null) {
-            ImmutableBytesWritable tmpPtr = new ImmutableBytesWritable();
-            Expression patternExpression = children.get(1);
-            if (!patternExpression.evaluate(tuple, tmpPtr)) {
+            Expression e = getPatternStrExpression();
+            if (e.evaluate(tuple, ptr)) {
+                String pattern = (String) TYPE.toObject(ptr, TYPE, e.getSortOrder());
+                if (pattern != null) {
+                    splitter = compilePatternSpec(pattern);
+                } else {
+                    ptr.set(ByteUtil.EMPTY_BYTE_ARRAY); // set ptr to null
+                    return true;
+                }
+            } else {
                 return false;
             }
-            if (tmpPtr.getLength() == 0) {
-                ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
-                return true; // set ptr to null
-            }
-            String patternStr =
-                    (String) PVarchar.INSTANCE.toObject(tmpPtr, patternExpression.getSortOrder());
-            splitter = compilePatternSpec(patternStr);
         }
 
-        return splitter.split(ptr, ptr);
+        Expression e = getSourceStrExpression();
+        if (!e.evaluate(tuple, ptr)) {
+            return false;
+        }
+        TYPE.coerceBytes(ptr, TYPE, e.getSortOrder(), SortOrder.ASC);
+
+        return splitter.split(ptr);
+    }
+
+    private Expression getSourceStrExpression() {
+        return children.get(0);
+    }
+
+    private Expression getPatternStrExpression() {
+        return children.get(1);
     }
 
     @Override
