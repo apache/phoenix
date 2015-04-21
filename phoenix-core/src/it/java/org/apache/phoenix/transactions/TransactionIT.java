@@ -25,8 +25,6 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Map;
 
-import co.cask.tephra.TxConstants;
-
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -38,6 +36,8 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import co.cask.tephra.TxConstants;
+
 import com.google.common.collect.Maps;
 
 public class TransactionIT extends BaseHBaseManagedTimeIT {
@@ -46,33 +46,7 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
 	
     @Before
     public void setUp() throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
-        try {
-            conn.createStatement().execute(
-                  "create table "+ FULL_TABLE_NAME + "("
-                + "   varchar_pk VARCHAR NOT NULL, "
-                + "   char_pk CHAR(6) NOT NULL, "
-                + "   int_pk INTEGER NOT NULL, "
-                + "   long_pk BIGINT NOT NULL, "
-                + "   decimal_pk DECIMAL(31, 10) NOT NULL, "
-                + "   date_pk DATE NOT NULL, "
-                + "   a.varchar_col1 VARCHAR, "
-                + "   a.char_col1 CHAR(10), "
-                + "   a.int_col1 INTEGER, "
-                + "   a.long_col1 BIGINT, "
-                + "   a.decimal_col1 DECIMAL(31, 10), "
-                + "   a.date1 DATE, "
-                + "   b.varchar_col2 VARCHAR, "
-                + "   b.char_col2 CHAR(10), "
-                + "   b.int_col2 INTEGER, "
-                + "   b.long_col2 BIGINT, "
-                + "   b.decimal_col2 DECIMAL(31, 10), "
-                + "   b.date2 DATE "
-                + "   CONSTRAINT pk PRIMARY KEY (varchar_pk, char_pk, int_pk, long_pk DESC, decimal_pk, date_pk)) "
-                + "TRANSACTIONAL=true");
-        } finally {
-            conn.close();
-        }
+        ensureTableCreated(getUrl(), TRANSACTIONAL_DATA_TABLE);
     }
 
 	@BeforeClass
@@ -289,7 +263,5 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
         	conn1.close();
         }
 	}
-
-
-
+	
 }
