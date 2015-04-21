@@ -42,7 +42,7 @@ public class PhoenixClientProject extends PhoenixAbstractProject {
     @Override
     public PhoenixClientProject copy(RelTraitSet traits, RelNode input,
             List<RexNode> projects, RelDataType rowType) {
-        return new PhoenixClientProject(getCluster(), traits, input, projects, rowType);
+        return create(input, projects, rowType);
     }
 
     @Override

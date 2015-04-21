@@ -33,7 +33,7 @@ public class PhoenixJoin extends Join implements PhoenixRel {
     @Override
     public Join copy(RelTraitSet traits, RexNode condition, RelNode left,
             RelNode right, JoinRelType joinRelType, boolean semiJoinDone) {
-        return new PhoenixJoin(getCluster(), traits, left, right, condition, joinRelType, ImmutableSet.<String>of());
+        return create(left, right, condition, joinRelType, ImmutableSet.<String>of());
     }
 
     @Override

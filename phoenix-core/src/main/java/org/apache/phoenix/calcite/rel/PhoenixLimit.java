@@ -6,9 +6,12 @@ import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptCost;
 import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelTraitSet;
+import org.apache.calcite.rel.RelCollation;
+import org.apache.calcite.rel.RelCollationTraitDef;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelWriter;
 import org.apache.calcite.rel.SingleRel;
+import org.apache.calcite.rel.metadata.RelMdCollation;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rex.RexNode;
 import org.apache.phoenix.calcite.CalciteUtils;
@@ -17,14 +20,23 @@ import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.execute.ClientScanPlan;
 
+import com.google.common.base.Supplier;
+
 public class PhoenixLimit extends SingleRel implements PhoenixRel {
     public final RexNode offset;
     public final RexNode fetch;
     public final Integer statelessFetch;
     
-    public static PhoenixLimit create(RelNode input, RexNode offset, RexNode fetch) {
+    public static PhoenixLimit create(final RelNode input, RexNode offset, RexNode fetch) {
         RelOptCluster cluster = input.getCluster();
-        RelTraitSet traits = input.getTraitSet().replace(PhoenixRel.CONVENTION);
+        final RelTraitSet traits =
+                cluster.traitSet().replace(PhoenixRel.CONVENTION)
+                .replaceIfs(RelCollationTraitDef.INSTANCE,
+                        new Supplier<List<RelCollation>>() {
+                    public List<RelCollation> get() {
+                        return RelMdCollation.limit(input);
+                    }
+                });
         return new PhoenixLimit(cluster, traits, input, offset, fetch);
     }
 
@@ -41,9 +53,7 @@ public class PhoenixLimit extends SingleRel implements PhoenixRel {
     public PhoenixLimit copy(
             RelTraitSet traitSet,
             List<RelNode> newInputs) {
-        return new PhoenixLimit(
-                getCluster(),
-                traitSet,
+        return create(
                 sole(newInputs),
                 offset,
                 fetch);

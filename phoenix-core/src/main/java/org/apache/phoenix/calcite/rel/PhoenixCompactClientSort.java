@@ -17,24 +17,23 @@ import org.apache.phoenix.execute.TupleProjector;
 
 public class PhoenixCompactClientSort extends PhoenixAbstractSort {
     
-    public static PhoenixCompactClientSort create(RelNode input, RelCollation collation, 
-            RexNode offset, RexNode fetch) {
+    public static PhoenixCompactClientSort create(RelNode input, RelCollation collation) {
         RelOptCluster cluster = input.getCluster();
         collation = RelCollationTraitDef.INSTANCE.canonize(collation);
         RelTraitSet traits =
             input.getTraitSet().replace(PhoenixRel.CONVENTION).replace(collation);
-        return new PhoenixCompactClientSort(cluster, traits, input, collation, offset, fetch);
+        return new PhoenixCompactClientSort(cluster, traits, input, collation);
     }
 
     private PhoenixCompactClientSort(RelOptCluster cluster, RelTraitSet traits,
-            RelNode child, RelCollation collation, RexNode offset, RexNode fetch) {
-        super(cluster, traits, child, collation, offset, fetch);
+            RelNode child, RelCollation collation) {
+        super(cluster, traits, child, collation);
     }
 
     @Override
     public PhoenixCompactClientSort copy(RelTraitSet traitSet, RelNode newInput,
             RelCollation newCollation, RexNode offset, RexNode fetch) {
-        return new PhoenixCompactClientSort(getCluster(), traitSet, newInput, newCollation, offset, fetch);
+        return create(newInput, newCollation);
     }
     
     @Override
@@ -75,8 +74,7 @@ public class PhoenixCompactClientSort extends PhoenixAbstractSort {
         }
         
         OrderBy orderBy = super.getOrderBy(implementor, tupleProjector);
-        Integer limit = super.getLimit(implementor);
-        QueryPlan newPlan = AggregatePlan.create((AggregatePlan) basePlan, orderBy, limit);
+        QueryPlan newPlan = AggregatePlan.create((AggregatePlan) basePlan, orderBy);
         
         if (hashJoinPlan != null) {        
             newPlan = HashJoinPlan.create(hashJoinPlan.getStatement(), newPlan, hashJoinPlan.getJoinInfo(), hashJoinPlan.getSubPlans());

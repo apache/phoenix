@@ -44,7 +44,7 @@ public class PhoenixClientAggregate extends PhoenixAbstractAggregate {
     public PhoenixClientAggregate copy(RelTraitSet traits, RelNode input,
             boolean indicator, ImmutableBitSet groupSet,
             List<ImmutableBitSet> groupSets, List<AggregateCall> aggregateCalls) {
-        return new PhoenixClientAggregate(getCluster(), traits, input, indicator, groupSet, groupSets, aggregateCalls);
+        return create(input, indicator, groupSet, groupSets, aggregateCalls);
     }
     
     @Override

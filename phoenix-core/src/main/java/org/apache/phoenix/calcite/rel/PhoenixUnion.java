@@ -28,7 +28,7 @@ public class PhoenixUnion extends Union implements PhoenixRel {
 
     @Override
     public PhoenixUnion copy(RelTraitSet traits, List<RelNode> inputs, boolean all) {
-        return new PhoenixUnion(getCluster(), traits, inputs, all);
+        return create(inputs, all);
     }
 
     @Override

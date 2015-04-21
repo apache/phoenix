@@ -6,6 +6,7 @@ import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Join;
+import org.apache.calcite.rel.core.JoinInfo;
 import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rex.RexNode;
 import org.apache.phoenix.parse.JoinTableNode.JoinType;
@@ -15,9 +16,11 @@ import org.apache.phoenix.parse.JoinTableNode.JoinType;
  * relational expression in Phoenix.
  */
 abstract public class PhoenixAbstractJoin extends Join implements PhoenixRel {
+    public final JoinInfo joinInfo;
 
     protected PhoenixAbstractJoin(RelOptCluster cluster, RelTraitSet traits, RelNode left, RelNode right, RexNode condition, JoinRelType joinType, Set<String> variablesStopped) {
         super( cluster, traits, left, right, condition, joinType, variablesStopped);
+        joinInfo = JoinInfo.of(left, right, condition);
         assert getConvention() == PhoenixRel.CONVENTION;
     }
     

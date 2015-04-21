@@ -2,7 +2,6 @@ package org.apache.phoenix.calcite.rel;
 
 import java.util.List;
 
-import org.apache.calcite.plan.Convention;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
@@ -31,9 +30,8 @@ public class PhoenixValues extends Values implements PhoenixRel {
 
     @Override
     public PhoenixValues copy(RelTraitSet traitSet, List<RelNode> inputs) {
-        assert traitSet.containsIfApplicable(Convention.NONE);
         assert inputs.isEmpty();
-        return new PhoenixValues(getCluster(), rowType, tuples, traitSet);
+        return create(getCluster(), rowType, tuples);
     }
 
     @Override

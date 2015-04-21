@@ -75,17 +75,19 @@ public class PhoenixConverterRules {
      * {@link PhoenixClientSort}.
      */
     private static class PhoenixSortRule extends PhoenixConverterRule {
-        private static Predicate<LogicalSort> NON_EMPTY_COLLATION = new Predicate<LogicalSort>() {
+        private static Predicate<LogicalSort> SORT_ONLY = new Predicate<LogicalSort>() {
             @Override
             public boolean apply(LogicalSort input) {
-                return !input.getCollation().getFieldCollations().isEmpty();
+                return !input.getCollation().getFieldCollations().isEmpty()
+                        && input.offset == null
+                        && input.fetch == null;
             }            
         };
         
         public static final PhoenixSortRule INSTANCE = new PhoenixSortRule();
 
         private PhoenixSortRule() {
-            super(LogicalSort.class, NON_EMPTY_COLLATION, Convention.NONE, PhoenixRel.CONVENTION,
+            super(LogicalSort.class, SORT_ONLY, Convention.NONE, PhoenixRel.CONVENTION,
                 "PhoenixSortRule");
         }
 
@@ -95,9 +97,7 @@ public class PhoenixConverterRules {
                 convert(
                         sort.getInput(), 
                         sort.getInput().getTraitSet().replace(out)),
-                sort.getCollation(), 
-                sort.offset, 
-                sort.fetch);
+                sort.getCollation());
         }
     }
 
@@ -106,26 +106,31 @@ public class PhoenixConverterRules {
      * {@link PhoenixLimit}.
      */
     private static class PhoenixLimitRule extends PhoenixConverterRule {
-        private static Predicate<LogicalSort> EMPTY_COLLATION = new Predicate<LogicalSort>() {
+        private static Predicate<LogicalSort> OFFSET_OR_FETCH = new Predicate<LogicalSort>() {
             @Override
             public boolean apply(LogicalSort input) {
-                return input.getCollation().getFieldCollations().isEmpty();
+                return input.offset != null 
+                        || input.fetch != null;
             }            
         };
         
         public static final PhoenixLimitRule INSTANCE = new PhoenixLimitRule();
 
         private PhoenixLimitRule() {
-            super(LogicalSort.class, EMPTY_COLLATION, Convention.NONE, PhoenixRel.CONVENTION,
+            super(LogicalSort.class, OFFSET_OR_FETCH, Convention.NONE, PhoenixRel.CONVENTION,
                 "PhoenixLimitRule");
         }
 
         public RelNode convert(RelNode rel) {
             final LogicalSort sort = (LogicalSort) rel;
+            RelNode input = convert(
+                    sort.getInput(), 
+                    sort.getInput().getTraitSet().replace(out));
+            if (!sort.getCollation().getFieldCollations().isEmpty()) {
+                input = PhoenixClientSort.create(input, sort.getCollation());
+            }
             return PhoenixLimit.create(
-                convert(
-                        sort.getInput(), 
-                        sort.getInput().getTraitSet().replace(out)),
+                input,
                 sort.offset, 
                 sort.fetch);
         }

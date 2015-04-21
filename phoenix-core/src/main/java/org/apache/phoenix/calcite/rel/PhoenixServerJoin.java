@@ -9,13 +9,15 @@ import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptCost;
 import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelTraitSet;
+import org.apache.calcite.rel.RelCollation;
+import org.apache.calcite.rel.RelCollationTraitDef;
 import org.apache.calcite.rel.RelNode;
-import org.apache.calcite.rel.core.JoinInfo;
 import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.util.Util;
 import org.apache.phoenix.calcite.CalciteUtils;
+import org.apache.phoenix.calcite.metadata.PhoenixRelMdCollation;
 import org.apache.phoenix.compile.JoinCompiler;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.execute.HashJoinPlan;
@@ -28,14 +30,23 @@ import org.apache.phoenix.parse.JoinTableNode.JoinType;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableRef;
 
+import com.google.common.base.Supplier;
 import com.google.common.collect.Lists;
 
 public class PhoenixServerJoin extends PhoenixAbstractJoin {
     
-    public static PhoenixServerJoin create(RelNode left, RelNode right, 
-            RexNode condition, JoinRelType joinType, Set<String> variablesStopped) {
+    public static PhoenixServerJoin create(final RelNode left, final RelNode right, 
+            RexNode condition, final JoinRelType joinType, 
+            Set<String> variablesStopped) {
         RelOptCluster cluster = left.getCluster();
-        RelTraitSet traits = left.getTraitSet().replace(PhoenixRel.CONVENTION);
+        final RelTraitSet traits =
+                cluster.traitSet().replace(PhoenixRel.CONVENTION)
+                .replaceIfs(RelCollationTraitDef.INSTANCE,
+                        new Supplier<List<RelCollation>>() {
+                    public List<RelCollation> get() {
+                        return PhoenixRelMdCollation.hashJoin(left, right, joinType);
+                    }
+                });
         return new PhoenixServerJoin(cluster, traits, left, right, condition, joinType, variablesStopped);
     }
 
@@ -49,7 +60,7 @@ public class PhoenixServerJoin extends PhoenixAbstractJoin {
     @Override
     public PhoenixServerJoin copy(RelTraitSet traits, RexNode condition, RelNode left,
             RelNode right, JoinRelType joinRelType, boolean semiJoinDone) {
-        return new PhoenixServerJoin(getCluster(), traits, left, right, condition, joinRelType, variablesStopped);
+        return create(left, right, condition, joinRelType, variablesStopped);
     }
 
     @Override
@@ -80,7 +91,6 @@ public class PhoenixServerJoin extends PhoenixAbstractJoin {
         PhoenixRel left = (PhoenixRel) getLeft();
         PhoenixRel right = (PhoenixRel) getRight();
         
-        JoinInfo joinInfo = JoinInfo.of(left, right, getCondition());
         List<Expression> leftExprs = Lists.<Expression> newArrayList();
         List<Expression> rightExprs = Lists.<Expression> newArrayList();
         implementor.pushContext(new ImplementorContext(implementor.getCurrentContext().isRetainPKColumns(), true));

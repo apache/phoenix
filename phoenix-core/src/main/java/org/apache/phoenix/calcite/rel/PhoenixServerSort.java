@@ -17,24 +17,23 @@ import org.apache.phoenix.execute.ScanPlan;
 
 public class PhoenixServerSort extends PhoenixAbstractSort {
     
-    public static PhoenixServerSort create(RelNode input, RelCollation collation, 
-            RexNode offset, RexNode fetch) {
+    public static PhoenixServerSort create(RelNode input, RelCollation collation) {
         RelOptCluster cluster = input.getCluster();
         collation = RelCollationTraitDef.INSTANCE.canonize(collation);
         RelTraitSet traits =
             input.getTraitSet().replace(PhoenixRel.CONVENTION).replace(collation);
-        return new PhoenixServerSort(cluster, traits, input, collation, offset, fetch);
+        return new PhoenixServerSort(cluster, traits, input, collation);
     }
 
     private PhoenixServerSort(RelOptCluster cluster, RelTraitSet traits,
-            RelNode child, RelCollation collation, RexNode offset, RexNode fetch) {
-        super(cluster, traits, child, collation, offset, fetch);
+            RelNode child, RelCollation collation) {
+        super(cluster, traits, child, collation);
     }
 
     @Override
     public PhoenixServerSort copy(RelTraitSet traitSet, RelNode newInput,
             RelCollation newCollation, RexNode offset, RexNode fetch) {
-        return new PhoenixServerSort(getCluster(), traitSet, newInput, newCollation, offset, fetch);
+        return create(newInput, newCollation);
     }
     
     @Override
@@ -67,10 +66,9 @@ public class PhoenixServerSort extends PhoenixAbstractSort {
         }
         
         OrderBy orderBy = super.getOrderBy(implementor, null);
-        Integer limit = super.getLimit(implementor);
         QueryPlan newPlan;
         try {
-            newPlan = ScanPlan.create((ScanPlan) basePlan, orderBy, limit);
+            newPlan = ScanPlan.create((ScanPlan) basePlan, orderBy);
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }

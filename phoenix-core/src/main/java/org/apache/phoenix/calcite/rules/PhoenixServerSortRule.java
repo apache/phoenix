@@ -32,7 +32,7 @@ public class PhoenixServerSortRule extends RelOptRule {
         PhoenixClientSort sort = call.rel(0);
         PhoenixRel input = call.rel(1);
         call.transformTo(PhoenixServerSort.create(
-                input, sort.getCollation(), sort.offset, sort.fetch));
+                input, sort.getCollation()));
     }
 
 }

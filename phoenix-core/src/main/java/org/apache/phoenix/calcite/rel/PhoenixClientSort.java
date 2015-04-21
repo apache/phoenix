@@ -23,24 +23,23 @@ import org.apache.phoenix.schema.TableRef;
 
 public class PhoenixClientSort extends PhoenixAbstractSort {
     
-    public static PhoenixClientSort create(RelNode input, RelCollation collation, 
-            RexNode offset, RexNode fetch) {
+    public static PhoenixClientSort create(RelNode input, RelCollation collation) {
         RelOptCluster cluster = input.getCluster();
         collation = RelCollationTraitDef.INSTANCE.canonize(collation);
         RelTraitSet traits =
             input.getTraitSet().replace(PhoenixRel.CONVENTION).replace(collation);
-        return new PhoenixClientSort(cluster, traits, input, collation, offset, fetch);
+        return new PhoenixClientSort(cluster, traits, input, collation);
     }
 
     private PhoenixClientSort(RelOptCluster cluster, RelTraitSet traits,
-            RelNode child, RelCollation collation, RexNode offset, RexNode fetch) {
-        super(cluster, traits, child, collation, offset, fetch);
+            RelNode child, RelCollation collation) {
+        super(cluster, traits, child, collation);
     }
 
     @Override
     public PhoenixClientSort copy(RelTraitSet traitSet, RelNode newInput,
             RelCollation newCollation, RexNode offset, RexNode fetch) {
-        return new PhoenixClientSort(getCluster(), traitSet, newInput, newCollation, offset, fetch);
+        return create(newInput, newCollation);
     }
     
     @Override
@@ -67,9 +66,8 @@ public class PhoenixClientSort extends PhoenixAbstractSort {
         }
         
         OrderBy orderBy = super.getOrderBy(implementor, null);
-        Integer limit = super.getLimit(implementor);
         
-        return new ClientScanPlan(context, plan.getStatement(), tableRef, RowProjector.EMPTY_PROJECTOR, limit, null, orderBy, plan);
+        return new ClientScanPlan(context, plan.getStatement(), tableRef, RowProjector.EMPTY_PROJECTOR, null, null, orderBy, plan);
     }
 
 }

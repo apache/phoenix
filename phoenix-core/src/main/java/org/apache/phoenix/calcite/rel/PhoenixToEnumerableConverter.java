@@ -48,7 +48,7 @@ public class PhoenixToEnumerableConverter extends ConverterImpl implements Enume
     }
 
     @Override public RelNode copy(RelTraitSet traitSet, List<RelNode> inputs) {
-        return new PhoenixToEnumerableConverter(getCluster(), traitSet, sole(inputs));
+        return create(sole(inputs));
     }
 
     @Override public RelOptCost computeSelfCost(RelOptPlanner planner) {
