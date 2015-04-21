@@ -71,18 +71,6 @@ public class PhoenixUtil {
         Connection connection = DriverManager.getConnection(url, props);
         return connection;
     }
-
-    public static void writeSfdcClientProperty() throws IOException {
-		Configuration conf = HBaseConfiguration.create();
-		Map<String, String> sfdcProperty = conf.getValByRegex("sfdc");
-    	Properties props = new Properties();
-		for (Map.Entry<String, String> entry : sfdcProperty.entrySet()) {
-			props.put(entry.getKey(), entry.getValue());
-			logger.debug("\nSetting sfdc connection property " + entry.getKey() + " to " + entry.getValue());
-		}
-        OutputStream out = new java.io.FileOutputStream(new File("sfdc-hbase-client.properties"));
-        props.store(out,"client properties");
-    }
  
     public boolean executeStatement(String sql) throws Exception {
         Connection connection = null;
