@@ -22,37 +22,13 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.contrib.java.lang.system.ExpectedSystemExit;
 
-import java.sql.Date;
-
-public class PherfTest extends BaseTestWithCluster {
+public class PherfTest {
     @Rule
     public final ExpectedSystemExit exit = ExpectedSystemExit.none();
 
     @Test
-    public void testPherfMain() {
-        String[] args = {"-drop", "all", "-l", "-q", "-m",
-                "--monitorFrequency", "100",
-                "-z", "localhost",
-                "--scenarioFile", ".*user_defined_scenario.xml",
-                "--schemaFile", ".*user_defined_schema_194.sql"};
-        Pherf.main(args);
-    }
-
-    @Test
     public void testListArgument() {
         String[] args = {"-listFiles"};
-        Pherf.main(args);
-    }
-
-    @Test
-    public void testReleaseExists() {
-        String[] args = {"-drop", "all", "-l", "-q", "-m",
-                "--monitorFrequency", "100",
-                "--scenarioFile", ".*test_scenario.xml",
-                "--schemaFile", ".*user_defined_schema_194.sql"};
-
-        // Makes sure that System.exit(1) is called. Release is a required param.
-        exit.expectSystemExitWithStatus(1);
         Pherf.main(args);
     }
 

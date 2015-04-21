@@ -18,11 +18,13 @@
 
 package org.apache.phoenix.pherf;
 
+import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.pherf.configuration.Column;
 import org.apache.phoenix.pherf.configuration.DataModel;
 import org.apache.phoenix.pherf.configuration.Scenario;
 import org.apache.phoenix.pherf.configuration.XMLConfigParser;
 import org.apache.phoenix.pherf.schema.SchemaReader;
+import org.apache.phoenix.pherf.util.PhoenixUtil;
 import org.junit.Test;
 
 import java.net.URL;
@@ -36,7 +38,8 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-public class SchemaReaderTest extends BaseTestWithCluster {
+public class SchemaReaderIT extends BaseHBaseManagedTimeIT {
+    protected static PhoenixUtil util = new PhoenixUtil(true);
 
 	@Test
     public void testSchemaReader() {
@@ -46,7 +49,8 @@ public class SchemaReaderTest extends BaseTestWithCluster {
 
     private void assertApplySchemaTest() {
         try {
-            SchemaReader reader = new SchemaReader(".*datamodel/.*test.*sql");
+            util.setZookeeper("localhost");
+            SchemaReader reader = new SchemaReader(util, ".*datamodel/.*test.*sql");
 
             List<Path> resources = new ArrayList<>(reader.getResourceList());
             assertTrue("Could not pull list of schema files.", resources.size() > 0);
