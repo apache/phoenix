@@ -100,7 +100,8 @@ public class PhoenixUtil {
         }
         return result;
     }
-    
+
+    @SuppressWarnings("unused")
     public boolean executeStatement(PreparedStatement preparedStatement, Connection connection) {
     	boolean result = false;
         try {
@@ -112,6 +113,7 @@ public class PhoenixUtil {
         return result;
     }
 
+    @SuppressWarnings("unused")
     public ResultSet executeQuery(PreparedStatement preparedStatement, Connection connection) {
         ResultSet resultSet = null;
         try {

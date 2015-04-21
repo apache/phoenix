@@ -130,19 +130,6 @@ public class ResourceList {
         return pherfProps;
     }
 
-    /**
-     * Utility method to check if base result dir exists
-     */
-    public void ensureBaseDirExists(String directory) {
-        File baseDir = new File(directory);
-        if (!baseDir.exists()) {
-            boolean made = baseDir.mkdir();
-            if (!made) {
-                logger.error("Could not make directory:" + directory);
-            }
-        }
-    }
-
     private Collection<String> getResources(
             final String element,
             final Pattern pattern) {

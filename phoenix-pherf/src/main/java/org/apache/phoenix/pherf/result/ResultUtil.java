@@ -38,59 +38,6 @@ public class ResultUtil {
     private static String FILE_SUFFIX = null;
 
     /**
-     * Overload for write all results type to file
-     * <p/>
-     * TODO Remove when we are sure results are stable. Currently there are no more references to this.
-     *
-     * @param dataModelResult
-     * @param fileName
-     * @throws javax.xml.bind.JAXBException
-     * @throws IOException
-     */
-    public synchronized void writeResultToFile(DataModelResult dataModelResult, String fileName, RunMode runMode) throws Exception {
-
-        ResultHandler detailsCSVHandler;
-        ResultHandler aggregateCSVHandler;
-        ResultHandler xmlResultHandler;
-        ResultHandler imageResultHandler;
-        List<ResultHandler> handlers = new ArrayList<>();
-        try {
-            ensureBaseResultDirExists();
-            final DataModelResult dataModelResultCopy = new DataModelResult(dataModelResult);
-
-            detailsCSVHandler = new CSVResultHandler(fileName, ResultFileDetails.CSV_DETAILED_PERFORMANCE);
-            handlers.add(detailsCSVHandler);
-            xmlResultHandler = new XMLResultHandler(fileName, ResultFileDetails.XML);
-            handlers.add(xmlResultHandler);
-            aggregateCSVHandler = new CSVResultHandler(fileName, ResultFileDetails.CSV_AGGREGATE_PERFORMANCE);
-            handlers.add(aggregateCSVHandler);
-            imageResultHandler = new ImageResultHandler(fileName, ResultFileDetails.IMAGE);
-            handlers.add(imageResultHandler);
-
-            // XML results
-            write(xmlResultHandler, dataModelResultCopy, runMode);
-            // JPG result visualization
-            write(imageResultHandler, dataModelResultCopy, runMode);
-            // CSV results
-            write(aggregateCSVHandler, dataModelResultCopy, runMode);
-            // CSV results details
-            write(detailsCSVHandler, dataModelResultCopy, runMode);
-
-        } finally {
-            for (ResultHandler handler : handlers) {
-                try {
-                    if (handler != null) {
-                        handler.flush();
-                        handler.close();
-                    }
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-            }
-        }
-    }
-
-    /**
      * Write data load time details
      *
      * @param dataLoadThreadTime {@link DataLoadThreadTime}
@@ -143,24 +90,6 @@ public class ResultUtil {
             if (writer != null) {
                 writer.flush();
                 writer.close();
-            }
-        }
-    }
-
-    // TODO remove when stable. There are no more references to this method.
-    public synchronized void write(List<DataModelResult> dataModelResults, RunMode runMode) throws Exception {
-        ensureBaseResultDirExists();
-
-        CSVResultHandler detailsCSVWriter = null;
-        try {
-            detailsCSVWriter = new CSVResultHandler(PherfConstants.COMBINED_FILE_NAME, ResultFileDetails.CSV_DETAILED_PERFORMANCE);
-            for (DataModelResult dataModelResult : dataModelResults) {
-                write(detailsCSVWriter, dataModelResult, runMode);
-            }
-        } finally {
-            if (detailsCSVWriter != null) {
-                detailsCSVWriter.flush();
-                detailsCSVWriter.close();
             }
         }
     }

@@ -58,7 +58,6 @@ public class DataLoader {
     private final RulesApplier rulesApplier;
     private final ResultUtil resultUtil;
     private final ExecutorService pool;
-    private final Properties properties;
 
     private final int threadPoolSize;
     private final int batchSize;
@@ -75,7 +74,6 @@ public class DataLoader {
      */
     public DataLoader(Properties properties, XMLConfigParser parser) throws Exception {
         this.parser = parser;
-        this.properties = properties;
         this.rulesApplier = new RulesApplier(this.parser);
         this.resultUtil = new ResultUtil();
         int size = Integer.parseInt(properties.getProperty("pherf.default.dataloader.threadpool"));
@@ -152,41 +150,6 @@ public class DataLoader {
     public void updatePhoenixStats(String tableName) throws Exception {
         logger.info("Updating stats for " + tableName);
         pUtil.executeStatement("UPDATE STATISTICS " + tableName);
-    }
-
-    public void printTableColumns(Scenario scenario) throws Exception {
-        Connection connection = null;
-        try {
-            connection = pUtil.getConnection();
-            List<Column> columnList = pUtil.getColumnsFromPhoenix(
-                    scenario.getSchemaName(),
-                    scenario.getTableNameWithoutSchemaName(), connection);
-
-            logger.debug("\n\nColumns from metadata:");
-            for (Column column : columnList) {
-                logger.debug("\nColumn name: [" + column.getName()
-                        + "]; type: [" + column.getType() + "]; length: ["
-                        + column.getLength() + "]");
-            }
-
-            if (null != scenario.getDataOverride()) {
-                logger.debug("\n\nColumns from override:");
-                for (Column column : scenario.getDataOverride().getColumn()) {
-                    logger.debug("\nColumn name: [" + column.getName() + "]; DataSequence: [" + column.getDataSequence()
-                            + "]; length: [" + column.getLength() + "]");
-                }
-            }
-
-        } finally {
-            if (connection != null) {
-                try {
-                    connection.close();
-                } catch (SQLException e) {
-                    // Swallow since we are closing anyway
-                    e.printStackTrace();
-                }
-            }
-        }
     }
 
     public Future<Info> upsertData(final Scenario scenario,

@@ -41,7 +41,8 @@ public class QuerySetResult extends QuerySet {
 		return queryResults;
 	}
 
-	public void setQueryResults(List<QueryResult> queryResults) {
+    @SuppressWarnings("unused")
+    public void setQueryResults(List<QueryResult> queryResults) {
 		this.queryResults = queryResults;
 	}	
 }

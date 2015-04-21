@@ -18,23 +18,23 @@
 
 package org.apache.phoenix.pherf.result.impl;
 
-import org.apache.phoenix.pherf.PherfConstants;
-import org.apache.phoenix.pherf.result.file.ResultFileDetails;
-import org.apache.commons.csv.CSVFormat;
-import org.apache.commons.csv.CSVParser;
-import org.apache.commons.csv.CSVPrinter;
-import org.apache.commons.csv.CSVRecord;
-import org.apache.phoenix.pherf.result.Result;
-import org.apache.phoenix.pherf.result.ResultHandler;
-import org.apache.phoenix.pherf.result.ResultUtil;
-import org.apache.phoenix.pherf.result.ResultValue;
-
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.List;
+
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVParser;
+import org.apache.commons.csv.CSVPrinter;
+import org.apache.commons.csv.CSVRecord;
+import org.apache.phoenix.pherf.PherfConstants;
+import org.apache.phoenix.pherf.result.Result;
+import org.apache.phoenix.pherf.result.ResultHandler;
+import org.apache.phoenix.pherf.result.ResultUtil;
+import org.apache.phoenix.pherf.result.ResultValue;
+import org.apache.phoenix.pherf.result.file.ResultFileDetails;
 
 /**
  * TODO Doc this class. Note that each instance that has a non unique file name will overwrite the last
@@ -123,7 +123,8 @@ public class CSVResultHandler implements ResultHandler {
             return;
         }
         csvPrinter = new CSVPrinter(new PrintWriter(resultFileName), CSVFormat.DEFAULT);
-        csvPrinter.printRecord(result.getHeader().split(PherfConstants.RESULT_FILE_DELIMETER));
+        Object[] records = result.getHeader().split(PherfConstants.RESULT_FILE_DELIMETER);
+        csvPrinter.printRecord(records);
         isClosed = false;
     }
 

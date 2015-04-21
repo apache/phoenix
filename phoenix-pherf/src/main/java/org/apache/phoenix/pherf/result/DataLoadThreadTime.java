@@ -30,10 +30,6 @@ public class DataLoadThreadTime {
 		return threadTime;
 	}
 
-	public void setThreadTime(List<WriteThreadTime> threadTime) {
-		this.threadTime = threadTime;
-	}
-	
 	public void add(String tableName, String threadName, int rowsUpserted, long timeInMsPerMillionRows) {
 		threadTime.add(new WriteThreadTime(tableName, threadName, rowsUpserted, timeInMsPerMillionRows));	
 	}
@@ -59,22 +55,13 @@ class WriteThreadTime {
 	public String getTableName() {
 		return tableName;
 	}
-	public void setTableName(String tableName) {
-		this.tableName = tableName;
-	}
 	public String getThreadName() {
 		return threadName;
-	}
-	public void setThreadName(String threadName) {
-		this.threadName = threadName;
 	}
 	public long getTimeInMsPerMillionRows() {
 		return timeInMsPerMillionRows;
 	}
-	public void setTimeInMsPerMillionRows(long timeInMsPerMillionRows) {
-		this.timeInMsPerMillionRows = timeInMsPerMillionRows;
-	}
-	
+
 	public List<ResultValue> getCsvRepresentation(ResultUtil util) {
         List<ResultValue> rowValues = new ArrayList<>();
         rowValues.add(new ResultValue(util.convertNull(getTableName())));
@@ -87,9 +74,5 @@ class WriteThreadTime {
 
 	public int getRowsUpserted() {
 		return rowsUpserted;
-	}
-
-	public void setRowsUpserted(int rowsUpserted) {
-		this.rowsUpserted = rowsUpserted;
 	}
 }

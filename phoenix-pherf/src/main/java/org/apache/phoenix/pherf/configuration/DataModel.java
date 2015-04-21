@@ -71,5 +71,14 @@ public class DataModel {
 	public void setName(String name) {
 		this.name = name;
 	}
-}
 
+    @Override
+    public String toString() {
+        StringBuilder stringBuilder = new StringBuilder();
+        for (Scenario scenario : getScenarios()) {
+            stringBuilder.append("Scenario: " + scenario.getName());
+            stringBuilder.append("[" + scenario + "]");
+        }
+        return stringBuilder.toString();
+    }
+}

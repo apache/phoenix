@@ -19,6 +19,7 @@
 package org.apache.phoenix.pherf.exception;
 
 public class FileLoaderRuntimeException extends PherfRuntimeException {
+    @SuppressWarnings("unused")
     public FileLoaderRuntimeException(String message) throws Exception {
         super(message);
     }

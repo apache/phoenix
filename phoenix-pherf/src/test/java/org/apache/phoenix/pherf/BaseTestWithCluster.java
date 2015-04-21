@@ -42,26 +42,4 @@ public class BaseTestWithCluster {
         PhoenixUtil.setZookeeper(zookeeper);
         logger.info("Using quorum:" + zookeeper);
     }
-
-    /**
-     * Get the configuration for what scenarios will run and how.
-     *
-     * @return {@link java.nio.file.Path}
-     */
-    public Path getTestConfiguration() {
-        URL resourceUrl = getUrl();
-        assertNotNull("Test data XML file is missing", resourceUrl);
-        Path resourcePath = null;
-        try {
-            resourcePath = Paths.get(resourceUrl.toURI());
-        } catch (URISyntaxException e) {
-            e.printStackTrace();
-        }
-        return resourcePath;
-    }
-
-    public URL getUrl() {
-        return getClass().getResource("/scenario/test_scenario.xml");
-    }
-
 }

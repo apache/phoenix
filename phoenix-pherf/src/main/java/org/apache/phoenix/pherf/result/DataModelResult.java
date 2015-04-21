@@ -35,6 +35,7 @@ public class DataModelResult extends DataModel {
 		return scenarioResult;
 	}
 
+    @SuppressWarnings("unused")
 	public void setScenarioResult(List<ScenarioResult> scenarioResult) {
 		this.scenarioResult = scenarioResult;
 	}

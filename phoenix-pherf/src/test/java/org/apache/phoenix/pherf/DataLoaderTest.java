@@ -29,20 +29,6 @@ import static junit.framework.Assert.assertEquals;
 import static junit.framework.Assert.fail;
 
 public class DataLoaderTest extends BaseTestWithCluster {
-    private static XMLConfigParser parser = null;
-    private static DataModel model = null;
-    private DataLoader loader = null;
-
-    @BeforeClass
-    public static void init() {
-
-        try {
-            parser = new XMLConfigParser(matcherScenario);
-            model = parser.getDataModels().get(0);
-        } catch (Exception e) {
-            fail("Failed to initialize test: " + e.getMessage());
-        }
-    }
 
     /**
      * Test rows divide evenly with large rows and small threadpool
