@@ -567,7 +567,7 @@ public class MutationState implements SQLCloseable {
             if (tableRef.getTable().getType() != PTableType.INDEX) {
                 numRows -= valuesMap.size();
             }
-            valuesMap.remove(tableRef); // Remove batches as we process them
+            mutations.remove(tableRef); // Remove batches as we process them
         }
         trace.close();
         assert(numRows==0);
