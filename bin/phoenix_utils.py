@@ -32,6 +32,8 @@ def find(pattern, classPaths):
             path = path[:-1]
     
         for root, dirs, files in os.walk(path):
+            # sort the file names so *-client always precedes *-thin-client
+            files.sort()
             for name in files:
                 if fnmatch.fnmatch(name, pattern):
                     return os.path.join(root, name)
@@ -41,6 +43,8 @@ def find(pattern, classPaths):
 def findFileInPathWithoutRecursion(pattern, path):
 
     files = [f for f in os.listdir(path) if os.path.isfile(os.path.join(path,f))]
+    # sort the file names so *-client always precedes *-thin-client
+    files.sort()
     for name in files:
         if fnmatch.fnmatch(name, pattern):
             return os.path.join(path, name)
