@@ -58,7 +58,7 @@ else:
 
 # HBase configuration folder path (where hbase-site.xml reside) for
 # HBase/Phoenix client side property override
-hbase_config_path = os.getenv('HBASE_CONF_DIR', phoenix_utils.hbase_conf_path)
+hbase_config_path = phoenix_utils.hbase_conf_dir
 
 # default paths ## TODO: add windows support
 java_home = os.getenv('JAVA_HOME')

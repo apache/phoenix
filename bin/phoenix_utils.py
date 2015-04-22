@@ -64,8 +64,10 @@ def setPath():
  phoenix_client_jar = find("phoenix-*-client.jar", phoenix_jar_path)
  global phoenix_test_jar_path
  phoenix_test_jar_path = os.path.join(current_dir, "..", "phoenix-core", "target","*")
- global hbase_conf_path
- hbase_conf_path = os.getenv('HBASE_CONF_PATH','.')
+ global hbase_conf_dir
+ hbase_conf_dir = os.getenv('HBASE_CONF_DIR', os.getenv('HBASE_CONF_PATH', '.'))
+ global hbase_conf_path # keep conf_path around for backward compatibility
+ hbase_conf_path = hbase_conf_dir
  global testjar
  testjar = find(PHOENIX_TESTS_JAR_PATTERN, phoenix_test_jar_path)
  global phoenix_queryserver_jar
