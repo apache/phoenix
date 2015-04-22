@@ -281,9 +281,7 @@ public class PartialCommitIT {
         
         @Override
         public void preDelete(ObserverContext<RegionCoprocessorEnvironment> c,
-        		Delete delete, WALEdit edit, Durability durability)
-        		throws IOException {
-        	System.out.println( c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString() + ' ' + delete + ' ' + delete.getFamilyCellMap().firstEntry().getValue().get(0).getQualifierLength());
+                Delete delete, WALEdit edit, Durability durability) throws IOException {
             if (shouldFailDelete(c, delete)) {
                 // throwing anything other than instances of IOException result
                 // in this coprocessor being unloaded
@@ -301,9 +299,9 @@ public class PartialCommitIT {
         private boolean shouldFailDelete(ObserverContext<RegionCoprocessorEnvironment> c, Delete delete) {
             String tableName = c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString();
             return TABLE_NAME_TO_FAIL.equals(tableName) &&  
-                   // Phoenix deletes are sent as Mutations with empty values
-                   delete.getFamilyCellMap().firstEntry().getValue().get(0).getValueLength() == 0 &&
-                   delete.getFamilyCellMap().firstEntry().getValue().get(0).getQualifierLength() == 0;
+                // Phoenix deletes are sent as Mutations with empty values
+                delete.getFamilyCellMap().firstEntry().getValue().get(0).getValueLength() == 0 &&
+                delete.getFamilyCellMap().firstEntry().getValue().get(0).getQualifierLength() == 0;
         }
     }
     
