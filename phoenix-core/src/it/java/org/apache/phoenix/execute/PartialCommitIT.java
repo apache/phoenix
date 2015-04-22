@@ -33,6 +33,7 @@ import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.Driver;
 import java.sql.ResultSet;
@@ -47,6 +48,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HBaseIOException;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
+import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
@@ -268,7 +270,7 @@ public class PartialCommitIT {
         @Override
         public void prePut(ObserverContext<RegionCoprocessorEnvironment> c, Put put, WALEdit edit,
                 final Durability durability) throws HBaseIOException {
-            if (shouldFailUpsert(c, put) || shouldFailDelete(c, put)) {
+            if (shouldFailUpsert(c, put)) {
                 // throwing anything other than instances of IOException result
                 // in this coprocessor being unloaded
                 // DoNotRetryIOException tells HBase not to retry this mutation
@@ -277,16 +279,31 @@ public class PartialCommitIT {
             }
         }
         
-        private static boolean shouldFailUpsert(ObserverContext<RegionCoprocessorEnvironment> c, Put put) {
+        @Override
+        public void preDelete(ObserverContext<RegionCoprocessorEnvironment> c,
+        		Delete delete, WALEdit edit, Durability durability)
+        		throws IOException {
+        	System.out.println( c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString() + ' ' + delete + ' ' + delete.getFamilyCellMap().firstEntry().getValue().get(0).getQualifierLength());
+            if (shouldFailDelete(c, delete)) {
+                // throwing anything other than instances of IOException result
+                // in this coprocessor being unloaded
+                // DoNotRetryIOException tells HBase not to retry this mutation
+                // multiple times
+                throw new DoNotRetryIOException();
+            }
+        }
+        
+        private boolean shouldFailUpsert(ObserverContext<RegionCoprocessorEnvironment> c, Put put) {
             String tableName = c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString();
             return TABLE_NAME_TO_FAIL.equals(tableName) && Bytes.equals(ROW_TO_FAIL, put.getRow());
         }
         
-        private static boolean shouldFailDelete(ObserverContext<RegionCoprocessorEnvironment> c, Put put) {
+        private boolean shouldFailDelete(ObserverContext<RegionCoprocessorEnvironment> c, Delete delete) {
             String tableName = c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString();
             return TABLE_NAME_TO_FAIL.equals(tableName) &&  
-                   // Phoenix deletes are sent as Puts with empty values
-                   put.getFamilyCellMap().firstEntry().getValue().get(0).getValueLength() == 0; 
+                   // Phoenix deletes are sent as Mutations with empty values
+                   delete.getFamilyCellMap().firstEntry().getValue().get(0).getValueLength() == 0 &&
+                   delete.getFamilyCellMap().firstEntry().getValue().get(0).getQualifierLength() == 0;
         }
     }
     
