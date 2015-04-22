@@ -404,7 +404,7 @@ checkTests () {
       JIRA_COMMENT="$JIRA_COMMENT
 
     {color:green}+0 tests included{color}.  The patch appears to be a documentation, build,
-                        or dev-support patch that doesn't require tests."
+                        or dev patch that doesn't require tests."
       return 0
     fi
     JIRA_COMMENT="$JIRA_COMMENT
@@ -485,7 +485,7 @@ applyPatch () {
   echo ""
  
   export PATCH
-  $BASEDIR/dev-support/smart-apply-patch.sh $PATCH_DIR/patch
+  $BASEDIR/dev/smart-apply-patch.sh $PATCH_DIR/patch
   if [[ $? != 0 ]] ; then
     echo "PATCH APPLICATION FAILED"
     JIRA_COMMENT="$JIRA_COMMENT
