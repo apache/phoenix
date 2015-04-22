@@ -159,6 +159,7 @@ import com.google.common.collect.Lists;
  * @since 0.1
  */
 public class PhoenixStatement implements Statement, SQLCloseable, org.apache.phoenix.jdbc.Jdbc7Shim.Statement {
+	
     private static final Logger logger = LoggerFactory.getLogger(PhoenixStatement.class);
     
     public enum Operation {
@@ -253,6 +254,7 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
                         setLastResultSet(rs);
                         setLastUpdateCount(NO_UPDATE);
                         setLastUpdateOperation(stmt.getOperation());
+                        connection.incrementStatementExecutionCounter();
                         return rs;
                     } catch (RuntimeException e) {
                         // FIXME: Expression.evaluate does not throw SQLException
@@ -305,6 +307,7 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
                                 int lastUpdateCount = (int) Math.min(Integer.MAX_VALUE, state.getUpdateCount());
                                 setLastUpdateCount(lastUpdateCount);
                                 setLastUpdateOperation(stmt.getOperation());
+                                connection.incrementStatementExecutionCounter();
                                 return lastUpdateCount;
                             } catch (RuntimeException e) {
                                 // FIXME: Expression.evaluate does not throw SQLException

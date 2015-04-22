@@ -59,6 +59,7 @@ import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.phoenix.call.CallRunner;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.execute.CommitException;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.expression.function.FunctionArgumentType;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
@@ -123,17 +124,17 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     private final Properties info;
     private List<SQLCloseable> statements = new ArrayList<SQLCloseable>();
     private final Map<PDataType<?>, Format> formatters = new HashMap<>();
-    private final MutationState mutationState;
+    private MutationState mutationState;
     private final int mutateBatchSize;
     private final Long scn;
     private boolean isAutoCommit = false;
     private PMetaData metaData;
     private final PName tenantId;
-    private final String datePattern;
+    private final String datePattern; 
     private final String timePattern;
     private final String timestampPattern;
+    private int statementExecutionCounter;
     private TraceScope traceScope = null;
-    
     private boolean isClosed = false;
     private Sampler<?> sampler;
     private boolean readOnly = false;
@@ -154,17 +155,20 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         this(connection.getQueryServices(), connection.getURL(), connection.getClientInfo(), connection.getMetaDataCache());
         this.isAutoCommit = connection.isAutoCommit;
         this.sampler = connection.sampler;
+        this.statementExecutionCounter = connection.statementExecutionCounter;
     }
     
     public PhoenixConnection(PhoenixConnection connection, long scn) throws SQLException {
         this(connection.getQueryServices(), connection, scn);
         this.sampler = connection.sampler;
+        this.statementExecutionCounter = connection.statementExecutionCounter;
     }
     
     public PhoenixConnection(ConnectionQueryServices services, PhoenixConnection connection, long scn) throws SQLException {
         this(services, connection.getURL(), newPropsWithSCN(scn,connection.getClientInfo()), connection.getMetaDataCache());
         this.isAutoCommit = connection.isAutoCommit;
         this.sampler = connection.sampler;
+        this.statementExecutionCounter = connection.statementExecutionCounter;
     }
     
     public PhoenixConnection(ConnectionQueryServices services, String url, Properties info, PMetaData metaData) throws SQLException {
@@ -240,7 +244,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
             }
             
         });
-        this.mutationState = new MutationState(maxSize, this);
+        this.mutationState = newMutationState(maxSize);
         this.services.addConnection(this);
 
         // setup tracing, if its enabled
@@ -372,6 +376,10 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         return metaData;
     }
 
+    protected MutationState newMutationState(int maxSize) {
+        return new MutationState(maxSize, this); 
+    }
+    
     public MutationState getMutationState() {
         return mutationState;
     }
@@ -440,6 +448,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
                 return null;
             }
         }, Tracing.withTracing(this, "committing mutations"));
+        statementExecutionCounter = 0;
     }
 
     @Override
@@ -644,6 +653,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     @Override
     public void rollback() throws SQLException {
         mutationState.rollback(this);
+        statementExecutionCounter = 0;
     }
 
     @Override
@@ -800,6 +810,21 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
 
     public KeyValueBuilder getKeyValueBuilder() {
         return this.services.getKeyValueBuilder();
+    }
+    
+    /**
+     * Used to track executions of {@link Statement}s and {@link PreparedStatement}s that were created from this connection before
+     * commit or rollback. 0-based. Used to associate partial save errors with SQL statements
+     * invoked by users.
+     * @see CommitException
+     * @see #incrementStatementExecutionCounter()
+     */
+    public int getStatementExecutionCounter() {
+		return statementExecutionCounter;
+	}
+    
+    public void incrementStatementExecutionCounter() {
+        statementExecutionCounter++;
     }
 
     public TraceScope getTraceScope() {
