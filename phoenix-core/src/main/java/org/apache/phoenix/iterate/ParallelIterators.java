@@ -92,6 +92,10 @@ public class ParallelIterators extends BaseResultIterators {
                         logger.debug(LogUtil.addCustomAnnotations("Id: " + scanId + ", Time: " + (System.currentTimeMillis() - startTime) + "ms, Scan: " + scan, ScanUtil.getCustomAnnotations(scan)));
                     }
                     PeekingResultIterator iterator = iteratorFactory.newIterator(context, scanner, scan);
+                    
+                    // Fill the scanner's cache. This helps reduce latency since we are parallelizing the I/O needed.
+                    iterator.peek();
+                    
                     allIterators.add(iterator);
                     return iterator;
                 }
