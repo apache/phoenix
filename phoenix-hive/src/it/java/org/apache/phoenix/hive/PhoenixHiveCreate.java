@@ -32,6 +32,7 @@ import java.io.StringWriter;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.util.Properties;
 
 import org.apache.commons.io.FileUtils;
@@ -67,9 +68,9 @@ import com.google.common.base.Preconditions;
  * Test class to run all Hive Phoenix integration tests against a MINI Map-Reduce cluster.
  */
 @Category(NeedsOwnMiniClusterTest.class)
-public class PhoenixHiveStoreIT {
+public class PhoenixHiveCreate {
     
-    private static final Log LOG = LogFactory.getLog(PhoenixHiveStoreIT.class);
+    private static final Log LOG = LogFactory.getLog(PhoenixHiveCreate.class);
     private static final String SCHEMA_NAME = "T";
     private static final String TABLE_NAME = "HIVE_TEST";
     private static Path TEST_ROOT;
@@ -106,10 +107,7 @@ public class PhoenixHiveStoreIT {
         File logDir = new File(hiveLogDir);
         logDir.mkdirs();
         
-     }
-    
-    @Before
-    public void setUp() throws Exception {
+        // Setup Hive mini Server
         Path testRoot = hbaseTestUtil.getDataTestDir();
         System.setProperty("test.tmp.dir", testRoot.toString());
         System.setProperty("test.warehouse.dir", (new Path(testRoot, "warehouse")).toString());
@@ -121,44 +119,95 @@ public class PhoenixHiveStoreIT {
             LOG.error("Unexpected exception in setup", e);
             fail("Unexpected exception in setup");
         }
-       
-    }
+        
+     }
+    
 	
     /**
-     * Check if Hive Mini Cluster Starts Correctly
-     * First simple test of connector creation
+     * Datatype Test
      * @throws Exception
      */
     @Test
-    public void simpleTest() throws Exception {
-        String testName = "simpleTest";
+    public void dataTypeTest() throws Exception {
+        String testName = "dataTypeTest";
         // create a dummy outfile under log folder
         hbaseTestUtil.getTestFileSystem().createNewFile(new Path(hiveLogDir, testName + ".out"));
         createFile(StringUtil.EMPTY_STRING, new Path(hiveLogDir, testName + ".out").toString());
         createFile(StringUtil.EMPTY_STRING, new Path(hiveOutputDir, testName + ".out").toString());
         StringBuilder sb = new StringBuilder();
-        sb.append("CREATE EXTERNAL TABLE IF NOT EXISTS phoenix_table(ID int, SALARY INT)" + HiveTestUtil.CRLF +
+        sb.append("CREATE EXTERNAL TABLE IF NOT EXISTS phoenix_datatype(ID int, description STRING, ts TIMESTAMP, db DOUBLE,fl FLOAT, us INT)" + HiveTestUtil.CRLF +
                   " STORED BY  \"org.apache.phoenix.hive.PhoenixStorageHandler\"" +HiveTestUtil.CRLF+
                   " TBLPROPERTIES(" + HiveTestUtil.CRLF+
-                  "   'phoenix.hbase.table.name'='phoenix_table'," + HiveTestUtil.CRLF+
+                  "   'phoenix.hbase.table.name'='phoenix_datatype'," + HiveTestUtil.CRLF+
                   "   'phoenix.zookeeper.znode.parent'='hbase'," + HiveTestUtil.CRLF+
          "   'phoenix.zookeeper.quorum'='localhost:" + hbaseTestUtil.getZkCluster().getClientPort() + "'," +HiveTestUtil.CRLF+ 
                   "   'phoenix.rowkeys'='id'," + HiveTestUtil.CRLF+
                   "   'autocreate'='true'," + HiveTestUtil.CRLF+
                   "   'autodrop'='true'," + HiveTestUtil.CRLF+
-                  "   'phoenix.column.mapping'='salary:B.salary');" + HiveTestUtil.CRLF);
-        sb.append("INSERT INTO TABLE phoenix_table" + HiveTestUtil.CRLF+
-        		  "VALUES (10, 1000);" + HiveTestUtil.CRLF);
+                  "   'phoenix.column.mapping'='description:B.description');" + HiveTestUtil.CRLF);
+        sb.append("INSERT INTO TABLE phoenix_datatype" + HiveTestUtil.CRLF+
+        		  "VALUES (10, \"foodesc\",\"2013-01-05 01:01:01\",200,2.0,-1);" + HiveTestUtil.CRLF);
         String fullPath = new Path(hbaseTestUtil.getDataTestDir(), testName).toString();
         createFile(sb.toString(), fullPath);
         runTest(testName, fullPath);
         
-        String phoenixQuery = "SELECT * FROM phoenix_table";
+        String phoenixQuery = "SELECT * FROM phoenix_datatype";
         PreparedStatement statement = conn.prepareStatement(phoenixQuery);
         ResultSet rs = statement.executeQuery();
-        assert(rs.getMetaData().getColumnCount() == 2);
-       
+        assert(rs.getMetaData().getColumnCount() == 6);
+        while(rs.next()){
+        	assert(rs.getInt(1) == 10);
+        	assert(rs.getString(2).equalsIgnoreCase("foodesc"));
+        	assert(rs.getTimestamp(3).equals(Timestamp.valueOf("2013-01-05 02:01:01")));
+        	assert(rs.getDouble(4) == 200);
+        	assert(rs.getFloat(5) == 2.0);
+        	assert(rs.getInt(6) == -1);	
+        } 
     }
+    
+    /**
+     * Datatype Test
+     * @throws Exception
+     */
+    @Test
+    public void MultiKey() throws Exception {
+        String testName = "MultiKey";
+        // create a dummy outfile under log folder
+        hbaseTestUtil.getTestFileSystem().createNewFile(new Path(hiveLogDir, testName + ".out"));
+        createFile(StringUtil.EMPTY_STRING, new Path(hiveLogDir, testName + ".out").toString());
+        createFile(StringUtil.EMPTY_STRING, new Path(hiveOutputDir, testName + ".out").toString());
+        StringBuilder sb = new StringBuilder();
+        sb.append("CREATE EXTERNAL TABLE IF NOT EXISTS phoenix_MultiKey(ID int, ID2 String,description STRING, ts TIMESTAMP, db DOUBLE,fl FLOAT, us INT)" + HiveTestUtil.CRLF +
+                  " STORED BY  \"org.apache.phoenix.hive.PhoenixStorageHandler\"" +HiveTestUtil.CRLF+
+                  " TBLPROPERTIES(" + HiveTestUtil.CRLF+
+                  "   'phoenix.hbase.table.name'='phoenix_MultiKey'," + HiveTestUtil.CRLF+
+                  "   'phoenix.zookeeper.znode.parent'='hbase'," + HiveTestUtil.CRLF+
+         "   'phoenix.zookeeper.quorum'='localhost:" + hbaseTestUtil.getZkCluster().getClientPort() + "'," +HiveTestUtil.CRLF+ 
+                  "   'phoenix.rowkeys'='id,id2'," + HiveTestUtil.CRLF+
+                  "   'autocreate'='true'," + HiveTestUtil.CRLF+
+                  "   'autodrop'='true'," + HiveTestUtil.CRLF+
+                  "   'phoenix.column.mapping'='description:B.description');" + HiveTestUtil.CRLF);
+        sb.append("INSERT INTO TABLE phoenix_MultiKey" + HiveTestUtil.CRLF+
+        		  "VALUES (10,  \"part2\",\"foodesc\",\"2013-01-05 01:01:01\",200,2.0,-1);" + HiveTestUtil.CRLF);
+        String fullPath = new Path(hbaseTestUtil.getDataTestDir(), testName).toString();
+        createFile(sb.toString(), fullPath);
+        runTest(testName, fullPath);
+        
+        String phoenixQuery = "SELECT * FROM phoenix_MultiKey";
+        PreparedStatement statement = conn.prepareStatement(phoenixQuery);
+        ResultSet rs = statement.executeQuery();
+        assert(rs.getMetaData().getColumnCount() == 7);
+        while(rs.next()){
+        	assert(rs.getInt(1) == 10);
+        	assert(rs.getString(2).equalsIgnoreCase("part2"));
+        	assert(rs.getString(3).equalsIgnoreCase("foodesc"));
+        	assert(rs.getTimestamp(4).equals(Timestamp.valueOf("2013-01-05 02:01:01")));
+        	assert(rs.getDouble(5) == 200);
+        	assert(rs.getFloat(6) == 2.0);
+        	assert(rs.getInt(7) == -1);	
+        } 
+    }
+       
     
     private void runTest(String fname, String fpath) throws Exception {
         long startTime = System.currentTimeMillis();
@@ -192,10 +241,6 @@ public class PhoenixHiveStoreIT {
 
         long elapsedTime = System.currentTimeMillis() - startTime;
         System.err.println("Done query: " + fname + " elapsedTime=" + elapsedTime/1000 + "s");
-        //String phoenixQuery = "SELECT * FROM phoenix_table";
-        //PreparedStatement statement = conn.prepareStatement(phoenixQuery);
-        //ResultSet rs = statement.executeQuery();
-        //assert(rs.getMetaData().getColumnCount() == 2);
         assertTrue("Test passed", true);
     }
 
@@ -203,18 +248,6 @@ public class PhoenixHiveStoreIT {
         FileUtils.write(new File(fullName), content);
     }
 
-    @After
-    public void tearDown() throws Exception {
-        dropTable(TABLE_FULL_NAME);
-        if(qt == null) return;
-        try {
-            qt.shutdown();
-        }
-        catch (Exception e) {
-            LOG.error("Unexpected exception in setup", e);
-            fail("Unexpected exception in tearDown");
-        }
-    }
 
     private void dropTable(String tableFullName) throws SQLException {
         Preconditions.checkNotNull(conn);
@@ -223,6 +256,14 @@ public class PhoenixHiveStoreIT {
 
     @AfterClass
     public static void tearDownAfterClass() throws Exception {
+    	 if(qt == null) return;
+         try {
+             qt.shutdown();
+         }
+         catch (Exception e) {
+             LOG.error("Unexpected exception in setup", e);
+             fail("Unexpected exception in tearDown");
+         }
         try {
             conn.close();
         } finally {
