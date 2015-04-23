@@ -60,11 +60,9 @@
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-resources-plugin</artifactId>
-                        <version>2.4</version>
                     </plugin>
                     <plugin>
                         <artifactId>maven-assembly-plugin</artifactId>
-                        <version>2.4</version>
                         <executions>
                             <execution>
                                 <id>make-dependency-jar</id>
@@ -125,23 +123,13 @@
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-surefire-plugin</artifactId>
-                        <configuration>
-                            <!-- Some tests require a cluster to be up. Disable them by default until we fix that problem -->
-                            <skipTests>true</skipTests>
-                            <systemPropertyVariables>
-                                <java.util.logging.config.file>${logging.location}</java.util.logging.config.file>
-                                <app.home>${project.basedir}</app.home>
-                            </systemPropertyVariables>
-                        </configuration>
                     </plugin>
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-resources-plugin</artifactId>
-                        <version>2.4</version>
                     </plugin>
                     <plugin>
                         <artifactId>maven-assembly-plugin</artifactId>
-                        <version>2.4</version>
                         <executions>
                             <execution>
                                 <id>make-dependency-jar</id>
@@ -427,6 +415,14 @@
                     <source>1.7</source>
                     <target>1.7</target>
                 </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>build-helper-maven-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <version>${maven-dependency-plugin.version}</version>
             </plugin>
         </plugins>
     </build>
