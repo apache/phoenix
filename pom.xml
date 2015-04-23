@@ -211,6 +211,8 @@
               <exclude>**/java.sql.Driver</exclude>
               <!-- exclude protobuf files -->
               <exclude>**/generated/**</exclude>
+              <!-- exclude pre-commit testing work directory -->
+              <exclude>**/patchprocess/**</exclude>
             </excludes>
           </configuration>
         </plugin>
