@@ -31,6 +31,7 @@
     <module>phoenix-assembly</module>
     <module>phoenix-pherf</module>
     <module>phoenix-spark</module>
+    <module>phoenix-hive</module>
   </modules>
 
   <repositories>
@@ -85,6 +86,7 @@
     <commons-cli.version>1.2</commons-cli.version>
     <hadoop.version>2.5.1</hadoop.version>
     <pig.version>0.12.0</pig.version>
+    <hive.version>0.14.0</hive.version>
     <jackson.version>1.8.8</jackson.version>
     <antlr.version>3.5</antlr.version>
     <log4j.version>1.2.17</log4j.version>
