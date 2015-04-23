@@ -68,6 +68,7 @@ phoenix_file_basename = 'phoenix-%s-server' % getpass.getuser()
 phoenix_log_file = '%s.log' % phoenix_file_basename
 phoenix_out_file = '%s.out' % phoenix_file_basename
 phoenix_pid_file = '%s.pid' % phoenix_file_basename
+opts = os.getenv('PHOENIX_QUERYSERVER_OPTS', '')
 
 # load hbase-env.sh to extract JAVA_HOME, HBASE_PID_DIR, HBASE_LOG_DIR
 hbase_env_path = os.path.join(hbase_config_path, 'hbase-env.sh')
@@ -84,6 +85,8 @@ if hbase_env.has_key('HBASE_PID_DIR'):
     hbase_pid_dir = hbase_env['HBASE_PID_DIR']
 if hbase_env.has_key('HBASE_LOG_DIR'):
     phoenix_log_dir = hbase_env['HBASE_LOG_DIR']
+if hbase_env.has_key('PHOENIX_QUERYSERVER_OPTS'):
+    opts = hbase_env['PHOENIX_QUERYSERVER_OPTS']
 
 log_file_path = os.path.join(phoenix_log_dir, phoenix_log_file)
 out_file_path = os.path.join(phoenix_log_dir, phoenix_out_file)
@@ -102,6 +105,7 @@ java_cmd = '%(java)s -cp ' + hbase_config_path + os.pathsep + phoenix_utils.phoe
     " -Dpsql.root.logger=%(root_logger)s" + \
     " -Dpsql.log.dir=%(log_dir)s" + \
     " -Dpsql.log.file=%(log_file)s" + \
+    " " + opts + \
     " org.apache.phoenix.queryserver.server.Main " + args
 
 if command == 'start':
@@ -133,9 +137,13 @@ if command == 'start':
             sys.exit(child.wait())
 
 elif command == 'stop':
-    if not os.path.isfile(out_file_path):
+    if not os.path.exists(pid_file_path):
         print >> sys.stderr, "no Query Server to stop because PID file not found, %s" % pid_file_path
         sys.exit(0)
+
+    if not os.path.isfile(pid_file_path):
+        print >> sys.stderr, "PID path exists but is not a file! %s" % pid_file_path
+        sys.exit(1)
 
     pid = None
     with open(pid_file_path, 'r') as p:
