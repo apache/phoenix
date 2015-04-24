@@ -1,14 +1,33 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.apache.phoenix.schema.json;
 
 import java.io.IOException;
 import java.sql.SQLException;
 
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.codehaus.jackson.JsonFactory;
 import org.codehaus.jackson.JsonNode;
-import org.codehaus.jackson.JsonParseException;
 import org.codehaus.jackson.JsonParser;
 import org.codehaus.jackson.JsonParser.Feature;
+import org.codehaus.jackson.JsonProcessingException;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.codehaus.jackson.node.ValueNode;
 
@@ -19,43 +38,65 @@ import com.google.common.base.Preconditions;
  * should be used to represent the JSON data type and also should be used to parse Json data and
  * read the value from it. It always conside the last value if same key exist more than once.
  */
-public class PhoenixJson {
+public class PhoenixJson implements Comparable<PhoenixJson> {
     private final JsonNode node;
     private String jsonAsString;
 
     /**
      * Static Factory method to get an {@link PhoenixJson} object. It also validates the json and
-     * throws {@link JsonParseException} if it is invalid with line number and character, which
-     * should be wrapped in {@link SQLException} by caller.
+     * throws {@link SQLException} if it is invalid with line number and character.
      * @param data Buffer that contains data to parse
      * @param offset Offset of the first data byte within buffer
      * @param length Length of contents to parse within buffer
      * @return {@link PhoenixJson}.
-     * @throws JsonParseException
-     * @throws IOException
+     * @throws SQLException
      */
     public static PhoenixJson getPhoenixJson(byte[] jsonData, int offset, int length)
-            throws JsonParseException, IOException {
-        JsonFactory jsonFactory = new JsonFactory();
-        JsonParser jsonParser = jsonFactory.createJsonParser(jsonData, offset, length);
-        jsonParser.configure(Feature.ALLOW_COMMENTS, true);
-        ObjectMapper objectMapper = new ObjectMapper();
-        try {
-            JsonNode rootNode = objectMapper.readTree(jsonParser);
-            PhoenixJson phoenixJson = new PhoenixJson(rootNode);
+            throws SQLException {
 
+        String jsonDataStr = Bytes.toString(jsonData, offset, length);
+        return getPhoenixJson(jsonDataStr);
+
+    }
+
+    /**
+     * Static Factory method to get an {@link PhoenixJson} object. It also validates the json and
+     * throws {@link SQLException} if it is invalid with line number and character.
+     * @param jsonData Json data as {@link String}.
+     * @return {@link PhoenixJson}.
+     * @throws SQLException
+     */
+    public static PhoenixJson getPhoenixJson(String jsonData) throws SQLException {
+        try {
+            JsonFactory jsonFactory = new JsonFactory();
+            JsonParser jsonParser = jsonFactory.createJsonParser(jsonData);
+            PhoenixJson phoenixJson = getPhoneixJson(jsonParser);
             /*
              * input data has been stored as it is, since some data is lost when json parser runs,
              * for example if a JSON object within the value contains the same key more than once
              * then only last one is stored rest all of them are ignored, which will defy the
              * contract of PJsonDataType of keeping user data as it is.
              */
-            phoenixJson.setJsonAsString(Bytes.toString(jsonData, offset, length));
+            phoenixJson.setJsonAsString(jsonData);
+            return phoenixJson;
+        } catch (IOException x) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_JSON_DATA).setRootCause(x)
+                    .setMessage(x.getMessage()).build().buildException();
+        }
+
+    }
+
+    private static PhoenixJson getPhoneixJson(JsonParser jsonParser) throws IOException,
+            JsonProcessingException {
+        jsonParser.configure(Feature.ALLOW_COMMENTS, true);
+        ObjectMapper objectMapper = new ObjectMapper();
+        try {
+            JsonNode rootNode = objectMapper.readTree(jsonParser);
+            PhoenixJson phoenixJson = new PhoenixJson(rootNode);
             return phoenixJson;
         } finally {
             jsonParser.close();
         }
-
     }
 
     /* Default for unit testing */PhoenixJson(final JsonNode node) {
@@ -175,7 +216,7 @@ public class PhoenixJson {
     @Override
     public String toString() {
         if (this.jsonAsString == null && this.node != null) {
-            setJsonAsString(getJsonAsString());
+            return getJsonAsString();
         }
         return this.jsonAsString;
     }
@@ -203,6 +244,28 @@ public class PhoenixJson {
         return true;
     }
 
+    /**
+     * @return length of the string represented by the current {@link PhoenixJson}.
+     */
+    public int estimateByteSize() {
+        if (this.jsonAsString != null) {
+            return this.jsonAsString.length();
+        }
+        String jsonStr = getJsonAsString();
+        return jsonStr == null ? 1 : jsonStr.length();
+    }
+
+    @Override
+    public int compareTo(PhoenixJson o) {
+        if (o == null) {
+            return 1;
+        } else if (this.equals(o)) {
+            return 0;
+        } else {
+            return this.toString().compareTo(o.toString());
+        }
+    }
+
     private void setJsonAsString(String str) {
         this.jsonAsString = str;
     }
@@ -213,4 +276,5 @@ public class PhoenixJson {
         }
         return null;
     }
+
 }

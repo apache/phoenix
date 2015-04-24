@@ -80,7 +80,7 @@ public class PVarchar extends PDataType<String> {
 		if (equalsAny(actualType, this, PChar.INSTANCE)) {
 			String s = (String) object;
 			return s == null || s.length() > 0 ? s : null;
-		} else if (equalsAny(actualType, PJsonDataType.INSTANCE)) {
+		} else if (equalsAny(actualType, PJson.INSTANCE)) {
 			if (object == null) {
 				return null;
 			}
@@ -93,7 +93,7 @@ public class PVarchar extends PDataType<String> {
 	@Override
 	public boolean isCoercibleTo(PDataType targetType) {
 		return equalsAny(targetType, this, PChar.INSTANCE, PVarbinary.INSTANCE,
-				PBinary.INSTANCE, PJsonDataType.INSTANCE);
+				PBinary.INSTANCE, PJson.INSTANCE);
 	}
 
 	@Override

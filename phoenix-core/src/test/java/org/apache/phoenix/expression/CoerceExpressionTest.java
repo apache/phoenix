@@ -49,7 +49,7 @@ public class CoerceExpressionTest {
 	private static final HashMap<Class, Object> map = new HashMap<Class, Object>();
 	
 	static {
-		map.put(PhoenixJson.class, "[1,2]");
+		map.put(PhoenixJson.class, "[1,2,3]");
 		map.put(String.class, "a");
 		map.put(Long.class, 1l);	
 		map.put(Integer.class, 1);

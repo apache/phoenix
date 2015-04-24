@@ -83,6 +83,7 @@ public enum SQLExceptionCode {
     SUBQUERY_RETURNS_DIFFERENT_NUMBER_OF_FIELDS(216, "22016", "Sub-query must return the same number of fields as the left-hand-side expression of 'IN'."),
     AMBIGUOUS_JOIN_CONDITION(217, "22017", "Amibiguous or non-equi join condition specified. Consider using table list with where clause."),
     CONSTRAINT_VIOLATION(218, "22018", "Constraint violatioin."),
+    INVALID_JSON_DATA(219, "22000", "Invalid json data."),
     
     /**
      * Constraint Violation (errorcode 03, sqlstate 23)
