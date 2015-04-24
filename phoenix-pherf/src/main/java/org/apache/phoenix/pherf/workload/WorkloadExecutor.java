@@ -39,7 +39,6 @@ public class WorkloadExecutor {
     private final XMLConfigParser parser;
     private MonitorManager monitor;
     private Future monitorThread;
-    private final Properties properties;
     private final int poolSize;
 
     private final ExecutorService pool;
@@ -61,7 +60,6 @@ public class WorkloadExecutor {
 
     public WorkloadExecutor(Properties properties, XMLConfigParser parser, boolean monitor) throws Exception {
         this.parser = parser;
-        this.properties = properties;
         this.poolSize = (properties.getProperty("pherf.default.threadpool") == null)
                 ? PherfConstants.DEFAULT_THREAD_POOL_SIZE
                 : Integer.parseInt(properties.getProperty("pherf.default.threadpool"));
@@ -79,7 +77,7 @@ public class WorkloadExecutor {
      */
     public void executeDataLoad() throws Exception {
         logger.info("\n\nStarting Data Loader...");
-        DataLoader dataLoader = new DataLoader(properties, parser);
+        DataLoader dataLoader = new DataLoader(parser);
         dataLoader.execute();
     }
 

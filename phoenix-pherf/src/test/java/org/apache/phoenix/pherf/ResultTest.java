@@ -41,17 +41,6 @@ import org.apache.phoenix.pherf.configuration.Query;
 public class ResultTest {
 
     @Test
-    public void testWriters() throws Exception {
-        ExecutorService executorService = Executors.newFixedThreadPool(1);
-        List<ResultHandler> writers = new ArrayList<>();
-//        Monitor monitor = new Monitor(new XMLConfigParser("test.*xml"), 100);
-//        Future future = executorService.submit(monitor);
-
-        writers.add(new CSVResultHandler(PherfConstants.MONITOR_FILE_NAME, ResultFileDetails.CSV_DETAILED_PERFORMANCE));
-
-    }
-
-    @Test
     public void testMonitorWriter() throws Exception {
         String[] row = "org.apache.phoenix.pherf:type=PherfWriteThreads,6,Mon Jan 05 15:14:00 PST 2015".split(PherfConstants.RESULT_FILE_DELIMETER);
         ResultHandler resultMonitorWriter = null;

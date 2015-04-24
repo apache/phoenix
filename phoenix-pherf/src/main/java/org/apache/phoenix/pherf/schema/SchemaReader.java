@@ -34,18 +34,23 @@ import java.util.Collection;
 
 public class SchemaReader {
     private static final Logger logger = LoggerFactory.getLogger(SchemaReader.class);
-    private final PhoenixUtil pUtil = new PhoenixUtil();
+    private final PhoenixUtil pUtil;
     private Collection<Path> resourceList;
     private final String searchPattern;
     private final ResourceList resourceUtil;
 
+    public SchemaReader(final String searchPattern) throws Exception {
+        this(new PhoenixUtil(), searchPattern);
+    }
     /**
      * Used for testing search Pattern
+     * @param  util {@link org.apache.phoenix.pherf.util.PhoenixUtil} Allows for overriding the util
      * @param searchPattern {@link java.util.regex.Pattern} that matches a resource on the CP
      * @throws Exception
      */
-    public SchemaReader(final String searchPattern) throws Exception {
+    public SchemaReader(PhoenixUtil util, final String searchPattern) throws Exception {
         this.searchPattern = searchPattern;
+        this.pUtil = util;
         this.resourceUtil = new ResourceList(PherfConstants.RESOURCE_DATAMODEL);
         read();
     }

@@ -163,11 +163,11 @@ public class ResourceList {
             final ZipEntry ze = (ZipEntry) e.nextElement();
             final String fileName = ze.getName();
             final boolean accept = pattern.matcher(fileName).matches();
-            logger.debug("fileName:" + fileName);
-            logger.debug("File:" + file.toString());
-            logger.debug("Match:" + accept);
+            logger.trace("fileName:" + fileName);
+            logger.trace("File:" + file.toString());
+            logger.trace("Match:" + accept);
             if (accept) {
-                logger.debug("Adding File from Jar: " + fileName);
+                logger.trace("Adding File from Jar: " + fileName);
                 retVal.add("/" + fileName);
             }
         }

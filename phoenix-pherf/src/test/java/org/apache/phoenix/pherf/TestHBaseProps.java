@@ -30,6 +30,5 @@ public class TestHBaseProps {
 	public void testCheckHBaseProps(){
 		Configuration conf = HBaseConfiguration.create();
 		assertTrue("did not get correct threadpool size", conf.get("phoenix.query.threadPoolSize").equals("128"));
-		assertTrue("did not get correct concurrentrequests size", conf.get("hbase.sfdc.concurrentrequests.max").equals("2147483647"));
 	}
 }

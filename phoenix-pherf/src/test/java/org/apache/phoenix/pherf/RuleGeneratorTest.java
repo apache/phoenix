@@ -22,6 +22,7 @@ import org.apache.phoenix.pherf.configuration.*;
 import org.apache.phoenix.pherf.loaddata.DataLoader;
 import org.apache.phoenix.pherf.rules.DataValue;
 import org.apache.phoenix.pherf.rules.RulesApplier;
+import org.apache.phoenix.pherf.util.PhoenixUtil;
 import org.joda.time.DateTime;
 import org.joda.time.format.DateTimeFormat;
 import org.joda.time.format.DateTimeFormatter;
@@ -32,7 +33,10 @@ import java.util.*;
 
 import static org.junit.Assert.*;
 
-public class RuleGeneratorTest extends BaseTestWithCluster {
+public class RuleGeneratorTest {
+    static PhoenixUtil util = new PhoenixUtil();
+    static final String matcherScenario = PherfConstants.SCENARIO_ROOT_PATTERN + ".xml";
+
 
     @Test
     public void testDateGenerator() throws Exception {
