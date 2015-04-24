@@ -49,6 +49,8 @@ import org.apache.phoenix.expression.DoubleSubtractExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.InListExpression;
 import org.apache.phoenix.expression.IsNullExpression;
+import org.apache.phoenix.expression.JsonPointAsTextExpression;
+import org.apache.phoenix.expression.JsonPointForArrayAsTextExpression;
 import org.apache.phoenix.expression.LikeExpression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.LongAddExpression;
@@ -86,6 +88,8 @@ import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunctionInfo;
 import org.apache.phoenix.parse.InListParseNode;
 import org.apache.phoenix.parse.IsNullParseNode;
+import org.apache.phoenix.parse.JsonPointAsElementParseNode;
+import org.apache.phoenix.parse.JsonPointAsTextParseNode;
 import org.apache.phoenix.parse.LikeParseNode;
 import org.apache.phoenix.parse.LikeParseNode.LikeType;
 import org.apache.phoenix.parse.LiteralParseNode;
@@ -121,10 +125,12 @@ import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PDouble;
+import org.apache.phoenix.schema.types.PJson;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PUnsignedTimestamp;
 import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.schema.types.PhoenixArray;
 import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.IndexUtil;
@@ -716,6 +722,8 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     public boolean visitEnter(AddParseNode node) throws SQLException {
         return true;
     }
+    
+    
 
     @Override
     public Expression visitLeave(AddParseNode node, List<Expression> children) throws SQLException {
@@ -1280,5 +1288,30 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     
     public int getTotalNodeCount() {
         return totalNodeCount;
+    }
+    
+    @Override
+    public boolean visitEnter( JsonPointAsTextParseNode node){
+    	return true;
+    }
+    @Override
+    public Expression visitLeave( JsonPointAsTextParseNode node,List <Expression> children)throws SQLException{
+    	 ParseNode lhsNode = node.getChildren().get(0);
+         ParseNode rhsNode = node.getChildren().get(1);
+         Expression lhs = children.get(0);
+         Expression rhs = children.get(1);
+         if ( !(rhs.getDataType().isCoercibleTo(PVarchar.INSTANCE)||rhs.getDataType().isCoercibleTo(PDecimal.INSTANCE))&&
+                 !(lhs.getDataType()==PJson.INSTANCE)) {
+             throw TypeMismatchException.newException(lhs.getDataType(), rhs.getDataType(), node.toString());
+         }
+         if (lhsNode instanceof BindParseNode) {
+             context.getBindManager().addParamMetaData((BindParseNode)lhsNode, rhs);
+         }
+         if (rhsNode instanceof BindParseNode) {
+             context.getBindManager().addParamMetaData((BindParseNode)rhsNode, lhs);
+         }
+         if(rhs.getDataType().isCoercibleTo(PVarchar.INSTANCE))return new JsonPointAsTextExpression(children);
+         else if(rhs.getDataType().isCoercibleTo(PDecimal.INSTANCE))return new JsonPointForArrayAsTextExpression(children);
+         else throw TypeMismatchException.newException(lhs.getDataType(), rhs.getDataType(), node.toString());
     }
 }

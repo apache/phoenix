@@ -31,6 +31,8 @@ import org.apache.phoenix.expression.DivideExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.InListExpression;
 import org.apache.phoenix.expression.IsNullExpression;
+import org.apache.phoenix.expression.JsonPointAsTextExpression;
+import org.apache.phoenix.expression.JsonPointForArrayAsTextExpression;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.LikeExpression;
 import org.apache.phoenix.expression.LiteralExpression;
@@ -191,5 +193,14 @@ public class CloneExpressionVisitor extends TraverseAllExpressionVisitor<Express
     public Expression visitLeave(ArrayElemRefExpression node, List<Expression> l) {
         return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node :  new ArrayElemRefExpression(l);
     }
+    @Override
+    public Expression visitLeave(JsonPointAsTextExpression node, List<Expression> l) {
+        return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node :  new JsonPointAsTextExpression(l);
+    }
 
+	@Override
+	public Expression visitLeave(JsonPointForArrayAsTextExpression node,
+			List<Expression> l) {
+		return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node :  new JsonPointForArrayAsTextExpression(l);
+	}
 }

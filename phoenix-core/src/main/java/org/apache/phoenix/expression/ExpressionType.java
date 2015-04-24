@@ -191,6 +191,8 @@ public enum ExpressionType {
     RandomFunction(RandomFunction.class),
     ToTimeFunction(ToTimeFunction.class),
     ToTimestampFunction(ToTimestampFunction.class),
+    JsonPointAsTextExpression(JsonPointAsTextExpression.class),
+    JsonPointForArrayAsTextExpression( JsonPointForArrayAsTextExpression.class),
     ;
     
     ExpressionType(Class<? extends Expression> clazz) {
