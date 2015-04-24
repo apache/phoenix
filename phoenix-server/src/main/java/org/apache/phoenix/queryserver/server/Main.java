@@ -60,7 +60,7 @@ public final class Main extends Configured implements Tool, Runnable {
 
   private final String[] argv;
   private final CountDownLatch runningLatch = new CountDownLatch(1);
-  private int port = DEFAULT_HTTP_PORT;
+  private HttpServer server = null;
   private int retCode = 0;
   private Throwable t = null;
 
@@ -76,11 +76,12 @@ public final class Main extends Configured implements Tool, Runnable {
   }
 
   /**
-   * @return the port number this instance is bound to.
+   * @return the port number this instance is bound to, or {@code -1} if the server is not running.
    */
   @VisibleForTesting
   public int getPort() {
-    return port;
+    if (server == null) return -1;
+    return server.getPort();
   }
 
   /**
@@ -126,12 +127,13 @@ public final class Main extends Configured implements Tool, Runnable {
       }
       Class<? extends PhoenixMetaFactory> factoryClass = getConf().getClass(
           QUERY_SERVER_META_FACTORY_KEY, PhoenixMetaFactoryImpl.class, PhoenixMetaFactory.class);
-      port = getConf().getInt(QUERY_SERVER_HTTP_PORT_KEY, DEFAULT_HTTP_PORT);
+      int port = getConf().getInt(QUERY_SERVER_HTTP_PORT_KEY, DEFAULT_HTTP_PORT);
+      LOG.debug("Listening on port " + port);
       PhoenixMetaFactory factory =
           factoryClass.getDeclaredConstructor(Configuration.class).newInstance(getConf());
       Meta meta = factory.create(Arrays.asList(args));
       Service service = new LocalService(meta);
-      HttpServer server = new HttpServer(port, new AvaticaHandler(service));
+      server = new HttpServer(port, new AvaticaHandler(service));
       server.start();
       runningLatch.countDown();
       server.join();
