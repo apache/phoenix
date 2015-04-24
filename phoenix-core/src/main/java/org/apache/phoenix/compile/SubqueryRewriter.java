@@ -52,6 +52,7 @@ import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.parse.TableNode;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
+import org.apache.phoenix.schema.TableNotFoundException;
 
 import com.google.common.collect.Lists;
 
@@ -557,6 +558,7 @@ public class SubqueryRewriter extends ParseNodeRewriter {
                 localResolver.resolveColumn(node.getSchemaName(), node.getTableName(), node.getName());
                 addType(true);
                 return null;
+            } catch (TableNotFoundException e) {
             } catch (ColumnNotFoundException e) { 
             } catch (ColumnFamilyNotFoundException e) {
             }
