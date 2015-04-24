@@ -19,7 +19,9 @@ package org.apache.phoenix.end2end;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.queryserver.client.ThinClientUtil;
+import org.apache.phoenix.queryserver.server.Main;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -49,16 +51,19 @@ public class QueryServerBasicsIT extends BaseHBaseManagedTimeIT {
   private static final Log LOG = LogFactory.getLog(QueryServerBasicsIT.class);
 
   private static QueryServerThread AVATICA_SERVER;
+  private static Configuration CONF;
   private static String CONN_STRING;
 
   @BeforeClass
   public static void beforeClass() throws Exception {
+    CONF = getTestClusterConfig();
+    CONF.setInt(Main.QUERY_SERVER_HTTP_PORT_KEY, 0);
     String url = getUrl();
-    AVATICA_SERVER = new QueryServerThread(new String[] { url }, getTestClusterConfig(),
-        QueryServerBasicsIT.class.getName());
+    AVATICA_SERVER = new QueryServerThread(new String[] { url }, CONF,
+            QueryServerBasicsIT.class.getName());
     AVATICA_SERVER.start();
-    final int port = AVATICA_SERVER.getMain().getPort();
     AVATICA_SERVER.getMain().awaitRunning();
+    final int port = AVATICA_SERVER.getMain().getPort();
     LOG.info("Avatica server started on port " + port);
     CONN_STRING = ThinClientUtil.getConnectionUrl("localhost", port);
     LOG.info("JDBC connection string is " + CONN_STRING);
@@ -110,18 +115,20 @@ public class QueryServerBasicsIT extends BaseHBaseManagedTimeIT {
 
   @Test
   public void smokeTest() throws Exception {
+    final String tableName = getClass().getSimpleName().toUpperCase() + System.currentTimeMillis();
     try (final Connection connection = DriverManager.getConnection(CONN_STRING)) {
       assertThat(connection.isClosed(), is(false));
       connection.setAutoCommit(true);
       try (final Statement stmt = connection.createStatement()) {
-        assertFalse(stmt.execute("CREATE TABLE TEST_TABLE("
+        assertFalse(stmt.execute("DROP TABLE IF EXISTS " + tableName));
+        assertFalse(stmt.execute("CREATE TABLE " + tableName + "("
             + "id INTEGER NOT NULL, "
             + "pk varchar(3) NOT NULL "
             + "CONSTRAINT PK_CONSTRAINT PRIMARY KEY (id, pk))"));
         assertEquals(0, stmt.getUpdateCount());
-        assertEquals(1, stmt.executeUpdate("UPSERT INTO TEST_TABLE VALUES(1, 'foo')"));
-        assertEquals(1, stmt.executeUpdate("UPSERT INTO TEST_TABLE VALUES(2, 'bar')"));
-        assertTrue(stmt.execute("SELECT * FROM TEST_TABLE"));
+        assertEquals(1, stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(1, 'foo')"));
+        assertEquals(1, stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(2, 'bar')"));
+        assertTrue(stmt.execute("SELECT * FROM " + tableName));
         try (final ResultSet resultSet = stmt.getResultSet()) {
           assertTrue(resultSet.next());
           assertEquals(1, resultSet.getInt(1));
@@ -131,7 +138,7 @@ public class QueryServerBasicsIT extends BaseHBaseManagedTimeIT {
           assertEquals("bar", resultSet.getString(2));
         }
       }
-      final String sql = "SELECT * FROM TEST_TABLE WHERE id = ?";
+      final String sql = "SELECT * FROM " + tableName + " WHERE id = ?";
       try (final PreparedStatement stmt = connection.prepareStatement(sql)) {
         stmt.setInt(1, 1);
         try (ResultSet resultSet = stmt.executeQuery()) {
