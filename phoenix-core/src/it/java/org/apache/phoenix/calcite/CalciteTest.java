@@ -139,10 +139,15 @@ public class CalciteTest extends BaseClientManagedTimeIT {
 
     private static Connection createConnection() throws SQLException {
         final Connection connection = DriverManager.getConnection(
-            "jdbc:calcite:");
+            "jdbc:phoenixcalcite:");
         final CalciteConnection calciteConnection =
             connection.unwrap(CalciteConnection.class);
         final String url = getUrl();
+        try {
+            Class.forName("org.apache.phoenix.jdbc.PhoenixDriver");
+        } catch (ClassNotFoundException e) {
+            throw new RuntimeException(e);
+        }
         final PhoenixConnection phoenixConnection =
             DriverManager.getConnection(url).unwrap(PhoenixConnection.class);
         calciteConnection.getRootSchema().add("phoenix",
@@ -174,7 +179,7 @@ public class CalciteTest extends BaseClientManagedTimeIT {
                 + "}\n");
         pw.close();
         final Connection connection =
-            DriverManager.getConnection("jdbc:calcite:model=" + file.getAbsolutePath());
+            DriverManager.getConnection("jdbc:phoenixcalcite:model=" + file.getAbsolutePath());
         return connection;
     }
     
