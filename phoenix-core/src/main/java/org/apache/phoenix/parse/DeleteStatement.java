@@ -19,6 +19,7 @@ package org.apache.phoenix.parse;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 
@@ -28,8 +29,8 @@ public class DeleteStatement extends DMLStatement implements FilterableStatement
     private final LimitNode limit;
     private final HintNode hint;
     
-    public DeleteStatement(NamedTableNode table, HintNode hint, ParseNode whereNode, List<OrderByNode> orderBy, LimitNode limit, int bindCount) {
-        super(table, bindCount);
+    public DeleteStatement(NamedTableNode table, HintNode hint, ParseNode whereNode, List<OrderByNode> orderBy, LimitNode limit, int bindCount, Map<String, UDFParseNode> udfParseNodes) {
+        super(table, bindCount, udfParseNodes);
         this.whereNode = whereNode;
         this.orderBy = orderBy == null ? Collections.<OrderByNode>emptyList() : orderBy;
         this.limit = limit;

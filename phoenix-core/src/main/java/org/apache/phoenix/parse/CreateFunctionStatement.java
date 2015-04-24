@@ -17,18 +17,32 @@
  */
 package org.apache.phoenix.parse;
 
-import java.util.Map;
+public class CreateFunctionStatement extends MutableStatement {
+    private final PFunction functionInfo;
+    private final boolean replace;
+    private final boolean temporary;
 
-public class DMLStatement extends SingleTableStatement {
+    public CreateFunctionStatement(PFunction functionInfo, boolean replace, boolean temporary) {
+        this.functionInfo = functionInfo;
+        this.replace = replace;
+        this.temporary = temporary;
+    }
 
-    private final Map<String, UDFParseNode> udfParseNodes;
-    
-    public DMLStatement(NamedTableNode table, int bindCount, Map<String, UDFParseNode> udfParseNodes) {
-        super(table, bindCount);
-        this.udfParseNodes = udfParseNodes;
+    @Override
+    public int getBindCount() {
+        return 0;
+    }
+
+    public PFunction getFunctionInfo() {
+        return functionInfo;
     }
     
-    public Map<String, UDFParseNode> getUdfParseNodes() {
-        return udfParseNodes;
+    public boolean isReplace() {
+        return replace;
     }
+
+    public boolean isTemporary() {
+        return temporary;
+    }
+
 }

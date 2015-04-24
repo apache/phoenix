@@ -33,7 +33,7 @@ import org.apache.phoenix.schema.stats.PTableStats;
  *
  * @since 0.1
  */
-public interface PTable {
+public interface PTable extends PMetaDataEntity {
     public static final long INITIAL_SEQ_NUM = 0;
     public static final String IS_IMMUTABLE_ROWS_PROP_NAME = "IMMUTABLE_ROWS";
     public static final boolean DEFAULT_DISABLE_WAL = false;
@@ -320,7 +320,6 @@ public interface PTable {
     Short getViewIndexId();
     PTableKey getKey();
 
-    int getEstimatedSize();
     IndexType getIndexType();
     PTableStats getTableStats();
 }

@@ -20,6 +20,7 @@ package org.apache.phoenix.query;
 import java.sql.SQLException;
 import java.util.List;
 
+import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PMetaData;
 import org.apache.phoenix.schema.PName;
@@ -38,4 +39,6 @@ public interface MetaDataMutated {
     PMetaData removeTable(PName tenantId, String tableName, String parentTableName, long tableTimeStamp) throws SQLException;
     PMetaData addColumn(PName tenantId, String tableName, List<PColumn> columns, long tableTimeStamp, long tableSeqNum, boolean isImmutableRows, boolean isWalDisabled, boolean isMultitenant, boolean storeNulls) throws SQLException;
     PMetaData removeColumn(PName tenantId, String tableName, List<PColumn> columnsToRemove, long tableTimeStamp, long tableSeqNum) throws SQLException;
+    PMetaData addFunction(PFunction function) throws SQLException;
+    PMetaData removeFunction(PName tenantId, String function, long functionTimeStamp) throws SQLException;
 }

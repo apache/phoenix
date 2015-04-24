@@ -64,6 +64,7 @@ import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.expression.function.FunctionArgumentType;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.jdbc.PhoenixStatement.PhoenixStatementParser;
+import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.DelegateConnectionQueryServices;
 import org.apache.phoenix.query.MetaDataMutated;
@@ -118,7 +119,7 @@ import com.google.common.collect.Maps;
  * 
  * @since 0.1
  */
-public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jdbc7Shim.Connection, MetaDataMutated  {
+public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jdbc7Shim.Connection, MetaDataMutated{
     private final String url;
     private final ConnectionQueryServices services;
     private final Properties info;
@@ -233,7 +234,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         formatters.put(PDecimal.INSTANCE, FunctionArgumentType.NUMERIC.getFormatter(numberPattern));
         // We do not limit the metaData on a connection less than the global one,
         // as there's not much that will be cached here.
-        this.metaData = metaData.pruneTables(new Pruner() {
+        Pruner pruner = new Pruner() {
 
             @Override
             public boolean prune(PTable table) {
@@ -243,8 +244,16 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
                          ! Objects.equal(tenantId, table.getTenantId())) );
             }
             
-        });
+            @Override
+            public boolean prune(PFunction function) {
+                long maxTimestamp = scn == null ? HConstants.LATEST_TIMESTAMP : scn;
+                return ( function.getTimeStamp() >= maxTimestamp ||
+                         ! Objects.equal(tenantId, function.getTenantId()));
+            }
+        };
         this.mutationState = newMutationState(maxSize);
+        this.metaData = metaData.pruneTables(pruner);
+        this.metaData = metaData.pruneFunctions(pruner);
         this.services.addConnection(this);
 
         // setup tracing, if its enabled
@@ -777,6 +786,18 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         getQueryServices().addTable(table);
         return metaData;
     }
+    
+    @Override
+    public PMetaData addFunction(PFunction function) throws SQLException {
+        // TODO: since a connection is only used by one thread at a time,
+        // we could modify this metadata in place since it's not shared.
+        if (scn == null || scn > function.getTimeStamp()) {
+            metaData = metaData.addFunction(function);
+        }
+        //Cascade through to connectionQueryServices too
+        getQueryServices().addFunction(function);
+        return metaData;
+    }
 
     @Override
     public PMetaData addColumn(PName tenantId, String tableName, List<PColumn> columns, long tableTimeStamp, long tableSeqNum, boolean isImmutableRows, boolean isWalDisabled, boolean isMultitenant, boolean storeNulls)
@@ -792,6 +813,14 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         metaData = metaData.removeTable(tenantId, tableName, parentTableName, tableTimeStamp);
         //Cascade through to connectionQueryServices too
         getQueryServices().removeTable(tenantId, tableName, parentTableName, tableTimeStamp);
+        return metaData;
+    }
+
+    @Override
+    public PMetaData removeFunction(PName tenantId, String functionName, long tableTimeStamp) throws SQLException {
+        metaData = metaData.removeFunction(tenantId, functionName, tableTimeStamp);
+        //Cascade through to connectionQueryServices too
+        getQueryServices().removeFunction(tenantId, functionName, tableTimeStamp);
         return metaData;
     }
 

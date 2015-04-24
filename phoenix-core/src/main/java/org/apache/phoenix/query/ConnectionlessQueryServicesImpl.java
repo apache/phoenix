@@ -20,6 +20,7 @@ package org.apache.phoenix.query;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_STATE_BYTES;
 
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -51,6 +52,8 @@ import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
+import org.apache.phoenix.parse.PFunction;
+import org.apache.phoenix.schema.FunctionNotFoundException;
 import org.apache.phoenix.schema.NewerTableAlreadyExistsException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PIndexState;
@@ -104,6 +107,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
         super(queryServices);
         userName = connInfo.getPrincipal();
         metaData = newEmptyMetaData();
+        
         // Use KeyValueBuilder that builds real KeyValues, as our test utils require this
         this.kvBuilder = GenericKeyValueBuilder.INSTANCE;
     }
@@ -279,6 +283,11 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
                     // timestamp.
                     // A TableAlreadyExistsException is not thrown, since the table only exists *after* this
                     // fixed timestamp.
+                }
+                
+                try {
+                   metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_FUNCTION_METADATA);
+                } catch (NewerTableAlreadyExistsException ignore) {
                 }
             } catch (SQLException e) {
                 sqlE = e;
@@ -479,5 +488,46 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
         return getProps().getInt(QueryServices.SEQUENCE_SALT_BUCKETS_ATTRIB,
                 QueryServicesOptions.DEFAULT_SEQUENCE_TABLE_SALT_BUCKETS);
     }
- 
+
+    @Override
+    public MetaDataMutationResult createFunction(List<Mutation> functionData, PFunction function, boolean temporary)
+            throws SQLException {
+        return new MetaDataMutationResult(MutationCode.FUNCTION_NOT_FOUND, 0l, null);
+    }
+
+    @Override
+    public PMetaData addFunction(PFunction function) throws SQLException {
+        return metaData = this.metaData.addFunction(function);
+    }
+
+    @Override
+    public PMetaData removeFunction(PName tenantId, String function, long functionTimeStamp)
+            throws SQLException {
+        return metaData = this.metaData.removeFunction(tenantId, function, functionTimeStamp);
+    }
+
+    @Override
+    public MetaDataMutationResult getFunctions(PName tenantId,
+            List<Pair<byte[], Long>> functionNameAndTimeStampPairs, long clientTimestamp)
+            throws SQLException {
+        List<PFunction> functions = new ArrayList<PFunction>(functionNameAndTimeStampPairs.size());
+        for(Pair<byte[], Long> functionInfo: functionNameAndTimeStampPairs) {
+            try {
+                PFunction function2 = metaData.getFunction(new PTableKey(tenantId, Bytes.toString(functionInfo.getFirst())));
+                functions.add(function2);
+            } catch (FunctionNotFoundException e) {
+                return new MetaDataMutationResult(MutationCode.FUNCTION_NOT_FOUND, 0, null);
+            }
+        }
+        if(functions.isEmpty()) {
+            return null;
+        }
+        return new MetaDataMutationResult(MutationCode.FUNCTION_ALREADY_EXISTS, 0, functions, true);
+    }
+
+    @Override
+    public MetaDataMutationResult dropFunction(List<Mutation> tableMetadata, boolean ifExists)
+            throws SQLException {
+        return new MetaDataMutationResult(MutationCode.FUNCTION_ALREADY_EXISTS, 0, null);
+    }
 }
