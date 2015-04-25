@@ -422,21 +422,21 @@ public class MutationState implements SQLCloseable {
     }
     
     @SuppressWarnings("deprecation")
-    private void send(Iterator<TableRef> tableRefs) throws SQLException {
+    private void send(Iterator<TableRef> tableRefIterator) throws SQLException {
         int i = 0;
         long[] serverTimeStamps = null;
         byte[] tenantId = connection.getTenantId() == null ? null : connection.getTenantId().getBytes();
         // Validate up front if not transactional so that we 
-        if (tableRefs == null) {
+        if (tableRefIterator == null) {
             serverTimeStamps = validateAll();
-            tableRefs = mutations.keySet().iterator();
+            tableRefIterator = mutations.keySet().iterator();
         }
 
         // add tracing for this operation
         TraceScope trace = Tracing.startNewSpan(connection, "Committing mutations to tables");
         Span span = trace.getSpan();
-        while (tableRefs.hasNext()) {
-            TableRef tableRef = tableRefs.next();
+        while (tableRefIterator.hasNext()) {
+            TableRef tableRef = tableRefIterator.next();
             Map<ImmutableBytesPtr,Map<PColumn,byte[]>> valuesMap = mutations.get(tableRef);
             if (valuesMap == null) {
                 continue;
@@ -567,7 +567,7 @@ public class MutationState implements SQLCloseable {
             if (tableRef.getTable().getType() != PTableType.INDEX) {
                 numRows -= valuesMap.size();
             }
-            mutations.remove(tableRef); // Remove batches as we process them
+            tableRefIterator.remove(); // Remove batches as we process them
         }
         trace.close();
         assert(numRows==0);

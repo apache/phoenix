@@ -129,7 +129,7 @@ public class StatsCollectorWithSplitsAndMultiCFIT extends StatsCollectorAbstract
         Collection<GuidePostsInfo> infos = TestUtil.getGuidePostsList(conn, STATS_TEST_TABLE_NAME_NEW);
         long[] rowCountArr = new long[]{25, 20, 25, 25};
         // CF A alone has double the bytecount because it has column qualifier A and column qualifier _0
-        long[] byteCountArr = new long[]{12120, 5540, 6652, 6652};
+        long[] byteCountArr = new long[]{12168, 5540, 6652, 6652};
         int i = 0;
         for(GuidePostsInfo info : infos) {
             assertRowCountAndByteCount(info, rowCountArr[i], byteCountArr[i]);
@@ -138,8 +138,8 @@ public class StatsCollectorWithSplitsAndMultiCFIT extends StatsCollectorAbstract
     }
 
     protected void assertRowCountAndByteCount(GuidePostsInfo info, long rowCount, long byteCount) {
-        assertEquals(info.getRowCount(), rowCount);
-        assertEquals(info.getByteCount(), byteCount);
+        assertEquals("Row count does not match ", rowCount, info.getRowCount());
+        assertEquals("Byte count does not match ", byteCount, info.getByteCount());
     }
 
     @Test
@@ -166,7 +166,7 @@ public class StatsCollectorWithSplitsAndMultiCFIT extends StatsCollectorAbstract
         Collection<GuidePostsInfo> infos = TestUtil.getGuidePostsList(conn, STATS_TEST_TABLE_NAME);
         for (GuidePostsInfo info : infos) {
             assertEquals(20, info.getRowCount());
-            assertEquals(11020, info.getByteCount());
+            assertEquals(11060, info.getByteCount());
             break;
         }
         List<KeyRange> keyRanges = getAllSplits(conn, STATS_TEST_TABLE_NAME);
@@ -248,7 +248,7 @@ public class StatsCollectorWithSplitsAndMultiCFIT extends StatsCollectorAbstract
         infos = TestUtil.getGuidePostsList(conn, STATS_TEST_TABLE_NAME);
         for (GuidePostsInfo info : infos) {
             assertEquals(20, info.getRowCount());
-            assertEquals(9918, info.getByteCount());
+            assertEquals(9954, info.getByteCount());
             break;
         }
         conn.close();

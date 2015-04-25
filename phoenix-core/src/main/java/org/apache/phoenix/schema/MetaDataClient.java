@@ -1357,15 +1357,13 @@ public class MetaDataClient {
                     transactional = transactionalProp;
                 }
             }
-            if (transactional) { // FIXME: remove once Tephra handles column deletes
-                if (Boolean.FALSE.equals(storeNullsProp)) {
-                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.STORE_NULLS_FOR_TRANSACTIONAL)
-                    .setSchemaName(schemaName).setTableName(tableName)
-                    .build().buildException();
-                }
-                // Force STORE_NULLS to true when transactional as Tephra cannot deal with column deletes
-                storeNulls = true;
-                tableProps.put(PhoenixDatabaseMetaData.STORE_NULLS, Boolean.TRUE);
+            if (transactional) { // FIXME: remove once Tephra handles storing multiple versions of a cell value, 
+            	// and allows ignoring empty key values for an operation
+            	if (Boolean.FALSE.equals(storeNullsProp)) {
+            		throw new SQLExceptionInfo.Builder(SQLExceptionCode.STORE_NULLS_MUST_BE_FALSE_FOR_TRANSACTIONAL)
+            		.setSchemaName(schemaName).setTableName(tableName)
+            		.build().buildException();
+            	}
             }
 
             // Delay this check as it is supported to have IMMUTABLE_ROWS and SALT_BUCKETS defined on views
