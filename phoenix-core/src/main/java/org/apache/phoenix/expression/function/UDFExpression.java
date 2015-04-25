@@ -26,16 +26,12 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.util.List;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.locks.Lock;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.DynamicClassLoader;
-import org.apache.hadoop.hbase.util.KeyLocker;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.compile.KeyPart;
 import org.apache.phoenix.expression.Expression;
@@ -59,18 +55,6 @@ public class UDFExpression extends ScalarFunction {
     private static final ConcurrentMap<String, DynamicClassLoader> pathSpecificCls =
             new MapMaker().concurrencyLevel(3).weakValues().makeMap();
 
-    public static final Log LOG = LogFactory.getLog(UDFExpression.class);
-    
-    /**
-     * A locker used to synchronize class loader initialization per tenant id.
-     */
-    private static final KeyLocker<String> locker = new KeyLocker<String>();
-
-    /**
-     * A locker used to synchronize class loader initialization per jar path.
-     */
-    private static final KeyLocker<String> pathLocker = new KeyLocker<String>();
-
     private PName tenantId;
     private String functionClassName;
     private String jarPath;
@@ -86,6 +70,19 @@ public class UDFExpression extends ScalarFunction {
         this.functionClassName = functionInfo.getClassName();
         this.jarPath = functionInfo.getJarPath();
         constructUDFFunction();
+    }
+
+    public UDFExpression(List<Expression> children, PName tenantId, String functionClassName,
+            String jarPath, ScalarFunction udfFunction) {
+        super(children);
+        this.tenantId = tenantId;
+        this.functionClassName = functionClassName;
+        this.jarPath = jarPath;
+        if(udfFunction != null) {
+            this.udfFunction = udfFunction;
+        } else {
+            constructUDFFunction();
+        }
     }
 
     @Override
@@ -121,6 +118,22 @@ public class UDFExpression extends ScalarFunction {
     @Override
     public int getKeyFormationTraversalIndex() {
         return udfFunction.getKeyFormationTraversalIndex();
+    }
+
+    public PName getTenantId() {
+        return tenantId;
+    }
+
+    public String getFunctionClassName() {
+        return functionClassName;
+    }
+
+    public String getJarPath() {
+        return jarPath;
+    }
+
+    public ScalarFunction getUdfFunction() {
+        return udfFunction;
     }
 
     @Override
@@ -174,39 +187,29 @@ public class UDFExpression extends ScalarFunction {
         }
         if (jarPath == null || jarPath.isEmpty() || config.get(DYNAMIC_JARS_DIR_KEY) != null
                 && (parent != null && parent.equals(config.get(DYNAMIC_JARS_DIR_KEY)))) {
-            Lock lock = locker.acquireLock(tenantId.getString());
-            try {
-                cl = tenantIdSpecificCls.get(tenantId);
-                if (cl == null) {
-                    cl = new DynamicClassLoader(config, UDFExpression.class.getClassLoader());
-                }
-                // Cache class loader as a weak value, will be GC'ed when no reference left
-                DynamicClassLoader prev = tenantIdSpecificCls.putIfAbsent(tenantId, cl);
-                if (prev != null) {
-                    cl = prev;
-                }
-                return cl;
-            } finally {
-                lock.unlock();
+            cl = tenantIdSpecificCls.get(tenantId);
+            if (cl == null) {
+                cl = new DynamicClassLoader(config, UDFExpression.class.getClassLoader());
             }
+            // Cache class loader as a weak value, will be GC'ed when no reference left
+            DynamicClassLoader prev = tenantIdSpecificCls.putIfAbsent(tenantId, cl);
+            if (prev != null) {
+                cl = prev;
+            }
+            return cl;
         } else {
-            Lock lock = pathLocker.acquireLock(jarPath);
-            try {
-                cl = pathSpecificCls.get(jarPath);
-                if (cl == null) {
-                    Configuration conf = HBaseConfiguration.create(config);
-                    conf.set(DYNAMIC_JARS_DIR_KEY, parent);
-                    cl = new DynamicClassLoader(conf, UDFExpression.class.getClassLoader());
-                }
-                // Cache class loader as a weak value, will be GC'ed when no reference left
-                DynamicClassLoader prev = pathSpecificCls.putIfAbsent(jarPath, cl);
-                if (prev != null) {
-                    cl = prev;
-                }
-                return cl;
-            } finally {
-                lock.unlock();
+            cl = pathSpecificCls.get(jarPath);
+            if (cl == null) {
+                Configuration conf = HBaseConfiguration.create(config);
+                conf.set(DYNAMIC_JARS_DIR_KEY, parent);
+                cl = new DynamicClassLoader(conf, UDFExpression.class.getClassLoader());
             }
+            // Cache class loader as a weak value, will be GC'ed when no reference left
+            DynamicClassLoader prev = pathSpecificCls.putIfAbsent(jarPath, cl);
+            if (prev != null) {
+                cl = prev;
+            }
+            return cl;
         }
     }
     

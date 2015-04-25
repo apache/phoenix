@@ -116,7 +116,6 @@ tokens
     UNION='union';
     FUNCTION='function';
     AS='as';
-    REPLACE='replace';
     TEMPORARY='temporary';
     RETURNS='returns';
     USING='using';
@@ -397,6 +396,7 @@ oneStatement returns [BindableStatement ret]
     |   s=alter_table_node
     |   s=trace_node
     |   s=create_function_node
+    |   s=drop_function_node
     |   s=alter_session_node
     |	s=create_sequence_node
     |	s=drop_sequence_node
@@ -540,12 +540,12 @@ trace_node returns [TraceStatement ret]
 
 // Parse a trace statement.
 create_function_node returns [CreateFunctionStatement ret]
-    :   CREATE (OR replace=REPLACE)? (temp=TEMPORARY)? FUNCTION function=identifier 
+    :   CREATE (temp=TEMPORARY)? FUNCTION function=identifier 
        (LPAREN args=zero_or_more_data_types RPAREN)
        RETURNS r=identifier AS (className= jar_path)
        (USING JAR (jarPath = jar_path))?
         {
-            $ret = factory.createFunction(new PFunction(SchemaUtil.normalizeIdentifier(function), args,r,(String)className.getValue(), jarPath == null ? null : (String)jarPath.getValue()), replace!=null, temp!=null);;
+            $ret = factory.createFunction(new PFunction(SchemaUtil.normalizeIdentifier(function), args,r,(String)className.getValue(), jarPath == null ? null : (String)jarPath.getValue()), temp!=null);;
         } 
     ;
 

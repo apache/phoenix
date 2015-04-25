@@ -76,4 +76,5 @@ public interface ColumnResolver {
      */
     public PFunction resolveFunction(String functionName) throws SQLException;
 
+    public boolean hasUDFs();
 }

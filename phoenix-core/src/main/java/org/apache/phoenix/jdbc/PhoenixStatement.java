@@ -566,8 +566,8 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
 
     private static class ExecutableCreateFunctionStatement extends CreateFunctionStatement implements CompilableStatement {
 
-        public ExecutableCreateFunctionStatement(PFunction functionInfo, boolean ifNotExists, boolean temporary) {
-            super(functionInfo, ifNotExists, temporary);
+        public ExecutableCreateFunctionStatement(PFunction functionInfo, boolean temporary) {
+            super(functionInfo, temporary);
         }
 
 
@@ -1013,8 +1013,8 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         }
         
         @Override
-        public CreateFunctionStatement createFunction(PFunction functionInfo, boolean ifNotExists, boolean temporary) {
-            return new ExecutableCreateFunctionStatement(functionInfo, ifNotExists, temporary);
+        public CreateFunctionStatement createFunction(PFunction functionInfo, boolean temporary) {
+            return new ExecutableCreateFunctionStatement(functionInfo, temporary);
         }
         @Override
         public DropSequenceStatement dropSequence(TableName tableName, boolean ifExists, int bindCount){

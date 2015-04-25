@@ -128,6 +128,10 @@ public class FromCompiler {
         public PFunction resolveFunction(String functionName) throws SQLException {
             throw new UnsupportedOperationException();
         };
+
+        public boolean hasUDFs() {
+            return false;
+        };
     };
 
     public static ColumnResolver getResolverForCreation(final CreateTableStatement statement, final PhoenixConnection connection)
@@ -453,7 +457,7 @@ public class FromCompiler {
             return functions;
         }
 
-        protected List<PFunction> createFunctionRef(List<String> functionNames, boolean updateCacheImmediately) throws SQLException {
+        private List<PFunction> createFunctionRef(List<String> functionNames, boolean updateCacheImmediately) throws SQLException {
             long timeStamp = QueryConstants.UNSET_TIMESTAMP;
             int numFunctions = functionNames.size();
             List<PFunction> functionsFound = new ArrayList<PFunction>(functionNames.size());
@@ -563,6 +567,10 @@ public class FromCompiler {
             return function;
         }
 
+        @Override
+        public boolean hasUDFs() {
+            return !functions.isEmpty();
+        }
     }
 
     private static class MultiTableColumnResolver extends BaseColumnResolver implements TableNodeVisitor<Void> {

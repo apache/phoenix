@@ -341,6 +341,10 @@ public class ParallelIteratorsSplitTest extends BaseConnectionlessQueryTest {
                 throw new UnsupportedOperationException();
             }
             
+            @Override
+            public boolean hasUDFs() {
+                return false;
+            }
         };
         PhoenixConnection connection = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
         final PhoenixStatement statement = new PhoenixStatement(connection);

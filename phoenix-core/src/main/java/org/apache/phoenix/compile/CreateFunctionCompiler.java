@@ -38,13 +38,9 @@ public class CreateFunctionCompiler {
     }
 
     public MutationPlan compile(final CreateFunctionStatement create) throws SQLException {
-        if(create.isReplace()) {
-            throw new SQLFeatureNotSupportedException();
-        }
         final PhoenixConnection connection = statement.getConnection();
         PhoenixConnection connectionToBe = connection;
-        Scan scan = new Scan();
-        final StatementContext context = new StatementContext(statement, FromCompiler.EMPTY_TABLE_RESOLVER, scan, new SequenceManager(statement));
+        final StatementContext context = new StatementContext(statement);
         final MetaDataClient client = new MetaDataClient(connectionToBe);
         
         return new MutationPlan() {

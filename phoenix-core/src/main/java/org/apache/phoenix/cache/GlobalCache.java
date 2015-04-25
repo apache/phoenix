@@ -170,7 +170,11 @@ public class GlobalCache extends TenantCacheImpl {
         public boolean equals(Object obj) {
             if(obj instanceof FunctionBytesPtr) return super.equals(obj);
             return false;
+        }
 
+        @Override
+        public int hashCode() {
+            return super.hashCode();
         }
     }
 }

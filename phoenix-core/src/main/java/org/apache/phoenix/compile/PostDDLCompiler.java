@@ -145,6 +145,10 @@ public class PostDDLCompiler {
                             public PFunction resolveFunction(String functionName) throws SQLException {
                                 throw new UnsupportedOperationException();
                             };
+
+                            public boolean hasUDFs() {
+                                return false;
+                            };
                         };
                         PhoenixStatement statement = new PhoenixStatement(connection);
                         StatementContext context = new StatementContext(statement, resolver, scan, new SequenceManager(statement));

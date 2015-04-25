@@ -19,12 +19,10 @@ package org.apache.phoenix.parse;
 
 public class CreateFunctionStatement extends MutableStatement {
     private final PFunction functionInfo;
-    private final boolean replace;
     private final boolean temporary;
 
-    public CreateFunctionStatement(PFunction functionInfo, boolean replace, boolean temporary) {
+    public CreateFunctionStatement(PFunction functionInfo, boolean temporary) {
         this.functionInfo = functionInfo;
-        this.replace = replace;
         this.temporary = temporary;
     }
 
@@ -37,10 +35,6 @@ public class CreateFunctionStatement extends MutableStatement {
         return functionInfo;
     }
     
-    public boolean isReplace() {
-        return replace;
-    }
-
     public boolean isTemporary() {
         return temporary;
     }

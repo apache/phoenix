@@ -364,8 +364,8 @@ public class MetaDataClient {
 
     /**
      * Update the cache with the latest as of the connection scn.
-     * @param functioName
-     * @return the timestamp from the server, negative if the table was added to the cache and positive otherwise
+     * @param functioNames
+     * @return the timestamp from the server, negative if the function was added to the cache and positive otherwise
      * @throws SQLException
      */
     public MetaDataMutationResult updateCache(List<String> functionNames) throws SQLException {
@@ -1381,10 +1381,8 @@ public class MetaDataClient {
             MutationCode code = result.getMutationCode();
             switch(code) {
             case FUNCTION_ALREADY_EXISTS:
-                if (!stmt.isReplace()) {
-                    throw new FunctionAlreadyExistsException(function.getFunctionName(), result.getFunctions().get(0));
-                }
-                addFunctionToCache(result);
+                throw new FunctionAlreadyExistsException(function.getFunctionName(), result
+                        .getFunctions().get(0));
             case NEWER_FUNCTION_FOUND:
                 // Add function to ConnectionQueryServices so it's cached, but don't add
                 // it to this connection as we can't see it.

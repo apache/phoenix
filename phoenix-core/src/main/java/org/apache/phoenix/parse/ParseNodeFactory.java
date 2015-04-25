@@ -297,8 +297,8 @@ public class ParseNodeFactory {
                 maxValue, cycle, ifNotExits, bindCount);
     }
 
-    public CreateFunctionStatement createFunction(PFunction functionInfo, boolean replace, boolean temporary) {
-        return new CreateFunctionStatement(functionInfo, replace, temporary);
+    public CreateFunctionStatement createFunction(PFunction functionInfo, boolean temporary) {
+        return new CreateFunctionStatement(functionInfo, temporary);
     }
 
     public DropFunctionStatement dropFunction(String functionName, boolean ifExists) {
