@@ -21,6 +21,8 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 
+import java.util.Arrays;
+
 import org.apache.hadoop.hbase.util.Bytes;
 import org.junit.Test;
 
@@ -36,7 +38,7 @@ public class PhoenixJsonTest {
 
         String jsonWithChineseChars = "[\"'普派'\"]";
         byte[] json = Bytes.toBytes(jsonWithChineseChars);
-        PhoenixJson phoenixJson = PhoenixJson.getPhoenixJson(json, 0, json.length);
+        PhoenixJson phoenixJson = PhoenixJson.getInstance(json, 0, json.length);
         assertNotNull(phoenixJson);
         assertEquals(jsonWithChineseChars, phoenixJson.toString());
 
@@ -47,7 +49,7 @@ public class PhoenixJsonTest {
 
         String jsonWithControlChars = "[\"\\n \\\"jumps \\r'普派'\"]";
         byte[] json = Bytes.toBytes(jsonWithControlChars);
-        PhoenixJson phoenixJson = PhoenixJson.getPhoenixJson(json, 0, json.length);
+        PhoenixJson phoenixJson = PhoenixJson.getInstance(json, 0, json.length);
         assertNotNull(phoenixJson);
         assertEquals(jsonWithControlChars, phoenixJson.toString());
 
@@ -58,7 +60,7 @@ public class PhoenixJsonTest {
 
         String emptyJson = "{}";
         byte[] json = Bytes.toBytes(emptyJson);
-        PhoenixJson phoenixJson = PhoenixJson.getPhoenixJson(json, 0, json.length);
+        PhoenixJson phoenixJson = PhoenixJson.getInstance(json, 0, json.length);
         assertNotNull(phoenixJson);
         assertEquals(emptyJson, phoenixJson.toString());
 
@@ -69,7 +71,7 @@ public class PhoenixJsonTest {
 
         String jsonArrayString = "[1,2,3]";
         byte[] json = Bytes.toBytes(jsonArrayString);
-        PhoenixJson phoenixJson = PhoenixJson.getPhoenixJson(json, 0, json.length);
+        PhoenixJson phoenixJson = PhoenixJson.getInstance(json, 0, json.length);
         assertNotNull(phoenixJson);
         assertEquals(jsonArrayString, phoenixJson.toString());
     }
@@ -78,7 +80,7 @@ public class PhoenixJsonTest {
     public void testVaidJsonParsing() throws Exception {
 
         byte[] json = TEST_JSON_STR.getBytes();
-        PhoenixJson phoenixJson = PhoenixJson.getPhoenixJson(json, 0, json.length);
+        PhoenixJson phoenixJson = PhoenixJson.getInstance(json, 0, json.length);
         assertNotNull(phoenixJson);
         assertEquals(TEST_JSON_STR, phoenixJson.toString());
     }
@@ -86,15 +88,15 @@ public class PhoenixJsonTest {
     @Test
     public void getPhoenixJson() throws Exception {
         byte[] json = TEST_JSON_STR.getBytes();
-        PhoenixJson phoenixJson = PhoenixJson.getPhoenixJson(json, 0, json.length);
+        PhoenixJson phoenixJson = PhoenixJson.getInstance(json, 0, json.length);
         PhoenixJson phoenixJson2 = phoenixJson.getPhoenixJson(new String[] { "f2", "f3" });
         assertEquals("value", phoenixJson2.serializeToString());
 
+        String[] paths = new String[] { "f2", "f3", "f4" };
         try {
-
-            phoenixJson.getPhoenixJson(new String[] { "f2", "f3", "f4" });
+            phoenixJson.getPhoenixJson(paths);
         } catch (Exception e) {
-            PhoenixJsonException jsonException = new PhoenixJsonException("path: f4 not found");
+            PhoenixJsonException jsonException = new PhoenixJsonException("path: "+Arrays.asList(paths)+" not found.");
             assertEquals(jsonException.getMessage(), e.getMessage());
             assertEquals(jsonException.getClass(), e.getClass());
         }
@@ -104,20 +106,20 @@ public class PhoenixJsonTest {
     @Test
     public void getNullablePhoenixJson() throws Exception {
         byte[] json = TEST_JSON_STR.getBytes();
-        PhoenixJson phoenixJson = PhoenixJson.getPhoenixJson(json, 0, json.length);
-        PhoenixJson phoenixJson2 = phoenixJson.getNullablePhoenixJson(new String[] { "f2", "f3" });
+        PhoenixJson phoenixJson = PhoenixJson.getInstance(json, 0, json.length);
+        PhoenixJson phoenixJson2 = phoenixJson.getPhoenixJsonOrNull(new String[] { "f2", "f3" });
         assertEquals("value", phoenixJson2.serializeToString());
 
-        assertNull(phoenixJson.getNullablePhoenixJson(new String[] { "f2", "f3", "f4" }));
-        assertNotNull(phoenixJson.getNullablePhoenixJson(new String[] { "f4", "f6", "1" }));
-        assertNull(phoenixJson.getNullablePhoenixJson(new String[] { "f4", "f6", "3" }));
-        assertNull(phoenixJson.getNullablePhoenixJson(new String[] { "f4", "f6", "-1" }));
+        assertNull(phoenixJson.getPhoenixJsonOrNull(new String[] { "f2", "f3", "f4" }));
+        assertNotNull(phoenixJson.getPhoenixJsonOrNull(new String[] { "f4", "f6", "1" }));
+        assertNull(phoenixJson.getPhoenixJsonOrNull(new String[] { "f4", "f6", "3" }));
+        assertNull(phoenixJson.getPhoenixJsonOrNull(new String[] { "f4", "f6", "-1" }));
     }
 
     @Test
     public void serializeToString() throws Exception {
         byte[] json = TEST_JSON_STR.getBytes();
-        PhoenixJson phoenixJson = PhoenixJson.getPhoenixJson(json, 0, json.length);
+        PhoenixJson phoenixJson = PhoenixJson.getInstance(json, 0, json.length);
         PhoenixJson phoenixJson2 = phoenixJson.getPhoenixJson(new String[] { "f4", "f5" });
         assertEquals(new Integer(99).toString(), phoenixJson2.serializeToString());
 
@@ -135,20 +137,20 @@ public class PhoenixJsonTest {
     @Test
     public void serializeToStringForJsonArray() throws Exception {
         byte[] json = TEST_JSON_STR.getBytes();
-        PhoenixJson phoenixJson = PhoenixJson.getPhoenixJson(json, 0, json.length);
+        PhoenixJson phoenixJson = PhoenixJson.getInstance(json, 0, json.length);
         PhoenixJson phoenixJson5 =
-                phoenixJson.getNullablePhoenixJson(new String[] { "f4", "f6", "0" });
+                phoenixJson.getPhoenixJsonOrNull(new String[] { "f4", "f6", "0" });
         assertEquals(new Integer(1).toString(), phoenixJson5.serializeToString());
-        phoenixJson5 = phoenixJson.getNullablePhoenixJson(new String[] { "f4", "f6", "1" });
+        phoenixJson5 = phoenixJson.getPhoenixJsonOrNull(new String[] { "f4", "f6", "1" });
         assertEquals(Boolean.TRUE.toString(), phoenixJson5.serializeToString());
-        phoenixJson5 = phoenixJson.getNullablePhoenixJson(new String[] { "f4", "f6", "2" });
+        phoenixJson5 = phoenixJson.getPhoenixJsonOrNull(new String[] { "f4", "f6", "2" });
         assertEquals("foo", phoenixJson5.serializeToString());
     }
 
     @Test
     public void testToString() throws Exception {
         byte[] json = TEST_JSON_STR.getBytes();
-        PhoenixJson phoenixJson = PhoenixJson.getPhoenixJson(json, 0, json.length);
+        PhoenixJson phoenixJson = PhoenixJson.getInstance(json, 0, json.length);
         assertEquals(TEST_JSON_STR, phoenixJson.toString());
     }
 }

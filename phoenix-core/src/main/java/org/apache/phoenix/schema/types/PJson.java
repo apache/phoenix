@@ -207,7 +207,7 @@ public class PJson extends PDataType<String> {
 
     private Object getPhoenixJson(byte[] bytes, int offset, int length) {
         try {
-            return PhoenixJson.getPhoenixJson(bytes, offset, length);
+            return PhoenixJson.getInstance(bytes, offset, length);
         } catch (SQLException sqe) {
             throw new IllegalDataException(sqe);
         }
@@ -215,7 +215,7 @@ public class PJson extends PDataType<String> {
 
     private Object getPhoenixJson(String jsonData) {
         try {
-            return PhoenixJson.getPhoenixJson(jsonData);
+            return PhoenixJson.getInstance(jsonData);
         } catch (SQLException sqe) {
             throw new IllegalDataException(sqe);
         }

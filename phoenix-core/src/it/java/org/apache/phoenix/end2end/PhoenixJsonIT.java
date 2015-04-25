@@ -51,7 +51,8 @@ public class PhoenixJsonIT extends BaseHBaseManagedTimeIT {
             PreparedStatement stmt = conn.prepareStatement(selectQuery);
             ResultSet rs = stmt.executeQuery();
             assertTrue(rs.next());
-            assertEquals("Json data read from DB is not as expected.", json, rs.getString(1));
+            assertEquals("Json data read from DB is not as expected for query: <" + selectQuery
+                    + ">", json, rs.getString(1));
             assertFalse(rs.next());
 
         } finally {
@@ -72,7 +73,8 @@ public class PhoenixJsonIT extends BaseHBaseManagedTimeIT {
             PreparedStatement stmt = conn.prepareStatement(selectQuery);
             ResultSet rs = stmt.executeQuery();
             assertTrue(rs.next());
-            assertEquals("Json data read from DB is not as expected.", json, rs.getString(1));
+            assertEquals("Json data read from DB is not as expected for query: <" + selectQuery
+                    + ">", json, rs.getString(1));
             assertFalse(rs.next());
 
         } finally {
@@ -215,9 +217,56 @@ public class PhoenixJsonIT extends BaseHBaseManagedTimeIT {
             assertTrue(rs.next());
             assertNotEquals(PhoenixJson.class.getName(), rs.getMetaData().getColumnClassName(1));
             assertEquals(String.class.getName(), rs.getMetaData().getColumnClassName(1));
-            assertEquals("Json data read from DB is not as expected.", json, rs.getString(1));
+            assertEquals("Json data read from DB is not as expected for query: <" + selectQuery
+                    + ">", json, rs.getString(1));
             assertFalse(rs.next());
 
+        } finally {
+            conn.close();
+        }
+    }
+
+    @Test
+    public void testSetObject() throws SQLException {
+
+        Connection conn = getConnection();
+        try {
+            String json = "{\"k1\":\"val\",\"k2\":true, \"k3\":2}";
+            String pk = "valueOne";
+            String ddl =
+                    "CREATE TABLE testJson" + "  (pk VARCHAR NOT NULL PRIMARY KEY, " + "col1 json)";
+            createTestTable(getUrl(), ddl);
+
+            String query = "UPSERT INTO testJson(pk, col1) VALUES(?,?)";
+            PreparedStatement stmt = conn.prepareStatement(query);
+            stmt.setString(1, pk);
+            stmt.setObject(2, PhoenixJson.getInstance(json), java.sql.Types.OTHER);
+            stmt.execute();
+
+            pk = "valueTwo";
+            query = "UPSERT INTO testJson(pk, col1) VALUES(?,?)";
+            stmt = conn.prepareStatement(query);
+            stmt.setString(1, pk);
+            stmt.setObject(2, json, java.sql.Types.OTHER);
+            stmt.execute();
+
+            conn.commit();
+
+            String selectQuery = "SELECT col1 FROM testJson WHERE pk = 'valueOne'";
+            stmt = conn.prepareStatement(selectQuery);
+            ResultSet rs = stmt.executeQuery();
+            assertTrue(rs.next());
+            assertEquals("Json data read from DB is not as expected for query: <" + selectQuery
+                    + ">", json, rs.getString(1));
+            assertFalse(rs.next());
+
+            selectQuery = "SELECT col1 FROM testJson WHERE pk = 'valueTwo'";
+            stmt = conn.prepareStatement(selectQuery);
+            rs = stmt.executeQuery();
+            assertTrue(rs.next());
+            assertEquals("Json data read from DB is not as expected for query: <" + selectQuery
+                    + ">", json, rs.getString(1));
+            assertFalse(rs.next());
         } finally {
             conn.close();
         }

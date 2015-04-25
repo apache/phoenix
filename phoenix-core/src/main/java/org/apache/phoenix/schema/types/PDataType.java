@@ -1144,18 +1144,17 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
       return null;
     }
     for (PDataType type : PDataType.values()) {
-		if (type.isArrayType() && type.getJavaClass().isInstance(value)) {
-			PhoenixArray arr = (PhoenixArray) value;
-			if ((type.getSqlType() == arr.baseType.sqlType
-					+ PDataType.ARRAY_TYPE_BASE)) {
-				return type;
-			}
-
-		} else {
-			if (type.getJavaClass().isInstance(value)) {
-				return type;
-			}
-		}
+        if(type.getJavaClass().isInstance(value)){
+    		if (type.isArrayType()) {
+    			PhoenixArray arr = (PhoenixArray) value;
+    			if ((type.getSqlType() == arr.baseType.sqlType
+    					+ PDataType.ARRAY_TYPE_BASE)) {
+    				return type;
+    			}
+    		} else {
+    			return type;
+    		}
+        }
     }
     throw new UnsupportedOperationException(
         "Unsupported literal value [" + value + "] of type " + value.getClass().getName());
