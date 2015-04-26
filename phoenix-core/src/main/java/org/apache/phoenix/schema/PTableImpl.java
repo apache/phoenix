@@ -718,10 +718,10 @@ public class PTableImpl implements PTable {
         @Override
         public void delete() {
             newMutations();
-            // FIXME: the version of the Delete constructor without the lock args was introduced
-            // in 0.94.4, thus if we try to use it here we can no longer use the 0.94.2 version
-            // of the client.
-            Delete delete = new Delete(key,ts);
+            Delete delete = new Delete(key);
+            for (PColumnFamily colFamily : families) {
+            	delete.deleteFamily(colFamily.getName().getBytes(), ts);
+            }
             deleteRow = delete;
             // No need to write to the WAL for indexes
             if (PTableImpl.this.getType() == PTableType.INDEX) {

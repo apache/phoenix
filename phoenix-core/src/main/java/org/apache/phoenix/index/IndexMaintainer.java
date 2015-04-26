@@ -806,15 +806,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         for (KeyValue kv : pendingUpdates) {
             if (kv.getTypeByte() == KeyValue.Type.DeleteFamily.getCode()) {
                 nDeleteCF++;
-                boolean isEmptyCF = Bytes.compareTo(kv.getFamilyArray(), kv.getFamilyOffset(), kv.getFamilyLength(), 
-                  dataEmptyKeyValueCF, 0, dataEmptyKeyValueCF.length) == 0;
-                // This is what a delete looks like on the client side for immutable indexing...
-                if (isEmptyCF) {
-                    return true;
-                }
             }
         }
-        // This is what a delete looks like on the server side for mutable indexing...
         return nDeleteCF == this.nDataCFs;
     }
     
