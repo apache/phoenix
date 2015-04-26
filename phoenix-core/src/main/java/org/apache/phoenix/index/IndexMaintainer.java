@@ -787,15 +787,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         int nDeleteCF = 0;
         int nDeleteVersionCF = 0;
         for (Cell kv : pendingUpdates) {
-            if (kv.getTypeByte() == KeyValue.Type.DeleteFamily.getCode()) {
-                nDeleteCF++;
-                boolean isEmptyCF = Bytes.compareTo(kv.getFamilyArray(), kv.getFamilyOffset(), kv.getFamilyLength(), 
-                  dataEmptyKeyValueCF, 0, dataEmptyKeyValueCF.length) == 0;
-                // This is what a delete looks like on the client side for immutable indexing...
-                if (isEmptyCF) {
-                    return DeleteType.ALL_VERSIONS;
-                }
-            } else if (kv.getTypeByte() == KeyValue.Type.DeleteFamilyVersion.getCode()) {
+            if (kv.getTypeByte() == KeyValue.Type.DeleteFamilyVersion.getCode()) {
                 nDeleteVersionCF++;
             }
         }
