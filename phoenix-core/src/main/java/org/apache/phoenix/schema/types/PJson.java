@@ -15,6 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.phoenix.schema.types;
 
 import java.sql.SQLException;
@@ -22,7 +23,6 @@ import java.sql.Types;
 import java.text.Format;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.json.PhoenixJson;
@@ -70,7 +70,7 @@ public class PJson extends PDataType<String> {
             return ByteUtil.EMPTY_BYTE_ARRAY;
         }
         PhoenixJson phoenixJson = (PhoenixJson) object;
-        return PVarchar.INSTANCE.toBytes(phoenixJson.toString());
+        return phoenixJson.toBytes();
     }
 
     @Override
@@ -78,13 +78,14 @@ public class PJson extends PDataType<String> {
             @SuppressWarnings("rawtypes") PDataType actualType, SortOrder sortOrder,
             Integer maxLength, Integer scale) {
 
-        if (!actualType.isCoercibleTo(this)) {
-            throwConstraintViolationException(actualType, this);
-        }
-        if (length == 0) {
-            return null;
-        }
-        return getPhoenixJson(bytes, offset, length);
+        Object object =
+                PVarchar.INSTANCE.toObject(bytes, offset, length, actualType, sortOrder, maxLength,
+                    scale);
+        /*
+         * avoiding the type casting of object to String by calling toString() since String's
+         * toString() returns itself.
+         */
+        return object == null ? object : getPhoenixJson(object.toString());
 
     }
 
@@ -97,7 +98,7 @@ public class PJson extends PDataType<String> {
             return object;
         }
         if (equalsAny(actualType, PVarchar.INSTANCE)) {
-            return getJsonFromVarchar(object, actualType);
+            return getPhoenixJson(object.toString());
         }
         return throwConstraintViolationException(actualType, this);
     }
@@ -190,27 +191,7 @@ public class PJson extends PDataType<String> {
         StringBuilder sbr = new StringBuilder();
         sbr.append("{").append(key).append(":").append(value).append("}");
 
-        byte[] bytes = Bytes.toBytes(sbr.toString());
-        return getPhoenixJson(bytes, 0, bytes.length);
-    }
-
-    private Object getJsonFromVarchar(Object object,
-            @SuppressWarnings("rawtypes") PDataType actualType) {
-        String s = (String) object;
-        if (s.length() > 0) {
-            return getPhoenixJson(s);
-        } else {
-            return null;
-        }
-
-    }
-
-    private Object getPhoenixJson(byte[] bytes, int offset, int length) {
-        try {
-            return PhoenixJson.getInstance(bytes, offset, length);
-        } catch (SQLException sqe) {
-            throw new IllegalDataException(sqe);
-        }
+        return getPhoenixJson(sbr.toString());
     }
 
     private Object getPhoenixJson(String jsonData) {

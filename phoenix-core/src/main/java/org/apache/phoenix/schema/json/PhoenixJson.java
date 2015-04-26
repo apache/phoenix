@@ -1,13 +1,21 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one or more contributor license
- * agreements. See the NOTICE file distributed with this work for additional information regarding
- * copyright ownership. The ASF licenses this file to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance with the License. You may obtain a
- * copy of the License at http://www.apache.org/licenses/LICENSE-2.0 Unless required by applicable
- * law or agreed to in writing, software distributed under the License is distributed on an "AS IS"
- * BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
- * for the specific language governing permissions and limitations under the License.
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
+
 package org.apache.phoenix.schema.json;
 
 import java.io.IOException;
@@ -33,23 +41,14 @@ import com.google.common.base.Preconditions;
  * read the value from it. It always conside the last value if same key exist more than once.
  */
 public class PhoenixJson implements Comparable<PhoenixJson> {
-    private final JsonNode node;
-    private String jsonAsString;
-
-    /**
-     * Static Factory method to get an {@link PhoenixJson} object. It also validates the json and
-     * throws {@link SQLException} if it is invalid with line number and character.
-     * @param data Buffer that contains data to parse
-     * @param offset Offset of the first data byte within buffer
-     * @param length Length of contents to parse within buffer
-     * @return {@link PhoenixJson}.
-     * @throws SQLException
+    private final JsonNode rootNode;
+    /*
+     * input data has been stored as it is, since some data is lost when json parser runs, for
+     * example if a JSON object within the value contains the same key more than once then only last
+     * one is stored rest all of them are ignored, which will defy the contract of PJsonDataType of
+     * keeping user data as it is.
      */
-    public static PhoenixJson getInstance(byte[] jsonData, int offset, int length)
-            throws SQLException {
-        String jsonDataStr = Bytes.toString(jsonData, offset, length);
-        return getInstance(jsonDataStr);
-    }
+    private final String jsonAsString;
 
     /**
      * Static Factory method to get an {@link PhoenixJson} object. It also validates the json and
@@ -59,18 +58,16 @@ public class PhoenixJson implements Comparable<PhoenixJson> {
      * @throws SQLException
      */
     public static PhoenixJson getInstance(String jsonData) throws SQLException {
+        if (jsonData == null) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_JSON_DATA)
+                    .setMessage("null data cannot mapped to a valid json object").build()
+                    .buildException();
+        }
         try {
             JsonFactory jsonFactory = new JsonFactory();
             JsonParser jsonParser = jsonFactory.createJsonParser(jsonData);
-            PhoenixJson phoenixJson = getInstanceInternal(jsonParser);
-            /*
-             * input data has been stored as it is, since some data is lost when json parser runs,
-             * for example if a JSON object within the value contains the same key more than once
-             * then only last one is stored rest all of them are ignored, which will defy the
-             * contract of PJsonDataType of keeping user data as it is.
-             */
-            phoenixJson.setJsonAsString(jsonData);
-            return phoenixJson;
+            JsonNode jsonNode = getRootJsonNode(jsonParser);
+            return new PhoenixJson(jsonNode, jsonData);
         } catch (IOException x) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_JSON_DATA).setRootCause(x)
                     .setMessage(x.getMessage()).build().buildException();
@@ -78,22 +75,24 @@ public class PhoenixJson implements Comparable<PhoenixJson> {
 
     }
 
-    private static PhoenixJson getInstanceInternal(JsonParser jsonParser) throws IOException,
+    /**
+     * Returns the root of the resulting {@link JsonNode} tree.
+     */
+    private static JsonNode getRootJsonNode(JsonParser jsonParser) throws IOException,
             JsonProcessingException {
         jsonParser.configure(Feature.ALLOW_COMMENTS, true);
         ObjectMapper objectMapper = new ObjectMapper();
         try {
-            JsonNode rootNode = objectMapper.readTree(jsonParser);
-            PhoenixJson phoenixJson = new PhoenixJson(rootNode);
-            return phoenixJson;
+            return objectMapper.readTree(jsonParser);
         } finally {
             jsonParser.close();
         }
     }
 
-    /* Default for unit testing */PhoenixJson(final JsonNode node) {
+    /* Default for unit testing */PhoenixJson(final JsonNode node, final String jsonData) {
         Preconditions.checkNotNull(node, "root node cannot be null for json");
-        this.node = node;
+        this.rootNode = node;
+        this.jsonAsString = jsonData;
     }
 
     /**
@@ -107,22 +106,20 @@ public class PhoenixJson implements Comparable<PhoenixJson> {
      * {@link PhoenixJson} object for json {"f7":"2"}. It always returns the last key if same key
      * exist more than once.
      * <p>
-     * If the given path is unreachable then it throws {@link PhoenixJsonException} with the message
-     * having information about not found path. It is caller responsibility to wrap it in
-     * {@link SQLException} or catch it and return null to client.
+     * If the given path is unreachable then it throws {@link SQLException}.
      * @param paths {@link String []} of path in the same order as they appear in json.
      * @return {@link PhoenixJson} for the json against @paths.
-     * @throws PhoenixJsonException
+     * @throws SQLException
      */
-    public PhoenixJson getPhoenixJson(String[] paths) throws PhoenixJsonException {
+    public PhoenixJson getPhoenixJson(String[] paths) throws SQLException {
         try {
             PhoenixJson phoenixJson = getPhoenixJsonInternal(paths);
             if (phoenixJson == null) {
-                throw new PhoenixJsonException("path: " + Arrays.asList(paths) + " not found.");
+                throw new SQLException("path: " + Arrays.asList(paths) + " not found.");
             }
             return phoenixJson;
         } catch (NumberFormatException nfe) {
-            throw new PhoenixJsonException("path: " + Arrays.asList(paths) + " not found.", nfe);
+            throw new SQLException("path: " + Arrays.asList(paths) + " not found.", nfe);
         }
     }
 
@@ -159,22 +156,22 @@ public class PhoenixJson implements Comparable<PhoenixJson> {
      * objects toString().
      */
     public String serializeToString() {
-        if (this.node == null || this.node.isNull()) {
+        if (this.rootNode == null || this.rootNode.isNull()) {
             return null;
-        } else if (this.node.isValueNode()) {
+        } else if (this.rootNode.isValueNode()) {
 
-            if (this.node.isNumber()) {
-                return this.node.getNumberValue().toString();
-            } else if (this.node.isBoolean()) {
-                return String.valueOf(this.node.getBooleanValue());
-            } else if (this.node.isTextual()) {
-                return this.node.getTextValue();
+            if (this.rootNode.isNumber()) {
+                return this.rootNode.getNumberValue().toString();
+            } else if (this.rootNode.isBoolean()) {
+                return String.valueOf(this.rootNode.getBooleanValue());
+            } else if (this.rootNode.isTextual()) {
+                return this.rootNode.getTextValue();
             } else {
                 return getJsonAsString();
             }
-        } else if (this.node.isArray()) {
+        } else if (this.rootNode.isArray()) {
             return getJsonAsString();
-        } else if (this.node.isContainerNode()) {
+        } else if (this.rootNode.isContainerNode()) {
             return getJsonAsString();
         }
 
@@ -184,17 +181,14 @@ public class PhoenixJson implements Comparable<PhoenixJson> {
 
     @Override
     public String toString() {
-        if (this.jsonAsString == null && this.node != null) {
-            return getJsonAsString();
-        }
-        return this.jsonAsString;
+        return getJsonAsString();
     }
 
     @Override
     public int hashCode() {
         final int prime = 31;
         int result = 1;
-        result = prime * result + ((this.node == null) ? 0 : this.node.hashCode());
+        result = prime * result + ((this.rootNode == null) ? 0 : this.rootNode.hashCode());
         return result;
     }
 
@@ -207,9 +201,9 @@ public class PhoenixJson implements Comparable<PhoenixJson> {
         if ((this.jsonAsString != null) && (other.jsonAsString != null)) {
             if (this.jsonAsString.equals(other.jsonAsString)) return true;
         }
-        if (this.node == null) {
-            if (other.node != null) return false;
-        } else if (!this.node.equals(other.node)) return false;
+        if (this.rootNode == null) {
+            if (other.rootNode != null) return false;
+        } else if (!this.rootNode.equals(other.rootNode)) return false;
         return true;
     }
 
@@ -217,11 +211,12 @@ public class PhoenixJson implements Comparable<PhoenixJson> {
      * @return length of the string represented by the current {@link PhoenixJson}.
      */
     public int estimateByteSize() {
-        if (this.jsonAsString != null) {
-            return this.jsonAsString.length();
-        }
         String jsonStr = getJsonAsString();
         return jsonStr == null ? 1 : jsonStr.length();
+    }
+
+    public byte[] toBytes() {
+        return Bytes.toBytes(getJsonAsString());
     }
 
     @Override
@@ -236,7 +231,7 @@ public class PhoenixJson implements Comparable<PhoenixJson> {
     }
 
     private PhoenixJson getPhoenixJsonInternal(String[] paths) {
-        JsonNode node = this.node;
+        JsonNode node = this.rootNode;
         for (String path : paths) {
             JsonNode nodeTemp = null;
             if (node.isArray()) {
@@ -250,17 +245,13 @@ public class PhoenixJson implements Comparable<PhoenixJson> {
             }
             node = nodeTemp;
         }
-        return new PhoenixJson(node);
+        return new PhoenixJson(node, null);
     }
-
-    private void setJsonAsString(String str) {
-        this.jsonAsString = str;
-    }
-
+    
     private String getJsonAsString() {
-        if (this.node != null) {
-            return this.node.toString();
+        if (this.jsonAsString != null) {
+            return this.jsonAsString;
         }
-        return null;
+        return this.rootNode.toString();
     }
 }

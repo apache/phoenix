@@ -15,15 +15,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.phoenix.schema.json;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 
+import java.sql.SQLException;
 import java.util.Arrays;
 
-import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.exception.SQLExceptionCode;
 import org.junit.Test;
 
 /**
@@ -37,8 +39,7 @@ public class PhoenixJsonTest {
     public void testParsingForJsonHavingChineseChars() throws Exception {
 
         String jsonWithChineseChars = "[\"'普派'\"]";
-        byte[] json = Bytes.toBytes(jsonWithChineseChars);
-        PhoenixJson phoenixJson = PhoenixJson.getInstance(json, 0, json.length);
+        PhoenixJson phoenixJson = PhoenixJson.getInstance(jsonWithChineseChars);
         assertNotNull(phoenixJson);
         assertEquals(jsonWithChineseChars, phoenixJson.toString());
 
@@ -48,8 +49,7 @@ public class PhoenixJsonTest {
     public void testParsingForJsonHavingControlAndQuoteChars() throws Exception {
 
         String jsonWithControlChars = "[\"\\n \\\"jumps \\r'普派'\"]";
-        byte[] json = Bytes.toBytes(jsonWithControlChars);
-        PhoenixJson phoenixJson = PhoenixJson.getInstance(json, 0, json.length);
+        PhoenixJson phoenixJson = PhoenixJson.getInstance(jsonWithControlChars);
         assertNotNull(phoenixJson);
         assertEquals(jsonWithControlChars, phoenixJson.toString());
 
@@ -59,10 +59,39 @@ public class PhoenixJsonTest {
     public void testEmptyJsonParsing() throws Exception {
 
         String emptyJson = "{}";
-        byte[] json = Bytes.toBytes(emptyJson);
-        PhoenixJson phoenixJson = PhoenixJson.getInstance(json, 0, json.length);
+        PhoenixJson phoenixJson = PhoenixJson.getInstance(emptyJson);
         assertNotNull(phoenixJson);
         assertEquals(emptyJson, phoenixJson.toString());
+
+    }
+
+    @Test
+    public void testZeroLengthJsonStringForParsing() throws Exception {
+
+        String emptyJson = "";
+        try {
+            PhoenixJson.getInstance(emptyJson);
+        } catch (SQLException expectedException) {
+            assertEquals("error code is not as expected.",
+                SQLExceptionCode.INVALID_JSON_DATA.getErrorCode(), expectedException.getErrorCode());
+            assertEquals("sql state is not as expected.",
+                SQLExceptionCode.INVALID_JSON_DATA.getSQLState(), expectedException.getSQLState());
+        }
+
+    }
+
+    @Test
+    public void testNullJsonStringForParsing() throws Exception {
+
+        String nullJson = null;
+        try {
+            PhoenixJson.getInstance(nullJson);
+        } catch (SQLException expectedException) {
+            assertEquals("error code is not as expected.",
+                SQLExceptionCode.INVALID_JSON_DATA.getErrorCode(), expectedException.getErrorCode());
+            assertEquals("sql state is not as expected.",
+                SQLExceptionCode.INVALID_JSON_DATA.getSQLState(), expectedException.getSQLState());
+        }
 
     }
 
@@ -70,8 +99,7 @@ public class PhoenixJsonTest {
     public void testJsonArrayParsing() throws Exception {
 
         String jsonArrayString = "[1,2,3]";
-        byte[] json = Bytes.toBytes(jsonArrayString);
-        PhoenixJson phoenixJson = PhoenixJson.getInstance(json, 0, json.length);
+        PhoenixJson phoenixJson = PhoenixJson.getInstance(jsonArrayString);
         assertNotNull(phoenixJson);
         assertEquals(jsonArrayString, phoenixJson.toString());
     }
@@ -79,16 +107,14 @@ public class PhoenixJsonTest {
     @Test
     public void testVaidJsonParsing() throws Exception {
 
-        byte[] json = TEST_JSON_STR.getBytes();
-        PhoenixJson phoenixJson = PhoenixJson.getInstance(json, 0, json.length);
+        PhoenixJson phoenixJson = PhoenixJson.getInstance(TEST_JSON_STR);
         assertNotNull(phoenixJson);
         assertEquals(TEST_JSON_STR, phoenixJson.toString());
     }
 
     @Test
     public void getPhoenixJson() throws Exception {
-        byte[] json = TEST_JSON_STR.getBytes();
-        PhoenixJson phoenixJson = PhoenixJson.getInstance(json, 0, json.length);
+        PhoenixJson phoenixJson = PhoenixJson.getInstance(TEST_JSON_STR);
         PhoenixJson phoenixJson2 = phoenixJson.getPhoenixJson(new String[] { "f2", "f3" });
         assertEquals("value", phoenixJson2.serializeToString());
 
@@ -96,17 +122,16 @@ public class PhoenixJsonTest {
         try {
             phoenixJson.getPhoenixJson(paths);
         } catch (Exception e) {
-            PhoenixJsonException jsonException = new PhoenixJsonException("path: "+Arrays.asList(paths)+" not found.");
+            SQLException jsonException =
+                    new SQLException("path: " + Arrays.asList(paths) + " not found.");
             assertEquals(jsonException.getMessage(), e.getMessage());
             assertEquals(jsonException.getClass(), e.getClass());
         }
-
     }
 
     @Test
     public void getNullablePhoenixJson() throws Exception {
-        byte[] json = TEST_JSON_STR.getBytes();
-        PhoenixJson phoenixJson = PhoenixJson.getInstance(json, 0, json.length);
+        PhoenixJson phoenixJson = PhoenixJson.getInstance(TEST_JSON_STR);
         PhoenixJson phoenixJson2 = phoenixJson.getPhoenixJsonOrNull(new String[] { "f2", "f3" });
         assertEquals("value", phoenixJson2.serializeToString());
 
@@ -118,8 +143,7 @@ public class PhoenixJsonTest {
 
     @Test
     public void serializeToString() throws Exception {
-        byte[] json = TEST_JSON_STR.getBytes();
-        PhoenixJson phoenixJson = PhoenixJson.getInstance(json, 0, json.length);
+        PhoenixJson phoenixJson = PhoenixJson.getInstance(TEST_JSON_STR);
         PhoenixJson phoenixJson2 = phoenixJson.getPhoenixJson(new String[] { "f4", "f5" });
         assertEquals(new Integer(99).toString(), phoenixJson2.serializeToString());
 
@@ -136,8 +160,7 @@ public class PhoenixJsonTest {
 
     @Test
     public void serializeToStringForJsonArray() throws Exception {
-        byte[] json = TEST_JSON_STR.getBytes();
-        PhoenixJson phoenixJson = PhoenixJson.getInstance(json, 0, json.length);
+        PhoenixJson phoenixJson = PhoenixJson.getInstance(TEST_JSON_STR);
         PhoenixJson phoenixJson5 =
                 phoenixJson.getPhoenixJsonOrNull(new String[] { "f4", "f6", "0" });
         assertEquals(new Integer(1).toString(), phoenixJson5.serializeToString());
@@ -149,8 +172,26 @@ public class PhoenixJsonTest {
 
     @Test
     public void testToString() throws Exception {
-        byte[] json = TEST_JSON_STR.getBytes();
-        PhoenixJson phoenixJson = PhoenixJson.getInstance(json, 0, json.length);
+        PhoenixJson phoenixJson = PhoenixJson.getInstance(TEST_JSON_STR);
         assertEquals(TEST_JSON_STR, phoenixJson.toString());
+    }
+
+    @Test
+    public void compareTo() throws Exception {
+        PhoenixJson phoenixJson1 = PhoenixJson.getInstance(TEST_JSON_STR);
+
+        assertEquals("for same object compareTo() is not as expected.", 0,
+            phoenixJson1.compareTo(phoenixJson1));
+
+        PhoenixJson phoenixJson2 = PhoenixJson.getInstance(TEST_JSON_STR);
+
+        assertEquals("for same json data compareTo() is not as expected.", 0,
+            phoenixJson1.compareTo(phoenixJson2));
+
+        phoenixJson1 = PhoenixJson.getInstance("{\"k1\":1,\"k2\":2}");
+
+        phoenixJson2 = PhoenixJson.getInstance("{\"k2\":2,\"k1\":1}");
+
+        assertEquals("compareTo() is not as expected.", 0, phoenixJson1.compareTo(phoenixJson2));
     }
 }

@@ -204,7 +204,7 @@ public enum ExpressionType {
     SecondFunction(SecondFunction.class),
     WeekFunction(WeekFunction.class),
     HourFunction(HourFunction.class),
-    NowFunction(NowFunction.class),
+    NowFunction(NowFunction.class)
     ;
 
     ExpressionType(Class<? extends Expression> clazz) {

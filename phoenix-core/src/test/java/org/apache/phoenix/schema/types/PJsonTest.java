@@ -43,7 +43,7 @@ public class PJsonTest {
 
     @Test
     public void testToBytesWithOffset() throws Exception {
-        PhoenixJson phoenixJson = PhoenixJson.getInstance(json, 0, json.length);
+        PhoenixJson phoenixJson = PhoenixJson.getInstance(PhoenixJsonTest.TEST_JSON_STR);
 
         byte[] bytes = new byte[json.length];
 
@@ -54,7 +54,7 @@ public class PJsonTest {
 
     @Test
     public void testToBytes() throws Exception {
-        PhoenixJson phoenixJson = PhoenixJson.getInstance(json, 0, json.length);
+        PhoenixJson phoenixJson = PhoenixJson.getInstance(PhoenixJsonTest.TEST_JSON_STR);
 
         byte[] bytes = PJson.INSTANCE.toBytes(phoenixJson);
         assertArrayEquals(json, bytes);
@@ -105,16 +105,16 @@ public class PJsonTest {
     }
 
     public void estimateByteSize() throws Exception {
-        PhoenixJson phoenixJson = PhoenixJson.getInstance(json, 0, json.length);
+        PhoenixJson phoenixJson = PhoenixJson.getInstance(PhoenixJsonTest.TEST_JSON_STR);
         assertEquals(PhoenixJsonTest.TEST_JSON_STR.length(),
             PJson.INSTANCE.estimateByteSize(phoenixJson));
     }
 
     @Test
     public void compareTo() throws Exception {
-        PhoenixJson phoenixJson1 = PhoenixJson.getInstance(json, 0, json.length);
+        PhoenixJson phoenixJson1 = PhoenixJson.getInstance(PhoenixJsonTest.TEST_JSON_STR);
 
-        PhoenixJson phoenixJson2 = PhoenixJson.getInstance(json, 0, json.length);
+        PhoenixJson phoenixJson2 = PhoenixJson.getInstance(PhoenixJsonTest.TEST_JSON_STR);
 
         assertEquals(0, PJson.INSTANCE.compareTo(phoenixJson1, phoenixJson2, PJson.INSTANCE));
 
@@ -136,7 +136,7 @@ public class PJsonTest {
 
     @Test
     public void toStringLiteral() throws Exception {
-        PhoenixJson phoenixJson = PhoenixJson.getInstance(json, 0, json.length);
+        PhoenixJson phoenixJson = PhoenixJson.getInstance(PhoenixJsonTest.TEST_JSON_STR);
         String stringLiteral = PJson.INSTANCE.toStringLiteral(phoenixJson, null);
         assertEquals(PVarchar.INSTANCE.toStringLiteral(PhoenixJsonTest.TEST_JSON_STR, null),
             stringLiteral);
@@ -144,7 +144,7 @@ public class PJsonTest {
 
     @Test
     public void coerceBytes() throws SQLException {
-        PhoenixJson phoenixJson = PhoenixJson.getInstance(json, 0, json.length);
+        PhoenixJson phoenixJson = PhoenixJson.getInstance(PhoenixJsonTest.TEST_JSON_STR);
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         ptr.set(json, 0, 0);
         PJson.INSTANCE.coerceBytes(ptr, phoenixJson, PJson.INSTANCE, json.length, new Integer(10),
