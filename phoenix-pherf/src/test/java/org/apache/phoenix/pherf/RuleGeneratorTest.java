@@ -22,6 +22,7 @@ import org.apache.phoenix.pherf.configuration.*;
 import org.apache.phoenix.pherf.loaddata.DataLoader;
 import org.apache.phoenix.pherf.rules.DataValue;
 import org.apache.phoenix.pherf.rules.RulesApplier;
+import org.apache.phoenix.pherf.util.PhoenixUtil;
 import org.joda.time.DateTime;
 import org.joda.time.format.DateTimeFormat;
 import org.joda.time.format.DateTimeFormatter;
@@ -32,7 +33,9 @@ import java.util.*;
 
 import static org.junit.Assert.*;
 
-public class RuleGeneratorTest extends BaseTestWithCluster {
+public class RuleGeneratorTest {
+    static PhoenixUtil util = new PhoenixUtil(true);
+    static final String matcherScenario = PherfConstants.SCENARIO_ROOT_PATTERN + ".xml";
 
     @Test
     public void testDateGenerator() throws Exception {
@@ -40,8 +43,6 @@ public class RuleGeneratorTest extends BaseTestWithCluster {
         DataModel model = parser.getDataModels().get(0);
         DataLoader loader = new DataLoader(parser);
         RulesApplier rulesApplier = loader.getRulesApplier();
-        int sampleSize = 100;
-        List<String> values = new ArrayList<>(sampleSize);
 
         for (Column dataMapping : model.getDataMappingColumns()) {
             if ((dataMapping.getType() == DataTypeMapping.DATE) && (dataMapping.getName().equals("CREATED_DATE"))) {
