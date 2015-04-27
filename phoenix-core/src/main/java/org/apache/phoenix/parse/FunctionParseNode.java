@@ -38,6 +38,9 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.function.AggregateFunction;
 import org.apache.phoenix.expression.function.FunctionExpression;
+import org.apache.phoenix.expression.function.UDFExpression;
+import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.parse.PFunction.FunctionArgument;
 import org.apache.phoenix.schema.ArgumentTypeMismatchException;
 import org.apache.phoenix.schema.ValueRangeExcpetion;
 import org.apache.phoenix.schema.types.PDataType;
@@ -58,7 +61,7 @@ import com.google.common.collect.ImmutableSet;
  */
 public class FunctionParseNode extends CompoundParseNode {
     private final String name;
-    private final BuiltInFunctionInfo info;
+    private BuiltInFunctionInfo info;
 
     FunctionParseNode(String name, List<ParseNode> children, BuiltInFunctionInfo info) {
         super(children);
@@ -84,6 +87,7 @@ public class FunctionParseNode extends CompoundParseNode {
     }
 
     public boolean isAggregate() {
+        if(getInfo()==null) return false;
         return getInfo().isAggregate();
     }
 
@@ -113,9 +117,17 @@ public class FunctionParseNode extends CompoundParseNode {
     }
 
     private static Constructor<? extends FunctionExpression> getExpressionCtor(Class<? extends FunctionExpression> clazz) {
+        return getExpressionCtor(clazz, null);
+    }
+
+    private static Constructor<? extends FunctionExpression> getExpressionCtor(Class<? extends FunctionExpression> clazz, PFunction function) {
         Constructor<? extends FunctionExpression> ctor;
         try {
-            ctor = clazz.getDeclaredConstructor(List.class);
+            if(function == null) {
+                ctor = clazz.getDeclaredConstructor(List.class);
+            } else {
+                ctor = clazz.getDeclaredConstructor(List.class, PFunction.class);
+            }
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -223,8 +235,24 @@ public class FunctionParseNode extends CompoundParseNode {
      * @throws SQLException
      */
     public Expression create(List<Expression> children, StatementContext context) throws SQLException {
+        return create(children, null, context);
+    }
+
+    /**
+     * Entry point for parser to instantiate compiled representation of built-in function
+     * @param children Compiled expressions for child nodes
+     * @param function
+     * @param context Query context for accessing state shared across the processing of multiple clauses
+     * @return compiled representation of built-in function
+     * @throws SQLException
+     */
+    public Expression create(List<Expression> children, PFunction function, StatementContext context) throws SQLException {
         try {
-            return info.getFuncCtor().newInstance(children);
+            if(function == null) {
+                return info.getFuncCtor().newInstance(children);
+            } else {
+                return info.getFuncCtor().newInstance(children, function);
+            }
         } catch (InstantiationException e) {
             throw new SQLException(e);
         } catch (IllegalAccessException e) {
@@ -275,9 +303,9 @@ public class FunctionParseNode extends CompoundParseNode {
         private final boolean isAggregate;
         private final int requiredArgCount;
 
-        BuiltInFunctionInfo(Class<? extends FunctionExpression> f, BuiltInFunction d) {
+        public BuiltInFunctionInfo(Class<? extends FunctionExpression> f, BuiltInFunction d) {
             this.name = SchemaUtil.normalizeIdentifier(d.name());
-            this.funcCtor = d.nodeClass() == FunctionParseNode.class ? getExpressionCtor(f) : null;
+            this.funcCtor = d.nodeClass() == FunctionParseNode.class ? getExpressionCtor(f, null) : null;
             this.nodeCtor = d.nodeClass() == FunctionParseNode.class ? null : getParseNodeCtor(d.nodeClass());
             this.args = new BuiltInFunctionArgInfo[d.args().length];
             int requiredArgCount = 0;
@@ -289,6 +317,22 @@ public class FunctionParseNode extends CompoundParseNode {
             }
             this.requiredArgCount = requiredArgCount;
             this.isAggregate = AggregateFunction.class.isAssignableFrom(f);
+        }
+
+        public BuiltInFunctionInfo(PFunction function) {
+            this.name = SchemaUtil.normalizeIdentifier(function.getFunctionName());
+            this.funcCtor = getExpressionCtor(UDFExpression.class, function);
+            this.nodeCtor = getParseNodeCtor(UDFParseNode.class);
+            this.args = new BuiltInFunctionArgInfo[function.getFunctionArguments().size()];
+            int requiredArgCount = 0;
+            for (int i = 0; i < args.length; i++) {
+                this.args[i] = new BuiltInFunctionArgInfo(function.getFunctionArguments().get(i));
+                if (this.args[i].getDefaultValue() == null) {
+                    requiredArgCount = i + 1;
+                }
+            }
+            this.requiredArgCount = requiredArgCount;
+            this.isAggregate = AggregateFunction.class.isAssignableFrom(UDFExpression.class);
         }
 
         public int getRequiredArgCount() {
@@ -365,6 +409,27 @@ public class FunctionParseNode extends CompoundParseNode {
             }
         }
 
+        @SuppressWarnings({ "unchecked", "rawtypes" })
+        BuiltInFunctionArgInfo(FunctionArgument arg) {
+            PDataType dataType =
+                    arg.isArrayType() ? PDataType.fromTypeId(PDataType.sqlArrayType(SchemaUtil
+                            .normalizeIdentifier(SchemaUtil.normalizeIdentifier(arg
+                                    .getArgumentType())))) : PDataType.fromSqlTypeName(SchemaUtil
+                            .normalizeIdentifier(arg.getArgumentType()));
+            this.allowedValues = Collections.emptySet();
+            this.allowedTypes = new Class[] { dataType.getClass() };
+            this.isConstant = arg.isConstant();
+            this.defaultValue =
+                    arg.getDefaultValue() == null ? null : getExpFromConstant((String) arg
+                            .getDefaultValue().getValue());
+            this.minValue =
+                    arg.getMinValue() == null ? null : getExpFromConstant((String) arg
+                            .getMinValue().getValue());
+            this.maxValue =
+                    arg.getMaxValue() == null ? null : getExpFromConstant((String) arg
+                            .getMaxValue().getValue());
+        }
+        
         private LiteralExpression getExpFromConstant(String strValue) {
             LiteralExpression exp = null;
             if (strValue.length() > 0) {

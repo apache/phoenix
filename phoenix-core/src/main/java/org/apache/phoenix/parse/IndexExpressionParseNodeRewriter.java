@@ -37,12 +37,12 @@ public class IndexExpressionParseNodeRewriter extends ParseNodeRewriter {
 
     private final Map<ParseNode, ParseNode> indexedParseNodeToColumnParseNodeMap;
     
-    public IndexExpressionParseNodeRewriter(PTable index, PhoenixConnection connection) throws SQLException {
+    public IndexExpressionParseNodeRewriter(PTable index, PhoenixConnection connection, Map<String, UDFParseNode> udfParseNodes) throws SQLException {
         indexedParseNodeToColumnParseNodeMap = Maps.newHashMapWithExpectedSize(index.getColumns().size());
         NamedTableNode tableNode = NamedTableNode.create(null,
                 TableName.create(index.getParentSchemaName().getString(), index.getParentTableName().getString()),
                 Collections.<ColumnDef> emptyList());
-        ColumnResolver dataResolver = FromCompiler.getResolver(tableNode, connection);
+        ColumnResolver dataResolver = FromCompiler.getResolver(tableNode, connection, udfParseNodes);
         StatementContext context = new StatementContext(new PhoenixStatement(connection), dataResolver);
         IndexStatementRewriter rewriter = new IndexStatementRewriter(dataResolver, null);
         ExpressionCompiler expressionCompiler = new ExpressionCompiler(context);

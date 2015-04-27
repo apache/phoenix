@@ -1,4 +1,6 @@
 /*
+ * Copyright 2010 The Apache Software Foundation
+ *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -15,20 +17,29 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.parse;
 
-import java.util.Map;
+option java_package = "org.apache.phoenix.coprocessor.generated";
+option java_outer_classname = "PFunctionProtos";
+option java_generic_services = true;
+option java_generate_equals_and_hash = true;
+option optimize_for = SPEED;
 
-public class DMLStatement extends SingleTableStatement {
+message PFunctionArg {
+  required string argumentType = 1;
+  optional bool isArrayType = 2;
+  optional bool isConstant = 3;
+  optional string defaultValue = 4;
+  optional string minValue = 5;
+  optional string maxValue = 6;
+}
 
-    private final Map<String, UDFParseNode> udfParseNodes;
-    
-    public DMLStatement(NamedTableNode table, int bindCount, Map<String, UDFParseNode> udfParseNodes) {
-        super(table, bindCount);
-        this.udfParseNodes = udfParseNodes;
-    }
-    
-    public Map<String, UDFParseNode> getUdfParseNodes() {
-        return udfParseNodes;
-    }
+message PFunction {
+  required string functionName = 1;
+  repeated PFunctionArg arguments = 2;
+  required string classname = 3;
+  required int64 timeStamp = 4;
+  optional string jarPath = 5;
+  optional bytes tenantId = 6;
+  optional string returnType = 7;
+  optional bool isArrayReturnType = 8;
 }

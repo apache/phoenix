@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.compile;
 
+
 import java.math.BigDecimal;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
@@ -70,6 +71,7 @@ import org.apache.phoenix.expression.function.ArrayAnyComparisonExpression;
 import org.apache.phoenix.expression.function.ArrayElemRefExpression;
 import org.apache.phoenix.expression.function.RoundDecimalExpression;
 import org.apache.phoenix.expression.function.RoundTimestampExpression;
+import org.apache.phoenix.expression.function.UDFExpression;
 import org.apache.phoenix.parse.AddParseNode;
 import org.apache.phoenix.parse.AndParseNode;
 import org.apache.phoenix.parse.ArithmeticParseNode;
@@ -95,12 +97,14 @@ import org.apache.phoenix.parse.ModulusParseNode;
 import org.apache.phoenix.parse.MultiplyParseNode;
 import org.apache.phoenix.parse.NotParseNode;
 import org.apache.phoenix.parse.OrParseNode;
+import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.RowValueConstructorParseNode;
 import org.apache.phoenix.parse.SequenceValueParseNode;
 import org.apache.phoenix.parse.StringConcatParseNode;
 import org.apache.phoenix.parse.SubqueryParseNode;
 import org.apache.phoenix.parse.SubtractParseNode;
+import org.apache.phoenix.parse.UDFParseNode;
 import org.apache.phoenix.parse.UnsupportedAllParseNodeVisitor;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -313,8 +317,19 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
      * @param children the child expression arguments to the function expression node.
      */
     public Expression visitLeave(FunctionParseNode node, List<Expression> children) throws SQLException {
+        PFunction function = null;
+        if(node instanceof UDFParseNode) {
+            function = context.getResolver().resolveFunction(node.getName());
+            BuiltInFunctionInfo info = new BuiltInFunctionInfo(function);
+            node = new UDFParseNode(node.getName(), node.getChildren(), info);
+        }
         children = node.validate(children, context);
-        Expression expression = node.create(children, context);
+        Expression expression = null;
+        if (function == null) {
+            expression = node.create(children, context);
+        } else {
+            expression = node.create(children, function, context);
+        }
         ImmutableBytesWritable ptr = context.getTempPtr();
         BuiltInFunctionInfo info = node.getInfo();
         for (int i = 0; i < info.getRequiredArgCount(); i++) { 

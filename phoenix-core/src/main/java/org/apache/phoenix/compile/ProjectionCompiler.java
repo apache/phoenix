@@ -458,7 +458,7 @@ public class ProjectionCompiler {
                 projectColumnFamily(table, scan, family);
             }
         }
-        return new RowProjector(projectedColumns, estimatedByteSize, isProjectEmptyKeyValue);
+        return new RowProjector(projectedColumns, estimatedByteSize, isProjectEmptyKeyValue, resolver.hasUDFs());
     }
 
     private static void projectAllColumnFamilies(PTable table, Scan scan) {

@@ -17,18 +17,11 @@
  */
 package org.apache.phoenix.parse;
 
-import java.util.Map;
+import java.util.List;
 
-public class DMLStatement extends SingleTableStatement {
+public class UDFParseNode extends FunctionParseNode {
 
-    private final Map<String, UDFParseNode> udfParseNodes;
-    
-    public DMLStatement(NamedTableNode table, int bindCount, Map<String, UDFParseNode> udfParseNodes) {
-        super(table, bindCount);
-        this.udfParseNodes = udfParseNodes;
-    }
-    
-    public Map<String, UDFParseNode> getUdfParseNodes() {
-        return udfParseNodes;
+    public UDFParseNode(String name, List<ParseNode> children, BuiltInFunctionInfo info) {
+        super(name, children, info);
     }
 }

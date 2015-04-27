@@ -15,20 +15,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.parse;
+package org.apache.phoenix.schema;
 
-import java.util.Map;
-
-public class DMLStatement extends SingleTableStatement {
-
-    private final Map<String, UDFParseNode> udfParseNodes;
-    
-    public DMLStatement(NamedTableNode table, int bindCount, Map<String, UDFParseNode> udfParseNodes) {
-        super(table, bindCount);
-        this.udfParseNodes = udfParseNodes;
-    }
-    
-    public Map<String, UDFParseNode> getUdfParseNodes() {
-        return udfParseNodes;
-    }
+public interface PMetaDataEntity {
+    public int getEstimatedSize();
 }

@@ -17,18 +17,25 @@
  */
 package org.apache.phoenix.parse;
 
-import java.util.Map;
+public class DropFunctionStatement extends MutableStatement {
 
-public class DMLStatement extends SingleTableStatement {
-
-    private final Map<String, UDFParseNode> udfParseNodes;
-    
-    public DMLStatement(NamedTableNode table, int bindCount, Map<String, UDFParseNode> udfParseNodes) {
-        super(table, bindCount);
-        this.udfParseNodes = udfParseNodes;
+    private final String functionName;
+    private final boolean ifExists;
+    public DropFunctionStatement(String functionName, boolean ifExists) {
+        this.functionName = functionName;
+        this.ifExists = ifExists;
     }
-    
-    public Map<String, UDFParseNode> getUdfParseNodes() {
-        return udfParseNodes;
+
+    @Override
+    public int getBindCount() {
+        return 0;
+    }
+
+    public String getFunctionName() {
+        return functionName;
+    }
+
+    public boolean ifExists() {
+        return ifExists;
     }
 }

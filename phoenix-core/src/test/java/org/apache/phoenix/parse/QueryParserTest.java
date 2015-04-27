@@ -289,24 +289,6 @@ public class QueryParserTest {
     }
 
     @Test
-    public void testUnknownFunction() throws Exception {
-        String sql = ((
-            "select /*gatherSlowStats*/ bogus_function(ind.key_prefix) from core.search_name_lookup ind\n" +
-            "where (ind.name = 'X')\n" +
-            "and rownum <= 2000\n" +
-            "and (ind.organization_id = '000000000000000')\n" +
-            "and (ind.key_prefix = '00T')\n" +
-            "and (ind.name_type = 't')"
-            ));
-        try {
-            parseQuery(sql);
-            fail();
-        } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.UNKNOWN_FUNCTION.getErrorCode(), e.getErrorCode());
-        }
-    }
-
-    @Test
     public void testNegativeNonBooleanWhere() throws Exception {
         String sql = ((
             "select /*gatherSlowStats*/ max( distinct 1) from core.search_name_lookup ind\n" +
