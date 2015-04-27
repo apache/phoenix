@@ -56,7 +56,7 @@ public class RepeatFunctionTest {
         
         inputExpression("ABc",PVarchar.INSTANCE, 2 , PInteger.INSTANCE, "ABcABc", SortOrder.DESC);
                         
-        //Tests for MultiByte Characters
+        //Tests for MultiByte Character
         
         inputExpression("Aɚɦ",PVarchar.INSTANCE, 3, PInteger.INSTANCE, "AɚɦAɚɦAɚɦ", SortOrder.ASC);
         

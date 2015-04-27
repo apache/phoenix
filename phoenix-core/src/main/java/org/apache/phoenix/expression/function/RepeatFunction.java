@@ -74,7 +74,7 @@ public class RepeatFunction extends ScalarFunction{
         
         int strLength = ptr.getLength();
         
-        String sourceStr = (String) PVarchar.INSTANCE.toObject(ptr, getChildren().get(0).getSortOrder());
+        String sourceStr = (String) PVarchar.INSTANCE.toObject(ptr, getChildren().get(0).getSortOrder()); 
         byte[] sourceBytes = sourceStr.getBytes();
         byte[] target = new byte[strLength*repeatNbr];
         int targetOffset = 0;

@@ -229,7 +229,7 @@ public enum ExpressionType {
     MinuteFunction(MinuteFunction.class),
     DayOfMonthFunction(DayOfMonthFunction.class),
     ArrayAppendFunction(ArrayAppendFunction.class),
-    RepeatFunction(RepeatFunction.class)
+    RepeatFunction(RepeatFunction.class) 
     ;
 
     ExpressionType(Class<? extends Expression> clazz) {

@@ -39,7 +39,7 @@ public class RepeatFunctionIT extends BaseHBaseManagedTimeIT {
         conn.commit();        
     }
     
-     private void testRepeat(Connection conn, String queryToExecute, String expValue) throws Exception {        
+     private void testRepeat(Connection conn, String queryToExecute, String expValue) throws Exception {       
         ResultSet rs;
         rs = conn.createStatement().executeQuery(queryToExecute);
         assertTrue(rs.next());
