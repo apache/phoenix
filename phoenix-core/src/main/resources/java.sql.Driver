@@ -1,1 +1,2 @@
 org.apache.phoenix.calcite.jdbc.PhoenixCalciteDriver
+org.apache.phoenix.jdbc.PhoenixDriver

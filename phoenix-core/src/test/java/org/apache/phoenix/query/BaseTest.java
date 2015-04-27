@@ -429,7 +429,8 @@ public abstract class BaseTest {
                 "    \"item_id\" varchar(10), " +
                 "    price integer, " +
                 "    quantity integer, " +
-                "    date timestamp)");
+                "    date timestamp, " +
+                "    the_year integer)");
         builder.put(JOIN_CUSTOMER_TABLE_FULL_NAME, "create table " + JOIN_CUSTOMER_TABLE_FULL_NAME +
                 "   (\"customer_id\" varchar(10) not null primary key, " +
                 "    name varchar, " +
@@ -1574,14 +1575,16 @@ public abstract class BaseTest {
                     "    \"item_id\", " +
                     "    PRICE, " +
                     "    QUANTITY," +
-                    "    DATE) " +
-                    "values (?, ?, ?, ?, ?, ?)");
+                    "    DATE," +
+                    "    THE_YEAR) " +
+                    "values (?, ?, ?, ?, ?, ?, ?)");
             stmt.setString(1, "000000000000001");
             stmt.setString(2, "0000000004");
             stmt.setString(3, "0000000001");
             stmt.setInt(4, 100);
             stmt.setInt(5, 1000);
             stmt.setTimestamp(6, new Timestamp(format.parse("2013-11-22 14:22:56").getTime()));
+            stmt.setShort(7, (short) 1997);
             stmt.execute();
 
             stmt.setString(1, "000000000000002");
@@ -1590,6 +1593,7 @@ public abstract class BaseTest {
             stmt.setInt(4, 552);
             stmt.setInt(5, 2000);
             stmt.setTimestamp(6, new Timestamp(format.parse("2013-11-25 10:06:29").getTime()));
+            stmt.setShort(7, (short) 1997);
             stmt.execute();
 
             stmt.setString(1, "000000000000003");
@@ -1598,6 +1602,7 @@ public abstract class BaseTest {
             stmt.setInt(4, 190);
             stmt.setInt(5, 3000);
             stmt.setTimestamp(6, new Timestamp(format.parse("2013-11-25 16:45:07").getTime()));
+            stmt.setShort(7, (short) 1997);
             stmt.execute();
 
             stmt.setString(1, "000000000000004");
@@ -1606,6 +1611,7 @@ public abstract class BaseTest {
             stmt.setInt(4, 510);
             stmt.setInt(5, 4000);
             stmt.setTimestamp(6, new Timestamp(format.parse("2013-11-26 13:26:04").getTime()));
+            stmt.setShort(7, (short) 1998);
             stmt.execute();
 
             stmt.setString(1, "000000000000005");
@@ -1614,6 +1620,7 @@ public abstract class BaseTest {
             stmt.setInt(4, 264);
             stmt.setInt(5, 5000);
             stmt.setTimestamp(6, new Timestamp(format.parse("2013-11-27 09:37:50").getTime()));
+            stmt.setShort(7, (short) 1998);
             stmt.execute();
 
             conn.commit();

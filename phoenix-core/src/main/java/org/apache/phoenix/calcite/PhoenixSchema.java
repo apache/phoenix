@@ -25,6 +25,8 @@ import java.util.*;
  * Implementation of Calcite's {@link Schema} SPI for Phoenix.
  */
 public class PhoenixSchema implements Schema {
+    public static final Factory FACTORY = new Factory();
+    
     private final String schemaName;
     private final PhoenixConnection pc;
     protected final MetaDataClient client;
@@ -39,14 +41,14 @@ public class PhoenixSchema implements Schema {
         tableCache.put("Join", "CustomerTable");
         tableCache.put("Join", "OrderTable");
     }
-
-    PhoenixSchema(String name, PhoenixConnection pc) {
+    
+    private PhoenixSchema(String name, PhoenixConnection pc) {
         this.schemaName = name;
         this.pc = pc;
         this.client = new MetaDataClient(pc);
     }
 
-    private static Schema create(SchemaPlus parentSchema, String name, Map<String, Object> operand) {
+    private static Schema create(SchemaPlus parentSchema, Map<String, Object> operand) {
         String url = (String) operand.get("url");
         final Properties properties = new Properties();
         for (Map.Entry<String, Object> entry : operand.entrySet()) {
@@ -150,7 +152,7 @@ public class PhoenixSchema implements Schema {
      */
     public static class Factory implements SchemaFactory {
         public Schema create(SchemaPlus parentSchema, String name, Map<String, Object> operand) {
-            return PhoenixSchema.create(parentSchema, name, operand);
+            return PhoenixSchema.create(parentSchema, operand);
         }
     }
 }

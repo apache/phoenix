@@ -1,12 +1,12 @@
 package org.apache.phoenix.calcite;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 
 import org.apache.calcite.adapter.jdbc.JdbcSchema;
 import org.apache.calcite.jdbc.CalciteConnection;
 import org.apache.calcite.schema.SchemaPlus;
 import org.apache.phoenix.end2end.BaseClientManagedTimeIT;
-import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -15,6 +15,7 @@ import java.io.FileWriter;
 import java.io.PrintWriter;
 import java.sql.*;
 import java.util.List;
+import java.util.Map;
 
 import javax.sql.DataSource;
 
@@ -147,15 +148,11 @@ public class CalciteTest extends BaseClientManagedTimeIT {
         final CalciteConnection calciteConnection =
             connection.unwrap(CalciteConnection.class);
         final String url = getUrl();
-        try {
-            Class.forName("org.apache.phoenix.jdbc.PhoenixDriver");
-        } catch (ClassNotFoundException e) {
-            throw new RuntimeException(e);
-        }
-        final PhoenixConnection phoenixConnection =
-            DriverManager.getConnection(url).unwrap(PhoenixConnection.class);
-        calciteConnection.getRootSchema().add("phoenix",
-            new PhoenixSchema(null, phoenixConnection));
+        Map<String, Object> operand = Maps.newHashMap();
+        operand.put("url", url);
+        SchemaPlus rootSchema = calciteConnection.getRootSchema();
+        rootSchema.add("phoenix",
+            PhoenixSchema.FACTORY.create(rootSchema, null, operand));
         calciteConnection.setSchema("phoenix");
         return connection;
     }
@@ -603,11 +600,11 @@ public class CalciteTest extends BaseClientManagedTimeIT {
         start().sql("SELECT \"order_id\", quantity FROM " + JOIN_ORDER_TABLE_FULL_NAME + " o WHERE quantity = (SELECT max(quantity) FROM " + JOIN_ORDER_TABLE_FULL_NAME + " q WHERE o.\"item_id\" = q.\"item_id\")")
                .explainIs("PhoenixToEnumerableConverter\n" +
                           "  PhoenixServerProject(order_id=[$0], QUANTITY=[$4])\n" +
-                          "    PhoenixServerJoin(condition=[AND(=($2, $6), =($4, $7))], joinType=[inner])\n" +
+                          "    PhoenixServerJoin(condition=[AND(=($2, $7), =($4, $8))], joinType=[inner])\n" +
                           "      PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n" +
                           "      PhoenixServerAggregate(group=[{0}], EXPR$0=[MAX($1)])\n" +
-                          "        PhoenixServerProject(item_id0=[$6], QUANTITY=[$4])\n" +
-                          "          PhoenixServerJoin(condition=[=($6, $2)], joinType=[inner])\n" +
+                          "        PhoenixServerProject(item_id0=[$7], QUANTITY=[$4])\n" +
+                          "          PhoenixServerJoin(condition=[=($7, $2)], joinType=[inner])\n" +
                           "            PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n" +
                           "            PhoenixServerAggregate(group=[{0}])\n" +
                           "              PhoenixServerProject(item_id=[$2])\n" +
@@ -627,23 +624,29 @@ public class CalciteTest extends BaseClientManagedTimeIT {
                 return createConnectionWithHsqldb();
             }
         };
-        start.sql("select \"the_year\", count(*) as c, min(\"the_month\") as m\n"
-            + "from \"foodmart\".\"time_by_day\" t\n"
-            + "join " + JOIN_ORDER_TABLE_FULL_NAME + " c on t.\"the_year\" = c.quantity\n" 
-            + "group by \"the_year\"\n"
-            + "order by 1, 2")
-            .explainIs("EnumerableSort(sort0=[$0], sort1=[$1], dir0=[ASC], dir1=[ASC])\n" +
-"  EnumerableAggregate(group=[{0}], C=[COUNT()], M=[MIN($1)])\n" +
-"    EnumerableCalc(expr#0..3=[{inputs}], the_year=[$t1], the_month=[$t0])\n" +
-"      EnumerableJoin(condition=[=($2, $3)], joinType=[inner])\n" +
-"        JdbcToEnumerableConverter\n" +
-"          JdbcProject(the_month=[$3], the_year=[$4], $f10=[CAST($4):INTEGER])\n" +
-"            JdbcTableScan(table=[[foodmart, time_by_day]])\n" +
-"        PhoenixToEnumerableConverter\n" +
-"          PhoenixServerProject(QUANTITY=[$4])\n" +
-"            PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n")
-            .resultIs(new Object[][] {})
-            //.resultIs(new Object[][] { new Object[] {(short) 1997, 365L, "April"}, new Object[] {(short) 1998, 365L, "April"}})
+        start.sql("select the_year, quantity as q, (select count(*) cnt \n"
+            + "from \"foodmart\".\"time_by_day\" t where t.\"the_year\" = c.the_year)\n"
+            + "from " + JOIN_ORDER_TABLE_FULL_NAME + " c")
+            .explainIs("EnumerableCalc(expr#0..8=[{inputs}], THE_YEAR=[$t6], Q=[$t4], EXPR$2=[$t8])\n" +
+                       "  EnumerableJoin(condition=[=($6, $7)], joinType=[left])\n" +
+                       "    PhoenixToEnumerableConverter\n" +
+                       "      PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n" +
+                       "    EnumerableAggregate(group=[{0}], agg#0=[SINGLE_VALUE($1)])\n" +
+                       "      EnumerableAggregate(group=[{0}], CNT=[COUNT()])\n" +
+                       "        EnumerableCalc(expr#0..10=[{inputs}], expr#11=[0], expr#12=[CAST($t5):INTEGER], expr#13=[=($t12, $t0)], THE_YEAR=[$t0], $f0=[$t11], $condition=[$t13])\n" +
+                       "          EnumerableJoin(condition=[true], joinType=[inner])\n" +
+                       "            PhoenixToEnumerableConverter\n" +
+                       "              PhoenixServerAggregate(group=[{0}])\n" +
+                       "                PhoenixServerProject(THE_YEAR=[$6])\n" +
+                       "                  PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n" +
+                       "            JdbcToEnumerableConverter\n" +
+                       "              JdbcTableScan(table=[[foodmart, time_by_day]])\n")
+            .resultIs(new Object[][] {
+                    new Object[] {1997, 1000, 365L}, 
+                    new Object[] {1997, 2000, 365L},
+                    new Object[] {1997, 3000, 365L},
+                    new Object[] {1998, 4000, 365L},
+                    new Object[] {1998, 5000, 365L}})
             .close();;
     }
 
