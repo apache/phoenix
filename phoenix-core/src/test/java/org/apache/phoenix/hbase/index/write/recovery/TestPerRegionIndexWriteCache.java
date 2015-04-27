@@ -24,6 +24,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map.Entry;
+import java.util.Random;
 import java.util.Set;
 
 import org.apache.hadoop.fs.FileSystem;
@@ -50,8 +51,8 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
 
 public class TestPerRegionIndexWriteCache {
-  private static final HBaseTestingUtility TEST_UTIL = new HBaseTestingUtility();
-  private static final TableName tableName = TableName.valueOf("t1"); 
+  private static final HBaseTestingUtility TEST_UTIL = new HBaseTestingUtility(); 
+  private static TableName tableName = TableName.valueOf("t1");;
   private static final byte[] row = Bytes.toBytes("row");
   private static final byte[] family = Bytes.toBytes("family");
   private static final byte[] qual = Bytes.toBytes("qual");
@@ -66,6 +67,7 @@ public class TestPerRegionIndexWriteCache {
 
   HRegion r1;
   HRegion r2;
+  WAL wal;
 
   @SuppressWarnings("deprecation")
 @Before
@@ -76,8 +78,10 @@ public class TestPerRegionIndexWriteCache {
       FileSystem newFS = FileSystem.newInstance(TEST_UTIL.getConfiguration());
       HRegionInfo hri = new HRegionInfo(tableName, null, null, false);
       Path basedir = FSUtils.getTableDir(hbaseRootDir, tableName);
+      Random rn = new Random();
+      tableName = TableName.valueOf("TestPerRegion" + rn.nextInt());
       WALFactory walFactory = new WALFactory(TEST_UTIL.getConfiguration(), null, "TestPerRegionIndexWriteCache");
-      WAL wal = walFactory.getWAL(Bytes.toBytes("logs"));
+      wal = walFactory.getWAL(Bytes.toBytes("logs"));
       HTableDescriptor htd = new HTableDescriptor(tableName);
       HColumnDescriptor a = new HColumnDescriptor(Bytes.toBytes("a"));
       htd.addFamily(a);
@@ -109,9 +113,15 @@ public class TestPerRegionIndexWriteCache {
   
   @After
   public void cleanUp() throws Exception {
-	  TEST_UTIL.cleanupTestDir();
+      try{
+          r1.close();
+          r2.close();
+          wal.close();
+      } catch (Exception ignored) {}
+      FileSystem newFS = FileSystem.get(TEST_UTIL.getConfiguration());
+      newFS.delete(TEST_UTIL.getDataTestDir(), true);
   }
-  
+
   
   @Test
   public void testAddRemoveSingleRegion() {
