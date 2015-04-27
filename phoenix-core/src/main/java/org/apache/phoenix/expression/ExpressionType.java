@@ -69,6 +69,7 @@ import org.apache.phoenix.expression.function.RandomFunction;
 import org.apache.phoenix.expression.function.RegexpReplaceFunction;
 import org.apache.phoenix.expression.function.RegexpSplitFunction;
 import org.apache.phoenix.expression.function.RegexpSubstrFunction;
+import org.apache.phoenix.expression.function.RepeatFunction;
 import org.apache.phoenix.expression.function.ReverseFunction;
 import org.apache.phoenix.expression.function.RoundDateExpression;
 import org.apache.phoenix.expression.function.RoundDecimalExpression;
@@ -227,7 +228,8 @@ public enum ExpressionType {
     InstrFunction(InstrFunction.class),
     MinuteFunction(MinuteFunction.class),
     DayOfMonthFunction(DayOfMonthFunction.class),
-    ArrayAppendFunction(ArrayAppendFunction.class)
+    ArrayAppendFunction(ArrayAppendFunction.class),
+    RepeatFunction(RepeatFunction.class) 
     ;
 
     ExpressionType(Class<? extends Expression> clazz) {
