@@ -114,6 +114,14 @@ tokens
     ASYNC='async';
     SAMPLING='sampling';
     UNION='union';
+    FUNCTION='function';
+    AS='as';
+    TEMPORARY='temporary';
+    RETURNS='returns';
+    USING='using';
+    JAR='jar';
+    DEFAULTVALUE='defaultvalue';
+    CONSTANT = 'constant';
 }
 
 
@@ -144,13 +152,18 @@ import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ListMultimap;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
+import java.lang.Boolean;
 import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Stack;
 import java.sql.SQLException;
 import org.apache.phoenix.expression.function.CountAggregateFunction;
+import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.parse.PFunction;
+import org.apache.phoenix.parse.PFunction.FunctionArgument;
+import org.apache.phoenix.parse.UDFParseNode;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.IllegalDataException;
@@ -206,6 +219,7 @@ package org.apache.phoenix.parse;
     private int anonBindNum;
     private ParseNodeFactory factory;
     private ParseContext.Stack contextStack = new ParseContext.Stack();
+    private Map<String, UDFParseNode> udfParseNodes = new HashMap<String, UDFParseNode>(1);
 
     public void setParseNodeFactory(ParseNodeFactory factory) {
         this.factory = factory;
@@ -341,13 +355,25 @@ package org.apache.phoenix.parse;
 // Used to incrementally parse a series of semicolon-terminated SQL statement
 // Note than unlike the rule below an EOF is not expected at the end.
 nextStatement returns [BindableStatement ret]
-    :  s=oneStatement {$ret = s;} SEMICOLON
+    :  s=oneStatement {
+    		try {
+    			$ret = s;
+    		} finally {
+    			udfParseNodes.clear();
+    		}
+    	} SEMICOLON
     |  EOF
     ;
 
 // Parses a single SQL statement (expects an EOF after the select statement).
 statement returns [BindableStatement ret]
-    :   s=oneStatement {$ret = s;} EOF
+    :   s=oneStatement {
+        		try {
+    			$ret = s;
+    		} finally {
+    			udfParseNodes.clear();
+    		}
+    	} EOF
     ;
 
 // Parses a select statement which must be the only statement (expects an EOF after the statement).
@@ -369,6 +395,8 @@ oneStatement returns [BindableStatement ret]
     |   s=alter_index_node
     |   s=alter_table_node
     |   s=trace_node
+    |   s=create_function_node
+    |   s=drop_function_node
     |   s=alter_session_node
     |	s=create_sequence_node
     |	s=drop_sequence_node
@@ -409,7 +437,7 @@ create_index_node returns [CreateIndexStatement ret]
         (async=ASYNC)?
         (p=fam_properties)?
         (SPLIT ON v=value_expression_list)?
-        {ret = factory.createIndex(i, factory.namedTable(null,t), ik, icrefs, v, p, ex!=null, l==null ? IndexType.getDefault() : IndexType.LOCAL, async != null, getBindCount()); }
+        {ret = factory.createIndex(i, factory.namedTable(null,t), ik, icrefs, v, p, ex!=null, l==null ? IndexType.getDefault() : IndexType.LOCAL, async != null, getBindCount(), new HashMap<String, UDFParseNode>(udfParseNodes)); }
     ;
 
 // Parse a create sequence statement.
@@ -510,6 +538,25 @@ trace_node returns [TraceStatement ret]
        {ret = factory.trace(Tracing.isTraceOn(flag.getText()), s == null ? Tracing.isTraceOn(flag.getText()) ? 1.0 : 0.0 : (((BigDecimal)s.getValue())).doubleValue());}
     ;
 
+// Parse a trace statement.
+create_function_node returns [CreateFunctionStatement ret]
+    :   CREATE (temp=TEMPORARY)? FUNCTION function=identifier 
+       (LPAREN args=zero_or_more_data_types RPAREN)
+       RETURNS r=identifier AS (className= jar_path)
+       (USING JAR (jarPath = jar_path))?
+        {
+            $ret = factory.createFunction(new PFunction(SchemaUtil.normalizeIdentifier(function), args,r,(String)className.getValue(), jarPath == null ? null : (String)jarPath.getValue()), temp!=null);;
+        } 
+    ;
+
+jar_path returns [LiteralParseNode ret]
+    : l=literal { $ret = l; }
+    ;
+
+drop_function_node returns [DropFunctionStatement ret]
+    : DROP FUNCTION (IF ex=EXISTS)? function=identifier {$ret = factory.dropFunction(SchemaUtil.normalizeIdentifier(function), ex!=null);}
+    ;
+
 // Parse an alter session statement.
 alter_session_node returns [AlterSessionStatement ret]
     :   ALTER SESSION (SET p=properties)
@@ -586,7 +633,7 @@ single_select returns [SelectStatement ret]
         (WHERE where=expression)?
         (GROUP BY group=group_by)?
         (HAVING having=expression)?
-        { ParseContext context = contextStack.peek(); $ret = factory.select(from, h, d!=null, sel, where, group, having, null, null, getBindCount(), context.isAggregate(), context.hasSequences(), null); }
+        { ParseContext context = contextStack.peek(); $ret = factory.select(from, h, d!=null, sel, where, group, having, null, null, getBindCount(), context.isAggregate(), context.hasSequences(), null, new HashMap<String,UDFParseNode>(udfParseNodes)); }
     ;
 finally{ contextStack.pop(); }
 
@@ -610,7 +657,7 @@ upsert_node returns [UpsertStatement ret]
     :   UPSERT (hint=hintClause)? INTO t=from_table_name
         (LPAREN p=upsert_column_refs RPAREN)?
         ((VALUES LPAREN v=one_or_more_expressions RPAREN) | s=select_node)
-        {ret = factory.upsert(factory.namedTable(null,t,p == null ? null : p.getFirst()), hint, p == null ? null : p.getSecond(), v, s, getBindCount()); }
+        {ret = factory.upsert(factory.namedTable(null,t,p == null ? null : p.getFirst()), hint, p == null ? null : p.getSecond(), v, s, getBindCount(), new HashMap<String, UDFParseNode>(udfParseNodes)); }
     ;
 
 upsert_column_refs returns [Pair<List<ColumnDef>,List<ColumnName>> ret]
@@ -625,7 +672,7 @@ delete_node returns [DeleteStatement ret]
         (WHERE v=expression)?
         (ORDER BY order=order_by)?
         (LIMIT l=limit)?
-        {ret = factory.delete(factory.namedTable(null,t), hint, v, order, l, getBindCount()); }
+        {ret = factory.delete(factory.namedTable(null,t), hint, v, order, l, getBindCount(), new HashMap<String, UDFParseNode>(udfParseNodes)); }
     ;
 
 limit returns [LimitNode ret]
@@ -813,17 +860,19 @@ term returns [ParseNode ret]
             if (!contextStack.isEmpty()) {
             	contextStack.peek().setAggregate(f.isAggregate());
             }
+            if(f instanceof UDFParseNode) udfParseNodes.put(f.getName(),(UDFParseNode)f);
             $ret = f;
         } 
     |   field=identifier LPAREN t=ASTERISK RPAREN 
         {
             if (!isCountFunction(field)) {
-                throwRecognitionException(t); 
+                throwRecognitionException(t);
             }
             FunctionParseNode f = factory.function(field, LiteralParseNode.STAR);
             if (!contextStack.isEmpty()) {
             	contextStack.peek().setAggregate(f.isAggregate());
             }
+            if(f instanceof UDFParseNode) udfParseNodes.put(f.getName(),(UDFParseNode)f);
             $ret = f;
         } 
     |   field=identifier LPAREN t=DISTINCT l=zero_or_more_expressions RPAREN 
@@ -832,6 +881,7 @@ term returns [ParseNode ret]
             if (!contextStack.isEmpty()) {
             	contextStack.peek().setAggregate(f.isAggregate());
             }
+            if(f instanceof UDFParseNode) udfParseNodes.put(f.getName(),(UDFParseNode)f);
             $ret = f;
         }
     |   e=case_statement { $ret = e; }
@@ -863,6 +913,19 @@ one_or_more_expressions returns [List<ParseNode> ret]
 zero_or_more_expressions returns [List<ParseNode> ret]
 @init{ret = new ArrayList<ParseNode>(); }
     :  (v = expression {$ret.add(v);})?  (COMMA v = expression {$ret.add(v);} )*
+;
+
+zero_or_more_data_types returns [List<FunctionArgument> ret]
+@init{ret = new ArrayList<FunctionArgument>(); }
+    : (dt = identifier (LPAREN l=NUMBER (COMMA s=NUMBER)? RPAREN)? ar=ARRAY? (lsq=LSQUARE (a=NUMBER)? RSQUARE)? (c = CONSTANT)? (DEFAULTVALUE EQ dv = value_expression)? (MINVALUE EQ minv = value_expression)?  (MAXVALUE EQ maxv = value_expression)? 
+    {$ret.add(new FunctionArgument(dt,  ar != null || lsq != null, c!=null, 
+    dv == null ? null : LiteralExpression.newConstant(((LiteralParseNode)dv).getValue()), 
+    minv == null ? null : LiteralExpression.newConstant(((LiteralParseNode)minv).getValue()), 
+    maxv == null ? null : LiteralExpression.newConstant(((LiteralParseNode)maxv).getValue())));})? (COMMA (dt = identifier (LPAREN l=NUMBER (COMMA s=NUMBER)? RPAREN)? ar=ARRAY? (lsq=LSQUARE (a=NUMBER)? RSQUARE)? (c = CONSTANT)? (DEFAULTVALUE EQ dv = value_expression)? (MINVALUE EQ minv = value_expression)?  (MAXVALUE EQ maxv = value_expression)?
+    {$ret.add(new FunctionArgument(dt,  ar != null || lsq != null, c!=null, 
+    dv == null ? null : LiteralExpression.newConstant(((LiteralParseNode)dv).getValue()), 
+    minv == null ? null : LiteralExpression.newConstant(((LiteralParseNode)minv).getValue()), 
+    maxv == null ? null : LiteralExpression.newConstant(((LiteralParseNode)maxv).getValue())));} ))*
 ;
 
 value_expression_list returns [List<ParseNode> ret]

@@ -95,6 +95,7 @@ import org.apache.phoenix.expression.function.ToTimeFunction;
 import org.apache.phoenix.expression.function.ToTimestampFunction;
 import org.apache.phoenix.expression.function.TrimFunction;
 import org.apache.phoenix.expression.function.TruncFunction;
+import org.apache.phoenix.expression.function.UDFExpression;
 import org.apache.phoenix.expression.function.UpperFunction;
 import org.apache.phoenix.expression.function.WeekFunction;
 import org.apache.phoenix.expression.function.YearFunction;
@@ -227,7 +228,8 @@ public enum ExpressionType {
     InstrFunction(InstrFunction.class),
     MinuteFunction(MinuteFunction.class),
     DayOfMonthFunction(DayOfMonthFunction.class),
-    ArrayAppendFunction(ArrayAppendFunction.class)
+    ArrayAppendFunction(ArrayAppendFunction.class),
+    UDFExpression(UDFExpression.class)
     ;
 
     ExpressionType(Class<? extends Expression> clazz) {

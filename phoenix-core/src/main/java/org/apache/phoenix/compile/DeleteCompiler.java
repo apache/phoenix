@@ -323,7 +323,7 @@ public class DeleteCompiler {
                         hint, false, aliasedNodes, delete.getWhere(), 
                         Collections.<ParseNode>emptyList(), null, 
                         delete.getOrderBy(), delete.getLimit(),
-                        delete.getBindCount(), false, false, Collections.<SelectStatement>emptyList());
+                        delete.getBindCount(), false, false, Collections.<SelectStatement>emptyList(), delete.getUdfParseNodes());
                 select = StatementNormalizer.normalize(select, resolver);
                 SelectStatement transformedSelect = SubqueryRewriter.transform(select, resolver, connection);
                 if (transformedSelect != select) {

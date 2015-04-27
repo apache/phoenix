@@ -20,6 +20,7 @@ package org.apache.phoenix.compile;
 import java.sql.SQLException;
 import java.util.List;
 
+import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.TableRef;
 
@@ -41,6 +42,11 @@ public interface ColumnResolver {
     public List<TableRef> getTables();
     
     /**
+     * Returns the collection of resolved functions.
+     */
+    public List<PFunction> getFunctions();
+
+    /**
      * Resolves table using name or alias.
      * @param schemaName the schema name
      * @param tableName the table name or table alias
@@ -60,4 +66,15 @@ public interface ColumnResolver {
      * @throws AmbiguousColumnException if the column name is ambiguous
      */
     public ColumnRef resolveColumn(String schemaName, String tableName, String colName) throws SQLException;
+        
+    /**
+     * Resolves function using functionName.
+     * @param functionName 
+     * @return the resolved PFunction
+     * @throws ColumnNotFoundException if the column could not be resolved
+     * @throws AmbiguousColumnException if the column name is ambiguous
+     */
+    public PFunction resolveFunction(String functionName) throws SQLException;
+
+    public boolean hasUDFs();
 }

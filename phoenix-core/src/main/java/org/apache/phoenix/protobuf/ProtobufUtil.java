@@ -71,6 +71,16 @@ public class ProtobufUtil {
         return getMutations(request.getTableMetadataMutationsList());
     }
 
+    public static List<Mutation> getMutations(MetaDataProtos.DropFunctionRequest request)
+            throws IOException {
+        return getMutations(request.getTableMetadataMutationsList());
+    }
+
+    public static List<Mutation> getMutations(MetaDataProtos.CreateFunctionRequest request)
+            throws IOException {
+        return getMutations(request.getTableMetadataMutationsList());
+    }
+
     public static List<Mutation> getMutations(MetaDataProtos.DropTableRequest request)
             throws IOException {
         return getMutations(request.getTableMetadataMutationsList());
