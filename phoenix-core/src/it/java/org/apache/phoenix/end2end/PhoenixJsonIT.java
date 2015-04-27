@@ -16,6 +16,7 @@
  * limitations under the License.
  */
 
+
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
@@ -234,6 +235,57 @@ public class PhoenixJsonIT extends BaseHBaseManagedTimeIT {
         }
     }
 
+    @Test
+    public void testJsonAsNull() throws Exception {
+        Connection conn = getConnection();
+        String json = null;
+        String pk = "valueOne";
+        String selectQuery = "SELECT col1 FROM testJson WHERE pk = 'valueOne' and col1 is NULL";
+        try {
+            populateTable(json, pk, conn);
+
+            PreparedStatement stmt = conn.prepareStatement(selectQuery);
+            ResultSet rs = stmt.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(PhoenixJson.class.getName(), rs.getMetaData().getColumnClassName(1));
+            assertEquals("Json data read from DB is not as expected for query: <" + selectQuery
+                    + ">", json, rs.getString(1));
+
+            assertEquals("Json data read from DB is not as expected for query: <" + selectQuery
+                    + ">", PhoenixJson.getInstance(json), rs.getObject(1, PhoenixJson.class));
+            assertFalse(rs.next());
+
+        } finally {
+            conn.close();
+        }
+    }
+
+    @Test
+    public void testJsonColumnInWhereClause() throws Exception {
+        Connection conn = getConnection();
+        String json = "[1]";
+        String pk = "valueOne";
+        String selectQuery = "SELECT col1 FROM testJson WHERE pk = 'valueOne' and col1 = '[1]'";
+        try {
+            populateTable(json, pk, conn);
+
+            PreparedStatement stmt = conn.prepareStatement(selectQuery);
+            ResultSet rs = stmt.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(PhoenixJson.class.getName(), rs.getMetaData().getColumnClassName(1));
+            assertEquals("Json data read from DB is not as expected for query: <" + selectQuery
+                    + ">", json, rs.getString(1));
+
+            assertEquals("Json data read from DB is not as expected for query: <" + selectQuery
+                    + ">", PhoenixJson.getInstance(json), rs.getObject(1, PhoenixJson.class));
+            assertFalse(rs.next());
+
+        } finally {
+            conn.close();
+        }
+    }
+
+    
     @Test
     public void testSetObject() throws SQLException {
 

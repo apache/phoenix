@@ -59,9 +59,7 @@ public class PhoenixJson implements Comparable<PhoenixJson> {
      */
     public static PhoenixJson getInstance(String jsonData) throws SQLException {
         if (jsonData == null) {
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_JSON_DATA)
-                    .setMessage("null data cannot mapped to a valid json object").build()
-                    .buildException();
+           return null;
         }
         try {
             JsonFactory jsonFactory = new JsonFactory();

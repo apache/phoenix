@@ -32,6 +32,7 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.json.PhoenixJson;
 import org.apache.phoenix.schema.json.PhoenixJsonTest;
+import org.apache.phoenix.util.ByteUtil;
 import org.junit.Test;
 
 /**
@@ -58,6 +59,13 @@ public class PJsonTest {
 
         byte[] bytes = PJson.INSTANCE.toBytes(phoenixJson);
         assertArrayEquals(json, bytes);
+    }
+    
+    @Test
+    public void testToBytesForNull() throws Exception {
+         assertEquals(ByteUtil.EMPTY_BYTE_ARRAY,PJson.INSTANCE.toBytes(null));
+         assertEquals(ByteUtil.EMPTY_BYTE_ARRAY,PJson.INSTANCE.toBytes(null, SortOrder.ASC));
+         assertEquals(ByteUtil.EMPTY_BYTE_ARRAY,PJson.INSTANCE.toBytes(null, SortOrder.DESC));
     }
 
     @Test
@@ -92,7 +100,16 @@ public class PJsonTest {
 
         PhoenixJson object4 = (PhoenixJson) PJson.INSTANCE.toObject(PhoenixJsonTest.TEST_JSON_STR);
         assertEquals(phoenixJson, object4);
+        
+    }
 
+    @Test
+    public void testToObjectForNull(){
+        String jsonStr= null;
+        assertNull(PJson.INSTANCE.toObject(jsonStr));
+        
+        Object jsonObj = null;
+        assertNull(PJson.INSTANCE.toObject(jsonObj, PJson.INSTANCE));
     }
 
     @Test
