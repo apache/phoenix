@@ -53,7 +53,7 @@ import org.apache.phoenix.pherf.util.PhoenixUtil;
 
 public class DataLoader {
     private static final Logger logger = LoggerFactory.getLogger(DataLoader.class);
-    private final PhoenixUtil pUtil = new PhoenixUtil();
+    private final PhoenixUtil pUtil;
     private final XMLConfigParser parser;
     private final RulesApplier rulesApplier;
     private final ResultUtil resultUtil;
@@ -63,7 +63,11 @@ public class DataLoader {
     private final int batchSize;
 
     public DataLoader(XMLConfigParser parser) throws Exception {
-        this(new ResourceList().getProperties(), parser);
+        this(new PhoenixUtil(), parser);
+    }
+
+    public DataLoader(PhoenixUtil phoenixUtil, XMLConfigParser parser) throws Exception{
+        this(phoenixUtil, new ResourceList().getProperties(), parser);
     }
 
     /**
@@ -72,9 +76,10 @@ public class DataLoader {
      * @param parser
      * @throws Exception
      */
-    public DataLoader(Properties properties, XMLConfigParser parser) throws Exception {
+    public DataLoader(PhoenixUtil phoenixUtil, Properties properties, XMLConfigParser parser) throws Exception {
+        this.pUtil = phoenixUtil;
         this.parser = parser;
-        this.rulesApplier = new RulesApplier(this.parser);
+        this.rulesApplier = new RulesApplier(parser);
         this.resultUtil = new ResultUtil();
         int size = Integer.parseInt(properties.getProperty("pherf.default.dataloader.threadpool"));
         this.threadPoolSize = (size == 0) ? Runtime.getRuntime().availableProcessors() : size;
@@ -85,7 +90,6 @@ public class DataLoader {
 
     public void execute() throws Exception {
         try {
-            DataModel model = getParser().getDataModels().get(0);
             DataLoadTimeSummary dataLoadTimeSummary = new DataLoadTimeSummary();
             DataLoadThreadTime dataLoadThreadTime = new DataLoadThreadTime();
 

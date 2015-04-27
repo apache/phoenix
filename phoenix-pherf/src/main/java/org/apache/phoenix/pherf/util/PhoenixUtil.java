@@ -38,36 +38,38 @@ public class PhoenixUtil {
 	private static final Logger logger = LoggerFactory.getLogger(PhoenixUtil.class);
 	private static String zookeeper;
 	private static int rowCountOverride = 0;
-	
+    private boolean testEnabled;
+
+    public PhoenixUtil() {
+        this(false);
+    }
+
+    public PhoenixUtil(final boolean testEnabled) {
+        this.testEnabled = testEnabled;
+    }
+
     public Connection getConnection() throws Exception{
     	return getConnection(null);
     }
 	
-    public Connection getConnection(String tenantId) throws Exception{
-		if (null == zookeeper) {
-			throw new IllegalArgumentException("Zookeeper must be set before initializing connection!");
-		}
-    	Properties props = new Properties();
-    	if (null != tenantId) {
-    		props.setProperty("TenantId", tenantId);
-   			logger.debug("\nSetting tenantId to " + tenantId);
-    	}
-    	Connection connection = DriverManager.getConnection("jdbc:phoenix:" + zookeeper, props);
-        return connection;
+    public Connection getConnection(String tenantId) throws Exception {
+        return getConnection(tenantId, testEnabled);
     }
 
-    public static void writeSfdcClientProperty() throws IOException {
-		Configuration conf = HBaseConfiguration.create();
-		Map<String, String> sfdcProperty = conf.getValByRegex("sfdc");
-    	Properties props = new Properties();
-		for (Map.Entry<String, String> entry : sfdcProperty.entrySet()) {
-			props.put(entry.getKey(), entry.getValue());
-			logger.debug("\nSetting sfdc connection property " + entry.getKey() + " to " + entry.getValue());
-		}
-        OutputStream out = new java.io.FileOutputStream(new File("sfdc-hbase-client.properties"));
-        props.store(out,"client properties");
+    public Connection getConnection(String tenantId, boolean testEnabled) throws Exception {
+        if (null == zookeeper) {
+            throw new IllegalArgumentException(
+                    "Zookeeper must be set before initializing connection!");
+        }
+        Properties props = new Properties();
+        if (null != tenantId) {
+            props.setProperty("TenantId", tenantId);
+            logger.debug("\nSetting tenantId to " + tenantId);
+        }
+        String url = "jdbc:phoenix:" + zookeeper + (testEnabled ? ";test=true" : "");
+        return DriverManager.getConnection(url, props);
     }
- 
+
     public boolean executeStatement(String sql) throws Exception {
         Connection connection = null;
         boolean result = false;

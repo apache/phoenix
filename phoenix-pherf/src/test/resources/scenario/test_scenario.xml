@@ -17,7 +17,7 @@
   ~   limitations under the License.
   -->
 
-<datamodel release="192" name="test_scenario">
+<datamodel name="test_scenario">
     <datamapping>
         <column>
             <!-- This column type defines what will generally happen to VARCHAR fields unless they are explicitly defined or overridden elsewhere -->
@@ -130,7 +130,7 @@
 
     </datamapping>
     <scenarios>
-        <scenario tableName="PHERF.TEST_TABLE" rowCount="50" name="testScenario">
+        <scenario tableName="PHERF.TEST_TABLE" rowCount="10" name="testScenario">
             <!-- Scenario level rule overrides will be unsupported in V1.
                     You can use the general datamappings in the mean time-->
             <dataOverride>

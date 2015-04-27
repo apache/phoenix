@@ -28,9 +28,9 @@
     <module>phoenix-pig</module>
     <module>phoenix-server-client</module>
     <module>phoenix-server</module>
-    <module>phoenix-assembly</module>
     <module>phoenix-pherf</module>
     <module>phoenix-spark</module>
+    <module>phoenix-assembly</module>
   </modules>
 
   <repositories>

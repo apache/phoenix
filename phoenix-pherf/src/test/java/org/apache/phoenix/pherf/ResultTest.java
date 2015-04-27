@@ -25,7 +25,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
-import org.apache.phoenix.pherf.PherfConstants;
 import org.apache.phoenix.pherf.PherfConstants.RunMode;
 import org.apache.phoenix.pherf.jmx.MonitorManager;
 
@@ -39,17 +38,6 @@ import org.junit.Test;
 import org.apache.phoenix.pherf.configuration.Query;
 
 public class ResultTest {
-
-    @Test
-    public void testWriters() throws Exception {
-        ExecutorService executorService = Executors.newFixedThreadPool(1);
-        List<ResultHandler> writers = new ArrayList<>();
-//        Monitor monitor = new Monitor(new XMLConfigParser("test.*xml"), 100);
-//        Future future = executorService.submit(monitor);
-
-        writers.add(new CSVResultHandler(PherfConstants.MONITOR_FILE_NAME, ResultFileDetails.CSV_DETAILED_PERFORMANCE));
-
-    }
 
     @Test
     public void testMonitorWriter() throws Exception {
