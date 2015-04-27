@@ -1,7 +1,10 @@
 package org.apache.phoenix.calcite;
 
+import com.google.common.collect.HashMultimap;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.SetMultimap;
+
 import org.apache.calcite.linq4j.tree.Expression;
 import org.apache.calcite.schema.*;
 import org.apache.phoenix.compile.ColumnResolver;
@@ -22,11 +25,23 @@ import java.util.*;
  * Implementation of Calcite's {@link Schema} SPI for Phoenix.
  */
 public class PhoenixSchema implements Schema {
-    private final String schemaName = null;
+    private final String schemaName;
     private final PhoenixConnection pc;
     protected final MetaDataClient client;
+    
+    // TODO to be removed after PHOENIX-1878.
+    private static final SetMultimap<String, String> tableCache;
+    static {
+        tableCache = HashMultimap.<String, String> create();
+        tableCache.put("", "ATABLE");
+        tableCache.put("Join", "ItemTable");
+        tableCache.put("Join", "SupplierTable");
+        tableCache.put("Join", "CustomerTable");
+        tableCache.put("Join", "OrderTable");
+    }
 
-    PhoenixSchema(PhoenixConnection pc) {
+    PhoenixSchema(String name, PhoenixConnection pc) {
+        this.schemaName = name;
         this.pc = pc;
         this.client = new MetaDataClient(pc);
     }
@@ -42,7 +57,7 @@ public class PhoenixSchema implements Schema {
                 DriverManager.getConnection(url, properties);
             final PhoenixConnection phoenixConnection =
                 connection.unwrap(PhoenixConnection.class);
-            return new PhoenixSchema(phoenixConnection);
+            return new PhoenixSchema(null, phoenixConnection);
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -66,7 +81,7 @@ public class PhoenixSchema implements Schema {
 
     @Override
     public Set<String> getTableNames() {
-        return ImmutableSet.of("ATABLE", "ITEMTABLE", "SUPPLIERTABLE", "ORDERTABLE", "CUSTOMERTABLE");
+        return tableCache.get(schemaName == null ? "" : schemaName);
     }
 
     @Override
@@ -81,12 +96,18 @@ public class PhoenixSchema implements Schema {
 
     @Override
     public Schema getSubSchema(String name) {
-        return null;
+        if (schemaName != null || !tableCache.containsKey(name))
+            return null;
+        
+        return new PhoenixSchema(name, pc);
     }
 
     @Override
     public Set<String> getSubSchemaNames() {
-        return ImmutableSet.of();
+        if (schemaName != null)
+            return Collections.emptySet();
+        
+        return tableCache.keySet();
     }
 
     @Override

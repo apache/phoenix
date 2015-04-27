@@ -95,7 +95,7 @@ public class PhoenixTable extends AbstractTable implements TranslatableTable {
             public Double getRowCount() {
                 // TODO
                 String tableName = pTable.getTableName().getString();
-                return tableName.equals("ITEMTABLE") ? 70d : tableName.equals("SUPPLIERTABLE") ? 60d : 100d;
+                return tableName.equals("ItemTable") ? 70d : tableName.equals("SupplierTable") ? 60d : 100d;
             }
 
             @Override
