@@ -54,7 +54,6 @@ import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.phoenix.expression.function.UDFExpression;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
-import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.FunctionAlreadyExistsException;
 import org.apache.phoenix.schema.FunctionNotFoundException;
@@ -62,13 +61,12 @@ import org.apache.phoenix.schema.ValueRangeExcpetion;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
-import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import com.google.common.collect.Maps;
 
-public class UserDefinedFunctionsIT extends BaseTest{
+public class UserDefinedFunctionsIT extends BaseOwnClusterIT{
     
     protected static final String TENANT_ID = "ZZTop";
     private static String url;
@@ -527,15 +525,6 @@ public class UserDefinedFunctionsIT extends BaseTest{
         assertEquals(1, rs.getInt(2));
         assertEquals("kcoj", rs.getString(3));
         assertFalse(rs.next());
-    }
-
-    @AfterClass
-    public static void tearDown() throws Exception {
-        try {
-            destroyDriver(driver);
-        } finally {
-            util.shutdownMiniCluster();
-        }
     }
 
     /**
