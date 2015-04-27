@@ -15,20 +15,25 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.parse;
+package org.apache.phoenix.schema;
 
-import java.util.Map;
+import org.apache.phoenix.parse.PFunction;
 
-public class DMLStatement extends SingleTableStatement {
+public class NewerFunctionAlreadyExistsException extends FunctionAlreadyExistsException {
+    private static final long serialVersionUID = 1L;
+    private final PFunction function;
 
-    private final Map<String, UDFParseNode> udfParseNodes;
-    
-    public DMLStatement(NamedTableNode table, int bindCount, Map<String, UDFParseNode> udfParseNodes) {
-        super(table, bindCount);
-        this.udfParseNodes = udfParseNodes;
+    public NewerFunctionAlreadyExistsException(String functionName) {
+        this(functionName, null);
     }
-    
-    public Map<String, UDFParseNode> getUdfParseNodes() {
-        return udfParseNodes;
+
+    public NewerFunctionAlreadyExistsException(String functionName, PFunction function) {
+        super(functionName);
+        this.function = function;
     }
+
+    public PFunction getFunction() {
+        return this.function;
+    }
+
 }

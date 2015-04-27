@@ -25,6 +25,7 @@ option java_generate_equals_and_hash = true;
 option optimize_for = SPEED;
 
 import "PTable.proto";
+import "PFunction.proto";
 
 enum MutationCode {
   TABLE_ALREADY_EXISTS = 0;
@@ -36,7 +37,11 @@ enum MutationCode {
   NEWER_TABLE_FOUND = 6;
   UNALLOWED_TABLE_MUTATION = 7;
   NO_PK_COLUMNS = 8;
-  PARENT_TABLE_NOT_FOUND = 9; 
+  PARENT_TABLE_NOT_FOUND = 9;
+  FUNCTION_ALREADY_EXISTS = 10;
+  FUNCTION_NOT_FOUND = 11;
+  NEWER_FUNCTION_FOUND = 12;
+  FUNCTION_NOT_IN_REGION = 13;
 };
 
 message MetaDataResponse {
@@ -46,6 +51,8 @@ message MetaDataResponse {
   repeated bytes tablesToDelete = 4;
   optional bytes columnName = 5;
   optional bytes familyName = 6;
+  optional bytes functionName = 7;
+  repeated PFunction function = 8;
 }
 
 message GetTableRequest {
@@ -56,9 +63,23 @@ message GetTableRequest {
   required int64 clientTimestamp = 5;
 }
 
+message GetFunctionsRequest {
+  required bytes tenantId = 1;
+  repeated bytes functionNames = 2;
+  repeated int64 functionTimestamps = 3;
+  required int64 clientTimestamp = 4;
+}
+
 // each byte array represents a MutationProto instance
 message CreateTableRequest {
   repeated bytes tableMetadataMutations = 1; 
+}
+
+// each byte array represents a MutationProto instance
+message CreateFunctionRequest {
+  repeated bytes tableMetadataMutations = 1;
+  required bool temporary = 2;
+  optional bool replace = 3;
 }
 
 message DropTableRequest {
@@ -73,6 +94,11 @@ message AddColumnRequest {
 
 message DropColumnRequest {
   repeated bytes tableMetadataMutations = 1;
+}
+
+message DropFunctionRequest {
+  repeated bytes tableMetadataMutations = 1;
+  optional bool ifExists = 2;
 }
 
 message UpdateIndexStateRequest {
@@ -106,12 +132,21 @@ service MetaDataService {
   rpc getTable(GetTableRequest)
     returns (MetaDataResponse);
 
+  rpc getFunctions(GetFunctionsRequest)
+    returns (MetaDataResponse);
+
   rpc createTable(CreateTableRequest)
+    returns (MetaDataResponse);
+
+  rpc createFunction(CreateFunctionRequest)
     returns (MetaDataResponse);
     
   rpc dropTable(DropTableRequest)
     returns (MetaDataResponse);
     
+  rpc dropFunction(DropFunctionRequest)
+    returns (MetaDataResponse);
+
    rpc addColumn(AddColumnRequest)
     returns (MetaDataResponse);
     

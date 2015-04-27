@@ -145,7 +145,12 @@ public class MetaDataUtil {
         Mutation m = getTableHeaderRow(tableMetadata);
         getVarChars(m.getRow(), 3, rowKeyMetaData);
     }
-    
+
+    public static void getTenantIdAndFunctionName(List<Mutation> functionMetadata, byte[][] rowKeyMetaData) {
+        Mutation m = getTableHeaderRow(functionMetadata);
+        getVarChars(m.getRow(), 2, rowKeyMetaData);
+    }
+
     public static byte[] getParentTableName(List<Mutation> tableMetadata) {
         if (tableMetadata.size() == 1) {
             return null;

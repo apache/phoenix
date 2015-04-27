@@ -23,12 +23,15 @@ import java.util.Map;
 
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.AmbiguousTableException;
 import org.apache.phoenix.schema.ColumnAlreadyExistsException;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ConcurrentTableMutationException;
+import org.apache.phoenix.schema.FunctionAlreadyExistsException;
+import org.apache.phoenix.schema.FunctionNotFoundException;
 import org.apache.phoenix.schema.ReadOnlyTableException;
 import org.apache.phoenix.schema.SequenceAlreadyExistsException;
 import org.apache.phoenix.schema.SequenceNotFoundException;
@@ -320,7 +323,22 @@ public enum SQLExceptionCode {
             return new SQLTimeoutException(OPERATION_TIMED_OUT.getMessage(),
                     OPERATION_TIMED_OUT.getSQLState(), OPERATION_TIMED_OUT.getErrorCode());
         }
-    }), 
+    }),
+    FUNCTION_UNDEFINED(6001, "42F01", "Function undefined.", new Factory() {
+        @Override
+        public SQLException newException(SQLExceptionInfo info) {
+            return new FunctionNotFoundException(info.getFunctionName());
+        }
+    }),
+    FUNCTION_ALREADY_EXIST(6002, "42F02", "Function already exists.", new Factory() {
+        @Override
+        public SQLException newException(SQLExceptionInfo info) {
+            return new FunctionAlreadyExistsException(info.getSchemaName(), info.getTableName());
+        }
+    }),
+    UNALLOWED_USER_DEFINED_FUNCTIONS(6003, "42F03",
+            "User defined functions are configured to not be allowed. To allow configure "
+                    + QueryServices.ALLOW_USER_DEFINED_FUNCTIONS_ATTRIB + " to true."),
     ;
 
     private final int errorCode;

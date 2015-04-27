@@ -32,8 +32,10 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.memory.ChildMemoryManager;
 import org.apache.phoenix.memory.GlobalMemoryManager;
+import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.PMetaDataEntity;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.SizedUtil;
 
@@ -57,17 +59,17 @@ public class GlobalCache extends TenantCacheImpl {
     // TODO: Use Guava cache with auto removal after lack of access 
     private final ConcurrentMap<ImmutableBytesWritable,TenantCache> perTenantCacheMap = new ConcurrentHashMap<ImmutableBytesWritable,TenantCache>();
     // Cache for lastest PTable for a given Phoenix table
-    private Cache<ImmutableBytesPtr,PTable> metaDataCache;
+    private Cache<ImmutableBytesPtr,PMetaDataEntity> metaDataCache;
     
     public void clearTenantCache() {
         perTenantCacheMap.clear();
     }
     
-    public Cache<ImmutableBytesPtr,PTable> getMetaDataCache() {
+    public Cache<ImmutableBytesPtr,PMetaDataEntity> getMetaDataCache() {
         // Lazy initialize QueryServices so that we only attempt to create an HBase Configuration
         // object upon the first attempt to connect to any cluster. Otherwise, an attempt will be
         // made at driver initialization time which is too early for some systems.
-        Cache<ImmutableBytesPtr,PTable> result = metaDataCache;
+        Cache<ImmutableBytesPtr,PMetaDataEntity> result = metaDataCache;
         if (result == null) {
             synchronized(this) {
                 result = metaDataCache;
@@ -82,9 +84,9 @@ public class GlobalCache extends TenantCacheImpl {
                     metaDataCache = result = CacheBuilder.newBuilder()
                             .maximumWeight(maxSize)
                             .expireAfterAccess(maxTTL, TimeUnit.MILLISECONDS)
-                            .weigher(new Weigher<ImmutableBytesPtr, PTable>() {
+                            .weigher(new Weigher<ImmutableBytesPtr, PMetaDataEntity>() {
                                 @Override
-                                public int weigh(ImmutableBytesPtr key, PTable table) {
+                                public int weigh(ImmutableBytesPtr key, PMetaDataEntity table) {
                                     return SizedUtil.IMMUTABLE_BYTES_PTR_SIZE + key.getLength() + table.getEstimatedSize();
                                 }
                             })
@@ -156,5 +158,23 @@ public class GlobalCache extends TenantCacheImpl {
             }
         }
         return tenantCache;
+    }
+
+    public static class FunctionBytesPtr extends ImmutableBytesPtr {
+
+        public FunctionBytesPtr(byte[] key) {
+            super(key);
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if(obj instanceof FunctionBytesPtr) return super.equals(obj);
+            return false;
+        }
+
+        @Override
+        public int hashCode() {
+            return super.hashCode();
+        }
     }
 }

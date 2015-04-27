@@ -27,7 +27,7 @@ public class NamedNode {
     public static NamedNode caseSensitiveNamedNode(String name) {
         return new NamedNode(name,true);
     }
-    
+
     NamedNode(String name, boolean isCaseSensitive) {
         this.name = name;
         this.isCaseSensitive = isCaseSensitive;

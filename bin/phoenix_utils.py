@@ -64,6 +64,15 @@ def setPath():
  phoenix_client_jar = find("phoenix-*-client.jar", phoenix_jar_path)
  global phoenix_test_jar_path
  phoenix_test_jar_path = os.path.join(current_dir, "..", "phoenix-core", "target","*")
+ global hadoop_common_jar_path
+ hadoop_common_jar_path = os.path.join(current_dir, "..", "phoenix-assembly", "target","*")
+ global hadoop_common_jar
+ hadoop_common_jar = find("hadoop-common*.jar", hadoop_common_jar_path)
+ global hadoop_hdfs_jar_path
+ hadoop_hdfs_jar_path = os.path.join(current_dir, "..", "phoenix-assembly", "target","*")
+ global hadoop_hdfs_jar
+ hadoop_hdfs_jar = find("hadoop-hdfs*.jar", hadoop_hdfs_jar_path)
+
  global hbase_conf_dir
  hbase_conf_dir = os.getenv('HBASE_CONF_DIR', os.getenv('HBASE_CONF_PATH', '.'))
  global hbase_conf_path # keep conf_path around for backward compatibility
