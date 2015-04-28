@@ -259,6 +259,31 @@ public class PhoenixJsonIT extends BaseHBaseManagedTimeIT {
             conn.close();
         }
     }
+    
+    @Test
+    public void testCountDistinct() throws Exception {
+        final int countDistinct = 11;
+        Connection conn = getConnection();
+        String json = null;
+        String pk = "valueOne";
+        String selectQuery = "SELECT DISTINCT_COUNT(col1)  FROM testJson";
+        try {
+            populateTable(json, pk, conn);
+            for (int i = 0; i < countDistinct; i++) {
+                upsertRecords("[" + i + "]", String.valueOf(i), conn);
+            }
+
+            PreparedStatement stmt = conn.prepareStatement(selectQuery);
+            ResultSet rs = stmt.executeQuery();
+            assertTrue(rs.next());
+            assertEquals("count distinct for Json data is not as expected for query: <"
+                    + selectQuery + ">", countDistinct, rs.getInt(1));
+            assertFalse(rs.next());
+
+        } finally {
+            conn.close();
+        }
+    }
 
     @Test
     public void testJsonColumnInWhereClause() throws Exception {
@@ -337,6 +362,10 @@ public class PhoenixJsonIT extends BaseHBaseManagedTimeIT {
                 "CREATE TABLE testJson" + "  (pk VARCHAR NOT NULL PRIMARY KEY, " + "col1 json)";
         createTestTable(getUrl(), ddl);
 
+        upsertRecords(json, pk, conn);
+    }
+
+    private void upsertRecords(String json, String pk, Connection conn) throws SQLException {
         String query = "UPSERT INTO testJson(pk, col1) VALUES(?,?)";
         PreparedStatement stmt = conn.prepareStatement(query);
         stmt.setString(1, pk);

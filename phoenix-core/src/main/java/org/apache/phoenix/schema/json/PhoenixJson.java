@@ -221,11 +221,8 @@ public class PhoenixJson implements Comparable<PhoenixJson> {
     public int compareTo(PhoenixJson o) {
         if (o == null) {
             return 1;
-        } else if (this.equals(o)) {
-            return 0;
-        } else {
-            return this.toString().compareTo(o.toString());
         }
+        return toString().compareTo(o.toString());
     }
 
     private PhoenixJson getPhoenixJsonInternal(String[] paths) {
@@ -243,7 +240,7 @@ public class PhoenixJson implements Comparable<PhoenixJson> {
             }
             node = nodeTemp;
         }
-        return new PhoenixJson(node, null);
+        return new PhoenixJson(node, node.toString());
     }
     
     private String getJsonAsString() {
