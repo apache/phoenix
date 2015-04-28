@@ -3,7 +3,6 @@ package org.apache.phoenix.calcite;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 
-import org.apache.calcite.adapter.jdbc.JdbcSchema;
 import org.apache.calcite.jdbc.CalciteConnection;
 import org.apache.calcite.schema.SchemaPlus;
 import org.apache.phoenix.end2end.BaseClientManagedTimeIT;
@@ -16,8 +15,6 @@ import java.io.PrintWriter;
 import java.sql.*;
 import java.util.List;
 import java.util.Map;
-
-import javax.sql.DataSource;
 
 import static org.apache.phoenix.util.TestUtil.JOIN_ITEM_TABLE_FULL_NAME;
 import static org.apache.phoenix.util.TestUtil.JOIN_ORDER_TABLE_FULL_NAME;
@@ -156,17 +153,42 @@ public class CalciteTest extends BaseClientManagedTimeIT {
         calciteConnection.setSchema("phoenix");
         return connection;
     }
+
+    private static final String FOODMART_SCHEMA = "     {\n"
+            + "       type: 'jdbc',\n"
+            + "       name: 'foodmart',\n"
+            + "       jdbcDriver: 'org.hsqldb.jdbcDriver',\n"
+            + "       jdbcUser: 'FOODMART',\n"
+            + "       jdbcPassword: 'FOODMART',\n"
+            + "       jdbcUrl: 'jdbc:hsqldb:res:foodmart',\n"
+            + "       jdbcCatalog: null,\n"
+            + "       jdbcSchema: 'foodmart'\n"
+            + "     }";
     
-    private static Connection createConnectionWithHsqldb() throws SQLException {
-        final Connection connection = createConnection();
-        final CalciteConnection calciteConnection =
-                connection.unwrap(CalciteConnection.class);
-        DataSource dataSource =
-                JdbcSchema.dataSource("jdbc:hsqldb:res:foodmart", "org.hsqldb.jdbcDriver", "FOODMART", "FOODMART");
-        SchemaPlus rootSchema = calciteConnection.getRootSchema();
-        rootSchema.add("foodmart",
-                JdbcSchema.create(rootSchema, "foodmart", dataSource, null,
-                    "foodmart"));
+    private static final String PHOENIX_SCHEMA = "    {\n"
+            + "      name: 'phoenix',\n"
+            + "      type: 'custom',\n"
+            + "      factory: 'org.apache.phoenix.calcite.PhoenixSchema$Factory',\n"
+            + "      operand: {\n"
+            + "        url: \"" + getUrl() + "\"\n"
+            + "      }\n"
+            + "    }";
+
+    private static Connection connectWithHsqldbUsingModel() throws Exception {
+        final File file = File.createTempFile("model", ".json");
+        final PrintWriter pw = new PrintWriter(new FileWriter(file));
+        pw.print(
+            "{\n"
+                + "  version: '1.0',\n"
+                + "  defaultSchema: 'phoenix',\n"
+                + "  schemas: [\n"
+                + PHOENIX_SCHEMA + ",\n"
+                + FOODMART_SCHEMA + "\n"
+                + "  ]\n"
+                + "}\n");
+        pw.close();
+        final Connection connection =
+            DriverManager.getConnection("jdbc:phoenixcalcite:model=" + file.getAbsolutePath());
         return connection;
     }
 
@@ -621,7 +643,7 @@ public class CalciteTest extends BaseClientManagedTimeIT {
         final Start start = new Start() {
             @Override
             Connection createConnection() throws Exception {
-                return createConnectionWithHsqldb();
+                return connectWithHsqldbUsingModel();
             }
         };
         start.sql("select the_year, quantity as q, (select count(*) cnt \n"
@@ -631,22 +653,47 @@ public class CalciteTest extends BaseClientManagedTimeIT {
                        "  EnumerableJoin(condition=[=($6, $7)], joinType=[left])\n" +
                        "    PhoenixToEnumerableConverter\n" +
                        "      PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n" +
-                       "    EnumerableAggregate(group=[{0}], agg#0=[SINGLE_VALUE($1)])\n" +
-                       "      EnumerableAggregate(group=[{0}], CNT=[COUNT()])\n" +
-                       "        EnumerableCalc(expr#0..10=[{inputs}], expr#11=[0], expr#12=[CAST($t5):INTEGER], expr#13=[=($t12, $t0)], THE_YEAR=[$t0], $f0=[$t11], $condition=[$t13])\n" +
-                       "          EnumerableJoin(condition=[true], joinType=[inner])\n" +
-                       "            PhoenixToEnumerableConverter\n" +
-                       "              PhoenixServerAggregate(group=[{0}])\n" +
-                       "                PhoenixServerProject(THE_YEAR=[$6])\n" +
-                       "                  PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n" +
-                       "            JdbcToEnumerableConverter\n" +
-                       "              JdbcTableScan(table=[[foodmart, time_by_day]])\n")
+                       "    EnumerableAggregate(group=[{0}], CNT=[COUNT()])\n" +
+                       "      EnumerableCalc(expr#0..10=[{inputs}], expr#11=[0], expr#12=[CAST($t5):INTEGER], expr#13=[=($t12, $t0)], THE_YEAR=[$t0], $f0=[$t11], $condition=[$t13])\n" +
+                       "        EnumerableJoin(condition=[true], joinType=[inner])\n" +
+                       "          PhoenixToEnumerableConverter\n" +
+                       "            PhoenixServerAggregate(group=[{0}])\n" +
+                       "              PhoenixServerProject(THE_YEAR=[$6])\n" +
+                       "                PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n" +
+                       "          JdbcToEnumerableConverter\n" +
+                       "            JdbcTableScan(table=[[foodmart, time_by_day]])\n")
             .resultIs(new Object[][] {
                     new Object[] {1997, 1000, 365L}, 
                     new Object[] {1997, 2000, 365L},
                     new Object[] {1997, 3000, 365L},
                     new Object[] {1998, 4000, 365L},
                     new Object[] {1998, 5000, 365L}})
+            .close();;
+    }
+    
+    @Test public void testScalarSubquery() {
+        start().sql("select \"item_id\", name, (select max(quantity) sq \n"
+            + "from " + JOIN_ORDER_TABLE_FULL_NAME + " o where o.\"item_id\" = i.\"item_id\")\n"
+            + "from " + JOIN_ITEM_TABLE_FULL_NAME + " i")
+            .explainIs("PhoenixToEnumerableConverter\n" +
+                       "  PhoenixServerProject(item_id=[$0], NAME=[$1], EXPR$2=[$8])\n" +
+                       "    PhoenixServerJoin(condition=[=($0, $7)], joinType=[left])\n" +
+                       "      PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
+                       "      PhoenixServerAggregate(group=[{0}], SQ=[MAX($1)])\n" +
+                       "        PhoenixServerProject(item_id0=[$7], QUANTITY=[$4])\n" +
+                       "          PhoenixServerJoin(condition=[=($2, $7)], joinType=[inner])\n" +
+                       "            PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n" +
+                       "            PhoenixServerAggregate(group=[{0}])\n" +
+                       "              PhoenixServerProject(item_id=[$0])\n" +
+                       "                PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n")
+            .resultIs(new Object[][] {
+                    new Object[] {"0000000001", "T1", 1000}, 
+                    new Object[] {"0000000002", "T2", 3000}, 
+                    new Object[] {"0000000003", "T3", 5000}, 
+                    new Object[] {"0000000004", "T4", null}, 
+                    new Object[] {"0000000005", "T5", null}, 
+                    new Object[] {"0000000006", "T6", 4000}, 
+                    new Object[] {"invalid001", "INVALID-1", null}})
             .close();;
     }
 

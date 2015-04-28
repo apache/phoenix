@@ -14,6 +14,7 @@ import org.apache.phoenix.calcite.rules.PhoenixServerAggregateRule;
 import org.apache.phoenix.calcite.rules.PhoenixServerJoinRule;
 import org.apache.phoenix.calcite.rules.PhoenixServerProjectRule;
 import org.apache.phoenix.calcite.rules.PhoenixServerSortRule;
+import org.apache.phoenix.calcite.rules.PhoenixSingleValueAggregateRemoveRule;
 
 public class PhoenixPrepareImpl extends CalcitePrepareImpl {
 
@@ -46,6 +47,7 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
         planner.addRule(PhoenixServerSortRule.SORT_SERVERPROJECT);
         planner.addRule(PhoenixCompactClientSortRule.SORT_SERVERAGGREGATE);
         planner.addRule(PhoenixClientJoinRule.INSTANCE);
+        planner.addRule(PhoenixSingleValueAggregateRemoveRule.INSTANCE);
 
         return planner;
     }

@@ -123,7 +123,7 @@ public class CalciteUtils {
                 return new CountAggregateFunction(args);
             }
         });
-        FUNCTION_MAP.put("SUM", new FunctionFactory() {
+        FUNCTION_MAP.put("$SUM0", new FunctionFactory() {
             @Override
             public FunctionExpression newFunction(SqlFunction sqlFunc,
                     List<Expression> args) {
