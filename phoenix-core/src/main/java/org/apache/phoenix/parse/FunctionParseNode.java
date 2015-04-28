@@ -39,7 +39,6 @@ import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.function.AggregateFunction;
 import org.apache.phoenix.expression.function.FunctionExpression;
 import org.apache.phoenix.expression.function.UDFExpression;
-import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.PFunction.FunctionArgument;
 import org.apache.phoenix.schema.ArgumentTypeMismatchException;
 import org.apache.phoenix.schema.ValueRangeExcpetion;
@@ -114,10 +113,6 @@ public class FunctionParseNode extends CompoundParseNode {
         }
         ctor.setAccessible(true);
         return ctor;
-    }
-
-    private static Constructor<? extends FunctionExpression> getExpressionCtor(Class<? extends FunctionExpression> clazz) {
-        return getExpressionCtor(clazz, null);
     }
 
     private static Constructor<? extends FunctionExpression> getExpressionCtor(Class<? extends FunctionExpression> clazz, PFunction function) {
