@@ -29,18 +29,20 @@ import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapred.RecordWriter;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapreduce.lib.db.DBWritable;
+import org.apache.phoenix.hive.util.HiveConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 
 public class HivePhoenixRecordWriter<T extends DBWritable> implements RecordWriter<NullWritable, T> {
     private static final Log LOG = LogFactory.getLog(HivePhoenixRecordWriter.class);
 
     private long numRecords = 0L;
-    private final Connection conn;
+    private  Connection conn;
     private final PreparedStatement statement;
+    private Configuration config;
     private final long batchSize;
 
-    public HivePhoenixRecordWriter(Connection conn, Configuration config) throws SQLException {
-        this.conn = conn;
+    public HivePhoenixRecordWriter(Configuration config) throws SQLException, IOException {
+    	this.conn = this.getConnection(config);
         this.batchSize = PhoenixConfigurationUtil.getBatchSize(config);
         String upsertQuery = PhoenixConfigurationUtil.getUpsertStatement(config);
         this.statement = this.conn.prepareStatement(upsertQuery);
@@ -55,7 +57,7 @@ public class HivePhoenixRecordWriter<T extends DBWritable> implements RecordWrit
             if (this.numRecords % this.batchSize == 0L) {
                 LOG.info("log commit called on a batch of size : " + this.batchSize);
                 this.statement.executeBatch();
-                //this.conn.commit();
+                this.conn.commit();
             }
         } catch (SQLException e) {
             throw new IOException("Exception while committing to database.", e);
@@ -80,6 +82,23 @@ public class HivePhoenixRecordWriter<T extends DBWritable> implements RecordWrit
             } catch (SQLException ex) {
                 throw new IOException(ex.getMessage());
             }
+        }
+    }
+    
+   private Connection getConnection(Configuration configuration) throws IOException {
+        if (this.conn != null) {
+            return this.conn;
+        }
+
+        this.config = configuration;
+        try {
+            LOG.info("Initializing new Phoenix connection...");
+            this.conn = HiveConnectionUtil.getConnection(configuration);
+            LOG.info("Initialized Phoenix connection, autoCommit="
+                    + this.conn.getAutoCommit());
+            return this.conn;
+        } catch (SQLException e) {
+            throw new IOException(e);
         }
     }
 }

@@ -43,6 +43,12 @@ import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.OutputFormat;
 import org.apache.phoenix.hive.util.HiveConfigurationUtil;
 
+
+/**
+* PhoenixStorageHandler
+* This class manages all the Phoenix/Hive table initial configurations and SerDe Election
+*/
+
 public class PhoenixStorageHandler extends DefaultStorageHandler implements
         HiveStoragePredicateHandler {
     static Log LOG = LogFactory.getLog(PhoenixStorageHandler.class.getName());

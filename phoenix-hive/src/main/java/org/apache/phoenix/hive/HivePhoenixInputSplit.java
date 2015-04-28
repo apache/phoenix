@@ -28,15 +28,12 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.FileSplit;
+import org.apache.phoenix.mapreduce.PhoenixInputSplit;
 import org.apache.phoenix.query.KeyRange;
 
 
 /**
 * HivePhoenixInputSplit
-* Need to extend Mapred for Hive compliance reasons
-*
-* @version 1.0
-* @since   2015-02-08 
 */
 
 public class HivePhoenixInputSplit extends FileSplit {

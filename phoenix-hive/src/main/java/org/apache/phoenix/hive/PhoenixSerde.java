@@ -40,6 +40,11 @@ import org.apache.phoenix.hive.util.HiveConstants;
 import org.apache.phoenix.hive.util.HiveTypeUtil;
 import org.apache.phoenix.schema.types.PDataType;
 
+/**
+* PhoenixSerDe
+* Hive SerializerDeserializer Class for Phoenix connection
+*/
+
 public class PhoenixSerde implements SerDe {
     static Log LOG = LogFactory.getLog(PhoenixSerde.class.getName());
     private PhoenixHiveDBWritable phrecord;
@@ -55,7 +60,7 @@ public class PhoenixSerde implements SerDe {
      * This method initializes the Hive SerDe
      * incoming hive types.
      * @param conf conf job configuration
-     *  @param tblProps table properties
+     * @param tblProps table properties
      */
     public void initialize(Configuration conf, Properties tblProps) throws SerDeException {
         if (conf != null) {

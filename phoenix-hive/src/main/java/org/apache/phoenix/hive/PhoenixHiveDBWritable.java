@@ -37,10 +37,7 @@ import org.apache.phoenix.schema.types.PDataType;
 
 /**
 * PhoenixHiveDBWritable
-* Phoenix rows class
-*
-* @version 1.0
-* @since   2015-02-08 
+* PhoenixStorageHandler Serialized Class referenced in the SerDe 
 */
 
 public class PhoenixHiveDBWritable implements Writable, DBWritable {
@@ -75,6 +72,10 @@ public class PhoenixHiveDBWritable implements Writable, DBWritable {
         return null;
     }
 
+    /**
+     * adds the Hive Writable values 
+     * @param the PreparedStatement
+     */
     public void add(Object value) {
         this.values.add(value);
     }
@@ -82,6 +83,11 @@ public class PhoenixHiveDBWritable implements Writable, DBWritable {
     public void clear() {
         this.values.clear();
     }
+    
+    /**
+     * Writes out the Hive writabke types to PhoenixDatatypes in a prepared statement
+     * @param the PreparedStatement
+     */
 
     public void write(PreparedStatement statement) throws SQLException {
         for (int i = 0; i < this.values.size(); i++) {

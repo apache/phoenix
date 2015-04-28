@@ -47,7 +47,6 @@ import org.apache.phoenix.util.ScanUtil;
 
 /**
 * HivePhoenixRecordReader
-* implements mapred as well for hive needs
 *
 * @version 1.0
 * @since   2015-02-08 
@@ -74,15 +73,6 @@ public class HivePhoenixRecordReader<T extends DBWritable> extends PhoenixRecord
         this.configuration = configuration;
         this.queryPlan = queryPlan;
     }
-
-
-   /* public NullWritable getCurrentKey() throws IOException, InterruptedException {
-        return this.key;
-    }
-
-    public T getCurrentValue() throws IOException, InterruptedException {
-        return this.value;
-    }*/
 
     public float getProgress() {
         return 0.0F;
@@ -116,30 +106,6 @@ public class HivePhoenixRecordReader<T extends DBWritable> extends PhoenixRecord
         }
     }
 
-    /*public boolean nextKeyValue() throws IOException, InterruptedException {
-        if (this.key == null) {
-            this.key = NullWritable.get();
-        }
-        if (this.value == null) {
-            this.value =
-                    (T) ((DBWritable) ReflectionUtils.newInstance(this.inputClass,
-                        this.configuration));
-        }
-        Preconditions.checkNotNull(this.resultSet);
-        try {
-            if (!this.resultSet.next()) {
-                return false;
-            }
-            this.value.readFields(this.resultSet);
-
-            return true;
-        } catch (SQLException e) {
-            LOG.error(String.format(" Error [%s] occurred while iterating over the resultset. ",
-                new Object[] { e.getMessage() }));
-            Throwables.propagate(e);
-        }
-        return false;
-    }*/
 
     public boolean next(NullWritable key, T val) throws IOException {
         if (key == null) {

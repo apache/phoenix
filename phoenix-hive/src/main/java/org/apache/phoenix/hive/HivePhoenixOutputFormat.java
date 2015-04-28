@@ -34,23 +34,19 @@ import org.apache.phoenix.hive.util.HiveConnectionUtil;
 
 /**
 * HivePhoenixOutputFormat
-* Need to extend the standard PhoenixOutputFormat but also implement the mapred OutputFormat for Hive compliance
-*
-* @version 1.0
-* @since   2015-02-08 
+* Custom Phoenix OutputFormat to feed into Hive
 */
 
 
-public class HivePhoenixOutputFormat<T extends DBWritable> extends org.apache.phoenix.mapreduce.PhoenixOutputFormat<T> implements
-org.apache.hadoop.mapred.OutputFormat<NullWritable, T> {
+public class HivePhoenixOutputFormat<T extends DBWritable> implements org.apache.hadoop.mapred.OutputFormat<NullWritable, T> {
     private static final Log LOG = LogFactory.getLog(HivePhoenixOutputFormat.class);
     private Connection connection;
-    private Configuration config;
+    
 
     public RecordWriter<NullWritable, T> getRecordWriter(FileSystem ignored, JobConf job,
             String name, Progressable progress) throws IOException {
         try {
-            return new HivePhoenixRecordWriter(getConnection(job), job);
+            return new HivePhoenixRecordWriter(job);
         } catch (SQLException e) {
             throw new IOException(e);
         }
@@ -60,22 +56,4 @@ org.apache.hadoop.mapred.OutputFormat<NullWritable, T> {
         LOG.debug("checkOutputSpecs");
         
     }
-    
-    synchronized Connection getConnection(Configuration configuration) throws IOException {
-        if (this.connection != null) {
-            return this.connection;
-        }
-
-        this.config = configuration;
-        try {
-            LOG.info("Initializing new Phoenix connection...");
-            this.connection = HiveConnectionUtil.getConnection(configuration);
-            LOG.info("Initialized Phoenix connection, autoCommit="
-                    + this.connection.getAutoCommit());
-            return this.connection;
-        } catch (SQLException e) {
-            throw new IOException(e);
-        }
-    }
-
 }

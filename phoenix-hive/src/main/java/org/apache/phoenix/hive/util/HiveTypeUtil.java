@@ -46,6 +46,13 @@ import org.apache.phoenix.schema.types.PSmallint;
 import org.apache.phoenix.schema.types.PTime;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.schema.types.PDecimal;
+
+/**
+ * HiveTypeUtil
+ * Utility Class to convert Hive Type to Pheonix and vise versa
+ *
+ */
 
 public class HiveTypeUtil {
     private static final Log LOG = LogFactory.getLog(HiveTypeUtil.class);
@@ -116,6 +123,8 @@ public class HiveTypeUtil {
             return PTimestamp.INSTANCE;
         } else if ("binary".equals(lctype)) {
             return PBinary.INSTANCE;
+        } else if ("decimal".equals(lctype)) {
+            return PDecimal.INSTANCE;
         } else if ("date".equals(lctype)) {
             return PDate.INSTANCE;
         }

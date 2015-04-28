@@ -52,10 +52,7 @@ import com.google.common.collect.Lists;
 
 /**
 * HivePhoenixInputFormat
-* Need to extend the standard PhoenixInputFormat but also implement the mapred inputFormat for Hive compliance
-*
-* @version 1.0
-* @since   2015-02-08 
+* Custom Phoenix InputFormat to feed into Hive
 */
 
 public class HivePhoenixInputFormat<T extends DBWritable> extends org.apache.phoenix.mapreduce.PhoenixInputFormat<T> implements org.apache.hadoop.mapred.InputFormat<NullWritable, T>{

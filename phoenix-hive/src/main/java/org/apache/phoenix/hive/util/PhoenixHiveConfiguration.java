@@ -34,9 +34,6 @@ import org.apache.phoenix.util.QueryUtil;
 
 import com.google.common.base.Preconditions;
 
-/**
- * Created by nmaillard on 6/23/14.
- */
 public class PhoenixHiveConfiguration {
     private static final Log LOG = LogFactory.getLog(PhoenixHiveConfiguration.class);
     private PhoenixHiveConfigurationUtil util;
