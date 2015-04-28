@@ -55,7 +55,7 @@ public class PhoenixJsonIT extends BaseHBaseManagedTimeIT {
         Connection conn = getConnection();
         try {
 
-            populateTable(json, pk, conn);
+            createTableAndUpsertRecord(json, pk, conn);
 
             PreparedStatement stmt = conn.prepareStatement(selectQuery);
             ResultSet rs = stmt.executeQuery();
@@ -77,7 +77,7 @@ public class PhoenixJsonIT extends BaseHBaseManagedTimeIT {
         Connection conn = getConnection();
         try {
 
-            populateTable(json, pk, conn);
+            createTableAndUpsertRecord(json, pk, conn);
 
             PreparedStatement stmt = conn.prepareStatement(selectQuery);
             ResultSet rs = stmt.executeQuery();
@@ -109,7 +109,7 @@ public class PhoenixJsonIT extends BaseHBaseManagedTimeIT {
 
             Set<Entry<String, String>> entrySet = jsonDataMap.entrySet();
             for (Entry<String, String> entry : entrySet) {
-                populateTable(entry.getValue(), entry.getKey(), conn);
+                createTableAndUpsertRecord(entry.getValue(), entry.getKey(), conn);
 
                 String selectQuery =
                         "SELECT col1 FROM testJson WHERE pk = '" + entry.getKey() + "'";
@@ -161,7 +161,7 @@ public class PhoenixJsonIT extends BaseHBaseManagedTimeIT {
         String selectQuery = "SELECT cast(pk as json) FROM testJson WHERE pk = 'valueOne'";
         Connection conn = getConnection();
         try {
-            populateTable(json, pk, conn);
+            createTableAndUpsertRecord(json, pk, conn);
 
             PreparedStatement stmt = conn.prepareStatement(selectQuery);
             ResultSet rs = stmt.executeQuery();
@@ -191,7 +191,7 @@ public class PhoenixJsonIT extends BaseHBaseManagedTimeIT {
         Connection conn = getConnection();
         String json = "{\"k1\":\"val\",\"k2\":true, \"k3\":2}";
         try {
-            populateTable(json, json, conn);
+            createTableAndUpsertRecord(json, json, conn);
 
             String selectQuery = "SELECT cast(pk as json) FROM testJson";
             PreparedStatement stmt = conn.prepareStatement(selectQuery);
@@ -219,7 +219,7 @@ public class PhoenixJsonIT extends BaseHBaseManagedTimeIT {
         String pk = "valueOne";
         String selectQuery = "SELECT cast(col1 as varchar) FROM testJson WHERE pk = 'valueOne'";
         try {
-            populateTable(json, pk, conn);
+            createTableAndUpsertRecord(json, pk, conn);
 
             PreparedStatement stmt = conn.prepareStatement(selectQuery);
             ResultSet rs = stmt.executeQuery();
@@ -242,7 +242,7 @@ public class PhoenixJsonIT extends BaseHBaseManagedTimeIT {
         String pk = "valueOne";
         String selectQuery = "SELECT col1 FROM testJson WHERE pk = 'valueOne' and col1 is NULL";
         try {
-            populateTable(json, pk, conn);
+            createTableAndUpsertRecord(json, pk, conn);
 
             PreparedStatement stmt = conn.prepareStatement(selectQuery);
             ResultSet rs = stmt.executeQuery();
@@ -268,9 +268,9 @@ public class PhoenixJsonIT extends BaseHBaseManagedTimeIT {
         String pk = "valueOne";
         String selectQuery = "SELECT DISTINCT_COUNT(col1)  FROM testJson";
         try {
-            populateTable(json, pk, conn);
+            createTableAndUpsertRecord(json, pk, conn);
             for (int i = 0; i < countDistinct; i++) {
-                upsertRecords("[" + i + "]", String.valueOf(i), conn);
+                upsertRecord("[" + i + "]", String.valueOf(i), conn);
             }
 
             PreparedStatement stmt = conn.prepareStatement(selectQuery);
@@ -292,7 +292,7 @@ public class PhoenixJsonIT extends BaseHBaseManagedTimeIT {
         String pk = "valueOne";
         String selectQuery = "SELECT col1 FROM testJson WHERE pk = 'valueOne' and col1 = '[1]'";
         try {
-            populateTable(json, pk, conn);
+            createTableAndUpsertRecord(json, pk, conn);
 
             PreparedStatement stmt = conn.prepareStatement(selectQuery);
             ResultSet rs = stmt.executeQuery();
@@ -357,15 +357,15 @@ public class PhoenixJsonIT extends BaseHBaseManagedTimeIT {
         }
     }
 
-    private void populateTable(String json, String pk, Connection conn) throws SQLException {
+    private void createTableAndUpsertRecord(String json, String pk, Connection conn) throws SQLException {
         String ddl =
                 "CREATE TABLE testJson" + "  (pk VARCHAR NOT NULL PRIMARY KEY, " + "col1 json)";
         createTestTable(getUrl(), ddl);
 
-        upsertRecords(json, pk, conn);
+        upsertRecord(json, pk, conn);
     }
 
-    private void upsertRecords(String json, String pk, Connection conn) throws SQLException {
+    private void upsertRecord(String json, String pk, Connection conn) throws SQLException {
         String query = "UPSERT INTO testJson(pk, col1) VALUES(?,?)";
         PreparedStatement stmt = conn.prepareStatement(query);
         stmt.setString(1, pk);

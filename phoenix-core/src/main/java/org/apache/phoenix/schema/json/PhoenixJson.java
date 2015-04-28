@@ -165,12 +165,12 @@ public class PhoenixJson implements Comparable<PhoenixJson> {
             } else if (this.rootNode.isTextual()) {
                 return this.rootNode.getTextValue();
             } else {
-                return getJsonAsString();
+                return this.jsonAsString;
             }
         } else if (this.rootNode.isArray()) {
-            return getJsonAsString();
+            return this.jsonAsString;
         } else if (this.rootNode.isContainerNode()) {
-            return getJsonAsString();
+            return this.jsonAsString;
         }
 
         return null;
@@ -179,14 +179,14 @@ public class PhoenixJson implements Comparable<PhoenixJson> {
 
     @Override
     public String toString() {
-        return getJsonAsString();
+        return this.jsonAsString;
     }
 
     @Override
     public int hashCode() {
         final int prime = 31;
         int result = 1;
-        result = prime * result + ((this.rootNode == null) ? 0 : this.rootNode.hashCode());
+        result = prime * result + this.jsonAsString.hashCode();
         return result;
     }
 
@@ -196,25 +196,19 @@ public class PhoenixJson implements Comparable<PhoenixJson> {
         if (obj == null) return false;
         if (getClass() != obj.getClass()) return false;
         PhoenixJson other = (PhoenixJson) obj;
-        if ((this.jsonAsString != null) && (other.jsonAsString != null)) {
-            if (this.jsonAsString.equals(other.jsonAsString)) return true;
-        }
-        if (this.rootNode == null) {
-            if (other.rootNode != null) return false;
-        } else if (!this.rootNode.equals(other.rootNode)) return false;
-        return true;
+        return this.jsonAsString.equals(other.jsonAsString);
     }
 
     /**
      * @return length of the string represented by the current {@link PhoenixJson}.
      */
     public int estimateByteSize() {
-        String jsonStr = getJsonAsString();
+        String jsonStr = toString();
         return jsonStr == null ? 1 : jsonStr.length();
     }
 
     public byte[] toBytes() {
-        return Bytes.toBytes(getJsonAsString());
+        return Bytes.toBytes(this.jsonAsString);
     }
 
     @Override
@@ -222,7 +216,7 @@ public class PhoenixJson implements Comparable<PhoenixJson> {
         if (o == null) {
             return 1;
         }
-        return toString().compareTo(o.toString());
+        return this.jsonAsString.compareTo(o.jsonAsString);
     }
 
     private PhoenixJson getPhoenixJsonInternal(String[] paths) {
@@ -241,12 +235,5 @@ public class PhoenixJson implements Comparable<PhoenixJson> {
             node = nodeTemp;
         }
         return new PhoenixJson(node, node.toString());
-    }
-    
-    private String getJsonAsString() {
-        if (this.jsonAsString != null) {
-            return this.jsonAsString;
-        }
-        return this.rootNode.toString();
     }
 }
