@@ -29,8 +29,6 @@ import static org.apache.phoenix.monitoring.PhoenixMetrics.SizeMetric.MUTATION_C
 import static org.apache.phoenix.monitoring.PhoenixMetrics.SizeMetric.PARALLEL_SCANS;
 import static org.apache.phoenix.monitoring.PhoenixMetrics.SizeMetric.QUERY_TIME;
 import static org.apache.phoenix.monitoring.PhoenixMetrics.SizeMetric.SCAN_BYTES;
-import static org.apache.phoenix.monitoring.PhoenixMetrics.SizeMetric.TASK_END_TO_END_TIME;
-import static org.apache.phoenix.monitoring.PhoenixMetrics.SizeMetric.TASK_EXECUTION_TIME;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
@@ -77,8 +75,6 @@ public class PhoenixMetricsIT extends BaseHBaseManagedTimeIT {
         
         assertTrue(SCAN_BYTES.getMetric().getTotalSum() > 0);
         assertTrue(QUERY_TIME.getMetric().getTotalSum() > 0);
-        assertTrue(TASK_END_TO_END_TIME.getMetric().getTotalSum() > 0);
-        assertTrue(TASK_EXECUTION_TIME.getMetric().getTotalSum() > 0);
     }
     
     @Test
