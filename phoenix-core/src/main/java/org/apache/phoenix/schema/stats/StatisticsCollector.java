@@ -169,7 +169,7 @@ public class StatisticsCollector {
             rowTracker = 
                     new ArrayList<GuidePostsInfo>();
         }
-        if (minKey == null) {
+        if (minKey == null && !results.isEmpty()) {
             Cell minCell = results.get(0);
             minKey = minCell.getRowArray();
             minKeyOffset =  minCell.getRowOffset();
