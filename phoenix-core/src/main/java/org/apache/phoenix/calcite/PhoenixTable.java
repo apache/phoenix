@@ -28,6 +28,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
@@ -95,10 +96,9 @@ public class PhoenixTable extends AbstractTable implements TranslatableTable {
         return new Statistic() {
             @Override
             public Double getRowCount() {
-                int rowCount = 0;
-                for (Map.Entry<byte[], GuidePostsInfo> entry : pTable.getTableStats().getGuidePosts().entrySet()) {
-                    rowCount += entry.getValue().getRowCount();
-                }
+                byte[] emptyCf = SchemaUtil.getEmptyColumnFamily(pTable);
+                GuidePostsInfo info = pTable.getTableStats().getGuidePosts().get(emptyCf);
+                long rowCount = info == null ? 0 : info.getRowCount();
                 
                 // Return an non-zero value to make the query plans stable.
                 // TODO remove "* 10.0" which is for test purpose.
