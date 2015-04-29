@@ -935,7 +935,9 @@ public class PTableImpl implements PTable {
             }
             long guidePostsByteCount = pGuidePosts.getByteCount();
             long rowCount = pGuidePosts.getRowCount();
-            GuidePostsInfo info = new GuidePostsInfo(guidePostsByteCount, value, rowCount);
+            // TODO : Not exposing MIN/MAX key outside to client 
+            GuidePostsInfo info =
+                    new GuidePostsInfo(guidePostsByteCount, value, rowCount);
             tableGuidePosts.put(pTableStatsProto.getKey().toByteArray(), info);
       }
       PTableStats stats = new PTableStatsImpl(tableGuidePosts, table.getStatsTimeStamp());
