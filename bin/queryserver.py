@@ -20,9 +20,9 @@
 ############################################################################
 
 #
-# Script to handle daemonizing the query server process.
+# Script to handle launching the query server process.
 #
-# usage: queryserver.py [start|stop] [-Dhadoop=configs]
+# usage: queryserver.py [start|stop|makeWinServiceDesc] [-Dhadoop=configs]
 #
 
 import datetime
@@ -34,7 +34,13 @@ import subprocess
 import sys
 import tempfile
 
-import daemon
+try:
+    import daemon
+    daemon_supported = True
+except ImportError:
+    # daemon script not supported on some platforms (windows?)
+    daemon_supported = False
+
 import phoenix_utils
 
 phoenix_utils.setPath()
@@ -47,6 +53,8 @@ if len(args) > 1:
         command = 'start'
     elif args[1] == 'stop':
         command = 'stop'
+    elif args[1] == 'makeWinServiceDesc':
+        command = 'makeWinServiceDesc'
 if command:
     args = args[2:]
 
@@ -108,7 +116,24 @@ java_cmd = '%(java)s -cp ' + hbase_config_path + os.pathsep + phoenix_utils.phoe
     " " + opts + \
     " org.apache.phoenix.queryserver.server.Main " + args
 
+if command == 'makeWinServiceDesc':
+    cmd = java_cmd % {'java': java, 'root_logger': 'INFO,DRFA,console', 'log_dir': phoenix_log_dir, 'log_file': phoenix_log_file}
+    slices = cmd.split(' ')
+
+    print "<service>"
+    print "  <id>queryserver</id>"
+    print "  <name>Phoenix Query Server</name>"
+    print "  <description>This service runs the Phoenix Query Server.</description>"
+    print "  <executable>%s</executable>" % slices[0]
+    print "  <arguments>%s</arguments>" % ' '.join(slices[1:])
+    print "</service>"
+    sys.exit()
+
 if command == 'start':
+    if not daemon_supported:
+        print >> sys.stderr, "daemon mode not supported on this platform"
+        sys.exit(-1)
+
     # run in the background
     d = os.path.dirname(out_file_path)
     if not os.path.exists(d):
@@ -137,6 +162,10 @@ if command == 'start':
             sys.exit(child.wait())
 
 elif command == 'stop':
+    if not daemon_supported:
+        print >> sys.stderr, "daemon mode not supported on this platform"
+        sys.exit(-1)
+
     if not os.path.exists(pid_file_path):
         print >> sys.stderr, "no Query Server to stop because PID file not found, %s" % pid_file_path
         sys.exit(0)
