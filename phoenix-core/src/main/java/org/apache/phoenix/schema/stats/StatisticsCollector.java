@@ -25,6 +25,7 @@ import java.util.Map;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -66,6 +67,10 @@ public class StatisticsCollector {
     private Map<ImmutableBytesPtr, Pair<Long,GuidePostsInfo>> guidePostsMap = Maps.newHashMap();
     protected StatisticsWriter statsTable;
     private Pair<Long,GuidePostsInfo> cachedGps = null;
+    // Store minKey and maxKey at the tracker level itself so that we don't need to do 
+    // any comparison for the min/max values for every next() call
+    private byte[] minKey;
+    private int minKeyOffset, minKeyLength;
 
     public StatisticsCollector(RegionCoprocessorEnvironment env, String tableName, long clientTimeStamp) throws IOException {
         this(env, tableName, clientTimeStamp, null, null, null);
@@ -139,6 +144,8 @@ public class StatisticsCollector {
                 statsTable.addStats((region.getRegionInfo().getRegionName()), this, fam,
                         mutations);
             }
+            // Clear minKey and maxKey
+            clearMinKeys();
         } catch (IOException e) {
             logger.error("Failed to update statistics table!", e);
             throw e;
@@ -161,6 +168,12 @@ public class StatisticsCollector {
         if(cachedGps == null) {
             rowTracker = 
                     new ArrayList<GuidePostsInfo>();
+        }
+        if (minKey == null) {
+            Cell minCell = results.get(0);
+            minKey = minCell.getRowArray();
+            minKeyOffset =  minCell.getRowOffset();
+            minKeyLength = minCell.getRowLength();
         }
         for (Cell cell : results) {
             KeyValue kv = KeyValueUtil.ensureKeyValue(cell);
@@ -238,9 +251,16 @@ public class StatisticsCollector {
     public void clear() {
         this.guidePostsMap.clear();
         maxTimeStamp = MetaDataProtocol.MIN_TABLE_TIMESTAMP;
+        clearMinKeys();
     }
 
-    public void addGuidePost(ImmutableBytesPtr cfKey, GuidePostsInfo info, long byteSize, long timestamp) {
+    private void clearMinKeys() {
+        minKey = null;
+        minKeyOffset = minKeyLength = 0;
+    }
+
+    public void addGuidePost(ImmutableBytesPtr cfKey, GuidePostsInfo info, long byteSize,
+            long timestamp, byte[] minKey) {
         Pair<Long, GuidePostsInfo> newInfo = new Pair<Long, GuidePostsInfo>(byteSize, info);
         Pair<Long, GuidePostsInfo> oldInfo = guidePostsMap.put(cfKey, newInfo);
         if (oldInfo != null) {
@@ -248,6 +268,9 @@ public class StatisticsCollector {
             newInfo.setFirst(oldInfo.getFirst() + newInfo.getFirst());
         }
         maxTimeStamp = Math.max(maxTimeStamp, timestamp);
+        this.minKey = minKey;
+        this.minKeyOffset = 0;
+        this.minKeyLength = this.minKey.length;
     }
 
     public GuidePostsInfo getGuidePosts(ImmutableBytesPtr fam) {
@@ -256,5 +279,11 @@ public class StatisticsCollector {
             return pair.getSecond();
         }
         return null;
+    }
+
+    public void getMinKey(ImmutableBytesWritable ptr) {
+        if (minKey != null) {
+            ptr.set(minKey, minKeyOffset, minKeyLength);
+        }
     }
 }
