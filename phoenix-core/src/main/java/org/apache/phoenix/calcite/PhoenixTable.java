@@ -1,6 +1,7 @@
 package org.apache.phoenix.calcite;
 
 import java.util.List;
+import java.util.Map;
 
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptTable;
@@ -25,6 +26,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.types.PDataType;
 
 import com.google.common.base.Preconditions;
@@ -93,9 +95,14 @@ public class PhoenixTable extends AbstractTable implements TranslatableTable {
         return new Statistic() {
             @Override
             public Double getRowCount() {
-                // TODO
-                String tableName = pTable.getTableName().getString();
-                return tableName.equals("ItemTable") ? 70d : tableName.equals("SupplierTable") ? 60d : 100d;
+                int rowCount = 0;
+                for (Map.Entry<byte[], GuidePostsInfo> entry : pTable.getTableStats().getGuidePosts().entrySet()) {
+                    rowCount += entry.getValue().getRowCount();
+                }
+                
+                // Return an non-zero value to make the query plans stable.
+                // TODO remove "* 10.0" which is for test purpose.
+                return rowCount > 0 ? rowCount * 10.0 : 100.0;
             }
 
             @Override

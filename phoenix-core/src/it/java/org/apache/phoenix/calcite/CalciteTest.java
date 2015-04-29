@@ -16,6 +16,7 @@ import java.sql.*;
 import java.util.List;
 import java.util.Map;
 
+import static org.apache.phoenix.util.TestUtil.JOIN_CUSTOMER_TABLE_FULL_NAME;
 import static org.apache.phoenix.util.TestUtil.JOIN_ITEM_TABLE_FULL_NAME;
 import static org.apache.phoenix.util.TestUtil.JOIN_ORDER_TABLE_FULL_NAME;
 import static org.apache.phoenix.util.TestUtil.JOIN_SUPPLIER_TABLE_FULL_NAME;
@@ -225,6 +226,13 @@ public class CalciteTest extends BaseClientManagedTimeIT {
         ensureTableCreated(url, ATABLE_NAME);
         initATableValues(getOrganizationId(), null, url);
         initJoinTableValues(url, null, null);
+        final Connection connection = DriverManager.getConnection(url);
+        connection.createStatement().execute("UPDATE STATISTICS ATABLE");
+        connection.createStatement().execute("UPDATE STATISTICS " + JOIN_CUSTOMER_TABLE_FULL_NAME);
+        connection.createStatement().execute("UPDATE STATISTICS " + JOIN_ITEM_TABLE_FULL_NAME);
+        connection.createStatement().execute("UPDATE STATISTICS " + JOIN_SUPPLIER_TABLE_FULL_NAME);
+        connection.createStatement().execute("UPDATE STATISTICS " + JOIN_ORDER_TABLE_FULL_NAME);
+        connection.close();
     }
     
     @Test public void testTableScan() throws Exception {
