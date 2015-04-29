@@ -45,6 +45,7 @@ import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.IndexMetaDataCacheClient;
@@ -159,6 +160,12 @@ public class MutationState implements SQLCloseable {
         if (txContext == null) {
             throw new SQLException("No transaction context"); // TODO: error code
         }
+        
+		if (connection.getSCN() != null) {
+			throw new SQLExceptionInfo.Builder(
+					SQLExceptionCode.CANNOT_START_TRANSACTION_WITH_SCN_SET)
+					.build().buildException();
+		}
         
         try {
             if (!txStarted) {
