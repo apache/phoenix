@@ -549,12 +549,10 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
         if (ptr.getLength() == 0) {
             elementLength = 0;
         }
-
         //padding
         if (elementLength > ptr.getLength()) {
             baseType.pad(ptr, elementLength, sortOrder);
         }
-
         int elementOffset = ptr.getOffset();
         byte[] elementBytes = ptr.get();
 
@@ -567,16 +565,14 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
             //checks whether offset array consists of shorts or integers
             boolean useInt = offsetArrayLength / arrayLength == Bytes.SIZEOF_INT;
             boolean convertToInt = false;
-
             int endElementPosition = getOffset(arrayBytes, arrayLength - 1, !useInt, offsetArrayPosition + offset) + elementLength + Bytes.SIZEOF_BYTE;
-
             int newOffsetArrayPosition;
             int offsetShift;
             int firstNonNullElementPosition = 0;
             int currentPosition = 0;
-            //handle the case where appended element is null
+            //handle the case where prepended element is null
             if (elementLength == 0) {
-                int nulls = 0;
+                int nulls = 1;
                 //counts the number of nulls which are already at the beginning of the array
                 for (int index = 0; index < arrayLength; index++) {
                     int currOffset = getOffset(arrayBytes, index, !useInt, offsetArrayPosition + offset);
@@ -588,31 +584,30 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
                         break;
                     }
                 }
-                nulls++;
 
                 int nMultiplesOver255 = nulls / 255;
-                endElementPosition = getOffset(arrayBytes, arrayLength - 1, !useInt, offsetArrayPosition + offset) + nMultiplesOver255 + 2 * Bytes.SIZEOF_BYTE;
+                int nRemainingNulls = nulls % 255;
+                int bytesForRemainingNulls = nRemainingNulls == 0 ? 0:1;
+                endElementPosition = getOffset(arrayBytes, arrayLength - 1, !useInt, offsetArrayPosition + offset) + nMultiplesOver255 + bytesForRemainingNulls + Bytes.SIZEOF_BYTE - firstNonNullElementPosition;
                 if (!useInt) {
                     if (PArrayDataType.useShortForOffsetArray(endElementPosition)) {
-                        newArray = new byte[length + Bytes.SIZEOF_SHORT + nMultiplesOver255 + 2 * Bytes.SIZEOF_BYTE - firstNonNullElementPosition];
+                        newArray = new byte[length + Bytes.SIZEOF_SHORT + nMultiplesOver255 + bytesForRemainingNulls + Bytes.SIZEOF_BYTE - firstNonNullElementPosition];
                     } else {
-                        newArray = new byte[length + arrayLength * Bytes.SIZEOF_SHORT + Bytes.SIZEOF_INT + nMultiplesOver255 + 2 * Bytes.SIZEOF_BYTE - firstNonNullElementPosition];
+                        newArray = new byte[length + arrayLength * Bytes.SIZEOF_SHORT + Bytes.SIZEOF_INT + nMultiplesOver255 + bytesForRemainingNulls + Bytes.SIZEOF_BYTE - firstNonNullElementPosition];
                         convertToInt = true;
                     }
                 } else {
-                    newArray = new byte[length + Bytes.SIZEOF_INT + nMultiplesOver255 + 2 * Bytes.SIZEOF_BYTE - firstNonNullElementPosition];
+                    newArray = new byte[length + Bytes.SIZEOF_INT + nMultiplesOver255 + bytesForRemainingNulls + Bytes.SIZEOF_BYTE - firstNonNullElementPosition];
                 }
                 newArray[currentPosition] = QueryConstants.SEPARATOR_BYTE;
                 currentPosition++;
 
-                newOffsetArrayPosition = offsetArrayPosition + nMultiplesOver255 + 2 * Bytes.SIZEOF_BYTE - firstNonNullElementPosition;
-                offsetShift = nMultiplesOver255 + 2 * Bytes.SIZEOF_BYTE - firstNonNullElementPosition;
-
+                newOffsetArrayPosition = offsetArrayPosition + bytesForRemainingNulls + nMultiplesOver255 + Bytes.SIZEOF_BYTE - firstNonNullElementPosition;
+                offsetShift = nMultiplesOver255 + bytesForRemainingNulls + Bytes.SIZEOF_BYTE - firstNonNullElementPosition;
                 while (nMultiplesOver255-- > 0) {
                     newArray[currentPosition] = (byte) 1;
                     currentPosition++;
                 }
-                int nRemainingNulls = nulls % 255;
                 // Write a byte for the remaining null elements
                 if (nRemainingNulls > 0) {
                     byte nNullByte = SortOrder.invert((byte) (nRemainingNulls - 1));
