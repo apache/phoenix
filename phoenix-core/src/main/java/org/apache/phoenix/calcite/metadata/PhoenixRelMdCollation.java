@@ -17,7 +17,6 @@ import org.apache.phoenix.calcite.rel.PhoenixLimit;
 import org.apache.phoenix.calcite.rel.PhoenixServerJoin;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Lists;
 
 public class PhoenixRelMdCollation {
     public static final RelMetadataProvider SOURCE =
@@ -40,27 +39,9 @@ public class PhoenixRelMdCollation {
     
     /** Helper method to determine a {@link PhoenixServerJoin}'s collation. */
     public static List<RelCollation> hashJoin(RelNode left, RelNode right, JoinRelType joinType) {
-        if (joinType != JoinRelType.FULL)
-            return ImmutableList.of();
-        
         // TODO enable the following code, right now would cause some unexpected behaviors.
-        if (joinType == JoinRelType.RIGHT) {
-            final ImmutableList<RelCollation> rightCollations =
-                    RelMetadataQuery.collations(right);
-            if (rightCollations.isEmpty())
-                return rightCollations;
-
-            List<RelCollation> newCollations = Lists.<RelCollation> newArrayList();
-            final int leftFieldCount = left.getRowType().getFieldCount();
-            for (RelCollation collation : rightCollations) {
-                if (!collation.getFieldCollations().isEmpty()) {
-                    newCollations.add(RelCollations.shift(collation, leftFieldCount));
-                }
-            }
-            return ImmutableList.copyOf(newCollations);
-        }
-
-        return RelMetadataQuery.collations(left);
+        // return RelMetadataQuery.collations(left);
+        return ImmutableList.of();
     }
 
     public static List<RelCollation> mergeJoin(RelNode left, RelNode right,

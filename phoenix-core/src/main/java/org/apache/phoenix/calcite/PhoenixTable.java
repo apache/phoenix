@@ -1,7 +1,6 @@
 package org.apache.phoenix.calcite;
 
 import java.util.List;
-import java.util.Map;
 
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptTable;

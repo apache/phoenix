@@ -37,7 +37,7 @@ public class PhoenixServerJoin extends PhoenixAbstractJoin {
     
     public static PhoenixServerJoin create(final RelNode left, final RelNode right, 
             RexNode condition, final JoinRelType joinType, 
-            Set<String> variablesStopped) {
+            Set<String> variablesStopped, boolean isSingleValueRhs) {
         RelOptCluster cluster = left.getCluster();
         final RelTraitSet traits =
                 cluster.traitSet().replace(PhoenixRel.CONVENTION)
@@ -47,20 +47,28 @@ public class PhoenixServerJoin extends PhoenixAbstractJoin {
                         return PhoenixRelMdCollation.hashJoin(left, right, joinType);
                     }
                 });
-        return new PhoenixServerJoin(cluster, traits, left, right, condition, joinType, variablesStopped);
+        return new PhoenixServerJoin(cluster, traits, left, right, condition, joinType, variablesStopped, isSingleValueRhs);
     }
 
     private PhoenixServerJoin(RelOptCluster cluster, RelTraitSet traits,
             RelNode left, RelNode right, RexNode condition,
-            JoinRelType joinType, Set<String> variablesStopped) {
+            JoinRelType joinType, Set<String> variablesStopped, 
+            boolean isSingleValueRhs) {
         super(cluster, traits, left, right, condition, joinType,
-                variablesStopped);
+                variablesStopped, isSingleValueRhs);
+        assert joinType != JoinRelType.FULL && joinType != JoinRelType.RIGHT;
     }
 
     @Override
     public PhoenixServerJoin copy(RelTraitSet traits, RexNode condition, RelNode left,
             RelNode right, JoinRelType joinRelType, boolean semiJoinDone) {
-        return create(left, right, condition, joinRelType, variablesStopped);
+        return copy(traits, condition, left, right, joinRelType, semiJoinDone, isSingleValueRhs);
+    }
+
+    @Override
+    public PhoenixServerJoin copy(RelTraitSet traits, RexNode condition, RelNode left,
+            RelNode right, JoinRelType joinRelType, boolean semiJoinDone, boolean isSingleValueRhs) {
+        return create(left, right, condition, joinRelType, variablesStopped, isSingleValueRhs);
     }
 
     @Override
@@ -70,7 +78,7 @@ public class PhoenixServerJoin extends PhoenixAbstractJoin {
         double rowCount = RelMetadataQuery.getRowCount(this);
         
         for (RelNode input : getInputs()) {
-            double inputRowCount = input.getRows();
+            double inputRowCount = RelMetadataQuery.getRowCount(input);
             if (Double.isInfinite(inputRowCount)) {
                 rowCount = inputRowCount;
             } else if (input == getLeft()) {
@@ -135,7 +143,7 @@ public class PhoenixServerJoin extends PhoenixAbstractJoin {
                 new int[] {leftTable.getColumns().size() - leftTable.getPKColumns().size()}, 
                 postFilterExpr, null);
         
-        return HashJoinPlan.create(SelectStatement.SELECT_STAR, leftPlan, hashJoinInfo, new HashJoinPlan.HashSubPlan[] {new HashJoinPlan.HashSubPlan(0, rightPlan, rightExprs, false, null, null)});
+        return HashJoinPlan.create(SelectStatement.SELECT_STAR, leftPlan, hashJoinInfo, new HashJoinPlan.HashSubPlan[] {new HashJoinPlan.HashSubPlan(0, rightPlan, rightExprs, isSingleValueRhs, null, null)});
     }
 
 }

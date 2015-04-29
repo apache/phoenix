@@ -15,7 +15,7 @@ import com.google.common.base.Predicate;
 public class PhoenixServerJoinRule extends RelOptRule {
     
     /** Predicate that returns true if a join type is not right or full. */
-    private static final Predicate<PhoenixJoin> NO_RIGHT_OR_FULL =
+    private static final Predicate<PhoenixJoin> NO_RIGHT_OR_FULL_JOIN =
         new Predicate<PhoenixJoin>() {
             @Override
             public boolean apply(PhoenixJoin phoenixJoin) {
@@ -35,7 +35,7 @@ public class PhoenixServerJoinRule extends RelOptRule {
 
     public PhoenixServerJoinRule(String description, RelOptRuleOperand left) {
         super(
-            operand(PhoenixJoin.class, null, NO_RIGHT_OR_FULL,
+            operand(PhoenixJoin.class, null, NO_RIGHT_OR_FULL_JOIN,
                     left, 
                     operand(PhoenixRel.class, any())),
             description);
@@ -48,7 +48,7 @@ public class PhoenixServerJoinRule extends RelOptRule {
         PhoenixRel right = call.rel(call.getRelList().size() - 1);
         call.transformTo(PhoenixServerJoin.create(
                 left, right, join.getCondition(), 
-                join.getJoinType(), join.getVariablesStopped()));
+                join.getJoinType(), join.getVariablesStopped(), false));
     }
 
 }

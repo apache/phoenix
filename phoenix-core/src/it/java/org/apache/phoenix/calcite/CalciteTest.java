@@ -661,15 +661,16 @@ public class CalciteTest extends BaseClientManagedTimeIT {
                        "  EnumerableJoin(condition=[=($6, $7)], joinType=[left])\n" +
                        "    PhoenixToEnumerableConverter\n" +
                        "      PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n" +
-                       "    EnumerableAggregate(group=[{0}], CNT=[COUNT()])\n" +
-                       "      EnumerableCalc(expr#0..10=[{inputs}], expr#11=[0], expr#12=[CAST($t5):INTEGER], expr#13=[=($t12, $t0)], THE_YEAR=[$t0], $f0=[$t11], $condition=[$t13])\n" +
-                       "        EnumerableJoin(condition=[true], joinType=[inner])\n" +
-                       "          PhoenixToEnumerableConverter\n" +
-                       "            PhoenixServerAggregate(group=[{0}])\n" +
-                       "              PhoenixServerProject(THE_YEAR=[$6])\n" +
-                       "                PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n" +
-                       "          JdbcToEnumerableConverter\n" +
-                       "            JdbcTableScan(table=[[foodmart, time_by_day]])\n")
+                       "    EnumerableAggregate(group=[{0}], agg#0=[SINGLE_VALUE($1)])\n" +
+                       "      EnumerableAggregate(group=[{0}], CNT=[COUNT()])\n" +
+                       "        EnumerableCalc(expr#0..10=[{inputs}], expr#11=[0], expr#12=[CAST($t5):INTEGER], expr#13=[=($t12, $t0)], THE_YEAR=[$t0], $f0=[$t11], $condition=[$t13])\n" +
+                       "          EnumerableJoin(condition=[true], joinType=[inner])\n" +
+                       "            PhoenixToEnumerableConverter\n" +
+                       "              PhoenixServerAggregate(group=[{0}])\n" +
+                       "                PhoenixServerProject(THE_YEAR=[$6])\n" +
+                       "                  PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n" +
+                       "            JdbcToEnumerableConverter\n" +
+                       "              JdbcTableScan(table=[[foodmart, time_by_day]])\n")
             .resultIs(new Object[][] {
                     new Object[] {1997, 1000, 365L}, 
                     new Object[] {1997, 2000, 365L},
@@ -685,7 +686,7 @@ public class CalciteTest extends BaseClientManagedTimeIT {
             + "from " + JOIN_ITEM_TABLE_FULL_NAME + " i")
             .explainIs("PhoenixToEnumerableConverter\n" +
                        "  PhoenixServerProject(item_id=[$0], NAME=[$1], EXPR$2=[$8])\n" +
-                       "    PhoenixServerJoin(condition=[=($0, $7)], joinType=[left])\n" +
+                       "    PhoenixServerJoin(condition=[=($0, $7)], joinType=[left], isSingleValueRhs=[true])\n" +
                        "      PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
                        "      PhoenixServerAggregate(group=[{0}], SQ=[MAX($1)])\n" +
                        "        PhoenixServerProject(item_id0=[$7], QUANTITY=[$4])\n" +

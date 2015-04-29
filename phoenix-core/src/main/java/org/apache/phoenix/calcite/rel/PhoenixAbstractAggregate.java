@@ -33,6 +33,26 @@ import com.google.common.collect.Lists;
  */
 abstract public class PhoenixAbstractAggregate extends Aggregate implements PhoenixRel {
     
+    public static boolean isSingleValueCheckAggregate(Aggregate aggregate) {
+        List<Integer> groupSet = aggregate.getGroupSet().asList();
+        int groupCount = groupSet.size();
+        if (groupCount + 1 != aggregate.getInput().getRowType().getFieldCount())
+            return false;
+        
+        for (int i = 0; i < groupCount; i++) {
+            if (groupSet.get(i) != i)
+                return false;
+        }
+        
+        List<AggregateCall> aggCalls = aggregate.getAggCallList();
+        if (aggCalls.size() != 1)
+            return false;
+        
+        AggregateCall call = aggCalls.get(0);
+        return call.getAggregation().getName().equals("SINGLE_VALUE")
+                && call.getArgList().get(0) == groupCount;
+    }
+    
     protected PhoenixAbstractAggregate(RelOptCluster cluster, RelTraitSet traits, RelNode child, boolean indicator, ImmutableBitSet groupSet, List<ImmutableBitSet> groupSets, List<AggregateCall> aggCalls) {
         super(cluster, traits, child, indicator, groupSet, groupSets, aggCalls);
         assert getConvention() == PhoenixRel.CONVENTION;
