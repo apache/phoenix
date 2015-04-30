@@ -28,6 +28,7 @@ import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.catalog.MetaEditor;
 import org.apache.hadoop.hbase.catalog.MetaReader;
+import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
@@ -73,7 +74,13 @@ public class LocalIndexSplitter extends BaseRegionObserver {
                         .getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES)))) {
             TableName indexTable =
                     TableName.valueOf(MetaDataUtil.getLocalIndexPhysicalName(tableDesc.getName()));
-            if (!MetaReader.tableExists(rss.getCatalogTracker(), indexTable)) return;
+            HBaseAdmin admin = null;
+            try {
+                admin = new HBaseAdmin(rss.getConfiguration());
+                if (!admin.tableExists(indexTable)) return;
+            } finally {
+                if (admin != null) admin.close();
+            }
 
             HRegion indexRegion = IndexUtil.getIndexRegion(environment);
             if (indexRegion == null) {
