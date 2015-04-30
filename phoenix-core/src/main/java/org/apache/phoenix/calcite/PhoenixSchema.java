@@ -40,34 +40,36 @@ public class PhoenixSchema implements Schema {
         this.schemaName = name;
         this.pc = pc;
         this.client = new MetaDataClient(pc);
-        this.subSchemaNames = Sets.newHashSet();
-        this.tableNames = Sets.newHashSet();
-        if (schemaName == null) {
-            loadSubSchemaNames();
-        }
-        loadTableNames();
+        this.subSchemaNames = name == null ? 
+                  ImmutableSet.<String> copyOf(loadSubSchemaNames()) 
+                : Collections.<String> emptySet();
+        this.tableNames = ImmutableSet.<String> copyOf(loadTableNames());
     }
     
-    private void loadSubSchemaNames() {
+    private Set<String> loadSubSchemaNames() {
         try {
             DatabaseMetaData md = pc.getMetaData();
             ResultSet rs = md.getSchemas();
+            Set<String> subSchemaNames = Sets.newHashSet();
             while (rs.next()) {
                 String schemaName = rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM);
-                this.subSchemaNames.add(schemaName == null ? "" : schemaName);
+                subSchemaNames.add(schemaName == null ? "" : schemaName);
             }
+            return subSchemaNames;
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
     }
     
-    private void loadTableNames() {
+    private Set<String> loadTableNames() {
         try {
             DatabaseMetaData md = pc.getMetaData();
             ResultSet rs = md.getTables(null, schemaName == null ? "" : schemaName, null, null);
+            Set<String> tableNames = Sets.newHashSet();
             while (rs.next()) {
-                this.tableNames.add(rs.getString(PhoenixDatabaseMetaData.TABLE_NAME));
+                tableNames.add(rs.getString(PhoenixDatabaseMetaData.TABLE_NAME));
             }
+            return tableNames;
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
