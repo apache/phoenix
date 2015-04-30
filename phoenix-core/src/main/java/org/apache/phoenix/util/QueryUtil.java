@@ -49,6 +49,8 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
+import java.util.Iterator;
+import java.util.Map;
 
 public final class QueryUtil {
 
@@ -267,6 +269,7 @@ public final class QueryUtil {
             SQLException {
         String url = getConnectionUrl(props, conf);
         LOG.info("Creating connection with the jdbc url:" + url);
+        PropertiesUtil.extractProperties(props, conf);
         return DriverManager.getConnection(url, props);
     }
 
@@ -317,4 +320,5 @@ public final class QueryUtil {
                 ("\"" + tableName + "\" ") +
                 (WHERE + " " + where);
     }
+    
 }
