@@ -26,6 +26,7 @@ import java.util.Properties;
 
 import com.google.common.base.Preconditions;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 
 /**
@@ -54,7 +55,7 @@ public class ConnectionUtil {
     public static Connection getInputConnection(final Configuration conf , final Properties props) throws SQLException {
         Preconditions.checkNotNull(conf);
         return getConnection(PhoenixConfigurationUtil.getInputCluster(conf),
-                extractProperties(props, conf));
+                PropertiesUtil.extractProperties(props, conf));
     }
 
     /**
@@ -77,7 +78,7 @@ public class ConnectionUtil {
     public static Connection getOutputConnection(final Configuration conf, Properties props) throws SQLException {
         Preconditions.checkNotNull(conf);
         return getConnection(PhoenixConfigurationUtil.getOutputCluster(conf),
-                extractProperties(props, conf));
+                PropertiesUtil.extractProperties(props, conf));
     }
 
     /**
@@ -91,22 +92,4 @@ public class ConnectionUtil {
         return DriverManager.getConnection(QueryUtil.getUrl(quorum), props);
     }
 
-    /**
-     * Add properties from the given Configuration to the provided Properties.
-     *
-     * @param props properties to which connection information from the Configuration will be added
-     * @param conf configuration containing connection information
-     * @return the input Properties value, with additional connection information from the
-     * given Configuration
-     */
-    private static Properties extractProperties(Properties props, final Configuration conf) {
-        Iterator<Map.Entry<String, String>> iterator = conf.iterator();
-        if(iterator != null) {
-            while (iterator.hasNext()) {
-                Map.Entry<String, String> entry = iterator.next();
-                props.setProperty(entry.getKey(), entry.getValue());
-            }
-        }
-        return props;
-    }
 }

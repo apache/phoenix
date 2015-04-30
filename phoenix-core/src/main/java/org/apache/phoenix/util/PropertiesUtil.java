@@ -17,7 +17,10 @@
  */
 package org.apache.phoenix.util;
 
+import java.util.Iterator;
+import java.util.Map;
 import java.util.Properties;
+import org.apache.hadoop.conf.Configuration;
 
 public class PropertiesUtil {
 
@@ -35,5 +38,24 @@ public class PropertiesUtil {
             newProperties.setProperty(pName, properties.getProperty(pName));
         }
         return newProperties;
+    }
+    
+     /**
+     * Add properties from the given Configuration to the provided Properties.
+     *
+     * @param props properties to which connection information from the Configuration will be added
+     * @param conf configuration containing connection information
+     * @return the input Properties value, with additional connection information from the
+     * given Configuration
+     */
+    public static Properties extractProperties(Properties props, final Configuration conf) {
+        Iterator<Map.Entry<String, String>> iterator = conf.iterator();
+        if(iterator != null) {
+            while (iterator.hasNext()) {
+                Map.Entry<String, String> entry = iterator.next();
+                props.setProperty(entry.getKey(), entry.getValue());
+            }
+        }
+        return props;
     }
 }
