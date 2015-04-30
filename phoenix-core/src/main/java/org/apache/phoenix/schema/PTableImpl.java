@@ -720,11 +720,7 @@ public class PTableImpl implements PTable {
             newMutations();
             Delete delete = new Delete(key);
             for (PColumnFamily colFamily : families) {
-<<<<<<< HEAD
             	delete.addFamily(colFamily.getName().getBytes(), ts);
-=======
-            	delete.deleteFamily(colFamily.getName().getBytes(), ts);
->>>>>>> 6948e48f61401945501b36dc8194a980fbaf0564
             }
             deleteRow = delete;
             // No need to write to the WAL for indexes
