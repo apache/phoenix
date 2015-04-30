@@ -284,6 +284,8 @@ public class StatisticsCollector {
     public void getMinKey(ImmutableBytesWritable ptr) {
         if (minKey != null) {
             ptr.set(minKey, minKeyOffset, minKeyLength);
+        } else {
+            ptr.set(HConstants.EMPTY_BYTE_ARRAY);
         }
     }
 }
