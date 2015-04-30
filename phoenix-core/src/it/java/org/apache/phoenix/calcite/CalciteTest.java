@@ -647,6 +647,52 @@ public class CalciteTest extends BaseClientManagedTimeIT {
                .close();
     }
     
+    @Test public void testScalarSubquery() {
+        start().sql("select \"item_id\", name, (select max(quantity) sq \n"
+            + "from " + JOIN_ORDER_TABLE_FULL_NAME + " o where o.\"item_id\" = i.\"item_id\")\n"
+            + "from " + JOIN_ITEM_TABLE_FULL_NAME + " i")
+            .explainIs("PhoenixToEnumerableConverter\n" +
+                       "  PhoenixServerProject(item_id=[$0], NAME=[$1], EXPR$2=[$8])\n" +
+                       "    PhoenixServerJoin(condition=[=($0, $7)], joinType=[left], isSingleValueRhs=[true])\n" +
+                       "      PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
+                       "      PhoenixServerAggregate(group=[{0}], SQ=[MAX($1)])\n" +
+                       "        PhoenixServerProject(item_id0=[$7], QUANTITY=[$4])\n" +
+                       "          PhoenixServerJoin(condition=[=($2, $7)], joinType=[inner])\n" +
+                       "            PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n" +
+                       "            PhoenixServerAggregate(group=[{0}])\n" +
+                       "              PhoenixServerProject(item_id=[$0])\n" +
+                       "                PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n")
+            .resultIs(new Object[][] {
+                    new Object[] {"0000000001", "T1", 1000}, 
+                    new Object[] {"0000000002", "T2", 3000}, 
+                    new Object[] {"0000000003", "T3", 5000}, 
+                    new Object[] {"0000000004", "T4", null}, 
+                    new Object[] {"0000000005", "T5", null}, 
+                    new Object[] {"0000000006", "T6", 4000}, 
+                    new Object[] {"invalid001", "INVALID-1", null}})
+            .close();;
+            start().sql("select \"item_id\", name, (select quantity sq \n"
+                    + "from " + JOIN_ORDER_TABLE_FULL_NAME + " o where o.\"item_id\" = i.\"item_id\")\n"
+                    + "from " + JOIN_ITEM_TABLE_FULL_NAME + " i where \"item_id\" < '0000000006'")
+                    .explainIs("PhoenixToEnumerableConverter\n" +
+                               "  PhoenixServerProject(item_id=[$0], NAME=[$1], EXPR$2=[$8])\n" +
+                               "    PhoenixServerJoin(condition=[=($0, $7)], joinType=[left], isSingleValueRhs=[true])\n" +
+                               "      PhoenixTableScan(table=[[phoenix, Join, ItemTable]], filter=[<($0, '0000000006')])\n" +
+                               "      PhoenixServerProject(item_id0=[$7], SQ=[$4])\n" +
+                               "        PhoenixServerJoin(condition=[=($2, $7)], joinType=[inner])\n" +
+                               "          PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n" +
+                               "          PhoenixServerAggregate(group=[{0}])\n" +
+                               "            PhoenixServerProject(item_id=[$0])\n" +
+                               "              PhoenixTableScan(table=[[phoenix, Join, ItemTable]], filter=[<($0, '0000000006')])\n")
+                    .resultIs(new Object[][] {
+                            new Object[] {"0000000001", "T1", 1000}, 
+                            new Object[] {"0000000002", "T2", 3000}, 
+                            new Object[] {"0000000003", "T3", 5000}, 
+                            new Object[] {"0000000004", "T4", null}, 
+                            new Object[] {"0000000005", "T5", null}})
+                    .close();;
+    }
+    
     @Test public void testConnectJoinHsqldb() {
         final Start start = new Start() {
             @Override
@@ -677,32 +723,6 @@ public class CalciteTest extends BaseClientManagedTimeIT {
                     new Object[] {1997, 3000, 365L},
                     new Object[] {1998, 4000, 365L},
                     new Object[] {1998, 5000, 365L}})
-            .close();;
-    }
-    
-    @Test public void testScalarSubquery() {
-        start().sql("select \"item_id\", name, (select max(quantity) sq \n"
-            + "from " + JOIN_ORDER_TABLE_FULL_NAME + " o where o.\"item_id\" = i.\"item_id\")\n"
-            + "from " + JOIN_ITEM_TABLE_FULL_NAME + " i")
-            .explainIs("PhoenixToEnumerableConverter\n" +
-                       "  PhoenixServerProject(item_id=[$0], NAME=[$1], EXPR$2=[$8])\n" +
-                       "    PhoenixServerJoin(condition=[=($0, $7)], joinType=[left], isSingleValueRhs=[true])\n" +
-                       "      PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
-                       "      PhoenixServerAggregate(group=[{0}], SQ=[MAX($1)])\n" +
-                       "        PhoenixServerProject(item_id0=[$7], QUANTITY=[$4])\n" +
-                       "          PhoenixServerJoin(condition=[=($2, $7)], joinType=[inner])\n" +
-                       "            PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n" +
-                       "            PhoenixServerAggregate(group=[{0}])\n" +
-                       "              PhoenixServerProject(item_id=[$0])\n" +
-                       "                PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n")
-            .resultIs(new Object[][] {
-                    new Object[] {"0000000001", "T1", 1000}, 
-                    new Object[] {"0000000002", "T2", 3000}, 
-                    new Object[] {"0000000003", "T3", 5000}, 
-                    new Object[] {"0000000004", "T4", null}, 
-                    new Object[] {"0000000005", "T5", null}, 
-                    new Object[] {"0000000006", "T6", 4000}, 
-                    new Object[] {"invalid001", "INVALID-1", null}})
             .close();;
     }
 

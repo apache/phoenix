@@ -55,21 +55,80 @@ public class CalciteUtils {
 
 			@Override
 			public Expression newExpression(RexNode node, Implementor implementor) {
-				RexCall call = (RexCall) node;
-				List<Expression> children = Lists.newArrayListWithExpectedSize(call.getOperands().size());
-				for (RexNode op : call.getOperands()) {
-					Expression child = getFactory(op).newExpression(op, implementor);
-					children.add(child);
-				}
 				ImmutableBytesWritable ptr = new ImmutableBytesWritable();
 				try {
-					return ComparisonExpression.create(CompareOp.EQUAL, children, ptr);
+					return ComparisonExpression.create(CompareOp.EQUAL, convertChildren((RexCall) node, implementor), ptr);
 				} catch (SQLException e) {
 					throw new RuntimeException(e);
 				}
 			}
 			
 		});
+        EXPRESSION_MAP.put(SqlKind.NOT_EQUALS, new ExpressionFactory() {
+
+            @Override
+            public Expression newExpression(RexNode node, Implementor implementor) {
+                ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+                try {
+                    return ComparisonExpression.create(CompareOp.NOT_EQUAL, convertChildren((RexCall) node, implementor), ptr);
+                } catch (SQLException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+            
+        });
+        EXPRESSION_MAP.put(SqlKind.GREATER_THAN, new ExpressionFactory() {
+
+            @Override
+            public Expression newExpression(RexNode node, Implementor implementor) {
+                ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+                try {
+                    return ComparisonExpression.create(CompareOp.GREATER, convertChildren((RexCall) node, implementor), ptr);
+                } catch (SQLException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+            
+        });
+        EXPRESSION_MAP.put(SqlKind.GREATER_THAN_OR_EQUAL, new ExpressionFactory() {
+
+            @Override
+            public Expression newExpression(RexNode node, Implementor implementor) {
+                ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+                try {
+                    return ComparisonExpression.create(CompareOp.GREATER_OR_EQUAL, convertChildren((RexCall) node, implementor), ptr);
+                } catch (SQLException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+            
+        });
+        EXPRESSION_MAP.put(SqlKind.LESS_THAN, new ExpressionFactory() {
+
+            @Override
+            public Expression newExpression(RexNode node, Implementor implementor) {
+                ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+                try {
+                    return ComparisonExpression.create(CompareOp.LESS, convertChildren((RexCall) node, implementor), ptr);
+                } catch (SQLException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+            
+        });
+        EXPRESSION_MAP.put(SqlKind.LESS_THAN_OR_EQUAL, new ExpressionFactory() {
+
+            @Override
+            public Expression newExpression(RexNode node, Implementor implementor) {
+                ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+                try {
+                    return ComparisonExpression.create(CompareOp.LESS_OR_EQUAL, convertChildren((RexCall) node, implementor), ptr);
+                } catch (SQLException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+            
+        });
 		EXPRESSION_MAP.put(SqlKind.LITERAL, new ExpressionFactory() {
 
 			@Override
@@ -137,6 +196,15 @@ public class CalciteUtils {
                 return new MaxAggregateFunction(args, null);
             }
         });
+    }
+    
+    private static List<Expression> convertChildren(RexCall call, Implementor implementor) {
+        List<Expression> children = Lists.newArrayListWithExpectedSize(call.getOperands().size());
+        for (RexNode op : call.getOperands()) {
+            Expression child = getFactory(op).newExpression(op, implementor);
+            children.add(child);
+        }
+        return children;
     }
 
 	public static Expression toExpression(RexNode node, Implementor implementor) {

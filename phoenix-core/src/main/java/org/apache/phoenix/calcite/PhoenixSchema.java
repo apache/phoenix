@@ -1,15 +1,15 @@
 package org.apache.phoenix.calcite;
 
-import com.google.common.collect.HashMultimap;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.SetMultimap;
+import com.google.common.collect.Sets;
 
 import org.apache.calcite.linq4j.tree.Expression;
 import org.apache.calcite.schema.*;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.parse.ColumnDef;
 import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.TableName;
@@ -17,7 +17,9 @@ import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.TableRef;
 
 import java.sql.Connection;
+import java.sql.DatabaseMetaData;
 import java.sql.DriverManager;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.*;
 
@@ -27,25 +29,48 @@ import java.util.*;
 public class PhoenixSchema implements Schema {
     public static final Factory FACTORY = new Factory();
     
-    private final String schemaName;
-    private final PhoenixConnection pc;
+    protected final String schemaName;
+    protected final PhoenixConnection pc;
     protected final MetaDataClient client;
     
-    // TODO to be removed after PHOENIX-1878.
-    private static final SetMultimap<String, String> tableCache;
-    static {
-        tableCache = HashMultimap.<String, String> create();
-        tableCache.put("", "ATABLE");
-        tableCache.put("Join", "ItemTable");
-        tableCache.put("Join", "SupplierTable");
-        tableCache.put("Join", "CustomerTable");
-        tableCache.put("Join", "OrderTable");
-    }
+    protected final Set<String> subSchemaNames;
+    protected final Set<String> tableNames;
     
     private PhoenixSchema(String name, PhoenixConnection pc) {
         this.schemaName = name;
         this.pc = pc;
         this.client = new MetaDataClient(pc);
+        this.subSchemaNames = Sets.newHashSet();
+        this.tableNames = Sets.newHashSet();
+        if (schemaName == null) {
+            loadSubSchemaNames();
+        }
+        loadTableNames();
+    }
+    
+    private void loadSubSchemaNames() {
+        try {
+            DatabaseMetaData md = pc.getMetaData();
+            ResultSet rs = md.getSchemas();
+            while (rs.next()) {
+                String schemaName = rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM);
+                this.subSchemaNames.add(schemaName == null ? "" : schemaName);
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+    }
+    
+    private void loadTableNames() {
+        try {
+            DatabaseMetaData md = pc.getMetaData();
+            ResultSet rs = md.getTables(null, schemaName == null ? "" : schemaName, null, null);
+            while (rs.next()) {
+                this.tableNames.add(rs.getString(PhoenixDatabaseMetaData.TABLE_NAME));
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     private static Schema create(SchemaPlus parentSchema, Map<String, Object> operand) {
@@ -83,7 +108,7 @@ public class PhoenixSchema implements Schema {
 
     @Override
     public Set<String> getTableNames() {
-        return tableCache.get(schemaName == null ? "" : schemaName);
+        return tableNames;
     }
 
     @Override
@@ -98,7 +123,7 @@ public class PhoenixSchema implements Schema {
 
     @Override
     public Schema getSubSchema(String name) {
-        if (schemaName != null || !tableCache.containsKey(name))
+        if (!subSchemaNames.contains(name))
             return null;
         
         return new PhoenixSchema(name, pc);
@@ -106,10 +131,7 @@ public class PhoenixSchema implements Schema {
 
     @Override
     public Set<String> getSubSchemaNames() {
-        if (schemaName != null)
-            return Collections.emptySet();
-        
-        return tableCache.keySet();
+        return subSchemaNames;
     }
 
     @Override
