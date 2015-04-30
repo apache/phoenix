@@ -216,7 +216,35 @@ public class ParseNodeFactory {
     public AndParseNode and(List<ParseNode> children) {
         return new AndParseNode(children);
     }
-
+  //those are for json operation
+    public JsonPathAsElementParseNode jsonPathE(ParseNode lhs,ParseNode rhs) {
+    	return null;
+    }
+    public JsonPathAsTextParseNode jsonPathT(ParseNode lhs,ParseNode rhs) {
+    	return null;
+    }
+    public JsonPointAsElementParseNode jsonPointE(ParseNode lhs,ParseNode rhs) {
+    	return null;
+    }
+    public JsonPointAsTextParseNode jsonPointT(ParseNode lhs,ParseNode rhs) {
+        return null;
+    }
+    public JsonSupersetParseNode jsonSuperset(ParseNode lhs,ParseNode rhs) {
+        return new JsonSupersetParseNode(lhs,rhs);
+    }
+    public JsonSubsetParseNode jsonSubset(ParseNode lhs,ParseNode rhs) {
+        return new JsonSubsetParseNode(lhs,rhs);
+    }
+    public JsonSingleKeySearchParseNode sSearch(ParseNode lhs,ParseNode rhs) {
+        return new JsonSingleKeySearchParseNode(lhs,rhs);
+    }
+    public JsonMultiKeySearchOrParseNode mOrSearch(ParseNode lhs,ParseNode rhs) {
+        return new JsonMultiKeySearchOrParseNode(lhs,rhs);
+    }
+    public JsonMultiKeySeatchAndParseNode mAndSearch(ParseNode lhs,ParseNode rhs) {
+        return new JsonMultiKeySeatchAndParseNode(lhs,rhs);
+    }
+    //end of json operation
     public FamilyWildcardParseNode family(String familyName){
     	    return new FamilyWildcardParseNode(familyName, false);
     }

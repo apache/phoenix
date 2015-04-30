@@ -737,14 +737,7 @@ bind_expression  returns [BindParseNode ret]
     ;
     
 value_expression returns [ParseNode ret]
-    :   i=pre_value_expression { $ret = i; }
-    ;
-pre_value_expression returns [ParseNode ret]
-    :   i=add_expression { $ret = i; }  ( SUPERSET su=add_expression { $ret = factory.jsonSuperset(i,su); }
-					| SUBSET sub=add_expression { $ret = factory.jsonSubset(i,sub); }
-					| QUESTION ques=add_expression { $ret = factory.sSearch(i,ques); }
-					| M_SERRCH_OR mor=add_expression { $ret = factory.mOrSearch(i,mor); }
-					| M_SEARCH_AND mand=add_expression { $ret = factory.mAndSearch(i,mand); } )?
+    :   i=add_expression { $ret = i; }
     ;
 
 add_expression returns [ParseNode ret]
@@ -795,25 +788,29 @@ json_text_expression returns [ParseNode ret]
     					       (PATH_T j=term) {l.add(j); op=2;} )?
     { 
 	if(op==1){
-	        $ret = factory.jsonPointT(l.get(0),l.get(1));
+		System.out.println("use: ->>"); 
+	        $ret=factory.jsonPointT(l);
 	}
 	else if(op==2){
-		$ret = factory.jsonPathT(l.get(0),l.get(1)); 
+		System.out.println("use: #>>");
+		$ret=factory.jsonPathT(l); 
 	}
-	else $ret = l.get(0);
+	else $ret=l.get(0);
     }
     ;
 json_element_expression returns [ParseNode ret]
 @init{List<ParseNode> l = new ArrayList<ParseNode>(2); int op=0;}
-    :   i=json_element {l.add(i);} ((POINT_E j=term) {l.add(j); op=1;} |(PATH_E j=term) {l.add(j); op=2;} )?
+    :   i=json_element {l.add(i);} ((QUESTION_MARK j=term) {l.add(j); op=1;} |(PATH_E j=term) {l.add(j); op=2;} )?
     { 
 	if(op==1){
-                $ret = factory.jsonPointE(l.get(0),l.get(1));
+		System.out.println("use: ?"); 
+                $ret=factory.jsonPointSK(l.get(0),l.get(1));
 	}
 	else if(op==2){
-                $ret = factory.jsonPathE(l.get(0),l.get(1));
+		System.out.println("use: #>"); 
+                $ret=factory.jsonPathE(l);
 	}
-	else $ret = l.get(0);
+	else $ret=l.get(0);
     }
     ;
 json_element returns [ParseNode ret]
@@ -1152,17 +1149,8 @@ POINT_T
 PATH_T
     : '#''>''>'
     ;
-SUPERSET
-    : '@''>'
-    ;
-SUBSET
-    : '<''@'
-    ;
-M_SERRCH_OR
-    : '?''|'
-    ;
-M_SEARCH_AND
-    : '?''&'
+QUESTION_MARK
+    : '?'
     ;
 // A FieldCharacter is a letter, digit, underscore, or a certain unicode section.
 fragment

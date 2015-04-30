@@ -1,0 +1,74 @@
+package org.apache.phoenix.expression;
+
+import java.io.DataInput;
+import java.io.DataOutput;
+import java.io.IOException;
+import java.util.List;
+
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.phoenix.expression.visitor.ExpressionVisitor;
+import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PBoolean;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.util.JSONutil;
+
+public class JsonSingleKeySearchExpression extends BaseCompoundExpression {
+	
+	public JsonSingleKeySearchExpression(List<Expression> children) {
+        super(children);
+    }
+	public JsonSingleKeySearchExpression() {
+    }
+	@Override
+	public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr)  {
+		if (!getPatternExpression().evaluate(tuple, ptr)) {
+            return false;
+        }
+		String pattern = (String) PVarchar.INSTANCE.toObject(ptr);
+		if (!getStrExpression().evaluate(tuple, ptr)) {
+	        return false;
+	    }
+		String value = (String) PVarchar.INSTANCE.toObject(ptr);
+		try
+		{
+			Object o= new JSONutil().mapJSON(pattern, value);
+			ptr.set(o!=null? PDataType.TRUE_BYTES : PDataType.FALSE_BYTES);
+		}
+		catch(IOException e)
+		{
+			e.printStackTrace();
+		}
+        return true;
+	}
+    private Expression getStrExpression() {
+        return children.get(0);
+    }
+
+    private Expression getPatternExpression() {
+        return children.get(1);
+    }
+	@Override
+	public <T> T accept(ExpressionVisitor<T> visitor) 
+	{
+		 List<T> l = acceptChildren(visitor, visitor.visitEnter(this));
+	        T t = visitor.visitLeave(this, l);
+	        if (t == null) {
+	            t = visitor.defaultReturn(this, l);
+	        }
+	        return t;
+	}
+
+	@Override
+	public PDataType getDataType() {
+		 return PBoolean.INSTANCE;
+	}
+	@Override
+    public void readFields(DataInput input) throws IOException {
+        super.readFields(input);
+    }
+	@Override
+    public void write(DataOutput output) throws IOException {
+        super.write(output);
+    }
+}

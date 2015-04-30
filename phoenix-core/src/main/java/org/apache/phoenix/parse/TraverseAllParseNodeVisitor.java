@@ -67,6 +67,36 @@ public abstract class TraverseAllParseNodeVisitor<T> extends BaseParseNodeVisito
     }
     
     @Override
+    public boolean visitEnter(JsonSingleKeySearchParseNode node) throws SQLException {
+        enterParseNode(node);
+        return true;
+    }
+    @Override
+    public boolean visitEnter(JsonSupersetParseNode node) throws SQLException {
+        enterParseNode(node);
+        return true;
+    }
+    @Override
+    public boolean visitEnter(JsonSubsetParseNode node) throws SQLException {
+        enterParseNode(node);
+        return true;
+    }
+    @Override
+    public boolean visitEnter(JsonMultiKeySearchOrParseNode node) throws SQLException {
+        enterParseNode(node);
+        return true;
+    }
+    @Override
+    public boolean visitEnter(JsonMultiKeySeatchAndParseNode node) throws SQLException {
+        enterParseNode(node);
+        return true;
+    }
+    @Override
+    public boolean visitEnter(JsonPathAsTextParseNode node) throws SQLException {
+        enterParseNode(node);
+        return true;
+    }
+    @Override
     public boolean visitEnter(NotParseNode node) throws SQLException {
         enterParseNode(node);
         return true;

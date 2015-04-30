@@ -83,9 +83,11 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PJson;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.JSONutil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -728,6 +730,13 @@ public class UpsertCompiler {
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.VALUE_IN_UPSERT_NOT_CONSTANT).build().buildException();
             }
             PColumn column = allColumns.get(columnIndexes[nodeIndex]);
+            if(column.getDataType()==PJson.INSTANCE && valueNode instanceof LiteralParseNode)
+            {
+            	boolean vaild=new JSONutil().isJSON((LiteralParseNode)valueNode);
+            	if(!vaild){
+            		throw new SQLExceptionInfo.Builder(SQLExceptionCode.JSON_PARSER_ERROR).build().buildException();
+            	}
+            }
             expressionBuilder.setColumn(column);
             Expression expression = valueNode.accept(expressionBuilder);
             if (expression.getDataType() != null && !expression.getDataType().isCastableTo(column.getDataType())) {

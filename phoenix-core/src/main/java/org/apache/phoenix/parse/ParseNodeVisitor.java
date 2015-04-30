@@ -22,6 +22,8 @@ import java.util.List;
 
 
 
+
+
 /**
  * 
  * Visitor for ParseNode in the node tree. Uses composite
@@ -124,5 +126,22 @@ public interface ParseNodeVisitor<E> {
     public boolean visitEnter(ArrayElemRefNode node) throws SQLException;
     public E visitLeave(ArrayElemRefNode node, List<E> l) throws SQLException;
     
+    public boolean visitEnter(JsonSingleKeySearchParseNode node) throws SQLException;
+    public E visitLeave(JsonSingleKeySearchParseNode node, List<E> l) throws SQLException;
+    
+    public boolean visitEnter(JsonSubsetParseNode node) throws SQLException;
+    public E visitLeave(JsonSubsetParseNode node, List<E> l) throws SQLException;
+    
+    public boolean visitEnter(JsonSupersetParseNode node) throws SQLException;
+    public E visitLeave(JsonSupersetParseNode node, List<E> l) throws SQLException;
+    
+    public boolean visitEnter(JsonMultiKeySearchOrParseNode node) throws SQLException;
+    public E visitLeave(JsonMultiKeySearchOrParseNode node, List<E> l) throws SQLException;
+    
+    public boolean visitEnter(JsonMultiKeySeatchAndParseNode node) throws SQLException;
+    public E visitLeave(JsonMultiKeySeatchAndParseNode node, List<E> l) throws SQLException;
+    
+    public boolean visitEnter(JsonPathAsTextParseNode node) throws SQLException;
+    public E visitLeave(JsonPathAsTextParseNode node, List<E> l) throws SQLException;
     
 }

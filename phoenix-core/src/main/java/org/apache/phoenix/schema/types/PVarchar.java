@@ -24,6 +24,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.JSONutil;
 import org.apache.phoenix.util.StringUtil;
 
 import com.google.common.base.Preconditions;
@@ -83,7 +84,7 @@ public class PVarchar extends PDataType<String> {
 
   @Override
   public boolean isCoercibleTo(PDataType targetType) {
-    return equalsAny(targetType, this, PChar.INSTANCE, PVarbinary.INSTANCE, PBinary.INSTANCE);
+    return equalsAny(targetType, this, PChar.INSTANCE, PVarbinary.INSTANCE, PBinary.INSTANCE,PJson.INSTANCE);
   }
 
   @Override
@@ -91,6 +92,9 @@ public class PVarchar extends PDataType<String> {
     if (isCoercibleTo(targetType)) {
       if (targetType.equals(PChar.INSTANCE)) {
         return value != null;
+      }
+      if(targetType.equals(PJson.INSTANCE)){
+    	  return new JSONutil().isJSON(value);
       }
       return true;
     }

@@ -49,6 +49,12 @@ import org.apache.phoenix.expression.DoubleSubtractExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.InListExpression;
 import org.apache.phoenix.expression.IsNullExpression;
+import org.apache.phoenix.expression.JsonMultiKeySearchOrExpression;
+import org.apache.phoenix.expression.JsonMultiKeySeatchAndExpression;
+import org.apache.phoenix.expression.JsonPathAsTextExpression;
+import org.apache.phoenix.expression.JsonSingleKeySearchExpression;
+import org.apache.phoenix.expression.JsonSubsetExpression;
+import org.apache.phoenix.expression.JsonSupersetExpression;
 import org.apache.phoenix.expression.LikeExpression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.LongAddExpression;
@@ -86,6 +92,12 @@ import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunctionInfo;
 import org.apache.phoenix.parse.InListParseNode;
 import org.apache.phoenix.parse.IsNullParseNode;
+import org.apache.phoenix.parse.JsonMultiKeySearchOrParseNode;
+import org.apache.phoenix.parse.JsonMultiKeySeatchAndParseNode;
+import org.apache.phoenix.parse.JsonPathAsTextParseNode;
+import org.apache.phoenix.parse.JsonSingleKeySearchParseNode;
+import org.apache.phoenix.parse.JsonSubsetParseNode;
+import org.apache.phoenix.parse.JsonSupersetParseNode;
 import org.apache.phoenix.parse.LikeParseNode;
 import org.apache.phoenix.parse.LikeParseNode.LikeType;
 import org.apache.phoenix.parse.LiteralParseNode;
@@ -176,7 +188,60 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     public boolean visitEnter(ComparisonParseNode node) {
         return true;
     }
-
+    @Override
+    public boolean visitEnter(JsonSingleKeySearchParseNode node) {
+        return true;
+    }
+    @Override
+    public boolean visitEnter(JsonSubsetParseNode node) {
+        return true;
+    }
+    @Override
+    public boolean visitEnter(JsonSupersetParseNode node) {
+        return true;
+    }
+    @Override
+    public boolean visitEnter(JsonMultiKeySearchOrParseNode node) {
+        return true;
+    }
+    @Override
+    public boolean visitEnter(JsonMultiKeySeatchAndParseNode node) {
+        return true;
+    }
+    @Override
+    public boolean visitEnter(JsonPathAsTextParseNode node) {
+        return true;
+    }
+    @Override
+    public Expression visitLeave(JsonSingleKeySearchParseNode node, List<Expression> children) throws SQLException {
+        Expression expression = new JsonSingleKeySearchExpression(children);
+        return wrapGroupByExpression(expression);
+    }
+    @Override
+    public Expression visitLeave(JsonSubsetParseNode node, List<Expression> children) throws SQLException {
+        Expression expression = new JsonSubsetExpression(children);
+        return wrapGroupByExpression(expression);
+    }
+    @Override
+    public Expression visitLeave(JsonSupersetParseNode node, List<Expression> children) throws SQLException {
+        Expression expression = new JsonSupersetExpression(children);
+        return wrapGroupByExpression(expression);
+    }
+    @Override
+    public Expression visitLeave(JsonMultiKeySearchOrParseNode node, List<Expression> children) throws SQLException {
+        Expression expression = new JsonMultiKeySearchOrExpression(children);
+        return wrapGroupByExpression(expression);
+    }
+    @Override
+    public Expression visitLeave(JsonMultiKeySeatchAndParseNode node, List<Expression> children) throws SQLException {
+        Expression expression = new JsonMultiKeySeatchAndExpression(children);
+        return wrapGroupByExpression(expression);
+    }
+    @Override
+    public Expression visitLeave(JsonPathAsTextParseNode node, List<Expression> children) throws SQLException {
+        Expression expression = new JsonPathAsTextExpression(children);
+        return wrapGroupByExpression(expression);
+    }
     private void addBindParamMetaData(ParseNode lhsNode, ParseNode rhsNode, Expression lhsExpr, Expression rhsExpr) throws SQLException {
         if (lhsNode instanceof BindParseNode) {
             context.getBindManager().addParamMetaData((BindParseNode)lhsNode, rhsExpr);

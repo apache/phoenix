@@ -49,6 +49,9 @@
         <include>org.codehaus.jackson:jackson-core-asl</include>
         <include>commons-collections:commons-collections</include>
         <include>joda-time:joda-time</include>
+        <include>com.fasterxml.jackson.core:jackson-databind</include>
+	<include>com.fasterxml.jackson.core:jackson-core</include>
+	<include>com.fasterxml.jackson.core:jackson-annotations</include>
       </includes>
     </dependencySet>
   </dependencySets>

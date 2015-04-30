@@ -58,7 +58,30 @@ public abstract class TraverseNoParseNodeVisitor<T> extends BaseParseNodeVisitor
     public boolean visitEnter(LikeParseNode node) throws SQLException {
         return false;
     }
-    
+    @Override
+    public boolean visitEnter(JsonSingleKeySearchParseNode node) throws SQLException {
+        return false;
+    }
+    @Override
+    public boolean visitEnter(JsonSubsetParseNode node) throws SQLException {
+        return false;
+    }
+    @Override
+    public boolean visitEnter(JsonSupersetParseNode node) throws SQLException {
+        return false;
+    }
+    @Override
+    public boolean visitEnter(JsonMultiKeySearchOrParseNode node) throws SQLException {
+        return false;
+    }
+    @Override
+    public boolean visitEnter(JsonMultiKeySeatchAndParseNode node) throws SQLException {
+        return false;
+    }
+    @Override
+    public boolean visitEnter(JsonPathAsTextParseNode node) throws SQLException {
+        return false;
+    }
     @Override
     public boolean visitEnter(BetweenParseNode node) throws SQLException {
         return false;
@@ -69,6 +92,30 @@ public abstract class TraverseNoParseNodeVisitor<T> extends BaseParseNodeVisitor
         return null;
     }
     
+    @Override
+    public T visitLeave(JsonSingleKeySearchParseNode node, List<T> l) throws SQLException {
+        return null;
+    }
+    @Override
+    public T visitLeave(JsonSubsetParseNode node, List<T> l) throws SQLException {
+        return null;
+    }
+    @Override
+    public T visitLeave(JsonSupersetParseNode node, List<T> l) throws SQLException {
+        return null;
+    }
+    @Override
+    public T visitLeave(JsonMultiKeySearchOrParseNode node, List<T> l) throws SQLException {
+        return null;
+    }
+    @Override
+    public T visitLeave(JsonMultiKeySeatchAndParseNode node, List<T> l) throws SQLException {
+        return null;
+    }
+    @Override
+    public T visitLeave(JsonPathAsTextParseNode node, List<T> l) throws SQLException {
+        return null;
+    }
     @Override
     public boolean visitEnter(NotParseNode node) throws SQLException {
         return false;

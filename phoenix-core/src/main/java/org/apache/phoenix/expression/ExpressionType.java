@@ -191,6 +191,12 @@ public enum ExpressionType {
     RandomFunction(RandomFunction.class),
     ToTimeFunction(ToTimeFunction.class),
     ToTimestampFunction(ToTimestampFunction.class),
+    JsonSingleKeySearchExpression(JsonSingleKeySearchExpression.class),
+    JsonSubsetExpression(JsonSubsetExpression.class),
+    JsonSupersetExpression(JsonSupersetExpression.class),
+    JsonMultiKeySearchOrExpression(JsonMultiKeySearchOrExpression.class),
+    JsonMultiKeySeatchAndExpression(JsonMultiKeySeatchAndExpression.class),
+    JsonPathAsTextExpression(JsonPathAsTextExpression.class),
     ;
     
     ExpressionType(Class<? extends Expression> clazz) {

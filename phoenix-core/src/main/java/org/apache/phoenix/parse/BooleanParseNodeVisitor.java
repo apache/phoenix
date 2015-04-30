@@ -38,6 +38,54 @@ public abstract class BooleanParseNodeVisitor<T> extends BaseParseNodeVisitor<T>
     }
 
     @Override
+    public boolean visitEnter(JsonSingleKeySearchParseNode node) throws SQLException {
+        return enterBooleanNode(node);
+    }
+    @Override
+    public boolean visitEnter(JsonSubsetParseNode node) throws SQLException {
+        return enterBooleanNode(node);
+    }
+    @Override
+    public boolean visitEnter(JsonSupersetParseNode node) throws SQLException {
+        return enterBooleanNode(node);
+    }
+    @Override
+    public boolean visitEnter(JsonMultiKeySearchOrParseNode node) throws SQLException {
+        return enterBooleanNode(node);
+    }
+    @Override
+    public boolean visitEnter(JsonMultiKeySeatchAndParseNode node) throws SQLException {
+        return enterBooleanNode(node);
+    }
+    @Override
+    public boolean visitEnter(JsonPathAsTextParseNode node) throws SQLException {
+        return enterBooleanNode(node);
+    }
+    @Override
+    public T visitLeave(JsonSingleKeySearchParseNode node, List<T> l) throws SQLException {
+        return leaveBooleanNode(node, l);
+    }
+    @Override
+    public T visitLeave(JsonSupersetParseNode node, List<T> l) throws SQLException {
+        return leaveBooleanNode(node, l);
+    }
+    @Override
+    public T visitLeave(JsonSubsetParseNode node, List<T> l) throws SQLException {
+        return leaveBooleanNode(node, l);
+    }
+    @Override
+    public T visitLeave(JsonMultiKeySeatchAndParseNode node, List<T> l) throws SQLException {
+        return leaveBooleanNode(node, l);
+    }
+    @Override
+    public T visitLeave(JsonMultiKeySearchOrParseNode node, List<T> l) throws SQLException {
+        return leaveBooleanNode(node, l);
+    }
+    @Override
+    public T visitLeave(JsonPathAsTextParseNode node, List<T> l) throws SQLException {
+        return leaveBooleanNode(node, l);
+    }
+    @Override
     public boolean visitEnter(OrParseNode node) throws SQLException {
         return enterBooleanNode(node);
     }

@@ -32,6 +32,30 @@ public class StatelessTraverseAllParseNodeVisitor extends TraverseAllParseNodeVi
     }
 
     @Override
+    public Void visitLeave(JsonSingleKeySearchParseNode node, List<Void> l) throws SQLException {
+        return null;
+    }
+    @Override
+    public Void visitLeave(JsonSupersetParseNode node, List<Void> l) throws SQLException {
+        return null;
+    }
+    @Override
+    public Void visitLeave(JsonSubsetParseNode node, List<Void> l) throws SQLException {
+        return null;
+    }
+    @Override
+    public Void visitLeave(JsonMultiKeySearchOrParseNode node, List<Void> l) throws SQLException {
+        return null;
+    }
+    @Override
+    public Void visitLeave(JsonMultiKeySeatchAndParseNode node, List<Void> l) throws SQLException {
+        return null;
+    }
+    @Override
+    public Void visitLeave(JsonPathAsTextParseNode node, List<Void> l) throws SQLException {
+        return null;
+    }
+    @Override
     public Void visitLeave(AndParseNode node, List<Void> l) throws SQLException {
         return null;
     }

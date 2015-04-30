@@ -275,7 +275,7 @@ public enum SQLExceptionCode {
     UNWANTED_TOKEN(603, "42P00", "Syntax error.", Factory.SYTAX_ERROR),
     MISMATCHED_TOKEN(604, "42P00", "Syntax error.", Factory.SYTAX_ERROR),
     UNKNOWN_FUNCTION(605, "42P00", "Syntax error.", Factory.SYTAX_ERROR),
-    
+    JSON_PARSER_ERROR(606, "42P00", "JSON format error.", Factory.SYTAX_ERROR),
     /**
      * Implementation defined class. Execution exceptions (errorcode 11, sqlstate XCL). 
      */

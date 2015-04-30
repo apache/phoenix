@@ -31,6 +31,12 @@ import org.apache.phoenix.expression.DivideExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.InListExpression;
 import org.apache.phoenix.expression.IsNullExpression;
+import org.apache.phoenix.expression.JsonMultiKeySearchOrExpression;
+import org.apache.phoenix.expression.JsonMultiKeySeatchAndExpression;
+import org.apache.phoenix.expression.JsonPathAsTextExpression;
+import org.apache.phoenix.expression.JsonSingleKeySearchExpression;
+import org.apache.phoenix.expression.JsonSubsetExpression;
+import org.apache.phoenix.expression.JsonSupersetExpression;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.LikeExpression;
 import org.apache.phoenix.expression.LiteralExpression;
@@ -191,5 +197,29 @@ public class CloneExpressionVisitor extends TraverseAllExpressionVisitor<Express
     public Expression visitLeave(ArrayElemRefExpression node, List<Expression> l) {
         return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node :  new ArrayElemRefExpression(l);
     }
-
+    @Override
+    public Expression visitLeave(JsonSingleKeySearchExpression node, List<Expression> l) {
+        return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node :  new JsonSingleKeySearchExpression (l);
+    }
+    @Override
+    public Expression visitLeave(JsonSupersetExpression node, List<Expression> l) {
+        return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node :  new JsonSupersetExpression(l);
+    }
+    @Override
+    public Expression visitLeave(JsonSubsetExpression node, List<Expression> l) {
+        return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node :  new JsonSubsetExpression(l);
+    }
+    @Override
+    public Expression visitLeave(JsonMultiKeySearchOrExpression node, List<Expression> l) {
+        return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node :  new JsonMultiKeySearchOrExpression(l);
+    }
+    @Override
+    public Expression visitLeave(JsonMultiKeySeatchAndExpression node, List<Expression> l) {
+        return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node :  new JsonMultiKeySeatchAndExpression(l);
+    }
+    @Override
+    public Expression visitLeave(JsonPathAsTextExpression node, List<Expression> l) {
+        return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node :  new JsonPathAsTextExpression(l);
+    }
+   
 }

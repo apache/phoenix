@@ -30,6 +30,12 @@ import org.apache.phoenix.expression.DivideExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.InListExpression;
 import org.apache.phoenix.expression.IsNullExpression;
+import org.apache.phoenix.expression.JsonMultiKeySearchOrExpression;
+import org.apache.phoenix.expression.JsonMultiKeySeatchAndExpression;
+import org.apache.phoenix.expression.JsonPathAsTextExpression;
+import org.apache.phoenix.expression.JsonSingleKeySearchExpression;
+import org.apache.phoenix.expression.JsonSubsetExpression;
+import org.apache.phoenix.expression.JsonSupersetExpression;
 import org.apache.phoenix.expression.LikeExpression;
 import org.apache.phoenix.expression.ModulusExpression;
 import org.apache.phoenix.expression.MultiplyExpression;
@@ -75,7 +81,7 @@ public abstract class BaseExpressionVisitor<E> implements ExpressionVisitor<E> {
     public Iterator<Expression> visitEnter(LikeExpression node) {
         return null;
     }
-
+    
     @Override
     public Iterator<Expression> visitEnter(SingleAggregateFunction node) {
         return null;
@@ -156,4 +162,28 @@ public abstract class BaseExpressionVisitor<E> implements ExpressionVisitor<E> {
         return null;
     }
 
+    @Override
+    public Iterator<Expression> visitEnter(JsonSingleKeySearchExpression node) {
+        return null;
+    }
+    @Override
+    public Iterator<Expression> visitEnter(JsonSupersetExpression node) {
+        return null;
+    }
+    @Override
+    public Iterator<Expression> visitEnter(JsonSubsetExpression node) {
+        return null;
+    }
+    @Override
+    public Iterator<Expression> visitEnter(JsonMultiKeySearchOrExpression node) {
+        return null;
+    }
+    @Override
+    public Iterator<Expression> visitEnter(JsonMultiKeySeatchAndExpression node) {
+        return null;
+    }
+    @Override
+    public Iterator<Expression> visitEnter(JsonPathAsTextExpression node) {
+        return null;
+    }
 }
