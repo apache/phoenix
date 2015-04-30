@@ -125,6 +125,8 @@ import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PUnsignedTimestamp;
 import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.schema.types.PVarbinaryArray;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.schema.types.PhoenixArray;
 import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.IndexUtil;
@@ -456,11 +458,26 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         ParseNode rhsNode = node.getChildren().get(1);
         Expression lhs = children.get(0);
         Expression rhs = children.get(1);
-        if ( rhs.getDataType() != null && lhs.getDataType() != null && 
-                !lhs.getDataType().isCoercibleTo(rhs.getDataType())  && 
-                !rhs.getDataType().isCoercibleTo(lhs.getDataType())) {
-            throw TypeMismatchException.newException(lhs.getDataType(), rhs.getDataType(), node.toString());
-        }
+        
+		if (PVarchar.INSTANCE != lhs.getDataType()
+				&& PChar.INSTANCE != lhs.getDataType()) {
+			throw new SQLExceptionInfo.Builder(
+					SQLExceptionCode.TYPE_NOT_SUPPORTED_FOR_OPERATOR)
+					.setMessage(
+							"LIKE does not support " + lhs.getDataType()
+									+ " in expression" + lhsNode).build()
+					.buildException();
+		}
+		if (PVarchar.INSTANCE != rhs.getDataType()
+				&& PChar.INSTANCE != rhs.getDataType()) {
+			throw new SQLExceptionInfo.Builder(
+					SQLExceptionCode.TYPE_NOT_SUPPORTED_FOR_OPERATOR)
+					.setMessage(
+							"LIKE does not support " + rhs.getDataType()
+									+ " in expression" + rhsNode).build()
+					.buildException();
+		}
+		
         if (lhsNode instanceof BindParseNode) {
             context.getBindManager().addParamMetaData((BindParseNode)lhsNode, rhs);
         }
