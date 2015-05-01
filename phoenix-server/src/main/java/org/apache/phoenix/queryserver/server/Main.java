@@ -121,8 +121,8 @@ public final class Main extends Configured implements Tool, Runnable {
         if (LOG.isDebugEnabled()) {
           LOG.debug("Login to " + hostname + " using " + getConf().get(KEYTAB_FILENAME_KEY)
               + " and principal " + getConf().get(KERBEROS_PRINCIPAL_KEY) + ".");
-          SecurityUtil.login(getConf(), KEYTAB_FILENAME_KEY, KERBEROS_PRINCIPAL_KEY, hostname);
         }
+        SecurityUtil.login(getConf(), KEYTAB_FILENAME_KEY, KERBEROS_PRINCIPAL_KEY, hostname);
         LOG.info("Login successful.");
       }
       Class<? extends PhoenixMetaFactory> factoryClass = getConf().getClass(
