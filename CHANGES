@@ -1,3 +1,124 @@
+i
+Release Notes - Phoenix - Version 4.4.0
+
+** New Feature
+    * [PHOENIX-971] - Query server
+    * [PHOENIX-1071] - Provide integration for exposing Phoenix tables as Spark RDDs
+    * [PHOENIX-1452] - Add Phoenix client-side logging and capture resource utilization metrics
+    * [PHOENIX-1609] - MR job to populate index tables
+    * [PHOENIX-1807] - Support UNION queries in subquery
+    * [PHOENIX-1815] - Use Spark Data Source API in phoenix-spark module
+
+** Improvement
+    * [PHOENIX-39] - Add sustained load tester that measures throughput
+    * [PHOENIX-1580] - Support UNION ALL
+    * [PHOENIX-1653] - Allow option to pass peer zookeeper address to load data into a target cluster in Map Reduce api
+    * [PHOENIX-1722] - Speedup CONVERT_TZ function
+    * [PHOENIX-1746] - Pass through guidepost config params on UPDATE STATISTICS call
+    * [PHOENIX-1756] - Add Month() and Second() built-in functions
+    * [PHOENIX-1759] - PhoenixArray to have decent .toString() implementation.
+    * [PHOENIX-1770] - psql.py returns 0 even if an error has occurred
+    * [PHOENIX-1779] - Parallelize fetching of next batch of records for scans corresponding to queries with no order by
+    * [PHOENIX-1781] - Add Now()
+    * [PHOENIX-1792] - Add Week() and Hour() built-ins
+    * [PHOENIX-1799] - Provide parameter metadata for prepared create table statements
+    * [PHOENIX-1934] - queryserver support for Windows service descriptor
+
+** Task
+    * [PHOENIX-538] - Support UDFs
+    * [PHOENIX-1826] - Implement TrackOrderPreservingExpressionCompiler as Expression visitor instead of ParseNode visitor
+
+** Sub-task
+    * [PHOENIX-1060] - Replace ReferencingColumn with ColumnReference
+    * [PHOENIX-1115] - Provide a SQL command to turn tracing on/off
+    * [PHOENIX-1489] - Access column values positionally from client
+    * [PHOENIX-1691] - Allow settting sampling rate while enabling tracing.
+    * [PHOENIX-1705] - implement ARRAY_APPEND built in function
+    * [PHOENIX-1712] - Implementing INSTR function
+    * [PHOENIX-1715] - Implement Build-in math function Sign
+    * [PHOENIX-1725] - Extract changes applicable to 4.0 branch
+    * [PHOENIX-1728] - Pherf - Make tests use mini cluster
+    * [PHOENIX-1776] - The literal -1.0 (floating point) should not be converted to -1 (Integer)
+    * [PHOENIX-1794] - Support Long.MIN_VALUE for phoenix BIGINT type.
+    * [PHOENIX-1816] - Add markdown page on Phoenix website describing how to use Spark integration
+    * [PHOENIX-1818] - Move cluster-required tests to src/it
+    * [PHOENIX-1863] - Create unit test for inverting the pad character
+    * [PHOENIX-1869] - Set default to not use joni regex library
+    * [PHOENIX-1870] - Fix NPE occurring during regex processing when joni library not used
+    * [PHOENIX-1882] - Issue column family deletes instead of row deletes in PTableImpl
+
+** Bug
+    * [PHOENIX-900] - Partial results for mutations
+    * [PHOENIX-1078] - Unable to run pig script with Phoenix in a secure HBase cluster
+    * [PHOENIX-1287] - Use the joni byte[] regex engine in place of j.u.regex
+    * [PHOENIX-1457] - Use high priority queue for metadata endpoint calls
+    * [PHOENIX-1577] - java.lang.IllegalArgumentException: nanos > 999999999 or < 0 while use Calendar
+    * [PHOENIX-1642] - Make Phoenix Master Branch pointing to HBase1.0.0
+    * [PHOENIX-1676] - Set priority of Index Updates correctly 
+    * [PHOENIX-1677] - Immutable index deadlocks when number of guideposts are one half of thread pool size
+    * [PHOENIX-1682] - PhoenixRuntime.getTable() does not work with case-sensitive table names
+    * [PHOENIX-1690] - IndexOutOfBoundsException during SkipScanFilter interesect
+    * [PHOENIX-1696] - Selecting column more than once fails
+    * [PHOENIX-1703] - Fail connection when server minor version is less than client minor version
+    * [PHOENIX-1704] - Add year() built-in function
+    * [PHOENIX-1709] - And expression of primary key RVCs can not compile
+    * [PHOENIX-1723] - PTinyint.isCoercibleTo fails to test -1 with type PTinyint
+    * [PHOENIX-1731] - Add getNextIndexedKey() to IndexHalfStoreFileReader and FilteredKeyValueScanner
+    * [PHOENIX-1733] - sqlline.py doesn't allow connecting with a tenant-specific connection
+    * [PHOENIX-1736] - Use non deprecated APIs where possible
+    * [PHOENIX-1741] - PUnsignedTimestamp should define its codec 
+    * [PHOENIX-1742] - Update pom to junit 4.12
+    * [PHOENIX-1744] - CAST from UNSIGNED_LONG (_INT) to * TIMESTAMP is not supported.
+    * [PHOENIX-1747] - Add maven eclipse generated files to .gitignore
+    * [PHOENIX-1749] - ORDER BY should support ordinal position as well as expression
+    * [PHOENIX-1753] - Query with RVC that doesn't lead with the row key can return incorrect results
+    * [PHOENIX-1755] - CSV loader needs a clearer error message for lines with insufficient fields
+    * [PHOENIX-1757] - Switch to HBase-1.0.1 when it is released
+    * [PHOENIX-1764] - Pherf ClassCastException
+    * [PHOENIX-1765] - Add DAYOFMONTH built-in function
+    * [PHOENIX-1773] - Backward compatibility for joins fail after PHOENIX-1489
+    * [PHOENIX-1783] - Fix IDE compiler errors for JodaTimezoneCacheTest
+    * [PHOENIX-1790] - Fix test failures due to incorrect shadowing of @AfterClass methods.
+    * [PHOENIX-1795] - Set handlerCount, numQueues and maxQueueLength of index and metadata queues correctly 
+    * [PHOENIX-1797] - Add more tests for date literals
+    * [PHOENIX-1798] - UnsupportedOperationException throws from BaseResultIterators.getIterators
+    * [PHOENIX-1800] - Fix failing test case SaltedViewIT#testSaltedUpdatableViewWithLocalIndex
+    * [PHOENIX-1803] - Fix flapping PhoenixServerRpcIT.testMetadataQos
+    * [PHOENIX-1809] - Improve explain plan
+    * [PHOENIX-1814] - Handle e notation for defining float/double
+    * [PHOENIX-1822] - PhoenixMetricsIT.testPhoenixMetricsForQueries() is flapping
+    * [PHOENIX-1846] - Add MINUTE built-in function
+    * [PHOENIX-1855] - Remove calls to RegionServerService.getCatalogTracker() in local indexing
+    * [PHOENIX-1856] - Include min row key for each region in stats row
+    * [PHOENIX-1861] - Padding character should be inverted if sort order is descending
+    * [PHOENIX-1865] - Fix missing ASL headers
+    * [PHOENIX-1872] - Support PrimitiveBooleanPhoenixArray when creating PhoenixArray from Boolean[]
+    * [PHOENIX-1873] - Fix compilation errors in Pherf
+    * [PHOENIX-1876] - Check for null function arguments before evaluating when constant
+    * [PHOENIX-1877] - Spark end2end tests are breaking the build
+    * [PHOENIX-1880] - Connections from QueryUtil.getConnection don't work on secure clusters
+    * [PHOENIX-1885] - Fix packaging for query server
+    * [PHOENIX-1894] - Iterators in BaseResultIterators#submitWork should be added to a thread safe collection.
+    * [PHOENIX-1895] - Remove unused private member variable for QueryServerThread
+    * [PHOENIX-1896] - Make queryserver.py more robust
+    * [PHOENIX-1899] - Performance regression for non-aggregate, unordered queries returning 0 or few records
+    * [PHOENIX-1903] - bin scripts locate wrong client jar
+    * [PHOENIX-1904] - bin scripts use incorrect variable for locating hbase conf
+    * [PHOENIX-1908] - TenantSpecificTablesDDLIT#testAddDropColumn is flaky
+    * [PHOENIX-1909] - queryserver.py accept PHOENIX_QUERYSERVER_OPTS
+    * [PHOENIX-1911] - Tests could fail if region and wal did not close on windows
+    * [PHOENIX-1912] - DropIndexDuringUpsertIT is hanging causing build to fail
+    * [PHOENIX-1916] - Spark tests are failing
+    * [PHOENIX-1917] - Correlated subquery fails if the inner query contains JOIN
+    * [PHOENIX-1919] - Clean up more ASL headers
+    * [PHOENIX-1930] - [BW COMPAT] Queries hangs with client on Phoenix 4.3.0 and server on 4.x-HBase-0.98
+    * [PHOENIX-1931] - IDE compilation errors after UDF check-in
+
+** Test
+    * [PHOENIX-1738] - Create end-to-end test for SIGN function
+    * [PHOENIX-1739] - Ensure RuntimeException nests SQLException so that proper exception gets thrown
+    * [PHOENIX-1915] - QueryServerBasicsIT should bind QS instance to random port
+
 Release Notes - Phoenix - Version 4.3
 
 ** New Feature
