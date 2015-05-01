@@ -137,21 +137,17 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
             assertEquals(2, rowsDeleted);
             
             // Delete and second upsert not committed yet, so there should be one row.
-            // FIXME: aggregate queries don't appear to honor the transaction information
-            // rs = conn2.createStatement().executeQuery("SELECT count(*) FROM " + FULL_TABLE_NAME);
-            rs = conn2.createStatement().executeQuery("SELECT * FROM " + FULL_TABLE_NAME);
+            rs = conn2.createStatement().executeQuery("SELECT count(*) FROM " + FULL_TABLE_NAME);
             assertTrue(rs.next());
-            // FIXME: (see above)
-            // assertEquals(1, rs.getInt(1));
-            assertFalse(rs.next());
+            assertEquals(1, rs.getInt(1));
             
             conn1.commit();
             
             // verify rows are deleted after commit
             // FIXME: this is failing, I think because Tephra isn't handling deletes like we need it to
             // TODO: confirm this works once we get the patch from Gary.
-            // rs = conn1.createStatement().executeQuery(selectSQL);
-            // assertFalse(rs.next());
+            rs = conn1.createStatement().executeQuery(selectSQL);
+            assertFalse(rs.next());
         }
         finally {
             conn1.close();
