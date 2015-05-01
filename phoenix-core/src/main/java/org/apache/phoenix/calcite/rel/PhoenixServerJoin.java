@@ -1,7 +1,6 @@
 package org.apache.phoenix.calcite.rel;
 
 import java.sql.SQLException;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 
@@ -22,7 +21,6 @@ import org.apache.phoenix.compile.JoinCompiler;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.execute.HashJoinPlan;
 import org.apache.phoenix.expression.Expression;
-import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.parse.SelectStatement;
@@ -96,32 +94,18 @@ public class PhoenixServerJoin extends PhoenixAbstractJoin {
     public QueryPlan implement(Implementor implementor) {
         assert getLeft().getConvention() == PhoenixRel.CONVENTION;
         assert getRight().getConvention() == PhoenixRel.CONVENTION;
-        PhoenixRel left = (PhoenixRel) getLeft();
-        PhoenixRel right = (PhoenixRel) getRight();
         
         List<Expression> leftExprs = Lists.<Expression> newArrayList();
         List<Expression> rightExprs = Lists.<Expression> newArrayList();
+
         implementor.pushContext(new ImplementorContext(implementor.getCurrentContext().isRetainPKColumns(), true));
-        QueryPlan leftPlan = implementor.visitInput(0, left);
+        QueryPlan leftPlan = implementInput(implementor, 0, leftExprs);
         PTable leftTable = implementor.getTableRef().getTable();
-        for (Iterator<Integer> iter = joinInfo.leftKeys.iterator(); iter.hasNext();) {
-            Integer index = iter.next();
-            leftExprs.add(implementor.newColumnExpression(index));
-        }
-        if (leftExprs.isEmpty()) {
-            leftExprs.add(LiteralExpression.newConstant(0));
-        }
         implementor.popContext();
+
         implementor.pushContext(new ImplementorContext(false, true));
-        QueryPlan rightPlan = implementor.visitInput(1, right);
+        QueryPlan rightPlan = implementInput(implementor, 1, rightExprs);
         PTable rightTable = implementor.getTableRef().getTable();
-        for (Iterator<Integer> iter = joinInfo.rightKeys.iterator(); iter.hasNext();) {
-            Integer index = iter.next();
-            rightExprs.add(implementor.newColumnExpression(index));
-        }
-        if (rightExprs.isEmpty()) {
-            rightExprs.add(LiteralExpression.newConstant(0));
-        }
         implementor.popContext();
         
         JoinType type = convertJoinType(getJoinType());

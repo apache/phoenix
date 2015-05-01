@@ -1,5 +1,7 @@
 package org.apache.phoenix.calcite.rel;
 
+import java.util.Iterator;
+import java.util.List;
 import java.util.Set;
 
 import org.apache.calcite.plan.RelOptCluster;
@@ -10,6 +12,10 @@ import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.rel.core.JoinInfo;
 import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.util.ImmutableIntList;
+import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.parse.JoinTableNode.JoinType;
 
 /**
@@ -34,6 +40,23 @@ abstract public class PhoenixAbstractJoin extends Join implements PhoenixRel {
     public RelWriter explainTerms(RelWriter pw) {
         return super.explainTerms(pw)
             .itemIf("isSingleValueRhs", isSingleValueRhs, isSingleValueRhs);
+    }
+    
+    protected QueryPlan implementInput(Implementor implementor, int index, List<Expression> conditionExprs) {
+        assert index <= 1;
+        
+        PhoenixRel input = index == 0 ? (PhoenixRel) left : (PhoenixRel) right;
+        ImmutableIntList keys = index == 0 ? joinInfo.leftKeys : joinInfo.rightKeys;
+        QueryPlan plan = implementor.visitInput(0, input);
+        for (Iterator<Integer> iter = keys.iterator(); iter.hasNext();) {
+            Integer i = iter.next();
+            conditionExprs.add(implementor.newColumnExpression(i));
+        }
+        if (conditionExprs.isEmpty()) {
+            conditionExprs.add(LiteralExpression.newConstant(0));
+        }
+
+        return plan;
     }
     
     protected static JoinType convertJoinType(JoinRelType type) {

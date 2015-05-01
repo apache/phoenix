@@ -15,15 +15,18 @@ import org.apache.calcite.sql.SqlKind;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.calcite.rel.PhoenixRel.Implementor;
+import org.apache.phoenix.expression.AndExpression;
 import org.apache.phoenix.expression.ComparisonExpression;
+import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.ExpressionType;
 import org.apache.phoenix.expression.LiteralExpression;
+import org.apache.phoenix.expression.OrExpression;
 import org.apache.phoenix.expression.function.AggregateFunction;
 import org.apache.phoenix.expression.function.CountAggregateFunction;
 import org.apache.phoenix.expression.function.FunctionExpression;
 import org.apache.phoenix.expression.function.MaxAggregateFunction;
-import org.apache.phoenix.expression.function.SumAggregateFunction;
+import org.apache.phoenix.expression.function.MinAggregateFunction;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -51,6 +54,26 @@ public class CalciteUtils {
 		return eFactory;
 	}
 	static {
+        EXPRESSION_MAP.put(SqlKind.AND, new ExpressionFactory() {
+
+            @Override
+            public Expression newExpression(RexNode node, Implementor implementor) {
+                try {
+                    return AndExpression.create(convertChildren((RexCall) node, implementor));
+                } catch (SQLException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+            
+        });
+        EXPRESSION_MAP.put(SqlKind.OR, new ExpressionFactory() {
+
+            @Override
+            public Expression newExpression(RexNode node, Implementor implementor) {
+                return new OrExpression(convertChildren((RexCall) node, implementor));
+            }
+            
+        });
 		EXPRESSION_MAP.put(SqlKind.EQUALS, new ExpressionFactory() {
 
 			@Override
@@ -182,18 +205,26 @@ public class CalciteUtils {
                 return new CountAggregateFunction(args);
             }
         });
-        FUNCTION_MAP.put("$SUM0", new FunctionFactory() {
-            @Override
-            public FunctionExpression newFunction(SqlFunction sqlFunc,
-                    List<Expression> args) {
-                return new SumAggregateFunction(args);
-            }
-        });
+        // TODO Buggy. Disable for now.
+        //FUNCTION_MAP.put("$SUM0", new FunctionFactory() {
+        //    @Override
+        //    public FunctionExpression newFunction(SqlFunction sqlFunc,
+        //            List<Expression> args) {
+        //        return new SumAggregateFunction(args);
+        //    }
+        //});
         FUNCTION_MAP.put("MAX", new FunctionFactory() {
             @Override
             public FunctionExpression newFunction(SqlFunction sqlFunc,
                     List<Expression> args) {
                 return new MaxAggregateFunction(args, null);
+            }
+        });
+        FUNCTION_MAP.put("MIN", new FunctionFactory() {
+            @Override
+            public FunctionExpression newFunction(SqlFunction sqlFunc,
+                    List<Expression> args) {
+                return new MinAggregateFunction(args, null);
             }
         });
     }
@@ -205,6 +236,33 @@ public class CalciteUtils {
             children.add(child);
         }
         return children;
+    }
+
+    public static boolean isExpressionSupported(RexNode node) {
+        try {
+            getFactory(node);
+        } catch (UnsupportedOperationException e) {
+            return false;
+        }
+        if (node instanceof RexCall) {
+            for (RexNode op : ((RexCall) node).getOperands()) {
+                if (!isExpressionSupported(op)) {
+                    return false;
+                }
+            }
+        }
+        
+        return true;
+    }
+    
+    public static boolean isAggregateFunctionSupported(SqlAggFunction aggFunc) {
+        try {
+            getFactory(aggFunc);
+        } catch (UnsupportedOperationException e) {
+            return false;
+        }
+
+        return true;
     }
 
 	public static Expression toExpression(RexNode node, Implementor implementor) {
@@ -226,7 +284,7 @@ public class CalciteUtils {
 	public static Object evaluateStatelessExpression(RexNode node) {
 	    try {
 	        Expression expression = toExpression(node, null);
-	        if (expression.isStateless()) {
+	        if (expression.isStateless() && expression.getDeterminism() == Determinism.ALWAYS) {
 	            ImmutableBytesWritable ptr = new ImmutableBytesWritable();
 	            expression.evaluate(null, ptr);
 	            return expression.getDataType().toObject(ptr);

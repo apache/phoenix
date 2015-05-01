@@ -1,5 +1,6 @@
 package org.apache.phoenix.calcite.rel;
 
+import java.sql.SQLException;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
@@ -19,8 +20,24 @@ import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.util.ImmutableIntList;
+import org.apache.hadoop.hbase.client.Scan;
+import org.apache.phoenix.calcite.CalciteUtils;
 import org.apache.phoenix.calcite.metadata.PhoenixRelMdCollation;
+import org.apache.phoenix.compile.ColumnResolver;
+import org.apache.phoenix.compile.FromCompiler;
+import org.apache.phoenix.compile.JoinCompiler;
 import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.compile.RowProjector;
+import org.apache.phoenix.compile.SequenceManager;
+import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
+import org.apache.phoenix.execute.ClientScanPlan;
+import org.apache.phoenix.execute.SortMergeJoinPlan;
+import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.parse.JoinTableNode.JoinType;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.TableRef;
 
 import com.google.common.base.Supplier;
 import com.google.common.collect.Lists;
@@ -102,7 +119,55 @@ public class PhoenixClientJoin extends PhoenixAbstractJoin {
 
     @Override
     public QueryPlan implement(Implementor implementor) {
-        throw new UnsupportedOperationException();
+        assert getLeft().getConvention() == PhoenixRel.CONVENTION;
+        assert getRight().getConvention() == PhoenixRel.CONVENTION;
+        
+        List<Expression> leftExprs = Lists.<Expression> newArrayList();
+        List<Expression> rightExprs = Lists.<Expression> newArrayList();
+
+        implementor.pushContext(new ImplementorContext(implementor.getCurrentContext().isRetainPKColumns() && getJoinType() != JoinRelType.FULL, true));
+        QueryPlan leftPlan = implementInput(implementor, 0, leftExprs);
+        PTable leftTable = implementor.getTableRef().getTable();
+        implementor.popContext();
+
+        implementor.pushContext(new ImplementorContext(false, true));
+        QueryPlan rightPlan = implementInput(implementor, 1, rightExprs);
+        PTable rightTable = implementor.getTableRef().getTable();
+        implementor.popContext();
+        
+        JoinType type = convertJoinType(getJoinType());
+        PTable joinedTable;
+        try {
+            joinedTable = JoinCompiler.joinProjectedTables(leftTable, rightTable, type);
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+        TableRef tableRef = new TableRef(joinedTable);
+        implementor.setTableRef(tableRef);
+        ColumnResolver resolver;
+        try {
+            resolver = FromCompiler.getResolver(tableRef);
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+        PhoenixStatement stmt = leftPlan.getContext().getStatement();
+        StatementContext context = new StatementContext(stmt, resolver, new Scan(), new SequenceManager(stmt));
+
+        QueryPlan plan = new SortMergeJoinPlan(context, leftPlan.getStatement(), 
+                tableRef, type, leftPlan, rightPlan, leftExprs, rightExprs, 
+                joinedTable, leftTable, rightTable, 
+                leftTable.getColumns().size() - leftTable.getPKColumns().size(), 
+                isSingleValueRhs);
+        
+        RexNode postFilter = joinInfo.getRemaining(getCluster().getRexBuilder());
+        Expression postFilterExpr = postFilter.isAlwaysTrue() ? null : CalciteUtils.toExpression(postFilter, implementor);
+        if (postFilter != null) {
+            plan = new ClientScanPlan(context, plan.getStatement(), tableRef, 
+                    RowProjector.EMPTY_PROJECTOR, null, postFilterExpr, 
+                    OrderBy.EMPTY_ORDER_BY, plan);
+        }
+        
+        return plan;
     }
 
 }

@@ -306,15 +306,26 @@ public class CalciteTest extends BaseClientManagedTimeIT {
     }
     
     @Test public void testClientJoin() throws Exception {        
-        start().sql("SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item FULL OUTER JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\"")
+        start().sql("SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item FULL OUTER JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" order by \"item_id\", supp.name")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixClientProject(item_id=[$0], NAME=[$1], supplier_id=[$3], NAME0=[$4])\n" +
-                           "    PhoenixClientJoin(condition=[=($2, $3)], joinType=[full])\n" +
-                           "      PhoenixServerSort(sort0=[$2], dir0=[ASC])\n" +
-                           "        PhoenixServerProject(item_id=[$0], NAME=[$1], supplier_id=[$5])\n" +
-                           "          PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
-                           "      PhoenixServerProject(supplier_id=[$0], NAME=[$1])\n" +
-                           "        PhoenixTableScan(table=[[phoenix, Join, SupplierTable]])\n")
+                           "  PhoenixClientSort(sort0=[$0], sort1=[$3], dir0=[ASC], dir1=[ASC])\n" +
+                           "    PhoenixClientProject(item_id=[$0], NAME=[$1], supplier_id=[$3], NAME0=[$4])\n" +
+                           "      PhoenixClientJoin(condition=[=($2, $3)], joinType=[full])\n" +
+                           "        PhoenixServerSort(sort0=[$2], dir0=[ASC])\n" +
+                           "          PhoenixServerProject(item_id=[$0], NAME=[$1], supplier_id=[$5])\n" +
+                           "            PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
+                           "        PhoenixServerProject(supplier_id=[$0], NAME=[$1])\n" +
+                           "          PhoenixTableScan(table=[[phoenix, Join, SupplierTable]])\n")
+                .resultIs(new Object[][] {
+                        {null, null, "0000000003", "S3"},
+                        {null, null, "0000000004", "S4"},
+                        {"0000000001", "T1", "0000000001", "S1"},
+                        {"0000000002", "T2", "0000000001", "S1"},
+                        {"0000000003", "T3", "0000000002", "S2"},
+                        {"0000000004", "T4", "0000000002", "S2"},
+                        {"0000000005", "T5", "0000000005", "S5"},
+                        {"0000000006", "T6", "0000000006", "S6"},
+                        {"invalid001", "INVALID-1", null, null}})
                 .close();        
     }
     
