@@ -160,6 +160,7 @@ import co.cask.tephra.persist.InMemoryTransactionStateStorage;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.google.inject.util.Providers;
 
 /**
  * 
@@ -518,7 +519,7 @@ public abstract class BaseTest {
 
         DiscoveryService discovery = new ZKDiscoveryService(zkClient);
         TransactionManager txManager = new TransactionManager(config, new InMemoryTransactionStateStorage(), new TxMetricsCollector());
-        txService = new TransactionService(config, zkClient, discovery, txManager);
+        txService = new TransactionService(config, zkClient, discovery, Providers.of(txManager));
         txService.startAndWait();
     }
 
