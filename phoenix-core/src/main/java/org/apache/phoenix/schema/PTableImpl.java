@@ -654,7 +654,7 @@ public class PTableImpl implements PTable {
                 addQuietly(setValues, kvBuilder, kvBuilder.buildPut(keyPtr,
                     SchemaUtil.getEmptyColumnFamilyPtr(PTableImpl.this),
                     QueryConstants.EMPTY_COLUMN_BYTES_PTR, ts,
-                    // set the vakue to the empty column name
+                    // set the value to the empty column name
                     QueryConstants.EMPTY_COLUMN_BYTES_PTR));
                 mutations.add(setValues);
                 if (!unsetValues.isEmpty()) {

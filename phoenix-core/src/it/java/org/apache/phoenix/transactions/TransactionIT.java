@@ -254,6 +254,7 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
 		}
         finally {
         	conn1.close();
+        	conn2.close();
         }
 	}
 	
