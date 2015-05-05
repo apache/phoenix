@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.expression;
 
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertEquals;
 
 import java.math.BigDecimal;
 import java.sql.SQLException;
@@ -43,7 +43,7 @@ public class ArrayPrependFunctionTest {
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         arrayPrependFunction.evaluate(null, ptr);
         PhoenixArray result = (PhoenixArray) arrayPrependFunction.getDataType().toObject(ptr, expressions.get(1).getSortOrder(), array.getMaxLength(), array.getScale());
-        assertTrue(result.equals(expected));
+        assertEquals(result, expected);
     }
 
     private static void test(PhoenixArray array, Object element, PDataType arrayDataType, Integer arrMaxLen, Integer arrScale, PDataType elementDataType, Integer elemMaxLen, Integer elemScale, PhoenixArray expected, SortOrder arraySortOrder, SortOrder elementSortOrder) throws SQLException {
@@ -333,6 +333,42 @@ public class ArrayPrependFunctionTest {
 
     @Test
     public void testArrayPrependFunction22() throws Exception {
+        byte[][] o = new byte[][]{new byte[]{2, 0, 3}, new byte[]{42, 3}, new byte[]{5, 3}, new byte[]{6, 3}, new byte[]{2, 5}};
+        byte[][] o2 = new byte[][]{new byte[]{5, 6}, new byte[]{2, 0, 3}, new byte[]{42, 3}, new byte[]{5, 3}, new byte[]{6, 3}, new byte[]{2, 5}};
+        byte[] element = new byte[]{5, 6};
+        PDataType baseType = PVarbinary.INSTANCE;
+
+        PhoenixArray arr = new PhoenixArray(baseType, o);
+        PhoenixArray expected = new PhoenixArray(baseType, o2);
+        test(arr, element, PDataType.fromTypeId(baseType.getSqlType() + PDataType.ARRAY_TYPE_BASE), null, null, baseType, 1, null, expected, SortOrder.ASC, SortOrder.DESC);
+    }
+
+    @Test
+    public void testArrayPrependFunction23() throws Exception {
+        byte[][] o = new byte[][]{new byte[]{2, 3}, new byte[]{42, 3}, new byte[]{5, 3}, new byte[]{6, 3}, new byte[]{2, 5}};
+        byte[][] o2 = new byte[][]{new byte[]{5, 6}, new byte[]{2, 3}, new byte[]{42, 3}, new byte[]{5, 3}, new byte[]{6, 3}, new byte[]{2, 5}};
+        byte[] element = new byte[]{5, 6};
+        PDataType baseType = PBinary.INSTANCE;
+
+        PhoenixArray arr = new PhoenixArray(baseType, o);
+        PhoenixArray expected = new PhoenixArray(baseType, o2);
+        test(arr, element, PDataType.fromTypeId(baseType.getSqlType() + PDataType.ARRAY_TYPE_BASE), 2, null, baseType, 1, null, expected, SortOrder.ASC, SortOrder.DESC);
+    }
+
+    @Test
+    public void testArrayPrependFunction24() throws Exception {
+        byte[][] o = new byte[][]{new byte[]{2, 0}, new byte[]{13, 3}, new byte[]{5, 3}, new byte[]{6, 3}, new byte[]{2, 5}};
+        byte[][] o2 = new byte[][]{new byte[]{5, 6}, new byte[]{2, 0}, new byte[]{13, 3}, new byte[]{5, 3}, new byte[]{6, 3}, new byte[]{2, 5}};
+        byte[] element = new byte[]{5, 6};
+        PDataType baseType = PBinary.INSTANCE;
+
+        PhoenixArray arr = new PhoenixArray(baseType, o);
+        PhoenixArray expected = new PhoenixArray(baseType, o2);
+        test(arr, element, PDataType.fromTypeId(baseType.getSqlType() + PDataType.ARRAY_TYPE_BASE), 3, null, baseType, 1, null, expected, SortOrder.ASC, SortOrder.DESC);
+    }
+
+    @Test
+    public void testForNullsWithNoNullsAtBeginning() throws Exception {
         Object[] o = new Object[]{"1   ", "2   ", "3   ", "4   "};
         Object[] o2 = new Object[]{"1", "2", "3", "4"};
         Object element = null;
@@ -344,7 +380,17 @@ public class ArrayPrependFunctionTest {
     }
 
     @Test
-    public void testArrayPrependFunction23() throws Exception {
+    public void testForNullsAllNulls() throws Exception {
+        Object element = null;
+        PDataType baseType = PChar.INSTANCE;
+
+        PhoenixArray arr = null;
+        PhoenixArray expected = null;
+        test(arr, element, PDataType.fromTypeId(baseType.getSqlType() + PDataType.ARRAY_TYPE_BASE), 4, null, baseType, 1, null, expected, SortOrder.ASC, SortOrder.DESC);
+    }
+
+    @Test
+    public void testForNullsWith268NullsAtBeginning() throws Exception {
         //268 nulls at the beginning
         Object[] o = new Object[270];
         for (int i = 0; i < o.length - 2; i++)
@@ -369,7 +415,7 @@ public class ArrayPrependFunctionTest {
     }
 
     @Test
-    public void testArrayPrependFunction24() throws Exception {
+    public void testForNullsWith241NullsAtBeginning() throws Exception {
         //241 nulls at the beginning
         Object[] o = new Object[243];
         for (int i = 0; i < o.length - 2; i++)
@@ -394,7 +440,7 @@ public class ArrayPrependFunctionTest {
     }
 
     @Test
-    public void testArrayPrependFunction25() throws Exception {
+    public void testForNullsWith254NullsAtBeginning() throws Exception {
         //254 nulls at the beginning
         Object[] o = new Object[256];
         for (int i = 0; i < o.length - 2; i++)
@@ -419,7 +465,57 @@ public class ArrayPrependFunctionTest {
     }
 
     @Test
-    public void testArrayPrependFunction26() throws Exception {
+    public void testForNullsWith510NullsAtBeginning() throws Exception {
+        //510 nulls at the beginning
+        Object[] o = new Object[512];
+        for (int i = 0; i < o.length - 2; i++)
+            o[i] = null;
+
+        o[o.length - 2] = "1";
+        o[o.length - 1] = "2";
+
+        Object[] o2 = new Object[513];
+        for (int i = 0; i < o2.length - 2; i++)
+            o2[i] = null;
+
+        o2[o2.length - 2] = "1";
+        o2[o2.length - 1] = "2";
+
+        Object element = null;
+        PDataType baseType = PVarchar.INSTANCE;
+
+        PhoenixArray arr = new PhoenixArray(baseType, o);
+        PhoenixArray expected = new PhoenixArray(baseType, o2);
+        test(arr, element, PDataType.fromTypeId(baseType.getSqlType() + PDataType.ARRAY_TYPE_BASE), null, null, baseType, 1, null, expected, SortOrder.ASC, SortOrder.DESC);
+    }
+
+    @Test
+    public void testForNullsWith610NullsAtBeginning() throws Exception {
+        //610 nulls at the beginning
+        Object[] o = new Object[612];
+        for (int i = 0; i < o.length - 2; i++)
+            o[i] = null;
+
+        o[o.length - 2] = "1";
+        o[o.length - 1] = "2";
+
+        Object[] o2 = new Object[613];
+        for (int i = 0; i < o2.length - 2; i++)
+            o2[i] = null;
+
+        o2[o2.length - 2] = "1";
+        o2[o2.length - 1] = "2";
+
+        Object element = null;
+        PDataType baseType = PVarchar.INSTANCE;
+
+        PhoenixArray arr = new PhoenixArray(baseType, o);
+        PhoenixArray expected = new PhoenixArray(baseType, o2);
+        test(arr, element, PDataType.fromTypeId(baseType.getSqlType() + PDataType.ARRAY_TYPE_BASE), null, null, baseType, 1, null, expected, SortOrder.ASC, SortOrder.DESC);
+    }
+
+    @Test
+    public void testForNullsWith1NullAtBeginning() throws Exception {
         Object[] o = new Object[]{"1   ", "2   ", "3   ", "4   "};
         Object[] o2 = new Object[]{null, "1   ", "2   ", "3   ", "4   "};
         Object element = null;
@@ -431,7 +527,7 @@ public class ArrayPrependFunctionTest {
     }
 
     @Test
-    public void testArrayPrependFunction27() throws Exception {
+    public void testForNullsWith2NullsAtBeginning() throws Exception {
         Object[] o = new Object[]{null, "1   ", "2   ", "3   ", "4   "};
         Object[] o2 = new Object[]{null, null, "1   ", "2   ", "3   ", "4   "};
         Object element = null;
@@ -443,7 +539,7 @@ public class ArrayPrependFunctionTest {
     }
 
     @Test
-    public void testArrayPrependFunction28() throws Exception {
+    public void testForNullsWithNullsInMiddle() throws Exception {
         Object[] o = new Object[]{"1   ", "2   ", null, "3   ", "4   "};
         Object[] o2 = new Object[]{null, "1   ", "2   ", null, "3   ", "4   "};
         Object element = null;
@@ -452,41 +548,5 @@ public class ArrayPrependFunctionTest {
         PhoenixArray arr = new PhoenixArray(baseType, o);
         PhoenixArray expected = new PhoenixArray(baseType, o2);
         test(arr, element, PDataType.fromTypeId(baseType.getSqlType() + PDataType.ARRAY_TYPE_BASE), null, null, baseType, 1, null, expected, SortOrder.ASC, SortOrder.DESC);
-    }
-
-    @Test
-    public void testArrayPrependFunction29() throws Exception {
-        byte[][] o = new byte[][]{new byte[]{2, 0, 3}, new byte[]{42, 3}, new byte[]{5, 3}, new byte[]{6, 3}, new byte[]{2, 5}};
-        byte[][] o2 = new byte[][]{new byte[]{5, 6}, new byte[]{2, 0, 3}, new byte[]{42, 3}, new byte[]{5, 3}, new byte[]{6, 3}, new byte[]{2, 5}};
-        byte[] element = new byte[]{5, 6};
-        PDataType baseType = PVarbinary.INSTANCE;
-
-        PhoenixArray arr = new PhoenixArray(baseType, o);
-        PhoenixArray expected = new PhoenixArray(baseType, o2);
-        test(arr, element, PDataType.fromTypeId(baseType.getSqlType() + PDataType.ARRAY_TYPE_BASE), null, null, baseType, 1, null, expected, SortOrder.ASC, SortOrder.DESC);
-    }
-
-    @Test
-    public void testArrayPrependFunction30() throws Exception {
-        byte[][] o = new byte[][]{new byte[]{2, 3}, new byte[]{42, 3}, new byte[]{5, 3}, new byte[]{6, 3}, new byte[]{2, 5}};
-        byte[][] o2 = new byte[][]{new byte[]{5, 6}, new byte[]{2, 3}, new byte[]{42, 3}, new byte[]{5, 3}, new byte[]{6, 3}, new byte[]{2, 5}};
-        byte[] element = new byte[]{5, 6};
-        PDataType baseType = PBinary.INSTANCE;
-
-        PhoenixArray arr = new PhoenixArray(baseType, o);
-        PhoenixArray expected = new PhoenixArray(baseType, o2);
-        test(arr, element, PDataType.fromTypeId(baseType.getSqlType() + PDataType.ARRAY_TYPE_BASE), 2, null, baseType, 1, null, expected, SortOrder.ASC, SortOrder.DESC);
-    }
-
-    @Test
-    public void testArrayPrependFunction31() throws Exception {
-        byte[][] o = new byte[][]{new byte[]{2, 0}, new byte[]{13, 3}, new byte[]{5, 3}, new byte[]{6, 3}, new byte[]{2, 5}};
-        byte[][] o2 = new byte[][]{new byte[]{5, 6}, new byte[]{2, 0}, new byte[]{13, 3}, new byte[]{5, 3}, new byte[]{6, 3}, new byte[]{2, 5}};
-        byte[] element = new byte[]{5, 6};
-        PDataType baseType = PBinary.INSTANCE;
-
-        PhoenixArray arr = new PhoenixArray(baseType, o);
-        PhoenixArray expected = new PhoenixArray(baseType, o2);
-        test(arr, element, PDataType.fromTypeId(baseType.getSqlType() + PDataType.ARRAY_TYPE_BASE), 3, null, baseType, 1, null, expected, SortOrder.ASC, SortOrder.DESC);
     }
 }

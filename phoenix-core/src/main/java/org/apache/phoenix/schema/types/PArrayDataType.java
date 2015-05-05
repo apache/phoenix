@@ -567,7 +567,7 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
             boolean convertToInt = false;
             int endElementPosition = getOffset(arrayBytes, arrayLength - 1, !useInt, offsetArrayPosition + offset) + elementLength + Bytes.SIZEOF_BYTE;
             int newOffsetArrayPosition;
-            int offsetShift;
+            int lengthIncrease;
             int firstNonNullElementPosition = 0;
             int currentPosition = 0;
             //handle the case where prepended element is null
@@ -587,23 +587,22 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
 
                 int nMultiplesOver255 = nulls / 255;
                 int nRemainingNulls = nulls % 255;
-                int bytesForRemainingNulls = nRemainingNulls == 0 ? 0:1;
-                endElementPosition = getOffset(arrayBytes, arrayLength - 1, !useInt, offsetArrayPosition + offset) + nMultiplesOver255 + bytesForRemainingNulls + Bytes.SIZEOF_BYTE - firstNonNullElementPosition;
+                lengthIncrease = nRemainingNulls == 1 ? (nMultiplesOver255 == 0 ? 2*Bytes.SIZEOF_BYTE : Bytes.SIZEOF_BYTE):0;
+                endElementPosition = getOffset(arrayBytes, arrayLength - 1, !useInt, offsetArrayPosition + offset) + lengthIncrease;
                 if (!useInt) {
                     if (PArrayDataType.useShortForOffsetArray(endElementPosition)) {
-                        newArray = new byte[length + Bytes.SIZEOF_SHORT + nMultiplesOver255 + bytesForRemainingNulls + Bytes.SIZEOF_BYTE - firstNonNullElementPosition];
+                        newArray = new byte[length + Bytes.SIZEOF_SHORT + lengthIncrease];
                     } else {
-                        newArray = new byte[length + arrayLength * Bytes.SIZEOF_SHORT + Bytes.SIZEOF_INT + nMultiplesOver255 + bytesForRemainingNulls + Bytes.SIZEOF_BYTE - firstNonNullElementPosition];
+                        newArray = new byte[length + arrayLength * Bytes.SIZEOF_SHORT + Bytes.SIZEOF_INT + lengthIncrease];
                         convertToInt = true;
                     }
                 } else {
-                    newArray = new byte[length + Bytes.SIZEOF_INT + nMultiplesOver255 + bytesForRemainingNulls + Bytes.SIZEOF_BYTE - firstNonNullElementPosition];
+                    newArray = new byte[length + Bytes.SIZEOF_INT + lengthIncrease];
                 }
                 newArray[currentPosition] = QueryConstants.SEPARATOR_BYTE;
                 currentPosition++;
 
-                newOffsetArrayPosition = offsetArrayPosition + bytesForRemainingNulls + nMultiplesOver255 + Bytes.SIZEOF_BYTE - firstNonNullElementPosition;
-                offsetShift = nMultiplesOver255 + bytesForRemainingNulls + Bytes.SIZEOF_BYTE - firstNonNullElementPosition;
+                newOffsetArrayPosition = offsetArrayPosition + lengthIncrease;
                 while (nMultiplesOver255-- > 0) {
                     newArray[currentPosition] = (byte) 1;
                     currentPosition++;
@@ -627,7 +626,7 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
                 }
                 newOffsetArrayPosition = offsetArrayPosition + Bytes.SIZEOF_BYTE + elementLength;
 
-                offsetShift = elementLength + Bytes.SIZEOF_BYTE;
+                lengthIncrease = elementLength + Bytes.SIZEOF_BYTE;
                 System.arraycopy(elementBytes, elementOffset, newArray, 0, elementLength);
                 currentPosition += elementLength + Bytes.SIZEOF_BYTE;
             }
@@ -637,9 +636,9 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
             arrayLength = arrayLength + 1;
             //writes the new offset and changes the previous offsets
             if (useInt || convertToInt) {
-                writeNewOffsets(arrayBytes, newArray, false, !useInt, newOffsetArrayPosition, arrayLength, offsetArrayPosition, offset, offsetShift, length);
+                writeNewOffsets(arrayBytes, newArray, false, !useInt, newOffsetArrayPosition, arrayLength, offsetArrayPosition, offset, lengthIncrease, length);
             } else {
-                writeNewOffsets(arrayBytes, newArray, true, true, newOffsetArrayPosition, arrayLength, offsetArrayPosition, offset, offsetShift, length);
+                writeNewOffsets(arrayBytes, newArray, true, true, newOffsetArrayPosition, arrayLength, offsetArrayPosition, offset, lengthIncrease, length);
             }
         } else {
             newArray = new byte[length + elementLength];
@@ -662,10 +661,10 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
         }
 
         currentPosition += offsetArrayElementSize;
-        boolean isFirstNullGroup = true;
+        boolean nullsAtBeginning = true;
         for (int arrayIndex = 0; arrayIndex < arrayLength - 1; arrayIndex++) {
             int oldOffset = getOffset(arrayBytes, arrayIndex, useShortPrevious, offsetArrayPosition + offset);
-            if (arrayBytes[offset + oldOffset] == QueryConstants.SEPARATOR_BYTE && isFirstNullGroup) {
+            if (arrayBytes[offset + oldOffset] == QueryConstants.SEPARATOR_BYTE && nullsAtBeginning) {
                 if (useShortNew) {
                     Bytes.putShort(newArray, currentPosition, (short) (oldOffset - Short.MAX_VALUE));
                 } else {
@@ -677,7 +676,7 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
                 } else {
                     Bytes.putInt(newArray, currentPosition, oldOffset + offsetShift);
                 }
-                isFirstNullGroup = false;
+                nullsAtBeginning = false;
             }
             currentPosition += offsetArrayElementSize;
         }
