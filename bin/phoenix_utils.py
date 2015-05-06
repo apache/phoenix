@@ -41,7 +41,8 @@ def find(pattern, classPaths):
     return ""
 
 def findFileInPathWithoutRecursion(pattern, path):
-
+    if not os.path.exists(path):
+        return ""
     files = [f for f in os.listdir(path) if os.path.isfile(os.path.join(path,f))]
     # sort the file names so *-client always precedes *-thin-client
     files.sort()
@@ -52,63 +53,71 @@ def findFileInPathWithoutRecursion(pattern, path):
     return ""
 
 def setPath():
- PHOENIX_CLIENT_JAR_PATTERN = "phoenix-*-client.jar"
- PHOENIX_THIN_CLIENT_JAR_PATTERN = "phoenix-*-thin-client.jar"
- PHOENIX_QUERYSERVER_JAR_PATTERN = "phoenix-server-*-runnable.jar"
- PHOENIX_TESTS_JAR_PATTERN = "phoenix-core-*-tests*.jar"
- global current_dir
- current_dir = os.path.dirname(os.path.abspath(__file__))
- global phoenix_jar_path
- phoenix_jar_path = os.path.join(current_dir, "..", "phoenix-assembly", "target","*")
- global phoenix_client_jar
- phoenix_client_jar = find("phoenix-*-client.jar", phoenix_jar_path)
- global phoenix_test_jar_path
- phoenix_test_jar_path = os.path.join(current_dir, "..", "phoenix-core", "target","*")
- global hadoop_common_jar_path
- hadoop_common_jar_path = os.path.join(current_dir, "..", "phoenix-assembly", "target","*")
- global hadoop_common_jar
- hadoop_common_jar = find("hadoop-common*.jar", hadoop_common_jar_path)
- global hadoop_hdfs_jar_path
- hadoop_hdfs_jar_path = os.path.join(current_dir, "..", "phoenix-assembly", "target","*")
- global hadoop_hdfs_jar
- hadoop_hdfs_jar = find("hadoop-hdfs*.jar", hadoop_hdfs_jar_path)
+    PHOENIX_CLIENT_JAR_PATTERN = "phoenix-*-client.jar"
+    PHOENIX_THIN_CLIENT_JAR_PATTERN = "phoenix-*-thin-client.jar"
+    PHOENIX_QUERYSERVER_JAR_PATTERN = "phoenix-server-*-runnable.jar"
+    PHOENIX_TESTS_JAR_PATTERN = "phoenix-core-*-tests*.jar"
 
- global hbase_conf_dir
- hbase_conf_dir = os.getenv('HBASE_CONF_DIR', os.getenv('HBASE_CONF_PATH', '.'))
- global hbase_conf_path # keep conf_path around for backward compatibility
- hbase_conf_path = hbase_conf_dir
- global testjar
- testjar = find(PHOENIX_TESTS_JAR_PATTERN, phoenix_test_jar_path)
- global phoenix_queryserver_jar
- phoenix_queryserver_jar = find(PHOENIX_QUERYSERVER_JAR_PATTERN, os.path.join(current_dir, "..", "phoenix-server", "target", "*"))
- global phoenix_thin_client_jar
- phoenix_thin_client_jar = find(PHOENIX_THIN_CLIENT_JAR_PATTERN, os.path.join(current_dir, "..", "phoenix-server-client", "target", "*"))
+    # Backward support old env variable PHOENIX_LIB_DIR replaced by PHOENIX_CLASS_PATH
+    global phoenix_class_path
+    phoenix_class_path = os.getenv('PHOENIX_LIB_DIR','')
+    if phoenix_class_path == "":
+        phoenix_class_path = os.getenv('PHOENIX_CLASS_PATH','')
 
- if phoenix_client_jar == "":
-     phoenix_client_jar = findFileInPathWithoutRecursion(PHOENIX_CLIENT_JAR_PATTERN, os.path.join(current_dir, ".."))
+    global hbase_conf_dir
+    hbase_conf_dir = os.getenv('HBASE_CONF_DIR', os.getenv('HBASE_CONF_PATH', '.'))
+    global hbase_conf_path # keep conf_path around for backward compatibility
+    hbase_conf_path = hbase_conf_dir
 
- if phoenix_thin_client_jar == "":
-     phoenix_thin_client_jar = findFileInPathWithoutRecursion(PHOENIX_THIN_CLIENT_JAR_PATTERN, os.path.join(current_dir, ".."))
+    global current_dir
+    current_dir = os.path.dirname(os.path.abspath(__file__))
 
- if phoenix_queryserver_jar == "":
-     phoenix_queryserver_jar = findFileInPathWithoutRecursion(PHOENIX_QUERYSERVER_JAR_PATTERN, os.path.join(current_dir, "..", "lib"))
+    global phoenix_jar_path
+    phoenix_jar_path = os.path.join(current_dir, "..", "phoenix-assembly", "target","*")
 
- if testjar == "":
-     testjar = findFileInPathWithoutRecursion(PHOENIX_TESTS_JAR_PATTERN, os.path.join(current_dir, ".."))
+    global phoenix_client_jar
+    phoenix_client_jar = find("phoenix-*-client.jar", phoenix_jar_path)
+    if phoenix_client_jar == "":
+        phoenix_client_jar = findFileInPathWithoutRecursion(PHOENIX_CLIENT_JAR_PATTERN, os.path.join(current_dir, ".."))
+    if phoenix_client_jar == "":
+        phoenix_client_jar = find(PHOENIX_CLIENT_JAR_PATTERN, phoenix_class_path)
 
- # Backward support old env variable PHOENIX_LIB_DIR replaced by PHOENIX_CLASS_PATH
- global phoenix_class_path
- phoenix_class_path = os.getenv('PHOENIX_LIB_DIR','')
- if phoenix_class_path == "":
-     phoenix_class_path = os.getenv('PHOENIX_CLASS_PATH','')
+    global phoenix_test_jar_path
+    phoenix_test_jar_path = os.path.join(current_dir, "..", "phoenix-core", "target","*")
 
- if phoenix_client_jar == "":
-     phoenix_client_jar = find(PHOENIX_CLIENT_JAR_PATTERN, phoenix_class_path)
+    global hadoop_common_jar_path
+    hadoop_common_jar_path = os.path.join(current_dir, "..", "phoenix-assembly", "target","*")
 
- if testjar == "":
-     testjar = find(PHOENIX_TESTS_JAR_PATTERN, phoenix_class_path)
+    global hadoop_common_jar
+    hadoop_common_jar = find("hadoop-common*.jar", hadoop_common_jar_path)
 
- return ""
+    global hadoop_hdfs_jar_path
+    hadoop_hdfs_jar_path = os.path.join(current_dir, "..", "phoenix-assembly", "target","*")
+
+    global hadoop_hdfs_jar
+    hadoop_hdfs_jar = find("hadoop-hdfs*.jar", hadoop_hdfs_jar_path)
+
+    global testjar
+    testjar = find(PHOENIX_TESTS_JAR_PATTERN, phoenix_test_jar_path)
+    if testjar == "":
+        testjar = findFileInPathWithoutRecursion(PHOENIX_TESTS_JAR_PATTERN, os.path.join(current_dir, ".."))
+    if testjar == "":
+        testjar = find(PHOENIX_TESTS_JAR_PATTERN, phoenix_class_path)
+
+    global phoenix_queryserver_jar
+    phoenix_queryserver_jar = find(PHOENIX_QUERYSERVER_JAR_PATTERN, os.path.join(current_dir, "..", "phoenix-server", "target", "*"))
+    if phoenix_queryserver_jar == "":
+        phoenix_queryserver_jar = findFileInPathWithoutRecursion(PHOENIX_QUERYSERVER_JAR_PATTERN, os.path.join(current_dir, "..", "lib"))
+    if phoenix_queryserver_jar == "":
+        phoenix_queryserver_jar = findFileInPathWithoutRecursion(PHOENIX_QUERYSERVER_JAR_PATTERN, os.path.join(current_dir, ".."))
+
+
+    global phoenix_thin_client_jar
+    phoenix_thin_client_jar = find(PHOENIX_THIN_CLIENT_JAR_PATTERN, os.path.join(current_dir, "..", "phoenix-server-client", "target", "*"))
+    if phoenix_thin_client_jar == "":
+        phoenix_thin_client_jar = findFileInPathWithoutRecursion(PHOENIX_THIN_CLIENT_JAR_PATTERN, os.path.join(current_dir, ".."))
+
+    return ""
 
 def shell_quote(args):
     """
@@ -124,3 +133,20 @@ def shell_quote(args):
         # pipes module isn't available on Windows
         import pipes
         return " ".join([pipes.quote(v) for v in args])
+
+if __name__ == "__main__":
+    setPath()
+    print "phoenix_class_path:", phoenix_class_path
+    print "hbase_conf_dir:", hbase_conf_dir
+    print "hbase_conf_path:", hbase_conf_path
+    print "current_dir:", current_dir
+    print "phoenix_jar_path:", phoenix_jar_path
+    print "phoenix_client_jar:", phoenix_client_jar
+    print "phoenix_test_jar_path:", phoenix_test_jar_path
+    print "hadoop_common_jar_path:", hadoop_common_jar_path
+    print "hadoop_common_jar:", hadoop_common_jar
+    print "hadoop_hdfs_jar_path:", hadoop_hdfs_jar_path
+    print "hadoop_hdfs_jar:", hadoop_hdfs_jar
+    print "testjar:", testjar
+    print "phoenix_queryserver_jar:", phoenix_queryserver_jar
+    print "phoenix_thin_client_jar:", phoenix_thin_client_jar
