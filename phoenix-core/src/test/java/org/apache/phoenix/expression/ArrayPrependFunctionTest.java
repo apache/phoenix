@@ -490,16 +490,16 @@ public class ArrayPrependFunctionTest {
     }
 
     @Test
-    public void testForNullsWith610NullsAtBeginning() throws Exception {
-        //610 nulls at the beginning
-        Object[] o = new Object[612];
+    public void testForNullsWith509NullsAtBeginning() throws Exception {
+        //509 nulls at the beginning
+        Object[] o = new Object[511];
         for (int i = 0; i < o.length - 2; i++)
             o[i] = null;
 
         o[o.length - 2] = "1";
         o[o.length - 1] = "2";
 
-        Object[] o2 = new Object[613];
+        Object[] o2 = new Object[512];
         for (int i = 0; i < o2.length - 2; i++)
             o2[i] = null;
 
