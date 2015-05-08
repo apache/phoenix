@@ -587,7 +587,21 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
 
                 int nMultiplesOver255 = nulls / 255;
                 int nRemainingNulls = nulls % 255;
-                lengthIncrease = nRemainingNulls == 1 ? (nMultiplesOver255 == 0 ? 2*Bytes.SIZEOF_BYTE : Bytes.SIZEOF_BYTE):0;
+
+                //Calculates the increase in length due to prepending the null
+                //There is a length increase only when nRemainingNulls == 1
+                //nRemainingNulls == 1 and nMultiplesOver255 == 0 means there were no nulls at the beginning previously.
+                //At that case we need to increase the length by two bytes, one for separator byte and one for null count.
+                //ex: initial array - 65 0 66 0 0 0 after prepending null - 0 1(inverted) 65 0 66 0 0 0
+                //nRemainingNulls == 1 and nMultiplesOver255 != 0 means there were null at the beginning previously.
+                //In this case due to prepending nMultiplesOver255 is increased by 1.
+                //We need to increase the length by one byte to store increased that.
+                //ex: initial array - 0 1 65 0 66 0 0 0 after prepending null - 0 1 1(inverted) 65 0 66 0 0 0
+                //nRemainingNulls == 0 case.
+                //ex: initial array - 0 254(inverted) 65 0 66 0 0 0 after prepending null - 0 1 65 0 66 0 0 0
+                //nRemainingNulls > 1 case.
+                //ex: initial array - 0 45(inverted) 65 0 66 0 0 0 after prepending null - 0 46(inverted) 65 0 66 0 0 0
+                lengthIncrease = nRemainingNulls == 1 ? (nMultiplesOver255 == 0 ? 2 * Bytes.SIZEOF_BYTE : Bytes.SIZEOF_BYTE) : 0;
                 endElementPosition = getOffset(arrayBytes, arrayLength - 1, !useInt, offsetArrayPosition + offset) + lengthIncrease;
                 if (!useInt) {
                     if (PArrayDataType.useShortForOffsetArray(endElementPosition)) {
