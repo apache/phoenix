@@ -71,7 +71,6 @@ import org.apache.phoenix.expression.function.ArrayAnyComparisonExpression;
 import org.apache.phoenix.expression.function.ArrayElemRefExpression;
 import org.apache.phoenix.expression.function.RoundDecimalExpression;
 import org.apache.phoenix.expression.function.RoundTimestampExpression;
-import org.apache.phoenix.expression.function.UDFExpression;
 import org.apache.phoenix.parse.AddParseNode;
 import org.apache.phoenix.parse.AndParseNode;
 import org.apache.phoenix.parse.ArithmeticParseNode;
@@ -261,7 +260,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
             determinism = determinism.combine(child.getDeterminism());
         }
         if (children.size() == 0) {
-            return LiteralExpression.newConstant(true, determinism);
+            return LiteralExpression.newConstant(false, determinism);
         }
         if (children.size() == 1) {
             return children.get(0);
