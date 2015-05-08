@@ -253,7 +253,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
             determinism = determinism.combine(child.getDeterminism());
         }
         if (children.size() == 0) {
-            return LiteralExpression.newConstant(true, determinism);
+            return LiteralExpression.newConstant(false, determinism);
         }
         if (children.size() == 1) {
             return children.get(0);
