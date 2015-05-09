@@ -48,7 +48,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Properties;
 import java.util.concurrent.Executor;
 
@@ -102,7 +101,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableMap.Builder;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 
 
 /**
@@ -183,21 +181,9 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
             if (tenantId != null) {
                 services = services.getChildQueryServices(tenantId.getBytesPtr());
             }
-            // TODO: we could avoid creating another wrapper if the only property
-            // specified was for the tenant ID
-            Map<String, String> existingProps = services.getProps().asMap();
-            final Map<String, String> tmpAugmentedProps = Maps.newHashMapWithExpectedSize(existingProps.size() + info.size());
-            tmpAugmentedProps.putAll(existingProps);
-            boolean needsDelegate = false;
-            for (Entry<Object, Object> entry : this.info.entrySet()) {
-                String key = entry.getKey().toString();
-                String value = entry.getValue().toString();
-                String oldValue = tmpAugmentedProps.put(key, value);
-                needsDelegate |= !Objects.equal(oldValue, value);
-            }
-            this.services = !needsDelegate ? services : new DelegateConnectionQueryServices(services) {
-                final ReadOnlyProps augmentedProps = new ReadOnlyProps(tmpAugmentedProps);
-    
+            ReadOnlyProps currentProps = services.getProps();
+            final ReadOnlyProps augmentedProps = currentProps.addAll(filterKnownNonProperties(this.info));
+            this.services = augmentedProps == currentProps ? services : new DelegateConnectionQueryServices(services) {
                 @Override
                 public ReadOnlyProps getProps() {
                     return augmentedProps;
@@ -256,6 +242,23 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         this.customTracingAnnotations = getImmutableCustomTracingAnnotations();
     }
     
+    private static Properties filterKnownNonProperties(Properties info) {
+        Properties prunedProperties = info;
+        if (info.contains(PhoenixRuntime.CURRENT_SCN_ATTRIB)) {
+            if (prunedProperties == info) {
+                prunedProperties = PropertiesUtil.deepCopy(info);
+            }
+            prunedProperties.remove(PhoenixRuntime.CURRENT_SCN_ATTRIB);
+        }
+        if (info.contains(PhoenixRuntime.TENANT_ID_ATTRIB)) {
+            if (prunedProperties == info) {
+                prunedProperties = PropertiesUtil.deepCopy(info);
+            }
+            prunedProperties.remove(PhoenixRuntime.TENANT_ID_ATTRIB);
+        }
+        return prunedProperties;
+    }
+
     private ImmutableMap<String, String> getImmutableCustomTracingAnnotations() {
     	Builder<String, String> result = ImmutableMap.builder();
     	result.putAll(JDBCUtil.getAnnotations(url, info));
