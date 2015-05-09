@@ -31,6 +31,10 @@
   <artifactId>phoenix-flume</artifactId>
   <name>Phoenix - Flume</name>
 
+  <properties>
+    <top.dir>${project.basedir}/..</top.dir>
+  </properties>
+
   <dependencies>
    <dependency>
       <groupId>org.apache.phoenix</groupId>
