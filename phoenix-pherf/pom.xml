@@ -30,6 +30,7 @@
     <name>Phoenix - Pherf</name>
 
     <properties>
+      <top.dir>${project.basedir}/..</top.dir>
     </properties>
 
     <profiles>
