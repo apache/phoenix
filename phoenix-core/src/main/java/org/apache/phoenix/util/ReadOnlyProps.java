@@ -23,10 +23,13 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Properties;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import com.google.common.base.Objects;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Maps;
 
 /**
  * 
@@ -59,6 +62,17 @@ public class ReadOnlyProps implements Iterable<Entry<String, String>> {
 
     public ReadOnlyProps(Map<String, String> props) {
         this.props = ImmutableMap.copyOf(props);
+    }
+
+    private ReadOnlyProps(ReadOnlyProps defaultProps, Properties overrides) {
+        Map<String,String> combinedProps = Maps.newHashMapWithExpectedSize(defaultProps.props.size() + overrides.size());
+        combinedProps.putAll(defaultProps.props);
+        for (Entry<Object, Object> entry : overrides.entrySet()) {
+            String key = entry.getKey().toString();
+            String value = entry.getValue().toString();
+            combinedProps.put(key, value);
+        }
+        this.props = ImmutableMap.copyOf(combinedProps);
     }
 
     private static Pattern varPat = Pattern.compile("\\$\\{[^\\}\\$\u0020]+\\}");
@@ -268,5 +282,23 @@ public class ReadOnlyProps implements Iterable<Entry<String, String>> {
     
     public boolean isEmpty() {
         return props.isEmpty();
+    }
+
+    /**
+     * Constructs new map only if necessary for adding the override properties.
+     * @param overrides Map of properties to override current properties.
+     * @return new ReadOnlyProps if in applying the overrides there are
+     * modifications to the current underlying Map, otherwise returns this.
+     */
+    public ReadOnlyProps addAll(Properties overrides) {
+        for (Entry<Object, Object> entry : overrides.entrySet()) {
+            String key = entry.getKey().toString();
+            String value = entry.getValue().toString();
+            String oldValue = props.get(key);
+            if (!Objects.equal(oldValue, value)) {
+                return new ReadOnlyProps(this, overrides);
+            }
+        }
+        return this;
     }
 }
