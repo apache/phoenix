@@ -27,6 +27,9 @@ import java.util.Properties;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.google.common.base.Objects;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
@@ -40,6 +43,7 @@ import com.google.common.collect.Maps;
  * @since 1.2.2
  */
 public class ReadOnlyProps implements Iterable<Entry<String, String>> {
+    private static final Logger logger = LoggerFactory.getLogger(ReadOnlyProps.class);
     public static final ReadOnlyProps EMPTY_PROPS = new ReadOnlyProps();
     private final Map<String, String> props;
     
@@ -296,6 +300,7 @@ public class ReadOnlyProps implements Iterable<Entry<String, String>> {
             String value = entry.getValue().toString();
             String oldValue = props.get(key);
             if (!Objects.equal(oldValue, value)) {
+                if (logger.isDebugEnabled()) logger.debug("Creating new ReadOnlyProps due to " + key + " with " + oldValue + "!=" + value);
                 return new ReadOnlyProps(this, overrides);
             }
         }
