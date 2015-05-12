@@ -24,6 +24,10 @@
       <url>http://www.apache.org</url>
   </organization>
 
+  <properties>
+    <top.dir>${project.basedir}/..</top.dir>
+  </properties>
+
   <build>
     <resources>
       <resource>

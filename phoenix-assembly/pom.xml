@@ -33,6 +33,10 @@
   <description>Assemble Phoenix artifacts</description>
   <packaging>pom</packaging>
 
+  <properties>
+    <top.dir>${project.basedir}/..</top.dir>
+  </properties>
+
   <build>
     <plugins>
       <plugin>
