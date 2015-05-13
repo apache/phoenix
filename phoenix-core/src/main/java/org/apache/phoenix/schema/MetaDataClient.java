@@ -1352,11 +1352,12 @@ public class MetaDataClient {
                     transactional = connection.getQueryServices().getProps().getBoolean(
                                     QueryServices.DEFAULT_TRANSACTIONAL_ATTRIB,
                                     QueryServicesOptions.DEFAULT_TRANSACTIONAL);
-                    tableProps.put(PhoenixDatabaseMetaData.TRANSACTIONAL, Boolean.valueOf(transactional));
                 } else {
                     transactional = transactionalProp;
                 }
             }
+            tableProps.put(PhoenixDatabaseMetaData.TRANSACTIONAL, Boolean.valueOf(transactional));
+            
             if (transactional) { // FIXME: remove once Tephra handles storing multiple versions of a cell value, 
             	// and allows ignoring empty key values for an operation
             	if (Boolean.FALSE.equals(storeNullsProp)) {
