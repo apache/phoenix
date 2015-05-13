@@ -65,6 +65,28 @@
             </configuration>
           </execution>
           <execution>
+            <id>client-minimal</id>
+            <phase>package</phase>
+            <goals>
+              <goal>single</goal>
+            </goals>
+            <configuration>
+            <finalName>phoenix-${project.version}</finalName>
+              <attach>false</attach>
+              <appendAssemblyId>true</appendAssemblyId>
+              <descriptors>
+               <!--build the phoenix client jar, but without HBase code. -->
+                <descriptor>src/build/client-without-hbase.xml</descriptor>
+               <!-- build the phoenix client jar, but without HBase (or its depenencies). -->
+                <descriptor>src/build/client-minimal.xml</descriptor>
+               <!-- build the phoenix server side jar, that includes phoenix-hadoopX-compat, phoenix-hadoop-compat and antlr -->
+                <descriptor>src/build/server.xml</descriptor>
+               <!-- build the phoenix server side jar, that includes phoenix-hadoopX-compat and phoenix-hadoop-compat. -->
+                <descriptor>src/build/server-without-antlr.xml</descriptor>
+              </descriptors>
+            </configuration>
+          </execution>
+          <execution>
             <id>package-to-tar</id>
             <phase>package</phase>
             <goals>
@@ -96,28 +118,6 @@
                 <descriptor>src/build/src.xml</descriptor>
               </descriptors>
               <tarLongFileMode>posix</tarLongFileMode>
-            </configuration>
-          </execution>          
-          <execution>
-            <id>client-minimal</id>
-            <phase>package</phase>
-            <goals>
-              <goal>single</goal>
-            </goals>
-            <configuration>
-            <finalName>phoenix-${project.version}</finalName>
-              <attach>false</attach>
-              <appendAssemblyId>true</appendAssemblyId>
-              <descriptors>
-               <!--build the phoenix client jar, but without HBase code. -->
-                <descriptor>src/build/client-without-hbase.xml</descriptor>
-               <!-- build the phoenix client jar, but without HBase (or its depenencies). -->
-                <descriptor>src/build/client-minimal.xml</descriptor>
-               <!-- build the phoenix server side jar, that includes phoenix-hadoopX-compat, phoenix-hadoop-compat and antlr -->
-                <descriptor>src/build/server.xml</descriptor>
-               <!-- build the phoenix server side jar, that includes phoenix-hadoopX-compat and phoenix-hadoop-compat. -->
-                <descriptor>src/build/server-without-antlr.xml</descriptor>
-              </descriptors>
             </configuration>
           </execution>
         </executions>
