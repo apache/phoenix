@@ -1094,6 +1094,7 @@ public abstract class BaseMutableIndexIT extends BaseHBaseManagedTimeIT {
         }
     }
     
+
     @Test
     public void testUpsertingNullForIndexedColumns() throws Exception {
     	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -1107,11 +1108,12 @@ public abstract class BaseMutableIndexIT extends BaseHBaseManagedTimeIT {
     		//create a row with value null for indexed column v2
     		stmt.executeUpdate("upsert into DEMO values('cc1', null, 'abc')");
     		conn.commit();
-            
+    		
     		//assert values in index table 
     		ResultSet rs = stmt.executeQuery("select * from DEMO_IDX");
     		assertTrue(rs.next());
     		assertEquals(0, Doubles.compare(0, rs.getDouble(1)));
+    		assertTrue(rs.wasNull());
     		assertEquals("cc1", rs.getString(2));
     		assertEquals("abc", rs.getString(3));
     		assertFalse(rs.next());
@@ -1121,6 +1123,7 @@ public abstract class BaseMutableIndexIT extends BaseHBaseManagedTimeIT {
     		assertTrue(rs.next());
     		assertEquals("cc1", rs.getString(1));
     		assertEquals(0, Doubles.compare(0, rs.getDouble(2)));
+    		assertTrue(rs.wasNull());
     		assertEquals("abc", rs.getString(3));
     		assertFalse(rs.next());
     		
@@ -1152,6 +1155,7 @@ public abstract class BaseMutableIndexIT extends BaseHBaseManagedTimeIT {
     		rs = stmt.executeQuery("select * from DEMO_IDX");
     		assertTrue(rs.next());
     		assertEquals(0, Doubles.compare(0, rs.getDouble(1)));
+    		assertTrue(rs.wasNull());
     		assertEquals("cc1", rs.getString(2));
     		assertEquals("abc", rs.getString(3));
     		assertFalse(rs.next());

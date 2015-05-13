@@ -37,7 +37,9 @@ import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
+import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.hbase.index.MultiMutation;
@@ -50,6 +52,8 @@ import org.apache.phoenix.hbase.index.covered.update.IndexedColumnGroup;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.write.IndexWriter;
 import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.trace.TracingUtils;
 import org.apache.phoenix.trace.util.NullSpan;
@@ -132,6 +136,29 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
         }
     }
 
+    private static final String TX_NO_READ_OWN_WRITES = "TX_NO_READ_OWN_WRITES";
+    @Override
+    public RegionScanner preScannerOpen(ObserverContext<RegionCoprocessorEnvironment> e, Scan scan, RegionScanner s) {
+        /*
+         * TODO: remove once Tephra gives us a way to not read our own writes.
+         *  Hack to force scan not to read their own writes. Since the mutations have already been
+         *  applied by the time the preBatchMutate hook is called, we need to adjust the max time
+         *  range down by one to prevent us from seeing the current state. Instead, we need to
+         *  see the state right before our Puts have been applied.
+         */
+        byte[] encoded = scan.getAttribute(TX_NO_READ_OWN_WRITES);
+        if (encoded != null) {
+            TimeRange range = scan.getTimeRange();
+            long maxTime = range.getMax();
+            try {
+                scan.setTimeRange(range.getMin(), maxTime == Long.MAX_VALUE ? maxTime : maxTime-1);
+            } catch (IOException e1) {
+                throw new RuntimeException(e1);
+            }
+        }
+        return s;
+    }
+
     private Collection<Pair<Mutation, byte[]>> getIndexUpdates(RegionCoprocessorEnvironment env, MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
         // Collect the set of mutable ColumnReferences so that we can first
         // run a scan to get the current state. We'll need this to delete
@@ -174,6 +201,13 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
                     keys.add(PVarbinary.INSTANCE.getKeyRange(ptr.copyBytesIfNecessary()));
                 }
                 Scan scan = new Scan();
+                scan.setAttribute(TX_NO_READ_OWN_WRITES, PDataType.TRUE_BYTES); // TODO: remove when Tephra allows this
+                // Project all mutable columns
+                for (ColumnReference ref : mutableColumns) {
+                    scan.addColumn(ref.getFamily(), ref.getQualifier());
+                }
+                // Project empty key value column
+                scan.addColumn(indexMaintainers.get(0).getDataEmptyKeyValueCF(), QueryConstants.EMPTY_COLUMN_BYTES);
                 ScanRanges scanRanges = ScanRanges.create(SchemaUtil.VAR_BINARY_SCHEMA, Collections.singletonList(keys), ScanUtil.SINGLE_COLUMN_SLOT_SPAN);
                 scanRanges.initializeScan(scan);
                 scan.setFilter(scanRanges.getSkipScanFilter());
@@ -190,8 +224,9 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
                     TxTableState state = new TxTableState(env, mutableColumns, updateAttributes, tx.getWritePointer(), m, result);
                     Iterable<IndexUpdate> deletes = codec.getIndexDeletes(state, indexMetaData);
                     for (IndexUpdate delete : deletes) {
-                    	if (delete.isValid()) 
-                    		indexUpdates.add(new Pair<Mutation, byte[]>(delete.getUpdate(),delete.getTableName()));
+                        if (delete.isValid()) {
+                            indexUpdates.add(new Pair<Mutation, byte[]>(delete.getUpdate(),delete.getTableName()));
+                        }
                     }
                     state.applyMutation();
                     Iterable<IndexUpdate> puts = codec.getIndexUpserts(state, indexMetaData);

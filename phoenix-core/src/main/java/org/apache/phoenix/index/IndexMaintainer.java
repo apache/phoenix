@@ -845,15 +845,19 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         // Delete the entire row if any of the indexed columns changed
         DeleteType deleteType = null;
         if (oldState == null || (deleteType=getDeleteTypeOrNull(pendingUpdates)) != null || hasIndexedColumnChanged(oldState, pendingUpdates)) { // Deleting the entire row
-            Delete delete;
+            byte[] emptyCF = emptyKeyValueCFPtr.copyBytesIfNecessary();
+            Delete delete = new Delete(indexRowKey);
             // If table delete was single version, then index delete should be as well
             if (deleteType == DeleteType.SINGLE_VERSION) {
-                delete = new Delete(indexRowKey);
                 for (ColumnReference ref : getAllColumns()) { // FIXME: Keep Set<byte[]> for index CFs?
                     delete.deleteFamilyVersion(ref.getFamily(), ts);
                 }
+                delete.deleteFamilyVersion(emptyCF, ts);
             } else {
-                delete = new Delete(indexRowKey, ts);
+                for (ColumnReference ref : getAllColumns()) { // FIXME: Keep Set<byte[]> for index CFs?
+                    delete.deleteFamily(ref.getFamily(), ts);
+                }
+                delete.deleteFamily(emptyCF, ts);
             }
             delete.setDurability(!indexWALDisabled ? Durability.USE_DEFAULT : Durability.SKIP_WAL);
             return delete;
