@@ -25,6 +25,7 @@ import org.apache.phoenix.expression.function.ArrayAppendFunction;
 import org.apache.phoenix.expression.function.ArrayElemRefExpression;
 import org.apache.phoenix.expression.function.ArrayIndexFunction;
 import org.apache.phoenix.expression.function.ArrayLengthFunction;
+import org.apache.phoenix.expression.function.ArrayPrependFunction;
 import org.apache.phoenix.expression.function.ByteBasedRegexpReplaceFunction;
 import org.apache.phoenix.expression.function.ByteBasedRegexpSplitFunction;
 import org.apache.phoenix.expression.function.ByteBasedRegexpSubstrFunction;
@@ -229,7 +230,8 @@ public enum ExpressionType {
     MinuteFunction(MinuteFunction.class),
     DayOfMonthFunction(DayOfMonthFunction.class),
     ArrayAppendFunction(ArrayAppendFunction.class),
-    UDFExpression(UDFExpression.class)
+    UDFExpression(UDFExpression.class),
+    ArrayPrependFunction(ArrayPrependFunction.class)
     ;
 
     ExpressionType(Class<? extends Expression> clazz) {
