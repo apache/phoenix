@@ -55,7 +55,7 @@ public class ResultTest {
             resultMonitorWriter.write(result);
             resultMonitorWriter.write(result);
             resultMonitorWriter.write(result);
-            resultMonitorWriter.flush();
+            resultMonitorWriter.close();
             List<Result> results = resultMonitorWriter.read();
             assertEquals("Results did not contain row.", results.size(), 3);
 
@@ -72,7 +72,7 @@ public class ResultTest {
         ExecutorService executorService = Executors.newFixedThreadPool(1);
         MonitorManager monitor = new MonitorManager(100);
         Future future = executorService.submit(monitor);
-        List<Result> records = null;
+        List<Result> records;
         final int TIMEOUT = 30;
 
         int ct = 0;
