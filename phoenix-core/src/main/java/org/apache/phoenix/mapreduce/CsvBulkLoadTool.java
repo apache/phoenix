@@ -176,7 +176,7 @@ public class CsvBulkLoadTool extends Configured implements Tool {
     @Override
     public int run(String[] args) throws Exception {
 
-        Configuration conf = HBaseConfiguration.addHbaseResources(getConf());
+        Configuration conf = HBaseConfiguration.create(getConf());
 
         CommandLine cmdLine = null;
         try {
