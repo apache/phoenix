@@ -78,11 +78,22 @@ phoenix_out_file = '%s.out' % phoenix_file_basename
 phoenix_pid_file = '%s.pid' % phoenix_file_basename
 opts = os.getenv('PHOENIX_QUERYSERVER_OPTS', '')
 
-# load hbase-env.sh to extract JAVA_HOME, HBASE_PID_DIR, HBASE_LOG_DIR
-hbase_env_path = os.path.join(hbase_config_path, 'hbase-env.sh')
+# load hbase-env.??? to extract JAVA_HOME, HBASE_PID_DIR, HBASE_LOG_DIR
+hbase_env_path = None
+hbase_env_cmd  = None
+if os.name == 'posix':
+    hbase_env_path = os.path.join(hbase_config_path, 'hbase-env.sh')
+    hbase_env_cmd = ['bash', '-c', 'source %s && env' % hbase_env_path]
+elif os.name == 'nt':
+    hbase_env_path = os.path.join(hbase_config_path, 'hbase-env.cmd')
+    hbase_env_cmd = ['cmd.exe', '/c', 'call %s & set' % hbase_env_path]
+if not hbase_env_path or not hbase_env_cmd:
+    print >> sys.stderr, "hbase-env file unknown on platform %s" % os.name
+    sys.exit(-1)
+
 hbase_env = {}
 if os.path.isfile(hbase_env_path):
-    p = subprocess.Popen(['bash', '-c', 'source %s && env' % hbase_env_path], stdout = subprocess.PIPE)
+    p = subprocess.Popen(hbase_env_cmd, stdout = subprocess.PIPE)
     for x in p.stdout:
         (k, _, v) = x.partition('=')
         hbase_env[k.strip()] = v.strip()
