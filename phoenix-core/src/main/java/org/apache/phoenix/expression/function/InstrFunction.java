@@ -82,7 +82,7 @@ public class InstrFunction extends ScalarFunction{
         
         String sourceStr = (String) PVarchar.INSTANCE.toObject(ptr, getChildren().get(0).getSortOrder());
 
-        position = sourceStr.indexOf(strToSearch);
+        position = sourceStr.indexOf(strToSearch) + 1;
         ptr.set(PInteger.INSTANCE.toBytes(position));
         return true;
     }
