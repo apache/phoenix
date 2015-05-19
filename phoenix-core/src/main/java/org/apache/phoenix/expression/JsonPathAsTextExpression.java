@@ -1,21 +1,21 @@
 package org.apache.phoenix.expression;
 
-import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PJson;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.JSONutil;
 
 import com.fasterxml.jackson.databind.JsonNode;
 
-public class JsonPathAsTextExpression  extends BaseCompoundExpression{
+public class JsonPathAsTextExpression  extends BaseJSONExpression{
 	public JsonPathAsTextExpression(List<Expression> children) {
         super(children);
     }
@@ -23,11 +23,11 @@ public class JsonPathAsTextExpression  extends BaseCompoundExpression{
     }
 	@Override
 	public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr)  {
-		if (!getPatternExpression().evaluate(tuple, ptr)) {
+		if (!children.get(1).evaluate(tuple, ptr)) {
             return false;
         }
 		String[] pattern =decodePath((String) PVarchar.INSTANCE.toObject(ptr));
-		if (!getStrExpression().evaluate(tuple, ptr)) {
+		if (!children.get(0).evaluate(tuple, ptr)) {
 	        return false;
 	    }
 		String value = (String) PVarchar.INSTANCE.toObject(ptr);
@@ -35,10 +35,27 @@ public class JsonPathAsTextExpression  extends BaseCompoundExpression{
 		try{
 			JsonNode node=util.gerateJsonTree(value);
 			for(int i=0;i<pattern.length;i++){
-				node=util.enterJsonTreeNode(node,pattern[i]);
+				if(node.isValueNode()){
+					ptr.set(PDataType.NULL_BYTES);
+					return false;
+				}
+				else if(node.isArray()){
+					//determine path value whether it is a int
+					if(pattern[i].matches("\\d+")){
+						node=util.enterJsonNodeArray(node,Integer.valueOf(pattern[i]));
+					}
+					else{
+						ptr.set(PDataType.NULL_BYTES);
+						return false;
+					}
+				}
+				else{
+					node=util.enterJsonTreeNode(node,pattern[i]);
+				}
+				
 			}
 			if(node!=null){
-				ptr.set(Bytes.toBytes(node.asText()));
+				ptr.set(PVarchar.INSTANCE.toBytes(node.asText(),SortOrder.getDefault()));
 			}
 			else{
 				ptr.set(PDataType.NULL_BYTES);
@@ -48,12 +65,6 @@ public class JsonPathAsTextExpression  extends BaseCompoundExpression{
 			e.printStackTrace();
 		}
         return true;
-	}
-	private Expression getStrExpression() {
-        return children.get(0);
-    }
-	private Expression getPatternExpression() {
-        return children.get(1);
 	}
 	private String[] decodePath(String path)
 	{
@@ -72,14 +83,10 @@ public class JsonPathAsTextExpression  extends BaseCompoundExpression{
 	}
 	@Override
 	public PDataType getDataType() {
-		 return PVarchar.INSTANCE;
+		 return PJson.INSTANCE;
 	}
 	@Override
-    public void readFields(DataInput input) throws IOException {
-        super.readFields(input);
-    }
-	@Override
-    public void write(DataOutput output) throws IOException {
-        super.write(output);
-    }
+	public PDataType getRealDataType(){
+		 return PVarchar.INSTANCE;
+	}
 }

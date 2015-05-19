@@ -14,20 +14,19 @@ import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.JSONutil;
 
-public class JsonSubsetExpression extends BaseCompoundExpression{
+public class JsonSubsetExpression extends BaseJSONExpression{
 	public JsonSubsetExpression(List<Expression> children) {
         super(children);
     }
-	public JsonSubsetExpression() {
-        
+	public JsonSubsetExpression() {  
     }
 	@Override
 	public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-		if (!getPatternExpression().evaluate(tuple, ptr)) {
+		if (!children.get(1).evaluate(tuple, ptr)) {
             return false;
         }
 		String pattern = (String) PVarchar.INSTANCE.toObject(ptr);
-		if (!getStrExpression().evaluate(tuple, ptr)) {
+		if (!children.get(0).evaluate(tuple, ptr)) {
 	        return false;
 	    }
 		String value = (String) PVarchar.INSTANCE.toObject(ptr);
@@ -39,7 +38,7 @@ public class JsonSubsetExpression extends BaseCompoundExpression{
 		try{
 		Map<String, Object> patternmap=util.getStringMap(pattern);
 		if(patternmap.size()==0){
-			ptr.set(PDataType.FALSE_BYTES);
+			ptr.set(PDataType.TRUE_BYTES);
     		return true;
 		}
 		Set<String> key = patternmap.keySet();
@@ -60,13 +59,6 @@ public class JsonSubsetExpression extends BaseCompoundExpression{
 		}
 		return true;
 	}
-	private Expression getStrExpression() {
-        return children.get(0);
-    }
-
-    private Expression getPatternExpression() {
-        return children.get(1);
-    }
 	@Override
 	public <T> T accept(ExpressionVisitor<T> visitor) {
 		 

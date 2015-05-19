@@ -15,7 +15,7 @@ import org.apache.phoenix.schema.types.PVarcharArray;
 import org.apache.phoenix.schema.types.PhoenixArray;
 import org.apache.phoenix.util.JSONutil;
 
-public class JsonMultiKeySeatchAndExpression extends BaseCompoundExpression{
+public class JsonMultiKeySeatchAndExpression extends BaseJSONExpression{
 	public JsonMultiKeySeatchAndExpression(List<Expression> children) {
         super(children);
     }

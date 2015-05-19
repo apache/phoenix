@@ -33,10 +33,13 @@ import org.apache.phoenix.expression.InListExpression;
 import org.apache.phoenix.expression.IsNullExpression;
 import org.apache.phoenix.expression.JsonMultiKeySearchOrExpression;
 import org.apache.phoenix.expression.JsonMultiKeySeatchAndExpression;
+import org.apache.phoenix.expression.JsonPathAsElementExpression;
 import org.apache.phoenix.expression.JsonPathAsTextExpression;
 import org.apache.phoenix.expression.JsonSingleKeySearchExpression;
 import org.apache.phoenix.expression.JsonSubsetExpression;
 import org.apache.phoenix.expression.JsonSupersetExpression;
+import org.apache.phoenix.expression.JsonPointAsTextExpression;
+import org.apache.phoenix.expression.JsonPointForArrayAsTextExpression;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.LikeExpression;
 import org.apache.phoenix.expression.LiteralExpression;
@@ -221,5 +224,19 @@ public class CloneExpressionVisitor extends TraverseAllExpressionVisitor<Express
     public Expression visitLeave(JsonPathAsTextExpression node, List<Expression> l) {
         return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node :  new JsonPathAsTextExpression(l);
     }
+    @Override
+    public Expression visitLeave(JsonPathAsElementExpression node, List<Expression> l) {
+        return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node :  new JsonPathAsElementExpression(l);
+    }
    
+    public Expression visitLeave(JsonPointAsTextExpression node, List<Expression> l) {
+        return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node :  new JsonPointAsTextExpression(l);
+    }
+
+	@Override
+	public Expression visitLeave(JsonPointForArrayAsTextExpression node,
+			List<Expression> l) {
+		return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node :  new JsonPointForArrayAsTextExpression(l);
+	}
+
 }

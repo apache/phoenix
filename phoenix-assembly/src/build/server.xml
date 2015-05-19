@@ -36,9 +36,9 @@
       <includes>
         <include>org.apache.phoenix:phoenix-core</include>
         <include>org.iq80.snappy:snappy</include>
-	<include>com.fasterxml.jackson.core:jackson-databind</include>
-	<include>com.fasterxml.jackson.core:jackson-core</include>
-	<include>com.fasterxml.jackson.core:jackson-annotations</include>
+	    <include>com.fasterxml.jackson.core:jackson-databind</include>
+	    <include>com.fasterxml.jackson.core:jackson-core</include>
+	    <include>com.fasterxml.jackson.core:jackson-annotations</include>
       </includes>
     </dependencySet>
     <dependencySet>

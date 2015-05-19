@@ -642,4 +642,40 @@ public class ParseNodeRewriter extends TraverseAllParseNodeVisitor<ParseNode> {
             }
         });
     }
+
+	@Override
+	public ParseNode visitLeave(JsonPathAsElementParseNode node,
+			List<ParseNode> nodes) throws SQLException {
+		 return leaveCompoundNode(node, nodes, new CompoundNodeFactory() {
+	            @Override
+	            public ParseNode createNode(List<ParseNode> children) {
+	                return NODE_FACTORY.jsonPathE(children.get(0), children.get(1));
+	            }
+	        });
+	}
+
+
+	@Override
+	public ParseNode visitLeave(JsonPointAsElementParseNode node,
+			List<ParseNode> nodes) throws SQLException {
+		return leaveCompoundNode(node, nodes, new CompoundNodeFactory() {
+            @Override
+            public ParseNode createNode(List<ParseNode> children) {
+                return NODE_FACTORY.jsonPointE(children.get(0), children.get(1));
+             
+            }
+        });
+	}
+
+	@Override
+	public ParseNode visitLeave(JsonPointAsTextParseNode node, List<ParseNode> nodes)
+			throws SQLException {
+		return leaveCompoundNode(node, nodes, new CompoundNodeFactory() {
+            @Override
+            public ParseNode createNode(List<ParseNode> children) {
+                return NODE_FACTORY.jsonPointT(children.get(0), children.get(1));
+            }
+        });
+	}
+
 }

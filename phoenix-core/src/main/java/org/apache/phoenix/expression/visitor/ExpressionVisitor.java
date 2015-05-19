@@ -33,10 +33,13 @@ import org.apache.phoenix.expression.InListExpression;
 import org.apache.phoenix.expression.IsNullExpression;
 import org.apache.phoenix.expression.JsonMultiKeySearchOrExpression;
 import org.apache.phoenix.expression.JsonMultiKeySeatchAndExpression;
+import org.apache.phoenix.expression.JsonPathAsElementExpression;
 import org.apache.phoenix.expression.JsonPathAsTextExpression;
 import org.apache.phoenix.expression.JsonSingleKeySearchExpression;
 import org.apache.phoenix.expression.JsonSubsetExpression;
 import org.apache.phoenix.expression.JsonSupersetExpression;
+import org.apache.phoenix.expression.JsonPointAsTextExpression;
+import org.apache.phoenix.expression.JsonPointForArrayAsTextExpression;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.LikeExpression;
 import org.apache.phoenix.expression.LiteralExpression;
@@ -152,4 +155,14 @@ public interface ExpressionVisitor<E> {
     
     public Iterator<Expression> visitEnter(JsonPathAsTextExpression node);
     public E visitLeave(JsonPathAsTextExpression node, List<E> l);
+    
+    public Iterator<Expression> visitEnter(JsonPathAsElementExpression node);
+    public E visitLeave(JsonPathAsElementExpression node, List<E> l);
+
+    public Iterator<Expression> visitEnter(JsonPointAsTextExpression jsonPathAsTextExpression);
+    public E visitLeave(JsonPointAsTextExpression node, List<E> l);
+	
+    public Iterator<Expression> visitEnter(JsonPointForArrayAsTextExpression jsonPointForArrayAsTextExpression);
+    public E visitLeave(JsonPointForArrayAsTextExpression node, List<E> l);
+
 }

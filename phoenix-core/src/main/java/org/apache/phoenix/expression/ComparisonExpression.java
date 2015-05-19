@@ -17,8 +17,10 @@
  */
 package org.apache.phoenix.expression;
 
+import java.io.BufferedWriter;
 import java.io.DataInput;
 import java.io.DataOutput;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.sql.SQLException;
@@ -39,9 +41,11 @@ import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PJson;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PUnsignedInt;
 import org.apache.phoenix.schema.types.PUnsignedLong;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.QueryUtil;
@@ -129,9 +133,17 @@ public class ComparisonExpression extends BaseCompoundExpression {
                 lhsExpr = new RowValueConstructorExpression(Collections.singletonList(lhsExpr), lhsExpr.isStateless());
             }
             children = Arrays.asList(lhsExpr, rhsExpr);
-        } else if(lhsExprDataType != null && rhsExprDataType != null && !lhsExprDataType.isComparableTo(rhsExprDataType)) {
+        } else if(lhsExprDataType != null && rhsExprDataType != null && !(lhsExpr instanceof BaseJSONExpression) && !(lhsExprDataType==PJson.INSTANCE && rhsExprDataType==PVarchar.INSTANCE) &&!lhsExprDataType.isComparableTo(rhsExprDataType)) {
             throw TypeMismatchException.newException(lhsExprDataType, rhsExprDataType,
                 toString(op, children));
+        }
+        if(lhsExpr instanceof JsonPathAsTextExpression){
+        	if(!(PVarchar.INSTANCE.isComparableTo(rhsExpr.getDataType()))){
+        		throw TypeMismatchException.newException(PVarchar.INSTANCE,rhsExprDataType);
+        	}
+        }
+        if(lhsExpr instanceof BaseJSONExpression){
+        	return new ComparisonExpression(children, op);
         }
         Determinism determinism =  lhsExpr.getDeterminism().combine(rhsExpr.getDeterminism());
         
@@ -320,7 +332,14 @@ public class ComparisonExpression extends BaseCompoundExpression {
         int rhsOffset = ptr.getOffset();
         int rhsLength = ptr.getLength();
         PDataType rhsDataType = children.get(1).getDataType();
-        SortOrder rhsSortOrder = children.get(1).getSortOrder();   
+        SortOrder rhsSortOrder = children.get(1).getSortOrder(); 
+        if(children.get(0) instanceof BaseJSONExpression && ((BaseJSONExpression)children.get(0)).getRealDataType() != null){
+        	lhsDataType=((BaseJSONExpression)children.get(0)).getRealDataType();
+        	if(!(lhsDataType.isComparableTo(rhsDataType))){
+        		ptr.set(PDataType.FALSE_BYTES);
+        		return true;
+        	}
+        }
         if (rhsDataType == PChar.INSTANCE) {
             rhsLength = StringUtil.getUnpaddedCharLength(rhsBytes, rhsOffset, rhsLength, rhsSortOrder);
         }

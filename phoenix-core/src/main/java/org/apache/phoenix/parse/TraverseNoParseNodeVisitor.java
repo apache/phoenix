@@ -354,4 +354,36 @@ public abstract class TraverseNoParseNodeVisitor<T> extends BaseParseNodeVisitor
     public T visitLeave(ArrayElemRefNode node, List<T> l) throws SQLException {
         return null;
     }
+    
+    
+    //for json 
+    @Override
+    public boolean visitEnter(JsonPathAsElementParseNode node) throws SQLException {
+        return false;
+    }
+    
+    @Override
+    public T visitLeave( JsonPathAsElementParseNode node, List<T> l) throws SQLException {
+        return null;
+    }
+    @Override
+    public boolean visitEnter(JsonPointAsElementParseNode node) throws SQLException {
+        return false;
+    }
+    
+    @Override
+    public T visitLeave(JsonPointAsElementParseNode node, List<T> l) throws SQLException {
+        return null;
+    }
+    
+    @Override
+    public boolean visitEnter(JsonPointAsTextParseNode node) throws SQLException {
+        return false;
+    }
+    
+    @Override
+    public T visitLeave(JsonPointAsTextParseNode node, List<T> l) throws SQLException {
+        return null;
+    }
+
 }

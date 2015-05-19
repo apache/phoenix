@@ -3,8 +3,6 @@ package org.apache.phoenix.util;
 import java.io.IOException;
 import java.util.Map;
 
-import org.apache.phoenix.parse.LiteralParseNode;
-
 import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonMappingException;
@@ -16,24 +14,7 @@ public class JSONutil {
 	public JSONutil(){
 		mapper=new ObjectMapper();
 	}
-	public boolean isJSON(LiteralParseNode node){
-		String value = node.getValue() instanceof String ? (String)node.getValue() : null;
-		if(value==null){
-			return false;
-		}
-		ObjectMapper mapper = new ObjectMapper();
-		try{
-			mapper.readValue(value, Map.class);
-			return true;
-		}
-		catch(JsonParseException e){
-			return false;
-		}
-		catch(IOException e){
-			return false;
-		}
-	}
-	public boolean isJSON(Object value){
+	public static boolean isJSON(Object value){
 		if(!(value instanceof String)){
 			return false;
 		}
@@ -62,13 +43,13 @@ public class JSONutil {
 	public JsonNode getJsonNode(Object json) throws JsonProcessingException, IOException{
 		return mapper.readTree((String)json);
 	}
-	public void decode(){
-		
-	}
 	public JsonNode gerateJsonTree(Object json) throws JsonProcessingException, IOException{
 		return mapper.readTree((String)json);  
 	}
 	public JsonNode enterJsonTreeNode(JsonNode tree,String nodename) throws JsonProcessingException, IOException{
 		return tree.path(nodename);  
+	}
+	public JsonNode enterJsonNodeArray(JsonNode tree,int index) throws JsonProcessingException, IOException{
+		return tree.path(index);  
 	}
 }

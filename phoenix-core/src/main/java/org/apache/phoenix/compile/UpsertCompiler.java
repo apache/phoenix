@@ -732,7 +732,7 @@ public class UpsertCompiler {
             PColumn column = allColumns.get(columnIndexes[nodeIndex]);
             if(column.getDataType()==PJson.INSTANCE && valueNode instanceof LiteralParseNode)
             {
-            	boolean vaild=new JSONutil().isJSON((LiteralParseNode)valueNode);
+            	boolean vaild=JSONutil.isJSON(((LiteralParseNode)valueNode).getValue());
             	if(!vaild){
             		throw new SQLExceptionInfo.Builder(SQLExceptionCode.JSON_PARSER_ERROR).build().buildException();
             	}

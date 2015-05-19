@@ -283,4 +283,96 @@ abstract public class UnsupportedAllParseNodeVisitor<E> extends BaseParseNodeVis
     public E visitLeave(ArrayAllComparisonNode node, List<E> l) throws SQLException {
         throw new SQLFeatureNotSupportedException(node.toString());
     }
+    
+    @Override
+    public boolean visitEnter( JsonPathAsElementParseNode node) throws SQLException {
+        throw new SQLFeatureNotSupportedException(node.toString());
+    }
+    
+    @Override
+    public E visitLeave( JsonPathAsElementParseNode node, List<E> l) throws SQLException {
+        throw new SQLFeatureNotSupportedException(node.toString());
+    }
+    
+    @Override
+    public boolean visitEnter( JsonPathAsTextParseNode node) throws SQLException {
+        throw new SQLFeatureNotSupportedException(node.toString());
+    }
+    
+    @Override
+    public E visitLeave( JsonPathAsTextParseNode node, List<E> l) throws SQLException {
+        throw new SQLFeatureNotSupportedException(node.toString());
+    }
+    
+    @Override
+    public boolean visitEnter(JsonPointAsElementParseNode node) throws SQLException {
+        throw new SQLFeatureNotSupportedException(node.toString());
+    }
+    
+    @Override
+    public E visitLeave(JsonPointAsElementParseNode node, List<E> l) throws SQLException {
+        throw new SQLFeatureNotSupportedException(node.toString());
+    }
+    
+    @Override
+    public boolean visitEnter(JsonPointAsTextParseNode node) throws SQLException {
+        throw new SQLFeatureNotSupportedException(node.toString());
+    }
+    
+    @Override
+    public E visitLeave(JsonPointAsTextParseNode node, List<E> l) throws SQLException {
+        throw new SQLFeatureNotSupportedException(node.toString());
+    }
+    
+    @Override
+    public boolean visitEnter(JsonSupersetParseNode node) throws SQLException {
+        throw new SQLFeatureNotSupportedException(node.toString());
+    }
+    
+    @Override
+    public E visitLeave(JsonSupersetParseNode node, List<E> l) throws SQLException {
+        throw new SQLFeatureNotSupportedException(node.toString());
+    }
+    
+    @Override
+    public boolean visitEnter(JsonSubsetParseNode node) throws SQLException {
+        throw new SQLFeatureNotSupportedException(node.toString());
+    }
+    
+    @Override
+    public E visitLeave(JsonSubsetParseNode node, List<E> l) throws SQLException {
+        throw new SQLFeatureNotSupportedException(node.toString());
+    }
+    
+    @Override
+    public boolean visitEnter(JsonSingleKeySearchParseNode node) throws SQLException {
+        throw new SQLFeatureNotSupportedException(node.toString());
+    }
+    
+    @Override
+    public E visitLeave(JsonSingleKeySearchParseNode node, List<E> l) throws SQLException {
+        throw new SQLFeatureNotSupportedException(node.toString());
+    }
+    
+    @Override
+    public boolean visitEnter(JsonMultiKeySearchOrParseNode node) throws SQLException {
+        throw new SQLFeatureNotSupportedException(node.toString());
+    }
+    
+    @Override
+    public E visitLeave(JsonMultiKeySearchOrParseNode node, List<E> l) throws SQLException {
+        throw new SQLFeatureNotSupportedException(node.toString());
+    }
+    
+    @Override
+    public boolean visitEnter(JsonMultiKeySeatchAndParseNode node) throws SQLException {
+        throw new SQLFeatureNotSupportedException(node.toString());
+    }
+    
+    @Override
+    public E visitLeave(JsonMultiKeySeatchAndParseNode node, List<E> l) throws SQLException {
+        throw new SQLFeatureNotSupportedException(node.toString());
+    }
+    
+    
 }

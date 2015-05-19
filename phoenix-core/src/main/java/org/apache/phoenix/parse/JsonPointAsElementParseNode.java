@@ -21,6 +21,8 @@ import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
 
+import org.apache.phoenix.compile.ColumnResolver;
+
 
 
 /**
@@ -30,16 +32,10 @@ import java.util.List;
  * 
  * @since 0.1
  */
-public class JsonPointAsElementParseNode extends ArithmeticParseNode {
-    public static final String OPERATOR = "->";
+public class JsonPointAsElementParseNode extends  BinaryParseNode {
 
-    @Override
-    public String getOperator() {
-        return OPERATOR;
-    }
-    
-    JsonPointAsElementParseNode(List<ParseNode> children) {
-        super(children);
+    JsonPointAsElementParseNode(ParseNode lhs,ParseNode rhs) {
+        super(lhs,rhs);
     }
 
     @Override
@@ -50,4 +46,12 @@ public class JsonPointAsElementParseNode extends ArithmeticParseNode {
         }
         return visitor.visitLeave(this, l);
     }
+    @Override
+	public void toSQL(ColumnResolver resolver, StringBuilder buf) {
+		List<ParseNode> children = getChildren();
+        children.get(0).toSQL(resolver, buf);
+        buf.append(" -> ");
+        children.get(1).toSQL(resolver, buf);
+	}
+
 }

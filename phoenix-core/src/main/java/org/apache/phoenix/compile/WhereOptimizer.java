@@ -34,6 +34,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.AndExpression;
 import org.apache.phoenix.expression.BaseExpression;
 import org.apache.phoenix.expression.BaseExpression.ExpressionComparabilityWrapper;
+import org.apache.phoenix.expression.BaseJSONExpression;
 import org.apache.phoenix.expression.BaseTerminalExpression;
 import org.apache.phoenix.expression.CoerceExpression;
 import org.apache.phoenix.expression.ComparisonExpression;
@@ -887,7 +888,7 @@ public class WhereOptimizer {
             // Delay adding to extractedNodes, until we're done traversing,
             // since we can't yet tell whether or not the PK column references
             // are contiguous
-            if (childParts.isEmpty()) {
+            if (childParts.isEmpty()||node.getChildren().get(0) instanceof BaseJSONExpression) {
                 return null;
             }
             Expression rhs = node.getChildren().get(1);

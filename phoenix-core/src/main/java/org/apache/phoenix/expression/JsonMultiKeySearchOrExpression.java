@@ -1,9 +1,6 @@
 package org.apache.phoenix.expression;
 
-import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
-import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -16,7 +13,7 @@ import org.apache.phoenix.schema.types.PVarcharArray;
 import org.apache.phoenix.schema.types.PhoenixArray;
 import org.apache.phoenix.util.JSONutil;
 
-public class JsonMultiKeySearchOrExpression extends BaseCompoundExpression{
+public class JsonMultiKeySearchOrExpression extends BaseJSONExpression{
 	public JsonMultiKeySearchOrExpression(List<Expression> children) {
         super(children);
     }
@@ -24,14 +21,14 @@ public class JsonMultiKeySearchOrExpression extends BaseCompoundExpression{
     }
 	@Override
 	public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr){
-		if (!getPatternExpression().evaluate(tuple, ptr)) {
+		if (!children.get(1).evaluate(tuple, ptr)) {
             return false;
         }
-		PhoenixArray pattern =(PhoenixArray)PVarcharArray.INSTANCE.toObject(ptr, getPatternExpression().getSortOrder());
-		if (!getStrExpression().evaluate(tuple, ptr)) {
+		PhoenixArray pattern =(PhoenixArray)PVarcharArray.INSTANCE.toObject(ptr);
+		if (!children.get(0).evaluate(tuple, ptr)) {
 	        return false;
 	    }
-		String value = (String) PVarchar.INSTANCE.toObject(ptr, getStrExpression().getSortOrder());
+		String value = (String) PVarchar.INSTANCE.toObject(ptr);
 		try
 		{
 			JSONutil util=new JSONutil();
@@ -50,12 +47,6 @@ public class JsonMultiKeySearchOrExpression extends BaseCompoundExpression{
 		}
         return true;
 	}
-	private Expression getStrExpression() {
-        return children.get(0);
-    }
-	private Expression getPatternExpression() {
-        return children.get(1);
-	}
 	@Override
 	public <T> T accept(ExpressionVisitor<T> visitor) 
 	{
@@ -70,12 +61,4 @@ public class JsonMultiKeySearchOrExpression extends BaseCompoundExpression{
 	public PDataType getDataType() {
 		 return PBoolean.INSTANCE;
 	}
-	@Override
-    public void readFields(DataInput input) throws IOException {
-        super.readFields(input);
-    }
-	@Override
-    public void write(DataOutput output) throws IOException {
-        super.write(output);
-    }
 }

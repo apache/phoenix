@@ -790,32 +790,16 @@ json_expression returns [ParseNode ret]
     :   j=json_text_expression { $ret=j; }
     ;
 json_text_expression returns [ParseNode ret]
-@init{List<ParseNode> l = new ArrayList<ParseNode>(2); int op=0;}
-    :   i=json_element_expression {l.add(i);} ((POINT_T j=term) {l.add(j); op=1;} | 
-    					       (PATH_T j=term) {l.add(j); op=2;} )?
-    { 
-	if(op==1){
-	        $ret = factory.jsonPointT(l.get(0),l.get(1));
-	}
-	else if(op==2){
-		$ret = factory.jsonPathT(l.get(0),l.get(1)); 
-	}
-	else $ret = l.get(0);
-    }
+
+    :   i=json_element_expression { $ret = i; }  ( POINT_T j1=term {$ret = factory.jsonPointT(i,j1);} | 
+    					       	   PATH_T j2=term {$ret = factory.jsonPathT(i,j2);} )?
     ;
+
 json_element_expression returns [ParseNode ret]
-@init{List<ParseNode> l = new ArrayList<ParseNode>(2); int op=0;}
-    :   i=json_element {l.add(i);} ((POINT_E j=term) {l.add(j); op=1;} |(PATH_E j=term) {l.add(j); op=2;} )?
-    { 
-	if(op==1){
-                $ret = factory.jsonPointE(l.get(0),l.get(1));
-	}
-	else if(op==2){
-                $ret = factory.jsonPathE(l.get(0),l.get(1));
-	}
-	else $ret = l.get(0);
-    }
+    :   i=json_element { $ret = i; } ( POINT_E j1=term { $ret = factory.jsonPointE(i,j1); } 
+				     | PATH_E j2=term { $ret = factory.jsonPathE(i,j2); } )?
     ;
+
 json_element returns [ParseNode ret]
     :   e=term (LSQUARE s=value_expression RSQUARE)? { if (s == null) { $ret = e; } else { $ret = factory.arrayElemRef(Arrays.<ParseNode>asList(e,s)); } }
     ;

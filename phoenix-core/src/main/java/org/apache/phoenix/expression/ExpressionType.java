@@ -197,6 +197,9 @@ public enum ExpressionType {
     JsonMultiKeySearchOrExpression(JsonMultiKeySearchOrExpression.class),
     JsonMultiKeySeatchAndExpression(JsonMultiKeySeatchAndExpression.class),
     JsonPathAsTextExpression(JsonPathAsTextExpression.class),
+    JsonPathAsElementExpression(JsonPathAsElementExpression.class),
+    JsonPointAsTextExpression(JsonPointAsTextExpression.class),
+    JsonPointForArrayAsTextExpression(JsonPointForArrayAsTextExpression.class),
     ;
     
     ExpressionType(Class<? extends Expression> clazz) {
