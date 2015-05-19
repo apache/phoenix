@@ -49,59 +49,59 @@ public class InstrFunctionTest {
     
     @Test
     public void testInstrFunction() throws SQLException {
-        inputExpression("abcdefghijkl",PVarchar.INSTANCE, "fgh", 5, SortOrder.ASC);
+        inputExpression("abcdefghijkl",PVarchar.INSTANCE, "fgh", 6, SortOrder.ASC);
         
-        inputExpression("abcdefghijkl",PVarchar.INSTANCE, "fgh", 5, SortOrder.DESC);
+        inputExpression("abcdefghijkl",PVarchar.INSTANCE, "fgh", 6, SortOrder.DESC);
         
-        inputExpression("abcde fghijkl",PVarchar.INSTANCE, " fgh", 5, SortOrder.ASC);
+        inputExpression("abcde fghijkl",PVarchar.INSTANCE, " fgh", 6, SortOrder.ASC);
         
-        inputExpression("abcde fghijkl",PVarchar.INSTANCE, " fgh", 5, SortOrder.DESC);
+        inputExpression("abcde fghijkl",PVarchar.INSTANCE, " fgh", 6, SortOrder.DESC);
         
-        inputExpression("abcde fghijkl",PVarchar.INSTANCE, "lmn", -1, SortOrder.DESC);
+        inputExpression("abcde fghijkl",PVarchar.INSTANCE, "lmn", 0, SortOrder.DESC);
         
-        inputExpression("abcde fghijkl",PVarchar.INSTANCE, "lmn", -1, SortOrder.ASC);
+        inputExpression("abcde fghijkl",PVarchar.INSTANCE, "lmn", 0, SortOrder.ASC);
         
-        inputExpression("ABCDEFGHIJKL",PVarchar.INSTANCE, "FGH", 5, SortOrder.ASC);
+        inputExpression("ABCDEFGHIJKL",PVarchar.INSTANCE, "FGH", 6, SortOrder.ASC);
         
-        inputExpression("ABCDEFGHIJKL",PVarchar.INSTANCE, "FGH", 5, SortOrder.DESC);
+        inputExpression("ABCDEFGHIJKL",PVarchar.INSTANCE, "FGH", 6, SortOrder.DESC);
         
-        inputExpression("ABCDEFGHiJKL",PVarchar.INSTANCE, "iJKL", 8, SortOrder.ASC);
+        inputExpression("ABCDEFGHiJKL",PVarchar.INSTANCE, "iJKL", 9, SortOrder.ASC);
         
-        inputExpression("ABCDEFGHiJKL",PVarchar.INSTANCE, "iJKL", 8, SortOrder.DESC);
+        inputExpression("ABCDEFGHiJKL",PVarchar.INSTANCE, "iJKL", 9, SortOrder.DESC);
         
-        inputExpression("ABCDE FGHiJKL",PVarchar.INSTANCE, " ", 5, SortOrder.ASC);
+        inputExpression("ABCDE FGHiJKL",PVarchar.INSTANCE, " ", 6, SortOrder.ASC);
         
-        inputExpression("ABCDE FGHiJKL",PVarchar.INSTANCE, " ", 5, SortOrder.DESC);
+        inputExpression("ABCDE FGHiJKL",PVarchar.INSTANCE, " ", 6, SortOrder.DESC);
         
         inputExpression("ABCDE FGHiJKL",PVarchar.INSTANCE, "", 0, SortOrder.ASC);
         
         inputExpression("ABCDE FGHiJKL",PVarchar.INSTANCE, "", 0, SortOrder.DESC);
         
-        inputExpression("ABCDEABC",PVarchar.INSTANCE, "ABC", 0, SortOrder.ASC);
+        inputExpression("ABCDEABC",PVarchar.INSTANCE, "ABC", 1, SortOrder.ASC);
         
-        inputExpression("ABCDEABC",PVarchar.INSTANCE, "ABC", 0, SortOrder.DESC);
+        inputExpression("ABCDEABC",PVarchar.INSTANCE, "ABC", 1, SortOrder.DESC);
         
-        inputExpression("AB01CDEABC",PVarchar.INSTANCE, "01C", 2, SortOrder.ASC);
+        inputExpression("AB01CDEABC",PVarchar.INSTANCE, "01C", 3, SortOrder.ASC);
         
-        inputExpression("AB01CDEABC",PVarchar.INSTANCE, "01C", 2, SortOrder.DESC);
+        inputExpression("AB01CDEABC",PVarchar.INSTANCE, "01C", 3, SortOrder.DESC);
         
-        inputExpression("ABCD%EFGH",PVarchar.INSTANCE, "%", 4, SortOrder.ASC);
+        inputExpression("ABCD%EFGH",PVarchar.INSTANCE, "%", 5, SortOrder.ASC);
         
-        inputExpression("ABCD%EFGH",PVarchar.INSTANCE, "%", 4, SortOrder.DESC);
+        inputExpression("ABCD%EFGH",PVarchar.INSTANCE, "%", 5, SortOrder.DESC);
         
         //Tests for MultiByte Characters
         
-        inputExpression("AɚɦFGH",PVarchar.INSTANCE, "ɚɦ", 1, SortOrder.ASC);
+        inputExpression("AɚɦFGH",PVarchar.INSTANCE, "ɚɦ", 2, SortOrder.ASC);
         
-        inputExpression("AɚɦFGH",PVarchar.INSTANCE, "ɚɦ", 1, SortOrder.DESC);
+        inputExpression("AɚɦFGH",PVarchar.INSTANCE, "ɚɦ", 2, SortOrder.DESC);
         
-        inputExpression("AɚɦFGH",PVarchar.INSTANCE, "ɦFGH", 2, SortOrder.ASC);
+        inputExpression("AɚɦFGH",PVarchar.INSTANCE, "ɦFGH", 3, SortOrder.ASC);
         
-        inputExpression("AɚɦFGH",PVarchar.INSTANCE, "ɦFGH", 2, SortOrder.DESC);
+        inputExpression("AɚɦFGH",PVarchar.INSTANCE, "ɦFGH", 3, SortOrder.DESC);
         
-        inputExpression("AɚɦF/GH",PVarchar.INSTANCE, "ɦF/GH", 2, SortOrder.ASC);
+        inputExpression("AɚɦF/GH",PVarchar.INSTANCE, "ɦF/GH", 3, SortOrder.ASC);
         
-        inputExpression("AɚɦF/GH",PVarchar.INSTANCE, "ɦF/GH", 2, SortOrder.DESC);
+        inputExpression("AɚɦF/GH",PVarchar.INSTANCE, "ɦF/GH", 3, SortOrder.DESC);
     }
     
 
