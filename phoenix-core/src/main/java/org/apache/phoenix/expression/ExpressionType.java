@@ -193,6 +193,8 @@ public enum ExpressionType {
     ToTimestampFunction(ToTimestampFunction.class),
     JsonPointAsTextExpression(JsonPointAsTextExpression.class),
     JsonPointForArrayAsTextExpression( JsonPointForArrayAsTextExpression.class),
+    JsonPointAsElementExpression(JsonPointAsElementExpression.class),
+    JsonPointForArrayAsElementExpression( JsonPointForArrayAsElementExpression.class)
     ;
     
     ExpressionType(Class<? extends Expression> clazz) {
