@@ -63,7 +63,7 @@ public class InstrFunctionIT extends BaseHBaseManagedTimeIT {
         Connection conn = DriverManager.getConnection(getUrl());
         initTable(conn, "ASC", "abcdefghijkl","fgh");
         String queryToExecute = "SELECT INSTR(name, 'fgh') FROM SAMPLE";
-        testInstr(conn, queryToExecute, 5);
+        testInstr(conn, queryToExecute, 6);
     }
     
     @Test
@@ -71,7 +71,7 @@ public class InstrFunctionIT extends BaseHBaseManagedTimeIT {
         Connection conn = DriverManager.getConnection(getUrl());
         initTable(conn, "DESC", "abcdefghijkl","fgh");
         String queryToExecute = "SELECT INSTR(name, 'fgh') FROM SAMPLE";
-        testInstr(conn, queryToExecute, 5);
+        testInstr(conn, queryToExecute, 6);
     }
     
     @Test
@@ -79,7 +79,7 @@ public class InstrFunctionIT extends BaseHBaseManagedTimeIT {
         Connection conn = DriverManager.getConnection(getUrl());
         initTable(conn, "ASC", "abcde fghijkl","lmn");
         String queryToExecute = "SELECT INSTR(name, 'lmn') FROM SAMPLE";
-        testInstr(conn, queryToExecute, -1);
+        testInstr(conn, queryToExecute, 0);
     }
     
     @Test
@@ -87,7 +87,7 @@ public class InstrFunctionIT extends BaseHBaseManagedTimeIT {
         Connection conn = DriverManager.getConnection(getUrl());
         initTable(conn, "DESC", "abcde fghijkl","lmn");
         String queryToExecute = "SELECT INSTR(name, 'lmn') FROM SAMPLE";
-        testInstr(conn, queryToExecute, -1);
+        testInstr(conn, queryToExecute, 0);
     }
 
     @Test
@@ -95,7 +95,7 @@ public class InstrFunctionIT extends BaseHBaseManagedTimeIT {
         Connection conn = DriverManager.getConnection(getUrl());
         initTable(conn, "ASC", "AɚɦFGH","ɚɦ");
         String queryToExecute = "SELECT INSTR(name, 'ɚɦ') FROM SAMPLE";
-        testInstr(conn, queryToExecute, 1);
+        testInstr(conn, queryToExecute, 2);
     }
     
     @Test
@@ -103,7 +103,7 @@ public class InstrFunctionIT extends BaseHBaseManagedTimeIT {
         Connection conn = DriverManager.getConnection(getUrl());
         initTable(conn, "DESC", "AɚɦFGH","ɚɦ");
         String queryToExecute = "SELECT INSTR(name, 'ɚɦ') FROM SAMPLE";
-        testInstr(conn, queryToExecute, 1);
+        testInstr(conn, queryToExecute, 2);
     } 
 
     @Test
