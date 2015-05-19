@@ -29,7 +29,9 @@ import org.apache.phoenix.expression.ComparisonExpression;
 import org.apache.phoenix.expression.DivideExpression;
 import org.apache.phoenix.expression.InListExpression;
 import org.apache.phoenix.expression.IsNullExpression;
+import org.apache.phoenix.expression.JsonPointAsElementExpression;
 import org.apache.phoenix.expression.JsonPointAsTextExpression;
+import org.apache.phoenix.expression.JsonPointForArrayAsElementExpression;
 import org.apache.phoenix.expression.JsonPointForArrayAsTextExpression;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.LikeExpression;
@@ -187,6 +189,16 @@ public class StatelessTraverseNoExpressionVisitor<E> extends TraverseNoExpressio
 
 	@Override
 	public E visitLeave(JsonPointForArrayAsTextExpression node, List<E> l) {
+		return null;
+	}
+	
+	@Override
+	public E visitLeave(JsonPointAsElementExpression node, List<E> l) {
+		return null;
+	}
+
+	@Override
+	public E visitLeave(JsonPointForArrayAsElementExpression node, List<E> l) {
 		return null;
 	}
 }

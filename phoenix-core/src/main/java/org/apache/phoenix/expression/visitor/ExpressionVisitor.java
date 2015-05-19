@@ -31,7 +31,9 @@ import org.apache.phoenix.expression.DivideExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.InListExpression;
 import org.apache.phoenix.expression.IsNullExpression;
+import org.apache.phoenix.expression.JsonPointAsElementExpression;
 import org.apache.phoenix.expression.JsonPointAsTextExpression;
+import org.apache.phoenix.expression.JsonPointForArrayAsElementExpression;
 import org.apache.phoenix.expression.JsonPointForArrayAsTextExpression;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.LikeExpression;
@@ -136,4 +138,10 @@ public interface ExpressionVisitor<E> {
 	
     public Iterator<Expression> visitEnter(JsonPointForArrayAsTextExpression jsonPointForArrayAsTextExpression);
     public E visitLeave(JsonPointForArrayAsTextExpression node, List<E> l);
+    
+    public Iterator<Expression> visitEnter(JsonPointAsElementExpression jsonPointForArrayAsTextExpression);
+    public E visitLeave(JsonPointAsElementExpression node, List<E> l);
+    
+    public Iterator<Expression> visitEnter(JsonPointForArrayAsElementExpression jsonPointForArrayAsTextExpression);
+    public E visitLeave(JsonPointForArrayAsElementExpression node, List<E> l);
 }

@@ -30,7 +30,9 @@ import org.apache.phoenix.expression.DivideExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.InListExpression;
 import org.apache.phoenix.expression.IsNullExpression;
+import org.apache.phoenix.expression.JsonPointAsElementExpression;
 import org.apache.phoenix.expression.JsonPointAsTextExpression;
+import org.apache.phoenix.expression.JsonPointForArrayAsElementExpression;
 import org.apache.phoenix.expression.JsonPointForArrayAsTextExpression;
 import org.apache.phoenix.expression.LikeExpression;
 import org.apache.phoenix.expression.ModulusExpression;
@@ -165,6 +167,16 @@ public abstract class BaseExpressionVisitor<E> implements ExpressionVisitor<E> {
     
     @Override
     public Iterator<Expression> visitEnter(JsonPointForArrayAsTextExpression node) {
+        return null;
+    }
+    
+    @Override
+    public Iterator<Expression> visitEnter(JsonPointAsElementExpression node) {
+        return null;
+    }
+    
+    @Override
+    public Iterator<Expression> visitEnter(JsonPointForArrayAsElementExpression node) {
         return null;
     }
 }
