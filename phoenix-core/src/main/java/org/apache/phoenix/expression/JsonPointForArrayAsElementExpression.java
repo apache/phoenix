@@ -93,8 +93,9 @@ public class JsonPointForArrayAsElementExpression extends BaseCompoundExpression
 					}
 					else
 					{
-						//need to create Json encode to bytes function and  decode to Json function 
-						return false;
+						//use byte string 
+						ptr.set(Bytes.toBytes(result.toString()));
+						return true;
 					}
 				}
 				else
