@@ -213,7 +213,7 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
         List<IndexMaintainer> indexMaintainers = indexMetaData.getIndexMaintainers();
         Set<ColumnReference> mutableColumns = Sets.newHashSetWithExpectedSize(indexMaintainers.size() * 10);
         for (IndexMaintainer indexMaintainer : indexMaintainers) {
-            if (!indexMaintainer.isImmutableRows()) {
+            if (!indexMaintainer.isImmutableRows() || !indexMaintainer.isLocalIndex()) {
                 mutableColumns.addAll(indexMaintainer.getAllColumns());
             }
         }

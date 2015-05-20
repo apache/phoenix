@@ -86,7 +86,7 @@ public class PhoenixIndexCodec extends BaseIndexCodec {
         ptr.set(state.getCurrentRowKey());
         List<IndexUpdate> indexUpdates = Lists.newArrayList();
         for (IndexMaintainer maintainer : indexMaintainers) {
-            if (maintainer.isImmutableRows()) {
+            if (maintainer.isImmutableRows() && maintainer.isLocalIndex()) {
                 continue;
             }
             Pair<ValueGetter, IndexUpdate> statePair = state.getIndexUpdateState(maintainer.getAllColumns());

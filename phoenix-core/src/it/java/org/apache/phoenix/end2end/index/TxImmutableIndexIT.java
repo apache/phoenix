@@ -55,7 +55,7 @@ public class TxImmutableIndexIT extends ImmutableIndexIT {
     }
     
     @Test
-    public void testRollbackOfUncommittedIndexChange() throws Exception {
+    public void testRollbackOfUncommittedKeyValueIndexChange() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
@@ -63,6 +63,37 @@ public class TxImmutableIndexIT extends ImmutableIndexIT {
             Statement stmt = conn.createStatement();
             stmt.execute("CREATE TABLE DEMO(v1 VARCHAR PRIMARY KEY, v2 VARCHAR, v3 VARCHAR) IMMUTABLE_ROWS=true");
             stmt.execute("CREATE INDEX DEMO_idx ON DEMO (v2) INCLUDE(v3)");
+            
+            stmt.executeUpdate("upsert into DEMO values('x', 'y', 'a')");
+            
+            //assert values in data table
+            ResultSet rs = stmt.executeQuery("select v1, v2, v3 from DEMO");
+            assertTrue(rs.next());
+            assertEquals("x", rs.getString(1));
+            assertEquals("y", rs.getString(2));
+            assertEquals("a", rs.getString(3));
+            assertFalse(rs.next());
+            
+            conn.rollback();
+            
+            //assert values in data table
+            rs = stmt.executeQuery("select v1, v2, v3 from DEMO");
+            assertFalse(rs.next());
+            
+        } finally {
+            conn.close();
+        }
+    }
+    
+    @Test
+    public void testRollbackOfUncommittedRowKeyIndexChange() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(false);
+        try {
+            Statement stmt = conn.createStatement();
+            stmt.execute("CREATE TABLE DEMO(v1 VARCHAR, v2 VARCHAR, v3 VARCHAR, CONSTRAINT pk PRIMARY KEY (v1, v2)) IMMUTABLE_ROWS=true");
+            stmt.execute("CREATE INDEX DEMO_idx ON DEMO (v2, v1)");
             
             stmt.executeUpdate("upsert into DEMO values('x', 'y', 'a')");
             
