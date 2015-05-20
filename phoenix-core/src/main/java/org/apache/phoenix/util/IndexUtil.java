@@ -30,6 +30,7 @@ import java.util.Map;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -209,13 +210,30 @@ public class IndexUtil {
                             .getLength()) == 0);
     }
 
+    public static List<Delete> generateDeleteIndexData(final PTable table, PTable index,
+            List<Delete> dataMutations, ImmutableBytesWritable ptr, final KeyValueBuilder kvBuilder, PhoenixConnection connection)
+            throws SQLException {
+        try {
+            IndexMaintainer maintainer = index.getIndexMaintainer(table, connection);
+            List<Delete> indexMutations = Lists.newArrayListWithExpectedSize(dataMutations.size());
+            for (final Mutation dataMutation : dataMutations) {
+                long ts = MetaDataUtil.getClientTimeStamp(dataMutation);
+                ptr.set(dataMutation.getRow());
+                indexMutations.add(maintainer.buildDeleteMutation(kvBuilder, ptr, ts));
+            }
+            return indexMutations;
+        } catch (IOException e) {
+            throw new SQLException(e);
+        }
+    }
+    
     public static List<Mutation> generateIndexData(final PTable table, PTable index,
             List<Mutation> dataMutations, ImmutableBytesWritable ptr, final KeyValueBuilder kvBuilder, PhoenixConnection connection)
             throws SQLException {
         try {
             IndexMaintainer maintainer = index.getIndexMaintainer(table, connection);
             List<Mutation> indexMutations = Lists.newArrayListWithExpectedSize(dataMutations.size());
-           for (final Mutation dataMutation : dataMutations) {
+            for (final Mutation dataMutation : dataMutations) {
                 long ts = MetaDataUtil.getClientTimeStamp(dataMutation);
                 ptr.set(dataMutation.getRow());
                 /*

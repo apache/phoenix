@@ -17,12 +17,24 @@
  */
 package org.apache.phoenix.end2end.index;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.Statement;
 import java.util.Map;
+import java.util.Properties;
 
 import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
+import org.junit.Test;
 
 import com.google.common.collect.Maps;
 
@@ -38,5 +50,36 @@ public class TxGlobalMutableIndexIT extends GlobalMutableIndexIT {
         props.put(QueryServices.DROP_METADATA_ATTRIB, Boolean.toString(true));
         props.put(QueryServices.DEFAULT_TRANSACTIONAL_ATTRIB, Boolean.toString(true));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+    }
+    
+    @Test
+    public void testRollbackOfUncommittedIndexChange() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(false);
+        try {
+            Statement stmt = conn.createStatement();
+            stmt.execute("CREATE TABLE DEMO(v1 VARCHAR PRIMARY KEY, v2 VARCHAR, v3 VARCHAR)");
+            stmt.execute("CREATE INDEX DEMO_idx ON DEMO (v2) INCLUDE(v3)");
+            
+            stmt.executeUpdate("upsert into DEMO values('x', 'y', 'a')");
+            
+            //assert values in data table
+            ResultSet rs = stmt.executeQuery("select v1, v2, v3 from DEMO");
+            assertTrue(rs.next());
+            assertEquals("x", rs.getString(1));
+            assertEquals("y", rs.getString(2));
+            assertEquals("a", rs.getString(3));
+            assertFalse(rs.next());
+            
+            conn.rollback();
+            
+            //assert values in data table
+            rs = stmt.executeQuery("select v1, v2, v3 from DEMO");
+            assertFalse(rs.next());
+            
+        } finally {
+            conn.close();
+        }
     }
 }

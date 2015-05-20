@@ -33,6 +33,7 @@ import java.text.Format;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 
 import org.apache.hadoop.hbase.client.Scan;
@@ -134,6 +135,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Throwables;
+import com.google.common.collect.Iterators;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
 /**
@@ -236,7 +238,11 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
                         QueryPlan plan = stmt.compilePlan(PhoenixStatement.this, Sequence.ValueOp.RESERVE_SEQUENCE);
                         // Send mutations to hbase, so they are visible to subsequent reads.
                         // Use original plan for data table so that data and immutable indexes will be sent
-                        boolean isTransactional = connection.getMutationState().startTransaction(plan.getContext().getResolver().getTables().iterator());
+                        // TODO: for joins, we need to iterate through all tables, but we need the original table,
+                        // not the projected table, so plan.getContext().getResolver().getTables() won't work.
+                        TableRef tableRef = plan.getTableRef();
+                        Iterator<TableRef> tableRefs = tableRef == null ? Iterators.<TableRef>emptyIterator() : Iterators.singletonIterator(tableRef);
+                        boolean isTransactional = connection.getMutationState().startTransaction(tableRefs);
                         plan = connection.getQueryServices().getOptimizer().optimize(PhoenixStatement.this, plan);
                         if (isTransactional) {
                             // After optimize so that we have the right context object

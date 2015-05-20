@@ -14,11 +14,13 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 import co.cask.tephra.Transaction;
+import co.cask.tephra.TxConstants;
 import co.cask.tephra.hbase98.TransactionAwareHTable;
 
 import org.apache.commons.logging.Log;
@@ -28,6 +30,8 @@ import org.apache.hadoop.hbase.CellScanner;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Delete;
+import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Result;
@@ -40,6 +44,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
+import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.hbase.index.MultiMutation;
@@ -64,6 +69,7 @@ import org.cloudera.htrace.Span;
 import org.cloudera.htrace.Trace;
 import org.cloudera.htrace.TraceScope;
 
+import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -101,16 +107,39 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
         this.writer.stop(msg);
     }
 
+    private static Iterator<Mutation> getMutationIterator(final MiniBatchOperationInProgress<Mutation> miniBatchOp) {
+        return new Iterator<Mutation>() {
+            private int i = 0;
+            
+            @Override
+            public boolean hasNext() {
+                return i < miniBatchOp.size();
+            }
+
+            @Override
+            public Mutation next() {
+                return miniBatchOp.getOperation(i++);
+            }
+
+            @Override
+            public void remove() {
+                throw new UnsupportedOperationException();
+            }
+            
+        };
+    }
     @Override
     public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c,
             MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
 
         Mutation m = miniBatchOp.getOperation(0);
-        if (!codec.isEnabled(m)) {
+        if (!codec.isEnabled(m) || m.getAttribute(TxConstants.TX_ROLLBACK_ATTRIBUTE_KEY) != null) {
             super.preBatchMutate(c, miniBatchOp);
             return;
         }
 
+        Map<String,byte[]> updateAttributes = m.getAttributesMap();
+        PhoenixIndexMetaData indexMetaData = new PhoenixIndexMetaData(c.getEnvironment(),updateAttributes);
         Collection<Pair<Mutation, byte[]>> indexUpdates = null;
         // get the current span, or just use a null-span to avoid a bunch of if statements
         try (TraceScope scope = Trace.startSpan("Starting to build index updates")) {
@@ -120,7 +149,7 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
             }
 
             // get the index updates for all elements in this batch
-            indexUpdates = getIndexUpdates(c.getEnvironment(), miniBatchOp);
+            indexUpdates = getIndexUpdates(c.getEnvironment(), indexMetaData, getMutationIterator(miniBatchOp), false);
 
             current.addTimelineAnnotation("Built index updates, doing preStep");
             TracingUtils.addAnnotation(current, "index update count", indexUpdates.size());
@@ -159,29 +188,41 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
         return s;
     }
 
-    private Collection<Pair<Mutation, byte[]>> getIndexUpdates(RegionCoprocessorEnvironment env, MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
-        // Collect the set of mutable ColumnReferences so that we can first
-        // run a scan to get the current state. We'll need this to delete
-        // the existing index rows.
-        Map<String,byte[]> updateAttributes = miniBatchOp.getOperation(0).getAttributesMap();
-        PhoenixIndexMetaData indexMetaData = new PhoenixIndexMetaData(env,updateAttributes);
-        Transaction tx = indexMetaData.getTransaction();
-        assert(tx != null);
-        List<IndexMaintainer> indexMaintainers = indexMetaData.getIndexMaintainers();
-        Set<ColumnReference> mutableColumns = Sets.newHashSetWithExpectedSize(indexMaintainers.size() * 10);
-        for (IndexMaintainer indexMaintainer : indexMaintainers) {
-            if (!indexMaintainer.isImmutableRows()) {
-                mutableColumns.addAll(indexMaintainer.getAllColumns());
-            }
+    @Override
+    public void preDelete(final ObserverContext<RegionCoprocessorEnvironment> e, final Delete delete,
+        final WALEdit edit, final Durability durability) throws IOException {
+        
+        // Need to do this in preDelete as otherwise our scan won't see the old values unless
+        // we do a raw scan.
+        if (delete.getAttribute(TxConstants.TX_ROLLBACK_ATTRIBUTE_KEY) == null || !codec.isEnabled(delete)) {
+            super.preDelete(e, delete, edit, durability);
+            return;
         }
+        Map<String,byte[]> updateAttributes = delete.getAttributesMap();
+        PhoenixIndexMetaData indexMetaData = new PhoenixIndexMetaData(e.getEnvironment(),updateAttributes);
+        Collection<Pair<Mutation, byte[]>> indexUpdates = null;
+        try {
+            indexUpdates = getIndexUpdates(e.getEnvironment(), indexMetaData, Iterators.<Mutation>singletonIterator(delete), true);
+            // no index updates, so we are done
+            if (!indexUpdates.isEmpty()) {
+                this.writer.write(indexUpdates);
+            }
+        } catch (Throwable t) {
+            String msg = "Failed to rollback index updates: " + indexUpdates;
+            LOG.error(msg, t);
+            ServerUtil.throwIOException(msg, t);
+        }
+    }
+
+    private Collection<Pair<Mutation, byte[]>> getIndexUpdates(RegionCoprocessorEnvironment env, PhoenixIndexMetaData indexMetaData, Iterator<Mutation> mutationIterator, boolean readOwnWrites) throws IOException {
         ResultScanner scanner = null;
         TransactionAwareHTable txTable = null;
         
         // Collect up all mutations in batch
         Map<ImmutableBytesPtr, MultiMutation> mutations =
                 new HashMap<ImmutableBytesPtr, MultiMutation>();
-        for (int i = 0; i < miniBatchOp.size(); i++) {
-            Mutation m = miniBatchOp.getOperation(i);
+        while(mutationIterator.hasNext()) {
+            Mutation m = mutationIterator.next();
             // add the mutation to the batch set
             ImmutableBytesPtr row = new ImmutableBytesPtr(m.getRow());
             MultiMutation stored = mutations.get(row);
@@ -193,6 +234,19 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
             stored.addAll(m);
         }
         
+        // Collect the set of mutable ColumnReferences so that we can first
+        // run a scan to get the current state. We'll need this to delete
+        // the existing index rows.
+        Transaction tx = indexMetaData.getTransaction();
+        assert(tx != null);
+        List<IndexMaintainer> indexMaintainers = indexMetaData.getIndexMaintainers();
+        Set<ColumnReference> mutableColumns = Sets.newHashSetWithExpectedSize(indexMaintainers.size() * 10);
+        for (IndexMaintainer indexMaintainer : indexMaintainers) {
+            if (!indexMaintainer.isImmutableRows()) {
+                mutableColumns.addAll(indexMaintainer.getAllColumns());
+            }
+        }
+
         Collection<Pair<Mutation, byte[]>> indexUpdates = new ArrayList<Pair<Mutation, byte[]>>(mutations.size() * 2 * indexMaintainers.size());
         try {
             if (!mutableColumns.isEmpty()) {
@@ -201,7 +255,9 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
                     keys.add(PVarbinary.INSTANCE.getKeyRange(ptr.copyBytesIfNecessary()));
                 }
                 Scan scan = new Scan();
-                scan.setAttribute(TX_NO_READ_OWN_WRITES, PDataType.TRUE_BYTES); // TODO: remove when Tephra allows this
+                if (!readOwnWrites) {
+                    scan.setAttribute(TX_NO_READ_OWN_WRITES, PDataType.TRUE_BYTES); // TODO: remove when Tephra allows this
+                }
                 // Project all mutable columns
                 for (ColumnReference ref : mutableColumns) {
                     scan.addColumn(ref.getFamily(), ref.getQualifier());
@@ -217,14 +273,17 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
                 txTable.startTx(tx);
                 scanner = txTable.getScanner(scan);
             }
+            ColumnReference emptyColRef = new ColumnReference(indexMaintainers.get(0).getDataEmptyKeyValueCF(), QueryConstants.EMPTY_COLUMN_BYTES);
             if (scanner != null) {
                 Result result;
                 while ((result = scanner.next()) != null) {
                     Mutation m = mutations.remove(new ImmutableBytesPtr(result.getRow()));
-                    TxTableState state = new TxTableState(env, mutableColumns, updateAttributes, tx.getWritePointer(), m, result);
+                    byte[] attribValue = m.getAttribute(TxConstants.TX_ROLLBACK_ATTRIBUTE_KEY);
+                    TxTableState state = new TxTableState(env, mutableColumns, indexMetaData.getAttributes(), tx.getWritePointer(), m, emptyColRef, result);
                     Iterable<IndexUpdate> deletes = codec.getIndexDeletes(state, indexMetaData);
                     for (IndexUpdate delete : deletes) {
                         if (delete.isValid()) {
+                            delete.getUpdate().setAttribute(TxConstants.TX_ROLLBACK_ATTRIBUTE_KEY, attribValue);
                             indexUpdates.add(new Pair<Mutation, byte[]>(delete.getUpdate(),delete.getTableName()));
                         }
                     }
@@ -238,7 +297,7 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
                 }
             }
             for (Mutation m : mutations.values()) {
-                TxTableState state = new TxTableState(env, mutableColumns, updateAttributes, tx.getWritePointer(), m);
+                TxTableState state = new TxTableState(env, mutableColumns, indexMetaData.getAttributes(), tx.getWritePointer(), m);
                 state.applyMutation();
                 Iterable<IndexUpdate> puts = codec.getIndexUpserts(state, indexMetaData);
                 for (IndexUpdate put : puts) {
@@ -284,7 +343,7 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
             }
         }
         
-        public TxTableState(RegionCoprocessorEnvironment env, Set<ColumnReference> indexedColumns, Map<String, byte[]> attributes, long currentTimestamp, Mutation m, Result r) {
+        public TxTableState(RegionCoprocessorEnvironment env, Set<ColumnReference> indexedColumns, Map<String, byte[]> attributes, long currentTimestamp, Mutation m, ColumnReference emptyColRef, Result r) {
             this(env, indexedColumns, attributes, currentTimestamp, m);
 
             for (ColumnReference ref : indexedColumns) {
@@ -295,6 +354,14 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
                     valueMap.put(ref, ptr);
                 }
             }
+            /*
+            Cell cell = r.getColumnLatestCell(emptyColRef.getFamily(), emptyColRef.getQualifier());
+            if (cell != null) {
+                ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+                ptr.set(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength());
+                valueMap.put(emptyColRef, ptr);
+            }
+            */
         }
         
         @Override

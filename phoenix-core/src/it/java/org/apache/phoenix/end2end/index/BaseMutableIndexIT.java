@@ -1171,4 +1171,5 @@ public abstract class BaseMutableIndexIT extends BaseHBaseManagedTimeIT {
     		conn.close();
     	}
     }
+    
 }

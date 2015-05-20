@@ -307,7 +307,7 @@ public interface PTable {
     PName getPhysicalName();
     boolean isImmutableRows();
 
-    void getIndexMaintainers(ImmutableBytesWritable ptr, PhoenixConnection connection);
+    boolean getIndexMaintainers(ImmutableBytesWritable ptr, PhoenixConnection connection);
     IndexMaintainer getIndexMaintainer(PTable dataTable, PhoenixConnection connection);
     PName getDefaultFamilyName();
 

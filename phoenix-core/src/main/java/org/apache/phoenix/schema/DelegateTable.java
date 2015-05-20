@@ -162,8 +162,8 @@ public class DelegateTable implements PTable {
     }
 
     @Override
-    public void getIndexMaintainers(ImmutableBytesWritable ptr, PhoenixConnection connection) {
-        delegate.getIndexMaintainers(ptr, connection);
+    public boolean getIndexMaintainers(ImmutableBytesWritable ptr, PhoenixConnection connection) {
+        return delegate.getIndexMaintainers(ptr, connection);
     }
 
     @Override

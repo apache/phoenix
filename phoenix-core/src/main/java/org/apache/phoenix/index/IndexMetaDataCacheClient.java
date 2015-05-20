@@ -24,7 +24,6 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
 import org.apache.phoenix.cache.ServerCacheClient;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.ScanRanges;
@@ -59,7 +58,7 @@ public class IndexMetaDataCacheClient {
      * @param mutations the list of mutations that will be sent in a batch to server
      * @param indexMetaDataByteLength length in bytes of the index metadata cache
      */
-    public static boolean useIndexMetadataCache(PhoenixConnection connection, List<Mutation> mutations, int indexMetaDataByteLength) {
+    public static boolean useIndexMetadataCache(PhoenixConnection connection, List<? extends Mutation> mutations, int indexMetaDataByteLength) {
         ReadOnlyProps props = connection.getQueryServices().getProps();
         int threshold = props.getInt(INDEX_MUTATE_BATCH_SIZE_THRESHOLD_ATTRIB, QueryServicesOptions.DEFAULT_INDEX_MUTATE_BATCH_SIZE_THRESHOLD);
         return (indexMetaDataByteLength > ServerCacheClient.UUID_LENGTH && mutations.size() > threshold);
@@ -73,7 +72,7 @@ public class IndexMetaDataCacheClient {
      * @throws MaxServerCacheSizeExceededException if size of hash cache exceeds max allowed
      * size
      */
-    public ServerCache addIndexMetadataCache(List<Mutation> mutations, ImmutableBytesWritable ptr, byte[] txState) throws SQLException {
+    public ServerCache addIndexMetadataCache(List<? extends Mutation> mutations, ImmutableBytesWritable ptr, byte[] txState) throws SQLException {
         /**
          * Serialize and compress hashCacheTable
          */

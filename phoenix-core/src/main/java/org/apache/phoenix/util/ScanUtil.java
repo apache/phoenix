@@ -45,12 +45,12 @@ import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.KeyRange.Bound;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
-import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.ValueSchema.Field;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PVarbinary;
 
 import com.google.common.collect.Lists;
 
@@ -434,7 +434,7 @@ public class ScanUtil {
         }
     }
     
-    public static ScanRanges newScanRanges(List<Mutation> mutations) throws SQLException {
+    public static ScanRanges newScanRanges(List<? extends Mutation> mutations) throws SQLException {
         List<KeyRange> keys = Lists.newArrayListWithExpectedSize(mutations.size());
         for (Mutation m : mutations) {
             keys.add(PVarbinary.INSTANCE.getKeyRange(m.getRow()));

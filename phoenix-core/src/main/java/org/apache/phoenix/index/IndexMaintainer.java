@@ -194,6 +194,35 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         ptr.set(stream.getBuffer(), 0, stream.size());
     }
     
+
+    public static void serializeAdditional(PTable table, ImmutableBytesWritable indexMetaDataPtr,
+            List<PTable> keyValueIndexes, PhoenixConnection connection) {
+        int nMutableIndexes = indexMetaDataPtr.getLength() == 0 ? 0 : ByteUtil.vintFromBytes(indexMetaDataPtr);
+        int nIndexes = nMutableIndexes + keyValueIndexes.size();
+        int estimatedSize = indexMetaDataPtr.getLength() + 1; // Just in case new size increases buffer
+        for (PTable index : keyValueIndexes) {
+            estimatedSize += index.getIndexMaintainer(table, connection).getEstimatedByteSize();
+        }
+        TrustedByteArrayOutputStream stream = new TrustedByteArrayOutputStream(estimatedSize + 1);
+        DataOutput output = new DataOutputStream(stream);
+        try {
+            // Encode data table salting in sign of number of indexes
+            WritableUtils.writeVInt(output, nIndexes * (table.getBucketNum() == null ? 1 : -1));
+            // Serialize current mutable indexes, subtracting the vint size from the length
+            // as its still included
+            if (indexMetaDataPtr.getLength() > 0) {
+                output.write(indexMetaDataPtr.get(), indexMetaDataPtr.getOffset(), indexMetaDataPtr.getLength()-WritableUtils.getVIntSize(nMutableIndexes));
+            }
+            // Serialize mutable indexes afterwards
+            for (PTable index : keyValueIndexes) {
+                index.getIndexMaintainer(table, connection).write(output);
+            }
+        } catch (IOException e) {
+            throw new RuntimeException(e); // Impossible
+        }
+        indexMetaDataPtr.set(stream.getBuffer(), 0, stream.size());
+    }
+    
     public static List<IndexMaintainer> deserialize(ImmutableBytesWritable metaDataPtr,
             KeyValueBuilder builder) {
         return deserialize(metaDataPtr.get(), metaDataPtr.getOffset(), metaDataPtr.getLength());
@@ -264,6 +293,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
 
     private IndexMaintainer(PTable dataTable, PTable index, PhoenixConnection connection) {
         this(dataTable.getRowKeySchema(), dataTable.getBucketNum() != null);
+        assert(dataTable.getType() == PTableType.SYSTEM || dataTable.getType() == PTableType.TABLE || dataTable.getType() == PTableType.VIEW);
         this.isMultiTenant = dataTable.isMultiTenant();
         this.viewIndexId = index.getViewIndexId() == null ? null : MetaDataUtil.getViewIndexIdDataType().toBytes(index.getViewIndexId());
         this.isLocalIndex = index.getIndexType() == IndexType.LOCAL;

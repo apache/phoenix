@@ -40,6 +40,7 @@ import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.TransactionUtil;
 
 public class PhoenixIndexMetaData implements IndexMetaData {
+    private final Map<String, byte[]> attributes;
     private final IndexMetaDataCache indexMetaDataCache;
     
     private static IndexMetaDataCache getIndexMetaData(RegionCoprocessorEnvironment env, Map<String, byte[]> attributes) throws IOException {
@@ -84,7 +85,8 @@ public class PhoenixIndexMetaData implements IndexMetaData {
     }
 
     public PhoenixIndexMetaData(RegionCoprocessorEnvironment env, Map<String,byte[]> attributes) throws IOException {
-        indexMetaDataCache = getIndexMetaData(env, attributes);
+        this.indexMetaDataCache = getIndexMetaData(env, attributes);
+        this.attributes = attributes;
     }
     
     public Transaction getTransaction() {
@@ -93,5 +95,9 @@ public class PhoenixIndexMetaData implements IndexMetaData {
     
     public List<IndexMaintainer> getIndexMaintainers() {
         return indexMetaDataCache.getIndexMaintainers();
+    }
+
+    public Map<String, byte[]> getAttributes() {
+        return attributes;
     }
 }

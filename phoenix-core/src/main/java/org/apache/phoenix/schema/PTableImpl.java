@@ -830,7 +830,7 @@ public class PTableImpl implements PTable {
     }
 
     @Override
-    public synchronized void getIndexMaintainers(ImmutableBytesWritable ptr, PhoenixConnection connection) {
+    public synchronized boolean getIndexMaintainers(ImmutableBytesWritable ptr, PhoenixConnection connection) {
         if (indexMaintainersPtr == null) {
             indexMaintainersPtr = new ImmutableBytesWritable();
             if (indexes.isEmpty()) {
@@ -840,6 +840,7 @@ public class PTableImpl implements PTable {
             }
         }
         ptr.set(indexMaintainersPtr.get(), indexMaintainersPtr.getOffset(), indexMaintainersPtr.getLength());
+        return indexMaintainersPtr.getLength() > 0;
     }
 
     @Override
