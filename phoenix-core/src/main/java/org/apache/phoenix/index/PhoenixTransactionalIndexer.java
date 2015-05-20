@@ -213,6 +213,10 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
         List<IndexMaintainer> indexMaintainers = indexMetaData.getIndexMaintainers();
         Set<ColumnReference> mutableColumns = Sets.newHashSetWithExpectedSize(indexMaintainers.size() * 10);
         for (IndexMaintainer indexMaintainer : indexMaintainers) {
+            // Check both immutable and local, as for transactional tables, we use an index maintainer
+            // to aid in rollback if there's a KeyValue column in the index. The alternative would be
+            // to hold on to all uncommitted index row keys (even ones already sent to HBase) on the
+            // client side.
             if (!indexMaintainer.isImmutableRows() || !indexMaintainer.isLocalIndex()) {
                 mutableColumns.addAll(indexMaintainer.getAllColumns());
             }
