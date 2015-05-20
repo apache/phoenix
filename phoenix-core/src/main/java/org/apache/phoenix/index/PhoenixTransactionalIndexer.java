@@ -30,8 +30,6 @@ import org.apache.hadoop.hbase.CellScanner;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.Delete;
-import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Result;
@@ -44,7 +42,6 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
-import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.hbase.index.MultiMutation;
@@ -69,7 +66,6 @@ import org.cloudera.htrace.Span;
 import org.cloudera.htrace.Trace;
 import org.cloudera.htrace.TraceScope;
 
-import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -133,11 +129,12 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
             MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
 
         Mutation m = miniBatchOp.getOperation(0);
-        if (!codec.isEnabled(m) || m.getAttribute(TxConstants.TX_ROLLBACK_ATTRIBUTE_KEY) != null) {
+        if (!codec.isEnabled(m)) {
             super.preBatchMutate(c, miniBatchOp);
             return;
         }
 
+        boolean readOwnWrites = m.getAttribute(TxConstants.TX_ROLLBACK_ATTRIBUTE_KEY) != null;
         Map<String,byte[]> updateAttributes = m.getAttributesMap();
         PhoenixIndexMetaData indexMetaData = new PhoenixIndexMetaData(c.getEnvironment(),updateAttributes);
         Collection<Pair<Mutation, byte[]>> indexUpdates = null;
@@ -149,7 +146,7 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
             }
 
             // get the index updates for all elements in this batch
-            indexUpdates = getIndexUpdates(c.getEnvironment(), indexMetaData, getMutationIterator(miniBatchOp), false);
+            indexUpdates = getIndexUpdates(c.getEnvironment(), indexMetaData, getMutationIterator(miniBatchOp), readOwnWrites);
 
             current.addTimelineAnnotation("Built index updates, doing preStep");
             TracingUtils.addAnnotation(current, "index update count", indexUpdates.size());
@@ -186,32 +183,6 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
             }
         }
         return s;
-    }
-
-    @Override
-    public void preDelete(final ObserverContext<RegionCoprocessorEnvironment> e, final Delete delete,
-        final WALEdit edit, final Durability durability) throws IOException {
-        
-        // Need to do this in preDelete as otherwise our scan won't see the old values unless
-        // we do a raw scan.
-        if (delete.getAttribute(TxConstants.TX_ROLLBACK_ATTRIBUTE_KEY) == null || !codec.isEnabled(delete)) {
-            super.preDelete(e, delete, edit, durability);
-            return;
-        }
-        Map<String,byte[]> updateAttributes = delete.getAttributesMap();
-        PhoenixIndexMetaData indexMetaData = new PhoenixIndexMetaData(e.getEnvironment(),updateAttributes);
-        Collection<Pair<Mutation, byte[]>> indexUpdates = null;
-        try {
-            indexUpdates = getIndexUpdates(e.getEnvironment(), indexMetaData, Iterators.<Mutation>singletonIterator(delete), true);
-            // no index updates, so we are done
-            if (!indexUpdates.isEmpty()) {
-                this.writer.write(indexUpdates);
-            }
-        } catch (Throwable t) {
-            String msg = "Failed to rollback index updates: " + indexUpdates;
-            LOG.error(msg, t);
-            ServerUtil.throwIOException(msg, t);
-        }
     }
 
     private Collection<Pair<Mutation, byte[]>> getIndexUpdates(RegionCoprocessorEnvironment env, PhoenixIndexMetaData indexMetaData, Iterator<Mutation> mutationIterator, boolean readOwnWrites) throws IOException {

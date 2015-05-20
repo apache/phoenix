@@ -27,6 +27,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import co.cask.tephra.TxConstants;
+
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.TableName;
@@ -219,7 +221,10 @@ public class IndexUtil {
             for (final Mutation dataMutation : dataMutations) {
                 long ts = MetaDataUtil.getClientTimeStamp(dataMutation);
                 ptr.set(dataMutation.getRow());
-                indexMutations.add(maintainer.buildDeleteMutation(kvBuilder, ptr, ts));
+                Delete delete = maintainer.buildDeleteMutation(kvBuilder, ptr, ts);
+                // TODO: move to TransactionUtil
+                delete.setAttribute(TxConstants.TX_ROLLBACK_ATTRIBUTE_KEY, dataMutation.getAttribute(TxConstants.TX_ROLLBACK_ATTRIBUTE_KEY));
+                indexMutations.add(delete);
             }
             return indexMutations;
         } catch (IOException e) {

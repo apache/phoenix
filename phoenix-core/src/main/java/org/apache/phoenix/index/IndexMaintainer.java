@@ -200,6 +200,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         int nMutableIndexes = indexMetaDataPtr.getLength() == 0 ? 0 : ByteUtil.vintFromBytes(indexMetaDataPtr);
         int nIndexes = nMutableIndexes + keyValueIndexes.size();
         int estimatedSize = indexMetaDataPtr.getLength() + 1; // Just in case new size increases buffer
+        if (indexMetaDataPtr.getLength() == 0) {
+            estimatedSize += table.getRowKeySchema().getEstimatedByteSize();
+        }
         for (PTable index : keyValueIndexes) {
             estimatedSize += index.getIndexMaintainer(table, connection).getEstimatedByteSize();
         }
@@ -212,6 +215,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             // as its still included
             if (indexMetaDataPtr.getLength() > 0) {
                 output.write(indexMetaDataPtr.get(), indexMetaDataPtr.getOffset(), indexMetaDataPtr.getLength()-WritableUtils.getVIntSize(nMutableIndexes));
+            } else {
+                table.getRowKeySchema().write(output);
             }
             // Serialize mutable indexes afterwards
             for (PTable index : keyValueIndexes) {

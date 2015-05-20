@@ -94,7 +94,6 @@ public class MutationState implements SQLCloseable {
 
     private PhoenixConnection connection;
     private final long maxSize;
-    private final ImmutableBytesWritable tempPtr = new ImmutableBytesWritable();
     // map from table to rows 
     //   rows - map from rowkey to columns
     //      columns - map from column to value
@@ -264,6 +263,7 @@ public class MutationState implements SQLCloseable {
         final List<Mutation> mutations = Lists.newArrayListWithExpectedSize(values.size());
         final List<Mutation> mutationsPertainingToIndex = indexes.hasNext() ? Lists.<Mutation>newArrayListWithExpectedSize(values.size()) : null;
         Iterator<Map.Entry<ImmutableBytesPtr,Map<PColumn,byte[]>>> iterator = values.entrySet().iterator();
+        final ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         while (iterator.hasNext()) {
             Map.Entry<ImmutableBytesPtr,Map<PColumn,byte[]>> rowEntry = iterator.next();
             ImmutableBytesPtr key = rowEntry.getKey();
@@ -305,7 +305,7 @@ public class MutationState implements SQLCloseable {
                 try {
                     indexMutations =
                             IndexUtil.generateIndexData(tableRef.getTable(), index, mutationsPertainingToIndex,
-                                tempPtr, connection.getKeyValueBuilder(), connection);
+                                    ptr, connection.getKeyValueBuilder(), connection);
                 } catch (SQLException e) {
                     throw new IllegalDataException(e);
                 }
@@ -473,8 +473,9 @@ public class MutationState implements SQLCloseable {
                         divideImmutableIndexes(enabledIndexes, table, rowKeyIndexes, keyValueIndexes);
                         // Generate index deletes for immutable indexes that only reference row key
                         // columns and submit directly here.
+                        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
                         for (PTable index : rowKeyIndexes) {
-                            List<Delete> indexDeletes = IndexUtil.generateDeleteIndexData(table, index, deletes, tempPtr, connection.getKeyValueBuilder(), connection);
+                            List<Delete> indexDeletes = IndexUtil.generateDeleteIndexData(table, index, deletes, ptr, connection.getKeyValueBuilder(), connection);
                             HTableInterface hindex = connection.getQueryServices().getTable(index.getPhysicalName().getBytes());
                             hindex.delete(indexDeletes);
                         }
@@ -511,6 +512,7 @@ public class MutationState implements SQLCloseable {
         // add tracing for this operation
         TraceScope trace = Tracing.startNewSpan(connection, "Committing mutations to tables");
         Span span = trace.getSpan();
+        ImmutableBytesWritable indexMetaDataPtr = new ImmutableBytesWritable();
         while (tableRefIterator.hasNext()) {
             TableRef tableRef = tableRefIterator.next();
             Map<ImmutableBytesPtr,Map<PColumn,byte[]>> valuesMap = mutations.get(tableRef);
@@ -518,7 +520,7 @@ public class MutationState implements SQLCloseable {
                 continue;
             }
             PTable table = tableRef.getTable();
-            boolean hasIndexMaintainers = table.getIndexMaintainers(tempPtr, connection);
+            table.getIndexMaintainers(indexMetaDataPtr, connection);
             boolean isDataTable = true;
             // Validate as we go if transactional since we can undo if a problem occurs (which is unlikely)
             long serverTimestamp = serverTimeStamps == null ? validate(tableRef, valuesMap) : serverTimeStamps[i++];
@@ -536,8 +538,8 @@ public class MutationState implements SQLCloseable {
                 boolean shouldRetry = false;
                 do {
                     ServerCache cache = null;
-                    if (hasIndexMaintainers && isDataTable) {
-                        cache = setMetaDataOnMutations(tableRef, mutations, tempPtr);
+                    if (isDataTable) {
+                        cache = setMetaDataOnMutations(tableRef, mutations, indexMetaDataPtr);
                     }
                 
                     // If we haven't retried yet, retry for this case only, as it's possible that
@@ -558,7 +560,11 @@ public class MutationState implements SQLCloseable {
                             // Don't add immutable indexes (those are the only ones that would participate
                             // during a commit), as we don't need conflict detection for these.
                             if (isDataTable) {
+                                // Even for immutable, we need to do this so that an abort has the state
+                                // necessary to generate the rows to delete.
                                 addTxParticipant(txnAware);
+                            } else {
+                                txnAware.startTx(getTransaction());
                             }
                             hTable = txnAware;
                         }
@@ -635,18 +641,23 @@ public class MutationState implements SQLCloseable {
         byte[] tenantId = connection.getTenantId() == null ? null : connection.getTenantId().getBytes();
         ServerCache cache = null;
         byte[] attribValue = null;
-        byte[] uuidValue;
+        byte[] uuidValue = null;
         byte[] txState = ByteUtil.EMPTY_BYTE_ARRAY;
         if (table.isTransactional()) {
             txState = TransactionUtil.encodeTxnState(getTransaction());
         }
-        if (IndexMetaDataCacheClient.useIndexMetadataCache(connection, mutations, indexMetaDataPtr.getLength() + txState.length)) {
-            IndexMetaDataCacheClient client = new IndexMetaDataCacheClient(connection, tableRef);
-            cache = client.addIndexMetadataCache(mutations, indexMetaDataPtr, txState);
-            uuidValue = cache.getId();
-        } else {
-            attribValue = ByteUtil.copyKeyBytesIfNecessary(indexMetaDataPtr);
-            uuidValue = ServerCacheClient.generateId();
+        boolean hasIndexMetaData = indexMetaDataPtr.getLength() > 0;
+        if (hasIndexMetaData) {
+            if (IndexMetaDataCacheClient.useIndexMetadataCache(connection, mutations, indexMetaDataPtr.getLength() + txState.length)) {
+                IndexMetaDataCacheClient client = new IndexMetaDataCacheClient(connection, tableRef);
+                cache = client.addIndexMetadataCache(mutations, indexMetaDataPtr, txState);
+                uuidValue = cache.getId();
+            } else {
+                attribValue = ByteUtil.copyKeyBytesIfNecessary(indexMetaDataPtr);
+                uuidValue = ServerCacheClient.generateId();
+            }
+        } else if (txState.length == 0) {
+            return null;
         }
         // Either set the UUID to be able to access the index metadata from the cache
         // or set the index metadata directly on the Mutation
@@ -657,6 +668,10 @@ public class MutationState implements SQLCloseable {
             mutation.setAttribute(PhoenixIndexCodec.INDEX_UUID, uuidValue);
             if (attribValue != null) {
                 mutation.setAttribute(PhoenixIndexCodec.INDEX_MD, attribValue);
+                if (txState.length > 0) {
+                    mutation.setAttribute(BaseScannerRegionObserver.TX_STATE, txState);
+                }
+            } else if (!hasIndexMetaData && txState.length > 0) {
                 mutation.setAttribute(BaseScannerRegionObserver.TX_STATE, txState);
             }
         }
