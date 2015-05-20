@@ -65,6 +65,7 @@ import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto;
 import org.apache.hadoop.hbase.regionserver.IndexHalfStoreFileReaderGenerator;
 import org.apache.hadoop.hbase.regionserver.LocalIndexSplitter;
 import org.apache.hadoop.hbase.security.User;
+import org.apache.hadoop.hbase.util.ByteStringer;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.hbase.util.VersionInfo;
@@ -165,7 +166,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.google.protobuf.HBaseZeroCopyByteString;
 
 
 public class ConnectionQueryServicesImpl extends DelegateQueryServices implements ConnectionQueryServices {
@@ -1281,9 +1281,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     BlockingRpcCallback<MetaDataResponse> rpcCallback =
                             new BlockingRpcCallback<MetaDataResponse>();
                     GetTableRequest.Builder builder = GetTableRequest.newBuilder();
-                    builder.setTenantId(HBaseZeroCopyByteString.wrap(tenantIdBytes));
-                    builder.setSchemaName(HBaseZeroCopyByteString.wrap(schemaBytes));
-                    builder.setTableName(HBaseZeroCopyByteString.wrap(tableBytes));
+                    builder.setTenantId(ByteStringer.wrap(tenantIdBytes));
+                    builder.setSchemaName(ByteStringer.wrap(schemaBytes));
+                    builder.setTableName(ByteStringer.wrap(tableBytes));
                     builder.setTableTimestamp(tableTimestamp);
                     builder.setClientTimestamp(clientTimestamp);
 
@@ -2353,9 +2353,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 ServerRpcController controller = new ServerRpcController();
                                 BlockingRpcCallback<ClearTableFromCacheResponse> rpcCallback = new BlockingRpcCallback<ClearTableFromCacheResponse>();
                                 ClearTableFromCacheRequest.Builder builder = ClearTableFromCacheRequest.newBuilder();
-                                builder.setTenantId(HBaseZeroCopyByteString.wrap(tenantId));
-                                builder.setTableName(HBaseZeroCopyByteString.wrap(tableName));
-                                builder.setSchemaName(HBaseZeroCopyByteString.wrap(schemaName));
+                                builder.setTenantId(ByteStringer.wrap(tenantId));
+                                builder.setTableName(ByteStringer.wrap(tableName));
+                                builder.setSchemaName(ByteStringer.wrap(schemaName));
                                 builder.setClientTimestamp(clientTS);
                                 instance.clearTableFromCache(controller, builder.build(), rpcCallback);
                                 if (controller.getFailedOn() != null) { throw controller.getFailedOn(); }
@@ -2639,9 +2639,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     BlockingRpcCallback<MetaDataResponse> rpcCallback =
                             new BlockingRpcCallback<MetaDataResponse>();
                     GetFunctionsRequest.Builder builder = GetFunctionsRequest.newBuilder();
-                    builder.setTenantId(HBaseZeroCopyByteString.wrap(tenantIdBytes));
+                    builder.setTenantId(ByteStringer.wrap(tenantIdBytes));
                     for(Pair<byte[], Long> function: functions) {
-                        builder.addFunctionNames(HBaseZeroCopyByteString.wrap(function.getFirst()));
+                        builder.addFunctionNames(ByteStringer.wrap(function.getFirst()));
                         builder.addFunctionTimestamps(function.getSecond().longValue());
                     }
                     builder.setClientTimestamp(clientTimestamp);
