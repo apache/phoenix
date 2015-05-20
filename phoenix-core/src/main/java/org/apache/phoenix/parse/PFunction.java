@@ -22,6 +22,7 @@ import java.util.Collections;
 import java.util.List;
 
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.util.ByteStringer;
 import org.apache.phoenix.coprocessor.generated.PFunctionProtos;
 import org.apache.phoenix.coprocessor.generated.PFunctionProtos.PFunctionArg;
 import org.apache.phoenix.expression.LiteralExpression;
@@ -30,8 +31,6 @@ import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.util.SizedUtil;
-
-import com.google.protobuf.HBaseZeroCopyByteString;
 
 public class PFunction implements PMetaDataEntity {
 
@@ -193,7 +192,7 @@ public class PFunction implements PMetaDataEntity {
     public static PFunctionProtos.PFunction toProto(PFunction function) {
         PFunctionProtos.PFunction.Builder builder = PFunctionProtos.PFunction.newBuilder();
         if(function.getTenantId() != null){
-          builder.setTenantId(HBaseZeroCopyByteString.wrap(function.getTenantId().getBytes()));
+          builder.setTenantId(ByteStringer.wrap(function.getTenantId().getBytes()));
         }
         builder.setFunctionName(function.getFunctionName());
         builder.setClassname(function.getClassName());
