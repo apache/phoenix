@@ -38,7 +38,7 @@ import javax.xml.bind.Marshaller;
 
 import static org.junit.Assert.*;
 
-public class ConfigurationParserTest {
+public class ConfigurationParserTest extends ResultBaseTest{
     private static final Logger logger = LoggerFactory.getLogger(ConfigurationParserTest.class);
 
     @Test

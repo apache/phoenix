@@ -18,7 +18,6 @@
 
 package org.apache.phoenix.pherf;
 
-import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.pherf.configuration.Column;
 import org.apache.phoenix.pherf.configuration.DataTypeMapping;
 import org.apache.phoenix.pherf.configuration.Scenario;
@@ -39,7 +38,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-public class DataIngestIT extends BaseHBaseManagedTimeIT {
+public class DataIngestIT extends ResultBaseTestIT {
     protected static PhoenixUtil util = new PhoenixUtil(true);
     static final String matcherScenario = ".*scenario/.*test.*xml";
     static final String matcherSchema = ".*datamodel/.*test.*sql";

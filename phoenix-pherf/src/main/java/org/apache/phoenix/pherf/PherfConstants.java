@@ -18,7 +18,13 @@
 
 package org.apache.phoenix.pherf;
 
+import java.io.InputStream;
+import java.util.Properties;
+
 public class PherfConstants {
+    private static PherfConstants instance = null;
+    private Properties properties = null;
+
     public static final int DEFAULT_THREAD_POOL_SIZE = 10;
     public static final int DEFAULT_BATCH_SIZE = 1000;
     public static final String DEFAULT_DATE_PATTERN = "yyyy-MM-dd HH:mm:ss.SSS";
@@ -29,7 +35,7 @@ public class PherfConstants {
             ".*" + PherfConstants.RESOURCE_SCENARIO.substring(1) + ".*";
     public static final String SCHEMA_ROOT_PATTERN = ".*";
     public static final String PHERF_PROPERTIES = "pherf.properties";
-    public static final String RESULT_DIR = "RESULTS";
+//    public static final String RESULT_DIR = "RESULTS";
     public static final String EXPORT_DIR = "CSV_EXPORT";
     public static final String RESULT_PREFIX = "RESULT_";
     public static final String PATH_SEPARATOR = "/";
@@ -59,5 +65,47 @@ public class PherfConstants {
     public static enum RunMode {
         PERFORMANCE,
         FUNCTIONAL
+    }
+
+    private PherfConstants() {
+    }
+
+    public static PherfConstants create() {
+        if (instance == null) {
+            instance = new PherfConstants();
+        }
+        return instance;
+    }
+
+    public Properties getProperties(final String fileName) throws Exception {
+        if (properties != null) {
+            return properties;
+        }
+
+        properties = new Properties();
+        InputStream is = null;
+        try {
+            is = getClass().getClassLoader().getResourceAsStream(fileName);
+            properties.load(is);
+        } finally {
+            if (is != null) {
+                is.close();
+            }
+        }
+        return properties;
+    }
+
+    public String getProperty(String property) {
+        return getProperty(PherfConstants.PHERF_PROPERTIES, property);
+    }
+
+    public String getProperty(final String fileName, String property) {
+        String value = null;
+        try {
+            value = getProperties(fileName).getProperty(property);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return value;
     }
 }
