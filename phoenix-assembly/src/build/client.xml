@@ -29,6 +29,16 @@
     <format>jar</format>
   </formats>
   <includeBaseDirectory>false</includeBaseDirectory>
+
+  <containerDescriptorHandlers>
+    <containerDescriptorHandler>
+      <!--
+          aggregate SPI's so that things like HDFS FileSystem works in uberjar
+          http://docs.oracle.com/javase/tutorial/sound/SPI-intro.html
+      -->
+      <handlerName>metaInf-services</handlerName>
+    </containerDescriptorHandler>
+  </containerDescriptorHandlers>
   
   <componentDescriptors>
     <componentDescriptor>src/build/components-minimal.xml</componentDescriptor>
