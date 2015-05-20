@@ -30,10 +30,10 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto;
 import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto.MutationType;
+import org.apache.hadoop.hbase.util.ByteStringer;
 import org.apache.hadoop.util.StringUtils;
 
 import com.google.protobuf.ByteString;
-import com.google.protobuf.HBaseZeroCopyByteString;
 import com.google.protobuf.RpcController;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos;
 import org.apache.phoenix.coprocessor.generated.ServerCachingProtos;
@@ -131,7 +131,7 @@ public class ProtobufUtil {
     public static ServerCachingProtos.ImmutableBytesWritable toProto(ImmutableBytesWritable w) {
         ServerCachingProtos.ImmutableBytesWritable.Builder builder = 
         		ServerCachingProtos.ImmutableBytesWritable.newBuilder();
-        builder.setByteArray(HBaseZeroCopyByteString.wrap(w.get()));
+        builder.setByteArray(ByteStringer.wrap(w.get()));
         builder.setOffset(w.getOffset());
         builder.setLength(w.getLength());
         return builder.build();

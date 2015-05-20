@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import org.apache.hadoop.hbase.util.ByteStringer;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos;
 import org.apache.phoenix.coprocessor.generated.PFunctionProtos;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataResponse;
@@ -34,8 +35,6 @@ import org.apache.phoenix.util.ByteUtil;
 
 import com.google.common.collect.Lists;
 import com.google.protobuf.ByteString;
-import com.google.protobuf.HBaseZeroCopyByteString;
-
 
 /**
  *
@@ -224,14 +223,14 @@ public abstract class MetaDataProtocol extends MetaDataService {
             }
             if (result.getTableNamesToDelete() != null) {
               for (byte[] tableName : result.tableNamesToDelete) {
-                builder.addTablesToDelete(HBaseZeroCopyByteString.wrap(tableName));
+                builder.addTablesToDelete(ByteStringer.wrap(tableName));
               }
             }
             if(result.getColumnName() != null){
-              builder.setColumnName(HBaseZeroCopyByteString.wrap(result.getColumnName()));
+              builder.setColumnName(ByteStringer.wrap(result.getColumnName()));
             }
             if(result.getFamilyName() != null){
-              builder.setFamilyName(HBaseZeroCopyByteString.wrap(result.getFamilyName()));
+              builder.setFamilyName(ByteStringer.wrap(result.getFamilyName()));
             }
           }
           return builder.build();
