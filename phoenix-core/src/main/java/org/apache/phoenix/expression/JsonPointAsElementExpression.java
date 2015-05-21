@@ -24,7 +24,7 @@ import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-public class JsonPointAsElementExpression extends BaseCompoundExpression{
+public class JsonPointAsElementExpression extends BaseJSONExpression{
 
 	private static final Logger logger = LoggerFactory.getLogger(JsonPointAsElementExpression.class);
 	
@@ -133,6 +133,10 @@ public class JsonPointAsElementExpression extends BaseCompoundExpression{
 	    
 		@Override
 		public PDataType getDataType() {
-			return defaultType;
+			return PJson.INSTANCE;
+		}
+		@Override
+		public PDataType getRealDataType(){
+			 return defaultType;
 		}
 }
