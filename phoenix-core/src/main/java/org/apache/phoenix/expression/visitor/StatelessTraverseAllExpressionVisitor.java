@@ -36,7 +36,9 @@ import org.apache.phoenix.expression.JsonPathAsTextExpression;
 import org.apache.phoenix.expression.JsonSingleKeySearchExpression;
 import org.apache.phoenix.expression.JsonSubsetExpression;
 import org.apache.phoenix.expression.JsonSupersetExpression;
+import org.apache.phoenix.expression.JsonPointAsElementExpression;
 import org.apache.phoenix.expression.JsonPointAsTextExpression;
+import org.apache.phoenix.expression.JsonPointForArrayAsElementExpression;
 import org.apache.phoenix.expression.JsonPointForArrayAsTextExpression;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.LikeExpression;
@@ -228,6 +230,16 @@ public class StatelessTraverseAllExpressionVisitor<E> extends TraverseAllExpress
 	
 	@Override
 	public E visitLeave(JsonPointForArrayAsTextExpression node, List<E> l) {
+		return null;
+	}
+	
+	@Override
+	public E visitLeave(JsonPointAsElementExpression node, List<E> l) {
+		return null;
+	}
+
+	@Override
+	public E visitLeave(JsonPointForArrayAsElementExpression node, List<E> l) {
 		return null;
 	}
 
