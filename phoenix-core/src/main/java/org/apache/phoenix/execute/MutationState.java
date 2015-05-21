@@ -61,7 +61,6 @@ import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PRow;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
-import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.trace.util.Tracing;
@@ -746,14 +745,8 @@ public class MutationState implements SQLCloseable {
             // We really should be keying the tables based on the physical table name.
             List<TableRef> strippedAliases = Lists.newArrayListWithExpectedSize(mutations.keySet().size());
             while (filteredTableRefs.hasNext()) {
-                /*
-                 * We'll have a PROJECTED table here, but we need the TABLE instead as otherwise we can't
-                 * get the cf:cq which we need for IndexMaintainer.
-                 */
                 TableRef tableRef = filteredTableRefs.next();
-                PTable projectedTable = tableRef.getTable();
-                PTable nonProjectedTable = connection.getMetaDataCache().getTable(new PTableKey(projectedTable.getTenantId(), projectedTable.getName().getString()));
-                strippedAliases.add(new TableRef(null, nonProjectedTable, tableRef.getTimeStamp(), tableRef.getLowerBoundTimeStamp(), tableRef.hasDynamicCols()));
+                strippedAliases.add(new TableRef(null, tableRef.getTable(), tableRef.getTimeStamp(), tableRef.getLowerBoundTimeStamp(), tableRef.hasDynamicCols()));
             }
             startTransaction();
             send(strippedAliases.iterator());

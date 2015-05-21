@@ -22,6 +22,7 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -166,6 +167,11 @@ public class TraceQueryPlan implements QueryPlan {
     @Override
     public long getEstimatedSize() {
         return PLong.INSTANCE.getByteSize();
+    }
+
+    @Override
+    public Set<TableRef> getTableRefs() {
+        return Collections.emptySet();
     }
 
     @Override

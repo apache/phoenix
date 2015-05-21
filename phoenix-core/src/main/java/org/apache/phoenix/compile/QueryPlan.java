@@ -19,6 +19,7 @@ package org.apache.phoenix.compile;
 
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Set;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
@@ -47,8 +48,10 @@ public interface QueryPlan extends StatementPlan {
     
     public long getEstimatedSize();
     
-    // TODO: change once joins are supported
+    @Deprecated
     TableRef getTableRef();
+    
+    Set<TableRef> getTableRefs();
     /**
      * Returns projector used to formulate resultSet row
      */

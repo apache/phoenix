@@ -27,6 +27,7 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
+import java.util.Set;
 
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValueUtil;
@@ -53,17 +54,18 @@ import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.KeyValueSchema;
+import org.apache.phoenix.schema.KeyValueSchema.KeyValueSchemaBuilder;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.ValueBitSet;
-import org.apache.phoenix.schema.KeyValueSchema.KeyValueSchemaBuilder;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ResultUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 
 public class SortMergeJoinPlan implements QueryPlan {
     private static final byte[] EMPTY_PTR = new byte[0];
@@ -81,6 +83,7 @@ public class SortMergeJoinPlan implements QueryPlan {
     private final KeyValueSchema rhsSchema;
     private final int rhsFieldPosition;
     private final boolean isSingleValueOnly;
+    private final Set<TableRef> tableRefs;
 
     public SortMergeJoinPlan(StatementContext context, FilterableStatement statement, TableRef table, 
             JoinType type, QueryPlan lhsPlan, QueryPlan rhsPlan, List<Expression> lhsKeyExpressions, List<Expression> rhsKeyExpressions,
@@ -99,6 +102,9 @@ public class SortMergeJoinPlan implements QueryPlan {
         this.rhsSchema = buildSchema(rhsTable);
         this.rhsFieldPosition = rhsFieldPosition;
         this.isSingleValueOnly = isSingleValueOnly;
+        this.tableRefs = Sets.newHashSetWithExpectedSize(lhsPlan.getTableRefs().size() + rhsPlan.getTableRefs().size());
+        this.tableRefs.addAll(lhsPlan.getTableRefs());
+        this.tableRefs.addAll(rhsPlan.getTableRefs());
     }
 
     private static KeyValueSchema buildSchema(PTable table) {
@@ -630,6 +636,11 @@ public class SortMergeJoinPlan implements QueryPlan {
             }
             
         }
+    }
+
+    @Override
+    public Set<TableRef> getTableRefs() {
+        return tableRefs;
     }
 
 }

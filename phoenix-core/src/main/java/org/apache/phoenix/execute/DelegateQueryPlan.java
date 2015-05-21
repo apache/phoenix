@@ -19,6 +19,7 @@ package org.apache.phoenix.execute;
 
 import java.sql.ParameterMetaData;
 import java.util.List;
+import java.util.Set;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
@@ -55,6 +56,11 @@ public abstract class DelegateQueryPlan implements QueryPlan {
     @Override
     public TableRef getTableRef() {
         return delegate.getTableRef();
+    }
+
+    @Override
+    public Set<TableRef> getTableRefs() {
+        return delegate.getTableRefs();
     }
 
     @Override

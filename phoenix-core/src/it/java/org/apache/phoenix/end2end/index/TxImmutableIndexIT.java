@@ -54,6 +54,7 @@ public class TxImmutableIndexIT extends ImmutableIndexIT {
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
     
+    // TODO: need test case with mix of mutable and immutable indexes
     @Test
     public void testRollbackOfUncommittedKeyValueIndexChange() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -85,6 +86,7 @@ public class TxImmutableIndexIT extends ImmutableIndexIT {
         }
     }
     
+    // TODO: need test case with mix of mutable and immutable indexes
     @Test
     public void testRollbackOfUncommittedRowKeyIndexChange() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);

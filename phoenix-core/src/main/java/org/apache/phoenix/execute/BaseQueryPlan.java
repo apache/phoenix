@@ -69,6 +69,7 @@ import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.TransactionUtil;
 import org.cloudera.htrace.TraceScope;
 
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 
 
@@ -85,6 +86,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
     protected static final long DEFAULT_ESTIMATED_SIZE = 10 * 1024; // 10 K
     
     protected final TableRef tableRef;
+    protected final Set<TableRef> tableRefs;
     protected final StatementContext context;
     protected final FilterableStatement statement;
     protected final RowProjector projection;
@@ -101,6 +103,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
         this.context = context;
         this.statement = statement;
         this.tableRef = table;
+        this.tableRefs = ImmutableSet.of(table);
         this.projection = projection;
         this.paramMetaData = paramMetaData;
         this.limit = limit;
@@ -129,6 +132,11 @@ public abstract class BaseQueryPlan implements QueryPlan {
     @Override
     public TableRef getTableRef() {
         return tableRef;
+    }
+
+    @Override
+    public Set<TableRef> getTableRefs() {
+        return tableRefs;
     }
 
     @Override
@@ -386,7 +394,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
     @Override
     public ExplainPlan getExplainPlan() throws SQLException {
         if (context.getScanRanges() == ScanRanges.NOTHING) {
-            return new ExplainPlan(Collections.singletonList("DEGENERATE SCAN OVER " + tableRef.getTable().getName().getString()));
+            return new ExplainPlan(Collections.singletonList("DEGENERATE SCAN OVER " + getTableRef().getTable().getName().getString()));
         }
         
         // Optimize here when getting explain plan, as queries don't get optimized until after compilation
