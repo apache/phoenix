@@ -456,6 +456,11 @@ public class MutationState implements SQLCloseable {
             this.tableRef = tableRef;
         }
         
+        /**
+         * Called by Tephra when a transaction is aborted. We have this wrapper so that we get an
+         * opportunity to attach our index meta data to the mutations such that we can also undo
+         * the index mutations.
+         */
         @Override
         public void delete(List<Delete> deletes) throws IOException {
             try {
@@ -483,6 +488,9 @@ public class MutationState implements SQLCloseable {
                     // If we have mutable indexes, local immutable indexes, or global immutable indexes
                     // that reference key value columns, setup index meta data and attach here. In this
                     // case updates to the indexes will be generated on the server side.
+                    // An alternative would be to let Tephra track the row keys for the immutable index
+                    // by adding it as a transaction participant (soon we can prevent any conflict
+                    // detection from occurring) with the downside being the additional memory required.
                     if (!keyValueIndexes.isEmpty()) {
                         attachMetaData = true;
                         IndexMaintainer.serializeAdditional(table, indexMetaDataPtr, keyValueIndexes, connection);
