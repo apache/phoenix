@@ -59,14 +59,14 @@ public class PhoenixIndexBuilder extends CoveredColumnsIndexBuilder {
             Mutation m = miniBatchOp.getOperation(i);
             keys.add(PVarbinary.INSTANCE.getKeyRange(m.getRow()));
             List<IndexMaintainer> indexMaintainers = getCodec().getIndexMaintainers(m.getAttributesMap());
-            
+
             for(IndexMaintainer indexMaintainer: indexMaintainers) {
                 if (indexMaintainer.isImmutableRows() && indexMaintainer.isLocalIndex()) continue;
                 indexTableName.set(indexMaintainer.getIndexTableName());
                 if (maintainers.get(indexTableName) != null) continue;
                 maintainers.put(indexTableName, indexMaintainer);
             }
-            
+
         }
         if (maintainers.isEmpty()) return;
         Scan scan = IndexManagementUtil.newLocalStateScan(new ArrayList<IndexMaintainer>(maintainers.values()));
@@ -100,7 +100,7 @@ public class PhoenixIndexBuilder extends CoveredColumnsIndexBuilder {
     private PhoenixIndexCodec getCodec() {
         return (PhoenixIndexCodec)this.codec;
     }
-    
+
     @Override
     public byte[] getBatchId(Mutation m){
         return this.codec.getBatchId(m);

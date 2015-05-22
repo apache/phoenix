@@ -101,8 +101,8 @@ import com.google.common.collect.Sets;
 
 /**
  * Region observer that aggregates ungrouped rows(i.e. SQL query with aggregation function and no GROUP BY).
- * 
- * 
+ *
+ *
  * @since 0.1
  */
 public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
@@ -116,7 +116,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
     public static final String EMPTY_CF = "EmptyCF";
     private static final Logger logger = LoggerFactory.getLogger(UngroupedAggregateRegionObserver.class);
     private KeyValueBuilder kvBuilder;
-    
+
     @Override
     public void start(CoprocessorEnvironment e) throws IOException {
         super.start(e);
@@ -139,14 +139,14 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
     public static void serializeIntoScan(Scan scan) {
         scan.setAttribute(BaseScannerRegionObserver.UNGROUPED_AGG, QueryConstants.TRUE);
     }
-    
+
     @Override
     public RegionScanner preScannerOpen(ObserverContext<RegionCoprocessorEnvironment> e, Scan scan, RegionScanner s)
             throws IOException {
         s = super.preScannerOpen(e, scan, s);
         if (ScanUtil.isAnalyzeTable(scan)) {
             // We are setting the start row and stop row such that it covers the entire region. As part
-            // of Phonenix-1263 we are storing the guideposts against the physical table rather than 
+            // of Phonenix-1263 we are storing the guideposts against the physical table rather than
             // individual tenant specific tables.
             scan.setStartRow(HConstants.EMPTY_START_ROW);
             scan.setStopRow(HConstants.EMPTY_END_ROW);
@@ -154,7 +154,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
         }
         return s;
     }
-    
+
     @Override
     protected RegionScanner doPostScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c, final Scan scan, final RegionScanner s) throws IOException {
         int offset = 0;
@@ -179,9 +179,9 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
         byte[] localIndexBytes = scan.getAttribute(LOCAL_INDEX_BUILD);
         List<IndexMaintainer> indexMaintainers = localIndexBytes == null ? null : IndexMaintainer.deserialize(localIndexBytes);
         List<Mutation> indexMutations = localIndexBytes == null ? Collections.<Mutation>emptyList() : Lists.<Mutation>newArrayListWithExpectedSize(1024);
-        
+
         RegionScanner theScanner = s;
-        
+
         byte[] indexUUID = scan.getAttribute(PhoenixIndexCodec.INDEX_UUID);
         PTable projectedTable = null;
         List<Expression> selectExpressions = null;
@@ -226,14 +226,14 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
             }
             ImmutableBytesWritable tempPtr = new ImmutableBytesWritable();
             theScanner =
-                    getWrappedScanner(c, theScanner, offset, scan, dataColumns, tupleProjector, 
+                    getWrappedScanner(c, theScanner, offset, scan, dataColumns, tupleProjector,
                             dataRegion, indexMaintainers == null ? null : indexMaintainers.get(0), viewConstants, p, tempPtr);
-        } 
-        
+        }
+
         if (j != null)  {
             theScanner = new HashJoinRegionScanner(theScanner, p, j, ScanUtil.getTenantId(scan), c.getEnvironment());
         }
-        
+
         int batchSize = 0;
         List<Mutation> mutations = Collections.emptyList();
         boolean buildLocalIndex = indexMaintainers != null && dataColumns==null && !localIndexScan;
@@ -330,7 +330,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
                                         }
                                         column.getDataType().coerceBytes(ptr, value,
                                             expression.getDataType(), expression.getMaxLength(),
-                                            expression.getScale(), expression.getSortOrder(), 
+                                            expression.getScale(), expression.getSortOrder(),
                                             column.getMaxLength(), column.getScale(),
                                             column.getSortOrder());
                                         byte[] bytes = ByteUtil.copyKeyBytesIfNecessary(ptr);
@@ -418,7 +418,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
                 }
             }
         }
-        
+
         if (logger.isDebugEnabled()) {
         	logger.debug(LogUtil.addCustomAnnotations("Finished scanning " + rowCount + " rows for ungrouped coprocessor scan " + scan, ScanUtil.getCustomAnnotations(scan)));
         }
@@ -438,7 +438,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
             keyValue = KeyValueUtil.newKeyValue(UNGROUPED_AGG_ROW_KEY, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, AGG_TIMESTAMP, value, 0, value.length);
         }
         final KeyValue aggKeyValue = keyValue;
-        
+
         RegionScanner scanner = new BaseRegionScanner() {
             private boolean done = !hadAny;
 
@@ -464,10 +464,15 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
                 results.add(aggKeyValue);
                 return false;
             }
-            
+
             @Override
             public long getMaxResultSize() {
             	return scan.getMaxResultSize();
+            }
+
+            @Override
+            public int getBatch() {
+                return innerScanner.getBatch();
             }
         };
         return scanner;
@@ -496,7 +501,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
         }
         indexMutations.clear();
     }
-    
+
     @Override
     public InternalScanner preCompact(ObserverContext<RegionCoprocessorEnvironment> c,
         final Store store, InternalScanner scanner, final ScanType scanType)
@@ -505,8 +510,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
         InternalScanner internalScanner = scanner;
         if (scanType.equals(ScanType.COMPACT_DROP_DELETES)) {
             try {
-                boolean useCurrentTime = 
-                        c.getEnvironment().getConfiguration().getBoolean(QueryServices.STATS_USE_CURRENT_TIME_ATTRIB, 
+                boolean useCurrentTime =
+                        c.getEnvironment().getConfiguration().getBoolean(QueryServices.STATS_USE_CURRENT_TIME_ATTRIB,
                                 QueryServicesOptions.DEFAULT_STATS_USE_CURRENT_TIME);
                 // Provides a means of clients controlling their timestamps to not use current time
                 // when background tasks are updating stats. Instead we track the max timestamp of
@@ -526,8 +531,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
         }
         return internalScanner;
     }
-    
-    
+
+
     @Override
     public void postSplit(ObserverContext<RegionCoprocessorEnvironment> e, HRegion l, HRegion r)
             throws IOException {
@@ -535,8 +540,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
         TableName table = region.getRegionInfo().getTable();
         StatisticsCollector stats = null;
         try {
-            boolean useCurrentTime = 
-                    e.getEnvironment().getConfiguration().getBoolean(QueryServices.STATS_USE_CURRENT_TIME_ATTRIB, 
+            boolean useCurrentTime =
+                    e.getEnvironment().getConfiguration().getBoolean(QueryServices.STATS_USE_CURRENT_TIME_ATTRIB,
                             QueryServicesOptions.DEFAULT_STATS_USE_CURRENT_TIME);
             // Provides a means of clients controlling their timestamps to not use current time
             // when background tasks are updating stats. Instead we track the max timestamp of
@@ -544,7 +549,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
             long clientTimeStamp = useCurrentTime ? TimeKeeper.SYSTEM.getCurrentTime() : StatisticsCollector.NO_TIMESTAMP;
             stats = new StatisticsCollector(e.getEnvironment(), table.getNameAsString(), clientTimeStamp);
             stats.splitStats(region, l, r);
-        } catch (IOException ioe) { 
+        } catch (IOException ioe) {
             if(logger.isWarnEnabled()) {
                 logger.warn("Error while collecting stats during split for " + table,ioe);
             }
@@ -559,7 +564,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
             return PTableImpl.createFromProto(ptableProto);
         } catch (IOException e) {
             throw new RuntimeException(e);
-        } 
+        }
     }
 
     private static List<Expression> deserializeExpressions(byte[] b) {
