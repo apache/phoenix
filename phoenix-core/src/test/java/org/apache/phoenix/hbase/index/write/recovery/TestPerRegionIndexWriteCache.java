@@ -65,8 +65,8 @@ public class TestPerRegionIndexWriteCache {
     p2.add(family, qual, val);
   }
 
-  HRegion r1;
-  HRegion r2;
+  HRegion r1; // FIXME: Uses private type
+  HRegion r2; // FIXME: Uses private type
   WAL wal;
 
   @SuppressWarnings("deprecation")

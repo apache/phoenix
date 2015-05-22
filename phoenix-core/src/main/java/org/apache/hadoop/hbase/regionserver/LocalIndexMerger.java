@@ -38,12 +38,12 @@ public class LocalIndexMerger extends BaseRegionServerObserver {
 
     private static final Log LOG = LogFactory.getLog(LocalIndexMerger.class);
 
-    private RegionMergeTransaction rmt = null;
-    private HRegion mergedRegion = null;
+    private RegionMergeTransactionImpl rmt = null; // FIXME: Use of private type
+    private HRegion mergedRegion = null; // FIXME: Use of private type
 
     @Override
     public void preMergeCommit(ObserverContext<RegionServerCoprocessorEnvironment> ctx,
-            HRegion regionA, HRegion regionB, List<Mutation> metaEntries) throws IOException {
+            Region regionA, Region regionB, List<Mutation> metaEntries) throws IOException {
         HTableDescriptor tableDesc = regionA.getTableDesc();
         if (SchemaUtil.isSystemTable(tableDesc.getName())) {
             return;
@@ -56,14 +56,14 @@ public class LocalIndexMerger extends BaseRegionServerObserver {
             TableName indexTable =
                     TableName.valueOf(MetaDataUtil.getLocalIndexPhysicalName(tableDesc.getName()));
             if (!MetaTableAccessor.tableExists(rs.getConnection(), indexTable)) return;
-            HRegion indexRegionA = IndexUtil.getIndexRegion(regionA, ctx.getEnvironment());
+            Region indexRegionA = IndexUtil.getIndexRegion(regionA, ctx.getEnvironment());
             if (indexRegionA == null) {
                 LOG.warn("Index region corresponindg to data region " + regionA
                         + " not in the same server. So skipping the merge.");
                 ctx.bypass();
                 return;
             }
-            HRegion indexRegionB = IndexUtil.getIndexRegion(regionB, ctx.getEnvironment());
+            Region indexRegionB = IndexUtil.getIndexRegion(regionB, ctx.getEnvironment());
             if (indexRegionB == null) {
                 LOG.warn("Index region corresponindg to region " + regionB
                         + " not in the same server. So skipping the merge.");
@@ -71,7 +71,7 @@ public class LocalIndexMerger extends BaseRegionServerObserver {
                 return;
             }
             try {
-                rmt = new RegionMergeTransaction(indexRegionA, indexRegionB, false);
+                rmt = new RegionMergeTransactionImpl(indexRegionA, indexRegionB, false);
                 if (!rmt.prepare(rss)) {
                     LOG.error("Prepare for the index regions merge [" + indexRegionA + ","
                             + indexRegionB + "] failed. So returning null. ");
@@ -97,7 +97,7 @@ public class LocalIndexMerger extends BaseRegionServerObserver {
 
     @Override
     public void postMergeCommit(ObserverContext<RegionServerCoprocessorEnvironment> ctx,
-            HRegion regionA, HRegion regionB, HRegion mergedRegion) throws IOException {
+            Region regionA, Region regionB, Region mergedRegion) throws IOException {
         if (rmt != null && this.mergedRegion != null) {
             RegionServerCoprocessorEnvironment environment = ctx.getEnvironment();
             HRegionServer rs = (HRegionServer) environment.getRegionServerServices();
@@ -107,7 +107,7 @@ public class LocalIndexMerger extends BaseRegionServerObserver {
 
     @Override
     public void preRollBackMerge(ObserverContext<RegionServerCoprocessorEnvironment> ctx,
-            HRegion regionA, HRegion regionB) throws IOException {
+            Region regionA, Region regionB) throws IOException {
         HRegionServer rs = (HRegionServer) ctx.getEnvironment().getRegionServerServices();
         try {
             if (rmt != null) {

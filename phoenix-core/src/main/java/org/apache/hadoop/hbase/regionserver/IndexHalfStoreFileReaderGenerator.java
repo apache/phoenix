@@ -76,7 +76,7 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
             FileSystem fs, Path p, FSDataInputStreamWrapper in, long size, CacheConfig cacheConf,
             Reference r, Reader reader) throws IOException {
         TableName tableName = ctx.getEnvironment().getRegion().getTableDesc().getTableName();
-        HRegion region = ctx.getEnvironment().getRegion();
+        Region region = ctx.getEnvironment().getRegion();
         HRegionInfo childRegion = region.getRegionInfo();
         byte[] splitKey = null;
         if (reader == null && r != null) {
@@ -109,7 +109,7 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
                     Pair<HRegionInfo, HRegionInfo> mergeRegions =
                             MetaTableAccessor.getRegionsFromMergeQualifier(ctx.getEnvironment()
                                     .getRegionServerServices().getConnection(),
-                                region.getRegionName());
+                                region.getRegionInfo().getRegionName());
                     if (mergeRegions == null || mergeRegions.getFirst() == null) return reader;
                     byte[] splitRow =
                             CellUtil.cloneRow(KeyValue.createKeyValueFromKey(r.getSplitKey()));
@@ -121,8 +121,9 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
                         childRegion = mergeRegions.getSecond();
                         regionStartKeyInHFile = mergeRegions.getSecond().getStartKey();
                     }
-                    splitKey = KeyValue.createFirstOnRow(region.getStartKey().length == 0 ?
-                            new byte[region.getEndKey().length] : region.getStartKey()).getKey();
+                    splitKey = KeyValue.createFirstOnRow(region.getRegionInfo().getStartKey().length == 0 ?
+                        new byte[region.getRegionInfo().getEndKey().length] :
+                            region.getRegionInfo().getStartKey()).getKey();
                 } else {
                     HRegionInfo parentRegion = HRegionInfo.getHRegionInfo(result);
                     regionStartKeyInHFile =

@@ -35,7 +35,7 @@ import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.regionserver.HRegion;
+import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -114,12 +114,12 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
     }
 
 
-    private static void throwIfScanOutOfRegion(Scan scan, HRegion region) throws DoNotRetryIOException {
+    private static void throwIfScanOutOfRegion(Scan scan, Region region) throws DoNotRetryIOException {
         boolean isLocalIndex = ScanUtil.isLocalIndex(scan);
         byte[] lowerInclusiveScanKey = scan.getStartRow();
         byte[] upperExclusiveScanKey = scan.getStopRow();
-        byte[] lowerInclusiveRegionKey = region.getStartKey();
-        byte[] upperExclusiveRegionKey = region.getEndKey();
+        byte[] lowerInclusiveRegionKey = region.getRegionInfo().getStartKey();
+        byte[] upperExclusiveRegionKey = region.getRegionInfo().getEndKey();
         boolean isStaleRegionBoundaries;
         if (isLocalIndex) {
             byte[] expectedUpperRegionKey = scan.getAttribute(EXPECTED_UPPER_REGION_KEY);
@@ -201,7 +201,7 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
                 }
             }
         } catch (Throwable t) {
-            ServerUtil.throwIOException(c.getEnvironment().getRegion().getRegionNameAsString(), t);
+            ServerUtil.throwIOException(c.getEnvironment().getRegion().getRegionInfo().getRegionNameAsString(), t);
             return null; // impossible
         }
     }
@@ -221,7 +221,7 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
     protected RegionScanner getWrappedScanner(final ObserverContext<RegionCoprocessorEnvironment> c,
             final RegionScanner s, final int offset, final Scan scan,
             final ColumnReference[] dataColumns, final TupleProjector tupleProjector,
-            final HRegion dataRegion, final IndexMaintainer indexMaintainer,
+            final Region dataRegion, final IndexMaintainer indexMaintainer,
             final byte[][] viewConstants, final TupleProjector projector,
             final ImmutableBytesWritable ptr) {
         return getWrappedScanner(c, s, null, null, offset, scan, dataColumns, tupleProjector,
@@ -246,7 +246,7 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
             final RegionScanner s, final Set<KeyValueColumnExpression> arrayKVRefs,
             final Expression[] arrayFuncRefs, final int offset, final Scan scan,
             final ColumnReference[] dataColumns, final TupleProjector tupleProjector,
-            final HRegion dataRegion, final IndexMaintainer indexMaintainer,
+            final Region dataRegion, final IndexMaintainer indexMaintainer,
             final byte[][] viewConstants, final KeyValueSchema kvSchema,
             final ValueBitSet kvSchemaBitSet, final TupleProjector projector,
             final ImmutableBytesWritable ptr) {
@@ -257,7 +257,7 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
                 try {
                     return s.next(results);
                 } catch (Throwable t) {
-                    ServerUtil.throwIOException(c.getEnvironment().getRegion().getRegionNameAsString(), t);
+                    ServerUtil.throwIOException(c.getEnvironment().getRegion().getRegionInfo().getRegionNameAsString(), t);
                     return false; // impossible
                 }
             }
@@ -267,7 +267,7 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
                 try {
                     return s.next(result, scannerContext);
                 } catch (Throwable t) {
-                    ServerUtil.throwIOException(c.getEnvironment().getRegion().getRegionNameAsString(), t);
+                    ServerUtil.throwIOException(c.getEnvironment().getRegion().getRegionInfo().getRegionNameAsString(), t);
                     return false; // impossible
                 }
             }
@@ -319,7 +319,7 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
                     // There is a scanattribute set to retrieve the specific array element
                     return next;
                 } catch (Throwable t) {
-                    ServerUtil.throwIOException(c.getEnvironment().getRegion().getRegionNameAsString(), t);
+                    ServerUtil.throwIOException(c.getEnvironment().getRegion().getRegionInfo().getRegionNameAsString(), t);
                     return false; // impossible
                 }
             }
@@ -346,10 +346,10 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
                 }
                 // There is a scanattribute set to retrieve the specific array element
                 return next;
-            } catch (Throwable t) {
-                ServerUtil.throwIOException(c.getEnvironment().getRegion().getRegionNameAsString(), t);
+              } catch (Throwable t) {
+                ServerUtil.throwIOException(c.getEnvironment().getRegion().getRegionInfo().getRegionNameAsString(), t);
                 return false; // impossible
-            }
+              }
             }
 
             private void replaceArrayIndexElement(final Set<KeyValueColumnExpression> arrayKVRefs,
