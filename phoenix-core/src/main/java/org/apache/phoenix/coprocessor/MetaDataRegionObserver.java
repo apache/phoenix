@@ -69,20 +69,20 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
     protected ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(1);
     private boolean enableRebuildIndex = QueryServicesOptions.DEFAULT_INDEX_FAILURE_HANDLING_REBUILD;
     private long rebuildIndexTimeInterval = QueryServicesOptions.DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_INTERVAL;
-  
+
     @Override
     public void preClose(final ObserverContext<RegionCoprocessorEnvironment> c,
             boolean abortRequested) {
         executor.shutdownNow();
         GlobalCache.getInstance(c.getEnvironment()).getMetaDataCache().invalidateAll();
     }
-    
+
     @Override
     public void start(CoprocessorEnvironment env) throws IOException {
-        // sleep a little bit to compensate time clock skew when SYSTEM.CATALOG moves 
+        // sleep a little bit to compensate time clock skew when SYSTEM.CATALOG moves
         // among region servers because we relies on server time of RS which is hosting
         // SYSTEM.CATALOG
-        long sleepTime = env.getConfiguration().getLong(QueryServices.CLOCK_SKEW_INTERVAL_ATTRIB, 
+        long sleepTime = env.getConfiguration().getLong(QueryServices.CLOCK_SKEW_INTERVAL_ATTRIB,
             QueryServicesOptions.DEFAULT_CLOCK_SKEW_INTERVAL);
         try {
             if(sleepTime > 0) {
@@ -91,12 +91,12 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
         } catch (InterruptedException ie) {
             Thread.currentThread().interrupt();
         }
-        enableRebuildIndex = env.getConfiguration().getBoolean(QueryServices.INDEX_FAILURE_HANDLING_REBUILD_ATTRIB, 
+        enableRebuildIndex = env.getConfiguration().getBoolean(QueryServices.INDEX_FAILURE_HANDLING_REBUILD_ATTRIB,
             QueryServicesOptions.DEFAULT_INDEX_FAILURE_HANDLING_REBUILD);
-        rebuildIndexTimeInterval = env.getConfiguration().getLong(QueryServices.INDEX_FAILURE_HANDLING_REBUILD_INTERVAL_ATTRIB, 
+        rebuildIndexTimeInterval = env.getConfiguration().getLong(QueryServices.INDEX_FAILURE_HANDLING_REBUILD_INTERVAL_ATTRIB,
             QueryServicesOptions.DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_INTERVAL);
     }
-    
+
 
     @Override
     public void postOpen(ObserverContext<RegionCoprocessorEnvironment> e) {
@@ -119,7 +119,7 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
             LOG.error("BuildIndexScheduleTask cannot start!", ex);
         }
     }
-    
+
     /**
      * Task runs periodically to build indexes whose INDEX_NEED_PARTIALLY_REBUILD is set true
      *
@@ -133,7 +133,7 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
         public BuildIndexScheduleTask(RegionCoprocessorEnvironment env) {
             this.env = env;
         }
-      
+
         private String getJdbcUrl() {
             String zkQuorum = this.env.getConfiguration().get(HConstants.ZOOKEEPER_QUORUM);
             String zkClientPort = this.env.getConfiguration().get(HConstants.ZOOKEEPER_CLIENT_PORT,
@@ -144,7 +144,8 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
                 + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkClientPort
                 + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkParentNode;
         }
-      
+
+        @Override
         public void run() {
             RegionScanner scanner = null;
             PhoenixConnection conn = null;
@@ -199,7 +200,7 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
                         PhoenixDatabaseMetaData.INDEX_STATE_BYTES);
                     if ((dataTable == null || dataTable.length == 0)
                             || (indexStat == null || indexStat.length == 0)
-                            || ((Bytes.compareTo(PIndexState.DISABLE.getSerializedBytes(), indexStat) != 0) 
+                            || ((Bytes.compareTo(PIndexState.DISABLE.getSerializedBytes(), indexStat) != 0)
                                     && (Bytes.compareTo(PIndexState.INACTIVE.getSerializedBytes(), indexStat) != 0))) {
                         // index has to be either in disable or inactive state
                         // data table name can't be empty

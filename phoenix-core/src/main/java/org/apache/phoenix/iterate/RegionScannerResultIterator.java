@@ -31,15 +31,15 @@ import org.apache.phoenix.util.ServerUtil;
 
 public class RegionScannerResultIterator extends BaseResultIterator {
     private final RegionScanner scanner;
-    
+
     public RegionScannerResultIterator(RegionScanner scanner) {
         this.scanner = scanner;
     }
-    
+
     @Override
     public Tuple next() throws SQLException {
-        // XXX: No access here to the region instance to enclose this with startRegionOperation / 
-        // stopRegionOperation 
+        // XXX: No access here to the region instance to enclose this with startRegionOperation /
+        // stopRegionOperation
         synchronized (scanner) {
             try {
                 // TODO: size
@@ -48,6 +48,7 @@ public class RegionScannerResultIterator extends BaseResultIterator {
                 // since this is an indication of whether or not there are more values after the
                 // ones returned
                 boolean hasMore = scanner.nextRaw(results);
+
                 if (!hasMore && results.isEmpty()) {
                     return null;
                 }

@@ -58,14 +58,14 @@ public class FamilyOnlyFilter extends FamilyFilter {
   @Override
   public ReturnCode filterKeyValue(Cell v) {
     if (done) {
-      return ReturnCode.SKIP;
+      return ReturnCode.NEXT_ROW;
     }
     ReturnCode code = super.filterKeyValue(v);
     if (previousMatchFound) {
       // we found a match before, and now we are skipping the key because of the family, therefore
       // we are done (no more of the family).
-      if (code.equals(ReturnCode.SKIP)) {
-      done = true;
+      if (code.equals(ReturnCode.SKIP) || code.equals(ReturnCode.NEXT_ROW)) {
+        done = true;
       }
     } else {
       // if we haven't seen a match before, then it doesn't matter what we see now, except to mark

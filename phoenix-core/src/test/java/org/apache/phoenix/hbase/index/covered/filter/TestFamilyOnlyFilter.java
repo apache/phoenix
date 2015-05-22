@@ -47,7 +47,7 @@ public class TestFamilyOnlyFilter {
 
     kv = new KeyValue(row, fam2, qual, 10, val);
     code = filter.filterKeyValue(kv);
-    assertEquals("Didn't filter out non-matching family!", ReturnCode.SKIP, code);
+    assertEquals("Didn't filter out non-matching family!", ReturnCode.NEXT_ROW, code);
   }
 
   @Test
@@ -61,7 +61,7 @@ public class TestFamilyOnlyFilter {
     KeyValue kv = new KeyValue(row, fam, qual, 10, val);
 
     ReturnCode code = filter.filterKeyValue(kv);
-    assertEquals("Didn't filter out non-matching family!", ReturnCode.SKIP, code);
+    assertEquals("Didn't filter out non-matching family!", ReturnCode.NEXT_ROW, code);
 
     kv = new KeyValue(row, fam2, qual, 10, val);
     code = filter.filterKeyValue(kv);
@@ -69,7 +69,7 @@ public class TestFamilyOnlyFilter {
 
     kv = new KeyValue(row, fam3, qual, 10, val);
     code = filter.filterKeyValue(kv);
-    assertEquals("Didn't filter out non-matching family!", ReturnCode.SKIP, code);
+    assertEquals("Didn't filter out non-matching family!", ReturnCode.NEXT_ROW, code);
   }
 
   @Test
@@ -83,7 +83,7 @@ public class TestFamilyOnlyFilter {
     KeyValue kv = new KeyValue(row, fam, qual, 10, val);
 
     ReturnCode code = filter.filterKeyValue(kv);
-    assertEquals("Didn't filter out non-matching family!", ReturnCode.SKIP, code);
+    assertEquals("Didn't filter out non-matching family!", ReturnCode.NEXT_ROW, code);
 
     KeyValue accept = new KeyValue(row, fam2, qual, 10, val);
     code = filter.filterKeyValue(accept);
@@ -91,12 +91,12 @@ public class TestFamilyOnlyFilter {
 
     kv = new KeyValue(row, fam3, qual, 10, val);
     code = filter.filterKeyValue(kv);
-    assertEquals("Didn't filter out non-matching family!", ReturnCode.SKIP, code);
+    assertEquals("Didn't filter out non-matching family!", ReturnCode.NEXT_ROW, code);
 
     // we shouldn't match the family again - everything after a switched family should be ignored
     code = filter.filterKeyValue(accept);
     assertEquals("Should have skipped a 'matching' family if it arrives out of order",
-      ReturnCode.SKIP, code);
+      ReturnCode.NEXT_ROW, code);
 
     // reset the filter and we should accept it again
     filter.reset();

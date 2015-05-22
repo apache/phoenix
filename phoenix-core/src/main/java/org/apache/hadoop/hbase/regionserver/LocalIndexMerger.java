@@ -81,7 +81,8 @@ public class LocalIndexMerger extends BaseRegionServerObserver {
                 this.mergedRegion = rmt.stepsBeforePONR(rss, rss, false);
                 rmt.prepareMutationsForMerge(mergedRegion.getRegionInfo(),
                     indexRegionA.getRegionInfo(), indexRegionB.getRegionInfo(),
-                    rss.getServerName(), metaEntries);
+                    rss.getServerName(), metaEntries,
+                    mergedRegion.getTableDesc().getRegionReplication());
             } catch (Exception e) {
                 ctx.bypass();
                 LOG.warn("index regions merge failed with the exception ", e);

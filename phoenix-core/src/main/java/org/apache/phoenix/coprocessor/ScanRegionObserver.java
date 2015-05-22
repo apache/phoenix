@@ -199,7 +199,7 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
             indexMaintainer = indexMaintainers.get(0);
             viewConstants = IndexUtil.deserializeViewConstantsFromScan(scan);
         }
-        
+
         final TupleProjector p = TupleProjector.deserializeProjectorFromScan(scan);
         final HashJoinInfo j = HashJoinInfo.deserializeHashJoinFromScan(scan);
         innerScanner =
@@ -285,12 +285,12 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
                 } finally {
                     try {
                         if(iterator != null) {
-                            iterator.close();    
+                            iterator.close();
                         }
                     } catch (SQLException e) {
                         ServerUtil.throwIOException(region.getRegionNameAsString(), e);
                     } finally {
-                        chunk.close();                
+                        chunk.close();
                     }
                 }
             }
@@ -298,6 +298,11 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
             @Override
             public long getMaxResultSize() {
                 return s.getMaxResultSize();
+            }
+
+            @Override
+            public int getBatch() {
+              return s.getBatch();
             }
         };
     }
