@@ -57,7 +57,7 @@ public class PBoolean extends PDataType<Boolean> {
       // TODO: review - return null?
       throw newIllegalDataException(this + " may not be null");
     }
-    return ((Boolean) object).booleanValue() ^ sortOrder == SortOrder.ASC ?
+    return ((Boolean) object).booleanValue() & sortOrder == SortOrder.ASC ?
         TRUE_BYTES :
         FALSE_BYTES;
   }
@@ -138,7 +138,7 @@ public class PBoolean extends PDataType<Boolean> {
   public Object getSampleValue(Integer maxLength, Integer arrayLength) {
     return RANDOM.get().nextBoolean();
   }
-  
+
     @Override
     public PhoenixArrayFactory getArrayFactory() {
         return new PhoenixArrayFactory() {
