@@ -42,7 +42,7 @@ import org.apache.hadoop.hbase.protobuf.ProtobufUtil;
 import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto.MutationType;
 import org.apache.hadoop.hbase.protobuf.generated.MultiRowMutationProtos.MultiRowMutationService;
 import org.apache.hadoop.hbase.protobuf.generated.MultiRowMutationProtos.MutateRowsRequest;
-import org.apache.hadoop.hbase.regionserver.HRegion;
+import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -105,7 +105,7 @@ public class StatisticsWriter implements Closeable {
         statsWriterTable.close();
     }
 
-    public void splitStats(HRegion p, HRegion l, HRegion r, StatisticsCollector tracker, ImmutableBytesPtr cfKey,
+    public void splitStats(Region p, Region l, Region r, StatisticsCollector tracker, ImmutableBytesPtr cfKey,
             List<Mutation> mutations) throws IOException {
         if (tracker == null) { return; }
         boolean useMaxTimeStamp = clientTimeStamp == StatisticsCollector.NO_TIMESTAMP;
@@ -113,8 +113,8 @@ public class StatisticsWriter implements Closeable {
             mutations.add(getLastStatsUpdatedTimePut(clientTimeStamp));
         }
         long readTimeStamp = useMaxTimeStamp ? HConstants.LATEST_TIMESTAMP : clientTimeStamp;
-        Result result = StatisticsUtil.readRegionStatistics(statsReaderTable, tableName, cfKey, p.getRegionName(),
-                readTimeStamp);
+        Result result = StatisticsUtil.readRegionStatistics(statsReaderTable, tableName, cfKey, 
+                p.getRegionInfo().getRegionName(), readTimeStamp);
         byte[] minKey = HConstants.EMPTY_BYTE_ARRAY;
         if (result != null && !result.isEmpty()) {
         	Cell cell = result.getColumnLatestCell(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_BYTES);
@@ -133,13 +133,13 @@ public class StatisticsWriter implements Closeable {
 
                 GuidePostsInfo guidePostsRegionInfo = GuidePostsInfo.deserializeGuidePostsInfo(cell.getValueArray(),
                         cell.getValueOffset(), cell.getValueLength(), rowCount);
-                byte[] pPrefix = StatisticsUtil.getRowKey(tableName, cfKey, p.getRegionName());
+                byte[] pPrefix = StatisticsUtil.getRowKey(tableName, cfKey, p.getRegionInfo().getRegionName());
                 mutations.add(new Delete(pPrefix, writeTimeStamp));
                 
 	        	long byteSize = 0;
                 Cell byteSizeCell = result.getColumnLatestCell(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
                         PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH_BYTES);                
-                int index = Collections.binarySearch(guidePostsRegionInfo.getGuidePosts(), r.getStartKey(),
+                int index = Collections.binarySearch(guidePostsRegionInfo.getGuidePosts(), r.getRegionInfo().getStartKey(),
                         Bytes.BYTES_COMPARATOR);
                 int size = guidePostsRegionInfo.getGuidePosts().size();
                 int midEndIndex, midStartIndex;
@@ -175,7 +175,7 @@ public class StatisticsWriter implements Closeable {
                     tracker.clear();
                     tracker.addGuidePost(cfKey, lguidePosts, leftByteCount, cell.getTimestamp(),
                         minKey);
-	                addStats(l.getRegionName(), tracker, cfKey, mutations);
+	                addStats(l.getRegionInfo().getRegionName(), tracker, cfKey, mutations);
 	            }
 	            if (midStartIndex < size) {
                     GuidePostsInfo rguidePosts =
@@ -184,7 +184,7 @@ public class StatisticsWriter implements Closeable {
 	                tracker.clear();
                     tracker.addGuidePost(cfKey, rguidePosts, rightByteCount, cell.getTimestamp(),
                         guidePostsRegionInfo.getGuidePosts().get(midStartIndex));
-	                addStats(r.getRegionName(), tracker, cfKey, mutations);
+	                addStats(r.getRegionInfo().getRegionName(), tracker, cfKey, mutations);
 	            }
         	}
         }

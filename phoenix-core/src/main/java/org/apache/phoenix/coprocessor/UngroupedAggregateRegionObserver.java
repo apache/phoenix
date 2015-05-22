@@ -48,8 +48,8 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
+import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScanType;
 import org.apache.hadoop.hbase.regionserver.Store;
@@ -125,7 +125,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
         this.kvBuilder = GenericKeyValueBuilder.INSTANCE;
     }
 
-    private static void commitBatch(HRegion region, List<Mutation> mutations, byte[] indexUUID) throws IOException {
+    private static void commitBatch(Region region, List<Mutation> mutations, byte[] indexUUID) throws IOException {
       if (indexUUID != null) {
           for (Mutation m : mutations) {
               m.setAttribute(PhoenixIndexCodec.INDEX_UUID, indexUUID);
@@ -133,7 +133,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
       }
       Mutation[] mutationArray = new Mutation[mutations.size()];
       // TODO: should we use the one that is all or none?
-      region.batchMutate(mutations.toArray(mutationArray));
+      region.batchMutate(mutations.toArray(mutationArray), HConstants.NO_NONCE, HConstants.NO_NONCE);
     }
 
     public static void serializeIntoScan(Scan scan) {
@@ -158,7 +158,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
     @Override
     protected RegionScanner doPostScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c, final Scan scan, final RegionScanner s) throws IOException {
         int offset = 0;
-        HRegion region = c.getEnvironment().getRegion();
+        Region region = c.getEnvironment().getRegion();
         long ts = scan.getTimeRange().getMax();
         StatisticsCollector stats = null;
         if(ScanUtil.isAnalyzeTable(scan)) {
@@ -172,7 +172,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
              * For local indexes, we need to set an offset on row key expressions to skip
              * the region start key.
              */
-            offset = region.getStartKey().length != 0 ? region.getStartKey().length:region.getEndKey().length;
+            offset = region.getRegionInfo().getStartKey().length != 0 ? region.getRegionInfo().getStartKey().length :
+                region.getRegionInfo().getEndKey().length;
             ScanUtil.setRowKeyOffset(scan, offset);
         }
 
@@ -212,7 +213,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
             ptr = new ImmutableBytesWritable();
         }
         TupleProjector tupleProjector = null;
-        HRegion dataRegion = null;
+        Region dataRegion = null;
         byte[][] viewConstants = null;
         ColumnReference[] dataColumns = IndexUtil.deserializeDataTableColumnsToJoin(scan);
         boolean localIndexScan = ScanUtil.isLocalIndex(scan);
@@ -279,8 +280,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
                                                 results);
                                         Put put = maintainer.buildUpdateMutation(kvBuilder,
                                             valueGetter, ptr, ts,
-                                            c.getEnvironment().getRegion().getStartKey(),
-                                            c.getEnvironment().getRegion().getEndKey());
+                                            c.getEnvironment().getRegion().getRegionInfo().getStartKey(),
+                                            c.getEnvironment().getRegion().getRegionInfo().getEndKey());
                                         indexMutations.add(put);
                                     }
                                 }
@@ -391,7 +392,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
                         } catch (ConstraintViolationException e) {
                             // Log and ignore in count
                             logger.error(LogUtil.addCustomAnnotations("Failed to create row in " +
-                                region.getRegionNameAsString() + " with values " +
+                                region.getRegionInfo().getRegionNameAsString() + " with values " +
                                 SchemaUtil.toString(values),
                                 ScanUtil.getCustomAnnotations(scan)), e);
                             continue;
@@ -479,9 +480,9 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
     }
 
     private void commitIndexMutations(final ObserverContext<RegionCoprocessorEnvironment> c,
-            HRegion region, List<Mutation> indexMutations) throws IOException {
+            Region region, List<Mutation> indexMutations) throws IOException {
         // Get indexRegion corresponding to data region
-        HRegion indexRegion = IndexUtil.getIndexRegion(c.getEnvironment());
+        Region indexRegion = IndexUtil.getIndexRegion(c.getEnvironment());
         if (indexRegion != null) {
             commitBatch(indexRegion, indexMutations, null);
         } else {
@@ -493,7 +494,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
                 table = c.getEnvironment().getTable(indexTable);
                 table.batch(indexMutations);
             } catch (InterruptedException ie) {
-                ServerUtil.throwIOException(c.getEnvironment().getRegion().getRegionNameAsString(),
+                ServerUtil.throwIOException(c.getEnvironment().getRegion().getRegionInfo().getRegionNameAsString(),
                     ie);
             } finally {
                 if (table != null) table.close();
@@ -534,9 +535,9 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
 
 
     @Override
-    public void postSplit(ObserverContext<RegionCoprocessorEnvironment> e, HRegion l, HRegion r)
+    public void postSplit(ObserverContext<RegionCoprocessorEnvironment> e, Region l, Region r)
             throws IOException {
-        HRegion region = e.getEnvironment().getRegion();
+        Region region = e.getEnvironment().getRegion();
         TableName table = region.getRegionInfo().getTable();
         StatisticsCollector stats = null;
         try {

@@ -45,7 +45,7 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.regionserver.HRegion;
+import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
@@ -112,8 +112,9 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
              * For local indexes, we need to set an offset on row key expressions to skip
              * the region start key.
              */
-            HRegion region = c.getEnvironment().getRegion();
-            offset = region.getStartKey().length != 0 ? region.getStartKey().length:region.getEndKey().length;
+            Region region = c.getEnvironment().getRegion();
+            offset = region.getRegionInfo().getStartKey().length != 0 ? region.getRegionInfo().getStartKey().length :
+                region.getRegionInfo().getEndKey().length;
             ScanUtil.setRowKeyOffset(scan, offset);
         }
 
@@ -128,7 +129,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
         byte[] localIndexBytes = scan.getAttribute(LOCAL_INDEX_BUILD);
         List<IndexMaintainer> indexMaintainers = localIndexBytes == null ? null : IndexMaintainer.deserialize(localIndexBytes);
         TupleProjector tupleProjector = null;
-        HRegion dataRegion = null;
+        Region dataRegion = null;
         byte[][] viewConstants = null;
         ColumnReference[] dataColumns = IndexUtil.deserializeDataTableColumnsToJoin(scan);
 
@@ -415,7 +416,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                 logger.debug(LogUtil.addCustomAnnotations("Spillable groupby enabled: " + spillableEnabled, ScanUtil.getCustomAnnotations(scan)));
             }
 
-            HRegion region = c.getEnvironment().getRegion();
+            Region region = c.getEnvironment().getRegion();
             region.startRegionOperation();
             try {
                 synchronized (scanner) {
@@ -495,7 +496,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                 // If we're calculating no aggregate functions, we can exit at the
                 // start of a new row. Otherwise, we have to wait until an agg
                 int countOffset = rowAggregators.length == 0 ? 1 : 0;
-                HRegion region = c.getEnvironment().getRegion();
+                Region region = c.getEnvironment().getRegion();
                 region.startRegionOperation();
                 try {
                     synchronized (scanner) {
