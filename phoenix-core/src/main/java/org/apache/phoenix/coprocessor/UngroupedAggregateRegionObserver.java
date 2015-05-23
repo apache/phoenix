@@ -48,8 +48,8 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
+import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScanType;
 import org.apache.hadoop.hbase.regionserver.Store;
@@ -101,8 +101,8 @@ import com.google.common.collect.Sets;
 
 /**
  * Region observer that aggregates ungrouped rows(i.e. SQL query with aggregation function and no GROUP BY).
- * 
- * 
+ *
+ *
  * @since 0.1
  */
 public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
@@ -116,7 +116,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
     public static final String EMPTY_CF = "EmptyCF";
     private static final Logger logger = LoggerFactory.getLogger(UngroupedAggregateRegionObserver.class);
     private KeyValueBuilder kvBuilder;
-    
+
     @Override
     public void start(CoprocessorEnvironment e) throws IOException {
         super.start(e);
@@ -125,7 +125,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
         this.kvBuilder = GenericKeyValueBuilder.INSTANCE;
     }
 
-    private static void commitBatch(HRegion region, List<Mutation> mutations, byte[] indexUUID) throws IOException {
+    private static void commitBatch(Region region, List<Mutation> mutations, byte[] indexUUID) throws IOException {
       if (indexUUID != null) {
           for (Mutation m : mutations) {
               m.setAttribute(PhoenixIndexCodec.INDEX_UUID, indexUUID);
@@ -133,20 +133,20 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
       }
       Mutation[] mutationArray = new Mutation[mutations.size()];
       // TODO: should we use the one that is all or none?
-      region.batchMutate(mutations.toArray(mutationArray));
+      region.batchMutate(mutations.toArray(mutationArray), HConstants.NO_NONCE, HConstants.NO_NONCE);
     }
 
     public static void serializeIntoScan(Scan scan) {
         scan.setAttribute(BaseScannerRegionObserver.UNGROUPED_AGG, QueryConstants.TRUE);
     }
-    
+
     @Override
     public RegionScanner preScannerOpen(ObserverContext<RegionCoprocessorEnvironment> e, Scan scan, RegionScanner s)
             throws IOException {
         s = super.preScannerOpen(e, scan, s);
         if (ScanUtil.isAnalyzeTable(scan)) {
             // We are setting the start row and stop row such that it covers the entire region. As part
-            // of Phonenix-1263 we are storing the guideposts against the physical table rather than 
+            // of Phonenix-1263 we are storing the guideposts against the physical table rather than
             // individual tenant specific tables.
             scan.setStartRow(HConstants.EMPTY_START_ROW);
             scan.setStopRow(HConstants.EMPTY_END_ROW);
@@ -154,11 +154,11 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
         }
         return s;
     }
-    
+
     @Override
     protected RegionScanner doPostScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c, final Scan scan, final RegionScanner s) throws IOException {
         int offset = 0;
-        HRegion region = c.getEnvironment().getRegion();
+        Region region = c.getEnvironment().getRegion();
         long ts = scan.getTimeRange().getMax();
         StatisticsCollector stats = null;
         if(ScanUtil.isAnalyzeTable(scan)) {
@@ -172,16 +172,17 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
              * For local indexes, we need to set an offset on row key expressions to skip
              * the region start key.
              */
-            offset = region.getStartKey().length != 0 ? region.getStartKey().length:region.getEndKey().length;
+            offset = region.getRegionInfo().getStartKey().length != 0 ? region.getRegionInfo().getStartKey().length :
+                region.getRegionInfo().getEndKey().length;
             ScanUtil.setRowKeyOffset(scan, offset);
         }
 
         byte[] localIndexBytes = scan.getAttribute(LOCAL_INDEX_BUILD);
         List<IndexMaintainer> indexMaintainers = localIndexBytes == null ? null : IndexMaintainer.deserialize(localIndexBytes);
         List<Mutation> indexMutations = localIndexBytes == null ? Collections.<Mutation>emptyList() : Lists.<Mutation>newArrayListWithExpectedSize(1024);
-        
+
         RegionScanner theScanner = s;
-        
+
         byte[] indexUUID = scan.getAttribute(PhoenixIndexCodec.INDEX_UUID);
         PTable projectedTable = null;
         List<Expression> selectExpressions = null;
@@ -212,7 +213,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
             ptr = new ImmutableBytesWritable();
         }
         TupleProjector tupleProjector = null;
-        HRegion dataRegion = null;
+        Region dataRegion = null;
         byte[][] viewConstants = null;
         ColumnReference[] dataColumns = IndexUtil.deserializeDataTableColumnsToJoin(scan);
         boolean localIndexScan = ScanUtil.isLocalIndex(scan);
@@ -226,14 +227,14 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
             }
             ImmutableBytesWritable tempPtr = new ImmutableBytesWritable();
             theScanner =
-                    getWrappedScanner(c, theScanner, offset, scan, dataColumns, tupleProjector, 
+                    getWrappedScanner(c, theScanner, offset, scan, dataColumns, tupleProjector,
                             dataRegion, indexMaintainers == null ? null : indexMaintainers.get(0), viewConstants, p, tempPtr);
-        } 
-        
+        }
+
         if (j != null)  {
             theScanner = new HashJoinRegionScanner(theScanner, p, j, ScanUtil.getTenantId(scan), c.getEnvironment());
         }
-        
+
         int batchSize = 0;
         List<Mutation> mutations = Collections.emptyList();
         boolean buildLocalIndex = indexMaintainers != null && dataColumns==null && !localIndexScan;
@@ -279,8 +280,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
                                                 results);
                                         Put put = maintainer.buildUpdateMutation(kvBuilder,
                                             valueGetter, ptr, ts,
-                                            c.getEnvironment().getRegion().getStartKey(),
-                                            c.getEnvironment().getRegion().getEndKey());
+                                            c.getEnvironment().getRegion().getRegionInfo().getStartKey(),
+                                            c.getEnvironment().getRegion().getRegionInfo().getEndKey());
                                         indexMutations.add(put);
                                     }
                                 }
@@ -330,7 +331,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
                                         }
                                         column.getDataType().coerceBytes(ptr, value,
                                             expression.getDataType(), expression.getMaxLength(),
-                                            expression.getScale(), expression.getSortOrder(), 
+                                            expression.getScale(), expression.getSortOrder(),
                                             column.getMaxLength(), column.getScale(),
                                             column.getSortOrder());
                                         byte[] bytes = ByteUtil.copyKeyBytesIfNecessary(ptr);
@@ -391,7 +392,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
                         } catch (ConstraintViolationException e) {
                             // Log and ignore in count
                             logger.error(LogUtil.addCustomAnnotations("Failed to create row in " +
-                                region.getRegionNameAsString() + " with values " +
+                                region.getRegionInfo().getRegionNameAsString() + " with values " +
                                 SchemaUtil.toString(values),
                                 ScanUtil.getCustomAnnotations(scan)), e);
                             continue;
@@ -418,7 +419,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
                 }
             }
         }
-        
+
         if (logger.isDebugEnabled()) {
         	logger.debug(LogUtil.addCustomAnnotations("Finished scanning " + rowCount + " rows for ungrouped coprocessor scan " + scan, ScanUtil.getCustomAnnotations(scan)));
         }
@@ -438,7 +439,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
             keyValue = KeyValueUtil.newKeyValue(UNGROUPED_AGG_ROW_KEY, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, AGG_TIMESTAMP, value, 0, value.length);
         }
         final KeyValue aggKeyValue = keyValue;
-        
+
         RegionScanner scanner = new BaseRegionScanner() {
             private boolean done = !hadAny;
 
@@ -464,19 +465,24 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
                 results.add(aggKeyValue);
                 return false;
             }
-            
+
             @Override
             public long getMaxResultSize() {
             	return scan.getMaxResultSize();
+            }
+
+            @Override
+            public int getBatch() {
+                return innerScanner.getBatch();
             }
         };
         return scanner;
     }
 
     private void commitIndexMutations(final ObserverContext<RegionCoprocessorEnvironment> c,
-            HRegion region, List<Mutation> indexMutations) throws IOException {
+            Region region, List<Mutation> indexMutations) throws IOException {
         // Get indexRegion corresponding to data region
-        HRegion indexRegion = IndexUtil.getIndexRegion(c.getEnvironment());
+        Region indexRegion = IndexUtil.getIndexRegion(c.getEnvironment());
         if (indexRegion != null) {
             commitBatch(indexRegion, indexMutations, null);
         } else {
@@ -488,7 +494,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
                 table = c.getEnvironment().getTable(indexTable);
                 table.batch(indexMutations);
             } catch (InterruptedException ie) {
-                ServerUtil.throwIOException(c.getEnvironment().getRegion().getRegionNameAsString(),
+                ServerUtil.throwIOException(c.getEnvironment().getRegion().getRegionInfo().getRegionNameAsString(),
                     ie);
             } finally {
                 if (table != null) table.close();
@@ -496,7 +502,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
         }
         indexMutations.clear();
     }
-    
+
     @Override
     public InternalScanner preCompact(ObserverContext<RegionCoprocessorEnvironment> c,
         final Store store, InternalScanner scanner, final ScanType scanType)
@@ -505,8 +511,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
         InternalScanner internalScanner = scanner;
         if (scanType.equals(ScanType.COMPACT_DROP_DELETES)) {
             try {
-                boolean useCurrentTime = 
-                        c.getEnvironment().getConfiguration().getBoolean(QueryServices.STATS_USE_CURRENT_TIME_ATTRIB, 
+                boolean useCurrentTime =
+                        c.getEnvironment().getConfiguration().getBoolean(QueryServices.STATS_USE_CURRENT_TIME_ATTRIB,
                                 QueryServicesOptions.DEFAULT_STATS_USE_CURRENT_TIME);
                 // Provides a means of clients controlling their timestamps to not use current time
                 // when background tasks are updating stats. Instead we track the max timestamp of
@@ -526,17 +532,17 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
         }
         return internalScanner;
     }
-    
-    
+
+
     @Override
-    public void postSplit(ObserverContext<RegionCoprocessorEnvironment> e, HRegion l, HRegion r)
+    public void postSplit(ObserverContext<RegionCoprocessorEnvironment> e, Region l, Region r)
             throws IOException {
-        HRegion region = e.getEnvironment().getRegion();
+        Region region = e.getEnvironment().getRegion();
         TableName table = region.getRegionInfo().getTable();
         StatisticsCollector stats = null;
         try {
-            boolean useCurrentTime = 
-                    e.getEnvironment().getConfiguration().getBoolean(QueryServices.STATS_USE_CURRENT_TIME_ATTRIB, 
+            boolean useCurrentTime =
+                    e.getEnvironment().getConfiguration().getBoolean(QueryServices.STATS_USE_CURRENT_TIME_ATTRIB,
                             QueryServicesOptions.DEFAULT_STATS_USE_CURRENT_TIME);
             // Provides a means of clients controlling their timestamps to not use current time
             // when background tasks are updating stats. Instead we track the max timestamp of
@@ -544,7 +550,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
             long clientTimeStamp = useCurrentTime ? TimeKeeper.SYSTEM.getCurrentTime() : StatisticsCollector.NO_TIMESTAMP;
             stats = new StatisticsCollector(e.getEnvironment(), table.getNameAsString(), clientTimeStamp);
             stats.splitStats(region, l, r);
-        } catch (IOException ioe) { 
+        } catch (IOException ioe) {
             if(logger.isWarnEnabled()) {
                 logger.warn("Error while collecting stats during split for " + table,ioe);
             }
@@ -559,7 +565,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
             return PTableImpl.createFromProto(ptableProto);
         } catch (IOException e) {
             throw new RuntimeException(e);
-        } 
+        }
     }
 
     private static List<Expression> deserializeExpressions(byte[] b) {

@@ -15,32 +15,31 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.phoenix.expression.function;
 
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.phoenix.exception.DataExceedsCapacityException;
 import org.apache.phoenix.expression.Expression;
-import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TypeMismatchException;
-import org.apache.phoenix.schema.types.*;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.*;
 
-@FunctionParseNode.BuiltInFunction(name = ArrayAppendFunction.NAME, args = {
+@FunctionParseNode.BuiltInFunction(name = ArrayPrependFunction.NAME, args = {
+        @FunctionParseNode.Argument(allowedTypes = {PVarbinary.class}),
         @FunctionParseNode.Argument(allowedTypes = {PBinaryArray.class,
-                PVarbinaryArray.class}),
-        @FunctionParseNode.Argument(allowedTypes = {PVarbinary.class}, defaultValue = "null")})
-public class ArrayAppendFunction extends ArrayModifierFunction {
+                PVarbinaryArray.class})})
+public class ArrayPrependFunction  extends ArrayModifierFunction {
 
-    public static final String NAME = "ARRAY_APPEND";
+    public static final String NAME = "ARRAY_PREPEND";
 
-    public ArrayAppendFunction() {
+    public ArrayPrependFunction() {
     }
 
-    public ArrayAppendFunction(List<Expression> children) throws TypeMismatchException {
+    public ArrayPrependFunction(List<Expression> children) throws TypeMismatchException {
         super(children);
     }
 
@@ -58,29 +57,26 @@ public class ArrayAppendFunction extends ArrayModifierFunction {
         int offset = ptr.getOffset();
         byte[] arrayBytes = ptr.get();
 
-        if (!getElementExpr().evaluate(tuple, ptr) || ptr.getLength() == 0) {
-            ptr.set(arrayBytes, offset, length);
-            return true;
-        }
+        getElementExpr().evaluate(tuple, ptr);
 
         checkSizeCompatibility(ptr);
         coerceBytes(ptr);
-        return PArrayDataType.appendItemToArray(ptr, length, offset, arrayBytes, getBaseType(), arrayLength, getMaxLength(), getArrayExpr().getSortOrder());
+        return PArrayDataType.prependItemToArray(ptr, length, offset, arrayBytes, getBaseType(), arrayLength, getMaxLength(), getArrayExpr().getSortOrder());
     }
 
     @Override
     public PDataType getDataType() {
-        return children.get(0).getDataType();
+        return children.get(1).getDataType();
     }
 
     @Override
     public Integer getMaxLength() {
-        return this.children.get(0).getMaxLength();
+        return this.children.get(1).getMaxLength();
     }
 
     @Override
     public SortOrder getSortOrder() {
-        return getChildren().get(0).getSortOrder();
+        return getChildren().get(1).getSortOrder();
     }
 
     @Override
@@ -88,11 +84,13 @@ public class ArrayAppendFunction extends ArrayModifierFunction {
         return NAME;
     }
 
+    @Override
     public Expression getArrayExpr() {
-        return getChildren().get(0);
+        return getChildren().get(1);
     }
 
+    @Override
     public Expression getElementExpr() {
-        return getChildren().get(1);
+        return getChildren().get(0);
     }
 }

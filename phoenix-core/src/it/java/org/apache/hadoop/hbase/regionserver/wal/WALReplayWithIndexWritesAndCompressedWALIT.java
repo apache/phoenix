@@ -159,7 +159,7 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
   }
 
   /**
-   * Test writing edits into an HRegion, closing it, splitting logs, opening Region again. Verify
+   * Test writing edits into an region, closing it, splitting logs, opening Region again. Verify
    * seqids.
    * @throws Exception on failure
    */
@@ -183,7 +183,7 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
     builder.build(htd);
 
     // create the region + its WAL
-    HRegion region0 = HRegion.createHRegion(hri, hbaseRootDir, this.conf, htd);
+    HRegion region0 = HRegion.createHRegion(hri, hbaseRootDir, this.conf, htd); // FIXME: Uses private type
     region0.close();
     region0.getWAL().close();
 

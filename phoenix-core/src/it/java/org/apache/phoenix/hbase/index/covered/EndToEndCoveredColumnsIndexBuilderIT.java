@@ -41,7 +41,7 @@ import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Put;
-import org.apache.hadoop.hbase.regionserver.HRegion;
+import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.util.EnvironmentEdge;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -312,7 +312,7 @@ public class EndToEndCoveredColumnsIndexBuilderIT {
     HTable primary = new HTable(UTIL.getConfiguration(), tableNameBytes);
 
     // overwrite the codec so we can verify the current state
-    HRegion region = UTIL.getMiniHBaseCluster().getRegions(tableNameBytes).get(0);
+    Region region = UTIL.getMiniHBaseCluster().getRegions(tableNameBytes).get(0);
     Indexer indexer =
         (Indexer) region.getCoprocessorHost().findCoprocessor(Indexer.class.getName());
     CoveredColumnsIndexBuilder builder =

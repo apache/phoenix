@@ -22,7 +22,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import org.apache.hadoop.hbase.client.Mutation;
-import org.apache.hadoop.hbase.regionserver.HRegion;
+import org.apache.hadoop.hbase.regionserver.Region;
 
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Multimap;
@@ -32,8 +32,8 @@ import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 
 public class PerRegionIndexWriteCache {
 
-  private Map<HRegion, Multimap<HTableInterfaceReference, Mutation>> cache =
-      new HashMap<HRegion, Multimap<HTableInterfaceReference, Mutation>>();
+  private Map<Region, Multimap<HTableInterfaceReference, Mutation>> cache =
+      new HashMap<Region, Multimap<HTableInterfaceReference, Mutation>>();
 
 
   /**
@@ -43,7 +43,7 @@ public class PerRegionIndexWriteCache {
    * @return Get the edits for the given region. Returns <tt>null</tt> if there are no pending edits
    *         for the region
    */
-  public Multimap<HTableInterfaceReference, Mutation> getEdits(HRegion region) {
+  public Multimap<HTableInterfaceReference, Mutation> getEdits(Region region) {
     return cache.remove(region);
   }
 
@@ -52,7 +52,7 @@ public class PerRegionIndexWriteCache {
    * @param table
    * @param collection
    */
-  public void addEdits(HRegion region, HTableInterfaceReference table,
+  public void addEdits(Region region, HTableInterfaceReference table,
       Collection<Mutation> collection) {
     Multimap<HTableInterfaceReference, Mutation> edits = cache.get(region);
     if (edits == null) {

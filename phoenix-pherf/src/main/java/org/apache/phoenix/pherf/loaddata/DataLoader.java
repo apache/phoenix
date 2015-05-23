@@ -67,7 +67,7 @@ public class DataLoader {
     }
 
     public DataLoader(PhoenixUtil phoenixUtil, XMLConfigParser parser) throws Exception{
-        this(phoenixUtil, new ResourceList().getProperties(), parser);
+        this(phoenixUtil, PherfConstants.create().getProperties(PherfConstants.PHERF_PROPERTIES), parser);
     }
 
     /**
