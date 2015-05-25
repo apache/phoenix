@@ -8,6 +8,7 @@ import java.util.List;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
@@ -16,6 +17,7 @@ import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PJson;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.util.JSONutil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -54,27 +56,27 @@ public class JsonPointAsElementExpression extends BaseJSONExpression{
         }
 		String key = (String) PVarchar.INSTANCE.toObject(ptr, children.get(1).getSortOrder());
 		try {
-		ObjectMapper mapper = new ObjectMapper();
-			JsonNode jsonTree=mapper.readTree(source);
+			JSONutil jsonUtil=new JSONutil();
+			JsonNode jsonTree=jsonUtil.getJsonNode(source);
 				if(jsonTree.has(key))
 				{
 					JsonNode result=jsonTree.get(key);
-					if(result.canConvertToInt())
+					if(result.isInt())
 					{
 						defaultType=PInteger.INSTANCE;
-						ptr.set(Bytes.toBytes(result.asInt()));
+						ptr.set(PInteger.INSTANCE.toBytes(result.asInt(), SortOrder.getDefault()));
 						return true;
 					}
-					else if(result.canConvertToLong())
+					else if(result.isLong())
 					{
 						defaultType=PLong.INSTANCE;
-						ptr.set(Bytes.toBytes(result.asLong()));
+						ptr.set(PLong.INSTANCE.toBytes(result.asLong(), SortOrder.getDefault()));
 						return true;
 					}
 					else if(result.isDouble())
 					{
 						defaultType=PDouble.INSTANCE;
-						ptr.set(Bytes.toBytes(result.asDouble()));
+						ptr.set(PDouble.INSTANCE.toBytes(result.asDouble(), SortOrder.getDefault()));
 						return true;
 					}
 					else if(result.isBoolean())
@@ -86,13 +88,13 @@ public class JsonPointAsElementExpression extends BaseJSONExpression{
 					else if(result.isTextual())
 					{
 						defaultType=PVarchar.INSTANCE;
-						ptr.set(Bytes.toBytes(result.asText()));
+						ptr.set(PVarchar.INSTANCE.toBytes(result.asText(), SortOrder.getDefault()));
 						return true;
 					}
 					else
 					{
 						//use byte string 
-						ptr.set(Bytes.toBytes(result.toString()));
+						ptr.set(PVarchar.INSTANCE.toBytes(result.toString(), SortOrder.getDefault()));
 						return true;
 					}
 				}
