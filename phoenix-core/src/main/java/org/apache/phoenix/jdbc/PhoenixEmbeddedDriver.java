@@ -31,6 +31,7 @@ import java.util.logging.Logger;
 
 import javax.annotation.concurrent.Immutable;
 
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -174,10 +175,10 @@ public abstract class PhoenixEmbeddedDriver implements Driver, org.apache.phoeni
     }
     
     /**
-     * 
+     *
      * Class to encapsulate connection info for HBase
      *
-     * 
+     *
      * @since 0.1.1
      */
     public static class ConnectionInfo {
@@ -204,12 +205,18 @@ public abstract class PhoenixEmbeddedDriver implements Driver, org.apache.phoeni
             return false;
         }
         
-        protected static ConnectionInfo create(String url) throws SQLException {
-            StringTokenizer tokenizer = new StringTokenizer(url == null ? "" : url.substring(PhoenixRuntime.JDBC_PROTOCOL.length()),DELIMITERS, true);
+        public static ConnectionInfo create(String url) throws SQLException {
+            url = url == null ? "" : url;
+            url = url.startsWith(PhoenixRuntime.JDBC_PROTOCOL)
+                    ? url.substring(PhoenixRuntime.JDBC_PROTOCOL.length())
+                    : url;
+            StringTokenizer tokenizer = new StringTokenizer(url, DELIMITERS, true);
             int nTokens = 0;
             String[] tokens = new String[5];
             String token = null;
-            while (tokenizer.hasMoreTokens() && !(token=tokenizer.nextToken()).equals(TERMINATOR) && tokenizer.hasMoreTokens() && nTokens < tokens.length) {
+            while (tokenizer.hasMoreTokens() &&
+                    !(token=tokenizer.nextToken()).equals(TERMINATOR) &&
+                    tokenizer.hasMoreTokens() && nTokens < tokens.length) {
                 token = tokenizer.nextToken();
                 // This would mean we have an empty string for a token which is illegal
                 if (DELIMITERS.contains(token)) {
@@ -316,8 +323,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, org.apache.phoeni
         private final String principal;
         private final String keytab;
         
-        // used for testing
-        ConnectionInfo(String zookeeperQuorum, Integer port, String rootNode, String principal, String keytab) {
+        public ConnectionInfo(String zookeeperQuorum, Integer port, String rootNode, String principal, String keytab) {
             this.zookeeperQuorum = zookeeperQuorum;
             this.port = port;
             this.rootNode = rootNode;
@@ -326,8 +332,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, org.apache.phoeni
             this.keytab = keytab;
         }
         
-        // used for testing
-        ConnectionInfo(String zookeeperQuorum, Integer port, String rootNode) {
+        public ConnectionInfo(String zookeeperQuorum, Integer port, String rootNode) {
         	this(zookeeperQuorum, port, rootNode, null, null);
         }
 
@@ -417,6 +422,11 @@ public abstract class PhoenixEmbeddedDriver implements Driver, org.apache.phoeni
 					+ (principal == null ? "" : ":" + principal)
 					+ (keytab == null ? "" : ":" + keytab);
 		}
+
+        public String toUrl() {
+            return PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR
+                    + toString();
+        }
     }
 
     public static boolean isTestUrl(String url) {

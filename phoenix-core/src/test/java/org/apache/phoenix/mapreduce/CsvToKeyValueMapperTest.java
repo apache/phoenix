@@ -95,21 +95,6 @@ public class CsvToKeyValueMapperTest {
     }
 
     @Test
-    public void testGetJdbcUrl() {
-        Configuration conf = new Configuration();
-        conf.set(HConstants.ZOOKEEPER_QUORUM, "myzkclient:2181");
-        String jdbcUrl = CsvToKeyValueMapper.getJdbcUrl(conf);
-
-        assertEquals("jdbc:phoenix:myzkclient:2181", jdbcUrl);
-    }
-
-    @Test(expected=IllegalStateException.class)
-    public void testGetJdbcUrl_NotConfigured() {
-        Configuration conf = new Configuration();
-        CsvToKeyValueMapper.getJdbcUrl(conf);
-    }
-
-    @Test
     public void testLoadPreUpdateProcessor() {
         Configuration conf = new Configuration();
         conf.setClass(PhoenixConfigurationUtil.UPSERT_HOOK_CLASS_CONFKEY, MockUpsertProcessor.class,
