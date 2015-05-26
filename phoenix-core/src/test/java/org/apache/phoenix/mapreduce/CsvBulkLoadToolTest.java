@@ -66,15 +66,4 @@ public class CsvBulkLoadToolTest {
     public void testGetQualifiedTableName_NullSchema() {
         assertEquals("MYTABLE", CsvBulkLoadTool.getQualifiedTableName(null, "myTable"));
     }
-
-    @Test
-    public void testGetJdbcUrl_WithQuorumSupplied() {
-        assertEquals("jdbc:phoenix:myzkhost:2181", bulkLoadTool.getJdbcUrl("myzkhost:2181"));
-    }
-
-    @Test
-    public void testGetJdbcUrl_NoQuorumSupplied() {
-        assertEquals("jdbc:phoenix:localhost:2181", bulkLoadTool.getJdbcUrl(null));
-    }
-
 }
