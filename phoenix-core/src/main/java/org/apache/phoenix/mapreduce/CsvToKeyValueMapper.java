@@ -19,7 +19,6 @@ package org.apache.phoenix.mapreduce;
 
 import java.io.IOException;
 import java.io.StringReader;
-import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Iterator;
 import java.util.List;
@@ -32,7 +31,6 @@ import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -41,11 +39,11 @@ import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.util.CSVCommonsLoader;
 import org.apache.phoenix.util.ColumnInfo;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.csv.CsvUpsertExecutor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -108,7 +106,6 @@ public class CsvToKeyValueMapper extends Mapper<LongWritable,Text,ImmutableBytes
     protected void setup(Context context) throws IOException, InterruptedException {
 
         Configuration conf = context.getConfiguration();
-        String jdbcUrl = getJdbcUrl(conf);
 
         // pass client configuration into driver
         Properties clientInfos = new Properties();
@@ -118,12 +115,9 @@ public class CsvToKeyValueMapper extends Mapper<LongWritable,Text,ImmutableBytes
             clientInfos.setProperty(entry.getKey(), entry.getValue());
         }
         
-        // This statement also ensures that the driver class is loaded
-        LOG.info("Connection with driver {} with url {}", PhoenixDriver.class.getName(), jdbcUrl);
-
         try {
-            conn = (PhoenixConnection) DriverManager.getConnection(jdbcUrl, clientInfos);
-        } catch (SQLException e) {
+            conn = (PhoenixConnection) QueryUtil.getConnection(clientInfos, conf);
+        } catch (SQLException | ClassNotFoundException e) {
             throw new RuntimeException(e);
         }
 
@@ -187,20 +181,6 @@ public class CsvToKeyValueMapper extends Mapper<LongWritable,Text,ImmutableBytes
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
-    }
-
-    /**
-     * Build up the JDBC URL for connecting to Phoenix.
-     *
-     * @return the full JDBC URL for a Phoenix connection
-     */
-    @VisibleForTesting
-    static String getJdbcUrl(Configuration conf) {
-        String zkQuorum = conf.get(HConstants.ZOOKEEPER_QUORUM);
-        if (zkQuorum == null) {
-            throw new IllegalStateException(HConstants.ZOOKEEPER_QUORUM + " is not configured");
-        }
-        return PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum;
     }
 
     @VisibleForTesting
