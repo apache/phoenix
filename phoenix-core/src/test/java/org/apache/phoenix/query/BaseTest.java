@@ -620,8 +620,6 @@ public abstract class BaseTest {
         }
         //no point doing sanity checks when running tests.
         conf.setBoolean("hbase.table.sanity.checks", false);
-        // Remove this configuration once hbase has HBASE-13756 fix.
-        conf.set("hbase.regionserver.msginterval", "300000");
         // set the server rpc controller and rpc scheduler factory, used to configure the cluster
         conf.set(RpcControllerFactory.CUSTOM_CONTROLLER_CONF_KEY, DEFAULT_SERVER_RPC_CONTROLLER_FACTORY);
         conf.set(RSRpcServices.REGION_SERVER_RPC_SCHEDULER_FACTORY_CLASS, DEFAULT_RPC_SCHEDULER_FACTORY);
