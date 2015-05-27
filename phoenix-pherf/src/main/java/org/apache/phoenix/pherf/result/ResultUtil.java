@@ -115,7 +115,9 @@ public class ResultUtil {
     }
 
     public void ensureBaseResultDirExists() {
-        ensureBaseDirExists(PherfConstants.RESULT_DIR);
+        PherfConstants constants = PherfConstants.create();
+        String resultDir = constants.getProperty("pherf.default.results.dir");
+        ensureBaseDirExists(resultDir);
     }
 
     /**

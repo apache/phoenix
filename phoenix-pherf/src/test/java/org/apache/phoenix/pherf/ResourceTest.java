@@ -48,11 +48,9 @@ public class ResourceTest {
 
     @Test
     public void testResourceListPropertyDirectory() throws Exception {
-
-        ResourceList list = new ResourceList();
-        Properties properties = list.getProperties();
-        assertTrue("Property file list was empty", properties.size() > 0);
-        assertNotNull(properties.getProperty("pherf.default.dataloader.threadpool"));
+        PherfConstants constants = PherfConstants.create();
+        assertNotNull(constants.getProperty("pherf.default.dataloader.threadpool"));
+        assertNotNull(constants.getProperty("pherf.default.results.dir"));
     }
 
     private Collection<Path> assertResources(String pattern, String rootDir, String assertStr) throws Exception {

@@ -45,7 +45,7 @@ public class WorkloadExecutor {
 
 
     public WorkloadExecutor() throws Exception {
-        this(new ResourceList().getProperties());
+        this(PherfConstants.create().getProperties(PherfConstants.PHERF_PROPERTIES));
     }
 
     public WorkloadExecutor(Properties properties) throws Exception{
