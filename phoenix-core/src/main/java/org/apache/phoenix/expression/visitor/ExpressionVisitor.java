@@ -38,7 +38,9 @@ import org.apache.phoenix.expression.JsonPathAsTextExpression;
 import org.apache.phoenix.expression.JsonSingleKeySearchExpression;
 import org.apache.phoenix.expression.JsonSubsetExpression;
 import org.apache.phoenix.expression.JsonSupersetExpression;
+import org.apache.phoenix.expression.JsonPointAsElementExpression;
 import org.apache.phoenix.expression.JsonPointAsTextExpression;
+import org.apache.phoenix.expression.JsonPointForArrayAsElementExpression;
 import org.apache.phoenix.expression.JsonPointForArrayAsTextExpression;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.LikeExpression;
@@ -164,5 +166,12 @@ public interface ExpressionVisitor<E> {
 	
     public Iterator<Expression> visitEnter(JsonPointForArrayAsTextExpression jsonPointForArrayAsTextExpression);
     public E visitLeave(JsonPointForArrayAsTextExpression node, List<E> l);
+
+    
+    public Iterator<Expression> visitEnter(JsonPointAsElementExpression jsonPointForArrayAsTextExpression);
+    public E visitLeave(JsonPointAsElementExpression node, List<E> l);
+    
+    public Iterator<Expression> visitEnter(JsonPointForArrayAsElementExpression jsonPointForArrayAsTextExpression);
+    public E visitLeave(JsonPointForArrayAsElementExpression node, List<E> l);
 
 }

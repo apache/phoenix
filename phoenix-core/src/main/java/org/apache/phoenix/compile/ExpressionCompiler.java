@@ -57,7 +57,9 @@ import org.apache.phoenix.expression.JsonPathAsTextExpression;
 import org.apache.phoenix.expression.JsonSingleKeySearchExpression;
 import org.apache.phoenix.expression.JsonSubsetExpression;
 import org.apache.phoenix.expression.JsonSupersetExpression;
+import org.apache.phoenix.expression.JsonPointAsElementExpression;
 import org.apache.phoenix.expression.JsonPointAsTextExpression;
+import org.apache.phoenix.expression.JsonPointForArrayAsElementExpression;
 import org.apache.phoenix.expression.JsonPointForArrayAsTextExpression;
 import org.apache.phoenix.expression.LikeExpression;
 import org.apache.phoenix.expression.LiteralExpression;
@@ -1465,5 +1467,31 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
          if(rhs.getDataType().isCoercibleTo(PVarchar.INSTANCE))return new JsonPointAsTextExpression(children);
          else if(rhs.getDataType().isCoercibleTo(PDecimal.INSTANCE))return new JsonPointForArrayAsTextExpression(children);
          else throw TypeMismatchException.newException(lhs.getDataType(), rhs.getDataType(), node.toString());
+    }
+    
+    @Override
+    public boolean visitEnter(JsonPointAsElementParseNode node) throws SQLException {
+        return true;
+    }
+    
+    @Override
+    public Expression visitLeave(JsonPointAsElementParseNode node, List <Expression> children) throws SQLException {
+    	ParseNode lhsNode = node.getChildren().get(0);
+        ParseNode rhsNode = node.getChildren().get(1);
+        Expression lhs = children.get(0);
+        Expression rhs = children.get(1);
+        if ( !(rhs.getDataType().isCoercibleTo(PVarchar.INSTANCE)||rhs.getDataType().isCoercibleTo(PDecimal.INSTANCE))&&
+                !(lhs.getDataType()==PJson.INSTANCE)) {
+            throw TypeMismatchException.newException(lhs.getDataType(), rhs.getDataType(), node.toString());
+        }
+        if (lhsNode instanceof BindParseNode) {
+            context.getBindManager().addParamMetaData((BindParseNode)lhsNode, rhs);
+        }
+        if (rhsNode instanceof BindParseNode) {
+            context.getBindManager().addParamMetaData((BindParseNode)rhsNode, lhs);
+        }
+        if(rhs.getDataType().isCoercibleTo(PVarchar.INSTANCE))return new JsonPointAsElementExpression(children);
+        else if(rhs.getDataType().isCoercibleTo(PDecimal.INSTANCE))return new JsonPointForArrayAsElementExpression(children);
+        else throw TypeMismatchException.newException(lhs.getDataType(), rhs.getDataType(), node.toString());
     }
 }
