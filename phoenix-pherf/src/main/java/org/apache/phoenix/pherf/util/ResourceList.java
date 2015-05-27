@@ -18,14 +18,12 @@
 
 package org.apache.phoenix.pherf.util;
 
-import org.apache.phoenix.pherf.PherfConstants;
 import org.apache.phoenix.pherf.exception.PherfException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
 import java.net.URI;
 import java.net.URL;
 import java.nio.file.Path;
@@ -43,17 +41,11 @@ public class ResourceList {
     private static final Logger logger = LoggerFactory.getLogger(ResourceList.class);
     private final String rootResourceDir;
 
-    public ResourceList() {
-        this("/");
-    }
-
     public ResourceList(String rootResourceDir) {
         this.rootResourceDir = rootResourceDir;
     }
 
     public Collection<Path> getResourceList(final String pattern) throws Exception {
-        Properties properties = getProperties();
-
         // Include files from config directory
         Collection<Path> paths = getResourcesPaths(Pattern.compile(pattern));
 
@@ -110,24 +102,6 @@ public class ResourceList {
         }
 
         return paths;
-    }
-
-    public Properties getProperties() throws Exception {
-        return getProperties(PherfConstants.PHERF_PROPERTIES);
-    }
-
-    public Properties getProperties(final String fileName) throws Exception {
-        Properties pherfProps = new Properties();
-        InputStream is = null;
-        try {
-            is = getClass().getClassLoader().getResourceAsStream(fileName);
-            pherfProps.load(is);
-        } finally {
-            if (is != null) {
-                is.close();
-            }
-        }
-        return pherfProps;
     }
 
     private Collection<String> getResources(

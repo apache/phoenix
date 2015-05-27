@@ -53,8 +53,11 @@ public class CSVResultHandler implements ResultHandler {
 
     public CSVResultHandler(String resultFileName, ResultFileDetails resultFileDetails, boolean generateFullFileName) {
         this.util = new ResultUtil();
+        PherfConstants constants = PherfConstants.create();
+        String resultDir = constants.getProperty("pherf.default.results.dir");
+
         this.resultFileName = generateFullFileName ?
-                PherfConstants.RESULT_DIR + PherfConstants.PATH_SEPARATOR
+                resultDir + PherfConstants.PATH_SEPARATOR
                         + PherfConstants.RESULT_PREFIX
                         + resultFileName + util.getSuffix()
                         + resultFileDetails.getExtension().toString()
