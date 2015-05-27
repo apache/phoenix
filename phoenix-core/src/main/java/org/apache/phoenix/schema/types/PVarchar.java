@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.schema.types;
 
+import java.sql.SQLException;
 import java.sql.Types;
 import java.text.Format;
 
@@ -88,13 +89,13 @@ public class PVarchar extends PDataType<String> {
   }
 
   @Override
-  public boolean isCoercibleTo(PDataType targetType, Object value) {
+  public boolean isCoercibleTo(PDataType targetType, Object value){
     if (isCoercibleTo(targetType)) {
       if (targetType.equals(PChar.INSTANCE)) {
         return value != null;
       }
       if(targetType.equals(PJson.INSTANCE)){
-    	  return new JSONutil().isJSON(value);
+    	return JSONutil.isJSON((String)value);
       }
       return true;
     }

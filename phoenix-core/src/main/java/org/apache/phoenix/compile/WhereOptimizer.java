@@ -888,7 +888,7 @@ public class WhereOptimizer {
             // Delay adding to extractedNodes, until we're done traversing,
             // since we can't yet tell whether or not the PK column references
             // are contiguous
-            if (childParts.isEmpty()||node.getChildren().get(0) instanceof BaseJSONExpression) {
+            if (childParts.isEmpty()) {
                 return null;
             }
             Expression rhs = node.getChildren().get(1);

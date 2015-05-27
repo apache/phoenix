@@ -133,7 +133,7 @@ public class ComparisonExpression extends BaseCompoundExpression {
                 lhsExpr = new RowValueConstructorExpression(Collections.singletonList(lhsExpr), lhsExpr.isStateless());
             }
             children = Arrays.asList(lhsExpr, rhsExpr);
-        } else if(lhsExprDataType != null && rhsExprDataType != null && !(lhsExpr instanceof BaseJSONExpression) && !(lhsExprDataType==PJson.INSTANCE && rhsExprDataType==PVarchar.INSTANCE) &&!lhsExprDataType.isComparableTo(rhsExprDataType)) {
+        } else if(lhsExprDataType != null && rhsExprDataType != null && !(lhsExpr instanceof BaseJSONExpression) && !lhsExprDataType.isComparableTo(rhsExprDataType)) {
             throw TypeMismatchException.newException(lhsExprDataType, rhsExprDataType,
                 toString(op, children));
         }

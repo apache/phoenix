@@ -6,6 +6,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.JSONutil;
 import org.apache.phoenix.util.StringUtil;
 
 
@@ -65,7 +66,7 @@ public class PJson extends PDataType<String> {
 	  public boolean isCoercibleTo(PDataType targetType) {
 	    return equalsAny(targetType, this,PVarchar.INSTANCE ,PChar.INSTANCE, PVarbinary.INSTANCE, PBinary.INSTANCE);
 	  }
-
+	  
 	  @Override
 	  public boolean isSizeCompatible(ImmutableBytesWritable ptr, Object value, PDataType srcType,
 	      Integer maxLength, Integer scale, Integer desiredMaxLength,
@@ -104,9 +105,9 @@ public class PJson extends PDataType<String> {
 
 	  @Override
 	  public boolean isBytesComparableWith(PDataType otherType) {
-	    return super.isBytesComparableWith(otherType) || otherType == PVarchar.INSTANCE|| otherType == PChar.INSTANCE;
+	    return super.isBytesComparableWith(otherType) || otherType == PVarchar.INSTANCE || otherType == PChar.INSTANCE;
 	  }
-
+	  
 	  @Override
 	  public String toStringLiteral(Object o, Format formatter) {
 	    if (formatter != null) {

@@ -56,6 +56,8 @@ import org.apache.hadoop.hbase.regionserver.Store;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.exception.ValueTypeIncompatibleException;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.Expression;
@@ -83,8 +85,10 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.stats.StatisticsCollector;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PJson;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.JSONutil;
 import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.MetaDataUtil;
@@ -316,6 +320,11 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
                                         PColumn column = projectedColumns.get(i);
                                         Object value = expression.getDataType()
                                             .toObject(ptr, column.getSortOrder());
+                                        if(column.getDataType()==PJson.INSTANCE&&!JSONutil.isJSON(ptr.get())){
+                                        	  throw new ValueTypeIncompatibleException(
+                                                      column.getDataType(), column.getMaxLength(),
+                                                      column.getScale());
+                                        }
                                         // We are guaranteed that the two column will have the
                                         // same type.
                                         if (!column.getDataType().isSizeCompatible(ptr, value,

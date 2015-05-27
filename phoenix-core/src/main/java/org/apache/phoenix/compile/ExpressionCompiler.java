@@ -202,30 +202,37 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     public boolean visitEnter(JsonSingleKeySearchParseNode node) {
         return true;
     }
+    
     @Override
     public boolean visitEnter(JsonSubsetParseNode node) {
         return true;
     }
+    
     @Override
     public boolean visitEnter(JsonSupersetParseNode node) {
         return true;
     }
+    
     @Override
     public boolean visitEnter(JsonMultiKeySearchOrParseNode node) {
         return true;
     }
+    
     @Override
     public boolean visitEnter(JsonMultiKeySeatchAndParseNode node) {
         return true;
     }
+    
     @Override
     public boolean visitEnter(JsonPathAsTextParseNode node) {
         return true;
     }
+    
     @Override
     public boolean visitEnter(JsonPathAsElementParseNode node) {
         return true;
     }
+    
     @Override
     public Expression visitLeave(JsonSingleKeySearchParseNode node, List<Expression> children) throws SQLException {
     	if(!(children.get(0) instanceof ColumnExpression)){
@@ -237,6 +244,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         Expression expression = new JsonSingleKeySearchExpression(children);
         return wrapGroupByExpression(expression);
     }
+    
     @Override
     public Expression visitLeave(JsonSubsetParseNode node, List<Expression> children) throws SQLException {
     	if(!(children.get(0) instanceof ColumnExpression)){
@@ -246,12 +254,13 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
       		 throw TypeMismatchException.newException(children.get(0).getDataType(), children.get(1).getDataType());
        	}
        	LiteralExpression rhs=(LiteralExpression)children.get(1);
-       	if(!JSONutil.isJSON(rhs.getValue())){
+       	if(!JSONutil.isJSON((String)rhs.getValue())){
        		throw new SQLExceptionInfo.Builder(SQLExceptionCode.JSON_PARSER_ERROR).build().buildException();
        	}
         Expression expression = new JsonSubsetExpression(children);
         return wrapGroupByExpression(expression);
     }
+    
     @Override
     public Expression visitLeave(JsonSupersetParseNode node, List<Expression> children) throws SQLException {
     	if(!(children.get(0) instanceof ColumnExpression)){
@@ -261,12 +270,13 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
    		 throw TypeMismatchException.newException(children.get(0).getDataType(), children.get(1).getDataType());
     	}
     	LiteralExpression rhs=(LiteralExpression)children.get(1);
-    	if(!JSONutil.isJSON(rhs.getValue())){
+    	if(!JSONutil.isJSON((String)rhs.getValue())){
     		throw new SQLExceptionInfo.Builder(SQLExceptionCode.JSON_PARSER_ERROR).build().buildException();
     	}
         Expression expression = new JsonSupersetExpression(children);
         return wrapGroupByExpression(expression);
     }
+    
     @Override
     public Expression visitLeave(JsonMultiKeySearchOrParseNode node, List<Expression> children) throws SQLException {
     	if(!(children.get(0) instanceof ColumnExpression)){
@@ -278,6 +288,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         Expression expression = new JsonMultiKeySearchOrExpression(children);
         return wrapGroupByExpression(expression);
     }
+    
     @Override
     public Expression visitLeave(JsonMultiKeySeatchAndParseNode node, List<Expression> children) throws SQLException {
     	if(!(children.get(0) instanceof ColumnExpression)){
@@ -289,6 +300,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         Expression expression = new JsonMultiKeySeatchAndExpression(children);
         return wrapGroupByExpression(expression);
     }
+    
     @Override
     public Expression visitLeave(JsonPathAsTextParseNode node, List<Expression> children) throws SQLException {
     	if(!(children.get(0) instanceof ColumnExpression)){
@@ -305,6 +317,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         Expression expression = new JsonPathAsTextExpression(children);
         return wrapGroupByExpression(expression);
     }
+    
     @Override
     public Expression visitLeave(JsonPathAsElementParseNode node, List<Expression> children) throws SQLException {
     	if(!(children.get(0) instanceof ColumnExpression)){
@@ -321,6 +334,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         Expression expression = new JsonPathAsElementExpression(children);
         return wrapGroupByExpression(expression);
     }
+    
     private void addBindParamMetaData(ParseNode lhsNode, ParseNode rhsNode, Expression lhsExpr, Expression rhsExpr) throws SQLException {
         if (lhsNode instanceof BindParseNode) {
             context.getBindManager().addParamMetaData((BindParseNode)lhsNode, rhsExpr);

@@ -146,6 +146,9 @@ public class UpsertCompiler {
                     Integer scale = rsScale == 0 ? null : rsScale;
                     // We are guaranteed that the two column will have compatible types,
                     // as we checked that before.
+                    if(column.getDataType()==PJson.INSTANCE && !JSONutil.isJSON(bytes)){
+                    	throw new SQLExceptionInfo.Builder(SQLExceptionCode.JSON_PARSER_ERROR).build().buildException();
+                    }
                     if (!column.getDataType().isSizeCompatible(ptr, value, column.getDataType(),
                             precision, scale,
                             column.getMaxLength(),column.getScale())) {
@@ -730,13 +733,6 @@ public class UpsertCompiler {
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.VALUE_IN_UPSERT_NOT_CONSTANT).build().buildException();
             }
             PColumn column = allColumns.get(columnIndexes[nodeIndex]);
-            if(column.getDataType()==PJson.INSTANCE && valueNode instanceof LiteralParseNode)
-            {
-            	boolean vaild=JSONutil.isJSON(((LiteralParseNode)valueNode).getValue());
-            	if(!vaild){
-            		throw new SQLExceptionInfo.Builder(SQLExceptionCode.JSON_PARSER_ERROR).build().buildException();
-            	}
-            }
             expressionBuilder.setColumn(column);
             Expression expression = valueNode.accept(expressionBuilder);
             if (expression.getDataType() != null && !expression.getDataType().isCastableTo(column.getDataType())) {
