@@ -209,7 +209,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, org.apache.phoeni
             url = url == null ? "" : url;
             url = url.startsWith(PhoenixRuntime.JDBC_PROTOCOL)
                     ? url.substring(PhoenixRuntime.JDBC_PROTOCOL.length())
-                    : url;
+                    : PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + url;
             StringTokenizer tokenizer = new StringTokenizer(url, DELIMITERS, true);
             int nTokens = 0;
             String[] tokens = new String[5];
