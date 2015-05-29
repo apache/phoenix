@@ -304,6 +304,41 @@
         </column>
     </datamapping>
     <scenarios>
+        <scenario tableName="PHERF.PHERF_PROD_TEST_UNSALTED" rowCount="100" name="readWriteScenario">
+            <!-- Scenario level rule overrides will be unsupported in V1.
+                    You can use the general datamappings in the mean time-->
+            <dataOverride>
+                <column>
+                    <type>VARCHAR</type>
+                    <userDefined>true</userDefined>
+                    <dataSequence>LIST</dataSequence>
+                    <name>TENANT_ID</name>
+                </column>
+            </dataOverride>
+            <writeParams executionDurationInMs="10000">
+                <!--
+                    Number of writer it insert into the threadpool
+                -->
+                <writerThreadCount>5</writerThreadCount>
+
+                <!--
+                    Time in Ms that each thread will sleep between batch writes. This helps to
+                    throttle writers.
+                -->
+                <threadSleepDuration>10</threadSleepDuration>
+
+                <batchSize>100</batchSize>
+            </writeParams>
+            <!--Minimum of executionDurationInMs or numberOfExecutions. Which ever is reached first -->
+            <querySet concurrency="1" executionType="PARALLEL" executionDurationInMs="60000"
+                      numberOfExecutions="100">
+                <!--  Aggregate queries on a per tenant basis -->
+                <query tenantId="00Dxx0000001gER"
+                       ddl="CREATE VIEW IF NOT EXISTS PHERF.PHERF_TEST_VIEW_UNSALTED AS SELECT * FROM PHERF.PHERF_PROD_TEST_UNSALTED"
+                       statement="select count(*) from PHERF.PHERF_TEST_VIEW_UNSALTED"/>
+            </querySet>
+
+        </scenario>
         <scenario tableName="PHERF.PHERF_PROD_TEST_UNSALTED" rowCount="10">
             <!-- Scenario level rule overrides will be unsupported in V1.
                     You can use the general datamappings in the mean time-->

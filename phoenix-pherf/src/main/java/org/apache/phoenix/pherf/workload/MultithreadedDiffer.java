@@ -30,84 +30,69 @@ import org.apache.phoenix.pherf.result.RunTime;
 import org.apache.phoenix.pherf.result.ThreadTime;
 
 class MultithreadedDiffer implements Runnable {
-	private static final Logger logger = LoggerFactory
-			.getLogger(MultithreadedRunner.class);
-	private Thread t;
-	private Query query;
-	private ThreadTime threadTime;
-	private String threadName;
-	private long numberOfExecutions;
-	private long executionDurationInMs;
-	private QueryVerifier queryVerifier = new QueryVerifier(true);
+    private static final Logger logger = LoggerFactory.getLogger(MultiThreadedRunner.class);
+    private Thread t;
+    private Query query;
+    private ThreadTime threadTime;
+    private String threadName;
+    private long numberOfExecutions;
+    private long executionDurationInMs;
+    private QueryVerifier queryVerifier = new QueryVerifier(true);
 
-	private synchronized ThreadTime getThreadTime() {
+    private synchronized ThreadTime getThreadTime() {
         return threadTime;
     }
 
     /**
-	 * Query Verification
-	 * @throws Exception
-	 */
-	private void diffQuery() throws Exception {
-		Long start = System.currentTimeMillis();
-		Date startDate = Calendar.getInstance().getTime();
- 		String newCSV = queryVerifier.exportCSV(query);
- 		boolean verifyResult = queryVerifier.doDiff(query, newCSV);
- 		String explainPlan = queryVerifier.getExplainPlan(query);
-        getThreadTime().getRunTimesInMs().add(
-                new RunTime(verifyResult == true ? PherfConstants.DIFF_PASS : PherfConstants.DIFF_FAIL, 
-                		explainPlan, startDate, -1L, 
-                		(int)(System.currentTimeMillis() - start)));
-	}
+     * Query Verification
+     *
+     * @throws Exception
+     */
+    private void diffQuery() throws Exception {
+        Long start = System.currentTimeMillis();
+        Date startDate = Calendar.getInstance().getTime();
+        String newCSV = queryVerifier.exportCSV(query);
+        boolean verifyResult = queryVerifier.doDiff(query, newCSV);
+        String explainPlan = queryVerifier.getExplainPlan(query);
+        getThreadTime().getRunTimesInMs().add(new RunTime(
+                        verifyResult == true ? PherfConstants.DIFF_PASS : PherfConstants.DIFF_FAIL,
+                        explainPlan, startDate, -1L, (int) (System.currentTimeMillis() - start)));
+    }
 
-	/**
-	 * Multithreaded Differ
-	 * @param threadName
-	 * @param query
-	 * @param threadName
-	 * @param threadTime
-	 * @param numberOfExecutions
-	 * @param executionDurationInMs
-	 */
-	MultithreadedDiffer(String threadName,
-			Query query, 
-			ThreadTime threadTime, 
-			long numberOfExecutions, 
-			long executionDurationInMs) {
-		this.query = query;
-		this.threadName = threadName;
-		this.threadTime = threadTime;
-		this.numberOfExecutions = numberOfExecutions;
-		this.executionDurationInMs = executionDurationInMs;
-	}
+    /**
+     * Multithreaded Differ
+     *
+     * @param threadName
+     * @param query
+     * @param threadName
+     * @param threadTime
+     * @param numberOfExecutions
+     * @param executionDurationInMs
+     */
+    MultithreadedDiffer(String threadName, Query query, ThreadTime threadTime,
+            long numberOfExecutions, long executionDurationInMs) {
+        this.query = query;
+        this.threadName = threadName;
+        this.threadTime = threadTime;
+        this.numberOfExecutions = numberOfExecutions;
+        this.executionDurationInMs = executionDurationInMs;
+    }
 
-	/**
-	 * Executes verification runs for a minimum of number of execution or execution duration
-	 */
-	public void run() {
-		logger.info("\n\nThread Starting " + t.getName() + " ; " + query.getStatement() + " for "
-				+ numberOfExecutions + "times\n\n");
-		Long start = System.currentTimeMillis();
-		for (long i = numberOfExecutions; (i > 0 && ((System
-				.currentTimeMillis() - start) < executionDurationInMs)); i--) {
-			try {
-				diffQuery();
-			} catch (Exception e) {
-				e.printStackTrace();
-			}
-		}
-		logger.info("\n\nThread exiting." + t.getName() + "\n\n");
-	}
-
-	/**
-	 * Thread start
-	 * @return
-	 */
-	public Thread start() {
-		if (t == null) {
-			t = new Thread(this, threadName);
-			t.start();
-		}
-		return t;
-	}
+    /**
+     * Executes verification runs for a minimum of number of execution or execution duration
+     */
+    public void run() {
+        logger.info("\n\nThread Starting " + t.getName() + " ; " + query.getStatement() + " for "
+                + numberOfExecutions + "times\n\n");
+        Long start = System.currentTimeMillis();
+        for (long i = numberOfExecutions; (i > 0 && ((System.currentTimeMillis() - start)
+                < executionDurationInMs)); i--) {
+            try {
+                diffQuery();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+        logger.info("\n\nThread exiting." + t.getName() + "\n\n");
+    }
 }

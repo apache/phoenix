@@ -36,22 +36,20 @@ import org.slf4j.LoggerFactory;
 import org.apache.phoenix.pherf.configuration.Query;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
 
-class MultithreadedRunner implements Runnable {
-	private static final Logger logger = LoggerFactory
-			.getLogger(MultithreadedRunner.class);
-	private Thread t;
-	private Query query;
-	private ThreadTime threadTime;
-	private PhoenixUtil pUtil = new PhoenixUtil();
-	private String threadName;
-	private DataModelResult dataModelResult;
-	private long numberOfExecutions;
-	private long executionDurationInMs;
-	private static long lastResultWritten = System.currentTimeMillis() - 1000;
+class MultiThreadedRunner implements Runnable {
+    private static final Logger logger = LoggerFactory.getLogger(MultiThreadedRunner.class);
+    private Query query;
+    private ThreadTime threadTime;
+    private PhoenixUtil pUtil = PhoenixUtil.create();
+    private String threadName;
+    private DataModelResult dataModelResult;
+    private long numberOfExecutions;
+    private long executionDurationInMs;
+    private static long lastResultWritten = System.currentTimeMillis() - 1000;
     private final ResultManager resultManager;
 
     /**
-     * Multithreaded runner
+     * MultiThreadedRunner
      *
      * @param threadName
      * @param query
@@ -60,12 +58,8 @@ class MultithreadedRunner implements Runnable {
      * @param numberOfExecutions
      * @param executionDurationInMs
      */
-    MultithreadedRunner(String threadName,
-                        Query query,
-                        DataModelResult dataModelResult,
-                        ThreadTime threadTime,
-                        long numberOfExecutions,
-                        long executionDurationInMs) {
+    MultiThreadedRunner(String threadName, Query query, DataModelResult dataModelResult,
+            ThreadTime threadTime, long numberOfExecutions, long executionDurationInMs) {
         this.query = query;
         this.threadName = threadName;
         this.threadTime = threadTime;
@@ -75,16 +69,16 @@ class MultithreadedRunner implements Runnable {
         this.resultManager = new ResultManager(dataModelResult.getName(), RunMode.PERFORMANCE);
     }
 
-	/**
-	 * Executes run for a minimum of number of execution or execution duration
-	 */
-	public void run() {
-		logger.info("\n\nThread Starting " + t.getName() + " ; " + query.getStatement() + " for "
-				+ numberOfExecutions + "times\n\n");
-		Long start = System.currentTimeMillis();
-		for (long i = numberOfExecutions; (i > 0 && ((System
-				.currentTimeMillis() - start) < executionDurationInMs)); i--) {
-			try {
+    /**
+     * Executes run for a minimum of number of execution or execution duration
+     */
+    public void run() {
+        logger.info("\n\nThread Starting " + threadName + " ; " + query.getStatement() + " for "
+                + numberOfExecutions + "times\n\n");
+        Long start = System.currentTimeMillis();
+        for (long i = numberOfExecutions; (i > 0 && ((System.currentTimeMillis() - start)
+                < executionDurationInMs)); i--) {
+            try {
                 synchronized (resultManager) {
                     timedQuery();
                     if ((System.currentTimeMillis() - lastResultWritten) > 1000) {
@@ -93,23 +87,11 @@ class MultithreadedRunner implements Runnable {
                     }
                 }
             } catch (Exception e) {
-				e.printStackTrace();
-			}
-		}
-		logger.info("\n\nThread exiting." + t.getName() + "\n\n");
-	}
-
-	/**
-	 * Thread start
-	 * @return
-	 */
-	public Thread start() {
-		if (t == null) {
-			t = new Thread(this, threadName);
-			t.start();
-		}
-		return t;
-	}
+                e.printStackTrace();
+            }
+        }
+        logger.info("\n\nThread exiting." + threadName + "\n\n");
+    }
 
     private synchronized ThreadTime getThreadTime() {
         return threadTime;
@@ -121,8 +103,9 @@ class MultithreadedRunner implements Runnable {
      * @throws Exception
      */
     private void timedQuery() throws Exception {
-        boolean isSelectCountStatement = query.getStatement().toUpperCase().trim()
-                .contains("COUNT(*)") ? true : false;
+        boolean
+                isSelectCountStatement =
+                query.getStatement().toUpperCase().trim().contains("COUNT(*)") ? true : false;
 
         Connection conn = null;
         PreparedStatement statement = null;
@@ -141,9 +124,9 @@ class MultithreadedRunner implements Runnable {
                 while (rs.next()) {
                     if (null != query.getExpectedAggregateRowCount()) {
                         if (rs.getLong(1) != query.getExpectedAggregateRowCount())
-                            throw new RuntimeException("Aggregate count "
-                                    + rs.getLong(1) + " does not match expected "
-                                    + query.getExpectedAggregateRowCount());
+                            throw new RuntimeException(
+                                    "Aggregate count " + rs.getLong(1) + " does not match expected "
+                                            + query.getExpectedAggregateRowCount());
                     }
 
                     if (isSelectCountStatement) {
@@ -159,8 +142,8 @@ class MultithreadedRunner implements Runnable {
             e.printStackTrace();
             exception = e.getMessage();
         } finally {
-            getThreadTime().getRunTimesInMs().add(
-                    new RunTime(exception, startDate, resultRowCount, (int) (System.currentTimeMillis() - start)));
+            getThreadTime().getRunTimesInMs().add(new RunTime(exception, startDate, resultRowCount,
+                    (int) (System.currentTimeMillis() - start)));
 
             if (rs != null) rs.close();
             if (statement != null) statement.close();
