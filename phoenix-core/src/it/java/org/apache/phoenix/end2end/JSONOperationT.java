@@ -62,7 +62,7 @@ public class JSONOperationT extends BaseHBaseManagedTimeIT{
     }
 	@Test
     public void testJsonPointAsElementForTypeVarchar() throws Exception {
-        String selectQuery = "SELECT col1 FROM testJson WHERE col1 -> 'k1' = 'val'";
+        String selectQuery = "SELECT col1 FROM testJson WHERE col1 -> 'k1' LIKE 'val'";
         String pk = "valueOne";
         Connection conn = getConnection();
         try {
@@ -82,7 +82,7 @@ public class JSONOperationT extends BaseHBaseManagedTimeIT{
     }
 	@Test
     public void testJsonPointAsText() throws Exception {
-        String selectQuery = "SELECT col1 FROM testJson WHERE col1 ->> 'k3' = '2'";
+        String selectQuery = "SELECT col1 FROM testJson WHERE col1 ->> 'k3' LIKE '2'";
         String pk = "valueOne";
         Connection conn = getConnection();
         try {
@@ -102,7 +102,7 @@ public class JSONOperationT extends BaseHBaseManagedTimeIT{
     }
 	@Test
     public void testJsonPathAsElement() throws Exception {
-        String selectQuery = "SELECT col1 FROM testJson WHERE col1 #> '{k6,nestk4,1}' = 8.4";
+        String selectQuery = "SELECT col1 FROM testJson WHERE col1 #> '{k6,nestk4,0}' = 9";
         String pk = "valueOne";
         Connection conn = getConnection();
         try {
@@ -122,7 +122,7 @@ public class JSONOperationT extends BaseHBaseManagedTimeIT{
     }
 	@Test
     public void testJsonPathAsText() throws Exception {
-        String selectQuery = "SELECT col1 FROM testJson WHERE col1 #>> '{k6,nestk4,0}' = '9'";
+        String selectQuery = "SELECT col1 FROM testJson WHERE col1 #>> '{k6,nestk4,0}' LIKE '9'";
         String pk = "valueOne";
         Connection conn = getConnection();
         try {
@@ -162,8 +162,8 @@ public class JSONOperationT extends BaseHBaseManagedTimeIT{
     }
 	@Test
     public void testJsonSubset() throws Exception {
-        String smalljson="'{\"k1\":\"val\"}'";
-        String selectQuery = "SELECT col1 FROM testJson WHERE col1 <@ "+json;
+        String smalljson="{\"k1\":\"val\"}";
+        String selectQuery = "SELECT col1 FROM testJson WHERE col1 <@ "+"'"+json+"'";
         String pk = "valueOne";
         Connection conn = getConnection();
         try {
