@@ -442,6 +442,20 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT{
         rs = stmt.executeQuery("select k from t9 where mysum9(k)=11");
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
+        try {
+            rs = stmt.executeQuery("select k from t9 where mysum9(k,10,'x')=11");
+            fail("FunctionNotFoundException should be thrown");
+        } catch(FunctionNotFoundException e) {
+        } catch(Exception e) {
+            fail("FunctionNotFoundException should be thrown");
+        }
+        try {
+            rs = stmt.executeQuery("select mysum9() from t9");
+            fail("FunctionNotFoundException should be thrown");
+        } catch(FunctionNotFoundException e) {
+        } catch(Exception e) {
+            fail("FunctionNotFoundException should be thrown");
+        }
         stmt.execute("drop function mysum9");
         try {
             rs = stmt.executeQuery("select k from t9 where mysum9(k)=11");

@@ -41,6 +41,7 @@ import org.apache.phoenix.expression.function.FunctionExpression;
 import org.apache.phoenix.expression.function.UDFExpression;
 import org.apache.phoenix.parse.PFunction.FunctionArgument;
 import org.apache.phoenix.schema.ArgumentTypeMismatchException;
+import org.apache.phoenix.schema.FunctionNotFoundException;
 import org.apache.phoenix.schema.ValueRangeExcpetion;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDataTypeFactory;
@@ -133,6 +134,9 @@ public class FunctionParseNode extends CompoundParseNode {
     public List<Expression> validate(List<Expression> children, StatementContext context) throws SQLException {
         BuiltInFunctionInfo info = this.getInfo();
         BuiltInFunctionArgInfo[] args = info.getArgs();
+        if (args.length < children.size() || info.getRequiredArgCount() > children.size()) {
+            throw new FunctionNotFoundException(this.name);
+        }
         if (args.length > children.size()) {
             List<Expression> moreChildren = new ArrayList<Expression>(children);
             for (int i = children.size(); i < info.getArgs().length; i++) {

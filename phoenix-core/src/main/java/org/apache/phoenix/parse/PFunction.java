@@ -95,9 +95,7 @@ public class PFunction implements PMetaDataEntity {
     }
 
     public PFunction(PFunction function) {
-        this(function.getTenantId(), function.getFunctionName(), function.getFunctionArguments(),
-                function.getReturnType(), function.getClassName(), function.getJarPath(), function
-                        .getTimeStamp());
+        this(function, function.isTemporaryFunction());
     }
 
     public String getFunctionName() {
