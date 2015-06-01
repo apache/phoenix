@@ -146,6 +146,7 @@ import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PUnsignedTimestamp;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.schema.types.PVarcharArray;
 import org.apache.phoenix.schema.types.PhoenixArray;
 import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.IndexUtil;
@@ -282,7 +283,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     	if(!(children.get(0) instanceof ColumnExpression)){
     		throw new SQLExceptionInfo.Builder(SQLExceptionCode.JSON_LEFT_OPER_ERROR).build().buildException();
        	}
-    	if(!(children.get(1) instanceof ArrayConstructorExpression)){
+    	if(children.get(1).getDataType()!=PVarcharArray.INSTANCE){
     		 throw TypeMismatchException.newException(children.get(0).getDataType(), children.get(1).getDataType());
     	}
         Expression expression = new JsonMultiKeySearchOrExpression(children);
@@ -294,7 +295,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     	if(!(children.get(0) instanceof ColumnExpression)){
     		throw new SQLExceptionInfo.Builder(SQLExceptionCode.JSON_LEFT_OPER_ERROR).build().buildException();
        	}
-    	if(!(children.get(1) instanceof ArrayConstructorExpression)){
+    	if(children.get(1).getDataType()!=PVarcharArray.INSTANCE){
    		 throw TypeMismatchException.newException(children.get(0).getDataType(), children.get(1).getDataType());
     	}
         Expression expression = new JsonMultiKeySeatchAndExpression(children);
