@@ -33,9 +33,7 @@ public abstract class BaseRegionScanner implements RegionScanner {
     }
 
     @Override
-    public boolean next(List<Cell> results) throws IOException {
-        return next(results);
-    }
+    public abstract boolean next(List<Cell> results) throws IOException;
 
     @Override
     public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
