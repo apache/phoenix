@@ -1627,6 +1627,7 @@ public abstract class BaseTest {
      * Disable and drop all the tables except SYSTEM.CATALOG and SYSTEM.SEQUENCE
      */
     private static void disableAndDropNonSystemTables() throws Exception {
+        if (driver == null) return;
         HBaseAdmin admin = driver.getConnectionQueryServices(null, null).getAdmin();
         try {
             HTableDescriptor[] tables = admin.listTables();
