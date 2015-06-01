@@ -37,7 +37,9 @@ import org.apache.phoenix.expression.JsonPathAsTextExpression;
 import org.apache.phoenix.expression.JsonSingleKeySearchExpression;
 import org.apache.phoenix.expression.JsonSubsetExpression;
 import org.apache.phoenix.expression.JsonSupersetExpression;
+import org.apache.phoenix.expression.JsonPointAsElementExpression;
 import org.apache.phoenix.expression.JsonPointAsTextExpression;
+import org.apache.phoenix.expression.JsonPointForArrayAsElementExpression;
 import org.apache.phoenix.expression.JsonPointForArrayAsTextExpression;
 import org.apache.phoenix.expression.LikeExpression;
 import org.apache.phoenix.expression.ModulusExpression;
@@ -207,6 +209,16 @@ public abstract class BaseExpressionVisitor<E> implements ExpressionVisitor<E> {
     
     @Override
     public Iterator<Expression> visitEnter(JsonPointForArrayAsTextExpression node) {
+        return null;
+    }
+    
+    @Override
+    public Iterator<Expression> visitEnter(JsonPointAsElementExpression node) {
+        return null;
+    }
+    
+    @Override
+    public Iterator<Expression> visitEnter(JsonPointForArrayAsElementExpression node) {
         return null;
     }
 }
