@@ -393,6 +393,9 @@ public class PDecimal extends PRealNumber<BigDecimal> {
   @Override
   public String toStringLiteral(Object o, Format formatter) {
       if (formatter == null) {
+          if(o == null) {
+              return String.valueOf(o);
+          }
           return ((BigDecimal)o).toPlainString();
         }
         return super.toStringLiteral(o, formatter);
