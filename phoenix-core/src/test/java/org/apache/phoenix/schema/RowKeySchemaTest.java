@@ -56,7 +56,7 @@ public class RowKeySchemaTest  extends BaseConnectionlessQueryTest  {
         String fullTableName = SchemaUtil.getTableName(SchemaUtil.normalizeIdentifier(schemaName),SchemaUtil.normalizeIdentifier(tableName));
         conn.createStatement().execute("CREATE TABLE " + fullTableName + "(" + dataColumns + " CONSTRAINT pk PRIMARY KEY (" + pk + "))  " + (dataProps.isEmpty() ? "" : dataProps) );
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        PTable table = pconn.getMetaDataCache().getTable(new PTableKey(pconn.getTenantId(), fullTableName));
+        PTable table = pconn.getTable(new PTableKey(pconn.getTenantId(), fullTableName));
         conn.close();
         StringBuilder buf = new StringBuilder("UPSERT INTO " + fullTableName  + " VALUES(");
         for (int i = 0; i < values.length; i++) {

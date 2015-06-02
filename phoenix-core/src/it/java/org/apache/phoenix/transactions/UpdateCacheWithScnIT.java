@@ -15,19 +15,27 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.schema;
+package org.apache.phoenix.transactions;
 
-import java.sql.SQLException;
+import static org.apache.phoenix.util.TestUtil.MUTABLE_INDEX_DATA_TABLE;
 
-import org.apache.phoenix.query.MetaDataMutated;
+import org.apache.phoenix.end2end.BaseClientManagedTimeIT;
+import org.junit.Before;
+import org.junit.Test;
 
+public class UpdateCacheWithScnIT extends BaseClientManagedTimeIT {
+	
+	protected long ts;
 
-public interface PMetaData extends MetaDataMutated, Iterable<PTable>, Cloneable {
-    public static interface Pruner {
-        public boolean prune(PTable table);
-    }
-    public int size();
-    public PMetaData clone();
-    public PTableRef getTableRef(PTableKey key) throws TableNotFoundException;
-    public PMetaData pruneTables(Pruner pruner);
+	@Before
+	public void initTable() throws Exception {
+		ts = nextTimestamp();
+		ensureTableCreated(getUrl(), MUTABLE_INDEX_DATA_TABLE, ts);
+	}
+	
+	@Test
+	public void testUpdateCacheWithScn() throws Exception {
+		UpdateCacheIT.helpTestUpdateCache(false, ts+2);
+	}
+
 }

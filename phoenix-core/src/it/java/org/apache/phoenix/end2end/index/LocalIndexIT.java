@@ -114,7 +114,7 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
         Connection conn1 = DriverManager.getConnection(getUrl());
         conn1.createStatement().execute("CREATE LOCAL INDEX " + TestUtil.DEFAULT_INDEX_TABLE_NAME + " ON " + TestUtil.DEFAULT_DATA_TABLE_NAME + "(v1)");
         conn1.createStatement().executeQuery("SELECT * FROM " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME).next();
-        PTable localIndex = conn1.unwrap(PhoenixConnection.class).getMetaDataCache().getTable(new PTableKey(null,TestUtil.DEFAULT_INDEX_TABLE_NAME));
+        PTable localIndex = conn1.unwrap(PhoenixConnection.class).getTable(new PTableKey(null,TestUtil.DEFAULT_INDEX_TABLE_NAME));
         assertEquals(IndexType.LOCAL, localIndex.getIndexType());
         assertNotNull(localIndex.getViewIndexId());
     }
@@ -130,7 +130,7 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
         } catch (SQLException e) { }
         try {
             conn2.createStatement().executeQuery("SELECT * FROM " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME).next();
-            conn2.unwrap(PhoenixConnection.class).getMetaDataCache().getTable(new PTableKey(null,TestUtil.DEFAULT_INDEX_TABLE_NAME));
+            conn2.unwrap(PhoenixConnection.class).getTable(new PTableKey(null,TestUtil.DEFAULT_INDEX_TABLE_NAME));
             fail("Local index should not be created.");
         } catch (TableNotFoundException e) { }
     }
@@ -146,7 +146,7 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
         } catch (SQLException e) { }
         try {
             conn2.createStatement().executeQuery("SELECT * FROM " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME).next();
-            conn2.unwrap(PhoenixConnection.class).getMetaDataCache().getTable(new PTableKey(null,TestUtil.DEFAULT_INDEX_TABLE_NAME));
+            conn2.unwrap(PhoenixConnection.class).getTable(new PTableKey(null,TestUtil.DEFAULT_INDEX_TABLE_NAME));
             fail("Local index should not be created.");
         } catch (TableNotFoundException e) { }
     }

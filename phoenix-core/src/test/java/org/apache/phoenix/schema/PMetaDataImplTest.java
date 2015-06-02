@@ -32,7 +32,7 @@ public class PMetaDataImplTest {
     
     private static PMetaData addToTable(PMetaData metaData, String name, int size) throws SQLException {
         PTable table = new PSizedTable(new PTableKey(null,name), size);
-        return metaData.addTable(table);
+        return metaData.addTable(table, System.currentTimeMillis());
     }
     
     private static PMetaData removeFromTable(PMetaData metaData, String name) throws SQLException {
@@ -40,7 +40,7 @@ public class PMetaDataImplTest {
     }
     
     private static PTable getFromTable(PMetaData metaData, String name) throws TableNotFoundException {
-        return metaData.getTable(new PTableKey(null,name));
+        return metaData.getTableRef(new PTableKey(null,name)).getTable();
     }
     
     private static void assertNames(PMetaData metaData, String... names) {

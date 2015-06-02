@@ -167,7 +167,7 @@ public class PostDDLCompiler {
                         // Not sure what the fix should be. We don't need conflict detection nor filtering of invalid transactions
                         // in this case, so maybe this is ok.
                         if (tableRef.getTable().isTransactional()) {
-                            ts = TransactionUtil.translateMillis(ts);
+                            ts = TransactionUtil.convertToNanoseconds(ts);
                         }
                         ScanUtil.setTimeRange(scan, ts);
                         if (emptyCF != null) {

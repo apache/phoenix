@@ -268,7 +268,7 @@ public class PhoenixRuntime {
      */
     public static Iterator<Pair<byte[],List<KeyValue>>> getUncommittedDataIterator(Connection conn, boolean includeMutableIndexes) throws SQLException {
         final PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        final Iterator<Pair<byte[],List<Mutation>>> iterator = pconn.getMutationState().toMutations(includeMutableIndexes);
+        final Iterator<Pair<byte[],List<Mutation>>> iterator = pconn.getMutationState().toMutations(includeMutableIndexes, null);
         return new Iterator<Pair<byte[],List<KeyValue>>>() {
 
             @Override
@@ -304,7 +304,7 @@ public class PhoenixRuntime {
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
         try {
             name = SchemaUtil.normalizeIdentifier(name);
-            table = pconn.getMetaDataCache().getTable(new PTableKey(pconn.getTenantId(), name));
+            table = pconn.getTable(new PTableKey(pconn.getTenantId(), name));
         } catch (TableNotFoundException e) {
             String schemaName = SchemaUtil.getSchemaNameFromFullName(name);
             String tableName = SchemaUtil.getTableNameFromFullName(name);

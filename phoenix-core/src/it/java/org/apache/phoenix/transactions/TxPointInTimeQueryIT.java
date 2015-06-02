@@ -70,37 +70,4 @@ public class TxPointInTimeQueryIT extends BaseClientManagedTimeIT {
 		}
 	}
 
-//	@Test
-//	public void testDropColumn() throws Exception {
-//		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-//		props.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
-//		Connection conn = DriverManager.getConnection(getUrl(), props);
-//		try {
-//			conn.createStatement()
-//					.execute(
-//							"CREATE TABLE t (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR) TRANSACTIONAL=true");
-//
-//			props.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
-//			conn = DriverManager.getConnection(getUrl(), props);
-//			// drop a column
-//			conn.createStatement().execute("ALTER TABLE t DROP COLUMN v1");
-//
-//			props.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 11));
-//			conn = DriverManager.getConnection(getUrl(), props);
-//			String selectQuery = "SELECT v1 FROM t";
-//			try {
-//				conn.createStatement().executeQuery(selectQuery);
-//				fail();
-//			} catch (ColumnNotFoundException e) {
-//			}
-//
-//			props.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
-//			conn = DriverManager.getConnection(getUrl(), props);
-//			ResultSet rs = conn.createStatement().executeQuery(selectQuery);
-//			assertFalse(rs.next());
-//		} finally {
-//			conn.close();
-//		}
-//	}
-
 }

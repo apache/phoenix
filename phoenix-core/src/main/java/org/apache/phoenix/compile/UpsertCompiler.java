@@ -678,7 +678,7 @@ public class UpsertCompiler {
                     // Repeated from PhoenixStatement.executeQuery which this call bypasses.
                     // Send mutations to hbase, so they are visible to subsequent reads.
                     // Use original plan for data table so that data and immutable indexes will be sent.
-                    boolean isTransactional = connection.getMutationState().startTransaction(originalQueryPlan.getContext().getResolver().getTables().iterator());
+                    boolean isTransactional = connection.getMutationState().sendMutations(originalQueryPlan.getContext().getResolver().getTables().iterator());
                     if (isTransactional) {
                         // Use real query plan  so that we have the right context object.
                         queryPlan.getContext().setTransaction(connection.getMutationState().getTransaction());

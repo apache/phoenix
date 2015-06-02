@@ -349,7 +349,7 @@ public class DeleteCompiler {
                     // optimizer updated the cache if it found indexes that were out of date.
                     // If the index was marked as disabled, it should not be in the list
                     // of immutable indexes.
-                    table = connection.getMetaDataCache().getTable(new PTableKey(table.getTenantId(), table.getName().getString()));
+                    table = connection.getTable(new PTableKey(table.getTenantId(), table.getName().getString()));
                     tableRefToBe.setTable(table);
                     immutableIndex = getNonDisabledImmutableIndexes(tableRefToBe);
                 }
@@ -564,7 +564,7 @@ public class DeleteCompiler {
                         // Repeated from PhoenixStatement.executeQuery which this call bypasses.
                         // Send mutations to hbase, so they are visible to subsequent reads.
                         // Use original plan for data table so that data and immutable indexes will be sent.
-                        boolean isTransactional = connection.getMutationState().startTransaction(resolver.getTables().iterator());
+                        boolean isTransactional = connection.getMutationState().sendMutations(resolver.getTables().iterator());
                         if (isTransactional) {
                             // Use real query plan  so that we have the right context object.
                             plan.getContext().setTransaction(connection.getMutationState().getTransaction());

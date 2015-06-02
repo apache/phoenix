@@ -27,6 +27,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.SortedMap;
 
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.end2end.Shadower;
@@ -646,7 +647,7 @@ public class SkipScanBigFilterTest extends BaseConnectionlessQueryTest {
         }
         stmt.execute();
         
-        final PTable table = conn.unwrap(PhoenixConnection.class).getMetaDataCache().getTable(new PTableKey(null, "PERF.BIG_OLAP_DOC"));
+        final PTable table = conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, "PERF.BIG_OLAP_DOC"));
         GuidePostsInfo info = new GuidePostsInfo(0,Collections.<byte[]> emptyList(), 0l);
         for (byte[] gp : guidePosts) {
             info.addGuidePost(gp, 1000);
@@ -670,7 +671,7 @@ public class SkipScanBigFilterTest extends BaseConnectionlessQueryTest {
                 return table.getTimeStamp()+1;
             }
         });
-        conn.unwrap(PhoenixConnection.class).addTable(tableWithStats);
+        conn.unwrap(PhoenixConnection.class).addTable(tableWithStats, System.currentTimeMillis());
 
         String query = "SELECT count(1) cnt,\n" + 
                 "       coalesce(SUM(impressions), 0.0) AS \"impressions\",\n" + 

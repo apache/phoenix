@@ -73,9 +73,13 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PMetaData;
 import org.apache.phoenix.schema.PMetaData.Pruner;
+import org.apache.phoenix.schema.PMetaDataImpl;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.schema.PTableRef;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.types.PArrayDataType;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDate;
@@ -151,19 +155,23 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     }
 
     public PhoenixConnection(PhoenixConnection connection) throws SQLException {
-        this(connection.getQueryServices(), connection.getURL(), connection.getClientInfo(), connection.getMetaDataCache(), connection.getMutationState().getTransaction());
+        this(connection.getQueryServices(), connection.getURL(), connection.getClientInfo(), connection.metaData, connection.getMutationState().getTransaction());
         this.isAutoCommit = connection.isAutoCommit;
         this.sampler = connection.sampler;
     }
     
     public PhoenixConnection(ConnectionQueryServices services, PhoenixConnection connection, long scn) throws SQLException {
-        this(services, connection.getURL(), newPropsWithSCN(scn,connection.getClientInfo()), connection.getMetaDataCache(), connection.getMutationState().getTransaction());
+        this(services, connection.getURL(), newPropsWithSCN(scn,connection.getClientInfo()), connection.metaData, connection.getMutationState().getTransaction());
         this.isAutoCommit = connection.isAutoCommit;
         this.sampler = connection.sampler;
     }
     
     public PhoenixConnection(ConnectionQueryServices services, String url, Properties info, PMetaData metaData) throws SQLException {
         this(services, url, info, metaData, null);
+    }
+    
+    public PhoenixConnection(PhoenixConnection connection, ConnectionQueryServices services, Properties info) throws SQLException {
+        this(services, connection.url, info, connection.metaData, null);
     }
     
     public PhoenixConnection(ConnectionQueryServices services, String url, Properties info, PMetaData metaData, Transaction txn) throws SQLException {
@@ -364,8 +372,12 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         return mutateBatchSize;
     }
     
-    public PMetaData getMetaDataCache() {
-        return metaData;
+    public PTable getTable(PTableKey key) throws TableNotFoundException {
+    	return metaData.getTableRef(key).getTable();
+    }
+    
+    public PTableRef getTableRef(PTableKey key) throws TableNotFoundException {
+    	return metaData.getTableRef(key);
     }
 
     public MutationState getMutationState() {
@@ -746,25 +758,29 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         // TODO Auto-generated method stub
         return 0;
     }
-
+    
     @Override
-    public PMetaData addTable(PTable table) throws SQLException {
-        // TODO: since a connection is only used by one thread at a time,
-        // we could modify this metadata in place since it's not shared.
-        if (scn == null || scn > table.getTimeStamp()) {
-            metaData = metaData.addTable(table);
-        }
+    public PMetaData addTable(PTable table, long resolvedTime) throws SQLException {
+        metaData = metaData.addTable(table, resolvedTime);
         //Cascade through to connectionQueryServices too
-        getQueryServices().addTable(table);
+        getQueryServices().addTable(table, resolvedTime);
+        return metaData;
+    }
+    
+    @Override
+    public PMetaData updateResolvedTimestamp(PTable table, long resolvedTime) throws SQLException {
+    	metaData = metaData.updateResolvedTimestamp(table, resolvedTime);
+    	//Cascade through to connectionQueryServices too
+        getQueryServices().updateResolvedTimestamp(table, resolvedTime);
         return metaData;
     }
 
     @Override
-    public PMetaData addColumn(PName tenantId, String tableName, List<PColumn> columns, long tableTimeStamp, long tableSeqNum, boolean isImmutableRows, boolean isWalDisabled, boolean isMultitenant, boolean storeNulls)
+    public PMetaData addColumn(PName tenantId, String tableName, List<PColumn> columns, long tableTimeStamp, long tableSeqNum, boolean isImmutableRows, boolean isWalDisabled, boolean isMultitenant, boolean storeNulls, long resolvedTime)
             throws SQLException {
-        metaData = metaData.addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows, isWalDisabled, isMultitenant, storeNulls);
+        metaData = metaData.addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows, isWalDisabled, isMultitenant, storeNulls, resolvedTime);
         //Cascade through to connectionQueryServices too
-        getQueryServices().addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows, isWalDisabled, isMultitenant, storeNulls);
+        getQueryServices().addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows, isWalDisabled, isMultitenant, storeNulls, resolvedTime);
         return metaData;
     }
 
@@ -778,10 +794,10 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
 
     @Override
     public PMetaData removeColumn(PName tenantId, String tableName, List<PColumn> columnsToRemove, long tableTimeStamp,
-            long tableSeqNum) throws SQLException {
-        metaData = metaData.removeColumn(tenantId, tableName, columnsToRemove, tableTimeStamp, tableSeqNum);
+            long tableSeqNum, long resolvedTime) throws SQLException {
+        metaData = metaData.removeColumn(tenantId, tableName, columnsToRemove, tableTimeStamp, tableSeqNum, resolvedTime);
         //Cascade through to connectionQueryServices too
-        getQueryServices().removeColumn(tenantId, tableName, columnsToRemove, tableTimeStamp, tableSeqNum);
+        getQueryServices().removeColumn(tenantId, tableName, columnsToRemove, tableTimeStamp, tableSeqNum, resolvedTime);
         return metaData;
     }
 

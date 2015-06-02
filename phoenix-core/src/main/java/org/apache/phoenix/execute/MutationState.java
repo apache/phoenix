@@ -323,17 +323,18 @@ public class MutationState implements SQLCloseable {
      * Get the unsorted list of HBase mutations for the tables with uncommitted data.
      * @return list of HBase mutations for uncommitted data.
      */
-    public Iterator<Pair<byte[],List<Mutation>>> toMutations() {
-        return toMutations(false);
+    public Iterator<Pair<byte[],List<Mutation>>> toMutations(Long timestamp) {
+        return toMutations(false, timestamp);
     }
     
-    public Iterator<Pair<byte[],List<Mutation>>> toMutations(final boolean includeMutableIndexes) {
+    public Iterator<Pair<byte[],List<Mutation>>> toMutations(final boolean includeMutableIndexes, final Long tableTimestamp) {
         final Iterator<Map.Entry<TableRef, Map<ImmutableBytesPtr,Map<PColumn,byte[]>>>> iterator = this.mutations.entrySet().iterator();
         if (!iterator.hasNext()) {
             return Iterators.emptyIterator();
         }
         Long scn = connection.getSCN();
-        final long timestamp = scn == null ? HConstants.LATEST_TIMESTAMP : scn;
+        final long timestamp = (tableTimestamp!=null && tableTimestamp!=QueryConstants.UNSET_TIMESTAMP) ? tableTimestamp : (scn == null ? HConstants.LATEST_TIMESTAMP : scn);
+//        final long timestamp = (scn == null ? HConstants.LATEST_TIMESTAMP : scn);
         return new Iterator<Pair<byte[],List<Mutation>>>() {
             private Map.Entry<TableRef, Map<ImmutableBytesPtr,Map<PColumn,byte[]>>> current = iterator.next();
             private Iterator<Pair<byte[],List<Mutation>>> innerIterator = init();
@@ -748,7 +749,7 @@ public class MutationState implements SQLCloseable {
      * @return true if at least partially transactional and false otherwise.
      * @throws SQLException
      */
-    public boolean startTransaction(Iterator<TableRef> tableRefs) throws SQLException {
+    public boolean sendMutations(Iterator<TableRef> tableRefs) throws SQLException {
         Iterator<TableRef> filteredTableRefs = Iterators.filter(tableRefs, new Predicate<TableRef>(){
             @Override
             public boolean apply(TableRef tableRef) {

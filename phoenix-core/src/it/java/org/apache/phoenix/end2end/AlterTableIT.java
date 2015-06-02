@@ -718,7 +718,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
 
     private void asssertIsWALDisabled(Connection conn, String fullTableName, boolean expectedValue) throws SQLException {
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        assertEquals(expectedValue, pconn.getMetaDataCache().getTable(new PTableKey(pconn.getTenantId(), fullTableName)).isWALDisabled());
+        assertEquals(expectedValue, pconn.getTable(new PTableKey(pconn.getTenantId(), fullTableName)).isWALDisabled());
     }
 
     @Test
@@ -1317,7 +1317,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
 
     private static void assertImmutableRows(Connection conn, String fullTableName, boolean expectedValue) throws SQLException {
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        assertEquals(expectedValue, pconn.getMetaDataCache().getTable(new PTableKey(pconn.getTenantId(), fullTableName)).isImmutableRows());
+        assertEquals(expectedValue, pconn.getTable(new PTableKey(pconn.getTenantId(), fullTableName)).isImmutableRows());
     }
 
     @Test
@@ -1977,7 +1977,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             ddl = "ALTER TABLE TESTCHANGEPHOENIXPROPS SET MULTI_TENANT = true";
             conn.createStatement().execute(ddl);
             // check metadata cache is updated with MULTI_TENANT = true
-            PTable t = conn.unwrap(PhoenixConnection.class).getMetaDataCache().getTable(new PTableKey(null, "TESTCHANGEPHOENIXPROPS"));
+            PTable t = conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, "TESTCHANGEPHOENIXPROPS"));
             assertTrue(t.isMultiTenant());
             
             // check table metadata updated server side
@@ -2017,7 +2017,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         String ddl = "CREATE TABLE TEST_TRANSACTIONAL_TABLE (k varchar primary key) transactional=true";
         conn.createStatement().execute(ddl);
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        PTable table = pconn.getMetaDataCache().getTable(new PTableKey(null, "TEST_TRANSACTIONAL_TABLE"));
+        PTable table = pconn.getTable(new PTableKey(null, "TEST_TRANSACTIONAL_TABLE"));
         HTableInterface htable = pconn.getQueryServices().getTable(Bytes.toBytes("TEST_TRANSACTIONAL_TABLE"));
         assertTrue(table.isTransactional());
         assertTrue(htable.getTableDescriptor().getCoprocessors().contains(TransactionProcessor.class.getName()));
@@ -2036,7 +2036,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         // Should be ok, as HBase metadata should match existing metadata.
         ddl = "CREATE TABLE IF NOT EXISTS TEST_TRANSACTIONAL_TABLE (k varchar primary key)"; 
         conn.createStatement().execute(ddl);
-        table = pconn.getMetaDataCache().getTable(new PTableKey(null, "TEST_TRANSACTIONAL_TABLE"));
+        table = pconn.getTable(new PTableKey(null, "TEST_TRANSACTIONAL_TABLE"));
         htable = pconn.getQueryServices().getTable(Bytes.toBytes("TEST_TRANSACTIONAL_TABLE"));
         assertTrue(table.isTransactional());
         assertTrue(htable.getTableDescriptor().getCoprocessors().contains(TransactionProcessor.class.getName()));

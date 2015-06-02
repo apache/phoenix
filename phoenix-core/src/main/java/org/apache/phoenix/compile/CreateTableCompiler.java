@@ -124,8 +124,8 @@ public class CreateTableCompiler {
                             // on our connection.
                             new DelegateConnectionQueryServices(connection.getQueryServices()) {
                                 @Override
-                                public PMetaData addTable(PTable table) throws SQLException {
-                                    return connection.addTable(table);
+                                public PMetaData addTable(PTable table, long resolvedTime) throws SQLException {
+                                    return connection.addTable(table, resolvedTime);
                                 }
                             },
                             connection, tableRef.getTimeStamp());

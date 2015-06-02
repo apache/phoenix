@@ -77,6 +77,7 @@ import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TransactionUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -195,6 +196,12 @@ public class FromCompiler {
         }
         PTable t = PTableImpl.makePTable(table, projectedColumns);
         return new SingleTableColumnResolver(connection, new TableRef(tableRef.getTableAlias(), t, tableRef.getLowerBoundTimeStamp(), tableRef.hasDynamicCols()));
+    }
+    
+    public static ColumnResolver getResolver(PhoenixConnection connection, TableRef tableRef)
+            throws SQLException {
+        SingleTableColumnResolver visitor = new SingleTableColumnResolver(connection, tableRef);
+        return visitor;
     }
 
     public static ColumnResolver getResolver(TableRef tableRef)
@@ -340,18 +347,18 @@ public class FromCompiler {
             PTable theTable = null;
             if (updateCacheImmediately || connection.getAutoCommit()) {
                 MetaDataMutationResult result = client.updateCache(schemaName, tableName);
-                timeStamp = result.getMutationTime();
+                timeStamp = TransactionUtil.getTableTimestamp(connection, result);
                 theTable = result.getTable();
                 if (theTable == null) {
                     throw new TableNotFoundException(schemaName, tableName, timeStamp);
                 }
             } else {
                 try {
-                    theTable = connection.getMetaDataCache().getTable(new PTableKey(tenantId, fullTableName));
+                    theTable = connection.getTable(new PTableKey(tenantId, fullTableName));
                 } catch (TableNotFoundException e1) {
                     if (tenantId != null) { // Check with null tenantId next
                         try {
-                            theTable = connection.getMetaDataCache().getTable(new PTableKey(null, fullTableName));
+                            theTable = connection.getTable(new PTableKey(null, fullTableName));
                         } catch (TableNotFoundException e2) {
                         }
                     }
@@ -360,7 +367,7 @@ public class FromCompiler {
                 if (theTable == null) {
                     MetaDataMutationResult result = client.updateCache(schemaName, tableName);
                     if (result.wasUpdated()) {
-                        timeStamp = result.getMutationTime();
+                    	timeStamp = TransactionUtil.getTableTimestamp(connection, result);
                         theTable = result.getTable();
                     }
                 }

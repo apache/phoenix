@@ -27,9 +27,13 @@ import co.cask.tephra.TransactionFailureException;
 import co.cask.tephra.TxConstants;
 import co.cask.tephra.hbase98.TransactionAwareHTable;
 
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.execute.MutationState;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.PTable;
 
 public class TransactionUtil {
@@ -38,8 +42,12 @@ public class TransactionUtil {
     
     private static final TransactionCodec codec = new TransactionCodec();
     
-    public static long translateMillis(long serverTimeStamp) {
+    public static long convertToNanoseconds(long serverTimeStamp) {
         return serverTimeStamp * 1000000;
+    }
+    
+    public static long convertToMillisecods(Long serverTimeStamp) {
+        return serverTimeStamp / 1000000;
     }
     
     public static byte[] encodeTxnState(Transaction txn) throws SQLException {
@@ -72,4 +80,34 @@ public class TransactionUtil {
     	// Conflict detection is not needed for tables with write-once/append-only data
     	return new TransactionAwareHTable(htable, table.isImmutableRows() ? TxConstants.ConflictDetection.NONE : TxConstants.ConflictDetection.ROW);
     }
+    
+	public static long getResolvedTimestamp(PhoenixConnection connection, boolean isTransactional, Long defaultResolvedTimestamp) {
+		Transaction transaction = connection.getMutationState().getTransaction();
+		Long scn = connection.getSCN();
+	    return scn != null ?  scn : (isTransactional && transaction!=null) ? convertToMillisecods(transaction.getReadPointer()) : defaultResolvedTimestamp;
+	}
+
+	public static long getResolvedTime(PhoenixConnection connection, MetaDataMutationResult result) {
+		PTable table = result.getTable();
+		boolean isTransactional = table!=null && table.isTransactional();
+		return getResolvedTimestamp(connection, isTransactional, result.getMutationTime());
+	}
+
+	public static long getTableTimestamp(PhoenixConnection connection, MetaDataMutationResult result) {
+		PTable table = result.getTable();
+		Transaction transaction = connection.getMutationState().getTransaction();
+		boolean transactional = table!=null && table.isTransactional();
+		return  (transactional && transaction!=null) ? convertToMillisecods(transaction.getReadPointer()) : result.getMutationTime();
+	}
+
+	public static Long getTableTimestamp(PhoenixConnection connection, boolean transactional, Long mutationTime) throws SQLException {
+		Long timestamp = mutationTime;
+		MutationState mutationState = connection.getMutationState();
+		if (transactional && mutationState.getTransaction()==null && connection.getSCN()==null) {
+			mutationState.startTransaction();
+			timestamp = convertToMillisecods(mutationState.getTransaction().getReadPointer());
+			connection.commit();
+		}
+		return timestamp;
+	}
 }

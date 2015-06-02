@@ -241,7 +241,7 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
                         // TODO: for joins, we need to iterate through all tables, but we need the original table,
                         // not the projected table, so plan.getContext().getResolver().getTables() won't work.
                         Iterator<TableRef> tableRefs = plan.getTableRefs().iterator();
-                        boolean isTransactional = connection.getMutationState().startTransaction(tableRefs);
+                        boolean isTransactional = connection.getMutationState().sendMutations(tableRefs);
                         plan = connection.getQueryServices().getOptimizer().optimize(PhoenixStatement.this, plan);
                         if (isTransactional) {
                             // After optimize so that we have the right context object
@@ -286,14 +286,14 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         }
     }
     
-    private boolean startTransaction(StatementPlan plan) throws SQLException {
+    private void startTransaction(StatementPlan plan) throws SQLException {
+    	if (connection.getMutationState().getTransaction()!=null)
+    		return;
         for (TableRef ref : plan.getContext().getResolver().getTables()) {
             if (ref.getTable().isTransactional()) {
                 connection.getMutationState().startTransaction();
-                return true;
             }
         }
-        return false;
     }
     
     protected int executeMutation(final CompilableStatement stmt) throws SQLException {
