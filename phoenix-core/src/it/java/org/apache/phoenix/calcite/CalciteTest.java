@@ -623,8 +623,8 @@ public class CalciteTest extends BaseClientManagedTimeIT {
         
         start().sql("SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" limit 3")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixClientProject(item_id=[$0], NAME=[$1], supplier_id=[$3], NAME0=[$4])\n" +
-                           "    PhoenixLimit(fetch=[3])\n" +
+                           "  PhoenixLimit(fetch=[3])\n" +
+                           "    PhoenixServerProject(item_id=[$0], NAME=[$1], supplier_id=[$3], NAME0=[$4])\n" +
                            "      PhoenixServerJoin(condition=[=($2, $3)], joinType=[inner])\n" +
                            "        PhoenixServerProject(item_id=[$0], NAME=[$1], supplier_id=[$5])\n" +
                            "          PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +

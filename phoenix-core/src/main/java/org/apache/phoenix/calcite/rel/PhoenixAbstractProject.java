@@ -3,9 +3,12 @@ package org.apache.phoenix.calcite.rel;
 import java.util.List;
 
 import org.apache.calcite.plan.RelOptCluster;
+import org.apache.calcite.plan.RelOptCost;
+import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Project;
+import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rex.RexNode;
 import org.apache.phoenix.calcite.CalciteUtils;
@@ -24,6 +27,15 @@ abstract public class PhoenixAbstractProject extends Project implements PhoenixR
     protected PhoenixAbstractProject(RelOptCluster cluster, RelTraitSet traits, RelNode input, List<? extends RexNode> projects, RelDataType rowType) {
         super(cluster, traits, input, projects, rowType);
         assert getConvention() == PhoenixRel.CONVENTION;
+    }
+
+    @Override
+    public RelOptCost computeSelfCost(RelOptPlanner planner) {
+        // This is to minimize the weight of cost of Project so that it
+        // does not affect more important decisions like join algorithms.
+        double rowCount = RelMetadataQuery.getRowCount(getInput());
+        double rows = 2 * rowCount / (rowCount + 1);
+        return planner.getCostFactory().makeCost(rows, 0, 0);
     }
     
     protected TupleProjector project(Implementor implementor) {        

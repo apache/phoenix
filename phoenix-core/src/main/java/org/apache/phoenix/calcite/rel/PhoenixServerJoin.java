@@ -74,17 +74,20 @@ public class PhoenixServerJoin extends PhoenixAbstractJoin {
         //TODO return infinite cost if RHS size exceeds memory limit.
         
         double rowCount = RelMetadataQuery.getRowCount(this);
-        
-        for (RelNode input : getInputs()) {
-            double inputRowCount = RelMetadataQuery.getRowCount(input);
-            if (Double.isInfinite(inputRowCount)) {
-                rowCount = inputRowCount;
-            } else if (input == getLeft()) {
-                rowCount += inputRowCount;
+
+        double leftRowCount = RelMetadataQuery.getRowCount(getLeft());
+        if (Double.isInfinite(leftRowCount)) {
+            rowCount = leftRowCount;
+        } else {
+            rowCount += leftRowCount;
+            double rightRowCount = RelMetadataQuery.getRowCount(getRight());
+            if (Double.isInfinite(rightRowCount)) {
+                rowCount = rightRowCount;
             } else {
-                rowCount += Util.nLogN(inputRowCount);
+                rowCount += Util.nLogN(rightRowCount);
             }
-        }
+        }            
+        
         RelOptCost cost = planner.getCostFactory().makeCost(rowCount, 0, 0);
 
         return cost.multiplyBy(SERVER_FACTOR).multiplyBy(PHOENIX_FACTOR);

@@ -13,8 +13,8 @@ import org.apache.calcite.rel.RelCollation;
 import org.apache.calcite.rel.RelCollationTraitDef;
 import org.apache.calcite.rel.RelCollations;
 import org.apache.calcite.rel.RelFieldCollation;
-import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelFieldCollation.Direction;
+import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.JoinInfo;
 import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
@@ -26,11 +26,11 @@ import org.apache.phoenix.calcite.metadata.PhoenixRelMdCollation;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.JoinCompiler;
+import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.SequenceManager;
 import org.apache.phoenix.compile.StatementContext;
-import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.execute.ClientScanPlan;
 import org.apache.phoenix.execute.SortMergeJoinPlan;
 import org.apache.phoenix.expression.Expression;
@@ -102,16 +102,20 @@ public class PhoenixClientJoin extends PhoenixAbstractJoin {
 
     @Override
     public RelOptCost computeSelfCost(RelOptPlanner planner) {
-        double rowCount = RelMetadataQuery.getRowCount(this);
-        
-        for (RelNode input : getInputs()) {
-            double inputRowCount = RelMetadataQuery.getRowCount(input);
-            if (Double.isInfinite(inputRowCount)) {
-                rowCount = inputRowCount;
+        double rowCount = RelMetadataQuery.getRowCount(this);        
+
+        double leftRowCount = RelMetadataQuery.getRowCount(getLeft());
+        if (Double.isInfinite(leftRowCount)) {
+            rowCount = leftRowCount;
+        } else {
+            rowCount += leftRowCount;
+            double rightRowCount = RelMetadataQuery.getRowCount(getRight());
+            if (Double.isInfinite(rightRowCount)) {
+                rowCount = rightRowCount;
             } else {
-                rowCount += inputRowCount;
+                rowCount += rightRowCount;
             }
-        }
+        }            
         RelOptCost cost = planner.getCostFactory().makeCost(rowCount, 0, 0);
 
         return cost.multiplyBy(PHOENIX_FACTOR);

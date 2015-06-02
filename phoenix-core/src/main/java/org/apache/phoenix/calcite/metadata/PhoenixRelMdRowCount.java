@@ -7,7 +7,6 @@ import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.util.BuiltInMethod;
 import org.apache.calcite.util.ImmutableBitSet;
 import org.apache.phoenix.calcite.rel.PhoenixAbstractAggregate;
-import org.apache.phoenix.calcite.rel.PhoenixAbstractSort;
 import org.apache.phoenix.calcite.rel.PhoenixLimit;
 
 public class PhoenixRelMdRowCount {
@@ -34,11 +33,7 @@ public class PhoenixRelMdRowCount {
         }
     }
     
-    public Double getRowCount(PhoenixAbstractSort rel) {
-        return rel.getRows();
-      }
-    
     public Double getRowCount(PhoenixLimit rel) {
         return rel.getRows();
-      }
+    }
 }

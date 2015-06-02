@@ -82,11 +82,14 @@ public class PhoenixSchema implements Schema {
             properties.setProperty(entry.getKey(), String.valueOf(entry.getValue()));
         }
         try {
+            Class.forName("org.apache.phoenix.jdbc.PhoenixDriver");
             final Connection connection =
                 DriverManager.getConnection(url, properties);
             final PhoenixConnection phoenixConnection =
                 connection.unwrap(PhoenixConnection.class);
             return new PhoenixSchema(null, phoenixConnection);
+        } catch (ClassNotFoundException e) {
+            throw new RuntimeException(e);
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
