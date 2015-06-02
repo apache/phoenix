@@ -26,6 +26,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.DateUtil;
 
 public class PTimestamp extends PDataType<Timestamp> {
@@ -47,6 +48,10 @@ public class PTimestamp extends PDataType<Timestamp> {
   @Override
   public int toBytes(Object object, byte[] bytes, int offset) {
     if (object == null) {
+      // Create the byte[] of size MAX_TIMESTAMP_BYTES
+      if(bytes.length != getByteSize()) {
+          bytes = Bytes.padTail(bytes, (getByteSize() - bytes.length));
+      }
       PDate.INSTANCE.getCodec().encodeLong(0l, bytes, offset);
       Bytes.putInt(bytes, offset + Bytes.SIZEOF_LONG, 0);
       return getByteSize();
