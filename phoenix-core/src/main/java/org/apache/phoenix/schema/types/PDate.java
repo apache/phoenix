@@ -39,9 +39,6 @@ public class PDate extends PDataType<Date> {
 
   @Override
   public byte[] toBytes(Object object) {
-    if (object == null) {
-      throw newIllegalDataException(this + " may not be null");
-    }
     byte[] bytes = new byte[getByteSize()];
     toBytes(object, bytes, 0);
     return bytes;
@@ -50,7 +47,8 @@ public class PDate extends PDataType<Date> {
   @Override
   public int toBytes(Object object, byte[] bytes, int offset) {
     if (object == null) {
-      throw newIllegalDataException(this + " may not be null");
+        getCodec().encodeLong(0l, bytes, offset);
+        return this.getByteSize();
     }
     getCodec().encodeLong(((java.util.Date) object).getTime(), bytes, offset);
     return this.getByteSize();

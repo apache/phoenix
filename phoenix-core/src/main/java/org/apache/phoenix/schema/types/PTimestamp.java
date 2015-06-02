@@ -39,9 +39,6 @@ public class PTimestamp extends PDataType<Timestamp> {
 
   @Override
   public byte[] toBytes(Object object) {
-    if (object == null) {
-      throw newIllegalDataException(this + " may not be null");
-    }
     byte[] bytes = new byte[getByteSize()];
     toBytes(object, bytes, 0);
     return bytes;
@@ -50,16 +47,18 @@ public class PTimestamp extends PDataType<Timestamp> {
   @Override
   public int toBytes(Object object, byte[] bytes, int offset) {
     if (object == null) {
-      throw newIllegalDataException(this + " may not be null");
+      PDate.INSTANCE.getCodec().encodeLong(0l, bytes, offset);
+      Bytes.putInt(bytes, offset + Bytes.SIZEOF_LONG, 0);
+      return getByteSize();
     }
     java.sql.Timestamp value = (java.sql.Timestamp) object;
     PDate.INSTANCE.getCodec().encodeLong(value.getTime(), bytes, offset);
 
-            /*
-             * By not getting the stuff that got spilled over from the millis part,
-             * it leaves the timestamp's byte representation saner - 8 bytes of millis | 4 bytes of nanos.
-             * Also, it enables timestamp bytes to be directly compared with date/time bytes.
-             */
+    /*
+     * By not getting the stuff that got spilled over from the millis part,
+     * it leaves the timestamp's byte representation saner - 8 bytes of millis | 4 bytes of nanos.
+     * Also, it enables timestamp bytes to be directly compared with date/time bytes.
+     */
     Bytes.putInt(bytes, offset + Bytes.SIZEOF_LONG, value.getNanos() % 1000000);
     return getByteSize();
   }
