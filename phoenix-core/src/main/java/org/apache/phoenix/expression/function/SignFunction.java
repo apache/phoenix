@@ -71,4 +71,9 @@ public class SignFunction extends ScalarFunction {
     public String getName() {
         return NAME;
     }
+
+    @Override
+    public OrderPreserving preservesOrder() {
+        return OrderPreserving.YES;
+    }
 }
