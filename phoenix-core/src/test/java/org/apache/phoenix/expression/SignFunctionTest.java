@@ -54,7 +54,8 @@ public class SignFunctionTest {
         Expression signFunction = new SignFunction(expressions);
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         signFunction.evaluate(null, ptr);
-        Integer result = (Integer) signFunction.getDataType().toObject(ptr);
+        Integer result =
+                (Integer) signFunction.getDataType().toObject(ptr, signFunction.getSortOrder());
         assertTrue(result.compareTo(expected) == 0);
     }
 
