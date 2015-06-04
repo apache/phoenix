@@ -81,6 +81,7 @@ import org.apache.phoenix.expression.function.SQLViewTypeFunction;
 import org.apache.phoenix.expression.function.SecondFunction;
 import org.apache.phoenix.expression.function.SignFunction;
 import org.apache.phoenix.expression.function.SqlTypeNameFunction;
+import org.apache.phoenix.expression.function.SqrtFunction;
 import org.apache.phoenix.expression.function.StddevPopFunction;
 import org.apache.phoenix.expression.function.StddevSampFunction;
 import org.apache.phoenix.expression.function.StringBasedRegexpReplaceFunction;
@@ -231,7 +232,8 @@ public enum ExpressionType {
     DayOfMonthFunction(DayOfMonthFunction.class),
     ArrayAppendFunction(ArrayAppendFunction.class),
     UDFExpression(UDFExpression.class),
-    ArrayPrependFunction(ArrayPrependFunction.class)
+    ArrayPrependFunction(ArrayPrependFunction.class),
+    SqrtFunction(SqrtFunction.class)
     ;
 
     ExpressionType(Class<? extends Expression> clazz) {
