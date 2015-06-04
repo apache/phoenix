@@ -23,6 +23,7 @@ import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Map;
 
+import com.google.common.base.Strings;
 import org.apache.phoenix.util.SQLCloseable;
 
 /**
@@ -54,11 +55,15 @@ public class PhoenixArray implements Array,SQLCloseable {
 	private static Object[] coerceToNewLength(PDataType baseType, Object[] elements, int maxLength) {
         Object[] resizedElements = new Object[elements.length];
         for (int i = 0; i < elements.length; i++) {
-            int length = baseType.getMaxLength(elements[i]);
-            if (length == maxLength) {
-                resizedElements[i] = elements[i];
+            Integer length = baseType.getMaxLength(elements[i]);
+            if (length != null) {
+                if (length == maxLength) {
+                    resizedElements[i] = elements[i];
+                } else {
+                    resizedElements[i] = baseType.pad(elements[i], maxLength);
+                }
             } else {
-                resizedElements[i] = baseType.pad(elements[i],maxLength);
+                resizedElements[i] = baseType.pad(elements[i], maxLength);
             }
         }
         return resizedElements;
@@ -67,18 +72,25 @@ public class PhoenixArray implements Array,SQLCloseable {
 	    if (elements == null || elements.length == 0) {
 	        return elements;
 	    }
-	    Object element = elements[0];
-	    int maxLength = baseType.getMaxLength(element);
-	    boolean resizeElements = false;
-	    for (int i = 1; i < elements.length; i++) {
-	        int length = baseType.getMaxLength(elements[i]);
-	        if (length > maxLength) {
-	            maxLength = length;
-	            resizeElements = true;
-	        } else if (length < maxLength) {
-	            resizeElements = true;
-	        }
-	    }
+        int maxLength = 0;
+        boolean resizeElements = false;
+        for (int i = 0; i < elements.length; i++) {
+            Integer length = baseType.getMaxLength(elements[i]);
+            if (length != null) {
+                if (maxLength == 0){
+                    maxLength = length;
+                    continue;
+                }
+                if (length > maxLength) {
+                    maxLength = length;
+                    resizeElements = true;
+                } else if (length < maxLength) {
+                    resizeElements = true;
+                }
+            } else {
+                resizeElements = true;
+            }
+        }
 	    if (!resizeElements) {
 	        return elements;
 	    }
@@ -92,7 +104,12 @@ public class PhoenixArray implements Array,SQLCloseable {
 		    if (baseType.getByteSize() == null) {
     		    elements = coerceToEqualLength(baseType, elements);
     		    if (elements != null && elements.length > 0) {
-    		        this.maxLength = baseType.getMaxLength(elements[0]);
+                    for(int i = 0; i < elements.length; i++) {
+                        if(elements[i] != null) {
+                            maxLength = baseType.getMaxLength(elements[i]);
+                            break;
+                        }
+                    }
     		    }
 		    } else {
 		        maxLength = baseType.getByteSize();
