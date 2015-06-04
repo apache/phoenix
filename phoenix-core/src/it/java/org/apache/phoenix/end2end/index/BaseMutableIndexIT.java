@@ -1131,19 +1131,19 @@ public abstract class BaseMutableIndexIT extends BaseHBaseManagedTimeIT {
     		stmt.executeUpdate("upsert into DEMO values('cc1', 1.23, 'abc')");
     		conn.commit();
     		
+    		//assert values in data table
+    		rs = stmt.executeQuery("select /*+ NO_INDEX */ v1, v2, v3 from DEMO");
+    		assertTrue(rs.next());
+    		assertEquals("cc1", rs.getString(1));
+    		assertEquals(0, Doubles.compare(1.23, rs.getDouble(2)));
+    		assertEquals("abc", rs.getString(3));
+    		assertFalse(rs.next());
+    		
     		//assert values in index table 
     		rs = stmt.executeQuery("select * from DEMO_IDX");
     		assertTrue(rs.next());
     		assertEquals(0, Doubles.compare(1.23, rs.getDouble(1)));
     		assertEquals("cc1", rs.getString(2));
-    		assertEquals("abc", rs.getString(3));
-    		assertFalse(rs.next());
-    		
-    		//assert values in data table
-    		rs = stmt.executeQuery("select v1, v2, v3 from DEMO");
-    		assertTrue(rs.next());
-    		assertEquals("cc1", rs.getString(1));
-    		assertEquals(0, Doubles.compare(1.23, rs.getDouble(2)));
     		assertEquals("abc", rs.getString(3));
     		assertFalse(rs.next());
     		

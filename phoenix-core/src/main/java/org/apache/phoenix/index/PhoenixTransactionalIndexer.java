@@ -20,6 +20,7 @@ import java.util.Map;
 import java.util.Set;
 
 import co.cask.tephra.Transaction;
+import co.cask.tephra.Transaction.VisibilityLevel;
 import co.cask.tephra.TxConstants;
 import co.cask.tephra.hbase98.TransactionAwareHTable;
 
@@ -134,9 +135,14 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
             return;
         }
 
-        boolean readOwnWrites = m.getAttribute(TxConstants.TX_ROLLBACK_ATTRIBUTE_KEY) != null;
         Map<String,byte[]> updateAttributes = m.getAttributesMap();
         PhoenixIndexMetaData indexMetaData = new PhoenixIndexMetaData(c.getEnvironment(),updateAttributes);
+        if (m.getAttribute(TxConstants.TX_ROLLBACK_ATTRIBUTE_KEY) == null) {
+        	// Unless we're aborting the transaction, we do not want to see our own transaction writes,
+        	// since index maintenance requires seeing the previously committed data in order to function
+        	// properly.
+        	indexMetaData.getTransaction().setVisibility(VisibilityLevel.SNAPSHOT_EXCLUDE_CURRENT);
+        }
         Collection<Pair<Mutation, byte[]>> indexUpdates = null;
         // get the current span, or just use a null-span to avoid a bunch of if statements
         try (TraceScope scope = Trace.startSpan("Starting to build index updates")) {
@@ -146,7 +152,7 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
             }
 
             // get the index updates for all elements in this batch
-            indexUpdates = getIndexUpdates(c.getEnvironment(), indexMetaData, getMutationIterator(miniBatchOp), readOwnWrites);
+            indexUpdates = getIndexUpdates(c.getEnvironment(), indexMetaData, getMutationIterator(miniBatchOp));
 
             current.addTimelineAnnotation("Built index updates, doing preStep");
             TracingUtils.addAnnotation(current, "index update count", indexUpdates.size());
@@ -162,30 +168,7 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
         }
     }
 
-    private static final String TX_NO_READ_OWN_WRITES = "TX_NO_READ_OWN_WRITES";
-    @Override
-    public RegionScanner preScannerOpen(ObserverContext<RegionCoprocessorEnvironment> e, Scan scan, RegionScanner s) {
-        /*
-         * TODO: remove once Tephra gives us a way to not read our own writes.
-         *  Hack to force scan not to read their own writes. Since the mutations have already been
-         *  applied by the time the preBatchMutate hook is called, we need to adjust the max time
-         *  range down by one to prevent us from seeing the current state. Instead, we need to
-         *  see the state right before our Puts have been applied.
-         */
-        byte[] encoded = scan.getAttribute(TX_NO_READ_OWN_WRITES);
-        if (encoded != null) {
-            TimeRange range = scan.getTimeRange();
-            long maxTime = range.getMax();
-            try {
-                scan.setTimeRange(range.getMin(), maxTime == Long.MAX_VALUE ? maxTime : maxTime-1);
-            } catch (IOException e1) {
-                throw new RuntimeException(e1);
-            }
-        }
-        return s;
-    }
-
-    private Collection<Pair<Mutation, byte[]>> getIndexUpdates(RegionCoprocessorEnvironment env, PhoenixIndexMetaData indexMetaData, Iterator<Mutation> mutationIterator, boolean readOwnWrites) throws IOException {
+    private Collection<Pair<Mutation, byte[]>> getIndexUpdates(RegionCoprocessorEnvironment env, PhoenixIndexMetaData indexMetaData, Iterator<Mutation> mutationIterator) throws IOException {
         ResultScanner scanner = null;
         TransactionAwareHTable txTable = null;
         
@@ -230,9 +213,6 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
                     keys.add(PVarbinary.INSTANCE.getKeyRange(ptr.copyBytesIfNecessary()));
                 }
                 Scan scan = new Scan();
-                if (!readOwnWrites) {
-                    scan.setAttribute(TX_NO_READ_OWN_WRITES, PDataType.TRUE_BYTES); // TODO: remove when Tephra allows this
-                }
                 // Project all mutable columns
                 for (ColumnReference ref : mutableColumns) {
                     scan.addColumn(ref.getFamily(), ref.getQualifier());

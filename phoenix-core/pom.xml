@@ -224,24 +224,24 @@
     <dependency>
       <groupId>co.cask.tephra</groupId>
       <artifactId>tephra-api</artifactId>
-      <version>0.4.2-SNAPSHOT</version>
+      <version>0.5.1-SNAPSHOT</version>
     </dependency>
     <dependency>
       <groupId>co.cask.tephra</groupId>
       <artifactId>tephra-core</artifactId>
-      <version>0.4.2-SNAPSHOT</version>
+      <version>0.5.1-SNAPSHOT</version>
     </dependency>
     <dependency>
       <groupId>co.cask.tephra</groupId>
       <artifactId>tephra-core</artifactId>
       <type>test-jar</type>
-      <version>0.4.2-SNAPSHOT</version>
+      <version>0.5.1-SNAPSHOT</version>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>co.cask.tephra</groupId>
       <artifactId>tephra-hbase-compat-0.98</artifactId>
-      <version>0.4.2-SNAPSHOT</version>
+      <version>0.5.1-SNAPSHOT</version>
     </dependency>
   
     <!-- Make sure we have all the antlr dependencies -->

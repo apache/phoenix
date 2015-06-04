@@ -510,10 +510,12 @@ public class MutationState implements SQLCloseable {
     private void send(Iterator<TableRef> tableRefIterator) throws SQLException {
         int i = 0;
         long[] serverTimeStamps = null;
+        boolean sendAll = false;
         // Validate up front if not transactional so that we 
         if (tableRefIterator == null) {
             serverTimeStamps = validateAll();
             tableRefIterator = mutations.keySet().iterator();
+            sendAll = true;
         }
 
         // add tracing for this operation
@@ -635,7 +637,12 @@ public class MutationState implements SQLCloseable {
             if (tableRef.getTable().getType() != PTableType.INDEX) {
                 numRows -= valuesMap.size();
             }
-            tableRefIterator.remove(); // Remove batches as we process them
+            // Remove batches as we process them
+            if (sendAll) {
+            	tableRefIterator.remove(); // Iterating through actual map in this case
+            } else {
+            	mutations.remove(tableRef);
+            }
         }
         trace.close();
         assert(numRows==0);
