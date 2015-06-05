@@ -30,6 +30,7 @@ import co.cask.tephra.hbase98.TransactionAwareHTable;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.schema.PTable;
 
 public class TransactionUtil {
     private TransactionUtil() {
@@ -67,7 +68,8 @@ public class TransactionUtil {
             .build().buildException();
     }
     
-    public static TransactionAwareHTable getTransactionAwareHTable(HTableInterface htable) {
-    	return new TransactionAwareHTable(htable, TxConstants.ConflictDetection.ROW);
+    public static TransactionAwareHTable getTransactionAwareHTable(HTableInterface htable, PTable table) {
+    	// Conflict detection is not needed for tables with write-once/append-only data
+    	return new TransactionAwareHTable(htable, table.isImmutableRows() ? TxConstants.ConflictDetection.NONE : TxConstants.ConflictDetection.ROW);
     }
 }

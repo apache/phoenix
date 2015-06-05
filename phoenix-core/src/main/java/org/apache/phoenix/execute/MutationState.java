@@ -565,7 +565,7 @@ public class MutationState implements SQLCloseable {
                             if (!table.getIndexes().isEmpty()) {
                                 hTable = new MetaDataAwareHTable(hTable, tableRef);
                             }
-                            TransactionAwareHTable txnAware = TransactionUtil.getTransactionAwareHTable(hTable);
+                            TransactionAwareHTable txnAware = TransactionUtil.getTransactionAwareHTable(hTable, table);
                             // Don't add immutable indexes (those are the only ones that would participate
                             // during a commit), as we don't need conflict detection for these.
                             if (isDataTable) {

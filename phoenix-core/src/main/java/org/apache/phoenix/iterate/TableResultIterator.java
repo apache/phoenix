@@ -89,7 +89,7 @@ public class TableResultIterator extends ExplainTable implements ResultIterator 
         HTableInterface htable = context.getConnection().getQueryServices().getTable(table.getPhysicalName().getBytes());
         Transaction tx;
         if (table.isTransactional() && (tx=context.getTransaction()) != null) {
-            TransactionAwareHTable txAware = TransactionUtil.getTransactionAwareHTable(htable);
+            TransactionAwareHTable txAware = TransactionUtil.getTransactionAwareHTable(htable, table);
             // Use transaction cached on context as we may have started a new transaction already
             // if auto commit is true.
             txAware.startTx(tx);

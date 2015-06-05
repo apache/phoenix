@@ -28,7 +28,9 @@ import java.util.Map;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
@@ -218,8 +220,7 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
         }
 	}
 	
-	@Test
-	public void testRowConflicts() throws Exception {
+	private void testRowConflicts() throws Exception {
 		Connection conn1 = DriverManager.getConnection(getUrl());
 		Connection conn2 = DriverManager.getConnection(getUrl());
 		try {
@@ -228,6 +229,7 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
 			String selectSql = "SELECT * FROM "+FULL_TABLE_NAME;
 			conn1.setAutoCommit(false);
 			ResultSet rs = conn1.createStatement().executeQuery(selectSql);
+			boolean immutableRows = conn1.unwrap(PhoenixConnection.class).getMetaDataCache().getTable(new PTableKey(null, FULL_TABLE_NAME)).isImmutableRows();
 	     	assertFalse(rs.next());
 			// upsert row using conn1
 			String upsertSql = "UPSERT INTO " + FULL_TABLE_NAME + "(varchar_pk, char_pk, int_pk, long_pk, decimal_pk, date_pk, a.int_col1) VALUES(?, ?, ?, ?, ?, ?, ?)";
@@ -246,9 +248,10 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
 	        //second commit should fail
  	        try {
  	 	        conn2.commit();
- 	 	        fail();
+ 	 	        if (!immutableRows) fail();
  	        }	
  	        catch (SQLException e) {
+ 	        	if (immutableRows) fail();
  	        	assertEquals(e.getErrorCode(), SQLExceptionCode.TRANSACTION_CONFLICT_EXCEPTION.getErrorCode());
  	        }
 		}
@@ -258,4 +261,15 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
         }
 	}
 	
+	@Test
+	public void testRowConflictDetected() throws Exception {
+		testRowConflicts();
+	}
+	
+	@Test
+	public void testNoConflictDetectionForImmutableRows() throws Exception {
+		Connection conn = DriverManager.getConnection(getUrl());
+		conn.createStatement().execute("ALTER TABLE " + FULL_TABLE_NAME + " SET IMMUTABLE_ROWS=true");
+		testRowConflicts();
+	}
 }
