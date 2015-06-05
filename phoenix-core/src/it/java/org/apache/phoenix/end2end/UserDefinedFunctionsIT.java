@@ -58,6 +58,8 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.FunctionAlreadyExistsException;
 import org.apache.phoenix.schema.FunctionNotFoundException;
 import org.apache.phoenix.schema.ValueRangeExcpetion;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PArrayDataType;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -121,11 +123,31 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT{
                     .append("        ptr.set(PInteger.INSTANCE.toBytes((Integer)sum));\n")
                     .append("        return true;\n")
                     .append("    }\n").toString();
-
+    private static String ARRAY_INDEX_EVALUATE_METHOD =
+            new StringBuffer()
+                    .append("    public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {\n")
+                    .append("        Expression indexExpr = children.get(1);\n")
+                    .append("        if (!indexExpr.evaluate(tuple, ptr)) {\n")
+                    .append("           return false;\n")
+                    .append("        } else if (ptr.getLength() == 0) {\n")
+                    .append("           return true;\n")
+                    .append("        }\n")
+                    .append("        // Use Codec to prevent Integer object allocation\n")
+                    .append("        int index = PInteger.INSTANCE.getCodec().decodeInt(ptr, indexExpr.getSortOrder());\n")
+                    .append("        if(index < 0) {\n")
+                    .append("           throw new ParseException(\"Index cannot be negative :\" + index);\n")
+                    .append("        }\n")
+                    .append("        Expression arrayExpr = children.get(0);\n")
+                    .append("        return PArrayDataType.positionAtArrayElement(tuple, ptr, index, arrayExpr, getDataType(),getMaxLength());\n")
+                    .append("    }\n").toString();
+    
+    
     private static String MY_REVERSE_CLASS_NAME = "MyReverse";
     private static String MY_SUM_CLASS_NAME = "MySum";
-    private static String MY_REVERSE_PROGRAM = getProgram(MY_REVERSE_CLASS_NAME, STRING_REVERSE_EVALUATE_METHOD, "PVarchar");
-    private static String MY_SUM_PROGRAM = getProgram(MY_SUM_CLASS_NAME, SUM_COLUMN_VALUES_EVALUATE_METHOD, "PInteger");
+    private static String MY_ARRAY_INDEX_CLASS_NAME = "MyArrayIndex";
+    private static String MY_REVERSE_PROGRAM = getProgram(MY_REVERSE_CLASS_NAME, STRING_REVERSE_EVALUATE_METHOD, "return PVarchar.INSTANCE;");
+    private static String MY_SUM_PROGRAM = getProgram(MY_SUM_CLASS_NAME, SUM_COLUMN_VALUES_EVALUATE_METHOD, "return PInteger.INSTANCE;");
+    private static String MY_ARRAY_INDEX_PROGRAM = getProgram(MY_ARRAY_INDEX_CLASS_NAME, ARRAY_INDEX_EVALUATE_METHOD, "return PDataType.fromTypeId(children.get(0).getDataType().getSqlType()- PDataType.ARRAY_TYPE_BASE);");
     private static Properties EMPTY_PROPS = new Properties();
     
 
@@ -144,6 +166,8 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT{
                 .append("import org.apache.phoenix.schema.types.PInteger;\n")
                 .append("import org.apache.phoenix.schema.types.PVarchar;\n")
                 .append("import org.apache.phoenix.util.StringUtil;\n")
+                .append("import org.apache.phoenix.schema.types.PArrayDataType;\n")
+                .append("import org.apache.phoenix.parse.ParseException;\n")
                 .append("public class "+className+" extends ScalarFunction{\n")
                 .append("    public static final String NAME = \"MY_REVERSE\";\n")
                 .append("    public "+className+"() {\n")
@@ -159,7 +183,7 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT{
                 .append("    }\n")
                 .append("  @Override\n")
                 .append("   public PDataType getDataType() {\n")
-                .append("       return "+returnType+".INSTANCE;\n")
+                .append(returnType+"\n")
                 .append("    }\n")
                 .append("    @Override\n")
                 .append("    public String getName() {\n")
@@ -181,6 +205,8 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT{
         UDFExpression.setConfig(conf);
         compileTestClass(MY_REVERSE_CLASS_NAME, MY_REVERSE_PROGRAM, 1);
         compileTestClass(MY_SUM_CLASS_NAME, MY_SUM_PROGRAM, 2);
+        compileTestClass(MY_ARRAY_INDEX_CLASS_NAME, MY_ARRAY_INDEX_PROGRAM, 3);
+
         String clientPort = util.getConfiguration().get(QueryServices.ZOOKEEPER_PORT_ATTRIB);
         url =
                 JDBC_PROTOCOL + JDBC_PROTOCOL_SEPARATOR + LOCALHOST + JDBC_PROTOCOL_SEPARATOR
@@ -265,6 +291,28 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT{
         } catch(FunctionNotFoundException e) {
             
         }
+        conn.createStatement().execute("CREATE TABLE TESTTABLE10(ID VARCHAR NOT NULL, NAME VARCHAR ARRAY, CITY VARCHAR ARRAY CONSTRAINT pk PRIMARY KEY (ID) )");
+        conn.createStatement().execute("create function UDF_ARRAY_ELEM(VARCHAR ARRAY, INTEGER) returns VARCHAR as 'org.apache.phoenix.end2end."+MY_ARRAY_INDEX_CLASS_NAME+"' using jar "
+                + "'"+util.getConfiguration().get(DYNAMIC_JARS_DIR_KEY) + "/myjar3.jar"+"'");
+        conn.createStatement().execute("UPSERT INTO TESTTABLE10(ID,NAME,CITY) VALUES('111', ARRAY['JOHN','MIKE','BOB'], ARRAY['NYC','LA','SF'])");
+        conn.createStatement().execute("UPSERT INTO TESTTABLE10(ID,NAME,CITY) VALUES('112', ARRAY['CHEN','CARL','ALICE'], ARRAY['BOSTON','WASHINGTON','PALO ALTO'])");
+        conn.commit();
+        rs = conn.createStatement().executeQuery("SELECT ID, UDF_ARRAY_ELEM(NAME, 2) FROM TESTTABLE10");
+        assertTrue(rs.next());
+        assertEquals("111", rs.getString(1));
+        assertEquals("MIKE", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("112", rs.getString(1));
+        assertEquals("CARL", rs.getString(2));
+        assertFalse(rs.next());
+        rs = conn2.createStatement().executeQuery("SELECT ID, UDF_ARRAY_ELEM(NAME, 2) FROM TESTTABLE10");
+        assertTrue(rs.next());
+        assertEquals("111", rs.getString(1));
+        assertEquals("MIKE", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("112", rs.getString(1));
+        assertEquals("CARL", rs.getString(2));
+        assertFalse(rs.next());
     }
 
     @Test
@@ -326,7 +374,7 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT{
         rs = tenant2Conn.createStatement().executeQuery("select * from t7 where MYFUNCTION(k1)=12");
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
-        assertEquals(2, rs.getInt(2));        
+        assertEquals(2, rs.getInt(2)); 
         assertEquals("jock", rs.getString(3));
         assertFalse(rs.next());
     }
