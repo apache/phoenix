@@ -1794,10 +1794,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                                     if (columnToDelete.isViewReferenced()) { // Disallow deletion of column referenced in WHERE clause of view
                                         return new MetaDataMutationResult(MutationCode.UNALLOWED_TABLE_MUTATION, EnvironmentEdgeManager.currentTimeMillis(), table, columnToDelete);
                                     }
-                                    // Look for columnToDelete in any indexes. If found as PK
-                                    // column, get lock and drop the index. If found as covered
-                                    // column, delete from index (do this client side?).
-                                    // In either case, invalidate index if the column is in it
+                                    // Look for columnToDelete in any indexes. If found as PK column, get lock and drop the index and then invalidate it
+                                    // Covered columns are deleted from the index by the client
                                     PhoenixConnection connection = table.getIndexes().isEmpty() ? null : QueryUtil.getConnection(env.getConfiguration()).unwrap(PhoenixConnection.class);
                                     for (PTable index : table.getIndexes()) {
                                         try {
