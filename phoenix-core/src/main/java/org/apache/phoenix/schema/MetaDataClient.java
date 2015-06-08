@@ -436,9 +436,9 @@ public class MetaDataClient {
                 // timestamp, we can handle this such that we don't ask the
                 // server again.
                 if (table != null) {
-                    // Ensures that table in result is set to table found in our cache.
-                    result.setTable(table);
                     if (code == MutationCode.TABLE_ALREADY_EXISTS) {
+                    	// Ensures that table in result is set to table found in our cache.
+                        result.setTable(table);
                         // Although this table is up-to-date, the parent table may not be.
                         // In this case, we update the parent table which may in turn pull
                         // in indexes to add to this table.
@@ -2692,18 +2692,20 @@ public class MetaDataClient {
 
                 dropColumnMutations(table, tableColumnsToDrop, tableMetaData);
                 for (PTable index : table.getIndexes()) {
+                	IndexMaintainer indexMaintainer = index.getIndexMaintainer(table, connection);
+                    // get the columns required for the index pk
+                    Set<ColumnReference> indexColumns = indexMaintainer.getIndexedColumns();
+                    // get the covered columns 
+                    Set<ColumnReference> coveredColumns = indexMaintainer.getCoverededColumns();
                     List<PColumn> indexColumnsToDrop = Lists.newArrayListWithExpectedSize(columnRefs.size());
                     for(PColumn columnToDrop : tableColumnsToDrop) {
-                        String indexColumnName = IndexUtil.getIndexColumnName(columnToDrop);
-                        try {
-                            PColumn indexColumn = index.getColumn(indexColumnName);
-                            if (SchemaUtil.isPKColumn(indexColumn)) {
-                                indexesToDrop.add(new TableRef(index));
-                            } else {
-                                indexColumnsToDrop.add(indexColumn);
-                                columnsToDrop.add(new ColumnRef(tableRef, columnToDrop.getPosition()));
-                            }
-                        } catch (ColumnNotFoundException e) {
+                        ColumnReference columnToDropRef = new ColumnReference(columnToDrop.getFamilyName().getBytes(), columnToDrop.getName().getBytes());
+						if (indexColumns.contains(columnToDropRef)) {
+                            indexesToDrop.add(new TableRef(index));
+                        } 
+                        else if (coveredColumns.contains(columnToDropRef)) {
+                        	String indexColumnName = IndexUtil.getIndexColumnName(columnToDrop);
+                            indexColumnsToDrop.add(index.getColumn(indexColumnName));
                         }
                     }
                     if(!indexColumnsToDrop.isEmpty()) {
