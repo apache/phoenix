@@ -529,7 +529,7 @@ public class QueryCompiler {
         // Don't pass groupBy when building where clause expression, because we do not want to wrap these
         // expressions as group by key expressions since they're pre, not post filtered.
         if (innerPlan == null && !tableRef.equals(resolver.getTables().get(0))) {
-            context.setResolver(FromCompiler.getResolverForQuery(select, this.statement.getConnection()));
+        	context.setResolver(FromCompiler.getResolver(context.getConnection(), tableRef, select.getUdfParseNodes()));
         }
         Set<SubqueryParseNode> subqueries = Sets.<SubqueryParseNode> newHashSet();
         Expression where = WhereCompiler.compile(context, select, viewWhere, subqueries);
