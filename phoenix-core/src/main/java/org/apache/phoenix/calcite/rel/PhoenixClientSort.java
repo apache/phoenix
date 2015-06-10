@@ -50,7 +50,6 @@ public class PhoenixClientSort extends PhoenixAbstractSort {
 
     @Override
     public QueryPlan implement(Implementor implementor) {
-        assert getConvention() == getInput().getConvention();
         if (this.offset != null)
             throw new UnsupportedOperationException();
             

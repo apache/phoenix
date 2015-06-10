@@ -55,8 +55,6 @@ public class PhoenixClientAggregate extends PhoenixAbstractAggregate {
 
     @Override
     public QueryPlan implement(Implementor implementor) {
-        assert getConvention() == getInput().getConvention();
-        
         QueryPlan plan = implementor.visitInput(0, (PhoenixRel) getInput());
         
         TableRef tableRef = implementor.getTableRef();

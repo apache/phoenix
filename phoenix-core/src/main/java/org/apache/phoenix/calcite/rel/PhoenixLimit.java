@@ -86,8 +86,6 @@ public class PhoenixLimit extends SingleRel implements PhoenixRel {
 
     @Override
     public QueryPlan implement(Implementor implementor) {
-        assert getConvention() == getInput().getConvention();
-        
         QueryPlan plan = implementor.visitInput(0, (PhoenixRel) getInput());
         // TODO only wrap with ClientScanPlan 
         // if (plan.getLimit() != null);

@@ -53,7 +53,6 @@ public class PhoenixFilter extends Filter implements PhoenixRel {
     }
 
     public QueryPlan implement(Implementor implementor) {
-        assert getConvention() == getInput().getConvention();
         QueryPlan plan = implementor.visitInput(0, (PhoenixRel) getInput());
         Expression expr = CalciteUtils.toExpression(condition, implementor);
         return new ClientScanPlan(plan.getContext(), plan.getStatement(), plan.getTableRef(),

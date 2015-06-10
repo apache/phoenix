@@ -50,8 +50,6 @@ public class PhoenixServerAggregate extends PhoenixAbstractAggregate {
 
     @Override
     public QueryPlan implement(Implementor implementor) {
-        assert getConvention() == getInput().getConvention();
-        
         QueryPlan plan = implementor.visitInput(0, (PhoenixRel) getInput());
         assert (plan instanceof ScanPlan 
                     || plan instanceof HashJoinPlan)

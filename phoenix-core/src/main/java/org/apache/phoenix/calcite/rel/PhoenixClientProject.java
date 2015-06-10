@@ -53,8 +53,6 @@ public class PhoenixClientProject extends PhoenixAbstractProject {
 
     @Override
     public QueryPlan implement(Implementor implementor) {
-        assert getConvention() == getInput().getConvention();
-        
         QueryPlan plan = implementor.visitInput(0, (PhoenixRel) getInput());        
         TupleProjector tupleProjector = project(implementor);
         

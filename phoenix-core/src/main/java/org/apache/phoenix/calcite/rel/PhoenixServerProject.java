@@ -54,8 +54,6 @@ public class PhoenixServerProject extends PhoenixAbstractProject {
 
     @Override
     public QueryPlan implement(Implementor implementor) {
-        assert getConvention() == getInput().getConvention();
-        
         implementor.pushContext(new ImplementorContext(implementor.getCurrentContext().isRetainPKColumns(), false));
         QueryPlan plan = implementor.visitInput(0, (PhoenixRel) getInput());
         implementor.popContext();
