@@ -21,8 +21,10 @@ import org.apache.phoenix.schema.TableRef;
  * over streams of {@link org.apache.phoenix.schema.tuple.Tuple}s.</p>
  */
 public interface PhoenixRel extends RelNode {
-  /** Calling convention for relational operations that occur in Phoenix. */
-  Convention CONVENTION = new Convention.Impl("PHOENIX", PhoenixRel.class);
+  /** Calling conventions for relational operations that occur in Phoenix. */
+  Convention SERVER_CONVENTION = new Convention.Impl("PHOENIX_SERVER", PhoenixRel.class);
+  Convention PROJECTABLE_CONVENTION = new Convention.Impl("PHOENIX_PROJECTABLE", PhoenixRel.class);
+  Convention CLIENT_CONVENTION = new Convention.Impl("PHOENIX_CLIENT", PhoenixRel.class);
   
   /** Metadata Provider for PhoenixRel */
   RelMetadataProvider METADATA_PROVIDER = new PhoenixRelMetadataProvider();

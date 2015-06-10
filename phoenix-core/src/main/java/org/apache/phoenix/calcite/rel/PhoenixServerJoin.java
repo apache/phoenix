@@ -38,7 +38,7 @@ public class PhoenixServerJoin extends PhoenixAbstractJoin {
             Set<String> variablesStopped, boolean isSingleValueRhs) {
         RelOptCluster cluster = left.getCluster();
         final RelTraitSet traits =
-                cluster.traitSet().replace(PhoenixRel.CONVENTION)
+                cluster.traitSet().replace(PhoenixRel.PROJECTABLE_CONVENTION)
                 .replaceIfs(RelCollationTraitDef.INSTANCE,
                         new Supplier<List<RelCollation>>() {
                     public List<RelCollation> get() {
@@ -54,7 +54,6 @@ public class PhoenixServerJoin extends PhoenixAbstractJoin {
             boolean isSingleValueRhs) {
         super(cluster, traits, left, right, condition, joinType,
                 variablesStopped, isSingleValueRhs);
-        assert joinType != JoinRelType.FULL && joinType != JoinRelType.RIGHT;
     }
 
     @Override
@@ -72,6 +71,10 @@ public class PhoenixServerJoin extends PhoenixAbstractJoin {
     @Override
     public RelOptCost computeSelfCost(RelOptPlanner planner) {
         //TODO return infinite cost if RHS size exceeds memory limit.
+        
+        if (joinType == JoinRelType.FULL || joinType == JoinRelType.RIGHT
+                || getLeft().getConvention() != PhoenixRel.SERVER_CONVENTION)
+            return planner.getCostFactory().makeInfiniteCost();
         
         double rowCount = RelMetadataQuery.getRowCount(this);
 
@@ -95,9 +98,6 @@ public class PhoenixServerJoin extends PhoenixAbstractJoin {
     
     @Override
     public QueryPlan implement(Implementor implementor) {
-        assert getLeft().getConvention() == PhoenixRel.CONVENTION;
-        assert getRight().getConvention() == PhoenixRel.CONVENTION;
-        
         List<Expression> leftExprs = Lists.<Expression> newArrayList();
         List<Expression> rightExprs = Lists.<Expression> newArrayList();
 

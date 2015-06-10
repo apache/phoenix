@@ -4,7 +4,7 @@ import com.google.common.base.Predicate;
 
 import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.plan.RelOptRuleCall;
-import org.apache.phoenix.calcite.rel.PhoenixFilter;
+import org.apache.calcite.rel.core.Filter;
 import org.apache.phoenix.calcite.rel.PhoenixTableScan;
 
 public class PhoenixFilterScanMergeRule extends RelOptRule {
@@ -22,13 +22,13 @@ public class PhoenixFilterScanMergeRule extends RelOptRule {
 
     private PhoenixFilterScanMergeRule() {
         super(
-            operand(PhoenixFilter.class,
+            operand(Filter.class,
                 operand(PhoenixTableScan.class, null, NO_FILTER, any())));
     }
 
     @Override
     public void onMatch(RelOptRuleCall call) {
-        PhoenixFilter filter = call.rel(0);
+        Filter filter = call.rel(0);
         PhoenixTableScan scan = call.rel(1);
         assert scan.filter == null : "predicate should have ensured no filter";
         call.transformTo(PhoenixTableScan.create(scan.getCluster(),

@@ -60,7 +60,7 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
     public static PhoenixTableScan create(RelOptCluster cluster, final RelOptTable table, 
             RexNode filter, Integer statelessFetch) {
         final RelTraitSet traits =
-                cluster.traitSetOf(PhoenixRel.CONVENTION)
+                cluster.traitSetOf(PhoenixRel.SERVER_CONVENTION)
                 .replaceIfs(RelCollationTraitDef.INSTANCE,
                         new Supplier<List<RelCollation>>() {
                     public List<RelCollation> get() {

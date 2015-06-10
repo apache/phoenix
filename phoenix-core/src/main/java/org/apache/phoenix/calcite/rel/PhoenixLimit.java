@@ -30,7 +30,7 @@ public class PhoenixLimit extends SingleRel implements PhoenixRel {
     public static PhoenixLimit create(final RelNode input, RexNode offset, RexNode fetch) {
         RelOptCluster cluster = input.getCluster();
         final RelTraitSet traits =
-                cluster.traitSet().replace(PhoenixRel.CONVENTION)
+                cluster.traitSet().replace(PhoenixRel.CLIENT_CONVENTION)
                 .replaceIfs(RelCollationTraitDef.INSTANCE,
                         new Supplier<List<RelCollation>>() {
                     public List<RelCollation> get() {
@@ -46,7 +46,6 @@ public class PhoenixLimit extends SingleRel implements PhoenixRel {
         this.fetch = fetch;
         Object value = fetch == null ? null : CalciteUtils.evaluateStatelessExpression(fetch);
         this.statelessFetch = value == null ? null : ((Number) value).intValue();        
-        assert getConvention() == PhoenixRel.CONVENTION;
     }
     
     @Override

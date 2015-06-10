@@ -29,7 +29,7 @@ public class PhoenixFilter extends Filter implements PhoenixRel {
     public static PhoenixFilter create(final RelNode input, final RexNode condition) {
         RelOptCluster cluster = input.getCluster();
         final RelTraitSet traits =
-                cluster.traitSet().replace(PhoenixRel.CONVENTION)
+                cluster.traitSet().replace(PhoenixRel.CLIENT_CONVENTION)
                 .replaceIfs(RelCollationTraitDef.INSTANCE,
                         new Supplier<List<RelCollation>>() {
                     public List<RelCollation> get() {
@@ -41,7 +41,6 @@ public class PhoenixFilter extends Filter implements PhoenixRel {
     
     private PhoenixFilter(RelOptCluster cluster, RelTraitSet traits, RelNode input, RexNode condition) {
         super(cluster, traits, input, condition);
-        assert getConvention() == PhoenixRel.CONVENTION;
     }
 
     public PhoenixFilter copy(RelTraitSet traitSet, RelNode input, RexNode condition) {

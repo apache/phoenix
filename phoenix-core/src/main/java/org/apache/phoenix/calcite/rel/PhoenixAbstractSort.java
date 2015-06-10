@@ -29,7 +29,6 @@ abstract public class PhoenixAbstractSort extends Sort implements PhoenixRel {
     
     protected PhoenixAbstractSort(RelOptCluster cluster, RelTraitSet traits, RelNode child, RelCollation collation) {
         super(cluster, traits, child, collation, null, null);
-        assert getConvention() == PhoenixRel.CONVENTION;
         assert !getCollation().getFieldCollations().isEmpty();
     }
     

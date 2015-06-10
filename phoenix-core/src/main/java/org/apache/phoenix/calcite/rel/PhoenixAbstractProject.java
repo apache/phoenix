@@ -26,7 +26,6 @@ import com.google.common.collect.Lists;
 abstract public class PhoenixAbstractProject extends Project implements PhoenixRel {
     protected PhoenixAbstractProject(RelOptCluster cluster, RelTraitSet traits, RelNode input, List<? extends RexNode> projects, RelDataType rowType) {
         super(cluster, traits, input, projects, rowType);
-        assert getConvention() == PhoenixRel.CONVENTION;
     }
 
     @Override

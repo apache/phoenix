@@ -17,13 +17,12 @@ public class PhoenixUnion extends Union implements PhoenixRel {
     
     public static PhoenixUnion create(List<RelNode> inputs, boolean all) {
         RelOptCluster cluster = inputs.get(0).getCluster();
-        RelTraitSet traits = cluster.traitSetOf(PhoenixRel.CONVENTION);
+        RelTraitSet traits = cluster.traitSetOf(PhoenixRel.CLIENT_CONVENTION);
         return new PhoenixUnion(cluster, traits, inputs, all);
     }
     
     private PhoenixUnion(RelOptCluster cluster, RelTraitSet traits, List<RelNode> inputs, boolean all) {
         super(cluster, traits, inputs, all);
-        assert getConvention() == PhoenixRel.CONVENTION;
     }
 
     @Override

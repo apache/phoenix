@@ -13,34 +13,34 @@ import org.apache.calcite.rel.metadata.RelMdCollation;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rex.RexNode;
 import org.apache.phoenix.compile.QueryPlan;
-import org.apache.phoenix.execute.ScanPlan;
+import org.apache.phoenix.execute.HashJoinPlan;
 import org.apache.phoenix.execute.TupleProjector;
 
 import com.google.common.base.Supplier;
 
-public class PhoenixServerProject extends PhoenixAbstractProject {
+public class PhoenixPostJoinProject extends PhoenixAbstractProject {
     
-    public static PhoenixServerProject create(final RelNode input, 
+    public static PhoenixPostJoinProject create(final RelNode input, 
             final List<? extends RexNode> projects, RelDataType rowType) {
         RelOptCluster cluster = input.getCluster();
         final RelTraitSet traits =
-                cluster.traitSet().replace(PhoenixRel.SERVER_CONVENTION)
+                cluster.traitSet().replace(PhoenixRel.PROJECTABLE_CONVENTION)
                 .replaceIfs(RelCollationTraitDef.INSTANCE,
                         new Supplier<List<RelCollation>>() {
                     public List<RelCollation> get() {
                         return RelMdCollation.project(input, projects);
                     }
                 });
-        return new PhoenixServerProject(cluster, traits, input, projects, rowType);
+        return new PhoenixPostJoinProject(cluster, traits, input, projects, rowType);
     }
 
-    private PhoenixServerProject(RelOptCluster cluster, RelTraitSet traits,
+    private PhoenixPostJoinProject(RelOptCluster cluster, RelTraitSet traits,
             RelNode input, List<? extends RexNode> projects, RelDataType rowType) {
         super(cluster, traits, input, projects, rowType);
     }
 
     @Override
-    public PhoenixServerProject copy(RelTraitSet traits, RelNode input,
+    public PhoenixPostJoinProject copy(RelTraitSet traits, RelNode input,
             List<RexNode> projects, RelDataType rowType) {
         return create(input, projects, rowType);
     }
@@ -59,11 +59,12 @@ public class PhoenixServerProject extends PhoenixAbstractProject {
         implementor.pushContext(new ImplementorContext(implementor.getCurrentContext().isRetainPKColumns(), false));
         QueryPlan plan = implementor.visitInput(0, (PhoenixRel) getInput());
         implementor.popContext();
-        assert (plan instanceof ScanPlan
-                && !TupleProjector.hasProjector(plan.getContext().getScan(), true));
+        assert (plan instanceof HashJoinPlan
+                && !TupleProjector.hasProjector(plan.getContext().getScan(), false));
         
         TupleProjector tupleProjector = super.project(implementor);
-        TupleProjector.serializeProjectorIntoScan(plan.getContext().getScan(), tupleProjector, true);
+        TupleProjector.serializeProjectorIntoScan(plan.getContext().getScan(), tupleProjector, false);
         return plan;
     }
+
 }

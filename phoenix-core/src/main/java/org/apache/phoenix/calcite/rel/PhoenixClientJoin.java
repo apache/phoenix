@@ -1,7 +1,6 @@
 package org.apache.phoenix.calcite.rel;
 
 import java.sql.SQLException;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 
@@ -12,14 +11,11 @@ import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelCollation;
 import org.apache.calcite.rel.RelCollationTraitDef;
 import org.apache.calcite.rel.RelCollations;
-import org.apache.calcite.rel.RelFieldCollation;
-import org.apache.calcite.rel.RelFieldCollation.Direction;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.JoinInfo;
 import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rex.RexNode;
-import org.apache.calcite.util.ImmutableIntList;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.calcite.CalciteUtils;
 import org.apache.phoenix.calcite.metadata.PhoenixRelMdCollation;
@@ -44,40 +40,20 @@ import com.google.common.collect.Lists;
 
 public class PhoenixClientJoin extends PhoenixAbstractJoin {
     
-    public static PhoenixClientJoin create(RelNode left, RelNode right, 
+    public static PhoenixClientJoin create(final RelNode left, final RelNode right, 
             RexNode condition, JoinRelType joinType, Set<String> variablesStopped,
             boolean isSingleValueRhs) {
         RelOptCluster cluster = left.getCluster();
         final JoinInfo joinInfo = JoinInfo.of(left, right, condition);
-        final RelNode sortedLeft = sortInput(left, joinInfo.leftKeys);
-        final RelNode sortedRight = sortInput(right, joinInfo.rightKeys);
         final RelTraitSet traits =
-                cluster.traitSet().replace(PhoenixRel.CONVENTION)
+                cluster.traitSet().replace(PhoenixRel.CLIENT_CONVENTION)
                 .replaceIfs(RelCollationTraitDef.INSTANCE,
                         new Supplier<List<RelCollation>>() {
                     public List<RelCollation> get() {
-                        return PhoenixRelMdCollation.mergeJoin(sortedLeft, sortedRight, joinInfo.leftKeys, joinInfo.rightKeys);
+                        return PhoenixRelMdCollation.mergeJoin(left, right, joinInfo.leftKeys, joinInfo.rightKeys);
                     }
                 });
-        return new PhoenixClientJoin(cluster, traits, sortedLeft, sortedRight, condition, joinType, variablesStopped, isSingleValueRhs);
-    }
-    
-    private static RelNode sortInput(RelNode input, ImmutableIntList sortKeys) {
-        if (sortKeys.isEmpty()) {
-            return input;
-        }
-        
-        List<RelFieldCollation> fieldCollations = Lists.newArrayList();
-        for (Iterator<Integer> iter = sortKeys.iterator(); iter.hasNext();) {
-            fieldCollations.add(new RelFieldCollation(iter.next(), Direction.ASCENDING));
-        }
-        RelCollation collation = RelCollations.of(fieldCollations);
-        List<RelCollation> collations = input.getTraitSet().getTraits(RelCollationTraitDef.INSTANCE);
-        if (collations.contains(collation)) {
-            return input;
-        }
-        
-        return PhoenixClientSort.create(input, collation);
+        return new PhoenixClientJoin(cluster, traits, left, right, condition, joinType, variablesStopped, isSingleValueRhs);
     }
 
     private PhoenixClientJoin(RelOptCluster cluster, RelTraitSet traits,
@@ -102,6 +78,11 @@ public class PhoenixClientJoin extends PhoenixAbstractJoin {
 
     @Override
     public RelOptCost computeSelfCost(RelOptPlanner planner) {
+        if (joinType == JoinRelType.RIGHT
+                || (!joinInfo.leftKeys.isEmpty() && !RelCollations.contains(RelMetadataQuery.collations(getLeft()), joinInfo.leftKeys))
+                || (!joinInfo.rightKeys.isEmpty() && !RelCollations.contains(RelMetadataQuery.collations(getRight()), joinInfo.rightKeys)))
+            return planner.getCostFactory().makeInfiniteCost();
+        
         double rowCount = RelMetadataQuery.getRowCount(this);        
 
         double leftRowCount = RelMetadataQuery.getRowCount(getLeft());
@@ -118,14 +99,11 @@ public class PhoenixClientJoin extends PhoenixAbstractJoin {
         }            
         RelOptCost cost = planner.getCostFactory().makeCost(rowCount, 0, 0);
 
-        return cost.multiplyBy(PHOENIX_FACTOR);
+        return cost.multiplyBy(SERVER_FACTOR).multiplyBy(PHOENIX_FACTOR);
     }
 
     @Override
     public QueryPlan implement(Implementor implementor) {
-        assert getLeft().getConvention() == PhoenixRel.CONVENTION;
-        assert getRight().getConvention() == PhoenixRel.CONVENTION;
-        
         List<Expression> leftExprs = Lists.<Expression> newArrayList();
         List<Expression> rightExprs = Lists.<Expression> newArrayList();
 

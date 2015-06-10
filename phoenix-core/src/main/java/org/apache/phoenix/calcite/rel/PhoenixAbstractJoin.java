@@ -27,10 +27,9 @@ abstract public class PhoenixAbstractJoin extends Join implements PhoenixRel {
     public final boolean isSingleValueRhs;
 
     protected PhoenixAbstractJoin(RelOptCluster cluster, RelTraitSet traits, RelNode left, RelNode right, RexNode condition, JoinRelType joinType, Set<String> variablesStopped, boolean isSingleValueRhs) {
-        super( cluster, traits, left, right, condition, joinType, variablesStopped);
+        super(cluster, traits, left, right, condition, joinType, variablesStopped);
         this.joinInfo = JoinInfo.of(left, right, condition);
         this.isSingleValueRhs = isSingleValueRhs;
-        assert getConvention() == PhoenixRel.CONVENTION;
     }
     
     abstract public PhoenixAbstractJoin copy(RelTraitSet traits, RexNode condition, RelNode left,

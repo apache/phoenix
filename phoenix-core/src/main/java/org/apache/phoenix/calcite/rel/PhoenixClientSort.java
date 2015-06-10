@@ -27,7 +27,7 @@ public class PhoenixClientSort extends PhoenixAbstractSort {
         RelOptCluster cluster = input.getCluster();
         collation = RelCollationTraitDef.INSTANCE.canonize(collation);
         RelTraitSet traits =
-            input.getTraitSet().replace(PhoenixRel.CONVENTION).replace(collation);
+            input.getTraitSet().replace(PhoenixRel.CLIENT_CONVENTION).replace(collation);
         return new PhoenixClientSort(cluster, traits, input, collation);
     }
 

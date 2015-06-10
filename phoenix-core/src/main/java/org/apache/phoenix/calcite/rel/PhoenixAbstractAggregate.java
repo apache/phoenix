@@ -55,7 +55,6 @@ abstract public class PhoenixAbstractAggregate extends Aggregate implements Phoe
     
     protected PhoenixAbstractAggregate(RelOptCluster cluster, RelTraitSet traits, RelNode child, boolean indicator, ImmutableBitSet groupSet, List<ImmutableBitSet> groupSets, List<AggregateCall> aggCalls) {
         super(cluster, traits, child, indicator, groupSet, groupSets, aggCalls);
-        assert getConvention() == PhoenixRel.CONVENTION;
 
         for (AggregateCall aggCall : aggCalls) {
             if (aggCall.isDistinct()) {

@@ -50,8 +50,6 @@ public class PhoenixRelMdCollation {
 
         final ImmutableList<RelCollation> leftCollations =
                 RelMetadataQuery.collations(left);
-        assert RelCollations.contains(leftCollations, leftKeys)
-        : "cannot merge join: left input is not sorted on left keys";
         for (RelCollation collation : leftCollations) {
             if (!collation.getFieldCollations().isEmpty()) {
                 builder.add(collation);
@@ -60,8 +58,6 @@ public class PhoenixRelMdCollation {
         
         final ImmutableList<RelCollation> rightCollations =
                 RelMetadataQuery.collations(right);
-        assert RelCollations.contains(rightCollations, rightKeys)
-        : "cannot merge join: right input is not sorted on right keys";
         final int leftFieldCount = left.getRowType().getFieldCount();
         for (RelCollation collation : rightCollations) {
             if (!collation.getFieldCollations().isEmpty()) {

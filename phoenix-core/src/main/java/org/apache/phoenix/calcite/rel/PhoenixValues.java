@@ -19,13 +19,12 @@ import com.google.common.collect.ImmutableList;
 public class PhoenixValues extends Values implements PhoenixRel {
     
     public static PhoenixValues create(RelOptCluster cluster, RelDataType rowType, ImmutableList<ImmutableList<RexLiteral>> tuples) {
-        RelTraitSet traits = cluster.traitSetOf(PhoenixRel.CONVENTION);
+        RelTraitSet traits = cluster.traitSetOf(PhoenixRel.CLIENT_CONVENTION);
         return new PhoenixValues(cluster, rowType, tuples, traits);
     }
     
     private PhoenixValues(RelOptCluster cluster, RelDataType rowType, ImmutableList<ImmutableList<RexLiteral>> tuples, RelTraitSet traits) {
         super(cluster, rowType, tuples, traits);
-        assert getConvention() == PhoenixRel.CONVENTION;
     }
 
     @Override

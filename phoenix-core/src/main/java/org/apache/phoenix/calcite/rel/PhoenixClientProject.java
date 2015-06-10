@@ -24,7 +24,7 @@ public class PhoenixClientProject extends PhoenixAbstractProject {
             final List<? extends RexNode> projects, RelDataType rowType) {
         RelOptCluster cluster = input.getCluster();
         final RelTraitSet traits =
-                cluster.traitSet().replace(PhoenixRel.CONVENTION)
+                cluster.traitSet().replace(PhoenixRel.CLIENT_CONVENTION)
                 .replaceIfs(RelCollationTraitDef.INSTANCE,
                         new Supplier<List<RelCollation>>() {
                     public List<RelCollation> get() {
