@@ -34,7 +34,12 @@ import org.apache.hadoop.security.SecurityUtil;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 
+import java.lang.management.ManagementFactory;
+import java.lang.management.RuntimeMXBean;
 import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
@@ -50,6 +55,11 @@ public final class Main extends Configured implements Tool, Runnable {
       "phoenix.queryserver.http.port";
   public static final int DEFAULT_HTTP_PORT = 8765;
 
+  public static final String QUERY_SERVER_ENV_LOGGING_KEY =
+          "phoenix.queryserver.envvars.logging.disabled";
+  public static final String QUERY_SERVER_ENV_LOGGING_SKIPWORDS_KEY =
+          "phoenix.queryserver.envvars.logging.skipwords";
+
   public static final String KEYTAB_FILENAME_KEY = "phoenix.queryserver.keytab.file";
   public static final String KERBEROS_PRINCIPAL_KEY = "phoenix.queryserver.kerberos.principal";
   public static final String DNS_NAMESERVER_KEY = "phoenix.queryserver.dns.nameserver";
@@ -58,11 +68,69 @@ public final class Main extends Configured implements Tool, Runnable {
 
   protected static final Log LOG = LogFactory.getLog(Main.class);
 
+  @SuppressWarnings("serial")
+  private static final Set<String> DEFAULT_SKIP_WORDS = new HashSet<String>() {
+    {
+      add("secret");
+      add("passwd");
+      add("password");
+      add("credential");
+    }
+  };
+
   private final String[] argv;
   private final CountDownLatch runningLatch = new CountDownLatch(1);
   private HttpServer server = null;
   private int retCode = 0;
   private Throwable t = null;
+
+  /**
+   * Log information about the currently running JVM.
+   */
+  public static void logJVMInfo() {
+    // Print out vm stats before starting up.
+    RuntimeMXBean runtime = ManagementFactory.getRuntimeMXBean();
+    if (runtime != null) {
+      LOG.info("vmName=" + runtime.getVmName() + ", vmVendor=" +
+              runtime.getVmVendor() + ", vmVersion=" + runtime.getVmVersion());
+      LOG.info("vmInputArguments=" + runtime.getInputArguments());
+    }
+  }
+
+  /**
+   * Logs information about the currently running JVM process including
+   * the environment variables. Logging of env vars can be disabled by
+   * setting {@code "phoenix.envvars.logging.disabled"} to {@code "true"}.
+   * <p>If enabled, you can also exclude environment variables containing
+   * certain substrings by setting {@code "phoenix.envvars.logging.skipwords"}
+   * to comma separated list of such substrings.
+   */
+  public static void logProcessInfo(Configuration conf) {
+    // log environment variables unless asked not to
+    if (conf == null || !conf.getBoolean(QUERY_SERVER_ENV_LOGGING_KEY, false)) {
+      Set<String> skipWords = new HashSet<String>(DEFAULT_SKIP_WORDS);
+      if (conf != null) {
+        String[] confSkipWords = conf.getStrings(QUERY_SERVER_ENV_LOGGING_SKIPWORDS_KEY);
+        if (confSkipWords != null) {
+          skipWords.addAll(Arrays.asList(confSkipWords));
+        }
+      }
+
+      nextEnv:
+      for (Map.Entry<String, String> entry : System.getenv().entrySet()) {
+        String key = entry.getKey().toLowerCase();
+        String value = entry.getValue().toLowerCase();
+        // exclude variables which may contain skip words
+        for(String skipWord : skipWords) {
+          if (key.contains(skipWord) || value.contains(skipWord))
+            continue nextEnv;
+        }
+        LOG.info("env:"+entry);
+      }
+    }
+    // and JVM info
+    logJVMInfo();
+  }
 
   /** Constructor for use from {@link org.apache.hadoop.util.ToolRunner}. */
   public Main() {
@@ -112,6 +180,7 @@ public final class Main extends Configured implements Tool, Runnable {
 
   @Override
   public int run(String[] args) throws Exception {
+    logProcessInfo(getConf());
     try {
       // handle secure cluster credentials
       if ("kerberos".equalsIgnoreCase(getConf().get(HBASE_SECURITY_CONF_KEY))) {
