@@ -5,6 +5,7 @@ import org.apache.calcite.plan.RelOptCostFactory;
 import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.prepare.CalcitePrepareImpl;
+import org.apache.calcite.rel.rules.JoinCommuteRule;
 import org.apache.phoenix.calcite.rules.PhoenixAddScanLimitRule;
 import org.apache.phoenix.calcite.rules.PhoenixCompactClientSortRule;
 import org.apache.phoenix.calcite.rules.PhoenixConverterRules;
@@ -24,6 +25,10 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
             org.apache.calcite.plan.Context externalContext,
             RelOptCostFactory costFactory) {
         RelOptPlanner planner = super.createPlanner(prepareContext, externalContext, costFactory);
+        
+        planner.removeRule(JoinCommuteRule.INSTANCE);
+        planner.addRule(JoinCommuteRule.SWAP_OUTER);
+        
         RelOptRule[] rules = PhoenixConverterRules.RULES;
         for (RelOptRule rule : rules) {
             planner.addRule(rule);

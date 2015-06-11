@@ -313,6 +313,29 @@ public class CalciteTest extends BaseClientManagedTimeIT {
                 .close();
     }
     
+    @Test public void testRightOuterJoin() throws Exception {
+        start().sql("SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item RIGHT OUTER JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\"")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                           "  PhoenixToClientConverter\n" +
+                           "    PhoenixPostJoinProject(item_id=[$2], NAME=[$3], supplier_id=[$0], NAME0=[$1])\n" +
+                           "      PhoenixServerJoin(condition=[=($4, $0)], joinType=[left])\n" +
+                           "        PhoenixServerProject(supplier_id=[$0], NAME=[$1])\n" +
+                           "          PhoenixTableScan(table=[[phoenix, Join, SupplierTable]])\n" +
+                           "        PhoenixToClientConverter\n" +
+                           "          PhoenixServerProject(item_id=[$0], NAME=[$1], supplier_id=[$5])\n" +
+                           "            PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n")
+                .resultIs(new Object[][] {
+                          {"0000000001", "T1", "0000000001", "S1"}, 
+                          {"0000000002", "T2", "0000000001", "S1"}, 
+                          {"0000000003", "T3", "0000000002", "S2"}, 
+                          {"0000000004", "T4", "0000000002", "S2"},
+                          {null, null, "0000000003", "S3"}, 
+                          {null, null, "0000000004", "S4"}, 
+                          {"0000000005", "T5", "0000000005", "S5"},
+                          {"0000000006", "T6", "0000000006", "S6"}})
+                .close();
+    }
+    
     @Test public void testClientJoin() throws Exception {        
         start().sql("SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item FULL OUTER JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" order by \"item_id\", supp.name")
                 .explainIs("PhoenixToEnumerableConverter\n" +
