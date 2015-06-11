@@ -360,6 +360,34 @@ public class CalciteTest extends BaseClientManagedTimeIT {
                 .close();
     }
     
+    @Test public void testJoinPlanningWithCollation() throws Exception { 
+        // Server-join with LHS sorted on order-by fields
+        start().sql("SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" order by supp.\"supplier_id\"")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                           "  PhoenixToClientConverter\n" +
+                           "    PhoenixPostJoinProject(item_id=[$2], NAME=[$3], supplier_id=[$0], NAME0=[$1])\n" +
+                           "      PhoenixServerJoin(condition=[=($4, $0)], joinType=[inner])\n" +
+                           "        PhoenixServerProject(supplier_id=[$0], NAME=[$1])\n" +
+                           "          PhoenixTableScan(table=[[phoenix, Join, SupplierTable]])\n" +
+                           "        PhoenixToClientConverter\n" +
+                           "          PhoenixServerProject(item_id=[$0], NAME=[$1], supplier_id=[$5])\n" +
+                           "            PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n")
+                .close();
+        
+        // Join key being order-by fields with the other side sorted on order-by fields
+        start().sql("SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" order by item.\"supplier_id\"")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                           "  PhoenixClientProject(item_id=[$0], NAME=[$1], supplier_id=[$3], NAME0=[$4])\n" +
+                           "    PhoenixClientJoin(condition=[=($2, $3)], joinType=[inner])\n" +
+                           "      PhoenixServerSort(sort0=[$2], dir0=[ASC])\n" +
+                           "        PhoenixServerProject(item_id=[$0], NAME=[$1], supplier_id=[$5])\n" +
+                           "          PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
+                           "      PhoenixToClientConverter\n" +
+                           "        PhoenixServerProject(supplier_id=[$0], NAME=[$1])\n" +
+                           "          PhoenixTableScan(table=[[phoenix, Join, SupplierTable]])\n")
+                .close();
+    }
+    
     @Test public void testMultiJoin() throws Exception {
         start().sql("select t1.entity_id, t2.a_string, t3.organization_id from aTable t1 join aTable t2 on t1.entity_id = t2.entity_id and t1.organization_id = t2.organization_id join atable t3 on t1.entity_id = t3.entity_id and t1.organization_id = t3.organization_id where t1.a_string = 'a'") 
                 .explainIs("PhoenixToEnumerableConverter\n" +

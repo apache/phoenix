@@ -39,9 +39,7 @@ public class PhoenixRelMdCollation {
     
     /** Helper method to determine a {@link PhoenixServerJoin}'s collation. */
     public static List<RelCollation> hashJoin(RelNode left, RelNode right, JoinRelType joinType) {
-        // TODO enable the following code, right now would cause some unexpected behaviors.
-        // return RelMetadataQuery.collations(left);
-        return ImmutableList.of();
+        return RelMetadataQuery.collations(left);
     }
 
     public static List<RelCollation> mergeJoin(RelNode left, RelNode right,
