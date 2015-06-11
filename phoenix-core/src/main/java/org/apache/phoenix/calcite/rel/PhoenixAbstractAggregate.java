@@ -3,6 +3,8 @@ package org.apache.phoenix.calcite.rel;
 import java.util.List;
 
 import org.apache.calcite.plan.RelOptCluster;
+import org.apache.calcite.plan.RelOptCost;
+import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Aggregate;
@@ -34,23 +36,12 @@ import com.google.common.collect.Lists;
 abstract public class PhoenixAbstractAggregate extends Aggregate implements PhoenixRel {
     
     public static boolean isSingleValueCheckAggregate(Aggregate aggregate) {
-        List<Integer> groupSet = aggregate.getGroupSet().asList();
-        int groupCount = groupSet.size();
-        if (groupCount + 1 != aggregate.getInput().getRowType().getFieldCount())
-            return false;
-        
-        for (int i = 0; i < groupCount; i++) {
-            if (groupSet.get(i) != i)
-                return false;
-        }
-        
         List<AggregateCall> aggCalls = aggregate.getAggCallList();
         if (aggCalls.size() != 1)
             return false;
         
         AggregateCall call = aggCalls.get(0);
-        return call.getAggregation().getName().equals("SINGLE_VALUE")
-                && call.getArgList().get(0) == groupCount;
+        return call.getAggregation().getName().equals("SINGLE_VALUE");
     }
     
     protected PhoenixAbstractAggregate(RelOptCluster cluster, RelTraitSet traits, RelNode child, boolean indicator, ImmutableBitSet groupSet, List<ImmutableBitSet> groupSets, List<AggregateCall> aggCalls) {
@@ -67,6 +58,14 @@ abstract public class PhoenixAbstractAggregate extends Aggregate implements Phoe
             default:
                 throw new UnsupportedOperationException("unsupported group type: " + getGroupType());
         }
+    }
+    
+    @Override
+    public RelOptCost computeSelfCost(RelOptPlanner planner) {
+        if (isSingleValueCheckAggregate(this))
+            return planner.getCostFactory().makeInfiniteCost();
+        
+        return super.computeSelfCost(planner);
     }
     
     protected GroupBy getGroupBy(Implementor implementor) {

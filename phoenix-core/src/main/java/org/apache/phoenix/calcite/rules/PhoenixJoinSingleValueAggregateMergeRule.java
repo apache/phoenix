@@ -1,5 +1,7 @@
 package org.apache.phoenix.calcite.rules;
 
+import java.util.List;
+
 import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.phoenix.calcite.rel.PhoenixAbstractAggregate;
@@ -15,7 +17,20 @@ public class PhoenixJoinSingleValueAggregateMergeRule extends RelOptRule {
             new Predicate<PhoenixAbstractAggregate>() {
         @Override
         public boolean apply(PhoenixAbstractAggregate phoenixAggregate) {
-            return PhoenixAbstractAggregate.isSingleValueCheckAggregate(phoenixAggregate);
+            if (!PhoenixAbstractAggregate.isSingleValueCheckAggregate(phoenixAggregate))
+                return false;
+            
+            List<Integer> groupSet = phoenixAggregate.getGroupSet().asList();
+            if (groupSet.size() + 1 != phoenixAggregate.getInput().getRowType().getFieldCount())
+                return false;
+            
+            for (int i = 0; i < groupSet.size(); i++) {
+                if (groupSet.get(i) != i)
+                    return false;
+            }
+            
+            List<Integer> argList = phoenixAggregate.getAggCallList().get(0).getArgList();
+            return (argList.size() == 1 && argList.get(0) == groupSet.size());
         }
     };
     
@@ -45,7 +60,7 @@ public class PhoenixJoinSingleValueAggregateMergeRule extends RelOptRule {
         }
         
         call.transformTo(join.copy(join.getTraitSet(), join.getCondition(), 
-                left, right.getInput(), join.getJoinType(), false, true));
+                left, convert(right.getInput(), right.getInput().getTraitSet().replace(PhoenixRel.CLIENT_CONVENTION)), join.getJoinType(), false, true));
     }
 
 }
