@@ -415,4 +415,25 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
 
     results.toList shouldEqual checkResults
   }
+
+  test("Can save arrays back to phoenix") {
+    val dataSet = List((2L, Array("String1", "String2", "String3")))
+
+    sc
+      .parallelize(dataSet)
+      .saveToPhoenix(
+        "ARRAY_TEST_TABLE",
+        Seq("ID","VCARRAY"),
+        zkUrl = Some(quorumAddress)
+      )
+
+    // Load the results back
+    val stmt = conn.createStatement()
+    val rs = stmt.executeQuery("SELECT VCARRAY FROM ARRAY_TEST_TABLE WHERE ID = 2")
+    rs.next()
+    val sqlArray = rs.getArray(1).getArray().asInstanceOf[Array[String]]
+
+    // Verify the arrays are equal
+    sqlArray shouldEqual dataSet(0)._2
+  }
 }
