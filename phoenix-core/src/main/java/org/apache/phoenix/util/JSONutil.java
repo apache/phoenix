@@ -53,9 +53,6 @@ public class JSONutil {
 	public JsonNode getJsonNode(Object json) throws JsonProcessingException, IOException{
 		return mapper.readTree((String)json);
 	}
-	public JsonNode gerateJsonTree(Object json) throws JsonProcessingException, IOException{
-		return mapper.readTree((String)json);  
-	}
 	public JsonNode enterJsonTreeNode(JsonNode node,String nodename) throws JsonProcessingException, IOException{
 		return node.path(nodename);  
 	}

@@ -102,7 +102,7 @@ public class JSONOperationT extends BaseHBaseManagedTimeIT{
     }
 	@Test
     public void testJsonPathAsElement() throws Exception {
-        String selectQuery = "SELECT col1 FROM testJson WHERE col1 #> '{k6,nestk4,0}' = 9";
+        String selectQuery = "SELECT col1 FROM testJson WHERE col1 #> '{k6,nestk4,1}' = 8.4";
         String pk = "valueOne";
         Connection conn = getConnection();
         try {
@@ -141,8 +141,8 @@ public class JSONOperationT extends BaseHBaseManagedTimeIT{
         }
     }
 	@Test
-    public void testJsonSuperset() throws Exception {
-        String selectQuery = "SELECT col1 FROM testJson WHERE col1 @> '{\"k1\": \"val\"}'";
+    public void testJsonSubSet() throws Exception {
+        String selectQuery = "SELECT col1 FROM testJson WHERE col1 @> '{\"k1\":\"val\"}'";
         String pk = "valueOne";
         Connection conn = getConnection();
         try {
@@ -161,7 +161,7 @@ public class JSONOperationT extends BaseHBaseManagedTimeIT{
         }
     }
 	@Test
-    public void testJsonSubset() throws Exception {
+    public void testJsonSuperSet() throws Exception {
         String smalljson="{\"k1\":\"val\"}";
         String selectQuery = "SELECT col1 FROM testJson WHERE col1 <@ "+"'"+json+"'";
         String pk = "valueOne";
@@ -174,7 +174,7 @@ public class JSONOperationT extends BaseHBaseManagedTimeIT{
             ResultSet rs = stmt.executeQuery();
             assertTrue(rs.next());
             assertEquals("Json data read from DB is not as expected for query: <" + selectQuery
-                    + ">", json, rs.getString(1));
+                    + ">", smalljson, rs.getString(1));
             assertFalse(rs.next());
 
         } finally {

@@ -33,7 +33,7 @@ public class JsonPathAsTextExpression  extends BaseJSONExpression{
 		String value = (String) PVarchar.INSTANCE.toObject(ptr);
 		JSONutil util=new JSONutil();
 		try{
-			JsonNode node=util.gerateJsonTree(value);
+			JsonNode node=util.getJsonNode(value);
 			for(int i=0;i<pattern.length;i++){
 				if(node.isValueNode()){
 					ptr.set(PDataType.NULL_BYTES);

@@ -37,7 +37,7 @@ public class JsonPathAsElementExpression extends BaseJSONExpression{
 		String value = (String) PVarchar.INSTANCE.toObject(ptr);
 		JSONutil util=new JSONutil();
 		try{
-			JsonNode node=util.gerateJsonTree(value);
+			JsonNode node=util.getJsonNode(value);
 			for(int i=0;i<pattern.length;i++){
 				if(node.isValueNode()){
 					ptr.set(PDataType.NULL_BYTES);
@@ -66,7 +66,7 @@ public class JsonPathAsElementExpression extends BaseJSONExpression{
 					datatype=PBoolean.INSTANCE;
 					ptr.set(Bytes.toBytes(node.asBoolean()));
 				}
-				else if(node.isFloat()){
+				else if(node.isDouble()){
 					datatype=PDouble.INSTANCE;
 					ptr.set(PDouble.INSTANCE.toBytes(node.asDouble(),SortOrder.getDefault()));
 				}
