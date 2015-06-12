@@ -63,13 +63,32 @@
     </dependencySet>
 
     <!-- Make sure we get all the components, not just the minimal client ones (e.g.
-      phoenix-flume, phoenix-pig, etc) -->
+      phoenix-flume, phoenix-pig, etc). We should exclude phoenix-server and
+      phoenix-server-client in the future, see PHOENIX-2032, PHOENIX-2038 -->
     <dependencySet>
       <outputDirectory>/</outputDirectory>
       <unpack>true</unpack>
-      <includes>
-        <include>org.apache.phoenix:phoenix-*</include>
-      </includes>
+      <!-- multiple deps provide some variant of LICENSE files/directories. These
+           overwrite each other at best, at worst conflict on case-insensitive
+           filesystems like HDFS+ and FAT32. Just exclude them -->
+      <unpackOptions>
+        <excludes>
+          <exclude>*license*</exclude>
+          <exclude>*LICENSE*</exclude>
+          <exclude>**/license/**</exclude>
+          <exclude>**/LICENSE/**</exclude>
+        </excludes>
+      </unpackOptions>
+      <!-- this is default, but make intentions clear -->
+      <useTransitiveDependencies>true</useTransitiveDependencies>
+      <!-- "When <include> subelements are present, they define a set of
+           artifact coordinates to include. If none is present, then <includes>
+           represents all valid values"
+           https://maven.apache.org/plugins/maven-assembly-plugin/assembly.html#class_dependencySet
+           This means bring in all dependencies transitively of the
+           phoenix-assembly module.
+      -->
+      <includes />
     </dependencySet>
   </dependencySets>
 </assembly>
