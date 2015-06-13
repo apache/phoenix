@@ -99,6 +99,7 @@ public class PhoenixToEnumerableConverter extends ConverterImpl implements Enume
         };
     }
 
+    @SuppressWarnings({ "rawtypes", "unchecked" })
     static Expression stash(EnumerableRelImplementor implementor, Object o, Class clazz) {
         ParameterExpression x = (ParameterExpression) implementor.stash(o, clazz);
         MethodCallExpression e =

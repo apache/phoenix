@@ -62,6 +62,7 @@ public class PhoenixTable extends AbstractTable implements TranslatableTable {
     	return pTable;
     }
 
+    @SuppressWarnings("rawtypes")
     @Override
     public RelDataType getRowType(RelDataTypeFactory typeFactory) {
         final RelDataTypeFactory.FieldInfoBuilder builder = typeFactory.builder();

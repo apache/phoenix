@@ -17,6 +17,7 @@ public enum BuiltInMethod {
     TO_ENUMERABLE(CalciteRuntime.class, "toEnumerable", QueryPlan.class);
 
     public final Method method;
+    @SuppressWarnings("rawtypes")
     public final Constructor constructor;
 
     public static final ImmutableMap<Method, BuiltInMethod> MAP;
@@ -32,11 +33,13 @@ public enum BuiltInMethod {
         MAP = builder.build();
     }
 
+    @SuppressWarnings("rawtypes")
     BuiltInMethod(Class clazz, String methodName, Class... argumentTypes) {
         this.method = Types.lookupMethod(clazz, methodName, argumentTypes);
         this.constructor = null;
     }
 
+    @SuppressWarnings("rawtypes")
     BuiltInMethod(Class clazz, Class... argumentTypes) {
         this.method = null;
         this.constructor = Types.lookupConstructor(clazz, argumentTypes);

@@ -311,6 +311,21 @@ public class CalciteTest extends BaseClientManagedTimeIT {
                 .resultIs(new Object[][] {
                           {"0000000005", "T5", 500, 8, 15, "0000000005", "Item T5", "0000000005", "S5", "888-888-5555", "505 YYY Street", "10005"}})
                 .close();
+        
+        start().sql("SELECT \"order_id\", i.name, i.price, discount2, quantity FROM " + JOIN_ORDER_TABLE_FULL_NAME + " o INNER JOIN " 
+                + JOIN_ITEM_TABLE_FULL_NAME + " i ON o.\"item_id\" = i.\"item_id\" AND o.price = (i.price * (100 - discount2)) / 100.0 WHERE quantity < 5000")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                           "  PhoenixToClientConverter\n" +
+                           "    PhoenixPostJoinProject(order_id=[$5], NAME=[$1], PRICE=[$2], DISCOUNT2=[$3], QUANTITY=[$7])\n" +
+                           "      PhoenixServerJoin(condition=[AND(=($6, $0), =($8, $4))], joinType=[inner])\n" +
+                           "        PhoenixServerProject(item_id=[$0], NAME=[$1], PRICE=[$2], DISCOUNT2=[$4], $f7=[/(*($2, -(100, $4)), 100.0)])\n" +
+                           "          PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
+                           "        PhoenixToClientConverter\n" +
+                           "          PhoenixServerProject(order_id=[$0], item_id=[$2], QUANTITY=[$4], $f7=[CAST($3):DECIMAL(17, 6) NOT NULL])\n" +
+                           "            PhoenixTableScan(table=[[phoenix, Join, OrderTable]], filter=[<($4, 5000)])\n")
+                .resultIs(new Object[][] {
+                          {"000000000000004", "T6", 600, 15, 4000}})
+                .close();
     }
     
     @Test public void testRightOuterJoin() throws Exception {
