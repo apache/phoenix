@@ -25,6 +25,8 @@ import java.util.Arrays;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.schema.EqualityNotSupportedException;
+import org.apache.phoenix.schema.types.PJson;
 import org.codehaus.jackson.JsonFactory;
 import org.codehaus.jackson.JsonNode;
 import org.codehaus.jackson.JsonParser;
@@ -192,11 +194,7 @@ public class PhoenixJson implements Comparable<PhoenixJson> {
 
     @Override
     public boolean equals(Object obj) {
-        if (this == obj) return true;
-        if (obj == null) return false;
-        if (getClass() != obj.getClass()) return false;
-        PhoenixJson other = (PhoenixJson) obj;
-        return this.jsonAsString.equals(other.jsonAsString);
+        throw new EqualityNotSupportedException(PJson.INSTANCE);
     }
 
     /**
@@ -213,10 +211,7 @@ public class PhoenixJson implements Comparable<PhoenixJson> {
 
     @Override
     public int compareTo(PhoenixJson o) {
-        if (o == null) {
-            return 1;
-        }
-        return this.jsonAsString.compareTo(o.jsonAsString);
+        throw new EqualityNotSupportedException(PJson.INSTANCE);
     }
 
     private PhoenixJson getPhoenixJsonInternal(String[] paths) {

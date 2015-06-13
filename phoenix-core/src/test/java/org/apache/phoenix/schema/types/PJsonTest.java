@@ -28,11 +28,13 @@ import java.sql.SQLException;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.schema.ConstraintViolationException;
+import org.apache.phoenix.schema.EqualityNotSupportedException;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.json.PhoenixJson;
 import org.apache.phoenix.schema.json.PhoenixJsonTest;
 import org.apache.phoenix.util.ByteUtil;
+import org.junit.Assert;
 import org.junit.Test;
 
 /**
@@ -86,10 +88,10 @@ public class PJsonTest {
         assertEquals(PhoenixJsonTest.TEST_JSON_STR, phoenixJson.toString());
 
         Object object2 = PJson.INSTANCE.toObject(phoenixJson, PJson.INSTANCE);
-        assertEquals(phoenixJson, object2);
+        assertEquals(phoenixJson.toString(), object2.toString());
 
         PJson.INSTANCE.toObject(PhoenixJsonTest.TEST_JSON_STR, PVarchar.INSTANCE);
-        assertEquals(phoenixJson, object2);
+        assertEquals(phoenixJson.toString(), object2.toString());
 
         try {
             PJson.INSTANCE.toObject(PhoenixJsonTest.TEST_JSON_STR, PChar.INSTANCE);
@@ -99,7 +101,7 @@ public class PJsonTest {
         }
 
         PhoenixJson object4 = (PhoenixJson) PJson.INSTANCE.toObject(PhoenixJsonTest.TEST_JSON_STR);
-        assertEquals(phoenixJson, object4);
+        assertEquals(phoenixJson.toString(), object4.toString());
         
     }
 
@@ -133,13 +135,21 @@ public class PJsonTest {
 
         PhoenixJson phoenixJson2 = PhoenixJson.getInstance(PhoenixJsonTest.TEST_JSON_STR);
 
-        assertEquals(0, PJson.INSTANCE.compareTo(phoenixJson1, phoenixJson2, PJson.INSTANCE));
+        try{
+            assertEquals(0, PJson.INSTANCE.compareTo(phoenixJson1, phoenixJson2, PJson.INSTANCE));
+            Assert.fail("Comparision on PJson should have thrown ConstraintViolationException");
+        }catch(EqualityNotSupportedException x){
+            SQLException sqe = (SQLException) x.getCause();
+            assertEquals(SQLExceptionCode.NON_EQUALITY_COMPARISON.getErrorCode(),
+                sqe.getErrorCode());
+        }
 
         try {
             PJson.INSTANCE
                     .compareTo(phoenixJson1, PhoenixJsonTest.TEST_JSON_STR, PVarchar.INSTANCE);
-        } catch (ConstraintViolationException cve) {
-            TypeMismatchException e = (TypeMismatchException) cve.getCause();
+            Assert.fail("Comparision on PJson should have thrown ConstraintViolationException");
+        } catch (ConstraintViolationException x) {
+            TypeMismatchException e = (TypeMismatchException) x.getCause();
             assertEquals(SQLExceptionCode.TYPE_MISMATCH.getErrorCode(), e.getErrorCode());
         }
     }

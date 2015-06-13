@@ -21,13 +21,13 @@ import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.aggregator.Aggregator;
 import org.apache.phoenix.expression.aggregator.DistinctCountClientAggregator;
 import org.apache.phoenix.expression.aggregator.DistinctValueWithCountServerAggregator;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
+import org.apache.phoenix.schema.EqualityNotSupportedException;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.tuple.Tuple;
@@ -100,6 +100,11 @@ public class DistinctCountAggregateFunction extends DelegateConstantToCountAggre
     
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
+        for (Expression child : getChildren()) {
+            if (!child.getDataType().isEqualitySupported()) {
+                throw new EqualityNotSupportedException(child.getDataType());
+            }
+        }
         // TODO: optimize query plan of this to run scan serially for a limit of one row
         if (!super.evaluate(tuple, ptr)) {
             ptr.set(ZERO); // If evaluate returns false, then no rows were found, so result is 0

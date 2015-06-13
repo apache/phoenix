@@ -22,8 +22,8 @@ package org.apache.phoenix.end2end;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.sql.Connection;
@@ -37,6 +37,7 @@ import java.util.Properties;
 import java.util.Set;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.schema.EqualityNotSupportedException;
 import org.apache.phoenix.schema.json.PhoenixJson;
 import org.apache.phoenix.schema.types.PJson;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -240,10 +241,11 @@ public class PhoenixJsonIT extends BaseHBaseManagedTimeIT {
         Connection conn = getConnection();
         String json = null;
         String pk = "valueOne";
-        String selectQuery = "SELECT col1 FROM testJson WHERE pk = 'valueOne' and col1 is NULL";
         try {
             createTableAndUpsertRecord(json, pk, conn);
 
+            /*test is null*/
+            String selectQuery = "SELECT col1 FROM testJson WHERE pk = 'valueOne' and col1 is NULL";
             PreparedStatement stmt = conn.prepareStatement(selectQuery);
             ResultSet rs = stmt.executeQuery();
             assertTrue(rs.next());
@@ -254,7 +256,20 @@ public class PhoenixJsonIT extends BaseHBaseManagedTimeIT {
             assertEquals("Json data read from DB is not as expected for query: <" + selectQuery
                     + ">", PhoenixJson.getInstance(json), rs.getObject(1, PhoenixJson.class));
             assertFalse(rs.next());
-
+            
+            /*test is not null*/
+            json = "[1,2,3]";
+            pk = "valueTwo";
+            upsertRecord(json, pk, conn);
+            selectQuery = "SELECT col1 FROM testJson WHERE col1 is not NULL";
+            stmt = conn.prepareStatement(selectQuery);
+            rs = stmt.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(PhoenixJson.class.getName(), rs.getMetaData().getColumnClassName(1));
+            assertEquals("Json data read from DB is not as expected for query: <" + selectQuery
+                    + ">", json, rs.getString(1));
+            assertFalse(rs.next());
+            
         } finally {
             conn.close();
         }
@@ -274,17 +289,41 @@ public class PhoenixJsonIT extends BaseHBaseManagedTimeIT {
             }
 
             PreparedStatement stmt = conn.prepareStatement(selectQuery);
-            ResultSet rs = stmt.executeQuery();
-            assertTrue(rs.next());
-            assertEquals("count distinct for Json data is not as expected for query: <"
-                    + selectQuery + ">", countDistinct, rs.getInt(1));
-            assertFalse(rs.next());
-
+            stmt.executeQuery();
+        } catch (SQLException sqe) {
+            assertEquals(SQLExceptionCode.NON_EQUALITY_COMPARISON.getErrorCode(),
+                sqe.getErrorCode());
+           
         } finally {
             conn.close();
         }
     }
 
+    @Test
+    public void testDistinct() throws Exception {
+        final int countDistinct = 11;
+        Connection conn = getConnection();
+        String json = null;
+        String pk = "valueOne";
+        String selectQuery = "SELECT DISTINCT(col1)  FROM testJson";
+        try {
+            createTableAndUpsertRecord(json, pk, conn);
+            for (int i = 0; i < countDistinct; i++) {
+                upsertRecord("[" + i + "]", String.valueOf(i), conn);
+            }
+
+            PreparedStatement stmt = conn.prepareStatement(selectQuery);
+            stmt.executeQuery();
+        } catch (SQLException sqe) {
+            assertEquals(SQLExceptionCode.NON_EQUALITY_COMPARISON.getErrorCode(),
+                sqe.getErrorCode());
+           
+        } finally {
+            conn.close();
+        }
+    }
+
+    
     @Test
     public void testJsonColumnInWhereClause() throws Exception {
         Connection conn = getConnection();
@@ -295,15 +334,52 @@ public class PhoenixJsonIT extends BaseHBaseManagedTimeIT {
             createTableAndUpsertRecord(json, pk, conn);
 
             PreparedStatement stmt = conn.prepareStatement(selectQuery);
-            ResultSet rs = stmt.executeQuery();
-            assertTrue(rs.next());
-            assertEquals(PhoenixJson.class.getName(), rs.getMetaData().getColumnClassName(1));
-            assertEquals("Json data read from DB is not as expected for query: <" + selectQuery
-                    + ">", json, rs.getString(1));
+            stmt.executeQuery();
+            fail("'=' operator should not be allowed with ");
+        } catch (SQLException sqe) {
+            assertEquals(SQLExceptionCode.NON_EQUALITY_COMPARISON.getErrorCode(),
+                sqe.getErrorCode());
+           
+        } finally {
+            conn.close();
+        }
+    }
+    
+    @Test
+    public void testJsonGroupByColumn() throws Exception {
+        Connection conn = getConnection();
+        String json = "[1]";
+        String pk = "valueOne";
+        String selectQuery = "SELECT col1 FROM testJson group by col1";
+        try {
+            createTableAndUpsertRecord(json, pk, conn);
 
-            assertEquals("Json data read from DB is not as expected for query: <" + selectQuery
-                    + ">", PhoenixJson.getInstance(json), rs.getObject(1, PhoenixJson.class));
-            assertFalse(rs.next());
+            PreparedStatement stmt = conn.prepareStatement(selectQuery);
+            stmt.executeQuery();
+        } catch (SQLException sqe) {
+            assertEquals(SQLExceptionCode.NON_EQUALITY_COMPARISON.getErrorCode(),
+                sqe.getErrorCode());
+           
+        } finally {
+            conn.close();
+        }
+    }
+    
+    @Test
+    public void testJsonColumnInWhereClauseOfSubQuery() throws Exception {
+        Connection conn = getConnection();
+        String json = "[1]";
+        String pk = "valueOne";
+        String selectQuery =
+                "SELECT col1 FROM testJson WHERE col1 in (select col1 from testJson where col1='[1]')";
+        try {
+            createTableAndUpsertRecord(json, pk, conn);
+
+            PreparedStatement stmt = conn.prepareStatement(selectQuery);
+            stmt.executeQuery();
+        } catch (SQLException sqe) {
+            assertEquals(SQLExceptionCode.NON_EQUALITY_COMPARISON.getErrorCode(),
+                sqe.getErrorCode());
 
         } finally {
             conn.close();
@@ -359,7 +435,7 @@ public class PhoenixJsonIT extends BaseHBaseManagedTimeIT {
 
     private void createTableAndUpsertRecord(String json, String pk, Connection conn) throws SQLException {
         String ddl =
-                "CREATE TABLE testJson" + "  (pk VARCHAR NOT NULL PRIMARY KEY, " + "col1 json)";
+                "CREATE TABLE testJson" + " (pk VARCHAR NOT NULL PRIMARY KEY, " + "col1 json)";
         createTestTable(getUrl(), ddl);
 
         upsertRecord(json, pk, conn);

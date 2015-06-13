@@ -307,6 +307,21 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
     return getClass() == o.getClass();
   }
 
+    /**
+     * @return true if {@link PDataType} can be declared as primary key otherwise false.
+     */
+    public boolean canBePrimaryKey() {
+        return true;
+    }
+
+    /**
+     * @return true if {@link PDataType} supports equality operators (=,!=,<,>,<=,>=) otherwise
+     *         false.
+     */
+    public boolean isEqualitySupported() {
+        return true;
+    }
+  
   /**
    * @return true when {@code lhs} equals any of {@code rhs}.
    */

@@ -134,6 +134,13 @@ public class ColumnDef {
          if(this.isArray) {
              this.dataType = localType;
          }
+         if (this.dataType != null && !this.dataType.canBePrimaryKey() && isPK) {
+                throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_PRIMARY_KEY_CONSTRAINT)
+                        .setColumnName(columnDefName.getColumnName())
+                        .setMessage(
+                            "," + this.dataType.toString() + " is not supported as primary key,")
+                        .build().buildException();
+         }
          this.expressionStr = expressionStr;
      } catch (SQLException e) {
          throw new ParseException(e);

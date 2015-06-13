@@ -23,6 +23,7 @@ import java.sql.Types;
 import java.text.Format;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.phoenix.schema.EqualityNotSupportedException;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.json.PhoenixJson;
@@ -50,6 +51,16 @@ public class PJson extends PDataType<String> {
 
     PJson() {
         super("JSON", Types.OTHER, PhoenixJson.class, null, 48);
+    }
+
+    @Override
+    public boolean canBePrimaryKey() {
+        return false;
+    }
+
+    @Override
+    public boolean isEqualitySupported() {
+        return false;
     }
 
     @Override
@@ -138,9 +149,7 @@ public class PJson extends PDataType<String> {
         if (PJson.INSTANCE != rhsType) {
             throwConstraintViolationException(rhsType, this);
         }
-        PhoenixJson phoenixJsonLHS = (PhoenixJson) lhs;
-        PhoenixJson phoenixJsonRHS = (PhoenixJson) rhs;
-        return phoenixJsonLHS.compareTo(phoenixJsonRHS);
+        throw new EqualityNotSupportedException(PJson.INSTANCE);
     }
 
     @Override

@@ -26,6 +26,8 @@ import java.sql.SQLException;
 import java.util.Arrays;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.schema.ConstraintViolationException;
+import org.apache.phoenix.schema.EqualityNotSupportedException;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -181,20 +183,12 @@ public class PhoenixJsonTest {
     public void compareTo() throws Exception {
         PhoenixJson phoenixJson1 = PhoenixJson.getInstance(TEST_JSON_STR);
 
-        assertEquals("for same object compareTo() is not as expected.", 0,
-            phoenixJson1.compareTo(phoenixJson1));
-
-        PhoenixJson phoenixJson2 = PhoenixJson.getInstance(TEST_JSON_STR);
-
-        assertEquals("for same json data compareTo() is not as expected.", 0,
-            phoenixJson1.compareTo(phoenixJson2));
-
-        // TODO : this should return 0 after normalization of Json String representation.
-        phoenixJson1 = PhoenixJson.getInstance("{\"k1\":1,\"k2\":2}");
-
-        phoenixJson2 = PhoenixJson.getInstance("{\"k2\":2,\"k1\":1}");
-
-        Assert.assertNotEquals("compareTo() is not as expected.", 0,
-            phoenixJson1.compareTo(phoenixJson2));
+       try{
+        phoenixJson1.compareTo(phoenixJson1);
+       }catch(EqualityNotSupportedException x){
+           SQLException sqe =(SQLException)x.getCause();
+           assertEquals(SQLExceptionCode.NON_EQUALITY_COMPARISON.getErrorCode(), sqe.getErrorCode());
+       }
+       
     }
 }
