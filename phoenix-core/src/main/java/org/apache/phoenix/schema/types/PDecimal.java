@@ -421,4 +421,15 @@ public class PDecimal extends PRealNumber<BigDecimal> {
         }
         return ((signByte & 0x80) == 0) ? -1 : 1;
     }
+
+    @Override
+    public void abs(byte[] bytes, int offset, int length, SortOrder sortOrder,
+            ImmutableBytesWritable outPtr) {
+        if (sortOrder == SortOrder.DESC) {
+            bytes = SortOrder.invert(bytes, offset, new byte[length], 0, length);
+            offset = 0;
+        }
+        BigDecimal bigDecimal = toBigDecimal(bytes, offset, length);
+        outPtr.set(toBytes(bigDecimal.abs()));
+    }
 }
