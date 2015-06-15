@@ -61,7 +61,7 @@ import org.junit.experimental.categories.Category;
 import com.google.common.collect.Maps;
 
 @Category(NeedsOwnMiniClusterTest.class)
-public class DropIndexDuringUpsertIT extends BaseTest {
+public abstract class DropIndexDuringUpsertIT extends BaseTest {
     private static final int NUM_SLAVES = 4;
     private static String url;
     private static PhoenixTestDriver driver;

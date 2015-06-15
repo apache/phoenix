@@ -80,6 +80,8 @@ public class StatisticsUtil {
         get.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH_BYTES);
         get.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_BYTES);
         get.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_ROW_COUNT_BYTES);
+        get.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
+            PhoenixDatabaseMetaData.MIN_KEY_BYTES);
         return statsHTable.get(get);
     }
     

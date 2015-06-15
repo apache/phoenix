@@ -33,7 +33,7 @@ import org.apache.phoenix.schema.tuple.Tuple;
         @FunctionParseNode.Argument(allowedTypes = {PBinaryArray.class,
                 PVarbinaryArray.class}),
         @FunctionParseNode.Argument(allowedTypes = {PVarbinary.class}, defaultValue = "null")})
-public class ArrayAppendFunction extends ScalarFunction {
+public class ArrayAppendFunction extends ArrayModifierFunction {
 
     public static final String NAME = "ARRAY_APPEND";
 
@@ -42,21 +42,6 @@ public class ArrayAppendFunction extends ScalarFunction {
 
     public ArrayAppendFunction(List<Expression> children) throws TypeMismatchException {
         super(children);
-
-        if (getDataType() != null && !(getElementExpr() instanceof LiteralExpression && getElementExpr().isNullable()) && !getElementDataType().isCoercibleTo(getBaseType())) {
-            throw TypeMismatchException.newException(getBaseType(), getElementDataType());
-        }
-
-        // If the base type of an element is fixed width, make sure the element being appended will fit
-        if (getDataType() != null && getElementExpr().getDataType().getByteSize() == null && getElementDataType() != null && getBaseType().isFixedWidth() && getElementDataType().isFixedWidth() && getArrayExpr().getMaxLength() != null &&
-                getElementExpr().getMaxLength() != null && getElementExpr().getMaxLength() > getArrayExpr().getMaxLength()) {
-            throw new DataExceedsCapacityException("");
-        }
-        // If the base type has a scale, make sure the element being appended has a scale less than or equal to it
-        if (getDataType() != null && getArrayExpr().getScale() != null && getElementExpr().getScale() != null &&
-                getElementExpr().getScale() > getArrayExpr().getScale()) {
-            throw new DataExceedsCapacityException(getBaseType(), getArrayExpr().getMaxLength(), getArrayExpr().getScale());
-        }
     }
 
     @Override
@@ -78,12 +63,8 @@ public class ArrayAppendFunction extends ScalarFunction {
             return true;
         }
 
-        if (!getBaseType().isSizeCompatible(ptr, null, getElementDataType(), getElementExpr().getMaxLength(), getElementExpr().getScale(), getArrayExpr().getMaxLength(), getArrayExpr().getScale())) {
-            throw new DataExceedsCapacityException("");
-        }
-
-        getBaseType().coerceBytes(ptr, null, getElementDataType(), getElementExpr().getMaxLength(), getElementExpr().getScale(), getElementExpr().getSortOrder(), getArrayExpr().getMaxLength(), getArrayExpr().getScale(), getArrayExpr().getSortOrder());
-
+        checkSizeCompatibility(ptr);
+        coerceBytes(ptr);
         return PArrayDataType.appendItemToArray(ptr, length, offset, arrayBytes, getBaseType(), arrayLength, getMaxLength(), getArrayExpr().getSortOrder());
     }
 
@@ -114,14 +95,4 @@ public class ArrayAppendFunction extends ScalarFunction {
     public Expression getElementExpr() {
         return getChildren().get(1);
     }
-
-    public PDataType getBaseType() {
-        return PDataType.arrayBaseType(getArrayExpr().getDataType());
-    }
-
-    public PDataType getElementDataType() {
-        return getElementExpr().getDataType();
-    }
-
-
 }

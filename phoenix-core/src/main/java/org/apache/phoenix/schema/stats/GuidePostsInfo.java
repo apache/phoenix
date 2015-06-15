@@ -85,7 +85,7 @@ public class GuidePostsInfo {
     public void incrementRowCount() {
         this.rowCount++;
     }
-    
+
     /**
      * Combines the GuidePosts per region into one.
      * @param oldInfo
@@ -124,7 +124,6 @@ public class GuidePostsInfo {
      * reached while collecting stats.
      * @param row
      * @param byteCount
-     * @param rowCount
      * @return
      */
     public boolean addGuidePost(byte[] row, long byteCount) {
@@ -145,9 +144,11 @@ public class GuidePostsInfo {
      * @param buf
      * @param offset
      * @param l
-     * @return
+     * @param rowCount
+     * @return the GuidePostsInfo instance formed by deserializing the byte[]
      */
-    public static GuidePostsInfo deserializeGuidePostsInfo(byte[] buf, int offset, int l, long rowCount) {
+    public static GuidePostsInfo deserializeGuidePostsInfo(byte[] buf, int offset, int l,
+            long rowCount) {
         try {
             ByteArrayInputStream bytesIn = new ByteArrayInputStream(buf, offset, l);
             try {

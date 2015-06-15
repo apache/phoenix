@@ -40,14 +40,14 @@ public class GuavaSplitter implements AbstractBaseSplitter {
     }
 
     @Override
-    public boolean split(ImmutableBytesWritable srcPtr, ImmutableBytesWritable outPtr) {
+    public boolean split(ImmutableBytesWritable srcPtr) {
         String sourceStr = (String) PVarchar.INSTANCE.toObject(srcPtr);
         if (sourceStr == null) { // sourceStr evaluated to null
-            outPtr.set(ByteUtil.EMPTY_BYTE_ARRAY);
+            srcPtr.set(ByteUtil.EMPTY_BYTE_ARRAY);
         } else {
             List<String> splitStrings = Lists.newArrayList(splitter.split(sourceStr));
             PhoenixArray splitArray = new PhoenixArray(PVarchar.INSTANCE, splitStrings.toArray());
-            outPtr.set(PVarcharArray.INSTANCE.toBytes(splitArray));
+            srcPtr.set(PVarcharArray.INSTANCE.toBytes(splitArray));
         }
         return true;
     }

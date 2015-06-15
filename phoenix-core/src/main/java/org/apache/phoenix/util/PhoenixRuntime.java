@@ -105,6 +105,11 @@ public class PhoenixRuntime {
      * Root for the JDBC URL that the Phoenix accepts accepts.
      */
     public final static String JDBC_PROTOCOL = "jdbc:phoenix";
+    /**
+     * Root for the JDBC URL used by the thin driver. Duplicated here to avoid dependencies
+     * between modules.
+     */
+    public final static String JDBC_THIN_PROTOCOL = "jdbc:phoenix:thin";
     public final static char JDBC_PROTOCOL_TERMINATOR = ';';
     public final static char JDBC_PROTOCOL_SEPARATOR = ':';
 
@@ -304,11 +309,17 @@ public class PhoenixRuntime {
         };
     }
 
+    /**
+     * 
+     * @param conn
+     * @param name requires a pre-normalized table name or a pre-normalized schema and table name
+     * @return
+     * @throws SQLException
+     */
     public static PTable getTable(Connection conn, String name) throws SQLException {
         PTable table = null;
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
         try {
-            name = SchemaUtil.normalizeIdentifier(name);
             table = pconn.getMetaDataCache().getTable(new PTableKey(pconn.getTenantId(), name));
         } catch (TableNotFoundException e) {
             String schemaName = SchemaUtil.getSchemaNameFromFullName(name);

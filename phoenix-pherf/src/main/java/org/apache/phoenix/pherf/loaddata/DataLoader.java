@@ -53,18 +53,21 @@ import org.apache.phoenix.pherf.util.PhoenixUtil;
 
 public class DataLoader {
     private static final Logger logger = LoggerFactory.getLogger(DataLoader.class);
-    private final PhoenixUtil pUtil = new PhoenixUtil();
+    private final PhoenixUtil pUtil;
     private final XMLConfigParser parser;
     private final RulesApplier rulesApplier;
     private final ResultUtil resultUtil;
     private final ExecutorService pool;
-    private final Properties properties;
 
     private final int threadPoolSize;
     private final int batchSize;
 
     public DataLoader(XMLConfigParser parser) throws Exception {
-        this(new ResourceList().getProperties(), parser);
+        this(new PhoenixUtil(), parser);
+    }
+
+    public DataLoader(PhoenixUtil phoenixUtil, XMLConfigParser parser) throws Exception{
+        this(phoenixUtil, PherfConstants.create().getProperties(PherfConstants.PHERF_PROPERTIES), parser);
     }
 
     /**
@@ -73,10 +76,10 @@ public class DataLoader {
      * @param parser
      * @throws Exception
      */
-    public DataLoader(Properties properties, XMLConfigParser parser) throws Exception {
+    public DataLoader(PhoenixUtil phoenixUtil, Properties properties, XMLConfigParser parser) throws Exception {
+        this.pUtil = phoenixUtil;
         this.parser = parser;
-        this.properties = properties;
-        this.rulesApplier = new RulesApplier(this.parser);
+        this.rulesApplier = new RulesApplier(parser);
         this.resultUtil = new ResultUtil();
         int size = Integer.parseInt(properties.getProperty("pherf.default.dataloader.threadpool"));
         this.threadPoolSize = (size == 0) ? Runtime.getRuntime().availableProcessors() : size;
@@ -87,7 +90,6 @@ public class DataLoader {
 
     public void execute() throws Exception {
         try {
-            DataModel model = getParser().getDataModels().get(0);
             DataLoadTimeSummary dataLoadTimeSummary = new DataLoadTimeSummary();
             DataLoadThreadTime dataLoadThreadTime = new DataLoadThreadTime();
 
@@ -152,41 +154,6 @@ public class DataLoader {
     public void updatePhoenixStats(String tableName) throws Exception {
         logger.info("Updating stats for " + tableName);
         pUtil.executeStatement("UPDATE STATISTICS " + tableName);
-    }
-
-    public void printTableColumns(Scenario scenario) throws Exception {
-        Connection connection = null;
-        try {
-            connection = pUtil.getConnection();
-            List<Column> columnList = pUtil.getColumnsFromPhoenix(
-                    scenario.getSchemaName(),
-                    scenario.getTableNameWithoutSchemaName(), connection);
-
-            logger.debug("\n\nColumns from metadata:");
-            for (Column column : columnList) {
-                logger.debug("\nColumn name: [" + column.getName()
-                        + "]; type: [" + column.getType() + "]; length: ["
-                        + column.getLength() + "]");
-            }
-
-            if (null != scenario.getDataOverride()) {
-                logger.debug("\n\nColumns from override:");
-                for (Column column : scenario.getDataOverride().getColumn()) {
-                    logger.debug("\nColumn name: [" + column.getName() + "]; DataSequence: [" + column.getDataSequence()
-                            + "]; length: [" + column.getLength() + "]");
-                }
-            }
-
-        } finally {
-            if (connection != null) {
-                try {
-                    connection.close();
-                } catch (SQLException e) {
-                    // Swallow since we are closing anyway
-                    e.printStackTrace();
-                }
-            }
-        }
     }
 
     public Future<Info> upsertData(final Scenario scenario,

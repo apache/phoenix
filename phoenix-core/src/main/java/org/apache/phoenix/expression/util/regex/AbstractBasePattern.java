@@ -21,13 +21,12 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 
 public abstract class AbstractBasePattern {
 
-    public abstract void matches(ImmutableBytesWritable srcPtr, ImmutableBytesWritable outPtr);
+    public abstract void matches(ImmutableBytesWritable srcPtr);
 
-    public abstract void replaceAll(ImmutableBytesWritable srcPtr,
-            ImmutableBytesWritable replacePtr, ImmutableBytesWritable outPtr);
+    public abstract void replaceAll(ImmutableBytesWritable srcPtr, byte[] rStrBytes,
+            int rStrOffset, int rStrLen);
 
-    public abstract boolean substr(ImmutableBytesWritable srcPtr, int offsetInStr,
-            ImmutableBytesWritable outPtr);
+    public abstract void substr(ImmutableBytesWritable srcPtr, int offsetInStr);
 
     public abstract String pattern();
 }

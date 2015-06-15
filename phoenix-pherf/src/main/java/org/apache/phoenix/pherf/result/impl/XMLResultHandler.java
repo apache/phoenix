@@ -30,6 +30,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Properties;
 
 public class XMLResultHandler implements ResultHandler {
     private final String resultFileName;
@@ -41,8 +42,11 @@ public class XMLResultHandler implements ResultHandler {
 
     public XMLResultHandler(String resultFileName, ResultFileDetails resultFileDetails, boolean generateFullFileName) {
         ResultUtil util = new ResultUtil();
+        PherfConstants constants = PherfConstants.create();
+        String resultDir = constants.getProperty("pherf.default.results.dir");
+
         this.resultFileName = generateFullFileName ?
-                PherfConstants.RESULT_DIR + PherfConstants.PATH_SEPARATOR
+                resultDir + PherfConstants.PATH_SEPARATOR
                         + PherfConstants.RESULT_PREFIX
                         + resultFileName + util.getSuffix()
                         + resultFileDetails.getExtension().toString()

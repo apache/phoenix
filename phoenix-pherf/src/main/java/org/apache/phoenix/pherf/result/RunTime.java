@@ -30,7 +30,12 @@ public class RunTime implements Comparator<RunTime>, Comparable<RunTime> {
 	private Long resultRowCount;
 	private String explainPlan;
 
-	public RunTime(Integer elapsedDurationInMs) {
+    @SuppressWarnings("unused")
+    public RunTime() {
+    }
+
+    @SuppressWarnings("unused")
+    public RunTime(Integer elapsedDurationInMs) {
 		this(null, elapsedDurationInMs);
 	}
 	
@@ -53,15 +58,13 @@ public class RunTime implements Comparator<RunTime>, Comparable<RunTime> {
 		this.message = message;
 		this.explainPlan = explainPlan;
 	}
-	
-	public RunTime() {
-	}
-	
+
 	@XmlAttribute()
 	public Date getStartTime() {
 		return startTime;
 	}
 
+    @SuppressWarnings("unused")
 	public void setStartTime(Date startTime) {
 		this.startTime = startTime;
 	}
@@ -71,7 +74,8 @@ public class RunTime implements Comparator<RunTime>, Comparable<RunTime> {
 		return elapsedDurationInMs;
 	}
 
-	public void setElapsedDurationInMs(Integer elapsedDurationInMs) {
+    @SuppressWarnings("unused")
+    public void setElapsedDurationInMs(Integer elapsedDurationInMs) {
 		this.elapsedDurationInMs = elapsedDurationInMs;
 	}
 
@@ -90,7 +94,8 @@ public class RunTime implements Comparator<RunTime>, Comparable<RunTime> {
 		return message;
 	}
 
-	public void setMessage(String message) {
+    @SuppressWarnings("unused")
+    public void setMessage(String message) {
 		this.message = message;
 	}
 	
@@ -99,7 +104,8 @@ public class RunTime implements Comparator<RunTime>, Comparable<RunTime> {
 		return explainPlan;
 	}
 
-	public void setExplainPlan(String explainPlan) {
+    @SuppressWarnings("unused")
+    public void setExplainPlan(String explainPlan) {
 		this.explainPlan = explainPlan;
 	}
 
@@ -108,6 +114,7 @@ public class RunTime implements Comparator<RunTime>, Comparable<RunTime> {
 		return resultRowCount;
 	}
 
+    @SuppressWarnings("unused")
 	public void setResultRowCount(Long resultRowCount) {
 		this.resultRowCount = resultRowCount;
 	}

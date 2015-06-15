@@ -44,6 +44,7 @@
         <include>org.cloudera.htrace:htrace-core</include>
         <include>io.netty:netty</include>
         <include>commons-codec:commons-codec</include>
+        <include>org.apache.calcite:calcite-avatica*</include>
       </includes>
     </dependencySet>
     <!-- Separate dependency set to just pull in the jackson stuff since its test 

@@ -60,11 +60,10 @@ public class JONIPattern extends AbstractBasePattern implements AbstractBaseSpli
     }
 
     @Override
-    public void matches(ImmutableBytesWritable srcPtr, ImmutableBytesWritable outPtr) {
+    public void matches(ImmutableBytesWritable srcPtr) {
         Preconditions.checkNotNull(srcPtr);
-        Preconditions.checkNotNull(outPtr);
         boolean ret = matches(srcPtr.get(), srcPtr.getOffset(), srcPtr.getLength());
-        outPtr.set(ret ? PDataType.TRUE_BYTES : PDataType.FALSE_BYTES);
+        srcPtr.set(ret ? PDataType.TRUE_BYTES : PDataType.FALSE_BYTES);
     }
 
     private boolean matches(byte[] bytes, int offset, int len) {
@@ -80,15 +79,14 @@ public class JONIPattern extends AbstractBasePattern implements AbstractBaseSpli
     }
 
     @Override
-    public void replaceAll(ImmutableBytesWritable srcPtr, ImmutableBytesWritable replacePtr,
-            ImmutableBytesWritable replacedPtr) {
+    public void replaceAll(ImmutableBytesWritable srcPtr, byte[] rStrBytes, int rStrOffset,
+            int rStrLen) {
         Preconditions.checkNotNull(srcPtr);
-        Preconditions.checkNotNull(replacePtr);
-        Preconditions.checkNotNull(replacedPtr);
+        Preconditions.checkNotNull(rStrBytes);
         byte[] replacedBytes =
-                replaceAll(srcPtr.get(), srcPtr.getOffset(), srcPtr.getLength(), replacePtr.get(),
-                    replacePtr.getOffset(), replacePtr.getLength());
-        replacedPtr.set(replacedBytes);
+                replaceAll(srcPtr.get(), srcPtr.getOffset(), srcPtr.getLength(), rStrBytes,
+                    rStrOffset, rStrLen);
+        srcPtr.set(replacedBytes);
     }
 
     private byte[] replaceAll(byte[] srcBytes, int srcOffset, int srcLen, byte[] replaceBytes,
@@ -130,15 +128,15 @@ public class JONIPattern extends AbstractBasePattern implements AbstractBaseSpli
     }
 
     @Override
-    public boolean substr(ImmutableBytesWritable srcPtr, int offsetInStr,
-            ImmutableBytesWritable outPtr) {
-        Preconditions.checkNotNull(srcPtr);
-        Preconditions.checkNotNull(outPtr);
-        int offsetInBytes = StringUtil.calculateUTF8Offset(srcPtr.get(), srcPtr.getOffset(),
-            srcPtr.getLength(), SortOrder.ASC, offsetInStr);
-        if (offsetInBytes < 0) return false;
-        substr(srcPtr.get(), offsetInBytes, srcPtr.getOffset() + srcPtr.getLength(), outPtr);
-        return true;
+    public void substr(ImmutableBytesWritable ptr, int offsetInStr) {
+        Preconditions.checkNotNull(ptr);
+        int offsetInBytes = StringUtil.calculateUTF8Offset(ptr.get(), ptr.getOffset(),
+                ptr.getLength(), SortOrder.ASC, offsetInStr);
+        if (offsetInBytes < 0) {
+            ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
+        } else {
+            substr(ptr.get(), offsetInBytes, ptr.getOffset() + ptr.getLength(), ptr);
+        }
     }
 
     private boolean substr(byte[] srcBytes, int offset, int range, ImmutableBytesWritable outPtr) {
@@ -154,8 +152,8 @@ public class JONIPattern extends AbstractBasePattern implements AbstractBaseSpli
     }
 
     @Override
-    public boolean split(ImmutableBytesWritable srcPtr, ImmutableBytesWritable outPtr) {
-        return split(srcPtr.get(), srcPtr.getOffset(), srcPtr.getLength(), outPtr);
+    public boolean split(ImmutableBytesWritable srcPtr) {
+        return split(srcPtr.get(), srcPtr.getOffset(), srcPtr.getLength(), srcPtr);
     }
 
     private boolean

@@ -39,6 +39,7 @@ import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.util.ByteStringer;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.generated.PGuidePostsProtos;
 import org.apache.phoenix.coprocessor.generated.PGuidePostsProtos.PGuidePosts;
@@ -71,7 +72,6 @@ import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.protobuf.HBaseZeroCopyByteString;
 import com.sun.istack.NotNull;
 
 /**
@@ -88,8 +88,8 @@ public class PTableImpl implements PTable {
 
     private PTableKey key;
     private PName name;
-    private PName schemaName;
-    private PName tableName;
+    private PName schemaName = PName.EMPTY_NAME;
+    private PName tableName = PName.EMPTY_NAME;
     private PName tenantId;
     private PTableType type;
     private PIndexState state;
@@ -718,10 +718,10 @@ public class PTableImpl implements PTable {
         @Override
         public void delete() {
             newMutations();
-            // FIXME: the version of the Delete constructor without the lock args was introduced
-            // in 0.94.4, thus if we try to use it here we can no longer use the 0.94.2 version
-            // of the client.
-            Delete delete = new Delete(key,ts);
+            Delete delete = new Delete(key);
+            for (PColumnFamily colFamily : families) {
+            	delete.addFamily(colFamily.getName().getBytes(), ts);
+            }
             deleteRow = delete;
             // No need to write to the WAL for indexes
             if (PTableImpl.this.getType() == PTableType.INDEX) {
@@ -935,7 +935,9 @@ public class PTableImpl implements PTable {
             }
             long guidePostsByteCount = pGuidePosts.getByteCount();
             long rowCount = pGuidePosts.getRowCount();
-            GuidePostsInfo info = new GuidePostsInfo(guidePostsByteCount, value, rowCount);
+            // TODO : Not exposing MIN/MAX key outside to client 
+            GuidePostsInfo info =
+                    new GuidePostsInfo(guidePostsByteCount, value, rowCount);
             tableGuidePosts.put(pTableStatsProto.getKey().toByteArray(), info);
       }
       PTableStats stats = new PTableStatsImpl(tableGuidePosts, table.getStatsTimeStamp());
@@ -982,10 +984,10 @@ public class PTableImpl implements PTable {
     public static PTableProtos.PTable toProto(PTable table) {
       PTableProtos.PTable.Builder builder = PTableProtos.PTable.newBuilder();
       if(table.getTenantId() != null){
-        builder.setTenantId(HBaseZeroCopyByteString.wrap(table.getTenantId().getBytes()));
+        builder.setTenantId(ByteStringer.wrap(table.getTenantId().getBytes()));
       }
-      builder.setSchemaNameBytes(HBaseZeroCopyByteString.wrap(table.getSchemaName().getBytes()));
-      builder.setTableNameBytes(HBaseZeroCopyByteString.wrap(table.getTableName().getBytes()));
+      builder.setSchemaNameBytes(ByteStringer.wrap(table.getSchemaName().getBytes()));
+      builder.setTableNameBytes(ByteStringer.wrap(table.getTableName().getBytes()));
       builder.setTableType(ProtobufUtil.toPTableTypeProto(table.getType()));
       if (table.getType() == PTableType.INDEX) {
     	if(table.getIndexState() != null) {
@@ -995,14 +997,14 @@ public class PTableImpl implements PTable {
     	  builder.setViewIndexId(table.getViewIndexId());
     	}
     	if(table.getIndexType() != null) {
-    	    builder.setIndexType(HBaseZeroCopyByteString.wrap(new byte[]{table.getIndexType().getSerializedValue()}));
+    	    builder.setIndexType(ByteStringer.wrap(new byte[]{table.getIndexType().getSerializedValue()}));
     	}
       }
       builder.setSequenceNumber(table.getSequenceNumber());
       builder.setTimeStamp(table.getTimeStamp());
       PName tmp = table.getPKName();
       if (tmp != null) {
-        builder.setPkNameBytes(HBaseZeroCopyByteString.wrap(tmp.getBytes()));
+        builder.setPkNameBytes(ByteStringer.wrap(tmp.getBytes()));
       }
       Integer bucketNum = table.getBucketNum();
       int offset = 0;
@@ -1027,14 +1029,14 @@ public class PTableImpl implements PTable {
 
       for (Map.Entry<byte[], GuidePostsInfo> entry : table.getTableStats().getGuidePosts().entrySet()) {
          PTableProtos.PTableStats.Builder statsBuilder = PTableProtos.PTableStats.newBuilder();
-         statsBuilder.setKey(HBaseZeroCopyByteString.wrap(entry.getKey()));
+         statsBuilder.setKey(ByteStringer.wrap(entry.getKey()));
          for (byte[] stat : entry.getValue().getGuidePosts()) {
-             statsBuilder.addValues(HBaseZeroCopyByteString.wrap(stat));
+             statsBuilder.addValues(ByteStringer.wrap(stat));
          }
          statsBuilder.setGuidePostsByteCount(entry.getValue().getByteCount());
          PGuidePostsProtos.PGuidePosts.Builder guidePstsBuilder = PGuidePostsProtos.PGuidePosts.newBuilder();
          for (byte[] stat : entry.getValue().getGuidePosts()) {
-             guidePstsBuilder.addGuidePosts(HBaseZeroCopyByteString.wrap(stat));
+             guidePstsBuilder.addGuidePosts(ByteStringer.wrap(stat));
          }
          guidePstsBuilder.setByteCount(entry.getValue().getByteCount());
          guidePstsBuilder.setRowCount(entry.getValue().getRowCount());
@@ -1044,21 +1046,21 @@ public class PTableImpl implements PTable {
       builder.setStatsTimeStamp(table.getTableStats().getTimestamp());
 
       if (table.getParentName() != null) {
-        builder.setDataTableNameBytes(HBaseZeroCopyByteString.wrap(table.getParentTableName().getBytes()));
+        builder.setDataTableNameBytes(ByteStringer.wrap(table.getParentTableName().getBytes()));
       }
       if (table.getDefaultFamilyName()!= null) {
-        builder.setDefaultFamilyName(HBaseZeroCopyByteString.wrap(table.getDefaultFamilyName().getBytes()));
+        builder.setDefaultFamilyName(ByteStringer.wrap(table.getDefaultFamilyName().getBytes()));
       }
       builder.setDisableWAL(table.isWALDisabled());
       builder.setMultiTenant(table.isMultiTenant());
       builder.setStoreNulls(table.getStoreNulls());
       if(table.getType() == PTableType.VIEW){
-        builder.setViewType(HBaseZeroCopyByteString.wrap(new byte[]{table.getViewType().getSerializedValue()}));
-        builder.setViewStatement(HBaseZeroCopyByteString.wrap(PVarchar.INSTANCE.toBytes(table.getViewStatement())));
+        builder.setViewType(ByteStringer.wrap(new byte[]{table.getViewType().getSerializedValue()}));
+        builder.setViewStatement(ByteStringer.wrap(PVarchar.INSTANCE.toBytes(table.getViewStatement())));
       }
       if(table.getType() == PTableType.VIEW || table.getViewIndexId() != null){
         for (int i = 0; i < table.getPhysicalNames().size(); i++) {
-          builder.addPhysicalNames(HBaseZeroCopyByteString.wrap(table.getPhysicalNames().get(i).getBytes()));
+          builder.addPhysicalNames(ByteStringer.wrap(table.getPhysicalNames().get(i).getBytes()));
         }
       }
 

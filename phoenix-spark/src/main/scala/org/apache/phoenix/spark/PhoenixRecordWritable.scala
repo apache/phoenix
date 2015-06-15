@@ -16,10 +16,11 @@ package org.apache.phoenix.spark
 import java.sql.{PreparedStatement, ResultSet}
 import org.apache.hadoop.mapreduce.lib.db.DBWritable
 import org.apache.phoenix.mapreduce.util.ColumnInfoToStringEncoderDecoder
-import org.apache.phoenix.schema.types.{PDate, PhoenixArray}
+import org.apache.phoenix.schema.types.{PDataType, PDate, PhoenixArray}
 import org.joda.time.DateTime
 import scala.collection.{immutable, mutable}
 import scala.collection.JavaConversions._
+
 
 class PhoenixRecordWritable(var encodedColumns: String) extends DBWritable {
   val upsertValues = mutable.ArrayBuffer[Any]()
@@ -44,13 +45,27 @@ class PhoenixRecordWritable(var encodedColumns: String) extends DBWritable {
     upsertValues.zip(columns).zipWithIndex.foreach {
       case ((v, c), i) => {
         if (v != null) {
+
           // Both Java and Joda dates used to work in 4.2.3, but now they must be java.sql.Date
+          // Can override any other types here as needed
           val (finalObj, finalType) = v match {
-            case dt: DateTime => (new java.sql.Date(dt.getMillis), PDate.INSTANCE.getSqlType)
-            case d: java.util.Date => (new java.sql.Date(d.getTime), PDate.INSTANCE.getSqlType)
-            case _ => (v, c.getSqlType)
+            case dt: DateTime => (new java.sql.Date(dt.getMillis), PDate.INSTANCE)
+            case d: java.util.Date => (new java.sql.Date(d.getTime), PDate.INSTANCE)
+            case _ => (v, c.getPDataType)
           }
-          statement.setObject(i + 1, finalObj, finalType)
+
+          // Save as array or object
+          finalObj match {
+            case obj: Array[AnyRef] => {
+              // Create a java.sql.Array, need to lookup the base sql type name
+              val sqlArray = statement.getConnection.createArrayOf(
+                PDataType.arrayBaseType(finalType).getSqlTypeName,
+                obj
+              )
+              statement.setArray(i + 1, sqlArray)
+            }
+            case _ => statement.setObject(i + 1, finalObj)
+          }
         } else {
           statement.setNull(i + 1, c.getSqlType)
         }

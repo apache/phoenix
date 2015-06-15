@@ -104,7 +104,7 @@ public class QueryMoreIT extends BaseHBaseManagedTimeIT {
         // assert query more for tenantId -> tenantIds[0]
         String tenantId = tenantIds[0];
         String cursorQueryId = "00TcursrqueryId";
-        String tableOrViewName = queryAgainstTenantSpecificView ? ("\"HISTORY_TABLE" + "_" + tenantId + "\"") : dataTableName;
+        String tableOrViewName = queryAgainstTenantSpecificView ? ("HISTORY_TABLE_" + tenantId) : dataTableName;
         
         assertEquals(numRowsPerTenant, upsertSelectRecordsInCursorTableForTenant(tableOrViewName, queryAgainstTenantSpecificView, tenantId, cursorQueryId));
         
@@ -265,7 +265,7 @@ public class QueryMoreIT extends BaseHBaseManagedTimeIT {
                 values[i] = rs.getObject(i + 1);
             }
             conn = getTenantSpecificConnection(tenantId);
-            pkIds.add(Base64.encodeBytes(PhoenixRuntime.encodeValues(conn, tableOrViewName, values, columns)));
+            pkIds.add(Base64.encodeBytes(PhoenixRuntime.encodeValues(conn, tableOrViewName.toUpperCase(), values, columns)));
         }
         return pkIds.toArray(new String[pkIds.size()]);
     }
@@ -283,7 +283,7 @@ public class QueryMoreIT extends BaseHBaseManagedTimeIT {
         PreparedStatement stmt = conn.prepareStatement(query);
         int bindCounter = 1;
         for (int i = 0; i < cursorIds.length; i++) {
-            Object[] pkParts = PhoenixRuntime.decodeValues(conn, tableName, Base64.decode(cursorIds[i]), columns);
+            Object[] pkParts = PhoenixRuntime.decodeValues(conn, tableName.toUpperCase(), Base64.decode(cursorIds[i]), columns);
             for (int j = 0; j < pkParts.length; j++) {
                 stmt.setObject(bindCounter++, pkParts[j]);
             }

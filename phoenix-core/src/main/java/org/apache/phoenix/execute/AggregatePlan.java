@@ -214,4 +214,9 @@ public class AggregatePlan extends BaseQueryPlan {
         }
         return resultScanner;
     }
+
+    @Override
+    public boolean useRoundRobinIterator() throws SQLException {
+        return false;
+    }
 }

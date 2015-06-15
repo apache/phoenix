@@ -24,8 +24,11 @@ import java.util.Collections;
 import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellComparator;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.HTableInterface;
@@ -33,12 +36,13 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.CoprocessorRpcChannel;
 import org.apache.hadoop.hbase.protobuf.ProtobufUtil;
 import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto.MutationType;
 import org.apache.hadoop.hbase.protobuf.generated.MultiRowMutationProtos.MultiRowMutationService;
 import org.apache.hadoop.hbase.protobuf.generated.MultiRowMutationProtos.MutateRowsRequest;
-import org.apache.hadoop.hbase.regionserver.HRegion;
+import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -84,6 +88,7 @@ public class StatisticsWriter implements Closeable {
     private final HTableInterface statsReaderTable;
     private final byte[] tableName;
     private final long clientTimeStamp;
+    private final ImmutableBytesWritable minKeyPtr = new ImmutableBytesWritable();
 
     private StatisticsWriter(HTableInterface statsReaderTable, HTableInterface statsWriterTable, String tableName, long clientTimeStamp) {
         this.statsReaderTable = statsReaderTable;
@@ -100,7 +105,7 @@ public class StatisticsWriter implements Closeable {
         statsWriterTable.close();
     }
 
-    public void splitStats(HRegion p, HRegion l, HRegion r, StatisticsCollector tracker, ImmutableBytesPtr cfKey,
+    public void splitStats(Region p, Region l, Region r, StatisticsCollector tracker, ImmutableBytesPtr cfKey,
             List<Mutation> mutations) throws IOException {
         if (tracker == null) { return; }
         boolean useMaxTimeStamp = clientTimeStamp == StatisticsCollector.NO_TIMESTAMP;
@@ -108,24 +113,33 @@ public class StatisticsWriter implements Closeable {
             mutations.add(getLastStatsUpdatedTimePut(clientTimeStamp));
         }
         long readTimeStamp = useMaxTimeStamp ? HConstants.LATEST_TIMESTAMP : clientTimeStamp;
-        Result result = StatisticsUtil.readRegionStatistics(statsReaderTable, tableName, cfKey, p.getRegionName(),
-                readTimeStamp);
+        Result result = StatisticsUtil.readRegionStatistics(statsReaderTable, tableName, cfKey, 
+                p.getRegionInfo().getRegionName(), readTimeStamp);
+        byte[] minKey = HConstants.EMPTY_BYTE_ARRAY;
         if (result != null && !result.isEmpty()) {
         	Cell cell = result.getColumnLatestCell(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_BYTES);
         	Cell rowCountCell = result.getColumnLatestCell(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_ROW_COUNT_BYTES);
+            Cell minKeyCell =
+                    result.getColumnLatestCell(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
+                        PhoenixDatabaseMetaData.MIN_KEY_BYTES);
             long rowCount = 0;
+            if (minKeyCell != null) {
+                minKey =
+                        ByteUtil.copyKeyBytesIfNecessary(new ImmutableBytesWritable(minKeyCell.getValueArray(),
+                                minKeyCell.getValueOffset(), minKeyCell.getValueLength()));
+            }
         	if (cell != null) {
                 long writeTimeStamp = useMaxTimeStamp ? cell.getTimestamp() : clientTimeStamp;
 
                 GuidePostsInfo guidePostsRegionInfo = GuidePostsInfo.deserializeGuidePostsInfo(cell.getValueArray(),
                         cell.getValueOffset(), cell.getValueLength(), rowCount);
-                byte[] pPrefix = StatisticsUtil.getRowKey(tableName, cfKey, p.getRegionName());
+                byte[] pPrefix = StatisticsUtil.getRowKey(tableName, cfKey, p.getRegionInfo().getRegionName());
                 mutations.add(new Delete(pPrefix, writeTimeStamp));
                 
 	        	long byteSize = 0;
                 Cell byteSizeCell = result.getColumnLatestCell(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
-                        PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH_BYTES);
-                int index = Collections.binarySearch(guidePostsRegionInfo.getGuidePosts(), r.getStartKey(),
+                        PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH_BYTES);                
+                int index = Collections.binarySearch(guidePostsRegionInfo.getGuidePosts(), r.getRegionInfo().getStartKey(),
                         Bytes.BYTES_COMPARATOR);
                 int size = guidePostsRegionInfo.getGuidePosts().size();
                 int midEndIndex, midStartIndex;
@@ -155,24 +169,27 @@ public class StatisticsWriter implements Closeable {
                     rightByteCount = (long)((1 - per) * byteSize);
                 }
 	            if (midEndIndex > 0) {
-	                GuidePostsInfo lguidePosts = new GuidePostsInfo(leftByteCount, guidePostsRegionInfo
-                            .getGuidePosts().subList(0, midEndIndex), leftRowCount);
+                    GuidePostsInfo lguidePosts =
+                            new GuidePostsInfo(leftByteCount, guidePostsRegionInfo.getGuidePosts()
+                                    .subList(0, midEndIndex), leftRowCount);
                     tracker.clear();
-	                tracker.addGuidePost(cfKey, lguidePosts, leftByteCount, cell.getTimestamp());
-	                addStats(l.getRegionName(), tracker, cfKey, mutations);
+                    tracker.addGuidePost(cfKey, lguidePosts, leftByteCount, cell.getTimestamp(),
+                        minKey);
+	                addStats(l.getRegionInfo().getRegionName(), tracker, cfKey, mutations);
 	            }
 	            if (midStartIndex < size) {
-	                GuidePostsInfo rguidePosts = new GuidePostsInfo(rightByteCount, guidePostsRegionInfo
-                            .getGuidePosts().subList(midStartIndex, size),
-                            rightRowCount);
+                    GuidePostsInfo rguidePosts =
+                            new GuidePostsInfo(rightByteCount, guidePostsRegionInfo.getGuidePosts()
+                                    .subList(midStartIndex, size), rightRowCount);
 	                tracker.clear();
-	                tracker.addGuidePost(cfKey, rguidePosts, rightByteCount, cell.getTimestamp());
-	                addStats(r.getRegionName(), tracker, cfKey, mutations);
+                    tracker.addGuidePost(cfKey, rguidePosts, rightByteCount, cell.getTimestamp(),
+                        guidePostsRegionInfo.getGuidePosts().get(midStartIndex));
+	                addStats(r.getRegionInfo().getRegionName(), tracker, cfKey, mutations);
 	            }
         	}
         }
     }
-    
+
     /**
      * Update a list of statistics for a given region.  If the UPDATE STATISTICS <tablename> query is issued
      * then we use Upsert queries to update the table
@@ -184,6 +201,7 @@ public class StatisticsWriter implements Closeable {
      *             if we fail to do any of the puts. Any single failure will prevent any future attempts for the remaining list of stats to
      *             update
      */
+    @SuppressWarnings("deprecation")
     public void addStats(byte[] regionName, StatisticsCollector tracker, ImmutableBytesPtr cfKey,
             List<Mutation> mutations) throws IOException {
         if (tracker == null) { return; }
@@ -206,6 +224,11 @@ public class StatisticsWriter implements Closeable {
             // Write as long_array
             put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_ROW_COUNT_BYTES,
                     timeStamp, PLong.INSTANCE.toBytes(gp.getRowCount()));
+            tracker.getMinKey(minKeyPtr);
+            put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
+                PhoenixDatabaseMetaData.MIN_KEY_BYTES, timeStamp,
+                // Ideally no copy would happen here
+                PVarbinary.INSTANCE.toBytes(ByteUtil.copyKeyBytesIfNecessary(minKeyPtr)));
         }
         // Add our empty column value so queries behave correctly
         put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES, timeStamp,

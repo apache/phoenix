@@ -121,7 +121,6 @@ import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
 import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
 import org.apache.hadoop.hbase.ipc.controller.ServerRpcControllerFactory;
-import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.regionserver.LocalIndexMerger;
 import org.apache.hadoop.hbase.regionserver.RSRpcServices;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -669,7 +668,7 @@ public abstract class BaseTest {
      * Create a {@link PhoenixTestDriver} and register it.
      * @return an initialized and registered {@link PhoenixTestDriver} 
      */
-    protected static PhoenixTestDriver initAndRegisterDriver(String url, ReadOnlyProps props) throws Exception {
+    public static PhoenixTestDriver initAndRegisterDriver(String url, ReadOnlyProps props) throws Exception {
         PhoenixTestDriver newDriver = new PhoenixTestDriver(props);
         DriverManager.registerDriver(newDriver);
         Driver oldDriver = DriverManager.getDriver(url); 
@@ -830,6 +829,7 @@ public abstract class BaseTest {
                     logger.info("Table " + fullTableName + " is already deleted.");
                 }
             }
+            rs.close();
             if (lastTenantId != null) {
                 conn.close();
             }
@@ -861,6 +861,7 @@ public abstract class BaseTest {
             logger.info("DROP SEQUENCE STATEMENT: DROP SEQUENCE " + SchemaUtil.getEscapedTableName(rs.getString(2), rs.getString(3)));
             conn.createStatement().execute("DROP SEQUENCE " + SchemaUtil.getEscapedTableName(rs.getString(2), rs.getString(3)));
         }
+        rs.close();
     }
     
     protected static void initSumDoubleValues(byte[][] splits, String url) throws Exception {
@@ -1633,6 +1634,7 @@ public abstract class BaseTest {
      * Disable and drop all the tables except SYSTEM.CATALOG and SYSTEM.SEQUENCE
      */
     private static void disableAndDropNonSystemTables() throws Exception {
+        if (driver == null) return;
         HBaseAdmin admin = driver.getConnectionQueryServices(null, null).getAdmin();
         try {
             HTableDescriptor[] tables = admin.listTables();

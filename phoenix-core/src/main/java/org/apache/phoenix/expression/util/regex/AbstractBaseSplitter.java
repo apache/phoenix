@@ -20,5 +20,5 @@ package org.apache.phoenix.expression.util.regex;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 
 public abstract interface AbstractBaseSplitter {
-    public abstract boolean split(ImmutableBytesWritable srcPtr, ImmutableBytesWritable outPtr);
+    public abstract boolean split(ImmutableBytesWritable srcPtr);
 }

@@ -26,6 +26,7 @@ import org.apache.phoenix.pherf.loaddata.DataLoader;
 import org.apache.phoenix.pherf.rules.DataValue;
 import org.apache.phoenix.pherf.rules.RulesApplier;
 import org.apache.phoenix.pherf.schema.SchemaReader;
+import org.apache.phoenix.pherf.util.PhoenixUtil;
 import org.junit.Test;
 
 import java.nio.file.Path;
@@ -35,14 +36,17 @@ import java.util.Map;
 
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
-public class DataIngestTest extends BaseTestWithCluster {
+public class DataIngestIT extends ResultBaseTestIT {
+    protected static PhoenixUtil util = new PhoenixUtil(true);
     static final String matcherScenario = ".*scenario/.*test.*xml";
     static final String matcherSchema = ".*datamodel/.*test.*sql";
 
     @Test
     public void generateData() throws Exception {
-        SchemaReader reader = new SchemaReader(matcherSchema);
+        util.setZookeeper("localhost");
+        SchemaReader reader = new SchemaReader(util, matcherSchema);
         XMLConfigParser parser = new XMLConfigParser(matcherScenario);
 
         // 1. Generate table schema from file
@@ -55,7 +59,7 @@ public class DataIngestTest extends BaseTestWithCluster {
         Scenario scenario = parser.getScenarios().get(0);
         List<Column> columnListFromPhoenix = util.getColumnsFromPhoenix(scenario.getSchemaName(), scenario.getTableNameWithoutSchemaName(), util.getConnection());
         assertTrue("Could not get phoenix columns.", columnListFromPhoenix.size() > 0);
-        DataLoader loader = new DataLoader(parser);
+        DataLoader loader = new DataLoader(util,parser);
         RulesApplier rulesApplier = loader.getRulesApplier();
         List<Map> modelList = rulesApplier.getModelList();
         assertTrue("Could not generate the modelList", modelList.size() > 0);
@@ -67,12 +71,17 @@ public class DataIngestTest extends BaseTestWithCluster {
             assertTrue("Failed to retrieve data for column type: " + column.getType(), data != null);
 
             // Test that we still retrieve the GENERAL_CHAR rule even after an override is applied to another CHAR type.
-            // FIELD_HISTORY_ARCHIVE_ID Column does not  specify an override so we should get the default rule.
-            if ((column.getType() == DataTypeMapping.CHAR) && (column.getName().equals("FIELD_HISTORY_ARCHIVE_ID"))) {
+            // NEWVAL_STRING Column does not  specify an override so we should get the default rule.
+            if ((column.getType() == DataTypeMapping.VARCHAR) && (column.getName().equals("NEWVAL_STRING"))) {
                 assertTrue("Failed to retrieve data for column type: ", data.getDistribution() == Integer.MIN_VALUE);
             }
         }
 
-        loader.execute();
+        // Load up the data.
+        try {
+            loader.execute();
+        } catch (Exception e) {
+            fail("Failed to lead data. An exception was thrown: " + e.getMessage());
+        }
     }
 }

@@ -18,11 +18,11 @@
 package org.apache.phoenix.mapreduce;
 
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
@@ -41,7 +41,6 @@ import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseConfiguration;
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -56,8 +55,8 @@ import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.job.JobManager;
-import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -67,6 +66,7 @@ import org.apache.phoenix.util.CSVCommonsLoader;
 import org.apache.phoenix.util.ColumnInfo;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.slf4j.Logger;
@@ -84,7 +84,7 @@ public class CsvBulkLoadTool extends Configured implements Tool {
 
     private static final Logger LOG = LoggerFactory.getLogger(CsvBulkLoadTool.class);
 
-    static final Option ZK_QUORUM_OPT = new Option("z", "zookeeper", true, "Zookeeper quorum to connect to (optional)");
+    static final Option ZK_QUORUM_OPT = new Option("z", "zookeeper", true, "Supply zookeeper connection details (optional)");
     static final Option INPUT_PATH_OPT = new Option("i", "input", true, "Input CSV path (mandatory)");
     static final Option OUTPUT_PATH_OPT = new Option("o", "output", true, "Output path for temporary HFiles (optional)");
     static final Option SCHEMA_NAME_OPT = new Option("s", "schema", true, "Phoenix schema name (optional)");
@@ -176,7 +176,7 @@ public class CsvBulkLoadTool extends Configured implements Tool {
     @Override
     public int run(String[] args) throws Exception {
 
-        Configuration conf = HBaseConfiguration.addHbaseResources(getConf());
+        Configuration conf = HBaseConfiguration.create(getConf());
 
         CommandLine cmdLine = null;
         try {
@@ -184,35 +184,48 @@ public class CsvBulkLoadTool extends Configured implements Tool {
         } catch (IllegalStateException e) {
             printHelpAndExit(e.getMessage(), getOptions());
         }
-        Class.forName(DriverManager.class.getName());
-        Connection conn = DriverManager.getConnection(
-                getJdbcUrl(cmdLine.getOptionValue(ZK_QUORUM_OPT.getOpt())));
-        
-        return loadData(conf, cmdLine, conn);
+        return loadData(conf, cmdLine);
     }
 
-	private int loadData(Configuration conf, CommandLine cmdLine,
-			Connection conn) throws SQLException, InterruptedException,
-			ExecutionException {
-		    String tableName = cmdLine.getOptionValue(TABLE_NAME_OPT.getOpt());
+	private int loadData(Configuration conf, CommandLine cmdLine) throws SQLException,
+            InterruptedException, ExecutionException, ClassNotFoundException {
+        String tableName = cmdLine.getOptionValue(TABLE_NAME_OPT.getOpt());
         String schemaName = cmdLine.getOptionValue(SCHEMA_NAME_OPT.getOpt());
         String indexTableName = cmdLine.getOptionValue(INDEX_TABLE_NAME_OPT.getOpt());
         String qualifiedTableName = getQualifiedTableName(schemaName, tableName);
-        String qualifedIndexTableName = null;
-        if(indexTableName != null){
-        	qualifedIndexTableName = getQualifiedTableName(schemaName, indexTableName);
+        String qualifiedIndexTableName = null;
+        if (indexTableName != null){
+        	qualifiedIndexTableName = getQualifiedTableName(schemaName, indexTableName);
+        }
+
+        if (cmdLine.hasOption(ZK_QUORUM_OPT.getOpt())) {
+            // ZK_QUORUM_OPT is optional, but if it's there, use it for both the conn and the job.
+            String zkQuorum = cmdLine.getOptionValue(ZK_QUORUM_OPT.getOpt());
+            PhoenixDriver.ConnectionInfo info = PhoenixDriver.ConnectionInfo.create(zkQuorum);
+            LOG.info("Configuring HBase connection to {}", info);
+            for (Map.Entry<String,String> entry : info.asProps()) {
+                if (LOG.isDebugEnabled()) {
+                    LOG.debug("Setting {} = {}", entry.getKey(), entry.getValue());
+                }
+                conf.set(entry.getKey(), entry.getValue());
+            }
+        }
+
+        final Connection conn = QueryUtil.getConnection(conf);
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Reading columns from {} :: {}", ((PhoenixConnection) conn).getURL(),
+                    qualifiedTableName);
         }
         List<ColumnInfo> importColumns = buildImportColumns(conn, cmdLine, qualifiedTableName);
         configureOptions(cmdLine, importColumns, conf);
-
         try {
             validateTable(conn, schemaName, tableName);
         } finally {
             conn.close();
         }
 
-        Path inputPath = new Path(cmdLine.getOptionValue(INPUT_PATH_OPT.getOpt()));
-        Path outputPath = null;
+        final Path inputPath = new Path(cmdLine.getOptionValue(INPUT_PATH_OPT.getOpt()));
+        final Path outputPath;
         if (cmdLine.hasOption(OUTPUT_PATH_OPT.getOpt())) {
             outputPath = new Path(cmdLine.getOptionValue(OUTPUT_PATH_OPT.getOpt()));
         } else {
@@ -221,20 +234,21 @@ public class CsvBulkLoadTool extends Configured implements Tool {
         
         List<TargetTableRef> tablesToBeLoaded = new ArrayList<TargetTableRef>();
         tablesToBeLoaded.add(new TargetTableRef(qualifiedTableName));
+        // using conn after it's been closed... o.O
         tablesToBeLoaded.addAll(getIndexTables(conn, schemaName, qualifiedTableName));
         
         // When loading a single index table, check index table name is correct
-        if(qualifedIndexTableName != null){
+        if (qualifiedIndexTableName != null){
             TargetTableRef targetIndexRef = null;
         	for (TargetTableRef tmpTable : tablesToBeLoaded){
-        		if(tmpTable.getLogicalName().compareToIgnoreCase(qualifedIndexTableName) == 0) {
+        		if (tmpTable.getLogicalName().compareToIgnoreCase(qualifiedIndexTableName) == 0) {
                     targetIndexRef = tmpTable;
         			break;
         		}
         	}
-        	if(targetIndexRef == null){
+        	if (targetIndexRef == null){
                 throw new IllegalStateException("CSV Bulk Loader error: index table " +
-                    qualifedIndexTableName + " doesn't exist");
+                    qualifiedIndexTableName + " doesn't exist");
         	}
         	tablesToBeLoaded.clear();
         	tablesToBeLoaded.add(targetIndexRef);
@@ -247,13 +261,14 @@ public class CsvBulkLoadTool extends Configured implements Tool {
                 .getProps()
                 .getBoolean(QueryServices.METRICS_ENABLED,
                         QueryServicesOptions.DEFAULT_IS_METRICS_ENABLED);
-        ExecutorService executor =  JobManager.createThreadPoolExec(Integer.MAX_VALUE, 5, 20, useInstrumentedPool);
+        ExecutorService executor =
+                JobManager.createThreadPoolExec(Integer.MAX_VALUE, 5, 20, useInstrumentedPool);
         try{
 	        for (TargetTableRef table : tablesToBeLoaded) {
 	        	Path tablePath = new Path(outputPath, table.getPhysicalName());
 	        	Configuration jobConf = new Configuration(conf);
 	        	jobConf.set(CsvToKeyValueMapper.TABLE_NAME_CONFKEY, qualifiedTableName);
-	        	if(qualifiedTableName.compareToIgnoreCase(table.getLogicalName()) != 0) {
+	        	if (qualifiedTableName.compareToIgnoreCase(table.getLogicalName()) != 0) {
                     jobConf.set(CsvToKeyValueMapper.INDEX_TABLE_NAME_CONFKEY, table.getPhysicalName());
 	        	}
 	        	TableLoader tableLoader = new TableLoader(
@@ -273,14 +288,6 @@ public class CsvBulkLoadTool extends Configured implements Tool {
         }
 		return retCode;
 	}
-
-    String getJdbcUrl(String zkQuorum) {
-        if (zkQuorum == null) {
-            LOG.warn("Defaulting to localhost for ZooKeeper quorum");
-            zkQuorum = "localhost:2181";
-        }
-        return PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum;
-    }
 
     /**
      * Build up the list of columns to be imported. The list is taken from the command line if
@@ -327,9 +334,11 @@ public class CsvBulkLoadTool extends Configured implements Tool {
      * @param importColumns descriptors of columns to be imported
      * @param conf job configuration
      */
-    @VisibleForTesting
-    static void configureOptions(CommandLine cmdLine, List<ColumnInfo> importColumns,
-            Configuration conf) {
+    private static void configureOptions(CommandLine cmdLine, List<ColumnInfo> importColumns,
+            Configuration conf) throws SQLException {
+
+        // we don't parse ZK_QUORUM_OPT here because we need it in order to
+        // create the connection we need to build importColumns.
 
         char delimiterChar = ',';
         if (cmdLine.hasOption(DELIMITER_OPT.getOpt())) {
@@ -356,12 +365,6 @@ public class CsvBulkLoadTool extends Configured implements Tool {
                 throw new IllegalArgumentException("Illegal escape character: " + escapeString);
             }
             escapeChar = escapeString.charAt(0);
-        }
-
-        if (cmdLine.hasOption(ZK_QUORUM_OPT.getOpt())) {
-            String zkQuorum = cmdLine.getOptionValue(ZK_QUORUM_OPT.getOpt());
-            LOG.info("Configuring ZK quorum to {}", zkQuorum);
-            conf.set(HConstants.ZOOKEEPER_QUORUM, zkQuorum);
         }
 
         CsvBulkImportUtil.initCsvImportJob(
@@ -493,7 +496,7 @@ public class CsvBulkLoadTool extends Configured implements Tool {
 	            job.setMapOutputKeyClass(ImmutableBytesWritable.class);
 	            job.setMapOutputValueClass(KeyValue.class);
 
-	            // initialize credentials to possibily run in a secure env
+	            // initialize credentials to possibly run in a secure env
 	            TableMapReduceUtil.initCredentials(job);
 
                 HTable htable = new HTable(conf, tableName);
@@ -522,8 +525,8 @@ public class CsvBulkLoadTool extends Configured implements Tool {
 	            }
 	            
 	            return true;
-            } catch(Exception ex) {
-            	LOG.error("Import job on table=" + tableName + " failed due to exception:" + ex);
+            } catch (Exception ex) {
+            	LOG.error("Import job on table=" + tableName + " failed due to exception.", ex);
             	return false;
             }
         }

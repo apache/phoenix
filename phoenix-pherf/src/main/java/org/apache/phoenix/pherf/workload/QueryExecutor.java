@@ -44,11 +44,9 @@ public class QueryExecutor {
 	private List<DataModel> dataModels;
 	private String queryHint;
 	private RunMode runMode;
-    private final ResultUtil resultUtil;
 
 	public QueryExecutor(XMLConfigParser parser) {
 		this.dataModels = parser.getDataModels();
-        this.resultUtil = new ResultUtil();
     }
 	
 	/**

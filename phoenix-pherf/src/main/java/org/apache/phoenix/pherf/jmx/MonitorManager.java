@@ -51,6 +51,7 @@ public class MonitorManager implements Runnable {
     private volatile boolean shouldStop = false;
     private volatile boolean isRunning = false;
 
+    @SuppressWarnings("unused")
     public MonitorManager() throws Exception {
         this(PherfConstants.MONITOR_FREQUENCY);
     }
@@ -105,8 +106,9 @@ public class MonitorManager implements Runnable {
                         rowCount.getAndIncrement();
                     }
                     try {
+                        resultHandler.flush();
                         Thread.sleep(getMonitorFrequency());
-                    } catch (InterruptedException e) {
+                    } catch (Exception e) {
                         Thread.currentThread().interrupt();
                         e.printStackTrace();
                     }
@@ -116,9 +118,7 @@ public class MonitorManager implements Runnable {
             try {
                 isRunning = false;
                 if (resultHandler != null) {
-                    resultHandler.flush();
                     resultHandler.close();
-
                 }
             } catch (Exception e) {
                 throw new FileLoaderRuntimeException("Could not close monitor results.", e);

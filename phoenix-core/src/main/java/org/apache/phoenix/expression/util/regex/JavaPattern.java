@@ -44,13 +44,12 @@ public class JavaPattern extends AbstractBasePattern {
     }
 
     @Override
-    public void matches(ImmutableBytesWritable srcPtr, ImmutableBytesWritable outPtr) {
+    public void matches(ImmutableBytesWritable srcPtr) {
         Preconditions.checkNotNull(srcPtr);
-        Preconditions.checkNotNull(outPtr);
         String matcherSourceStr = (String) PVarchar.INSTANCE.toObject(srcPtr);
         if (srcPtr.get().length == 0 && matcherSourceStr == null) matcherSourceStr = "";
         boolean ret = pattern.matcher(matcherSourceStr).matches();
-        outPtr.set(ret ? PDataType.TRUE_BYTES : PDataType.FALSE_BYTES);
+        srcPtr.set(ret ? PDataType.TRUE_BYTES : PDataType.FALSE_BYTES);
     }
 
     @Override
@@ -59,35 +58,37 @@ public class JavaPattern extends AbstractBasePattern {
     }
 
     @Override
-    public void replaceAll(ImmutableBytesWritable srcPtr, ImmutableBytesWritable replacePtr,
-            ImmutableBytesWritable replacedPtr) {
+    public void replaceAll(ImmutableBytesWritable srcPtr, byte[] rStrBytes, int rStrOffset,
+            int rStrLen) {
         Preconditions.checkNotNull(srcPtr);
-        Preconditions.checkNotNull(replacePtr);
-        Preconditions.checkNotNull(replacedPtr);
+        Preconditions.checkNotNull(rStrBytes);
         String sourceStr = (String) PVarchar.INSTANCE.toObject(srcPtr);
-        String replaceStr = (String) PVarchar.INSTANCE.toObject(replacePtr);
-        if (srcPtr.get().length == 0 && sourceStr == null) sourceStr = "";
-        if (replacePtr.get().length == 0 && replaceStr == null) replaceStr = "";
+        String replaceStr = (String) PVarchar.INSTANCE.toObject(rStrBytes, rStrOffset, rStrLen);
+        if (srcPtr.getLength() == 0 && sourceStr == null) sourceStr = "";
+        if (rStrLen == 0 && replaceStr == null) replaceStr = "";
         String replacedStr = pattern.matcher(sourceStr).replaceAll(replaceStr);
-        replacedPtr.set(PVarchar.INSTANCE.toBytes(replacedStr));
+        srcPtr.set(PVarchar.INSTANCE.toBytes(replacedStr));
     }
 
     @Override
-    public boolean substr(ImmutableBytesWritable srcPtr, int offsetInStr,
-            ImmutableBytesWritable outPtr) {
-        Preconditions.checkNotNull(srcPtr);
-        Preconditions.checkNotNull(outPtr);
-        String sourceStr = (String) PVarchar.INSTANCE.toObject(srcPtr);
-        if (srcPtr.get().length == 0 && sourceStr == null) sourceStr = "";
-        if (offsetInStr < 0) offsetInStr += sourceStr.length();
-        if (offsetInStr < 0 || offsetInStr >= sourceStr.length()) return false;
-        Matcher matcher = pattern.matcher(sourceStr);
-        boolean ret = matcher.find(offsetInStr);
-        if (ret) {
-            outPtr.set(PVarchar.INSTANCE.toBytes(matcher.group()));
+    public void substr(ImmutableBytesWritable ptr, int offsetInStr) {
+        Preconditions.checkNotNull(ptr);
+        String sourceStr = (String) PVarchar.INSTANCE.toObject(ptr);
+        if (sourceStr == null) {
+            ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
         } else {
-            outPtr.set(ByteUtil.EMPTY_BYTE_ARRAY);
+            if (offsetInStr < 0) offsetInStr += sourceStr.length();
+            if (offsetInStr < 0 || offsetInStr >= sourceStr.length()) {
+                ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
+            } else {
+                Matcher matcher = pattern.matcher(sourceStr);
+                boolean ret = matcher.find(offsetInStr);
+                if (ret) {
+                    ptr.set(PVarchar.INSTANCE.toBytes(matcher.group()));
+                } else {
+                    ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
+                }
+            }
         }
-        return true;
     }
 }

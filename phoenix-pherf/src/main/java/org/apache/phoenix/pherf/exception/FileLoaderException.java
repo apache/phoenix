@@ -22,6 +22,8 @@ public class FileLoaderException extends PherfException {
     public FileLoaderException(String message) throws Exception {
         super(message);
     }
+
+    @SuppressWarnings("unused")
     public FileLoaderException(String message, Exception e) {
         super(message, e);
     }

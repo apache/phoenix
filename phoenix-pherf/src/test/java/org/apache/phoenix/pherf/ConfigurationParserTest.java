@@ -38,7 +38,7 @@ import javax.xml.bind.Marshaller;
 
 import static org.junit.Assert.*;
 
-public class ConfigurationParserTest {
+public class ConfigurationParserTest extends ResultBaseTest{
     private static final Logger logger = LoggerFactory.getLogger(ConfigurationParserTest.class);
 
     @Test
@@ -62,7 +62,8 @@ public class ConfigurationParserTest {
         assertNotNull("Test data XML file is missing", resourceUrl);
 
 		try {
-//            writeXML();
+
+            logger.debug("DataModel: " + writeXML());
 			Path resourcePath = Paths.get(resourceUrl.toURI());
             DataModel data = XMLConfigParser.readDataModel(resourcePath);
             List<Scenario> scenarioList = data.getScenarios();
@@ -83,7 +84,7 @@ public class ConfigurationParserTest {
             Scenario scenario = scenarioList.get(0);
             assertNotNull(scenario);
             assertEquals("PHERF.TEST_TABLE", scenario.getTableName());
-            assertEquals(50, scenario.getRowCount());
+            assertEquals(10, scenario.getRowCount());
             assertEquals(1, scenario.getDataOverride().getColumn().size());
             QuerySet qs = scenario.getQuerySet().get(0);
             assertEquals(ExecutionType.SERIAL, qs.getExecutionType());
@@ -138,7 +139,8 @@ public class ConfigurationParserTest {
     /*
         Used for debugging to dump out a simple xml filed based on the bound objects.
      */
-	private void writeXML() {
+	private String writeXML() {
+        DataModel data = new DataModel();
         try {
             DataValue dataValue = new DataValue();
             dataValue.setDistribution(20);
@@ -154,7 +156,6 @@ public class ConfigurationParserTest {
             List<Column> columnList = new ArrayList<>();
             columnList.add(column);
 
-            DataModel data = new DataModel();
             data.setRelease("192");
             data.setDataMappingColumns(columnList);
 
@@ -196,5 +197,6 @@ public class ConfigurationParserTest {
             // some exception occured
             e.printStackTrace();
         }
+        return data.toString();
     }
 }

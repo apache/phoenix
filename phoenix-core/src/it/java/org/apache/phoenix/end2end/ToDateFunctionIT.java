@@ -18,25 +18,16 @@
 
 package org.apache.phoenix.end2end;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
-
-import java.sql.Connection;
-import java.sql.Date;
-import java.sql.DriverManager;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.sql.Time;
-import java.sql.Timestamp;
-import java.util.Properties;
-
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+
+import java.sql.*;
+import java.util.Properties;
+
+import static org.junit.Assert.*;
 
 
 public class ToDateFunctionIT extends BaseHBaseManagedTimeIT {
@@ -232,5 +223,32 @@ public class ToDateFunctionIT extends BaseHBaseManagedTimeIT {
         } finally {
             conn.close();
         }
+    }
+
+    @Test
+    public void testVarcharToDateComparision() throws SQLException {
+        final String dateString1 = "1900-01-02";
+        final String dateString2 = "2100-01-01";
+
+        conn.prepareStatement(
+                "CREATE TABLE SB(" +
+                        "DATE_STRING VARCHAR(50) NOT NULL " +
+                        "CONSTRAINT PK PRIMARY KEY (DATE_STRING))").execute();
+        conn.commit();
+
+        String upsertSql = String.format("upsert into SB values (?)");
+        PreparedStatement stmt = conn.prepareStatement(upsertSql);
+        stmt.setString(1, dateString1);
+        stmt.execute();
+        stmt.setString(1, dateString2);
+        stmt.execute();
+        conn.commit();
+
+        String selectSql = "SELECT DATE_STRING FROM SB WHERE TO_DATE(DATE_STRING) > TO_DATE('2001-01-01')";
+        ResultSet rs = conn.prepareStatement(selectSql).executeQuery();
+        assertTrue(rs.next());
+        String obtainedString = rs.getString("DATE_STRING");
+        assertEquals("Did not get value that was inserted!!", dateString2, obtainedString);
+        assertFalse("No more rows expected!!", rs.next());
     }
 }

@@ -40,7 +40,7 @@ import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionServerCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.regionserver.HRegion;
+import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionServerServices;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
@@ -305,47 +305,49 @@ public class IndexUtil {
         });
     }
 
-    public static HRegion getIndexRegion(RegionCoprocessorEnvironment environment)
+    public static Region getIndexRegion(RegionCoprocessorEnvironment environment)
             throws IOException {
-        HRegion dataRegion = environment.getRegion();
+        Region dataRegion = environment.getRegion();
         return getIndexRegion(dataRegion, environment.getRegionServerServices());
     }
 
-    public static HRegion
-            getIndexRegion(HRegion dataRegion, RegionServerCoprocessorEnvironment env)
+    public static Region
+            getIndexRegion(Region dataRegion, RegionServerCoprocessorEnvironment env)
                     throws IOException {
         return getIndexRegion(dataRegion, env.getRegionServerServices());
     }
 
-    public static HRegion getDataRegion(RegionCoprocessorEnvironment env) throws IOException {
-        HRegion indexRegion = env.getRegion();
+    public static Region getDataRegion(RegionCoprocessorEnvironment env) throws IOException {
+        Region indexRegion = env.getRegion();
         return getDataRegion(indexRegion, env.getRegionServerServices());
     }
 
-    public static HRegion
-            getDataRegion(HRegion indexRegion, RegionServerCoprocessorEnvironment env)
+    public static Region
+            getDataRegion(Region indexRegion, RegionServerCoprocessorEnvironment env)
                     throws IOException {
         return getDataRegion(indexRegion, env.getRegionServerServices());
     }
 
-    public static HRegion getIndexRegion(HRegion dataRegion, RegionServerServices rss) throws IOException {
+    public static Region getIndexRegion(Region dataRegion, RegionServerServices rss) throws IOException {
         TableName indexTableName =
                 TableName.valueOf(MetaDataUtil.getLocalIndexPhysicalName(dataRegion.getTableDesc()
                         .getName()));
-        List<HRegion> onlineRegions = rss.getOnlineRegions(indexTableName);
-        for(HRegion indexRegion : onlineRegions) {
-            if (Bytes.compareTo(dataRegion.getStartKey(), indexRegion.getStartKey()) == 0) {
+        List<Region> onlineRegions = rss.getOnlineRegions(indexTableName);
+        for(Region indexRegion : onlineRegions) {
+            if (Bytes.compareTo(dataRegion.getRegionInfo().getStartKey(),
+                    indexRegion.getRegionInfo().getStartKey()) == 0) {
                 return indexRegion;
             }
         }
         return null;
     }
 
-    public static HRegion getDataRegion(HRegion indexRegion, RegionServerServices rss) throws IOException {
+    public static Region getDataRegion(Region indexRegion, RegionServerServices rss) throws IOException {
         TableName dataTableName = TableName.valueOf(MetaDataUtil.getUserTableName(indexRegion.getTableDesc().getNameAsString()));
-        List<HRegion> onlineRegions = rss.getOnlineRegions(dataTableName);
-        for(HRegion region : onlineRegions) {
-            if (Bytes.compareTo(indexRegion.getStartKey(), region.getStartKey()) == 0) {
+        List<Region> onlineRegions = rss.getOnlineRegions(dataTableName);
+        for(Region region : onlineRegions) {
+            if (Bytes.compareTo(indexRegion.getRegionInfo().getStartKey(),
+                    region.getRegionInfo().getStartKey()) == 0) {
                 return region;
             }
         }
@@ -466,7 +468,7 @@ public class IndexUtil {
     
     public static void wrapResultUsingOffset(final ObserverContext<RegionCoprocessorEnvironment> c,
             List<Cell> result, final int offset, ColumnReference[] dataColumns,
-            TupleProjector tupleProjector, HRegion dataRegion, IndexMaintainer indexMaintainer,
+            TupleProjector tupleProjector, Region dataRegion, IndexMaintainer indexMaintainer,
             byte[][] viewConstants, ImmutableBytesWritable ptr) throws IOException {
         if (tupleProjector != null) {
             // Join back to data table here by issuing a local get projecting

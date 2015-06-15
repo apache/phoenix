@@ -30,7 +30,8 @@ public class DataOverride {
 		return column;
 	}
 
-	public void setColumn(List<Column> column) {
+    @SuppressWarnings("unused")
+    public void setColumn(List<Column> column) {
 		this.column = column;
 	}
 }

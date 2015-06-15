@@ -24,9 +24,11 @@ import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -57,8 +59,15 @@ import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.parse.AndParseNode;
+import org.apache.phoenix.parse.BaseParseNodeVisitor;
+import org.apache.phoenix.parse.BooleanParseNodeVisitor;
+import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.SQLParser;
+import org.apache.phoenix.parse.StatelessTraverseAllParseNodeVisitor;
+import org.apache.phoenix.parse.TraverseAllParseNodeVisitor;
+import org.apache.phoenix.parse.UDFParseNode;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PColumn;
@@ -328,8 +337,21 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         this.immutableRows = dataTable.isImmutableRows();
         int indexColByteSize = 0;
         ColumnResolver resolver = null;
+        List<ParseNode> parseNodes = new ArrayList<ParseNode>(1);
+        UDFParseNodeVisitor visitor = new UDFParseNodeVisitor();
+        for (int i = indexPosOffset; i < index.getPKColumns().size(); i++) {
+            PColumn indexColumn = index.getPKColumns().get(i);
+            String expressionStr = IndexUtil.getIndexColumnExpressionStr(indexColumn);
+            try {
+                ParseNode parseNode  = SQLParser.parseCondition(expressionStr);
+                parseNode.accept(visitor);
+                parseNodes.add(parseNode);
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+        }
         try {
-            resolver = FromCompiler.getResolver(new TableRef(dataTable));
+            resolver = FromCompiler.getResolver(connection, new TableRef(dataTable), visitor.getUdfParseNodes());
         } catch (SQLException e) {
             throw new RuntimeException(e); // Impossible
         }
@@ -341,9 +363,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             Expression expression = null;
             try {
                 expressionIndexCompiler.reset();
-                String expressionStr = IndexUtil.getIndexColumnExpressionStr(indexColumn);
-                ParseNode parseNode  = SQLParser.parseCondition(expressionStr);
-                expression = parseNode.accept(expressionIndexCompiler);
+                expression = parseNodes.get(indexPos).accept(expressionIndexCompiler);
             } catch (SQLException e) {
                 throw new RuntimeException(e); // Impossible
             }
@@ -786,15 +806,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         for (KeyValue kv : pendingUpdates) {
             if (kv.getTypeByte() == KeyValue.Type.DeleteFamily.getCode()) {
                 nDeleteCF++;
-                boolean isEmptyCF = Bytes.compareTo(kv.getFamilyArray(), kv.getFamilyOffset(), kv.getFamilyLength(), 
-                  dataEmptyKeyValueCF, 0, dataEmptyKeyValueCF.length) == 0;
-                // This is what a delete looks like on the client side for immutable indexing...
-                if (isEmptyCF) {
-                    return true;
-                }
             }
         }
-        // This is what a delete looks like on the server side for mutable indexing...
         return nDeleteCF == this.nDataCFs;
     }
     
@@ -861,7 +874,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             }
         }
         return delete;
-  }
+    }
 
     public byte[] getIndexTableName() {
         return indexTableName;
@@ -1336,5 +1349,25 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     
     public Set<ColumnReference> getIndexedColumns() {
         return indexedColumns;
+    }
+
+    public static class UDFParseNodeVisitor extends StatelessTraverseAllParseNodeVisitor {
+
+        private Map<String, UDFParseNode> udfParseNodes;
+        public UDFParseNodeVisitor() {
+            udfParseNodes = new HashMap<String, UDFParseNode>(1);
+        }
+
+        @Override
+        public boolean visitEnter(FunctionParseNode node) throws SQLException {
+            if(node instanceof UDFParseNode) {
+                udfParseNodes.put(node.getName(), (UDFParseNode)node);
+            }
+            return super.visitEnter(node);
+        }
+        
+        public Map<String, UDFParseNode> getUdfParseNodes() {
+            return udfParseNodes;
+        }
     }
 }

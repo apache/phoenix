@@ -25,7 +25,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
-import org.apache.phoenix.pherf.PherfConstants;
 import org.apache.phoenix.pherf.PherfConstants.RunMode;
 import org.apache.phoenix.pherf.jmx.MonitorManager;
 
@@ -34,22 +33,12 @@ import org.apache.phoenix.pherf.result.file.ResultFileDetails;
 import org.apache.phoenix.pherf.result.impl.CSVResultHandler;
 import org.apache.phoenix.pherf.result.impl.XMLResultHandler;
 import org.apache.phoenix.pherf.result.*;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import org.apache.phoenix.pherf.configuration.Query;
 
-public class ResultTest {
-
-    @Test
-    public void testWriters() throws Exception {
-        ExecutorService executorService = Executors.newFixedThreadPool(1);
-        List<ResultHandler> writers = new ArrayList<>();
-//        Monitor monitor = new Monitor(new XMLConfigParser("test.*xml"), 100);
-//        Future future = executorService.submit(monitor);
-
-        writers.add(new CSVResultHandler(PherfConstants.MONITOR_FILE_NAME, ResultFileDetails.CSV_DETAILED_PERFORMANCE));
-
-    }
+public class ResultTest extends ResultBaseTest {
 
     @Test
     public void testMonitorWriter() throws Exception {
@@ -67,7 +56,7 @@ public class ResultTest {
             resultMonitorWriter.write(result);
             resultMonitorWriter.write(result);
             resultMonitorWriter.write(result);
-            resultMonitorWriter.flush();
+            resultMonitorWriter.close();
             List<Result> results = resultMonitorWriter.read();
             assertEquals("Results did not contain row.", results.size(), 3);
 
@@ -84,7 +73,7 @@ public class ResultTest {
         ExecutorService executorService = Executors.newFixedThreadPool(1);
         MonitorManager monitor = new MonitorManager(100);
         Future future = executorService.submit(monitor);
-        List<Result> records = null;
+        List<Result> records;
         final int TIMEOUT = 30;
 
         int ct = 0;
@@ -108,7 +97,7 @@ public class ResultTest {
         records = monitor.readResults();
 
         assertNotNull("Could not retrieve records", records);
-        assertEquals("Failed to get correct amount of CSV records.", records.size(), monitor.getRowCount());
+        assertTrue("Failed to get correct CSV records.", records.size() > 0);
         assertFalse("Monitor was not stopped correctly.", monitor.isRunning());
     }
 

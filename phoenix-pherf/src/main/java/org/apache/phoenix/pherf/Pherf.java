@@ -84,7 +84,7 @@ public class Pherf {
             System.exit(1);
         }
 
-        properties = getProperties();
+        properties = PherfConstants.create().getProperties(PherfConstants.PHERF_PROPERTIES);
         dropPherfTablesRegEx = command.getOptionValue("drop", null);
         monitor = command.hasOption("m");
         String monitorFrequency = (command.hasOption("m") && command.hasOption("monitorFrequency"))
@@ -116,7 +116,6 @@ public class Pherf {
         }
         PhoenixUtil.setZookeeper(zookeeper);
         PhoenixUtil.setRowCountOverride(rowCountOverride);
-        PhoenixUtil.writeSfdcClientProperty();
     }
 
     public static void main(String[] args) {
@@ -192,10 +191,5 @@ public class Pherf {
                 workloadExec.shutdown();
             }
         }
-    }
-
-    private static Properties getProperties() throws Exception {
-        ResourceList list = new ResourceList();
-        return list.getProperties();
     }
 }

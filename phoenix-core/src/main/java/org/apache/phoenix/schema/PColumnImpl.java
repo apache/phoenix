@@ -17,13 +17,13 @@
  */
 package org.apache.phoenix.schema;
 
+import org.apache.hadoop.hbase.util.ByteStringer;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.SizedUtil;
 
 import com.google.common.base.Preconditions;
-import com.google.protobuf.HBaseZeroCopyByteString;
 
 public class PColumnImpl implements PColumn {
     private PName name;
@@ -238,9 +238,9 @@ public class PColumnImpl implements PColumn {
 
     public static PTableProtos.PColumn toProto(PColumn column) {
         PTableProtos.PColumn.Builder builder = PTableProtos.PColumn.newBuilder();
-        builder.setColumnNameBytes(HBaseZeroCopyByteString.wrap(column.getName().getBytes()));
+        builder.setColumnNameBytes(ByteStringer.wrap(column.getName().getBytes()));
         if (column.getFamilyName() != null) {
-            builder.setFamilyNameBytes(HBaseZeroCopyByteString.wrap(column.getFamilyName().getBytes()));
+            builder.setFamilyNameBytes(ByteStringer.wrap(column.getFamilyName().getBytes()));
         }
         builder.setDataType(column.getDataType().getSqlTypeName());
         if (column.getMaxLength() != null) {
@@ -256,7 +256,7 @@ public class PColumnImpl implements PColumn {
             builder.setArraySize(column.getArraySize());
         }
         if (column.getViewConstant() != null) {
-            builder.setViewConstant(HBaseZeroCopyByteString.wrap(column.getViewConstant()));
+            builder.setViewConstant(ByteStringer.wrap(column.getViewConstant()));
         }
         builder.setViewReferenced(column.isViewReferenced());
         

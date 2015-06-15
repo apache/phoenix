@@ -44,6 +44,7 @@ import org.apache.hadoop.hbase.client.coprocessor.Batch;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.BlockingRpcCallback;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
+import org.apache.hadoop.hbase.util.ByteStringer;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.coprocessor.ServerCachingProtocol.ServerCacheFactory;
@@ -68,7 +69,6 @@ import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.ScanUtil;
 
 import com.google.common.collect.ImmutableSet;
-import com.google.protobuf.HBaseZeroCopyByteString;
 
 /**
  * 
@@ -194,9 +194,9 @@ public class ServerCacheClient {
                                                             new BlockingRpcCallback<AddServerCacheResponse>();
                                                     AddServerCacheRequest.Builder builder = AddServerCacheRequest.newBuilder();
                                                     if(connection.getTenantId() != null){
-                                                        builder.setTenantId(HBaseZeroCopyByteString.wrap(connection.getTenantId().getBytes()));
+                                                        builder.setTenantId(ByteStringer.wrap(connection.getTenantId().getBytes()));
                                                     }
-                                                    builder.setCacheId(HBaseZeroCopyByteString.wrap(cacheId));
+                                                    builder.setCacheId(ByteStringer.wrap(cacheId));
                                                     builder.setCachePtr(org.apache.phoenix.protobuf.ProtobufUtil.toProto(cachePtr));
                                                     ServerCacheFactoryProtos.ServerCacheFactory.Builder svrCacheFactoryBuider = ServerCacheFactoryProtos.ServerCacheFactory.newBuilder();
                                                     svrCacheFactoryBuider.setClassName(cacheFactory.getClass().getName());
@@ -307,9 +307,9 @@ public class ServerCacheClient {
     									new BlockingRpcCallback<RemoveServerCacheResponse>();
     							RemoveServerCacheRequest.Builder builder = RemoveServerCacheRequest.newBuilder();
     							if(connection.getTenantId() != null){
-    								builder.setTenantId(HBaseZeroCopyByteString.wrap(connection.getTenantId().getBytes()));
+    								builder.setTenantId(ByteStringer.wrap(connection.getTenantId().getBytes()));
     							}
-    							builder.setCacheId(HBaseZeroCopyByteString.wrap(cacheId));
+    							builder.setCacheId(ByteStringer.wrap(cacheId));
     							instance.removeServerCache(controller, builder.build(), rpcCallback);
     							if(controller.getFailedOn() != null) {
     								throw controller.getFailedOn();

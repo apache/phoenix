@@ -34,7 +34,7 @@ import java.util.Collection;
 
 public class SchemaReader {
     private static final Logger logger = LoggerFactory.getLogger(SchemaReader.class);
-    private final PhoenixUtil pUtil = new PhoenixUtil();
+    private final PhoenixUtil pUtil;
     private Collection<Path> resourceList;
     private final String searchPattern;
     private final ResourceList resourceUtil;
@@ -45,6 +45,11 @@ public class SchemaReader {
      * @throws Exception
      */
     public SchemaReader(final String searchPattern) throws Exception {
+        this(new PhoenixUtil(), searchPattern);
+    }
+
+    public SchemaReader(PhoenixUtil util, final String searchPattern) throws Exception {
+        this.pUtil = util;
         this.searchPattern = searchPattern;
         this.resourceUtil = new ResourceList(PherfConstants.RESOURCE_DATAMODEL);
         read();

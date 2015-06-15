@@ -25,13 +25,14 @@ import java.util.Map;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
+import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.Store;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
@@ -66,6 +67,10 @@ public class StatisticsCollector {
     private Map<ImmutableBytesPtr, Pair<Long,GuidePostsInfo>> guidePostsMap = Maps.newHashMap();
     protected StatisticsWriter statsTable;
     private Pair<Long,GuidePostsInfo> cachedGps = null;
+    // Store minKey and maxKey at the tracker level itself so that we don't need to do 
+    // any comparison for the min/max values for every next() call
+    private byte[] minKey;
+    private int minKeyOffset, minKeyLength;
 
     public StatisticsCollector(RegionCoprocessorEnvironment env, String tableName, long clientTimeStamp) throws IOException {
         this(env, tableName, clientTimeStamp, null, null, null);
@@ -106,7 +111,7 @@ public class StatisticsCollector {
         this.statsTable.close();
     }
 
-    public void updateStatistic(HRegion region) {
+    public void updateStatistic(Region region) {
         try {
             ArrayList<Mutation> mutations = new ArrayList<Mutation>();
             writeStatsToStatsTable(region, true, mutations, TimeKeeper.SYSTEM.getCurrentTime());
@@ -121,7 +126,7 @@ public class StatisticsCollector {
         }
     }
     
-    private void writeStatsToStatsTable(final HRegion region,
+    private void writeStatsToStatsTable(final Region region,
             boolean delete, List<Mutation> mutations, long currentTime) throws IOException {
         try {
             // update the statistics table
@@ -139,6 +144,8 @@ public class StatisticsCollector {
                 statsTable.addStats((region.getRegionInfo().getRegionName()), this, fam,
                         mutations);
             }
+            // Clear minKey and maxKey
+            clearMinKeys();
         } catch (IOException e) {
             logger.error("Failed to update statistics table!", e);
             throw e;
@@ -161,6 +168,12 @@ public class StatisticsCollector {
         if(cachedGps == null) {
             rowTracker = 
                     new ArrayList<GuidePostsInfo>();
+        }
+        if (minKey == null && !results.isEmpty()) {
+            Cell minCell = results.get(0);
+            minKey = minCell.getRowArray();
+            minKeyOffset =  minCell.getRowOffset();
+            minKeyLength = minCell.getRowLength();
         }
         for (Cell cell : results) {
             KeyValue kv = KeyValueUtil.ensureKeyValue(cell);
@@ -202,7 +215,7 @@ public class StatisticsCollector {
         }
     }
 
-    public InternalScanner createCompactionScanner(HRegion region, Store store, InternalScanner s) throws IOException {
+    public InternalScanner createCompactionScanner(Region region, Store store, InternalScanner s) throws IOException {
         // See if this is for Major compaction
         if (logger.isDebugEnabled()) {
             logger.debug("Compaction scanner created for stats");
@@ -211,13 +224,13 @@ public class StatisticsCollector {
         return getInternalScanner(region, store, s, cfKey);
     }
 
-    public void splitStats(HRegion parent, HRegion left, HRegion right) {
+    public void splitStats(Region parent, Region left, Region right) {
         try {
             if (logger.isDebugEnabled()) {
                 logger.debug("Collecting stats for split of " + parent.getRegionInfo() + " into " + left.getRegionInfo() + " and " + right.getRegionInfo());
             }
             List<Mutation> mutations = Lists.newArrayListWithExpectedSize(3);
-            for (byte[] fam : parent.getStores().keySet()) {
+            for (byte[] fam : parent.getTableDesc().getFamiliesKeys()) {
             	statsTable.splitStats(parent, left, right, this, new ImmutableBytesPtr(fam), mutations);
             }
             if (logger.isDebugEnabled()) {
@@ -230,7 +243,7 @@ public class StatisticsCollector {
         }
     }
 
-    protected InternalScanner getInternalScanner(HRegion region, Store store,
+    protected InternalScanner getInternalScanner(Region region, Store store,
             InternalScanner internalScan, ImmutableBytesPtr family) {
         return new StatisticsScanner(this, statsTable, region, internalScan, family);
     }
@@ -238,9 +251,16 @@ public class StatisticsCollector {
     public void clear() {
         this.guidePostsMap.clear();
         maxTimeStamp = MetaDataProtocol.MIN_TABLE_TIMESTAMP;
+        clearMinKeys();
     }
 
-    public void addGuidePost(ImmutableBytesPtr cfKey, GuidePostsInfo info, long byteSize, long timestamp) {
+    private void clearMinKeys() {
+        minKey = null;
+        minKeyOffset = minKeyLength = 0;
+    }
+
+    public void addGuidePost(ImmutableBytesPtr cfKey, GuidePostsInfo info, long byteSize,
+            long timestamp, byte[] minKey) {
         Pair<Long, GuidePostsInfo> newInfo = new Pair<Long, GuidePostsInfo>(byteSize, info);
         Pair<Long, GuidePostsInfo> oldInfo = guidePostsMap.put(cfKey, newInfo);
         if (oldInfo != null) {
@@ -248,6 +268,9 @@ public class StatisticsCollector {
             newInfo.setFirst(oldInfo.getFirst() + newInfo.getFirst());
         }
         maxTimeStamp = Math.max(maxTimeStamp, timestamp);
+        this.minKey = minKey;
+        this.minKeyOffset = 0;
+        this.minKeyLength = this.minKey.length;
     }
 
     public GuidePostsInfo getGuidePosts(ImmutableBytesPtr fam) {
@@ -256,5 +279,13 @@ public class StatisticsCollector {
             return pair.getSecond();
         }
         return null;
+    }
+
+    public void getMinKey(ImmutableBytesWritable ptr) {
+        if (minKey != null) {
+            ptr.set(minKey, minKeyOffset, minKeyLength);
+        } else {
+            ptr.set(HConstants.EMPTY_BYTE_ARRAY);
+        }
     }
 }

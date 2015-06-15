@@ -85,7 +85,7 @@ class PhoenixRDD(sc: SparkContext, table: String, columns: Seq[String],
     if(!columns.isEmpty) {
       PhoenixConfigurationUtil.setSelectColumnNames(config, columns.mkString(","))
     }
-    PhoenixConfigurationUtil.setInputTableName(config, "\"" + table + "\"")
+    PhoenixConfigurationUtil.setInputTableName(config, table)
     PhoenixConfigurationUtil.setInputClass(config, classOf[PhoenixRecordWritable])
 
     // Override the Zookeeper URL if present. Throw exception if no address given.

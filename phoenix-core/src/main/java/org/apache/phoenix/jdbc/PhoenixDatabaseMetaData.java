@@ -106,6 +106,11 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
     public static final int SCHEMA_NAME_INDEX = 1;
     public static final int TENANT_ID_INDEX = 0;
 
+
+    public static final int TYPE_INDEX = 2;
+    public static final int FUNTION_NAME_INDEX = 1;
+    
+
     public static final String SYSTEM_CATALOG_SCHEMA = QueryConstants.SYSTEM_SCHEMA_NAME;
     public static final byte[] SYSTEM_CATALOG_SCHEMA_BYTES = QueryConstants.SYSTEM_SCHEMA_NAME_BYTES;
     public static final String SYSTEM_CATALOG_TABLE = "CATALOG";
@@ -209,6 +214,31 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
     public static final byte[] TABLE_FAMILY_BYTES = QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
 
     public static final String TYPE_SEQUENCE = "SEQUENCE";
+    public static final String SYSTEM_FUNCTION_TABLE = "FUNCTION";
+    public static final String SYSTEM_FUNCTION_NAME = SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA, SYSTEM_FUNCTION_TABLE);
+    public static final byte[] SYSTEM_FUNCTION_NAME_BYTES = Bytes.toBytes(SYSTEM_FUNCTION_NAME);
+
+    public static final String FUNCTION_NAME = "FUNCTION_NAME";
+    public static final byte[] FUNCTION_NAME_BYTES = Bytes.toBytes(FUNCTION_NAME);
+    public static final String CLASS_NAME = "CLASS_NAME";
+    public static final byte[] CLASS_NAME_BYTES = Bytes.toBytes(CLASS_NAME);
+    public static final String JAR_PATH = "JAR_PATH";
+    public static final byte[] JAR_PATH_BYTES = Bytes.toBytes(JAR_PATH);
+    public static final String TYPE = "TYPE";
+    public static final byte[] TYPE_BYTES = Bytes.toBytes(TYPE);
+    public static final String ARG_POSITION = "ARG_POSITION";
+    public static final byte[] ARG_POSITION_TYPE = Bytes.toBytes(ARG_POSITION);
+    public static final String RETURN_TYPE = "RETURN_TYPE";
+    public static final byte[] RETURN_TYPE_BYTES = Bytes.toBytes(RETURN_TYPE);
+    public static final String IS_ARRAY = "IS_ARRAY";
+    public static final byte[] IS_ARRAY_BYTES = Bytes.toBytes(IS_ARRAY);
+    public static final String IS_CONSTANT = "IS_CONSTANT";
+    public static final byte[] IS_CONSTANT_BYTES = Bytes.toBytes(IS_CONSTANT);
+    public static final String DEFAULT_VALUE = "DEFAULT_VALUE";
+    public static final byte[] DEFAULT_VALUE_BYTES = Bytes.toBytes(DEFAULT_VALUE);
+    public static final String NUM_ARGS = "NUM_ARGS";
+    public static final byte[] NUM_ARGS_BYTES = Bytes.toBytes(NUM_ARGS);
+    
     public static final byte[] SEQUENCE_FAMILY_BYTES = QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
     public static final String SEQUENCE_SCHEMA_NAME = SYSTEM_CATALOG_SCHEMA;
     public static final byte[] SEQUENCE_SCHEMA_NAME_BYTES = Bytes.toBytes(SEQUENCE_SCHEMA_NAME);

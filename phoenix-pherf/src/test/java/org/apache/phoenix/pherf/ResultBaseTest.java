@@ -16,18 +16,29 @@
  *   limitations under the License.
  */
 
-package org.apache.phoenix.pherf.jmx.monitors;
+package org.apache.phoenix.pherf;
 
-import org.apache.phoenix.pherf.jmx.Stat;
+import org.apache.phoenix.pherf.result.ResultUtil;
+import org.junit.BeforeClass;
 
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.Properties;
 
-public class ExampleMonitor implements Monitor {
-    private final AtomicLong counter = new AtomicLong();
+public class ResultBaseTest {
+    private static boolean isSetUpDone = false;
 
-    @Override
-    public Stat getStat() {
-        Stat<Long> stat = new Stat(new Long(counter.getAndIncrement()));
-        return stat;
+    @BeforeClass
+    public static void setUp() throws Exception {
+        if (isSetUpDone) {
+            return;
+        }
+
+        ResultUtil util = new ResultUtil();
+        PherfConstants constants = PherfConstants.create();
+        Properties properties = constants.getProperties(PherfConstants.PHERF_PROPERTIES);
+        String dir = properties.getProperty("pherf.default.results.dir");
+        String targetDir = "target/" + dir;
+        properties.setProperty("pherf.default.results.dir", targetDir);
+        util.ensureBaseDirExists(targetDir);
+        isSetUpDone = true;
     }
 }
