@@ -76,9 +76,7 @@ public final class TypeUtil {
     private TypeUtil() {}
 
     /**
-     * A map of Phoenix to Pig data types.
-     * 
-     * @return
+     * @return map of Phoenix to Pig data types.
      */
     private static ImmutableMap<PDataType, Byte> init() {
         final ImmutableMap.Builder<PDataType, Byte> builder = new Builder<PDataType, Byte>();
@@ -160,7 +158,8 @@ public final class TypeUtil {
 
     /**
      * This method encodes a value with Phoenix data type. It begins with checking whether an object is BINARY and makes
-     * a call to {@link #castBytes(Object, PDataType)} to convery bytes to targetPhoenixType
+     * a call to {@link #castBytes(Object, PDataType)} to convert bytes to targetPhoenixType. It returns a {@link RuntimeException}
+     * when object can not be coerced.
      * 
      * @param o
      * @param targetPhoenixType
