@@ -26,15 +26,16 @@ import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PDouble;
 
-@BuiltInFunction(name = SqrtFunction.NAME, args = { @Argument(allowedTypes = { PDouble.class, PDecimal.class }) })
-public class SqrtFunction extends JavaMathOneArgumentFunction {
+@BuiltInFunction(name = PowerFunction.NAME, args = { @Argument(allowedTypes = { PDouble.class, PDecimal.class }),
+        @Argument(allowedTypes = { PDouble.class, PDecimal.class }) })
+public class PowerFunction extends JavaMathTwoArgumentFunction {
 
-    public static final String NAME = "SQRT";
+    public static final String NAME = "POWER";
 
-    public SqrtFunction() {
+    public PowerFunction() {
     }
 
-    public SqrtFunction(List<Expression> children) throws SQLException {
+    public PowerFunction(List<Expression> children) throws SQLException {
         super(children);
     }
 
@@ -44,12 +45,7 @@ public class SqrtFunction extends JavaMathOneArgumentFunction {
     }
 
     @Override
-    protected double compute(double firstArg) {
-        return Math.sqrt(firstArg);
-    }
-
-    @Override
-    public OrderPreserving preservesOrder() {
-        return OrderPreserving.YES;
+    protected double compute(double firstArg, double secondArg) {
+        return Math.pow(firstArg, secondArg);
     }
 }

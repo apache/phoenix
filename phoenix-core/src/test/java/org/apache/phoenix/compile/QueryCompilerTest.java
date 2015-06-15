@@ -34,6 +34,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
@@ -1634,7 +1635,72 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         assertLiteralEquals(oneMoreThanMaxLong, p, 11);
     }
 
-   
+    @Test
+    public void testMathFunctionOrderByOrderPreservingFwd() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute("CREATE TABLE t (k1 INTEGER not null, k2 double not null, k3 BIGINT not null, v varchar, constraint pk primary key(k1,k2,k3))");
+        /*
+         * "SELECT * FROM T ORDER BY k1, k2",
+         * "SELECT * FROM T ORDER BY k1, SIGN(k2)",
+         * "SELECT * FROM T ORDER BY SIGN(k1), k2",
+         */
+        List<String> queryList = new ArrayList<String>();
+        queryList.add("SELECT * FROM T ORDER BY k1, k2");
+        for (String sub : new String[] { "SIGN", "CBRT", "LN", "LOG", "EXP" }) {
+            queryList.add(String.format("SELECT * FROM T ORDER BY k1, %s(k2)", sub));
+            queryList.add(String.format("SELECT * FROM T ORDER BY %s(k1), k2", sub));
+        }
+        String[] queries = queryList.toArray(new String[queryList.size()]);
+        for (int i = 0; i < queries.length; i++) {
+            String query = queries[i];
+            QueryPlan plan = conn.createStatement().unwrap(PhoenixStatement.class).compileQuery(query);
+            assertTrue(plan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+        }
+        // Negative test
+        queryList.clear();
+        for (String sub : new String[] { "SIGN", "CBRT", "LN", "LOG", "EXP" }) {
+            queryList.add(String.format("SELECT * FROM T WHERE %s(k2)=2.0", sub));
+        }
+        for (String query : queryList.toArray(new String[queryList.size()])) {
+            Scan scan = conn.createStatement().unwrap(PhoenixStatement.class).compileQuery(query).getContext().getScan();
+            assertNotNull(scan.getFilter());
+            assertTrue(scan.getStartRow().length == 0);
+            assertTrue(scan.getStopRow().length == 0);
+        }
+    }
+
+    @Test
+    public void testMathFunctionOrderByOrderPreservingRev() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute("CREATE TABLE t (k1 INTEGER not null, k2 double not null, k3 BIGINT not null, v varchar, constraint pk primary key(k1,k2 DESC,k3))");
+        List<String> queryList = new ArrayList<String>();
+        // "SELECT * FROM T ORDER BY k1 DESC, SIGN(k2) DESC, k3 DESC"
+        queryList.add("SELECT * FROM T ORDER BY k1 DESC");
+        queryList.add("SELECT * FROM T ORDER BY k1 DESC, k2");
+        queryList.add("SELECT * FROM T ORDER BY k1 DESC, k2, k3 DESC");
+        for (String sub : new String[] { "SIGN", "CBRT", "LN", "LOG", "EXP" }) {
+            queryList.add(String.format("SELECT * FROM T ORDER BY k1 DESC, %s(k2) DESC, k3 DESC", sub));
+        }
+        String[] queries = queryList.toArray(new String[queryList.size()]);
+        for (int i = 0; i < queries.length; i++) {
+            String query = queries[i];
+            QueryPlan plan =
+                    conn.createStatement().unwrap(PhoenixStatement.class).compileQuery(query);
+            assertTrue(query, plan.getOrderBy() == OrderBy.REV_ROW_KEY_ORDER_BY);
+        }
+        // Negative test
+        queryList.clear();
+        for (String sub : new String[] { "SIGN", "CBRT", "LN", "LOG", "EXP" }) {
+            queryList.add(String.format("SELECT * FROM T WHERE %s(k2)=2.0", sub));
+        }
+        for (String query : queryList.toArray(new String[queryList.size()])) {
+            Scan scan = conn.createStatement().unwrap(PhoenixStatement.class).compileQuery(query).getContext().getScan();
+            assertNotNull(scan.getFilter());
+            assertTrue(scan.getStartRow().length == 0);
+            assertTrue(scan.getStopRow().length == 0);
+        }
+    }
+
     @Test
     public void testOrderByOrderPreservingFwd() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
