@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.schema.types;
 
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.schema.SortOrder;
 
 public abstract class PWholeNumber<T> extends PNumericType<T> {
@@ -31,5 +32,12 @@ public abstract class PWholeNumber<T> extends PNumericType<T> {
             Integer scale) {
         long l = getCodec().decodeLong(bytes, offset, sortOrder);
         return Long.signum(l);
+    }
+
+    @Override
+    public void abs(byte[] bytes, int offset, int length, SortOrder sortOrder,
+            ImmutableBytesWritable outPtr) {
+        long l = getCodec().decodeLong(bytes, offset, sortOrder);
+        getCodec().encodeLong(Math.abs(l), outPtr);
     }
 }

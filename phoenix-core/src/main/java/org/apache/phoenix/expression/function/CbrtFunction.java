@@ -26,15 +26,15 @@ import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PDouble;
 
-@BuiltInFunction(name = SqrtFunction.NAME, args = { @Argument(allowedTypes = { PDouble.class, PDecimal.class }) })
-public class SqrtFunction extends JavaMathOneArgumentFunction {
+@BuiltInFunction(name = CbrtFunction.NAME, args = { @Argument(allowedTypes = { PDouble.class, PDecimal.class }) })
+public class CbrtFunction extends JavaMathOneArgumentFunction {
 
-    public static final String NAME = "SQRT";
+    public static final String NAME = "CBRT";
 
-    public SqrtFunction() {
+    public CbrtFunction() {
     }
 
-    public SqrtFunction(List<Expression> children) throws SQLException {
+    public CbrtFunction(List<Expression> children) throws SQLException {
         super(children);
     }
 
@@ -45,7 +45,7 @@ public class SqrtFunction extends JavaMathOneArgumentFunction {
 
     @Override
     protected double compute(double firstArg) {
-        return Math.sqrt(firstArg);
+        return Math.cbrt(firstArg);
     }
 
     @Override

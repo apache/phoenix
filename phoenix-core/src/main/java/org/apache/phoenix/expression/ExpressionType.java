@@ -19,6 +19,7 @@ package org.apache.phoenix.expression;
 
 import java.util.Map;
 
+import org.apache.phoenix.expression.function.AbsFunction;
 import org.apache.phoenix.expression.function.ArrayAllComparisonExpression;
 import org.apache.phoenix.expression.function.ArrayAnyComparisonExpression;
 import org.apache.phoenix.expression.function.ArrayAppendFunction;
@@ -29,6 +30,7 @@ import org.apache.phoenix.expression.function.ArrayPrependFunction;
 import org.apache.phoenix.expression.function.ByteBasedRegexpReplaceFunction;
 import org.apache.phoenix.expression.function.ByteBasedRegexpSplitFunction;
 import org.apache.phoenix.expression.function.ByteBasedRegexpSubstrFunction;
+import org.apache.phoenix.expression.function.CbrtFunction;
 import org.apache.phoenix.expression.function.CeilDateExpression;
 import org.apache.phoenix.expression.function.CeilDecimalExpression;
 import org.apache.phoenix.expression.function.CeilFunction;
@@ -41,6 +43,7 @@ import org.apache.phoenix.expression.function.DecodeFunction;
 import org.apache.phoenix.expression.function.DistinctCountAggregateFunction;
 import org.apache.phoenix.expression.function.DistinctValueAggregateFunction;
 import org.apache.phoenix.expression.function.EncodeFunction;
+import org.apache.phoenix.expression.function.ExpFunction;
 import org.apache.phoenix.expression.function.ExternalSqlTypeIdFunction;
 import org.apache.phoenix.expression.function.FirstValueFunction;
 import org.apache.phoenix.expression.function.FloorDateExpression;
@@ -53,6 +56,8 @@ import org.apache.phoenix.expression.function.InvertFunction;
 import org.apache.phoenix.expression.function.LTrimFunction;
 import org.apache.phoenix.expression.function.LastValueFunction;
 import org.apache.phoenix.expression.function.LengthFunction;
+import org.apache.phoenix.expression.function.LnFunction;
+import org.apache.phoenix.expression.function.LogFunction;
 import org.apache.phoenix.expression.function.LowerFunction;
 import org.apache.phoenix.expression.function.LpadFunction;
 import org.apache.phoenix.expression.function.MD5Function;
@@ -65,6 +70,7 @@ import org.apache.phoenix.expression.function.NthValueFunction;
 import org.apache.phoenix.expression.function.PercentRankAggregateFunction;
 import org.apache.phoenix.expression.function.PercentileContAggregateFunction;
 import org.apache.phoenix.expression.function.PercentileDiscAggregateFunction;
+import org.apache.phoenix.expression.function.PowerFunction;
 import org.apache.phoenix.expression.function.RTrimFunction;
 import org.apache.phoenix.expression.function.RandomFunction;
 import org.apache.phoenix.expression.function.RegexpReplaceFunction;
@@ -232,7 +238,13 @@ public enum ExpressionType {
     ArrayAppendFunction(ArrayAppendFunction.class),
     UDFExpression(UDFExpression.class),
     ArrayPrependFunction(ArrayPrependFunction.class),
-    SqrtFunction(SqrtFunction.class)
+    SqrtFunction(SqrtFunction.class),
+    AbsFunction(AbsFunction.class),
+    CbrtFunction(CbrtFunction.class),
+    LnFunction(LnFunction.class),
+    LogFunction(LogFunction.class),
+    ExpFunction(ExpFunction.class),
+    PowerFunction(PowerFunction.class)
     ;
 
     ExpressionType(Class<? extends Expression> clazz) {

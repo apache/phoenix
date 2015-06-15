@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.expression.function;
 
-import java.math.BigDecimal;
 import java.sql.SQLException;
 import java.util.List;
 
@@ -25,27 +24,19 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PDouble;
+import org.apache.phoenix.util.ByteUtil;
 
-public abstract class JavaMathOneArgumentFunction extends ScalarFunction {
+public abstract class JavaMathTwoArgumentFunction extends ScalarFunction {
 
-    public JavaMathOneArgumentFunction() {
+    public JavaMathTwoArgumentFunction() {
     }
 
-    public JavaMathOneArgumentFunction(List<Expression> children) throws SQLException {
+    public JavaMathTwoArgumentFunction(List<Expression> children) throws SQLException {
         super(children);
     }
 
-    protected abstract double compute(double firstArg);
-
-    static double getArg(Expression exp, ImmutableBytesWritable ptr) {
-        if (exp.getDataType() == PDecimal.INSTANCE) {
-            return ((BigDecimal) exp.getDataType().toObject(ptr, exp.getSortOrder())).doubleValue();
-        } else {
-            return exp.getDataType().getCodec().decodeDouble(ptr, exp.getSortOrder());
-        }
-    }
+    protected abstract double compute(double firstArg, double secondArg);
 
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
@@ -54,10 +45,20 @@ public abstract class JavaMathOneArgumentFunction extends ScalarFunction {
         Expression arg1Expr = children.get(0);
         if (!arg1Expr.evaluate(tuple, ptr)) return false;
         if (ptr.getLength() == 0) return true;
-        double arg1 = getArg(arg1Expr, ptr);
+        double arg1 = JavaMathOneArgumentFunction.getArg(arg1Expr, ptr);
+
+        Expression arg2Expr = (children.size() <= 1) ? null : children.get(1);
+        double arg2;
+        if (arg2Expr != null && !arg2Expr.evaluate(tuple, ptr)) return false;
+        if (arg2Expr == null || ptr.getLength() == 0) {
+            ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
+            return true;
+        } else {
+            arg2 = JavaMathOneArgumentFunction.getArg(arg2Expr, ptr);
+        }
 
         ptr.set(new byte[returnType.getByteSize()]);
-        returnType.getCodec().encodeDouble(compute(arg1), ptr);
+        returnType.getCodec().encodeDouble(compute(arg1, arg2), ptr);
         return true;
     }
 
