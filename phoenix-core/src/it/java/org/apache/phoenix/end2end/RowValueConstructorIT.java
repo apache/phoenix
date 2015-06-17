@@ -1395,4 +1395,32 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
         assertEquals(1, numRecords);
     }
 
+    @Test
+    public void testRVCInView() throws Exception {
+        Connection conn = nextConnection(getUrl());
+        conn.createStatement().execute("CREATE TABLE TEST_TABLE.TEST1 (\n" + 
+                "PK1 CHAR(3) NOT NULL, \n" + 
+                "PK2 CHAR(3) NOT NULL,\n" + 
+                "DATA1 CHAR(10)\n" + 
+                "CONSTRAINT PK PRIMARY KEY (PK1, PK2))");
+        conn.close();
+        conn = nextConnection(getUrl());
+        conn.createStatement().execute("CREATE VIEW TEST_TABLE.FOO AS SELECT * FROM TEST_TABLE.TEST1 WHERE PK1 = 'FOO'");
+        conn.close();
+        conn = nextConnection(getUrl());
+        conn.createStatement().execute("UPSERT INTO TEST_TABLE.TEST1 VALUES('FOO','001','SOMEDATA')");
+        conn.createStatement().execute("UPSERT INTO TEST_TABLE.TEST1 VALUES('FOO','002','SOMEDATA')");
+        conn.createStatement().execute("UPSERT INTO TEST_TABLE.TEST1 VALUES('FOO','003','SOMEDATA')");
+        conn.createStatement().execute("UPSERT INTO TEST_TABLE.TEST1 VALUES('FOO','004','SOMEDATA')");
+        conn.createStatement().execute("UPSERT INTO TEST_TABLE.TEST1 VALUES('FOO','005','SOMEDATA')");
+        conn.commit();
+        conn.close();
+        
+        conn = nextConnection(getUrl());        
+        ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM TEST_TABLE.FOO WHERE PK2 < '004' AND (PK1,PK2) > ('FOO','002') LIMIT 2");
+        assertTrue(rs.next());
+        assertEquals("003", rs.getString("PK2"));
+        assertFalse(rs.next());
+        conn.close();
+    }
 }
