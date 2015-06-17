@@ -98,6 +98,7 @@ public abstract class BaseViewIT extends BaseOwnClusterHBaseManagedTimeIT {
         assertEquals(1, rs.getInt(1));
         assertEquals(121, rs.getInt(2));
         assertFalse(rs.next());
+        conn.close();
     }
 
     protected void testUpdatableViewIndex(Integer saltBuckets) throws Exception {
@@ -179,6 +180,7 @@ public abstract class BaseViewIT extends BaseOwnClusterHBaseManagedTimeIT {
                                     + "CLIENT MERGE SORT",
                             QueryUtil.getExplainPlan(rs));
         }
+        conn.close();
     }
 
 
