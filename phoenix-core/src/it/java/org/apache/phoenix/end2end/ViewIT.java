@@ -92,8 +92,11 @@ public class ViewIT extends BaseViewIT {
             fail();
         } catch (ReadOnlyTableException e) {
             
+        } finally {
+            conn.close();
         }
 
+        conn = DriverManager.getConnection(getUrl());
         int count = 0;
         ResultSet rs = conn.createStatement().executeQuery("SELECT k FROM v2");
         while (rs.next()) {
