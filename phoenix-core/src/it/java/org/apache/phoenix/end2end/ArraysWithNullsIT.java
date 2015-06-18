@@ -26,7 +26,7 @@ import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PhoenixArray;
 import org.junit.Test;
 
-public class ArraysWithNullsIT extends BaseClientManagedTimeIT {
+public class ArraysWithNullsIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testArrayUpsertIntWithNulls() throws Exception {
