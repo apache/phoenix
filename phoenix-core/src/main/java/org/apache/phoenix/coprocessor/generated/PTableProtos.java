@@ -3108,6 +3108,16 @@ public final class PTableProtos {
      * <code>optional bool storeNulls = 24;</code>
      */
     boolean getStoreNulls();
+
+    // optional int32 baseColumnCount = 25;
+    /**
+     * <code>optional int32 baseColumnCount = 25;</code>
+     */
+    boolean hasBaseColumnCount();
+    /**
+     * <code>optional int32 baseColumnCount = 25;</code>
+     */
+    int getBaseColumnCount();
   }
   /**
    * Protobuf type {@code PTable}
@@ -3296,6 +3306,11 @@ public final class PTableProtos {
             case 192: {
               bitField0_ |= 0x00080000;
               storeNulls_ = input.readBool();
+              break;
+            }
+            case 200: {
+              bitField0_ |= 0x00100000;
+              baseColumnCount_ = input.readInt32();
               break;
             }
           }
@@ -3828,6 +3843,22 @@ public final class PTableProtos {
       return storeNulls_;
     }
 
+    // optional int32 baseColumnCount = 25;
+    public static final int BASECOLUMNCOUNT_FIELD_NUMBER = 25;
+    private int baseColumnCount_;
+    /**
+     * <code>optional int32 baseColumnCount = 25;</code>
+     */
+    public boolean hasBaseColumnCount() {
+      return ((bitField0_ & 0x00100000) == 0x00100000);
+    }
+    /**
+     * <code>optional int32 baseColumnCount = 25;</code>
+     */
+    public int getBaseColumnCount() {
+      return baseColumnCount_;
+    }
+
     private void initFields() {
       schemaNameBytes_ = com.google.protobuf.ByteString.EMPTY;
       tableNameBytes_ = com.google.protobuf.ByteString.EMPTY;
@@ -3853,6 +3884,7 @@ public final class PTableProtos {
       indexType_ = com.google.protobuf.ByteString.EMPTY;
       statsTimeStamp_ = 0L;
       storeNulls_ = false;
+      baseColumnCount_ = 0;
     }
     private byte memoizedIsInitialized = -1;
     public final boolean isInitialized() {
@@ -3992,6 +4024,9 @@ public final class PTableProtos {
       if (((bitField0_ & 0x00080000) == 0x00080000)) {
         output.writeBool(24, storeNulls_);
       }
+      if (((bitField0_ & 0x00100000) == 0x00100000)) {
+        output.writeInt32(25, baseColumnCount_);
+      }
       getUnknownFields().writeTo(output);
     }
 
@@ -4101,6 +4136,10 @@ public final class PTableProtos {
       if (((bitField0_ & 0x00080000) == 0x00080000)) {
         size += com.google.protobuf.CodedOutputStream
           .computeBoolSize(24, storeNulls_);
+      }
+      if (((bitField0_ & 0x00100000) == 0x00100000)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeInt32Size(25, baseColumnCount_);
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSerializedSize = size;
@@ -4233,6 +4272,11 @@ public final class PTableProtos {
         result = result && (getStoreNulls()
             == other.getStoreNulls());
       }
+      result = result && (hasBaseColumnCount() == other.hasBaseColumnCount());
+      if (hasBaseColumnCount()) {
+        result = result && (getBaseColumnCount()
+            == other.getBaseColumnCount());
+      }
       result = result &&
           getUnknownFields().equals(other.getUnknownFields());
       return result;
@@ -4341,6 +4385,10 @@ public final class PTableProtos {
       if (hasStoreNulls()) {
         hash = (37 * hash) + STORENULLS_FIELD_NUMBER;
         hash = (53 * hash) + hashBoolean(getStoreNulls());
+      }
+      if (hasBaseColumnCount()) {
+        hash = (37 * hash) + BASECOLUMNCOUNT_FIELD_NUMBER;
+        hash = (53 * hash) + getBaseColumnCount();
       }
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
@@ -4514,6 +4562,8 @@ public final class PTableProtos {
         bitField0_ = (bitField0_ & ~0x00400000);
         storeNulls_ = false;
         bitField0_ = (bitField0_ & ~0x00800000);
+        baseColumnCount_ = 0;
+        bitField0_ = (bitField0_ & ~0x01000000);
         return this;
       }
 
@@ -4654,6 +4704,10 @@ public final class PTableProtos {
           to_bitField0_ |= 0x00080000;
         }
         result.storeNulls_ = storeNulls_;
+        if (((from_bitField0_ & 0x01000000) == 0x01000000)) {
+          to_bitField0_ |= 0x00100000;
+        }
+        result.baseColumnCount_ = baseColumnCount_;
         result.bitField0_ = to_bitField0_;
         onBuilt();
         return result;
@@ -4819,6 +4873,9 @@ public final class PTableProtos {
         }
         if (other.hasStoreNulls()) {
           setStoreNulls(other.getStoreNulls());
+        }
+        if (other.hasBaseColumnCount()) {
+          setBaseColumnCount(other.getBaseColumnCount());
         }
         this.mergeUnknownFields(other.getUnknownFields());
         return this;
@@ -6424,6 +6481,39 @@ public final class PTableProtos {
         return this;
       }
 
+      // optional int32 baseColumnCount = 25;
+      private int baseColumnCount_ ;
+      /**
+       * <code>optional int32 baseColumnCount = 25;</code>
+       */
+      public boolean hasBaseColumnCount() {
+        return ((bitField0_ & 0x01000000) == 0x01000000);
+      }
+      /**
+       * <code>optional int32 baseColumnCount = 25;</code>
+       */
+      public int getBaseColumnCount() {
+        return baseColumnCount_;
+      }
+      /**
+       * <code>optional int32 baseColumnCount = 25;</code>
+       */
+      public Builder setBaseColumnCount(int value) {
+        bitField0_ |= 0x01000000;
+        baseColumnCount_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>optional int32 baseColumnCount = 25;</code>
+       */
+      public Builder clearBaseColumnCount() {
+        bitField0_ = (bitField0_ & ~0x01000000);
+        baseColumnCount_ = 0;
+        onChanged();
+        return this;
+      }
+
       // @@protoc_insertion_point(builder_scope:PTable)
     }
 
@@ -6470,7 +6560,7 @@ public final class PTableProtos {
       "values\030\002 \003(\014\022\033\n\023guidePostsByteCount\030\003 \001(" +
       "\003\022\025\n\rkeyBytesCount\030\004 \001(\003\022\027\n\017guidePostsCo",
       "unt\030\005 \001(\005\022!\n\013pGuidePosts\030\006 \001(\0132\014.PGuideP" +
-      "osts\"\266\004\n\006PTable\022\027\n\017schemaNameBytes\030\001 \002(\014" +
+      "osts\"\317\004\n\006PTable\022\027\n\017schemaNameBytes\030\001 \002(\014" +
       "\022\026\n\016tableNameBytes\030\002 \002(\014\022\036\n\ttableType\030\003 " +
       "\002(\0162\013.PTableType\022\022\n\nindexState\030\004 \001(\t\022\026\n\016" +
       "sequenceNumber\030\005 \002(\003\022\021\n\ttimeStamp\030\006 \002(\003\022" +
@@ -6484,10 +6574,11 @@ public final class PTableProtos {
       "nt\030\022 \001(\014\022\025\n\rphysicalNames\030\023 \003(\014\022\020\n\010tenan" +
       "tId\030\024 \001(\014\022\023\n\013viewIndexId\030\025 \001(\005\022\021\n\tindexT" +
       "ype\030\026 \001(\014\022\026\n\016statsTimeStamp\030\027 \001(\003\022\022\n\nsto" +
-      "reNulls\030\030 \001(\010*A\n\nPTableType\022\n\n\006SYSTEM\020\000\022" +
-      "\010\n\004USER\020\001\022\010\n\004VIEW\020\002\022\t\n\005INDEX\020\003\022\010\n\004JOIN\020\004" +
-      "B@\n(org.apache.phoenix.coprocessor.gener" +
-      "atedB\014PTableProtosH\001\210\001\001\240\001\001"
+      "reNulls\030\030 \001(\010\022\027\n\017baseColumnCount\030\031 \001(\005*A" +
+      "\n\nPTableType\022\n\n\006SYSTEM\020\000\022\010\n\004USER\020\001\022\010\n\004VI" +
+      "EW\020\002\022\t\n\005INDEX\020\003\022\010\n\004JOIN\020\004B@\n(org.apache." +
+      "phoenix.coprocessor.generatedB\014PTablePro" +
+      "tosH\001\210\001\001\240\001\001"
     };
     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
       new com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner() {
@@ -6511,7 +6602,7 @@ public final class PTableProtos {
           internal_static_PTable_fieldAccessorTable = new
             com.google.protobuf.GeneratedMessage.FieldAccessorTable(
               internal_static_PTable_descriptor,
-              new java.lang.String[] { "SchemaNameBytes", "TableNameBytes", "TableType", "IndexState", "SequenceNumber", "TimeStamp", "PkNameBytes", "BucketNum", "Columns", "Indexes", "IsImmutableRows", "GuidePosts", "DataTableNameBytes", "DefaultFamilyName", "DisableWAL", "MultiTenant", "ViewType", "ViewStatement", "PhysicalNames", "TenantId", "ViewIndexId", "IndexType", "StatsTimeStamp", "StoreNulls", });
+              new java.lang.String[] { "SchemaNameBytes", "TableNameBytes", "TableType", "IndexState", "SequenceNumber", "TimeStamp", "PkNameBytes", "BucketNum", "Columns", "Indexes", "IsImmutableRows", "GuidePosts", "DataTableNameBytes", "DefaultFamilyName", "DisableWAL", "MultiTenant", "ViewType", "ViewStatement", "PhysicalNames", "TenantId", "ViewIndexId", "IndexType", "StatsTimeStamp", "StoreNulls", "BaseColumnCount", });
           return null;
         }
       };
