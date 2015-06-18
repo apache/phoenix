@@ -62,8 +62,7 @@ public abstract class MetaDataProtocol extends MetaDataService {
 
     public static final long MIN_TABLE_TIMESTAMP = 0;
 
-    // Incremented from 5 to 7 with the addition of the STORE_NULLS table option in 4.3
-    public static final long MIN_SYSTEM_TABLE_TIMESTAMP = MIN_TABLE_TIMESTAMP + 7;
+    public static final long MIN_SYSTEM_TABLE_TIMESTAMP = MIN_TABLE_TIMESTAMP + 8;
     public static final int DEFAULT_MAX_META_DATA_VERSIONS = 1000;
     public static final int DEFAULT_MAX_STAT_DATA_VERSIONS = 3;
     public static final boolean DEFAULT_META_DATA_KEEP_DELETED_CELLS = true;
@@ -73,6 +72,7 @@ public abstract class MetaDataProtocol extends MetaDataService {
     public static final long MIN_SYSTEM_TABLE_TIMESTAMP_4_2_0 = MIN_TABLE_TIMESTAMP + 4;
     public static final long MIN_SYSTEM_TABLE_TIMESTAMP_4_2_1 = MIN_TABLE_TIMESTAMP + 5;
     public static final long MIN_SYSTEM_TABLE_TIMESTAMP_4_3_0 = MIN_TABLE_TIMESTAMP + 7;
+    public static final long MIN_SYSTEM_TABLE_TIMESTAMP_4_5_0 = MIN_TABLE_TIMESTAMP + 8;
     
     // TODO: pare this down to minimum, as we don't need duplicates for both table and column errors, nor should we need
     // a different code for every type of error.
