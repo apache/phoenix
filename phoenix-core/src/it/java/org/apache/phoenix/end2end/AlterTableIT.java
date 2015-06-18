@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.hadoop.hbase.HColumnDescriptor.DEFAULT_REPLICATION_SCOPE;
+import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_MUTATE_TABLE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.closeConnection;
 import static org.apache.phoenix.util.TestUtil.closeStatement;
@@ -32,9 +33,11 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
@@ -48,8 +51,10 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -58,6 +63,8 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import com.google.common.base.Objects;
 
 /**
  *
@@ -1987,5 +1994,354 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         } finally {
             conn.close();
         }
+    }
+    
+    @Test
+    public void testAddColumnToTableWithViews() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        try {       
+            conn.createStatement().execute("CREATE TABLE IF NOT EXISTS TABLEWITHVIEW ("
+                    + " ID char(1) NOT NULL,"
+                    + " COL1 integer NOT NULL,"
+                    + " COL2 bigint NOT NULL,"
+                    + " CONSTRAINT NAME_PK PRIMARY KEY (ID, COL1, COL2)"
+                    + " )");
+            assertTableDefinition(conn, "TABLEWITHVIEW", PTableType.TABLE, null, 0, 3, -1, "ID", "COL1", "COL2");
+            
+            conn.createStatement().execute("CREATE VIEW VIEWOFTABLE ( VIEW_COL1 SMALLINT ) AS SELECT * FROM TABLEWITHVIEW");
+            assertTableDefinition(conn, "VIEWOFTABLE", PTableType.VIEW, "TABLEWITHVIEW", 0, 4, 3, "ID", "COL1", "COL2", "VIEW_COL1");
+            
+            conn.createStatement().execute("ALTER TABLE TABLEWITHVIEW ADD COL3 char(10)");
+            assertTableDefinition(conn, "VIEWOFTABLE", PTableType.VIEW, "TABLEWITHVIEW", 1, 5, 4, "ID", "COL1", "COL2", "COL3", "VIEW_COL1");
+            
+        } finally {
+            conn.close();
+        }
+    }
+
+    private void assertTableDefinition(Connection conn, String tableName, PTableType tableType, String parentTableName, int sequenceNumber, int columnCount, int baseColumnCount, String... columnName) throws Exception {
+        PreparedStatement p = conn.prepareStatement("SELECT * FROM SYSTEM.CATALOG WHERE TABLE_NAME=? AND TABLE_TYPE=?");
+        p.setString(1, tableName);
+        p.setString(2, tableType.getSerializedValue());
+        ResultSet rs = p.executeQuery();
+        assertTrue(rs.next());
+        assertEquals(getSystemCatalogEntriesForTable(conn, tableName, "Mismatch in BaseColumnCount"), baseColumnCount, rs.getInt("BASE_COLUMN_COUNT"));
+        assertEquals(getSystemCatalogEntriesForTable(conn, tableName, "Mismatch in columnCount"), columnCount, rs.getInt("COLUMN_COUNT"));
+        assertEquals(getSystemCatalogEntriesForTable(conn, tableName, "Mismatch in sequenceNumber"), sequenceNumber, rs.getInt("TABLE_SEQ_NUM"));
+        rs.close();
+
+        ResultSet parentTableColumnsRs = null; 
+        if (parentTableName != null) {
+            parentTableColumnsRs = conn.getMetaData().getColumns(null, null, parentTableName, null);
+        }
+        
+        rs = conn.getMetaData().getColumns(null, null, tableName, null);
+        for (int i = 0; i < columnName.length; i++) {
+            if (columnName[i] != null) {
+                assertTrue(rs.next());
+                assertEquals(getSystemCatalogEntriesForTable(conn, tableName, "Mismatch in columnName: i=" + i), columnName[i], rs.getString("COLUMN_NAME"));
+                assertEquals(getSystemCatalogEntriesForTable(conn, tableName, "Mismatch in ordinalPosition: i=" + i), i+1, rs.getInt("ORDINAL_POSITION"));
+                if (i < baseColumnCount && parentTableColumnsRs != null) {
+                    assertTrue(parentTableColumnsRs.next());
+                    ResultSetMetaData md = parentTableColumnsRs.getMetaData();
+                    assertEquals(md.getColumnCount(), rs.getMetaData().getColumnCount());
+                    for (int columnIndex = 1; columnIndex < md.getColumnCount(); columnIndex++) {
+                        String viewColumnValue = rs.getString(columnIndex);
+                        String parentTableColumnValue = parentTableColumnsRs.getString(columnIndex);
+                        if (!Objects.equal(viewColumnValue, parentTableColumnValue)) {
+                            if (md.getColumnName(columnIndex).equals("TABLE_NAME")) {
+                                assertEquals(parentTableName, parentTableColumnValue);
+                                assertEquals(tableName, viewColumnValue);
+                            } else {
+                                fail(md.getColumnName(columnIndex) + "=" + parentTableColumnValue);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assertFalse(getSystemCatalogEntriesForTable(conn, tableName, ""), rs.next());
+    }
+    
+    private String getSystemCatalogEntriesForTable(Connection conn, String tableName, String message) throws Exception {
+        StringBuilder sb = new StringBuilder(message);
+        sb.append("\n\n\n");
+        ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM SYSTEM.CATALOG WHERE TABLE_NAME='"+ tableName +"'");
+        ResultSetMetaData metaData = rs.getMetaData();
+        int rowNum = 0;
+        while (rs.next()) {
+            sb.append(rowNum++).append("------\n");
+            for (int i = 1; i <= metaData.getColumnCount(); i++) {
+                sb.append("\t").append(metaData.getColumnLabel(i)).append("=").append(rs.getString(i)).append("\n");
+            }
+            sb.append("\n");
+        }
+        rs.close();
+        return sb.toString();
+    }
+    
+    @Test
+    public void testCacheInvalidatedAfterAddingColumnToBaseTableWithViews() throws Exception {
+        String baseTable = "testCacheInvalidatedAfterAddingColumnToBaseTableWithViews";
+        String viewName = baseTable + "_view";
+        String tenantId = "tenantId";
+        try (Connection globalConn = DriverManager.getConnection(getUrl())) {
+            String tableDDL = "CREATE TABLE " + baseTable + " (TENANT_ID VARCHAR NOT NULL, PK1 VARCHAR NOT NULL, V1 VARCHAR CONSTRAINT NAME_PK PRIMARY KEY(TENANT_ID, PK1)) MULTI_TENANT = true " ;
+            globalConn.createStatement().execute(tableDDL);
+            Properties tenantProps = new Properties();
+            tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+            // create a tenant specific view
+            try (Connection tenantConn =  DriverManager.getConnection(getUrl(), tenantProps)) {
+                String viewDDL = "CREATE VIEW " + viewName + " AS SELECT * FROM " + baseTable;
+                tenantConn.createStatement().execute(viewDDL);
+                
+                // Add a column to the base table using global connection
+                globalConn.createStatement().execute("ALTER TABLE " + baseTable + " ADD NEW_COL VARCHAR");
+
+                // Check now whether the tenant connection can see the column that was added
+                tenantConn.createStatement().execute("SELECT NEW_COL FROM " + viewName);
+                tenantConn.createStatement().execute("SELECT NEW_COL FROM " + baseTable);
+            }
+        }
+    }
+    
+    @Test
+    public void testDropColumnOnTableWithViewsNotAllowed() throws Exception {
+        String baseTable = "testDropColumnOnTableWithViewsNotAllowed";
+        String viewName = baseTable + "_view";
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String tableDDL = "CREATE TABLE " + baseTable + " (PK1 VARCHAR NOT NULL PRIMARY KEY, V1 VARCHAR, V2 VARCHAR)";
+            conn.createStatement().execute(tableDDL);
+            
+            String viewDDL = "CREATE VIEW " + viewName + " AS SELECT * FROM " + baseTable;
+            conn.createStatement().execute(viewDDL);
+            
+            String dropColumn = "ALTER TABLE " + baseTable + " DROP COLUMN V2";
+            try {
+                conn.createStatement().execute(dropColumn);
+                fail("Dropping column on a base table that has views is not allowed");
+            } catch (SQLException e) {  
+                assertEquals(CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
+            }
+        }
+    }
+    
+    @Test
+    public void testAlteringViewThatHasChildViewsNotAllowed() throws Exception {
+        String baseTable = "testAlteringViewThatHasChildViewsNotAllowed";
+        String childView = "childView";
+        String grandChildView = "grandChildView";
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String baseTableDDL =
+                    "CREATE TABLE " +  baseTable + " (TENANT_ID VARCHAR NOT NULL, PK2 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR CONSTRAINT NAME_PK PRIMARY KEY(TENANT_ID, PK2))";
+            conn.createStatement().execute(baseTableDDL);
+
+            String childViewDDL = "CREATE VIEW " + childView + " AS SELECT * FROM " + baseTable;
+            conn.createStatement().execute(childViewDDL);
+
+            String addColumnToChildViewDDL =
+                    "ALTER VIEW " + childView + " ADD CHILD_VIEW_COL VARCHAR";
+            conn.createStatement().execute(addColumnToChildViewDDL);
+
+            String grandChildViewDDL =
+                    "CREATE VIEW " + grandChildView + " AS SELECT * FROM " + childView;
+            conn.createStatement().execute(grandChildViewDDL);
+
+            // dropping base table column from child view should fail
+            String dropColumnFromChildView = "ALTER VIEW " + childView + " DROP COLUMN V2";
+            try {
+                conn.createStatement().execute(dropColumnFromChildView);
+                fail("Dropping columns from a view that has child views on it is not allowed");
+            } catch (SQLException e) {
+                assertEquals(CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
+            }
+
+            // dropping view specific column from child view should fail
+            dropColumnFromChildView = "ALTER VIEW " + childView + " DROP COLUMN CHILD_VIEW_COL";
+            try {
+                conn.createStatement().execute(dropColumnFromChildView);
+                fail("Dropping columns from a view that has child views on it is not allowed");
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
+            }
+            
+            // Adding column to view that has child views should fail
+            String addColumnToChildView = "ALTER VIEW " + childView + " ADD V5 VARCHAR";
+            try {
+                conn.createStatement().execute(addColumnToChildView);
+                fail("Adding columns to a view that has child views on it is not allowed");
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
+            }
+
+            // dropping column from the grand child view, however, should work.
+            String dropColumnFromGrandChildView =
+                    "ALTER VIEW " + grandChildView + " DROP COLUMN CHILD_VIEW_COL";
+            conn.createStatement().execute(dropColumnFromGrandChildView);
+
+            // similarly, dropping column inherited from the base table should work.
+            dropColumnFromGrandChildView = "ALTER VIEW " + grandChildView + " DROP COLUMN V2";
+            conn.createStatement().execute(dropColumnFromGrandChildView);
+        }
+    }
+    
+    @Test
+    public void testDivorcedViewsStayDivorced() throws Exception {
+        String baseTable = "testDivorcedViewsStayDivorced";
+        String viewName = baseTable + "_view";
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String tableDDL = "CREATE TABLE " + baseTable + " (PK1 VARCHAR NOT NULL PRIMARY KEY, V1 VARCHAR, V2 VARCHAR)";
+            conn.createStatement().execute(tableDDL);
+            
+            String viewDDL = "CREATE VIEW " + viewName + " AS SELECT * FROM " + baseTable;
+            conn.createStatement().execute(viewDDL);
+            
+            // Drop the column inherited from base table to divorce the view
+            String dropColumn = "ALTER VIEW " + viewName + " DROP COLUMN V2";
+            conn.createStatement().execute(dropColumn);
+            
+            String alterBaseTable = "ALTER TABLE " + baseTable + " ADD V3 VARCHAR";
+            conn.createStatement().execute(alterBaseTable);
+            
+            // Column V3 shouldn't have propagated to the divorced view.
+            String sql = "SELECT V3 FROM " + viewName;
+            try {
+                conn.createStatement().execute(sql);
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.COLUMN_NOT_FOUND.getErrorCode(), e.getErrorCode());
+            }
+        } 
+    }
+    
+    @Test
+    public void testAddingColumnToBaseTablePropagatesToEntireViewHierarchy() throws Exception {
+        String baseTable = "testViewHierarchy";
+        String view1 = "view1";
+        String view2 = "view2";
+        String view3 = "view3";
+        String view4 = "view4";
+        /*                                     baseTable
+                                 /                  |               \ 
+                         view1(tenant1)    view3(tenant2)          view4(global)
+                          /
+                        view2(tenant1)  
+        */
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String baseTableDDL = "CREATE TABLE " + baseTable + " (TENANT_ID VARCHAR NOT NULL, PK1 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR CONSTRAINT NAME_PK PRIMARY KEY(TENANT_ID, PK1)) MULTI_TENANT = true ";
+            conn.createStatement().execute(baseTableDDL);
+            
+            try (Connection tenant1Conn = getTenantConnection("tenant1")) {
+                String view1DDL = "CREATE VIEW " + view1 + " AS SELECT * FROM " + baseTable;
+                tenant1Conn.createStatement().execute(view1DDL);
+                
+                String view2DDL = "CREATE VIEW " + view2 + " AS SELECT * FROM " + view1;
+                tenant1Conn.createStatement().execute(view2DDL);
+            }
+            
+            try (Connection tenant2Conn = getTenantConnection("tenant2")) {
+                String view3DDL = "CREATE VIEW " + view3 + " AS SELECT * FROM " + baseTable;
+                tenant2Conn.createStatement().execute(view3DDL);
+            }
+            
+            String view4DDL = "CREATE VIEW " + view4 + " AS SELECT * FROM " + baseTable;
+            conn.createStatement().execute(view4DDL);
+            
+            String alterBaseTable = "ALTER TABLE " + baseTable + " ADD V3 VARCHAR";
+            conn.createStatement().execute(alterBaseTable);
+            
+            // verify that the column is visible to view4
+            conn.createStatement().execute("SELECT V3 FROM " + view4);
+            
+            // verify that the column is visible to view1 and view2
+            try (Connection tenant1Conn = getTenantConnection("tenant1")) {
+                tenant1Conn.createStatement().execute("SELECT V3 from " + view1);
+                tenant1Conn.createStatement().execute("SELECT V3 from " + view2);
+            }
+            
+            // verify that the column is visible to view3
+            try (Connection tenant2Conn = getTenantConnection("tenant2")) {
+                tenant2Conn.createStatement().execute("SELECT V3 from " + view3);
+            }
+            
+        }
+           
+    }
+    
+    @Test
+    public void testChangingPKOfBaseTableChangesPKForAllViews() throws Exception {
+        String baseTable = "testChangePKOfBaseTable";
+        String view1 = "view1";
+        String view2 = "view2";
+        String view3 = "view3";
+        String view4 = "view4";
+        /*                                     baseTable
+                                 /                  |               \ 
+                         view1(tenant1)    view3(tenant2)          view4(global)
+                          /
+                        view2(tenant1)  
+         */
+        Connection tenant1Conn = null, tenant2Conn = null;
+        try (Connection globalConn = DriverManager.getConnection(getUrl())) {
+            String baseTableDDL = "CREATE TABLE "
+                    + baseTable
+                    + " (TENANT_ID VARCHAR NOT NULL, PK1 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR CONSTRAINT NAME_PK PRIMARY KEY(TENANT_ID, PK1)) MULTI_TENANT = true ";
+            globalConn.createStatement().execute(baseTableDDL);
+
+            tenant1Conn = getTenantConnection("tenant1");
+            String view1DDL = "CREATE VIEW " + view1 + " AS SELECT * FROM " + baseTable;
+            tenant1Conn.createStatement().execute(view1DDL);
+
+            String view2DDL = "CREATE VIEW " + view2 + " AS SELECT * FROM " + view1;
+            tenant1Conn.createStatement().execute(view2DDL);
+
+            tenant2Conn = getTenantConnection("tenant2");
+            String view3DDL = "CREATE VIEW " + view3 + " AS SELECT * FROM " + baseTable;
+            tenant2Conn.createStatement().execute(view3DDL);
+
+            String view4DDL = "CREATE VIEW " + view4 + " AS SELECT * FROM " + baseTable;
+            globalConn.createStatement().execute(view4DDL);
+
+            String alterBaseTable = "ALTER TABLE " + baseTable + " ADD NEW_PK varchar primary key ";
+            globalConn.createStatement().execute(alterBaseTable);
+
+            // verify that the new column new_pk is now part of the primary key for the entire hierarchy
+            assertTrue(checkColumnPartOfPk(globalConn.unwrap(PhoenixConnection.class), "PK1", baseTable));
+            assertTrue(checkColumnPartOfPk(tenant1Conn.unwrap(PhoenixConnection.class), "PK1", view1));
+            assertTrue(checkColumnPartOfPk(tenant1Conn.unwrap(PhoenixConnection.class), "PK1", view2));
+            assertTrue(checkColumnPartOfPk(tenant2Conn.unwrap(PhoenixConnection.class), "PK1", view3));
+            assertTrue(checkColumnPartOfPk(globalConn.unwrap(PhoenixConnection.class), "PK1", view4));
+
+        } finally {
+            if (tenant1Conn != null) {
+                try {
+                    tenant1Conn.close();
+                } catch (Throwable ignore) {}
+            }
+            if (tenant2Conn != null) {
+                try {
+                    tenant2Conn.close();
+                } catch (Throwable ignore) {}
+            }
+        }
+
+    }
+    
+    private boolean checkColumnPartOfPk(PhoenixConnection conn, String columnName, String tableName) throws SQLException {
+        String normalizedTableName = SchemaUtil.normalizeIdentifier(tableName);
+        PTable table = conn.getMetaDataCache().getTable(new PTableKey(conn.getTenantId(), normalizedTableName));
+        List<PColumn> pkCols = table.getPKColumns();
+        String normalizedColumnName = SchemaUtil.normalizeIdentifier(columnName);
+        for (PColumn pkCol : pkCols) {
+            if (pkCol.getName().getString().equals(normalizedColumnName)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    private Connection getTenantConnection(String tenantId) throws Exception {
+        Properties tenantProps = new Properties();
+        tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+        return DriverManager.getConnection(getUrl(), tenantProps);
     }
 }
