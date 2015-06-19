@@ -1158,13 +1158,14 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
     }
 
 
-    private static void acquireLock(HRegion region, byte[] key, List<RowLock> locks)
+    private static RowLock acquireLock(HRegion region, byte[] key, List<RowLock> locks)
         throws IOException {
         RowLock rowLock = region.getRowLock(key);
         if (rowLock == null) {
             throw new IOException("Failed to acquire lock on " + Bytes.toStringBinary(key));
         }
         locks.add(rowLock);
+        return rowLock;
     }
 
     private static final byte[] PHYSICAL_TABLE_BYTES = new byte[] {PTable.LinkType.PHYSICAL_TABLE.getSerializedValue()};
@@ -1576,18 +1577,16 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             byte[] viewSchemaName = rowViewKeyMetaData[PhoenixDatabaseMetaData.SCHEMA_NAME_INDEX];
             byte[] viewName = rowViewKeyMetaData[PhoenixDatabaseMetaData.TABLE_NAME_INDEX];
             byte[] viewKey = SchemaUtil.getTableKey(viewTenantId, viewSchemaName, viewName);
-            PTable view = doGetTable(viewKey, clientTimeStamp);
+            // lock the rows corresponding to views so that no other thread can modify the view meta-data
+            RowLock viewRowLock = acquireLock(region, viewKey, locks);
+            PTable view = doGetTable(viewKey, clientTimeStamp, viewRowLock);
 
             if (view.getBaseColumnCount() == QueryConstants.DIVORCED_VIEW_BASE_COLUMN_COUNT) {
                 // if a view has divorced itself from the base table, we don't allow schema changes
                 // to be propagated to it.
                 return;
             }
-            // lock the rows corresponding to views so that no other thread can modify the view meta-data
-            acquireLock(region, viewKey, locks);
-
             int deltaNumberOfColumns = 0;
-            
             for (Mutation m : tableMetadata) {
                 byte[][] rkmd = new byte[5][];
                 int pkCount = getVarChars(m.getRow(), rkmd);
