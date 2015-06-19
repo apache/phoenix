@@ -28,14 +28,13 @@ public class PherfConstants {
     public static final int DEFAULT_THREAD_POOL_SIZE = 10;
     public static final int DEFAULT_BATCH_SIZE = 1000;
     public static final String DEFAULT_DATE_PATTERN = "yyyy-MM-dd HH:mm:ss.SSS";
-    public static final String DEFAULT_FILE_PATTERN = ".*scenario.xml";
     public static final String RESOURCE_SCENARIO = "/scenario";
     public static final String
             SCENARIO_ROOT_PATTERN =
             ".*" + PherfConstants.RESOURCE_SCENARIO.substring(1) + ".*";
     public static final String SCHEMA_ROOT_PATTERN = ".*";
     public static final String PHERF_PROPERTIES = "pherf.properties";
-//    public static final String RESULT_DIR = "RESULTS";
+
     public static final String EXPORT_DIR = "CSV_EXPORT";
     public static final String RESULT_PREFIX = "RESULT_";
     public static final String PATH_SEPARATOR = "/";
@@ -51,6 +50,7 @@ public class PherfConstants {
 
     public static final String PHERF_SCHEMA_NAME = "PHERF";
 
+    // TODO MOve to properties
     // log out data load per n rows
     public static final int LOG_PER_NROWS = 1000000;
     public static final String COMBINED_FILE_NAME = "COMBINED";
@@ -86,7 +86,9 @@ public class PherfConstants {
         InputStream is = null;
         try {
             is = getClass().getClassLoader().getResourceAsStream(fileName);
-            properties.load(is);
+            if (is != null) {
+                properties.load(is);
+            }
         } finally {
             if (is != null) {
                 is.close();

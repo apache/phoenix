@@ -18,9 +18,9 @@
 
 package org.apache.phoenix.pherf.result;
 
-import java.util.List;
-
 import org.apache.phoenix.pherf.result.file.ResultFileDetails;
+
+import java.util.List;
 
 /**
  * Common container for Pherf results.
@@ -33,10 +33,9 @@ public class Result {
     private final String header;
 
     /**
-     *
-     * @param type {@link org.apache.phoenix.pherf.result.file.ResultFileDetails} Currently unused, but gives metadata about the
-     *                                                           contents of the result.
-     * @param header Used for CSV, otherwise pass null. For CSV pass comma separated string of header fields.
+     * @param type          {@link org.apache.phoenix.pherf.result.file.ResultFileDetails} Currently unused, but gives metadata about the
+     *                      contents of the result.
+     * @param header        Used for CSV, otherwise pass null. For CSV pass comma separated string of header fields.
      * @param messageValues List<{@link ResultValue} All fields combined represent the data
      *                      for a row to be written.
      */

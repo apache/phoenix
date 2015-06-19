@@ -19,95 +19,96 @@
 package org.apache.phoenix.pherf.workload;
 
 import org.apache.phoenix.pherf.PherfConstants;
-import org.apache.phoenix.pherf.PherfConstants.RunMode;
-import org.apache.phoenix.pherf.configuration.XMLConfigParser;
-import org.apache.phoenix.pherf.jmx.MonitorManager;
-import org.apache.phoenix.pherf.loaddata.DataLoader;
-
-import org.apache.phoenix.pherf.util.ResourceList;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.Properties;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 
 public class WorkloadExecutor {
     private static final Logger logger = LoggerFactory.getLogger(WorkloadExecutor.class);
-    private final XMLConfigParser parser;
-    private MonitorManager monitor;
-    private Future monitorThread;
     private final int poolSize;
 
-    private final ExecutorService pool;
+    // Jobs can be accessed by multiple threads
+    private final Map<Workload, Future> jobs = new ConcurrentHashMap<>();
 
+    private final ExecutorService pool;
 
     public WorkloadExecutor() throws Exception {
         this(PherfConstants.create().getProperties(PherfConstants.PHERF_PROPERTIES));
     }
 
-    public WorkloadExecutor(Properties properties) throws Exception{
-        this(properties,PherfConstants.DEFAULT_FILE_PATTERN);
+    public WorkloadExecutor(Properties properties) throws Exception {
+        this(properties, new ArrayList());
     }
 
-    public WorkloadExecutor(Properties properties, String filePattern) throws Exception {
-        this(properties,
-                new XMLConfigParser(filePattern),
-                true);
-    }
-
-    public WorkloadExecutor(Properties properties, XMLConfigParser parser, boolean monitor) throws Exception {
-        this.parser = parser;
-        this.poolSize = (properties.getProperty("pherf.default.threadpool") == null)
-                ? PherfConstants.DEFAULT_THREAD_POOL_SIZE
-                : Integer.parseInt(properties.getProperty("pherf.default.threadpool"));
+    public WorkloadExecutor(Properties properties, List<Workload> workloads) throws Exception {
+        this.poolSize =
+                (properties.getProperty("pherf.default.threadpool") == null) ?
+                        PherfConstants.DEFAULT_THREAD_POOL_SIZE :
+                        Integer.parseInt(properties.getProperty("pherf.default.threadpool"));
 
         this.pool = Executors.newFixedThreadPool(this.poolSize);
-        if (monitor) {
-            initMonitor(Integer.parseInt(properties.getProperty("pherf.default.monitorFrequency")));
+        init(workloads);
+    }
+
+    public void add(Workload workload) throws Exception {
+        this.jobs.put(workload, pool.submit(workload.execute()));
+    }
+
+    /**
+     * Blocks on waiting for all workloads to finish. If a
+     * {@link org.apache.phoenix.pherf.workload.Workload} Requires complete() to be called, it must
+     * be called prior to using this method. Otherwise it will block infinitely.
+     */
+    public void get() {
+        for (Workload workload : jobs.keySet()) {
+            get(workload);
         }
     }
 
     /**
-     * Executes all scenarios dataload
+     * Calls the {@link java.util.concurrent.Future#get()} method pertaining to this workflow.
+     * Once the Future competes, the workflow is removed from the list.
      *
-     * @throws Exception
+     * @param workload Key entry in the HashMap
      */
-    public void executeDataLoad() throws Exception {
-        logger.info("\n\nStarting Data Loader...");
-        DataLoader dataLoader = new DataLoader(parser);
-        dataLoader.execute();
-    }
-
-    /**
-     * Executes all scenario multi-threaded query sets
-     *
-     * @param queryHint
-     * @throws Exception
-     */
-    public void executeMultithreadedQueryExecutor(String queryHint, boolean export, RunMode runMode) throws Exception {
-        logger.info("\n\nStarting Query Executor...");
-        QueryExecutor queryExecutor = new QueryExecutor(parser);
-        queryExecutor.execute(queryHint, export, runMode);
-    }
-
-    public void shutdown() throws Exception {
-		if (null != monitor && monitor.isRunning()) {
-            this.monitor.stop();
-            this.monitorThread.get(60, TimeUnit.SECONDS);
-            this.pool.shutdown();
+    public void get(Workload workload) {
+        try {
+            Future future = jobs.get(workload);
+            future.get();
+            jobs.remove(workload);
+        } catch (InterruptedException | ExecutionException e) {
+            logger.error("", e);
         }
     }
 
-    // Just used for testing
-    public XMLConfigParser getParser() {
-        return parser;
+    /**
+     * Complete all workloads in the list.
+     * Entries in the job Map will persist until {#link WorkloadExecutorNew#get()} is called
+     */
+    public void complete() {
+        for (Workload workload : jobs.keySet()) {
+            workload.complete();
+        }
     }
 
-    private void initMonitor(int monitorFrequency) throws Exception {
-        this.monitor = new MonitorManager(monitorFrequency);
-        monitorThread = pool.submit(this.monitor);
+    public void shutdown() {
+        // Make sure any Workloads still on pool have been properly shutdown
+        complete();
+        pool.shutdownNow();
+    }
+
+    public ExecutorService getPool() {
+        return pool;
+    }
+
+    private void init(List<Workload> workloads) throws Exception {
+        for (Workload workload : workloads) {
+            this.jobs.put(workload, pool.submit(workload.execute()));
+        }
     }
 }
