@@ -18,31 +18,31 @@
 
 package org.apache.phoenix.pherf.result;
 
+import org.apache.phoenix.pherf.configuration.QuerySet;
+
 import java.util.ArrayList;
 import java.util.List;
 
-import org.apache.phoenix.pherf.configuration.QuerySet;
-
 public class QuerySetResult extends QuerySet {
-	
-	private List<QueryResult> queryResults = new ArrayList<QueryResult>();
 
-	public QuerySetResult(QuerySet querySet) {
-		this.setConcurrency(querySet.getConcurrency());
-		this.setNumberOfExecutions(querySet.getNumberOfExecutions());
-		this.setExecutionDurationInMs(querySet.getExecutionDurationInMs());
-		this.setExecutionType(querySet.getExecutionType());
-	}
-	
-	public QuerySetResult() {
-	}
+    private List<QueryResult> queryResults = new ArrayList<>();
 
-	public List<QueryResult> getQueryResults() {
-		return queryResults;
-	}
+    public QuerySetResult(QuerySet querySet) {
+        this.setConcurrency(querySet.getConcurrency());
+        this.setNumberOfExecutions(querySet.getNumberOfExecutions());
+        this.setExecutionDurationInMs(querySet.getExecutionDurationInMs());
+        this.setExecutionType(querySet.getExecutionType());
+    }
+
+    public QuerySetResult() {
+    }
+
+    public List<QueryResult> getQueryResults() {
+        return queryResults;
+    }
 
     @SuppressWarnings("unused")
     public void setQueryResults(List<QueryResult> queryResults) {
-		this.queryResults = queryResults;
-	}	
+        this.queryResults = queryResults;
+    }
 }

@@ -16,13 +16,14 @@
   ~   limitations under the License.
   -->
 
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <parent>
         <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix</artifactId>
-        <version>4.4.1-HBase-0.98-SNAPSHOT</version>
+        <version>4.5.0-SNAPSHOT</version>
     </parent>
 
     <artifactId>phoenix-pherf</artifactId>
@@ -30,6 +31,7 @@
     <name>Phoenix - Pherf</name>
 
     <properties>
+        <top.dir>${project.basedir}/..</top.dir>
     </properties>
 
     <profiles>
@@ -231,6 +233,11 @@
         </dependency>
 
         <!-- Test Dependencies -->
+        <dependency>
+            <groupId>com.jcabi</groupId>
+            <artifactId>jcabi-jdbc</artifactId>
+            <version>0.15</version>
+        </dependency>
         <dependency>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>

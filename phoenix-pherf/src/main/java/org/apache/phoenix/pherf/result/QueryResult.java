@@ -18,13 +18,13 @@
 
 package org.apache.phoenix.pherf.result;
 
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.List;
-
 import org.apache.phoenix.pherf.PherfConstants.RunMode;
 import org.apache.phoenix.pherf.configuration.Query;
 import org.apache.phoenix.util.DateUtil;
+
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
 
 public class QueryResult extends Query {
     private List<ThreadTime> threadTimes = new ArrayList<ThreadTime>();
@@ -47,8 +47,7 @@ public class QueryResult extends Query {
         this.setId(query.getId());
     }
 
-    @SuppressWarnings("unused")
-    public QueryResult() {
+    @SuppressWarnings("unused") public QueryResult() {
     }
 
     public Date getStartTime() {
@@ -136,8 +135,8 @@ public class QueryResult extends Query {
     }
 
     private String getStartTimeText() {
-        return (null == this.getStartTime())
-                ? ""
-                : DateUtil.DEFAULT_MS_DATE_FORMATTER.format(this.getStartTime());
+        return (null == this.getStartTime()) ?
+                "" :
+                DateUtil.DEFAULT_MS_DATE_FORMATTER.format(this.getStartTime());
     }
 }
