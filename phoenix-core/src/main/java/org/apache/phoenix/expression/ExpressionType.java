@@ -23,6 +23,7 @@ import org.apache.phoenix.expression.function.AbsFunction;
 import org.apache.phoenix.expression.function.ArrayAllComparisonExpression;
 import org.apache.phoenix.expression.function.ArrayAnyComparisonExpression;
 import org.apache.phoenix.expression.function.ArrayAppendFunction;
+import org.apache.phoenix.expression.function.ArrayConcatFunction;
 import org.apache.phoenix.expression.function.ArrayElemRefExpression;
 import org.apache.phoenix.expression.function.ArrayIndexFunction;
 import org.apache.phoenix.expression.function.ArrayLengthFunction;
@@ -245,7 +246,8 @@ public enum ExpressionType {
     LnFunction(LnFunction.class),
     LogFunction(LogFunction.class),
     ExpFunction(ExpFunction.class),
-    PowerFunction(PowerFunction.class)
+    PowerFunction(PowerFunction.class),
+    ArrayConcatFunction(ArrayConcatFunction.class)
     ;
 
     ExpressionType(Class<? extends Expression> clazz) {

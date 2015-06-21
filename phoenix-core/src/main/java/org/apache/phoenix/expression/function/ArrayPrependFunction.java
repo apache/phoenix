@@ -23,16 +23,13 @@ import java.util.List;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.FunctionParseNode;
-import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TypeMismatchException;
-import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.*;
 
 @FunctionParseNode.BuiltInFunction(name = ArrayPrependFunction.NAME, args = {
         @FunctionParseNode.Argument(allowedTypes = {PVarbinary.class}),
-        @FunctionParseNode.Argument(allowedTypes = {PBinaryArray.class,
-                PVarbinaryArray.class})})
-public class ArrayPrependFunction  extends ArrayModifierFunction {
+        @FunctionParseNode.Argument(allowedTypes = {PBinaryArray.class, PVarbinaryArray.class})})
+public class ArrayPrependFunction extends ArrayModifierFunction {
 
     public static final String NAME = "ARRAY_PREPEND";
 
@@ -44,53 +41,14 @@ public class ArrayPrependFunction  extends ArrayModifierFunction {
     }
 
     @Override
-    public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-
-        if (!getArrayExpr().evaluate(tuple, ptr)) {
-            return false;
-        } else if (ptr.getLength() == 0) {
-            return true;
-        }
-        int arrayLength = PArrayDataType.getArrayLength(ptr, getBaseType(), getArrayExpr().getMaxLength());
-
-        int length = ptr.getLength();
-        int offset = ptr.getOffset();
-        byte[] arrayBytes = ptr.get();
-
-        getElementExpr().evaluate(tuple, ptr);
-
-        checkSizeCompatibility(ptr);
-        coerceBytes(ptr);
-        return PArrayDataType.prependItemToArray(ptr, length, offset, arrayBytes, getBaseType(), arrayLength, getMaxLength(), getArrayExpr().getSortOrder());
-    }
-
-    @Override
-    public PDataType getDataType() {
-        return children.get(1).getDataType();
-    }
-
-    @Override
-    public Integer getMaxLength() {
-        return this.children.get(1).getMaxLength();
-    }
-
-    @Override
-    public SortOrder getSortOrder() {
-        return getChildren().get(1).getSortOrder();
+    protected boolean modifierFunction(ImmutableBytesWritable ptr, int len, int offset,
+                                       byte[] arrayBytes, PDataType baseDataType, int arrayLength, Integer maxLength,
+                                       Expression arrayExp) {
+        return PArrayDataType.prependItemToArray(ptr, len, offset, arrayBytes, baseDataType, arrayLength, getMaxLength(), arrayExp.getSortOrder());
     }
 
     @Override
     public String getName() {
         return NAME;
-    }
-
-    @Override
-    public Expression getArrayExpr() {
-        return getChildren().get(1);
-    }
-
-    @Override
-    public Expression getElementExpr() {
-        return getChildren().get(0);
     }
 }

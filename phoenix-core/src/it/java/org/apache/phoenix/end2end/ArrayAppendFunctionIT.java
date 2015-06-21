@@ -497,23 +497,6 @@ public class ArrayAppendFunctionIT extends BaseHBaseManagedTimeIT {
     }
 
     @Test
-    public void testArrayAppendFunctionIntegerWithNull() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
-        initTables(conn);
-
-        ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT ARRAY_APPEND(NULL,NULL) FROM regions WHERE region_name = 'SF Bay Area'");
-        assertTrue(rs.next());
-
-        Integer[] integers = new Integer[]{2345, 46345, 23234, 456};
-
-        Array array = conn.createArrayOf("INTEGER", integers);
-
-        assertEquals(null, rs.getArray(1));
-        assertFalse(rs.next());
-    }
-
-    @Test
     public void testArrayAppendFunctionVarcharWithNull() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         initTables(conn);
