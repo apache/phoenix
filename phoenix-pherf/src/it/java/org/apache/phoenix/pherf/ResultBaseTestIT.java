@@ -19,27 +19,38 @@
 package org.apache.phoenix.pherf;
 
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
+import org.apache.phoenix.pherf.configuration.XMLConfigParser;
 import org.apache.phoenix.pherf.result.ResultUtil;
+import org.apache.phoenix.pherf.schema.SchemaReader;
+import org.apache.phoenix.pherf.util.PhoenixUtil;
 import org.junit.BeforeClass;
 
+import java.nio.file.Path;
+import java.util.List;
 import java.util.Properties;
 
 public class ResultBaseTestIT extends BaseHBaseManagedTimeIT {
-    private static boolean isSetUpDone = false;
+    protected static final String matcherScenario = ".*scenario/.*test.*xml";
+    protected static final String matcherSchema = ".*datamodel/.*test.*sql";
 
-    @BeforeClass
-    public static void setUp() throws Exception {
-        if (isSetUpDone) {
-            return;
-        }
+    protected static PhoenixUtil util = PhoenixUtil.create(true);
+    protected static Properties properties;
+    protected static SchemaReader reader;
+    protected static XMLConfigParser parser;
+    protected static List<Path> resources;
+    protected static ResultUtil resultUtil = new ResultUtil();
 
-        ResultUtil util = new ResultUtil();
+    @BeforeClass public static void setUp() throws Exception {
+
         PherfConstants constants = PherfConstants.create();
-        Properties properties = constants.getProperties(PherfConstants.PHERF_PROPERTIES);
+        properties = constants.getProperties(PherfConstants.PHERF_PROPERTIES);
         String dir = properties.getProperty("pherf.default.results.dir");
         String targetDir = "target/" + dir;
         properties.setProperty("pherf.default.results.dir", targetDir);
-        util.ensureBaseDirExists(targetDir);
-        isSetUpDone = true;
+        resultUtil.ensureBaseDirExists(targetDir);
+
+        util.setZookeeper("localhost");
+        reader = new SchemaReader(util, matcherSchema);
+        parser = new XMLConfigParser(matcherScenario);
     }
 }

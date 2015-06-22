@@ -22,29 +22,29 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class DataLoadTimeSummary {
-	private List<TableLoadTime> tableLoadTime = new ArrayList<TableLoadTime>();
+    private List<TableLoadTime> tableLoadTime = new ArrayList<TableLoadTime>();
 
-	public List<TableLoadTime> getTableLoadTime() {
-		return tableLoadTime;
-	}
-	
-	public void add(String tableName, int rowCount, int durationInMs) {
-		tableLoadTime.add(new TableLoadTime(tableName, rowCount, durationInMs));
-	}
+    public List<TableLoadTime> getTableLoadTime() {
+        return tableLoadTime;
+    }
+
+    public void add(String tableName, int rowCount, int durationInMs) {
+        tableLoadTime.add(new TableLoadTime(tableName, rowCount, durationInMs));
+    }
 }
 
 class TableLoadTime {
-	private int durationInMs;
-	private String tableName;
-	private int rowCount;
+    private int durationInMs;
+    private String tableName;
+    private int rowCount;
 
-	public TableLoadTime(String tableName, int rowCount, int durationInMs) {
-		this.tableName = tableName;
-		this.rowCount = rowCount;
-		this.durationInMs = durationInMs;
-	}
-	
-	public List<ResultValue> getCsvRepresentation(ResultUtil util) {
+    public TableLoadTime(String tableName, int rowCount, int durationInMs) {
+        this.tableName = tableName;
+        this.rowCount = rowCount;
+        this.durationInMs = durationInMs;
+    }
+
+    public List<ResultValue> getCsvRepresentation(ResultUtil util) {
         List<ResultValue> rowValues = new ArrayList<>();
         rowValues.add(new ResultValue(util.convertNull(getTableName())));
         rowValues.add(new ResultValue(util.convertNull(String.valueOf(getRowCount()))));
@@ -53,15 +53,15 @@ class TableLoadTime {
         return rowValues;
     }
 
-	public int getDurationInMs() {
-		return durationInMs;
-	}
+    public int getDurationInMs() {
+        return durationInMs;
+    }
 
-	public String getTableName() {
-		return tableName;
-	}
+    public String getTableName() {
+        return tableName;
+    }
 
-	public int getRowCount() {
-		return rowCount;
-	}
+    public int getRowCount() {
+        return rowCount;
+    }
 }
