@@ -31,8 +31,7 @@ public enum Extension {
         this.extension = extension;
     }
 
-    @Override
-    public String toString() {
+    @Override public String toString() {
         return extension;
     }
 }

@@ -45,7 +45,7 @@ public class SchemaReader {
      * @throws Exception
      */
     public SchemaReader(final String searchPattern) throws Exception {
-        this(new PhoenixUtil(), searchPattern);
+        this(PhoenixUtil.create(), searchPattern);
     }
 
     public SchemaReader(PhoenixUtil util, final String searchPattern) throws Exception {

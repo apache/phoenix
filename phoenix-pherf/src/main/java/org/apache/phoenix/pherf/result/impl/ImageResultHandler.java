@@ -19,8 +19,8 @@
 package org.apache.phoenix.pherf.result.impl;
 
 import org.apache.phoenix.pherf.PherfConstants;
-import org.apache.phoenix.pherf.result.file.ResultFileDetails;
 import org.apache.phoenix.pherf.result.*;
+import org.apache.phoenix.pherf.result.file.ResultFileDetails;
 import org.jfree.chart.ChartFactory;
 import org.jfree.chart.ChartUtilities;
 import org.jfree.chart.JFreeChart;
@@ -42,22 +42,22 @@ public class ImageResultHandler implements ResultHandler {
         this(resultFileName, resultFileDetails, true);
     }
 
-    public ImageResultHandler(String resultFileName, ResultFileDetails resultFileDetails, boolean generateFullFileName) {
+    public ImageResultHandler(String resultFileName, ResultFileDetails resultFileDetails,
+            boolean generateFullFileName) {
         ResultUtil util = new ResultUtil();
         PherfConstants constants = PherfConstants.create();
         String resultDir = constants.getProperty("pherf.default.results.dir");
 
-        this.resultFileName = generateFullFileName ?
-                resultDir + PherfConstants.PATH_SEPARATOR
-                        + PherfConstants.RESULT_PREFIX
-                        + resultFileName + util.getSuffix()
-                        + resultFileDetails.getExtension().toString()
-                : resultFileName;
+        this.resultFileName =
+                generateFullFileName ?
+                        resultDir + PherfConstants.PATH_SEPARATOR + PherfConstants.RESULT_PREFIX
+                                + resultFileName + util.getSuffix() + resultFileDetails
+                                .getExtension().toString() :
+                        resultFileName;
         this.resultFileDetails = resultFileDetails;
     }
 
-    @Override
-    public synchronized void write(Result result) throws Exception {
+    @Override public synchronized void write(Result result) throws Exception {
         TimeSeriesCollection timeSeriesCollection = new TimeSeriesCollection();
         int rowCount = 0;
         int maxLegendCount = 20;
@@ -70,12 +70,16 @@ public class ImageResultHandler implements ResultHandler {
             for (QuerySetResult querySetResult : scenarioResult.getQuerySetResult()) {
                 for (QueryResult queryResult : querySetResult.getQueryResults()) {
                     for (ThreadTime tt : queryResult.getThreadTimes()) {
-                        TimeSeries timeSeries = new TimeSeries(queryResult.getStatement() + " :: " + tt.getThreadName());
+                        TimeSeries
+                                timeSeries =
+                                new TimeSeries(
+                                        queryResult.getStatement() + " :: " + tt.getThreadName());
                         rowCount++;
                         synchronized (tt.getRunTimesInMs()) {
                             for (RunTime rt : tt.getRunTimesInMs()) {
                                 if (rt.getStartTime() != null) {
-                                    timeSeries.add(new Millisecond(rt.getStartTime()), rt.getElapsedDurationInMs());
+                                    timeSeries.add(new Millisecond(rt.getStartTime()),
+                                            rt.getElapsedDurationInMs());
                                 }
                             }
                         }
@@ -85,10 +89,14 @@ public class ImageResultHandler implements ResultHandler {
             }
         }
         boolean legend = rowCount > maxLegendCount ? false : true;
-        JFreeChart chart = ChartFactory.createTimeSeriesChart(dataModelResult.getName()
-                , "Time", "Query Time (ms)", timeSeriesCollection,
-                legend, true, false);
-        StandardXYItemRenderer renderer = new StandardXYItemRenderer(StandardXYItemRenderer.SHAPES_AND_LINES);
+        JFreeChart
+                chart =
+                ChartFactory
+                        .createTimeSeriesChart(dataModelResult.getName(), "Time", "Query Time (ms)",
+                                timeSeriesCollection, legend, true, false);
+        StandardXYItemRenderer
+                renderer =
+                new StandardXYItemRenderer(StandardXYItemRenderer.SHAPES_AND_LINES);
         chart.getXYPlot().setRenderer(renderer);
         chart.getXYPlot().setBackgroundPaint(Color.WHITE);
         chart.getXYPlot().setRangeGridlinePaint(Color.BLACK);
@@ -96,35 +104,31 @@ public class ImageResultHandler implements ResultHandler {
             chart.getXYPlot().getRenderer().setSeriesStroke(i, new BasicStroke(3f));
         }
         try {
-            ChartUtilities.saveChartAsJPEG(new File(resultFileName), chart, chartDimension, chartDimension);
+            ChartUtilities.saveChartAsJPEG(new File(resultFileName), chart, chartDimension,
+                    chartDimension);
         } catch (IOException e) {
             e.printStackTrace();
         }
 
     }
 
-    @Override
-    public synchronized void flush() throws Exception {
+    @Override public synchronized void flush() throws Exception {
 
     }
 
-    @Override
-    public synchronized void close() throws Exception {
+    @Override public synchronized void close() throws Exception {
 
     }
 
-    @Override
-    public List<Result> read() throws Exception {
+    @Override public List<Result> read() throws Exception {
         return null;
     }
 
-    @Override
-    public boolean isClosed() {
+    @Override public boolean isClosed() {
         return false;
     }
 
-    @Override
-    public ResultFileDetails getResultFileDetails() {
+    @Override public ResultFileDetails getResultFileDetails() {
         return resultFileDetails;
     }
 }
