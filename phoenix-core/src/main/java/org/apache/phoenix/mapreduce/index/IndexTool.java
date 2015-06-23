@@ -30,6 +30,7 @@ import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.apache.commons.cli.PosixParser;
+import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.FileSystem;
@@ -164,12 +165,12 @@ public class IndexTool extends Configured implements Tool {
             final String qIndexTable = SchemaUtil.getTableName(schemaName, indexTable);
          
             connection = ConnectionUtil.getInputConnection(configuration);
-            if(!isValidIndexTable(connection, dataTable, indexTable)) {
+            if(!isValidIndexTable(connection, qDataTable, indexTable)) {
                 throw new IllegalArgumentException(String.format(" %s is not an index table for %s ",qIndexTable,qDataTable));
             }
             
-            final PTable pdataTable = PhoenixRuntime.getTable(connection, dataTable);
-            final PTable pindexTable = PhoenixRuntime.getTable(connection, indexTable);
+            final PTable pdataTable = PhoenixRuntime.getTable(connection, qDataTable);
+            final PTable pindexTable = PhoenixRuntime.getTable(connection, qIndexTable);
             
             // this is set to ensure index tables remains consistent post population.
             long indxTimestamp = pindexTable.getTimeStamp();
@@ -178,7 +179,7 @@ public class IndexTool extends Configured implements Tool {
             // check if the index type is LOCAL, if so, set the logicalIndexName that is computed from the dataTable name.
             String logicalIndexTable = qIndexTable;
             if(IndexType.LOCAL.equals(pindexTable.getIndexType())) {
-                logicalIndexTable  = MetaDataUtil.getLocalIndexTableName(dataTable);
+                logicalIndexTable  = MetaDataUtil.getLocalIndexTableName(qDataTable);
             }
             
             final PhoenixConnection pConnection = connection.unwrap(PhoenixConnection.class);
@@ -187,7 +188,7 @@ public class IndexTool extends Configured implements Tool {
             
             final List<String> indexColumns = ddlCompiler.getIndexColumnNames();
             final String selectQuery = ddlCompiler.getSelectQuery();
-            final String upsertQuery = QueryUtil.constructUpsertStatement(indexTable, indexColumns, Hint.NO_INDEX);
+            final String upsertQuery = QueryUtil.constructUpsertStatement(qIndexTable, indexColumns, Hint.NO_INDEX);
        
             configuration.set(PhoenixConfigurationUtil.UPSERT_STATEMENT, upsertQuery);
             PhoenixConfigurationUtil.setOutputTableName(configuration, logicalIndexTable);
@@ -231,11 +232,11 @@ public class IndexTool extends Configured implements Tool {
             }
             
             // finally update the index state to ACTIVE.
-            updateIndexState(connection,dataTable,indexTable,PIndexState.ACTIVE);
+            updateIndexState(connection,qDataTable,indexTable,PIndexState.ACTIVE);
             return 0;
             
         } catch (Exception ex) {
-           LOG.error(" An exception occured while performing the indexing job , error message {} ",ex.getMessage());
+           LOG.error(" An exception occured while performing the indexing job : "+ ExceptionUtils.getStackTrace(ex));
            return -1;
         } finally {
             try {
