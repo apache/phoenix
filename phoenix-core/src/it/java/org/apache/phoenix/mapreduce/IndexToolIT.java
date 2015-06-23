@@ -42,6 +42,7 @@ import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.SchemaUtil;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -62,6 +63,7 @@ public class IndexToolIT {
     public static void setUp() throws Exception {
         hbaseTestUtil = new HBaseTestingUtility();
         Configuration conf = hbaseTestUtil.getConfiguration();
+        conf.setBoolean("hbase.defaults.for.version.skip", true);
         setUpConfigForMiniCluster(conf);
         hbaseTestUtil.startMiniCluster();
         hbaseTestUtil.startMiniMapReduceCluster();
@@ -71,34 +73,35 @@ public class IndexToolIT {
     
     @Test
     public void testImmutableGlobalIndex() throws Exception {
-        testSecondaryIndex("DATA_TABLE1",true, false);
+        testSecondaryIndex("SCHEMA", "DATA_TABLE1", true, false);
     }
     
     @Test
     public void testImmutableLocalIndex() throws Exception {
-        testSecondaryIndex("DATA_TABLE2",true, true);
+        testSecondaryIndex("SCHEMA", "DATA_TABLE2", true, true);
     }
     
     @Test
     public void testMutableGlobalIndex() throws Exception {
-        testSecondaryIndex("DATA_TABLE3",false, false);
+        testSecondaryIndex("SCHEMA", "DATA_TABLE3", false, false);
     }
     
     @Test
     public void testMutableLocalIndex() throws Exception {
-        testSecondaryIndex("DATA_TABLE4",false, true);
+        testSecondaryIndex("SCHEMA", "DATA_TABLE4", false, true);
     }
     
-    public void testSecondaryIndex(final String dataTable , final boolean isImmutable , final boolean isLocal) throws Exception {
+    public void testSecondaryIndex(final String schemaName, final String dataTable, final boolean isImmutable , final boolean isLocal) throws Exception {
         
+    	final String fullTableName = SchemaUtil.getTableName(schemaName, dataTable);
         final String indxTable = String.format("%s_%s",dataTable,"INDX");
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum,props);
         Statement stmt = conn.createStatement();
         try {
         
-            stmt.execute(String.format("CREATE TABLE %s (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, ZIP INTEGER) %s",dataTable, (isImmutable ? "IMMUTABLE_ROWS=true" :"")));
-            String upsertQuery = String.format("UPSERT INTO %s VALUES(?, ?, ?)",dataTable);
+            stmt.execute(String.format("CREATE TABLE %s (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, ZIP INTEGER) %s", fullTableName, (isImmutable ? "IMMUTABLE_ROWS=true" :"")));
+            String upsertQuery = String.format("UPSERT INTO %s VALUES(?, ?, ?)", fullTableName);
             PreparedStatement stmt1 = conn.prepareStatement(upsertQuery);
             
             int id = 1;
@@ -107,15 +110,15 @@ public class IndexToolIT {
             upsertRow(stmt1, id++);
             conn.commit();
             
-            stmt.execute(String.format("CREATE %s INDEX %s ON %s (UPPER(NAME)) ASYNC ", (isLocal ? "LOCAL" : ""), indxTable,dataTable));
+            stmt.execute(String.format("CREATE %s INDEX %s ON %s  (UPPER(NAME)) ASYNC ", (isLocal ? "LOCAL" : ""), indxTable, fullTableName));
    
             //verify rows are fetched from data table.
-            String selectSql = String.format("SELECT UPPER(NAME),ID FROM %s",dataTable);
+            String selectSql = String.format("SELECT UPPER(NAME),ID FROM %s", fullTableName);
             ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
             String actualExplainPlan = QueryUtil.getExplainPlan(rs);
             
             //assert we are pulling from data table.
-            assertEquals(String.format("CLIENT 1-CHUNK PARALLEL 1-WAY FULL SCAN OVER %s",dataTable),actualExplainPlan);
+            assertEquals(String.format("CLIENT 1-CHUNK PARALLEL 1-WAY FULL SCAN OVER %s", fullTableName), actualExplainPlan);
             
             rs = stmt1.executeQuery(selectSql);
             assertTrue(rs.next());
@@ -127,7 +130,7 @@ public class IndexToolIT {
             final IndexTool indexingTool = new IndexTool();
             indexingTool.setConf(new Configuration(hbaseTestUtil.getConfiguration()));
             
-            final String[] cmdArgs = getArgValues(dataTable,indxTable);
+            final String[] cmdArgs = getArgValues(schemaName, dataTable, indxTable);
             int status = indexingTool.run(cmdArgs);
             assertEquals(0, status);
             
@@ -135,11 +138,13 @@ public class IndexToolIT {
             upsertRow(stmt1, 3);
             upsertRow(stmt1, 4);
             conn.commit();
+            
+            rs = stmt1.executeQuery("SELECT * FROM "+SchemaUtil.getTableName(schemaName, indxTable));
 
             //assert we are pulling from index table.
             rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
             actualExplainPlan = QueryUtil.getExplainPlan(rs);
-            assertExplainPlan(actualExplainPlan,dataTable,indxTable,isLocal);
+            assertExplainPlan(actualExplainPlan,schemaName,dataTable,indxTable,isLocal);
             
             rs = stmt.executeQuery(selectSql);
             assertTrue(rs.next());
@@ -160,7 +165,7 @@ public class IndexToolIT {
       
             assertFalse(rs.next());
             
-            conn.createStatement().execute(String.format("DROP INDEX  %s ON %s",indxTable , dataTable));
+            conn.createStatement().execute(String.format("DROP INDEX  %s ON %s",indxTable , fullTableName));
         } finally {
             conn.close();
         }
@@ -219,14 +224,14 @@ public class IndexToolIT {
             final IndexTool indexingTool = new IndexTool();
             indexingTool.setConf(new Configuration(hbaseTestUtil.getConfiguration()));
             
-            final String[] cmdArgs = getArgValues(dataTable,indxTable);
+            final String[] cmdArgs = getArgValues(null, dataTable,indxTable);
             int status = indexingTool.run(cmdArgs);
             assertEquals(0, status);
             
             //assert we are pulling from index table.
             rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
             actualExplainPlan = QueryUtil.getExplainPlan(rs);
-            assertExplainPlan(actualExplainPlan,dataTable,indxTable,false);
+            assertExplainPlan(actualExplainPlan,null,dataTable,indxTable,false);
             
             rs = stmt.executeQuery(selectSql);
             assertTrue(rs.next());
@@ -242,23 +247,27 @@ public class IndexToolIT {
         }
     }
     
-    private void assertExplainPlan(final String actualExplainPlan, String dataTable,
+    private void assertExplainPlan(final String actualExplainPlan, String schemaName, String dataTable,
             String indxTable, boolean isLocal) {
         
         String expectedExplainPlan = "";
         if(isLocal) {
-            final String localIndexName = MetaDataUtil.getLocalIndexTableName(dataTable);
+            final String localIndexName = MetaDataUtil.getLocalIndexTableName(SchemaUtil.getTableName(schemaName, dataTable));
             expectedExplainPlan = String.format("CLIENT 1-CHUNK PARALLEL 1-WAY RANGE SCAN OVER %s [-32768]"
                 + "\n    SERVER FILTER BY FIRST KEY ONLY", localIndexName);
         } else {
             expectedExplainPlan = String.format("CLIENT 1-CHUNK PARALLEL 1-WAY FULL SCAN OVER %s"
-                    + "\n    SERVER FILTER BY FIRST KEY ONLY",indxTable);
+                    + "\n    SERVER FILTER BY FIRST KEY ONLY",SchemaUtil.getTableName(schemaName, indxTable));
         }
         assertEquals(expectedExplainPlan,actualExplainPlan);
     }
 
-    private String[] getArgValues(String dataTable, String indxTable) {
+    private String[] getArgValues(String schemaName, String dataTable, String indxTable) {
         final List<String> args = Lists.newArrayList();
+        if (schemaName!=null) {
+        	args.add("-s");
+        	args.add(schemaName);
+        }
         args.add("-dt");
         args.add(dataTable);
         args.add("-it");
