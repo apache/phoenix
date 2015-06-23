@@ -16,27 +16,21 @@
  *   limitations under the License.
  */
 
-package org.apache.phoenix.pherf.result;
+package org.apache.phoenix.pherf;
 
-import org.apache.phoenix.pherf.result.file.ResultFileDetails;
+import org.junit.Rule;
+import org.junit.Test;
+import org.junit.contrib.java.lang.system.ExpectedSystemExit;
 
-import java.util.List;
+public class PherfMainIT extends ResultBaseTestIT {
+    @Rule
+    public final ExpectedSystemExit exit = ExpectedSystemExit.none();
 
-/**
- * This is a common interface for working with Pherf results in various output formats. Implementations of this
- * interface can deal with particular details for that format while giving callers to output a simple API to report
- * against.
- */
-public interface ResultHandler {
-    public void write(Result result) throws Exception;
-
-    public void flush() throws Exception;
-
-    public void close() throws Exception;
-
-    public List<Result> read() throws Exception;
-
-    public boolean isClosed();
-
-    public ResultFileDetails getResultFileDetails();
+    @Test
+    public void testPherfMain() {
+        String[] args = { "-q",
+                "--scenarioFile", ".*prod_test_unsalted_scenario.*",
+                "-m", "--monitorFrequency", "10" };
+        Pherf.main(args);
+    }
 }
