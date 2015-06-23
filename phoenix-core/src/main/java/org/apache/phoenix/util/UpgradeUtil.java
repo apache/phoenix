@@ -32,7 +32,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
 import static org.apache.phoenix.query.QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT;
-import static org.apache.phoenix.query.QueryConstants.DIVORCED_VIEW_BASE_COLUMN_COUNT;
+import static org.apache.phoenix.query.QueryConstants.DIVERGED_VIEW_BASE_COLUMN_COUNT;
 
 import java.io.IOException;
 import java.sql.PreparedStatement;
@@ -595,7 +595,7 @@ public class UpgradeUtil {
                         // We are about to iterate through columns of a different view. Check whether base column count was upserted.
                         // If it wasn't then it is likely the case that a column inherited from the base table was dropped from view.
                         if (currentViewName != null && !baseColumnCountUpserted && numBaseTableColsMatched < numColsInBaseTable) {
-                            upsertBaseColumnCountInHeaderRow(metaConnection, currentTenantId, currentViewSchema, currentViewName, DIVORCED_VIEW_BASE_COLUMN_COUNT);
+                            upsertBaseColumnCountInHeaderRow(metaConnection, currentTenantId, currentViewSchema, currentViewName, DIVERGED_VIEW_BASE_COLUMN_COUNT);
                         }
                         // reset the values as we are now going to iterate over columns of a new view.
                         numBaseTableColsMatched = 0;
@@ -641,7 +641,7 @@ public class UpgradeUtil {
                             }
                         } else {
                             // special value to denote that the view has divorced itself from the base physical table.
-                            upsertBaseColumnCountInHeaderRow(metaConnection, viewTenantId, viewSchema, viewName, DIVORCED_VIEW_BASE_COLUMN_COUNT);
+                            upsertBaseColumnCountInHeaderRow(metaConnection, viewTenantId, viewSchema, viewName, DIVERGED_VIEW_BASE_COLUMN_COUNT);
                             baseColumnCountUpserted = true;
                             // ignore rest of the rows for the view.
                             ignore = true;
