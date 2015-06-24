@@ -1941,11 +1941,15 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                     columnsToAdd += ", " + PhoenixDatabaseMetaData.INDEX_TYPE + " " + PUnsignedTinyint.INSTANCE.getSqlTypeName()
                                             + ", " + PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP + " " + PLong.INSTANCE.getSqlTypeName();
                                 }
-                                // Ugh..need to assign to another local variable to keep eclipse happy.
-                                PhoenixConnection newMetaConnection = addColumnsIfNotExists(metaConnection,
-                                        PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-                                        MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP, columnsToAdd);
-                                metaConnection = newMetaConnection;
+
+                                // If we have some new columns from 4.1-4.3 to add, add them now.
+                                if (!columnsToAdd.isEmpty()) {
+                                    // Ugh..need to assign to another local variable to keep eclipse happy.
+                                    PhoenixConnection newMetaConnection = addColumnsIfNotExists(metaConnection,
+                                            PhoenixDatabaseMetaData.SYSTEM_CATALOG,
+                                            MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP, columnsToAdd);
+                                    metaConnection = newMetaConnection;
+                                }
                                 
                                 if (currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_5_0) {
                                     columnsToAdd = PhoenixDatabaseMetaData.BASE_COLUMN_COUNT + " "
