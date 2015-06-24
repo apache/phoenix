@@ -36,8 +36,10 @@ import java.io.OutputStream;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.Statement;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.jar.Attributes;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
@@ -614,10 +616,22 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT{
             manifest.getMainAttributes().put(Attributes.Name.MANIFEST_VERSION, "1.0");
             FileOutputStream jarFos = new FileOutputStream(jarPath);
             JarOutputStream jarOutputStream = new JarOutputStream(jarFos, manifest);
-            String pathToAdd =packageName.replace('.', File.separatorChar)
-                    + File.separator;
-            jarOutputStream.putNextEntry(new JarEntry(pathToAdd));
-            jarOutputStream.closeEntry();
+            String pathToAdd = packageName.replace('.', '/') + '/';
+            String jarPathStr = new String(pathToAdd);
+            Set<String> pathsInJar = new HashSet<String>();
+
+            while (pathsInJar.add(jarPathStr)) {
+                int ix = jarPathStr.lastIndexOf('/', jarPathStr.length() - 2);
+                if (ix < 0) {
+                    break;
+                }
+                jarPathStr = jarPathStr.substring(0, ix);
+            }
+            for (String pathInJar : pathsInJar) {
+                jarOutputStream.putNextEntry(new JarEntry(pathInJar));
+                jarOutputStream.closeEntry();
+            }
+
             jarOutputStream.putNextEntry(new JarEntry(pathToAdd + classFile.getName()));
             byte[] allBytes = new byte[(int) classFile.length()];
             FileInputStream fis = new FileInputStream(classFile);
