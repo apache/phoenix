@@ -46,10 +46,12 @@ import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeepDeletedCells;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
@@ -2402,7 +2404,6 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             tenantConn.createStatement().execute("CREATE INDEX " + view2Index + " ON " + view2 + " (v1) include (v2)");
             assertEquals(0, getTableSequenceNumber(phxConn, view2Index));
             assertEquals(4, getMaxKeySequenceNumber(phxConn, view2Index));
-
         }
         try (Connection tenantConn = getTenantConnection(tenant2)) {
             // create tenant specific view for tenant2 - view3
@@ -2410,13 +2411,13 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             PhoenixConnection phxConn = tenantConn.unwrap(PhoenixConnection.class);
             assertEquals(0, getTableSequenceNumber(phxConn, view3));
             assertEquals(2, getMaxKeySequenceNumber(phxConn, view3));
-            
+
 
             // create an index on view3
             tenantConn.createStatement().execute("CREATE INDEX " + view3Index + " ON " + view3 + " (v1) include (v2)");
             assertEquals(0, getTableSequenceNumber(phxConn, view3Index));
             assertEquals(4, getMaxKeySequenceNumber(phxConn, view3Index));
-            
+
 
         }
 
@@ -2424,7 +2425,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         try (Connection globalConn = DriverManager.getConnection(getUrl())) {
             globalConn.createStatement().execute("ALTER TABLE " + baseTable + " ADD v3 VARCHAR, k2 VARCHAR PRIMARY KEY, k3 VARCHAR PRIMARY KEY");
             assertEquals(4, getMaxKeySequenceNumber(globalConn.unwrap(PhoenixConnection.class), baseTable));
-            
+
             // Upsert records in the base table
             String upsert = "UPSERT INTO " + baseTable + " (TENANT_ID, K1, K2, K3, V1, V2, V3) VALUES (?, ?, ?, ?, ?, ?, ?)";
             PreparedStatement stmt = globalConn.prepareStatement(upsert);
@@ -2458,7 +2459,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             assertEquals(1, getTableSequenceNumber(phxConn, view1));
             assertEquals(4, getMaxKeySequenceNumber(phxConn, view1));
             verifyNewColumns(rs, "K2", "K3", "V3");
-            
+
 
             rs = tenantConn.createStatement().executeQuery("SELECT K2, K3, V3 FROM " + view2);
             assertTrue(checkColumnPartOfPk(phxConn, "k2", view2));
@@ -2466,7 +2467,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             assertEquals(1, getTableSequenceNumber(phxConn, view2));
             assertEquals(4, getMaxKeySequenceNumber(phxConn, view2));
             verifyNewColumns(rs, "K2", "K3", "V3");
-            
+
             assertTrue(checkColumnPartOfPk(phxConn, IndexUtil.getIndexColumnName(null, "k2"), view2Index));
             assertTrue(checkColumnPartOfPk(phxConn, IndexUtil.getIndexColumnName(null, "k3"), view2Index));
             assertEquals(1, getTableSequenceNumber(phxConn, view2Index));
@@ -2479,12 +2480,25 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             assertTrue(checkColumnPartOfPk(phxConn, "k3", view3));
             assertEquals(1, getTableSequenceNumber(phxConn, view3));
             verifyNewColumns(rs, "K22", "K33", "V33");
-            
+
             assertTrue(checkColumnPartOfPk(phxConn, IndexUtil.getIndexColumnName(null, "k2"), view3Index));
             assertTrue(checkColumnPartOfPk(phxConn, IndexUtil.getIndexColumnName(null, "k3"), view3Index));
             assertEquals(1, getTableSequenceNumber(phxConn, view3Index));
             assertEquals(6, getMaxKeySequenceNumber(phxConn, view3Index));
         }
+        // Verify that the index is actually being used when using newly added pk col
+        try (Connection tenantConn = getTenantConnection(tenant1)) {
+            String upsert = "UPSERT INTO " + view2 + " (K1, K2, K3, V1, V2, V3) VALUES ('key1', 'key2', 'key3', 'value1', 'value2', 'value3')";
+            tenantConn.createStatement().executeUpdate(upsert);
+            tenantConn.commit();
+            Statement stmt = tenantConn.createStatement();
+            String sql = "SELECT V2 FROM " + view2 + " WHERE V1 = 'value1' AND K3 = 'key3'";
+            QueryPlan plan = stmt.unwrap(PhoenixStatement.class).optimizeQuery(sql);
+            assertTrue(plan.getTableRef().getTable().getName().getString().equals(SchemaUtil.normalizeIdentifier(view2Index)));
+            ResultSet rs = tenantConn.createStatement().executeQuery(sql);
+            verifyNewColumns(rs, "value2");
+        }
+
     }
     
     private static long getTableSequenceNumber(PhoenixConnection conn, String tableName) throws SQLException {
