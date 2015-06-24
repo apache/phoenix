@@ -265,7 +265,7 @@ public class CsvBulkLoadTool extends Configured implements Tool {
                 JobManager.createThreadPoolExec(Integer.MAX_VALUE, 5, 20, useInstrumentedPool);
         try{
 	        for (TargetTableRef table : tablesToBeLoaded) {
-	        	Path tablePath = new Path(outputPath, table.getPhysicalName());
+	            Path tablePath = new Path(outputPath, table.getLogicalName());
 	        	Configuration jobConf = new Configuration(conf);
 	        	jobConf.set(CsvToKeyValueMapper.TABLE_NAME_CONFKEY, qualifiedTableName);
 	        	if (qualifiedTableName.compareToIgnoreCase(table.getLogicalName()) != 0) {
