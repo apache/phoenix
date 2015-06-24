@@ -39,6 +39,7 @@ import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.QueryUtil;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -206,6 +207,8 @@ public class CsvBulkLoadToolIT {
         String ddl = "CREATE LOCAL INDEX TABLE6_IDX ON TABLE6 "
                 + " (FIRST_NAME ASC)";
         stmt.execute(ddl);
+        ddl = "CREATE LOCAL INDEX TABLE6_IDX2 ON TABLE6 " + " (LAST_NAME ASC)";
+        stmt.execute(ddl);
 
         FileSystem fs = FileSystem.get(hbaseTestUtil.getConfiguration());
         FSDataOutputStream outputStream = fs.create(new Path("/tmp/input3.csv"));
@@ -228,6 +231,22 @@ public class CsvBulkLoadToolIT {
         assertEquals("FirstName 2", rs.getString(2));
 
         rs.close();
+        rs =
+                stmt.executeQuery("EXPLAIN SELECT id, FIRST_NAME FROM TABLE6 where first_name='FirstName 2'");
+        assertEquals(
+            "CLIENT 1-CHUNK PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_TABLE6 [-32768,'FirstName 2']\n"
+                    + "    SERVER FILTER BY FIRST KEY ONLY", QueryUtil.getExplainPlan(rs));
+        rs.close();
+        rs = stmt.executeQuery("SELECT id, LAST_NAME FROM TABLE6 where last_name='LastName 2'");
+        assertTrue(rs.next());
+        assertEquals(2, rs.getInt(1));
+        assertEquals("LastName 2", rs.getString(2));
+        rs.close();
+        rs =
+                stmt.executeQuery("EXPLAIN SELECT id, LAST_NAME FROM TABLE6 where last_name='LastName 2'");
+        assertEquals(
+            "CLIENT 1-CHUNK PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_TABLE6 [-32767,'LastName 2']\n"
+                    + "    SERVER FILTER BY FIRST KEY ONLY", QueryUtil.getExplainPlan(rs));
         stmt.close();
     }
 
