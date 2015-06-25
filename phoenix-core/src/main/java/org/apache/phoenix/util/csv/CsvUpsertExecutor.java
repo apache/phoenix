@@ -233,7 +233,10 @@ public class CsvUpsertExecutor implements Closeable {
         @Nullable
         @Override
         public Object apply(@Nullable String input) {
-            if(dateTimeParser != null) {
+            if (input == null || input.isEmpty()) {
+                return null;
+            }
+            if (dateTimeParser != null) {
                 long epochTime = dateTimeParser.parseDateTime(input);
                 byte[] byteValue = new byte[dataType.getByteSize()];
                 dataType.getCodec().encodeLong(epochTime, byteValue, 0);
