@@ -1118,4 +1118,35 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         assertFalse(rs.next());
     }
 
+    @Test
+    public void testRemarkColumn() throws SQLException {
+        long ts = nextTimestamp();
+        Properties props = new Properties();
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+
+        // Retrieve the database metadata
+        DatabaseMetaData dbmd = conn.getMetaData();
+        ResultSet rs = dbmd.getColumns(null, null, null, null);
+        rs.next();
+
+        // Lookup column by name, this should return null but not throw an exception
+        String remarks = rs.getString("REMARKS");
+        assertNull(remarks);
+
+        // Same as above, but lookup by position
+        remarks = rs.getString(12);
+        assertNull(remarks);
+
+        // Iterate through metadata columns to find 'COLUMN_NAME' == 'REMARKS'
+        boolean foundRemarksColumn = false;
+        while(rs.next()) {
+            String colName = rs.getString("COLUMN_NAME");
+            if(PhoenixDatabaseMetaData.REMARKS.equals(colName)) {
+                foundRemarksColumn = true;
+                break;
+            }
+        }
+        assertTrue("Could not find REMARKS column", foundRemarksColumn);
+    }
 }
