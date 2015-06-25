@@ -688,6 +688,24 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     }
 
     @Test
+    public void testLikeExtractAllKeyExpression2() throws SQLException {
+        String tenantId = "000000000000001";
+        String keyPrefix = "中文";
+        String query = "select * from atable where organization_id = ? and entity_id  LIKE '" + keyPrefix + "%'";
+        List<Object> binds = Arrays.<Object>asList(tenantId);
+        StatementContext context = compileStatement(query, binds);
+        Scan scan = context.getScan();
+
+        assertNull(scan.getFilter());
+        byte[] startRow = ByteUtil.concat(
+            PVarchar.INSTANCE.toBytes(tenantId),StringUtil.padChar(PVarchar.INSTANCE.toBytes(keyPrefix),15));
+        assertArrayEquals(startRow, scan.getStartRow());
+        byte[] stopRow = ByteUtil.concat(
+            PVarchar.INSTANCE.toBytes(tenantId),StringUtil.padChar(ByteUtil.nextKey(PVarchar.INSTANCE.toBytes(keyPrefix)),15));
+        assertArrayEquals(stopRow, scan.getStopRow());
+    }
+
+    @Test
     public void testLikeExtractAllAsEqKeyExpression() throws SQLException {
         String tenantId = "000000000000001";
         String keyPrefix = "002";
