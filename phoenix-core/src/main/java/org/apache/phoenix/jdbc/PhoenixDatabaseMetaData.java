@@ -437,6 +437,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
                 DECIMAL_DIGITS + "," +
                 NUM_PREC_RADIX + "," +
                 NULLABLE + "," +
+                REMARKS + "," +
                 COLUMN_DEF + "," +
                 SQL_DATA_TYPE + "," +
                 SQL_DATETIME_SUB + "," +
