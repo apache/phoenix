@@ -63,7 +63,9 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_BYTE
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_STATEMENT_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE_BYTES;
 import static org.apache.phoenix.query.QueryConstants.DIVORCED_VIEW_BASE_COLUMN_COUNT;
+import static org.apache.phoenix.query.QueryConstants.SEPARATOR_BYTE_ARRAY;
 import static org.apache.phoenix.schema.PTableType.INDEX;
+import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
 import static org.apache.phoenix.util.SchemaUtil.getVarCharLength;
 import static org.apache.phoenix.util.SchemaUtil.getVarChars;
 
@@ -167,11 +169,13 @@ import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.schema.types.PSmallint;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.QueryUtil;
@@ -1584,13 +1588,13 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             // lock the rows corresponding to views so that no other thread can modify the view meta-data
             RowLock viewRowLock = acquireLock(region, viewKey, locks);
             PTable view = doGetTable(viewKey, clientTimeStamp, viewRowLock);
-
             if (view.getBaseColumnCount() == QueryConstants.DIVORCED_VIEW_BASE_COLUMN_COUNT) {
                 // if a view has divorced itself from the base table, we don't allow schema changes
                 // to be propagated to it.
                 return;
             }
             int deltaNumberOfColumns = 0;
+            short deltaNumPkColsSoFar = 0;
             for (Mutation m : tableMetadata) {
                 byte[][] rkmd = new byte[5][];
                 int pkCount = getVarChars(m.getRow(), rkmd);
@@ -1599,16 +1603,133 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         && Bytes.compareTo(tableName, rkmd[TABLE_NAME_INDEX]) == 0) {
                     Put p = (Put)m;
 
-                    byte[] k = ByteUtil.concat(viewKey, QueryConstants.SEPARATOR_BYTE_ARRAY, rkmd[COLUMN_NAME_INDEX],
-                            QueryConstants.SEPARATOR_BYTE_ARRAY, rkmd[FAMILY_NAME_INDEX]);
-                    Put viewColumnDefinitionPut = new Put(k, clientTimeStamp);
+                    byte[] columnKey = ByteUtil.concat(viewKey, QueryConstants.SEPARATOR_BYTE_ARRAY, rkmd[COLUMN_NAME_INDEX]);
+                    if (rkmd[FAMILY_NAME_INDEX] != null) {
+                        columnKey = ByteUtil.concat(columnKey, QueryConstants.SEPARATOR_BYTE_ARRAY, rkmd[FAMILY_NAME_INDEX]);
+                    }
+                    Put viewColumnDefinitionPut = new Put(columnKey, clientTimeStamp);
                     for (Cell cell : p.getFamilyCellMap().values().iterator().next()) {
-                        viewColumnDefinitionPut.add(CellUtil.createCell(k, CellUtil.cloneFamily(cell),
+                        viewColumnDefinitionPut.add(CellUtil.createCell(columnKey, CellUtil.cloneFamily(cell),
                                 CellUtil.cloneQualifier(cell), cell.getTimestamp(), cell.getTypeByte(),
                                 CellUtil.cloneValue(cell)));
                     }
                     deltaNumberOfColumns++;
                     mutationsForAddingColumnsToViews.add(viewColumnDefinitionPut);
+                    if (rkmd[FAMILY_NAME_INDEX] == null && rkmd[COLUMN_NAME_INDEX] != null) {
+                        /*
+                         * If adding a pk column to the base table (and hence the view), see if there are any indexes on
+                         * the view. If yes, then generate puts for the index header row and column rows.
+                         */
+                        deltaNumPkColsSoFar++;
+                        for (PTable index : view.getIndexes()) {
+                            int oldNumberOfColsInIndex = index.getColumns().size();
+                            
+                            byte[] indexColumnKey = ByteUtil.concat(getViewIndexHeaderRowKey(index),
+                                    QueryConstants.SEPARATOR_BYTE_ARRAY,
+                                    IndexUtil.getIndexColumnName(rkmd[FAMILY_NAME_INDEX], rkmd[COLUMN_NAME_INDEX]));
+                            Put indexColumnDefinitionPut = new Put(indexColumnKey, clientTimeStamp);
+                            
+                            // Set the index specific data type for the column
+                            List<Cell> dataTypes = viewColumnDefinitionPut
+                                    .get(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                                            PhoenixDatabaseMetaData.DATA_TYPE_BYTES);
+                            if (dataTypes != null && dataTypes.size() > 0) {
+                                Cell dataType = dataTypes.get(0);
+                                int dataColumnDataType = PInteger.INSTANCE.getCodec().decodeInt(
+                                        dataType.getValueArray(), dataType.getValueOffset(), SortOrder.ASC);
+                                int indexColumnDataType = IndexUtil.getIndexColumnDataType(true,
+                                        PDataType.fromTypeId(dataColumnDataType)).getSqlType();
+                                byte[] indexColumnDataTypeBytes = new byte[PInteger.INSTANCE.getByteSize()];
+                                PInteger.INSTANCE.getCodec().encodeInt(indexColumnDataType, indexColumnDataTypeBytes, 0);
+                                indexColumnDefinitionPut.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                                        PhoenixDatabaseMetaData.DATA_TYPE_BYTES, indexColumnDataTypeBytes);
+                            }
+                            
+                            // Set precision
+                            List<Cell> decimalDigits = viewColumnDefinitionPut.get(
+                                    PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                                    PhoenixDatabaseMetaData.DECIMAL_DIGITS_BYTES);
+                            if (decimalDigits != null && decimalDigits.size() > 0) {
+                                Cell decimalDigit = decimalDigits.get(0);
+                                indexColumnDefinitionPut.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                                        PhoenixDatabaseMetaData.DECIMAL_DIGITS_BYTES, decimalDigit.getValueArray());
+                            }
+                            
+                            // Set size
+                            List<Cell> columnSizes = viewColumnDefinitionPut.get(
+                                    PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                                    PhoenixDatabaseMetaData.COLUMN_SIZE_BYTES);
+                            if (columnSizes != null && columnSizes.size() > 0) {
+                                Cell columnSize = columnSizes.get(0);
+                                indexColumnDefinitionPut.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                                        PhoenixDatabaseMetaData.COLUMN_SIZE_BYTES, columnSize.getValueArray());
+                            }
+                            
+                            // Set sort order
+                            List<Cell> sortOrders = viewColumnDefinitionPut.get(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                                    PhoenixDatabaseMetaData.SORT_ORDER_BYTES);
+                            if (sortOrders != null && sortOrders.size() > 0) {
+                                Cell sortOrder = sortOrders.get(0);
+                                indexColumnDefinitionPut.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                                        PhoenixDatabaseMetaData.SORT_ORDER_BYTES, sortOrder.getValueArray());
+                            }
+                            
+                            // Set data table name
+                            List<Cell> dataTableNames = viewColumnDefinitionPut.get(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                                    PhoenixDatabaseMetaData.DATA_TABLE_NAME_BYTES);
+                            if (dataTableNames != null && dataTableNames.size() > 0) {
+                                Cell dataTableName = dataTableNames.get(0);
+                                indexColumnDefinitionPut.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                                        PhoenixDatabaseMetaData.DATA_TABLE_NAME_BYTES, dataTableName.getValueArray());
+                            }
+                            
+                            // Set the ordinal position of the new column.
+                            byte[] ordinalPositionBytes = new byte[PInteger.INSTANCE.getByteSize()];
+                            int ordinalPositionOfNewCol = oldNumberOfColsInIndex + deltaNumPkColsSoFar;
+                            PInteger.INSTANCE.getCodec().encodeInt(ordinalPositionOfNewCol, ordinalPositionBytes, 0);
+                            indexColumnDefinitionPut.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                                        PhoenixDatabaseMetaData.ORDINAL_POSITION_BYTES, ordinalPositionBytes);
+                            
+                            // New PK columns have to be nullable after the first DDL
+                            byte[] isNullableBytes = PBoolean.INSTANCE.toBytes(true);
+                            indexColumnDefinitionPut.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                                        PhoenixDatabaseMetaData.NULLABLE_BYTES, isNullableBytes);
+                            
+                            // Set the key sequence for the pk column to be added
+                            short currentKeySeq = SchemaUtil.getMaxKeySeq(index);
+                            short newKeySeq = (short)(currentKeySeq + deltaNumPkColsSoFar);
+                            byte[] keySeqBytes = new byte[PSmallint.INSTANCE.getByteSize()];
+                            PSmallint.INSTANCE.getCodec().encodeShort(newKeySeq, keySeqBytes, 0);
+                            indexColumnDefinitionPut.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                                    PhoenixDatabaseMetaData.KEY_SEQ_BYTES, keySeqBytes);
+                            
+                            mutationsForAddingColumnsToViews.add(indexColumnDefinitionPut);
+                        }
+                    }
+                }
+            }
+            if (deltaNumPkColsSoFar > 0) {
+                for (PTable index : view.getIndexes()) {
+                    byte[] indexHeaderRowKey = getViewIndexHeaderRowKey(index);
+                    Put indexHeaderRowMutation = new Put(indexHeaderRowKey);
+                    
+                    // increment sequence number
+                    long newSequenceNumber = index.getSequenceNumber() + 1;
+                    byte[] newSequenceNumberPtr = new byte[PLong.INSTANCE.getByteSize()];
+                    PLong.INSTANCE.getCodec().encodeLong(newSequenceNumber, newSequenceNumberPtr, 0);
+                    indexHeaderRowMutation.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                            PhoenixDatabaseMetaData.TABLE_SEQ_NUM_BYTES, newSequenceNumberPtr);
+                    
+                    // increase the column count
+                    int newColumnCount = index.getColumns().size() + deltaNumPkColsSoFar;
+                    byte[] newColumnCountPtr = new byte[PInteger.INSTANCE.getByteSize()];
+                    PInteger.INSTANCE.getCodec().encodeInt(newColumnCount, newColumnCountPtr, 0);
+                    indexHeaderRowMutation.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                            PhoenixDatabaseMetaData.COLUMN_COUNT_BYTES, newColumnCountPtr);
+                    
+                    // add index row header key to the invalidate list to force clients to fetch the latest meta-data
+                    invalidateList.add(new ImmutableBytesPtr(indexHeaderRowKey));
+                    mutationsForAddingColumnsToViews.add(indexHeaderRowMutation);
                 }
             }
 
@@ -1635,7 +1756,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     int newPosition = column.getPosition() + deltaNumberOfColumns + 1;
 
                     byte[] k = ByteUtil.concat(viewKey, QueryConstants.SEPARATOR_BYTE_ARRAY, column.getName()
-                            .getBytes(), QueryConstants.SEPARATOR_BYTE_ARRAY, column.getFamilyName() != null ? column.getFamilyName().getBytes() : null);
+                            .getBytes());
+                    if (column.getFamilyName() != null) {
+                        k = ByteUtil.concat(k, QueryConstants.SEPARATOR_BYTE_ARRAY, column.getFamilyName().getBytes());
+                    }
 
                     Put positionUpdatePut = new Put(k, clientTimeStamp);
                     byte[] ptr = new byte[PInteger.INSTANCE.getByteSize()];
@@ -1648,7 +1772,14 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             invalidateList.add(new ImmutableBytesPtr(viewKey));
         }
     }
-
+    
+    private byte[] getViewIndexHeaderRowKey(PTable index) {
+        byte[] tenantIdBytes = index.getKey().getTenantId() != null ? index.getKey().getTenantId().getBytes() : EMPTY_BYTE_ARRAY;
+        byte[] schemaNameBytes = index.getSchemaName() != null ? index.getSchemaName().getBytes() : EMPTY_BYTE_ARRAY; 
+        byte[] tableNameBytes = index.getTableName().getBytes();
+        return ByteUtil.concat(tenantIdBytes, SEPARATOR_BYTE_ARRAY, schemaNameBytes, SEPARATOR_BYTE_ARRAY, tableNameBytes);
+    }
+    
     @Override
     public void addColumn(RpcController controller, AddColumnRequest request,
             RpcCallback<MetaDataResponse> done) {
