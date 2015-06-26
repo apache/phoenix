@@ -20,7 +20,7 @@ package org.apache.phoenix.end2end;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static org.apache.phoenix.query.QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT;
-import static org.apache.phoenix.query.QueryConstants.DIVORCED_VIEW_BASE_COLUMN_COUNT;
+import static org.apache.phoenix.query.QueryConstants.DIVERGED_VIEW_BASE_COLUMN_COUNT;
 import static org.apache.phoenix.util.UpgradeUtil.SELECT_BASE_COLUMN_COUNT_FROM_HEADER_ROW;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -187,14 +187,14 @@ public class UpgradeIT extends BaseHBaseManagedTimeIT {
             for (int i = 1; i <=2 ; i++) {
                 String tenantId = "tenant" + i;
                 checkBaseColumnCount(tenantId, null, "TENANT_VIEW1", 4);
-                checkBaseColumnCount(tenantId, null, "TENANT_VIEW2", DIVORCED_VIEW_BASE_COLUMN_COUNT);
-                checkBaseColumnCount(tenantId, null, "TENANT_VIEW3", DIVORCED_VIEW_BASE_COLUMN_COUNT);
+                checkBaseColumnCount(tenantId, null, "TENANT_VIEW2", DIVERGED_VIEW_BASE_COLUMN_COUNT);
+                checkBaseColumnCount(tenantId, null, "TENANT_VIEW3", DIVERGED_VIEW_BASE_COLUMN_COUNT);
             }
             
             // Verify base column count for global views
             checkBaseColumnCount(null, null, "GLOBAL_VIEW1", 4);
-            checkBaseColumnCount(null, null, "GLOBAL_VIEW2", DIVORCED_VIEW_BASE_COLUMN_COUNT);
-            checkBaseColumnCount(null, null, "GLOBAL_VIEW3", DIVORCED_VIEW_BASE_COLUMN_COUNT);
+            checkBaseColumnCount(null, null, "GLOBAL_VIEW2", DIVERGED_VIEW_BASE_COLUMN_COUNT);
+            checkBaseColumnCount(null, null, "GLOBAL_VIEW3", DIVERGED_VIEW_BASE_COLUMN_COUNT);
         }
         
         
@@ -243,7 +243,7 @@ public class UpgradeIT extends BaseHBaseManagedTimeIT {
                     conn3.createStatement().execute(
                         "ALTER VIEW " + fullViewName + " DROP COLUMN CF2.V2");
                 }
-                expectedBaseColumnCount = DIVORCED_VIEW_BASE_COLUMN_COUNT;
+                expectedBaseColumnCount = DIVERGED_VIEW_BASE_COLUMN_COUNT;
             } else {
                 expectedBaseColumnCount = 6;
             }
