@@ -2408,7 +2408,6 @@ public class MetaDataClient {
                                 .setColumnName(colDef.getColumnDefName().getColumnName()).build().buildException();
                             }
                         }
-                        throwIfAlteringViewPK(colDef, table);
                         PColumn column = newColumn(position++, colDef, PrimaryKeyConstraint.EMPTY, table.getDefaultFamilyName() == null ? null : table.getDefaultFamilyName().getString(), true);
                         columns.add(column);
                         String pkName = null;
@@ -2906,16 +2905,6 @@ public class MetaDataClient {
             connection.addFunction(function);
         }
         return result.getFunctions();
-    }
-
-    private void throwIfAlteringViewPK(ColumnDef col, PTable table) throws SQLException {
-        if (col != null && col.isPK() && table.getType() == PTableType.VIEW) {
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_MODIFY_VIEW_PK)
-            .setSchemaName(table.getSchemaName().getString())
-            .setTableName(table.getTableName().getString())
-            .setColumnName(col.getColumnDefName().getColumnName())
-            .build().buildException();
-        }
     }
 
     public PTableStats getTableStats(PTable table) throws SQLException {

@@ -234,7 +234,6 @@ public enum SQLExceptionCode {
             
             
     CANNOT_CREATE_TENANT_SPECIFIC_TABLE(1030, "42Y89", "Cannot create table for tenant-specific connection"),
-    CANNOT_DEFINE_PK_FOR_VIEW(1031, "42Y90", "Defining PK columns for a VIEW is not allowed."),
     DEFAULT_COLUMN_FAMILY_ONLY_ON_CREATE_TABLE(1034, "42Y93", "Default column family may only be specified when creating a table."),
     INSUFFICIENT_MULTI_TENANT_COLUMNS(1040, "42Y96", "A MULTI_TENANT table must have two or more PK columns with the first column being NOT NULL and of type VARCHAR or CHAR."),
     VIEW_WHERE_IS_CONSTANT(1045, "43A02", "WHERE clause in VIEW should not evaluate to a constant."),

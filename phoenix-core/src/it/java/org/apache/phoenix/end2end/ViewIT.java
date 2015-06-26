@@ -34,6 +34,7 @@ import java.util.List;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.schema.ColumnAlreadyExistsException;
 import org.apache.phoenix.schema.ReadOnlyTableException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.QueryUtil;
@@ -465,7 +466,7 @@ public class ViewIT extends BaseViewIT {
     }
 	
     @Test
-    public void testViewDefinesPKColumn() throws Exception {
+    public void testCreateViewDefinesPKColumn() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         String ddl = "CREATE TABLE tp (k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, v1 DECIMAL, CONSTRAINT pk PRIMARY KEY (k1, k2))";
         conn.createStatement().execute(ddl);
@@ -493,7 +494,7 @@ public class ViewIT extends BaseViewIT {
     }
     
     @Test
-    public void testViewDefinesPKConstraint() throws Exception {
+    public void testCreateViewDefinesPKConstraint() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         String ddl = "CREATE TABLE tp (k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, v1 DECIMAL, CONSTRAINT pk PRIMARY KEY (k1, k2))";
         conn.createStatement().execute(ddl);
@@ -503,6 +504,43 @@ public class ViewIT extends BaseViewIT {
         // assert PK metadata
         ResultSet rs = conn.getMetaData().getPrimaryKeys(null, null, "V1");
         assertPKs(rs, new String[] {"K1", "K2", "K3", "K4"});
+    }
+    
+    @Test
+    public void testViewAddsPKColumn() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String ddl = "CREATE TABLE tp (k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, v1 DECIMAL, CONSTRAINT pk PRIMARY KEY (k1, k2))";
+        conn.createStatement().execute(ddl);
+        ddl = "CREATE VIEW v1  AS SELECT * FROM tp WHERE v1 = 1.0";
+        conn.createStatement().execute(ddl);
+        ddl = "ALTER VIEW V1 ADD k3 VARCHAR PRIMARY KEY, k4 VARCHAR PRIMARY KEY, v2 INTEGER";
+        conn.createStatement().execute(ddl);
+
+        // assert PK metadata
+        ResultSet rs = conn.getMetaData().getPrimaryKeys(null, null, "V1");
+        assertPKs(rs, new String[] {"K1", "K2", "K3", "K4"});
+    }
+    
+    @Test(expected=ColumnAlreadyExistsException.class)
+    public void testViewAddsClashingPKColumn() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String ddl = "CREATE TABLE tp (k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, v1 DECIMAL, CONSTRAINT pk PRIMARY KEY (k1, k2))";
+        conn.createStatement().execute(ddl);
+        ddl = "CREATE VIEW v1  AS SELECT * FROM tp WHERE v1 = 1.0";
+        conn.createStatement().execute(ddl);
+        ddl = "ALTER VIEW V1 ADD k3 VARCHAR PRIMARY KEY, k2 VARCHAR PRIMARY KEY, v2 INTEGER";
+        conn.createStatement().execute(ddl);
+    }
+    
+    @Test(expected=SQLException.class)
+    public void testViewAddsNotNullPKColumn() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String ddl = "CREATE TABLE tp (k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, v1 DECIMAL, CONSTRAINT pk PRIMARY KEY (k1, k2))";
+        conn.createStatement().execute(ddl);
+        ddl = "CREATE VIEW v1  AS SELECT * FROM tp WHERE v1 = 1.0";
+        conn.createStatement().execute(ddl);
+        ddl = "ALTER VIEW V1 ADD k3 VARCHAR NOT NULL PRIMARY KEY"; // can only add nullable PKs via ALTER VIEW/TABLE
+        conn.createStatement().execute(ddl);
     }
     
     private void assertPKs(ResultSet rs, String[] expectedPKs) throws SQLException {
