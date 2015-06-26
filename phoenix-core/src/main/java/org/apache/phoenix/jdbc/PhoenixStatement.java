@@ -70,6 +70,7 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.iterate.MaterializedResultIterator;
+import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.parse.AddColumnStatement;
 import org.apache.phoenix.parse.AliasedNode;
@@ -443,6 +444,11 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
                 public ResultIterator iterator() throws SQLException {
                     return iterator;
                 }
+                
+                @Override
+                public ResultIterator iterator(ParallelScanGrouper scanGrouper) throws SQLException {
+                    return iterator;
+                }
 
                 @Override
                 public long getEstimatedSize() {
@@ -508,6 +514,7 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
                 public boolean useRoundRobinIterator() throws SQLException {
                     return false;
                 }
+                
             };
         }
     }

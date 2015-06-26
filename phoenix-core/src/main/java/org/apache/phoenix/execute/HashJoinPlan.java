@@ -49,7 +49,9 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.InListExpression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.RowValueConstructorExpression;
+import org.apache.phoenix.iterate.DefaultParallelScanGrouper;
 import org.apache.phoenix.iterate.FilterResultIterator;
+import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.job.JobManager.JobCallable;
@@ -113,9 +115,14 @@ public class HashJoinPlan extends DelegateQueryPlan {
         this.subPlans = subPlans;
         this.recompileWhereClause = recompileWhereClause;
     }
-
+    
     @Override
     public ResultIterator iterator() throws SQLException {
+    	return iterator(DefaultParallelScanGrouper.getInstance());
+    }
+
+    @Override
+    public ResultIterator iterator(ParallelScanGrouper scanGrouper) throws SQLException {
         int count = subPlans.length;
         PhoenixConnection connection = getContext().getConnection();
         ConnectionQueryServices services = connection.getQueryServices();
@@ -191,7 +198,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
             HashJoinInfo.serializeHashJoinIntoScan(scan, joinInfo);
         }
         
-        ResultIterator iterator = joinInfo == null ? delegate.iterator() : ((BaseQueryPlan) delegate).iterator(dependencies);
+        ResultIterator iterator = joinInfo == null ? delegate.iterator(scanGrouper) : ((BaseQueryPlan) delegate).iterator(dependencies, scanGrouper);
         if (statement.getInnerSelectStatement() != null && postFilter != null) {
             iterator = new FilterResultIterator(iterator, postFilter);
         }

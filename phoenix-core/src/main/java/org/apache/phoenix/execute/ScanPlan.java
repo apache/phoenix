@@ -38,6 +38,7 @@ import org.apache.phoenix.iterate.MergeSortRowKeyResultIterator;
 import org.apache.phoenix.iterate.MergeSortTopNResultIterator;
 import org.apache.phoenix.iterate.ParallelIteratorFactory;
 import org.apache.phoenix.iterate.ParallelIterators;
+import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.iterate.ResultIterators;
 import org.apache.phoenix.iterate.RoundRobinResultIterator;
@@ -161,7 +162,7 @@ public class ScanPlan extends BaseQueryPlan {
     }
 
     @Override
-    protected ResultIterator newIterator() throws SQLException {
+    protected ResultIterator newIterator(ParallelScanGrouper scanGrouper) throws SQLException {
         // Set any scan attributes before creating the scanner, as it will be too late afterwards
     	Scan scan = context.getScan();
         scan.setAttribute(BaseScannerRegionObserver.NON_AGGREGATE_QUERY, QueryConstants.TRUE);
@@ -177,9 +178,9 @@ public class ScanPlan extends BaseQueryPlan {
         Integer perScanLimit = !allowPageFilter || isOrdered ? null : limit;
         ResultIterators iterators;
         if (isSerial) {
-        	iterators = new SerialIterators(this, perScanLimit, parallelIteratorFactory);
+        	iterators = new SerialIterators(this, perScanLimit, parallelIteratorFactory, scanGrouper);
         } else {
-        	iterators = new ParallelIterators(this, perScanLimit, parallelIteratorFactory);
+        	iterators = new ParallelIterators(this, perScanLimit, parallelIteratorFactory, scanGrouper);
         }
         splits = iterators.getSplits();
         scans = iterators.getScans();
