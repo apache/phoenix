@@ -48,6 +48,7 @@ import org.apache.phoenix.iterate.LimitingResultIterator;
 import org.apache.phoenix.iterate.LookAheadResultIterator;
 import org.apache.phoenix.iterate.OrderedAggregatingResultIterator;
 import org.apache.phoenix.iterate.OrderedResultIterator;
+import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.PeekingResultIterator;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.iterate.SequenceResultIterator;
@@ -80,8 +81,8 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
     }
 
     @Override
-    public ResultIterator iterator() throws SQLException {
-        ResultIterator iterator = delegate.iterator();
+    public ResultIterator iterator(ParallelScanGrouper scanGrouper) throws SQLException {
+        ResultIterator iterator = delegate.iterator(scanGrouper);
         if (where != null) {
             iterator = new FilterResultIterator(iterator, where);
         }

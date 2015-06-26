@@ -38,6 +38,8 @@ import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
+import org.apache.phoenix.iterate.DefaultParallelScanGrouper;
+import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixParameterMetaData;
@@ -105,9 +107,14 @@ public class TraceQueryPlan implements QueryPlan {
     public ExplainPlan getExplainPlan() throws SQLException {
         return ExplainPlan.EMPTY_PLAN;
     }
-
+    
     @Override
     public ResultIterator iterator() throws SQLException {
+    	return iterator(DefaultParallelScanGrouper.getInstance());
+    }
+
+    @Override
+    public ResultIterator iterator(ParallelScanGrouper scanGrouper) throws SQLException {
         final PhoenixConnection conn = stmt.getConnection();
         if (conn.getTraceScope() == null && !traceStatement.isTraceOn()) {
             return ResultIterator.EMPTY_ITERATOR;

@@ -29,6 +29,7 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.iterate.FilterResultIterator;
 import org.apache.phoenix.iterate.LimitingResultIterator;
 import org.apache.phoenix.iterate.OrderedResultIterator;
+import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.iterate.SequenceResultIterator;
 import org.apache.phoenix.parse.FilterableStatement;
@@ -49,8 +50,8 @@ public class ClientScanPlan extends ClientProcessingPlan {
     }
 
     @Override
-    public ResultIterator iterator() throws SQLException {
-        ResultIterator iterator = delegate.iterator();
+    public ResultIterator iterator(ParallelScanGrouper scanGrouper) throws SQLException {
+        ResultIterator iterator = delegate.iterator(scanGrouper);
         if (where != null) {
             iterator = new FilterResultIterator(iterator, where);
         }
