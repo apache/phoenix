@@ -61,7 +61,6 @@ public class PhoenixClientJoin extends PhoenixAbstractJoin {
             JoinRelType joinType, Set<String> variablesStopped, boolean isSingleValueRhs) {
         super(cluster, traits, left, right, condition, joinType,
                 variablesStopped, isSingleValueRhs);
-        assert joinType != JoinRelType.RIGHT;
     }
 
     @Override
@@ -78,6 +77,10 @@ public class PhoenixClientJoin extends PhoenixAbstractJoin {
 
     @Override
     public RelOptCost computeSelfCost(RelOptPlanner planner) {
+        if (getLeft().getConvention() != PhoenixRel.CLIENT_CONVENTION 
+                || getRight().getConvention() != PhoenixRel.CLIENT_CONVENTION)
+            return planner.getCostFactory().makeInfiniteCost();            
+        
         if (joinType == JoinRelType.RIGHT
                 || (!joinInfo.leftKeys.isEmpty() && !RelCollations.contains(RelMetadataQuery.collations(getLeft()), joinInfo.leftKeys))
                 || (!joinInfo.rightKeys.isEmpty() && !RelCollations.contains(RelMetadataQuery.collations(getRight()), joinInfo.rightKeys)))

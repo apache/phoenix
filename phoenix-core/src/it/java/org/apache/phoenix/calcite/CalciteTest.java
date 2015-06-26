@@ -826,12 +826,12 @@ public class CalciteTest extends BaseClientManagedTimeIT {
                        "        PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n" +
                        "    EnumerableAggregate(group=[{0}], agg#0=[SINGLE_VALUE($1)])\n" +
                        "      EnumerableAggregate(group=[{0}], CNT=[COUNT()])\n" +
-                       "        EnumerableCalc(expr#0..10=[{inputs}], expr#11=[CAST($t5):INTEGER], expr#12=[=($t11, $t0)], proj#0..10=[{exprs}], $condition=[$t12])\n" +
-                       "          EnumerableJoin(condition=[true], joinType=[inner])\n" +
-                       "            PhoenixToEnumerableConverter\n" +
-                       "              PhoenixServerAggregate(group=[{6}])\n" +
-                       "                PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n" +
-                       "            JdbcToEnumerableConverter\n" +
+                       "        EnumerableJoin(condition=[=($0, $11)], joinType=[inner])\n" +
+                       "          PhoenixToEnumerableConverter\n" +
+                       "            PhoenixServerAggregate(group=[{6}])\n" +
+                       "              PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n" +
+                       "          JdbcToEnumerableConverter\n" +
+                       "            JdbcProject(time_id=[$0], the_date=[$1], the_day=[$2], the_month=[$3], the_year=[$4], day_of_month=[$5], week_of_year=[$6], month_of_year=[$7], quarter=[$8], fiscal_period=[$9], $f10=[CAST($4):INTEGER])\n" +
                        "              JdbcTableScan(table=[[foodmart, time_by_day]])\n")
             .resultIs(new Object[][] {
                     new Object[] {1997, 1000, 365L}, 

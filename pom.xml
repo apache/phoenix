@@ -113,7 +113,7 @@
     <collections.version>3.2.1</collections.version>
     <jodatime.version>2.7</jodatime.version>
     <joni.version>2.1.2</joni.version>
-    <calcite.version>1.3.0-incubating</calcite.version>
+    <calcite.version>1.4.0-incubating-SNAPSHOT</calcite.version>
 
     <!-- Test Dependencies -->
     <mockito-all.version>1.8.5</mockito-all.version>
@@ -773,7 +773,7 @@
       </dependency>
       <dependency>
         <groupId>org.apache.calcite</groupId>
-        <artifactId>calcite-avatica</artifactId>
+        <artifactId>calcite-linq4j</artifactId>
         <version>${calcite.version}</version>
       </dependency>
       <dependency>

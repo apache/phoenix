@@ -43,6 +43,10 @@ public class PhoenixServerAggregate extends PhoenixAbstractAggregate {
     
     @Override
     public RelOptCost computeSelfCost(RelOptPlanner planner) {
+        if (getInput().getConvention() != PhoenixRel.SERVER_CONVENTION
+                && getInput().getConvention() != PhoenixRel.PROJECTABLE_CONVENTION)
+            return planner.getCostFactory().makeInfiniteCost();
+        
         return super.computeSelfCost(planner)
                 .multiplyBy(SERVER_FACTOR)
                 .multiplyBy(PHOENIX_FACTOR);

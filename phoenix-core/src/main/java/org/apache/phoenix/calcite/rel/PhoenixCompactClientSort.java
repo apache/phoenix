@@ -28,7 +28,7 @@ public class PhoenixCompactClientSort extends PhoenixAbstractSort {
     private PhoenixCompactClientSort(RelOptCluster cluster, RelTraitSet traits,
             RelNode child, RelCollation collation) {
         super(cluster, traits, child, collation);
-    }
+   }
 
     @Override
     public PhoenixCompactClientSort copy(RelTraitSet traitSet, RelNode newInput,
@@ -38,6 +38,9 @@ public class PhoenixCompactClientSort extends PhoenixAbstractSort {
     
     @Override
     public RelOptCost computeSelfCost(RelOptPlanner planner) {
+        if (getInput().getConvention() != PhoenixRel.CLIENT_CONVENTION)
+            return planner.getCostFactory().makeInfiniteCost();
+        
         return super.computeSelfCost(planner)
                 .multiplyBy(CLIENT_MERGE_FACTOR)
                 .multiplyBy(PHOENIX_FACTOR);

@@ -70,11 +70,15 @@ public class PhoenixServerJoin extends PhoenixAbstractJoin {
 
     @Override
     public RelOptCost computeSelfCost(RelOptPlanner planner) {
-        //TODO return infinite cost if RHS size exceeds memory limit.
+        if (getLeft().getConvention() != PhoenixRel.SERVER_CONVENTION 
+                || getRight().getConvention() != PhoenixRel.CLIENT_CONVENTION)
+            return planner.getCostFactory().makeInfiniteCost();            
         
         if (joinType == JoinRelType.FULL || joinType == JoinRelType.RIGHT
                 || getLeft().getConvention() != PhoenixRel.SERVER_CONVENTION)
             return planner.getCostFactory().makeInfiniteCost();
+        
+        //TODO return infinite cost if RHS size exceeds memory limit.
         
         double rowCount = RelMetadataQuery.getRowCount(this);
 

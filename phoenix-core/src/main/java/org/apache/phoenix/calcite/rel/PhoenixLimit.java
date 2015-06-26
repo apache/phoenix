@@ -67,6 +67,9 @@ public class PhoenixLimit extends SingleRel implements PhoenixRel {
 
     @Override 
     public RelOptCost computeSelfCost(RelOptPlanner planner) {
+        if (getInput().getConvention() != PhoenixRel.CLIENT_CONVENTION)
+            return planner.getCostFactory().makeInfiniteCost();
+        
         double rowCount = RelMetadataQuery.getRowCount(this);
         return planner.getCostFactory()
                 .makeCost(rowCount, 0, 0)

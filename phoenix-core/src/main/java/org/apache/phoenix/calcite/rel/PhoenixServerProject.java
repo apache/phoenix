@@ -47,6 +47,9 @@ public class PhoenixServerProject extends PhoenixAbstractProject {
 
     @Override
     public RelOptCost computeSelfCost(RelOptPlanner planner) {
+        if (getInput().getConvention() != PhoenixRel.SERVER_CONVENTION)
+            return planner.getCostFactory().makeInfiniteCost();
+        
         return super.computeSelfCost(planner)
                 .multiplyBy(SERVER_FACTOR)
                 .multiplyBy(PHOENIX_FACTOR);
