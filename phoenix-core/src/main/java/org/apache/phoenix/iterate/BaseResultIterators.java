@@ -103,6 +103,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
     private final byte[] physicalTableName;
     private final QueryPlan plan;
     protected final String scanId;
+    private final ParallelScanGrouper scanGrouper;
     // TODO: too much nesting here - breakup into new classes.
     private final List<List<List<Pair<Scan,Future<PeekingResultIterator>>>>> allFutures;
     
@@ -133,9 +134,10 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         return true;
     }
     
-    public BaseResultIterators(QueryPlan plan, Integer perScanLimit) throws SQLException {
+    public BaseResultIterators(QueryPlan plan, Integer perScanLimit, ParallelScanGrouper scanGrouper) throws SQLException {
         super(plan.getContext(), plan.getTableRef(), plan.getGroupBy(), plan.getOrderBy(), plan.getStatement().getHint(), plan.getLimit());
         this.plan = plan;
+        this.scanGrouper = scanGrouper;
         StatementContext context = plan.getContext();
         TableRef tableRef = plan.getTableRef();
         PTable table = tableRef.getTable();
@@ -371,24 +373,11 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
     }
     
     private List<Scan> addNewScan(List<List<Scan>> parallelScans, List<Scan> scans, Scan scan, byte[] startKey, boolean crossedRegionBoundary) {
-        PTable table = getTable();
-        boolean startNewScanList = false;
-        if (!plan.isRowKeyOrdered()) {
-            startNewScanList = true;
-        } else if (crossedRegionBoundary) {
-            if (table.getIndexType() == IndexType.LOCAL) {
-                startNewScanList = true;
-            } else if (table.getBucketNum() != null) {
-                startNewScanList = scans.isEmpty() ||
-                        ScanUtil.crossesPrefixBoundary(startKey,
-                                ScanUtil.getPrefix(scans.get(scans.size()-1).getStartRow(), SaltingUtil.NUM_SALTING_BYTES), 
-                                SaltingUtil.NUM_SALTING_BYTES);
-            }
-        }
+        boolean startNewScan = scanGrouper.shouldStartNewScan(plan, scans, startKey, crossedRegionBoundary);
         if (scan != null) {
-            scans.add(scan);
+        	scans.add(scan);
         }
-        if (startNewScanList && !scans.isEmpty()) {
+        if (startNewScan && !scans.isEmpty()) {
             parallelScans.add(scans);
             scans = Lists.newArrayListWithExpectedSize(1);
         }
@@ -410,7 +399,6 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         Scan scan = context.getScan();
         List<HRegionLocation> regionLocations = context.getConnection().getQueryServices()
                 .getAllTableRegions(physicalTableName);
-        
         List<byte[]> regionBoundaries = toBoundaries(regionLocations);
         ScanRanges scanRanges = context.getScanRanges();
         PTable table = getTable();

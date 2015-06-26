@@ -28,6 +28,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapreduce.InputFormat;
 import org.apache.hadoop.mapreduce.InputSplit;
@@ -36,6 +37,7 @@ import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.lib.db.DBWritable;
 import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.iterate.MapReduceParallelScanGrouper;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
@@ -112,10 +114,10 @@ public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWr
             Preconditions.checkNotNull(selectStatement);
             final Statement statement = connection.createStatement();
             final PhoenixStatement pstmt = statement.unwrap(PhoenixStatement.class);
-            // Optimize the query plan so that we potentially use secondary indexes
+            // Optimize the query plan so that we potentially use secondary indexes            
             final QueryPlan queryPlan = pstmt.optimizeQuery(selectStatement);
             // Initialize the query plan so it sets up the parallel scans
-            queryPlan.iterator();
+            queryPlan.iterator(MapReduceParallelScanGrouper.getInstance());
             return queryPlan;
         } catch (Exception exception) {
             LOG.error(String.format("Failed to get the query plan with error [%s]",
