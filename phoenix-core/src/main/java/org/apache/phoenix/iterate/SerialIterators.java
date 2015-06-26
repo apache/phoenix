@@ -52,9 +52,9 @@ public class SerialIterators extends BaseResultIterators {
 	private static final String NAME = "SERIAL";
     private final ParallelIteratorFactory iteratorFactory;
     
-    public SerialIterators(QueryPlan plan, Integer perScanLimit, ParallelIteratorFactory iteratorFactory)
+    public SerialIterators(QueryPlan plan, Integer perScanLimit, ParallelIteratorFactory iteratorFactory, ParallelScanGrouper scanGrouper)
             throws SQLException {
-        super(plan, perScanLimit);
+        super(plan, perScanLimit, scanGrouper);
         Preconditions.checkArgument(perScanLimit != null); // must be a limit specified
         this.iteratorFactory = iteratorFactory;
     }
