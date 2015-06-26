@@ -23,8 +23,10 @@ import java.util.List;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.iterate.DefaultParallelScanGrouper;
 import org.apache.phoenix.iterate.DelegateResultIterator;
 import org.apache.phoenix.iterate.FilterResultIterator;
+import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.schema.tuple.Tuple;
 
@@ -50,10 +52,15 @@ public class TupleProjectionPlan extends DelegateQueryPlan {
 
         return new ExplainPlan(planSteps);
     }
-
+    
     @Override
     public ResultIterator iterator() throws SQLException {
-        ResultIterator iterator = new DelegateResultIterator(delegate.iterator()) {
+    	return iterator(DefaultParallelScanGrouper.getInstance());
+    }
+
+    @Override
+    public ResultIterator iterator(ParallelScanGrouper scanGrouper) throws SQLException {
+        ResultIterator iterator = new DelegateResultIterator(delegate.iterator(scanGrouper)) {
             
             @Override
             public Tuple next() throws SQLException {

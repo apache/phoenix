@@ -24,6 +24,7 @@ import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
+import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.query.KeyRange;
@@ -45,6 +46,8 @@ public interface QueryPlan extends StatementPlan {
      * @throws SQLException
      */
     public ResultIterator iterator() throws SQLException;
+    
+    public ResultIterator iterator(ParallelScanGrouper scanGrouper) throws SQLException;
     
     public long getEstimatedSize();
     
