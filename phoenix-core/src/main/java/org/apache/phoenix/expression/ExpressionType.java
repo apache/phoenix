@@ -247,9 +247,7 @@ public enum ExpressionType {
     LogFunction(LogFunction.class),
     ExpFunction(ExpFunction.class),
     PowerFunction(PowerFunction.class),
-    ArrayConcatFunction(ArrayConcatFunction.class),
-    JsonExtractPathFunction(JsonExtractPathFunction.class),
-    JsonExtractPathTextFunction(JsonExtractPathTextFunction.class)
+    ArrayConcatFunction(ArrayConcatFunction.class)
     ;
 
     ExpressionType(Class<? extends Expression> clazz) {
