@@ -18,22 +18,32 @@
 
 package org.apache.phoenix.pherf;
 
-import org.apache.phoenix.pherf.configuration.*;
-import org.apache.phoenix.pherf.workload.WriteWorkload;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
+
+import org.apache.phoenix.pherf.configuration.Column;
+import org.apache.phoenix.pherf.configuration.DataModel;
+import org.apache.phoenix.pherf.configuration.DataSequence;
+import org.apache.phoenix.pherf.configuration.DataTypeMapping;
+import org.apache.phoenix.pherf.configuration.Scenario;
+import org.apache.phoenix.pherf.configuration.XMLConfigParser;
 import org.apache.phoenix.pherf.rules.DataValue;
 import org.apache.phoenix.pherf.rules.RulesApplier;
-import org.apache.phoenix.pherf.util.PhoenixUtil;
+import org.apache.phoenix.pherf.workload.WriteWorkload;
 import org.joda.time.DateTime;
 import org.joda.time.format.DateTimeFormat;
 import org.joda.time.format.DateTimeFormatter;
 import org.junit.Test;
 
-import java.util.*;
-
-import static org.junit.Assert.*;
-
 public class RuleGeneratorTest {
-    private static PhoenixUtil util = PhoenixUtil.create(true);
     private static final String matcherScenario = PherfConstants.SCENARIO_ROOT_PATTERN + ".xml";
 
     @Test
