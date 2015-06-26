@@ -62,7 +62,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_CONSTANT_BYTE
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_STATEMENT_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE_BYTES;
-import static org.apache.phoenix.query.QueryConstants.DIVORCED_VIEW_BASE_COLUMN_COUNT;
+import static org.apache.phoenix.query.QueryConstants.DIVERGED_VIEW_BASE_COLUMN_COUNT;
 import static org.apache.phoenix.query.QueryConstants.SEPARATOR_BYTE_ARRAY;
 import static org.apache.phoenix.schema.PTableType.INDEX;
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
@@ -1588,7 +1588,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             // lock the rows corresponding to views so that no other thread can modify the view meta-data
             RowLock viewRowLock = acquireLock(region, viewKey, locks);
             PTable view = doGetTable(viewKey, clientTimeStamp, viewRowLock);
-            if (view.getBaseColumnCount() == QueryConstants.DIVORCED_VIEW_BASE_COLUMN_COUNT) {
+            if (view.getBaseColumnCount() == QueryConstants.DIVERGED_VIEW_BASE_COLUMN_COUNT) {
                 // if a view has divorced itself from the base table, we don't allow schema changes
                 // to be propagated to it.
                 return;
@@ -1641,7 +1641,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                                         PDataType.fromTypeId(dataColumnDataType)).getSqlType();
                                 byte[] indexColumnDataTypeBytes = new byte[PInteger.INSTANCE.getByteSize()];
                                 PInteger.INSTANCE.getCodec().encodeInt(indexColumnDataType, indexColumnDataTypeBytes, 0);
-                                indexColumnDefinitionPut.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                                indexColumnDefinitionPut.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                                         PhoenixDatabaseMetaData.DATA_TYPE_BYTES, indexColumnDataTypeBytes);
                             }
                             
@@ -1651,7 +1651,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                                     PhoenixDatabaseMetaData.DECIMAL_DIGITS_BYTES);
                             if (decimalDigits != null && decimalDigits.size() > 0) {
                                 Cell decimalDigit = decimalDigits.get(0);
-                                indexColumnDefinitionPut.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                                indexColumnDefinitionPut.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                                         PhoenixDatabaseMetaData.DECIMAL_DIGITS_BYTES, decimalDigit.getValueArray());
                             }
                             
@@ -1661,7 +1661,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                                     PhoenixDatabaseMetaData.COLUMN_SIZE_BYTES);
                             if (columnSizes != null && columnSizes.size() > 0) {
                                 Cell columnSize = columnSizes.get(0);
-                                indexColumnDefinitionPut.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                                indexColumnDefinitionPut.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                                         PhoenixDatabaseMetaData.COLUMN_SIZE_BYTES, columnSize.getValueArray());
                             }
                             
@@ -1670,7 +1670,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                                     PhoenixDatabaseMetaData.SORT_ORDER_BYTES);
                             if (sortOrders != null && sortOrders.size() > 0) {
                                 Cell sortOrder = sortOrders.get(0);
-                                indexColumnDefinitionPut.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                                indexColumnDefinitionPut.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                                         PhoenixDatabaseMetaData.SORT_ORDER_BYTES, sortOrder.getValueArray());
                             }
                             
@@ -1679,7 +1679,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                                     PhoenixDatabaseMetaData.DATA_TABLE_NAME_BYTES);
                             if (dataTableNames != null && dataTableNames.size() > 0) {
                                 Cell dataTableName = dataTableNames.get(0);
-                                indexColumnDefinitionPut.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                                indexColumnDefinitionPut.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                                         PhoenixDatabaseMetaData.DATA_TABLE_NAME_BYTES, dataTableName.getValueArray());
                             }
                             
@@ -1687,12 +1687,12 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                             byte[] ordinalPositionBytes = new byte[PInteger.INSTANCE.getByteSize()];
                             int ordinalPositionOfNewCol = oldNumberOfColsInIndex + deltaNumPkColsSoFar;
                             PInteger.INSTANCE.getCodec().encodeInt(ordinalPositionOfNewCol, ordinalPositionBytes, 0);
-                            indexColumnDefinitionPut.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                            indexColumnDefinitionPut.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                                         PhoenixDatabaseMetaData.ORDINAL_POSITION_BYTES, ordinalPositionBytes);
                             
                             // New PK columns have to be nullable after the first DDL
                             byte[] isNullableBytes = PBoolean.INSTANCE.toBytes(true);
-                            indexColumnDefinitionPut.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                            indexColumnDefinitionPut.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                                         PhoenixDatabaseMetaData.NULLABLE_BYTES, isNullableBytes);
                             
                             // Set the key sequence for the pk column to be added
@@ -1700,7 +1700,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                             short newKeySeq = (short)(currentKeySeq + deltaNumPkColsSoFar);
                             byte[] keySeqBytes = new byte[PSmallint.INSTANCE.getByteSize()];
                             PSmallint.INSTANCE.getCodec().encodeShort(newKeySeq, keySeqBytes, 0);
-                            indexColumnDefinitionPut.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                            indexColumnDefinitionPut.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                                     PhoenixDatabaseMetaData.KEY_SEQ_BYTES, keySeqBytes);
                             
                             mutationsForAddingColumnsToViews.add(indexColumnDefinitionPut);
@@ -1717,14 +1717,14 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     long newSequenceNumber = index.getSequenceNumber() + 1;
                     byte[] newSequenceNumberPtr = new byte[PLong.INSTANCE.getByteSize()];
                     PLong.INSTANCE.getCodec().encodeLong(newSequenceNumber, newSequenceNumberPtr, 0);
-                    indexHeaderRowMutation.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                    indexHeaderRowMutation.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                             PhoenixDatabaseMetaData.TABLE_SEQ_NUM_BYTES, newSequenceNumberPtr);
                     
                     // increase the column count
                     int newColumnCount = index.getColumns().size() + deltaNumPkColsSoFar;
                     byte[] newColumnCountPtr = new byte[PInteger.INSTANCE.getByteSize()];
                     PInteger.INSTANCE.getCodec().encodeInt(newColumnCount, newColumnCountPtr, 0);
-                    indexHeaderRowMutation.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                    indexHeaderRowMutation.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                             PhoenixDatabaseMetaData.COLUMN_COUNT_BYTES, newColumnCountPtr);
                     
                     // add index row header key to the invalidate list to force clients to fetch the latest meta-data
@@ -1794,21 +1794,29 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     byte[] schemaName = rowKeyMetaData[SCHEMA_NAME_INDEX];
                     byte[] tableName = rowKeyMetaData[TABLE_NAME_INDEX];
                     PTableType type = table.getType();
-                    TableViewFinderResult childViewsResult = findChildViews(region, tenantId, table,
-                            (type == PTableType.VIEW ? PARENT_TABLE_BYTES : PHYSICAL_TABLE_BYTES));
                     List<Mutation> mutationsForAddingColumnsToViews = Collections.emptyList();
-                    if (childViewsResult.hasViews()) {
-                        /*
-                         * Adding a column is not allowed if: 1) Meta-data for child view/s spans over more than one
-                         * region. 2) Adding column to a views that has child view/s.
-                         */
-                        if (!childViewsResult.allViewsInSingleRegion() || type == PTableType.VIEW) {
-                            return new MetaDataMutationResult(MutationCode.UNALLOWED_TABLE_MUTATION,
-                                    EnvironmentEdgeManager.currentTimeMillis(), null);
-                        } else {
-                            mutationsForAddingColumnsToViews = new ArrayList<>(childViewsResult.getResults().size() * tableMetaData.size());
-                            addRowsToChildViews(tableMetaData, mutationsForAddingColumnsToViews, schemaName, tableName, invalidateList, clientTimeStamp,
-                                    childViewsResult, region, locks);
+                    /*
+                     * If adding a column to a view, we don't want to propagate those meta-data changes to the child
+                     * view hierarchy. This is because our check of finding child views is expensive and we want making
+                     * meta-data changes to views to be light-weight. The side-effect of this change is that a child
+                     * won't have it's parent views columns i.e. it would have diverged itself from the parent view. See
+                     * https://issues.apache.org/jira/browse/PHOENIX-2051 for a proper way to fix the performance issue
+                     * and https://issues.apache.org/jira/browse/PHOENIX-2054 for enabling meta-data changes to a view
+                     * to be propagated to its view hierarchy.
+                     */
+                    if (type == PTableType.TABLE) {
+                        TableViewFinderResult childViewsResult = findChildViews(region, tenantId, table, PHYSICAL_TABLE_BYTES);
+                        if (childViewsResult.hasViews()) {
+                            // Adding a column is not allowed if the meta-data for child view/s spans over
+                            // more than one region (since the changes cannot be done in a transactional fashion)
+                            if (!childViewsResult.allViewsInSingleRegion()) {
+                                return new MetaDataMutationResult(MutationCode.UNALLOWED_TABLE_MUTATION,
+                                        EnvironmentEdgeManager.currentTimeMillis(), null);
+                            } else {
+                                mutationsForAddingColumnsToViews = new ArrayList<>(childViewsResult.getResults().size() * tableMetaData.size());
+                                addRowsToChildViews(tableMetaData, mutationsForAddingColumnsToViews, schemaName, tableName, invalidateList, clientTimeStamp,
+                                        childViewsResult, region, locks);
+                            }
                         }
                     }
                     for (Mutation m : tableMetaData) {
@@ -2041,18 +2049,19 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                                         continue;
                                     }
                                     if (table.getType() == PTableType.VIEW) {
-                                        if (table.getBaseColumnCount() != DIVORCED_VIEW_BASE_COLUMN_COUNT
+                                        if (table.getBaseColumnCount() != DIVERGED_VIEW_BASE_COLUMN_COUNT
                                                 && columnToDelete.getPosition() < table.getBaseColumnCount()) {
                                             /*
                                              * If the column being dropped is inherited from the base table, then the
-                                             * view is about to divorce itself from the base table. Divorce here means
-                                             * that any further meta-data changes made to the base table will not be
-                                             * propagated to the hierarchy of views on the base table.
+                                             * view is about to diverge itself from the base table. The consequence of
+                                             * this divergence is that that any further meta-data changes made to the
+                                             * base table will not be propagated to the hierarchy of views where this
+                                             * view is the root.
                                              */
                                             byte[] viewKey = SchemaUtil.getTableKey(tenantId, schemaName, tableName);
                                             Put updateBaseColumnCountPut = new Put(viewKey);
                                             byte[] baseColumnCountPtr = new byte[PInteger.INSTANCE.getByteSize()];
-                                            PInteger.INSTANCE.getCodec().encodeInt(DIVORCED_VIEW_BASE_COLUMN_COUNT,
+                                            PInteger.INSTANCE.getCodec().encodeInt(DIVERGED_VIEW_BASE_COLUMN_COUNT,
                                                     baseColumnCountPtr, 0);
                                             updateBaseColumnCountPut.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                                                     PhoenixDatabaseMetaData.BASE_COLUMN_COUNT_BYTES, clientTimeStamp,

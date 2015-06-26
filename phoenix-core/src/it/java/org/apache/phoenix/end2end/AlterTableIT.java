@@ -2129,8 +2129,8 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
     }
     
     @Test
-    public void testAlteringViewThatHasChildViewsNotAllowed() throws Exception {
-        String baseTable = "testAlteringViewThatHasChildViewsNotAllowed";
+    public void testAlteringViewThatHasChildViews() throws Exception {
+        String baseTable = "testAlteringViewThatHasChildViews";
         String childView = "childView";
         String grandChildView = "grandChildView";
         try (Connection conn = DriverManager.getConnection(getUrl())) {
@@ -2167,13 +2167,17 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
                 assertEquals(SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
             }
             
-            // Adding column to view that has child views should fail
+            // Adding column to view that has child views is allowed
             String addColumnToChildView = "ALTER VIEW " + childView + " ADD V5 VARCHAR";
+            conn.createStatement().execute(addColumnToChildView);
+            // V5 column should be visible now for childView
+            conn.createStatement().execute("SELECT V5 FROM " + childView);    
+            
+            // However, column V5 shouldn't have propagated to grandChildView. Not till PHOENIX-2054 is fixed.
             try {
-                conn.createStatement().execute(addColumnToChildView);
-                fail("Adding columns to a view that has child views on it is not allowed");
+                conn.createStatement().execute("SELECT V5 FROM " + grandChildView);
             } catch (SQLException e) {
-                assertEquals(SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
+                assertEquals(SQLExceptionCode.COLUMN_NOT_FOUND.getErrorCode(), e.getErrorCode());
             }
 
             // dropping column from the grand child view, however, should work.
