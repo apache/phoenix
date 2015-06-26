@@ -34,10 +34,12 @@ public class Scenario {
     private int rowCount;
     private Map<String, String> phoenixProperties;
     private DataOverride dataOverride;
-    private List<QuerySet> querySet = new ArrayList<QuerySet>();
+    private List<QuerySet> querySet = new ArrayList<>();
+    private WriteParams writeParams;
     private String name;
 
     public Scenario() {
+        writeParams = new WriteParams();
     }
 
     /**
@@ -159,6 +161,14 @@ public class Scenario {
 
     public void setName(String name) {
         this.name = name;
+    }
+
+    public WriteParams getWriteParams() {
+        return writeParams;
+    }
+
+    public void setWriteParams(WriteParams writeParams) {
+        this.writeParams = writeParams;
     }
 
     @Override

@@ -18,227 +18,256 @@
 
 package org.apache.phoenix.pherf.workload;
 
-import java.sql.Connection;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-
-import org.apache.phoenix.pherf.PherfConstants.RunMode;
-import org.apache.phoenix.pherf.configuration.XMLConfigParser;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
+import org.apache.phoenix.pherf.PherfConstants.RunMode;
+import org.apache.phoenix.pherf.configuration.*;
 import org.apache.phoenix.pherf.result.*;
+import org.apache.phoenix.pherf.util.PhoenixUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.phoenix.pherf.configuration.DataModel;
-import org.apache.phoenix.pherf.configuration.ExecutionType;
-import org.apache.phoenix.pherf.configuration.Query;
-import org.apache.phoenix.pherf.configuration.QuerySet;
-import org.apache.phoenix.pherf.configuration.Scenario;
-import org.apache.phoenix.pherf.util.PhoenixUtil;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
 
-public class QueryExecutor {
-	private static final Logger logger = LoggerFactory.getLogger(QueryExecutor.class);
-	private List<DataModel> dataModels;
-	private String queryHint;
-	private RunMode runMode;
+public class QueryExecutor implements Workload {
+    private static final Logger logger = LoggerFactory.getLogger(QueryExecutor.class);
+    private List<DataModel> dataModels;
+    private String queryHint;
+    private final RunMode runMode;
+    private final boolean exportCSV;
+    private final ExecutorService pool;
+    private final XMLConfigParser parser;
+    private final PhoenixUtil util;
 
-	public QueryExecutor(XMLConfigParser parser) {
-		this.dataModels = parser.getDataModels();
+    public QueryExecutor(XMLConfigParser parser, PhoenixUtil util, ExecutorService pool) {
+        this(parser, util, pool, parser.getDataModels(), null, false, RunMode.PERFORMANCE);
     }
-	
-	/**
-	 * Calls in Multithreaded Query Executor for all datamodels
-	 * @throws Exception 
-	 */
-	public void execute(String queryHint, boolean exportCSV, RunMode runMode) throws Exception {
-		this.queryHint = queryHint;
-		this.runMode = runMode;
-		for (DataModel dataModel: dataModels) {
-			if (exportCSV) {
-				exportAllScenarios(dataModel);	
-			} else {
-				executeAllScenarios(dataModel);
-			}
-		}
-	}
 
-	/**
-	 * Export all queries results to CSV 
-	 * @param dataModel
-	 * @throws Exception 
-	 */
-	protected void exportAllScenarios(DataModel dataModel) throws Exception {
-		List<Scenario> scenarios = dataModel.getScenarios();
-		QueryVerifier exportRunner = new QueryVerifier(false);
-		for (Scenario scenario : scenarios) {
-			for (QuerySet querySet : scenario.getQuerySet()) {
-				executeQuerySetDdls(querySet);
-				for (Query query : querySet.getQuery()) {
-					exportRunner.exportCSV(query);
-				}
-			}
-		}
-	}
-	
-	/**
-	 * Execute all scenarios
-	 * @param dataModel
-	 * @throws Exception 
-	 */
-	protected void executeAllScenarios(DataModel dataModel) throws Exception {
-		List<DataModelResult> dataModelResults = new ArrayList<DataModelResult>();
-		DataModelResult dataModelResult = new DataModelResult(dataModel, PhoenixUtil.getZookeeper());
-        ResultManager resultManager = new ResultManager(dataModelResult.getName(), this.runMode);
+    public QueryExecutor(XMLConfigParser parser, PhoenixUtil util, ExecutorService pool,
+            List<DataModel> dataModels, String queryHint, boolean exportCSV, RunMode runMode) {
+        this.parser = parser;
+        this.queryHint = queryHint;
+        this.exportCSV = exportCSV;
+        this.runMode = runMode;
+        this.dataModels = dataModels;
+        this.pool = pool;
+        this.util = util;
+    }
 
+    @Override public void complete() {
 
-		dataModelResults.add(dataModelResult);
-		List<Scenario> scenarios = dataModel.getScenarios();
-		Configuration conf = HBaseConfiguration.create();
-		Map<String, String> phoenixProperty = conf.getValByRegex("phoenix");
-		phoenixProperty.putAll(conf.getValByRegex("sfdc"));
+    }
 
-		for (Scenario scenario : scenarios) {
-			ScenarioResult scenarioResult = new ScenarioResult(scenario);
-			scenarioResult.setPhoenixProperties(phoenixProperty);
-			dataModelResult.getScenarioResult().add(scenarioResult);
+    /**
+     * Calls in Multithreaded Query Executor for all datamodels
+     *
+     * @throws Exception
+     */
+    public Runnable execute() throws Exception {
+        Runnable runnable = null;
+        for (DataModel dataModel : dataModels) {
+            if (exportCSV) {
+                runnable = exportAllScenarios(dataModel);
+            } else {
+                runnable = executeAllScenarios(dataModel);
+            }
+        }
+        return runnable;
+    }
 
-			for (QuerySet querySet : scenario.getQuerySet()) {
-				QuerySetResult querySetResult = new QuerySetResult(querySet);
-				scenarioResult.getQuerySetResult().add(querySetResult);
-				
-				executeQuerySetDdls(querySet);
-				
-				if (querySet.getExecutionType() == ExecutionType.SERIAL) {
-					execcuteQuerySetSerial(dataModelResult, querySet, querySetResult, scenarioResult);
-				} else {
-					execcuteQuerySetParallel(dataModelResult, querySet, querySetResult, scenarioResult);					
-				}
-			}
-            resultManager.write(dataModelResult);
-		}
-        resultManager.write(dataModelResults);
-	}
+    /**
+     * Export all queries results to CSV
+     *
+     * @param dataModel
+     * @throws Exception
+     */
+    protected Runnable exportAllScenarios(final DataModel dataModel) throws Exception {
+        return new Runnable() {
+            @Override public void run() {
+                try {
 
-	/**
-	 * Execute all querySet DDLs first based on tenantId if specified. This is executed
-	 * first since we don't want to run DDLs in parallel to executing queries.
-	 * 
-	 * @param querySet
-	 * @throws Exception 
-	 */
-	protected void executeQuerySetDdls(QuerySet querySet) throws Exception {
-		PhoenixUtil pUtil = new PhoenixUtil();
-		for (Query query : querySet.getQuery()) {
-			if (null != query.getDdl()) {
-				Connection conn = null;
-				try {
-					logger.info("\nExecuting DDL:" + query.getDdl() + " on tenantId:" + query.getTenantId());
-					pUtil.executeStatement(query.getDdl(), conn = pUtil.getConnection(query.getTenantId()));
-				} finally {
-					if (null != conn) {
-						conn.close();
-					}
-				}
-			}
-		}
-	}
+                    List<Scenario> scenarios = dataModel.getScenarios();
+                    QueryVerifier exportRunner = new QueryVerifier(false);
+                    for (Scenario scenario : scenarios) {
+                        for (QuerySet querySet : scenario.getQuerySet()) {
+                            util.executeQuerySetDdls(querySet);
+                            for (Query query : querySet.getQuery()) {
+                                exportRunner.exportCSV(query);
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    logger.warn("", e);
+                }
+            }
+        };
+    }
 
-	/**
-	 * Execute query set serially
-	 * @param dataModelResult
-	 * @param querySet
-	 * @param querySetResult
-	 * @param scenario
-	 * @throws InterruptedException
-	 */
-	protected void execcuteQuerySetSerial(DataModelResult dataModelResult, QuerySet querySet, QuerySetResult querySetResult, Scenario scenario) throws InterruptedException {
-		for (Query query : querySet.getQuery()) {
-			QueryResult queryResult = new QueryResult(query);
-			querySetResult.getQueryResults().add(queryResult);
+    /**
+     * Execute all scenarios
+     *
+     * @param dataModel
+     * @throws Exception
+     */
+    protected Runnable executeAllScenarios(final DataModel dataModel) throws Exception {
+        return new Runnable() {
+            @Override public void run() {
+                List<DataModelResult> dataModelResults = new ArrayList<>();
+                DataModelResult
+                        dataModelResult =
+                        new DataModelResult(dataModel, PhoenixUtil.getZookeeper());
+                ResultManager
+                        resultManager =
+                        new ResultManager(dataModelResult.getName(), QueryExecutor.this.runMode);
 
-			for (int cr = querySet.getMinConcurrency(); cr <= querySet
-					.getMaxConcurrency(); cr++) {
-				
-				List<Thread> threads = new ArrayList<Thread>();
-				
-				for (int i = 0; i < cr; i++) {
+                dataModelResults.add(dataModelResult);
+                List<Scenario> scenarios = dataModel.getScenarios();
+                Configuration conf = HBaseConfiguration.create();
+                Map<String, String> phoenixProperty = conf.getValByRegex("phoenix");
+                try {
 
-					Thread thread = executeRunner((i + 1) + ","
-							+ cr, dataModelResult, queryResult,
-							querySetResult);
-					threads.add(thread);
-				}
+                    for (Scenario scenario : scenarios) {
+                        ScenarioResult scenarioResult = new ScenarioResult(scenario);
+                        scenarioResult.setPhoenixProperties(phoenixProperty);
+                        dataModelResult.getScenarioResult().add(scenarioResult);
+                        WriteParams writeParams = scenario.getWriteParams();
 
-				for (Thread thread : threads) {
-					thread.join();
-				}
-			}
-		}
-	}
+                        if (writeParams != null) {
+                            int writerThreadCount = writeParams.getWriterThreadCount();
+                            for (int i = 0; i < writerThreadCount; i++) {
+                                logger.debug("Inserting write workload ( " + i + " ) of ( "
+                                        + writerThreadCount + " )");
+                                Workload writes = new WriteWorkload(PhoenixUtil.create(), parser);
+                                pool.submit(writes.execute());
+                            }
+                        }
 
-	/**
-	 * Execute query set in parallel
-	 * @param dataModelResult
-	 * @param querySet
-	 * @param querySetResult
-	 * @param scenario
-	 * @throws InterruptedException
-	 */
-	protected void execcuteQuerySetParallel(DataModelResult dataModelResult, QuerySet querySet, QuerySetResult querySetResult, Scenario scenario)
-			throws InterruptedException {
-		for (int cr = querySet.getMinConcurrency(); cr <= querySet
-				.getMaxConcurrency(); cr++) {
-			List<Thread> threads = new ArrayList<Thread>();
-			for (int i = 0; i < cr; i++) {
-				for (Query query : querySet.getQuery()) {
-					QueryResult queryResult = new QueryResult(query);
-					querySetResult.getQueryResults().add(queryResult);
+                        for (QuerySet querySet : scenario.getQuerySet()) {
+                            QuerySetResult querySetResult = new QuerySetResult(querySet);
+                            scenarioResult.getQuerySetResult().add(querySetResult);
 
-					Thread thread = executeRunner((i + 1) + ","
-							+ cr, dataModelResult, queryResult,
-							querySetResult);
-					threads.add(thread);
-				}
-			}
-			for (Thread thread : threads) {
-				thread.join();
-			}
-		}
-	}
-	
-	/**
-	 * Execute multi-thread runner
-	 * @param name
-	 * @param dataModelResult
-	 * @param queryResult
-	 * @param querySet
-	 * @return
-	 */
-	protected Thread executeRunner(String name, DataModelResult dataModelResult, QueryResult queryResult, QuerySet querySet) {
-		ThreadTime threadTime = new ThreadTime();
-		queryResult.getThreadTimes().add(threadTime);
-		threadTime.setThreadName(name);
-		queryResult.setHint(this.queryHint);
-		logger.info("\nExecuting query "
-				+ queryResult.getStatement());
-		Thread thread;
-		if (this.runMode == RunMode.FUNCTIONAL) {
-			thread = new MultithreadedDiffer(
-					threadTime.getThreadName(),
-					queryResult,
-					threadTime, querySet.getNumberOfExecutions(), querySet.getExecutionDurationInMs())
-					.start();
-		} else {
-			thread = new MultithreadedRunner(
-					threadTime.getThreadName(),
-					queryResult,
-					dataModelResult,
-					threadTime, querySet.getNumberOfExecutions(), querySet.getExecutionDurationInMs())
-					.start();
-		}
-		return thread;
-	}
+                            util.executeQuerySetDdls(querySet);
+                            if (querySet.getExecutionType() == ExecutionType.SERIAL) {
+                                executeQuerySetSerial(dataModelResult, querySet, querySetResult);
+                            } else {
+                                executeQuerySetParallel(dataModelResult, querySet, querySetResult);
+                            }
+                        }
+                        resultManager.write(dataModelResult);
+                    }
+                    resultManager.write(dataModelResults);
+                } catch (Exception e) {
+                    logger.warn("", e);
+                }
+            }
+        };
+    }
+
+    /**
+     * Execute query set serially
+     *
+     * @param dataModelResult
+     * @param querySet
+     * @param querySetResult
+     * @throws InterruptedException
+     */
+    protected void executeQuerySetSerial(DataModelResult dataModelResult, QuerySet querySet,
+            QuerySetResult querySetResult) throws InterruptedException {
+        for (Query query : querySet.getQuery()) {
+            QueryResult queryResult = new QueryResult(query);
+            querySetResult.getQueryResults().add(queryResult);
+
+            for (int cr = querySet.getMinConcurrency(); cr <= querySet.getMaxConcurrency(); cr++) {
+
+                List<Future> threads = new ArrayList<>();
+
+                for (int i = 0; i < cr; i++) {
+
+                    Runnable
+                            thread =
+                            executeRunner((i + 1) + "," + cr, dataModelResult, queryResult,
+                                    querySetResult);
+                    threads.add(pool.submit(thread));
+                }
+
+                for (Future thread : threads) {
+                    try {
+                        thread.get();
+                    } catch (ExecutionException e) {
+                        logger.error("", e);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Execute query set in parallel
+     *
+     * @param dataModelResult
+     * @param querySet
+     * @param querySetResult
+     * @throws InterruptedException
+     */
+    protected void executeQuerySetParallel(DataModelResult dataModelResult, QuerySet querySet,
+            QuerySetResult querySetResult) throws InterruptedException {
+        for (int cr = querySet.getMinConcurrency(); cr <= querySet.getMaxConcurrency(); cr++) {
+            List<Future> threads = new ArrayList<>();
+            for (int i = 0; i < cr; i++) {
+                for (Query query : querySet.getQuery()) {
+                    QueryResult queryResult = new QueryResult(query);
+                    querySetResult.getQueryResults().add(queryResult);
+
+                    Runnable
+                            thread =
+                            executeRunner((i + 1) + "," + cr, dataModelResult, queryResult,
+                                    querySetResult);
+                    threads.add(pool.submit(thread));
+                }
+
+                for (Future thread : threads) {
+                    try {
+                        thread.get();
+                    } catch (ExecutionException e) {
+                        logger.error("", e);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Execute multi-thread runner
+     *
+     * @param name
+     * @param dataModelResult
+     * @param queryResult
+     * @param querySet
+     * @return
+     */
+    protected Runnable executeRunner(String name, DataModelResult dataModelResult,
+            QueryResult queryResult, QuerySet querySet) {
+        ThreadTime threadTime = new ThreadTime();
+        queryResult.getThreadTimes().add(threadTime);
+        threadTime.setThreadName(name);
+        queryResult.setHint(this.queryHint);
+        logger.info("\nExecuting query " + queryResult.getStatement());
+        Runnable thread;
+        if (this.runMode == RunMode.FUNCTIONAL) {
+            thread =
+                    new MultithreadedDiffer(threadTime.getThreadName(), queryResult, threadTime,
+                            querySet.getNumberOfExecutions(), querySet.getExecutionDurationInMs());
+        } else {
+            thread =
+                    new MultiThreadedRunner(threadTime.getThreadName(), queryResult,
+                            dataModelResult, threadTime, querySet.getNumberOfExecutions(),
+                            querySet.getExecutionDurationInMs());
+        }
+        return thread;
+    }
 }

@@ -20,6 +20,7 @@ package org.apache.phoenix.pherf.result;
 
 /**
  * Generic box container for a result value. This class allows for writing results of any type easily
+ *
  * @param <T>
  */
 public class ResultValue<T> {
@@ -33,8 +34,7 @@ public class ResultValue<T> {
         return resultValue;
     }
 
-    @Override
-    public String toString() {
+    @Override public String toString() {
         return resultValue.toString();
     }
 }

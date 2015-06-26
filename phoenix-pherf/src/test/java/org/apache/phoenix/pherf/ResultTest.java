@@ -33,7 +33,6 @@ import org.apache.phoenix.pherf.result.file.ResultFileDetails;
 import org.apache.phoenix.pherf.result.impl.CSVResultHandler;
 import org.apache.phoenix.pherf.result.impl.XMLResultHandler;
 import org.apache.phoenix.pherf.result.*;
-import org.junit.BeforeClass;
 import org.junit.Test;
 
 import org.apache.phoenix.pherf.configuration.Query;
@@ -72,7 +71,7 @@ public class ResultTest extends ResultBaseTest {
     public void testMonitorResult() throws Exception {
         ExecutorService executorService = Executors.newFixedThreadPool(1);
         MonitorManager monitor = new MonitorManager(100);
-        Future future = executorService.submit(monitor);
+        Future future = executorService.submit(monitor.execute());
         List<Result> records;
         final int TIMEOUT = 30;
 
@@ -83,7 +82,7 @@ public class ResultTest extends ResultBaseTest {
             Thread.sleep(100);
             if (ct == max) {
                 int timer = 0;
-                monitor.stop();
+                monitor.complete();
                 while (monitor.isRunning() && (timer < TIMEOUT)) {
                     System.out.println("Waiting for monitor to finish. Seconds Waited :" + timer);
                     Thread.sleep(1000);
