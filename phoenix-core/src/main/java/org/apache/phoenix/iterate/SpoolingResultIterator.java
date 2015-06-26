@@ -17,8 +17,10 @@
  */
 package org.apache.phoenix.iterate;
 
-import static org.apache.phoenix.monitoring.PhoenixMetrics.CountMetric.NUM_SPOOL_FILE;
-import static org.apache.phoenix.monitoring.PhoenixMetrics.SizeMetric.SPOOL_FILE_SIZE;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MEMORY_CHUNK_BYTES;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MEMORY_WAIT_TIME;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_SPOOL_FILE_COUNTER;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_SPOOL_FILE_SIZE;
 
 import java.io.BufferedInputStream;
 import java.io.DataInputStream;
@@ -37,6 +39,9 @@ import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.memory.MemoryManager;
 import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
+import org.apache.phoenix.monitoring.MemoryMetricsHolder;
+import org.apache.phoenix.monitoring.ReadMetricQueue;
+import org.apache.phoenix.monitoring.SpoolingMetricsHolder;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.tuple.ResultTuple;
@@ -55,8 +60,10 @@ import org.apache.phoenix.util.TupleUtil;
  * @since 0.1
  */
 public class SpoolingResultIterator implements PeekingResultIterator {
-    private final PeekingResultIterator spoolFrom;
     
+    private final PeekingResultIterator spoolFrom;
+    private final SpoolingMetricsHolder spoolMetrics;
+    private final MemoryMetricsHolder memoryMetrics;
     public static class SpoolingResultIteratorFactory implements ParallelIteratorFactory {
         private final QueryServices services;
 
@@ -64,14 +71,16 @@ public class SpoolingResultIterator implements PeekingResultIterator {
             this.services = services;
         }
         @Override
-        public PeekingResultIterator newIterator(StatementContext context, ResultIterator scanner, Scan scan) throws SQLException {
-            return new SpoolingResultIterator(scanner, services);
+        public PeekingResultIterator newIterator(StatementContext context, ResultIterator scanner, Scan scan, String physicalTableName) throws SQLException {
+            ReadMetricQueue readRequestMetric = context.getReadMetricsQueue();
+            SpoolingMetricsHolder spoolMetrics = new SpoolingMetricsHolder(readRequestMetric, physicalTableName);
+            MemoryMetricsHolder memoryMetrics = new MemoryMetricsHolder(readRequestMetric, physicalTableName);
+            return new SpoolingResultIterator(spoolMetrics, memoryMetrics, scanner, services);
         }
-
     }
 
-    public SpoolingResultIterator(ResultIterator scanner, QueryServices services) throws SQLException {
-        this (scanner, services.getMemoryManager(),
+    private SpoolingResultIterator(SpoolingMetricsHolder spoolMetrics, MemoryMetricsHolder memoryMetrics, ResultIterator scanner, QueryServices services) throws SQLException {
+        this (spoolMetrics, memoryMetrics, scanner, services.getMemoryManager(),
                 services.getProps().getInt(QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB, QueryServicesOptions.DEFAULT_SPOOL_THRESHOLD_BYTES),
                 services.getProps().getLong(QueryServices.MAX_SPOOL_TO_DISK_BYTES_ATTRIB, QueryServicesOptions.DEFAULT_MAX_SPOOL_TO_DISK_BYTES),
                 services.getProps().get(QueryServices.SPOOL_DIRECTORY, QueryServicesOptions.DEFAULT_SPOOL_DIRECTORY));
@@ -86,9 +95,15 @@ public class SpoolingResultIterator implements PeekingResultIterator {
     *  the memory manager) is exceeded.
     * @throws SQLException
     */
-    SpoolingResultIterator(ResultIterator scanner, MemoryManager mm, final int thresholdBytes, final long maxSpoolToDisk, final String spoolDirectory) throws SQLException {
+    SpoolingResultIterator(SpoolingMetricsHolder sMetrics, MemoryMetricsHolder mMetrics, ResultIterator scanner, MemoryManager mm, final int thresholdBytes, final long maxSpoolToDisk, final String spoolDirectory) throws SQLException {
+        this.spoolMetrics = sMetrics;
+        this.memoryMetrics = mMetrics;
         boolean success = false;
+        long startTime = System.currentTimeMillis();
         final MemoryChunk chunk = mm.allocate(0, thresholdBytes);
+        long waitTime = System.currentTimeMillis() - startTime;
+        GLOBAL_MEMORY_WAIT_TIME.update(waitTime);
+        memoryMetrics.getMemoryWaitTimeMetric().change(waitTime);
         DeferredFileOutputStream spoolTo = null;
         try {
             // Can't be bigger than int, since it's the max of the above allocation
@@ -96,8 +111,11 @@ public class SpoolingResultIterator implements PeekingResultIterator {
             spoolTo = new DeferredFileOutputStream(size, "ResultSpooler",".bin", new File(spoolDirectory)) {
                 @Override
                 protected void thresholdReached() throws IOException {
-                    super.thresholdReached();
-                    chunk.close();
+                    try {
+                        super.thresholdReached();
+                    } finally {
+                        chunk.close();
+                    }
                 }
             };
             DataOutputStream out = new DataOutputStream(spoolTo);
@@ -115,9 +133,14 @@ public class SpoolingResultIterator implements PeekingResultIterator {
                 byte[] data = spoolTo.getData();
                 chunk.resize(data.length);
                 spoolFrom = new InMemoryResultIterator(data, chunk);
+                GLOBAL_MEMORY_CHUNK_BYTES.update(data.length);
+                memoryMetrics.getMemoryChunkSizeMetric().change(data.length);
             } else {
-                NUM_SPOOL_FILE.increment();
-                SPOOL_FILE_SIZE.update(spoolTo.getFile().length());
+                long sizeOfSpoolFile = spoolTo.getFile().length();
+                GLOBAL_SPOOL_FILE_SIZE.update(sizeOfSpoolFile);
+                GLOBAL_SPOOL_FILE_COUNTER.increment();
+                spoolMetrics.getNumSpoolFileMetric().increment();
+                spoolMetrics.getSpoolFileSizeMetric().change(sizeOfSpoolFile);
                 spoolFrom = new OnDiskResultIterator(spoolTo.getFile());
                 if (spoolTo.getFile() != null) {
                     spoolTo.getFile().deleteOnExit();

@@ -17,11 +17,11 @@
  */
 package org.apache.phoenix.job;
 
-import static org.apache.phoenix.monitoring.PhoenixMetrics.CountMetric.REJECTED_TASK_COUNT;
-import static org.apache.phoenix.monitoring.PhoenixMetrics.CountMetric.TASK_COUNT;
-import static org.apache.phoenix.monitoring.PhoenixMetrics.SizeMetric.TASK_END_TO_END_TIME;
-import static org.apache.phoenix.monitoring.PhoenixMetrics.SizeMetric.TASK_EXECUTION_TIME;
-import static org.apache.phoenix.monitoring.PhoenixMetrics.SizeMetric.TASK_QUEUE_WAIT_TIME;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_REJECTED_TASK_COUNTER;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_TASK_END_TO_END_TIME;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_TASK_EXECUTED_COUNTER;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_TASK_EXECUTION_TIME;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_TASK_QUEUE_WAIT_TIME;
 
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Callable;
@@ -35,6 +35,10 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+
+import javax.annotation.Nullable;
+
+import org.apache.phoenix.monitoring.TaskExecutionMetricsHolder;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 /**
@@ -63,6 +67,7 @@ public class JobManager<T> extends AbstractRoundRobinQueue<T> {
 
     public static interface JobRunnable<T> extends Runnable {
         public Object getJobId();
+        public TaskExecutionMetricsHolder getTaskExecutionMetric();
     }
 
     public static ThreadPoolExecutor createThreadPoolExec(int keepAliveMs, int size, int queueSize, boolean useInstrumentedThreadPool) {
@@ -117,13 +122,17 @@ public class JobManager<T> extends AbstractRoundRobinQueue<T> {
      */
     static class JobFutureTask<T> extends FutureTask<T> {
         private final Object jobId;
+        @Nullable
+        private final TaskExecutionMetricsHolder taskMetric;
         
         public JobFutureTask(Runnable r, T t) {
             super(r, t);
             if(r instanceof JobRunnable){
               	this.jobId = ((JobRunnable)r).getJobId();
+              	this.taskMetric = ((JobRunnable)r).getTaskExecutionMetric();
             } else {
             	this.jobId = this;
+            	this.taskMetric = null;
             }
         }
         
@@ -132,8 +141,10 @@ public class JobManager<T> extends AbstractRoundRobinQueue<T> {
             // FIXME: this fails when executor used by hbase
             if (c instanceof JobCallable) {
                 this.jobId = ((JobCallable<T>) c).getJobId();
+                this.taskMetric = ((JobCallable<T>) c).getTaskExecutionMetric();
             } else {
                 this.jobId = this;
+                this.taskMetric = null;
             }
         }
         
@@ -187,6 +198,7 @@ public class JobManager<T> extends AbstractRoundRobinQueue<T> {
      */
     public static interface JobCallable<T> extends Callable<T> {
         public Object getJobId();
+        public TaskExecutionMetricsHolder getTaskExecutionMetric();
     }
 
 
@@ -224,27 +236,40 @@ public class JobManager<T> extends AbstractRoundRobinQueue<T> {
         private final RejectedExecutionHandler rejectedExecHandler = new RejectedExecutionHandler() {
             @Override
             public void rejectedExecution(Runnable r, ThreadPoolExecutor executor) {
-                REJECTED_TASK_COUNT.increment();
+                TaskExecutionMetricsHolder metrics = getRequestMetric(r);
+                if (metrics != null) {
+                    metrics.getNumRejectedTasks().increment();
+                }
+                GLOBAL_REJECTED_TASK_COUNTER.increment();
                 throw new RejectedExecutionException("Task " + r.toString() + " rejected from " + executor.toString());
             }
         };
 
-        public InstrumentedThreadPoolExecutor(String threadPoolName, int corePoolSize, int maximumPoolSize, long keepAliveTime, TimeUnit unit,
-                BlockingQueue<Runnable> workQueue, ThreadFactory threadFactory) {
+        public InstrumentedThreadPoolExecutor(String threadPoolName, int corePoolSize, int maximumPoolSize,
+                long keepAliveTime, TimeUnit unit, BlockingQueue<Runnable> workQueue, ThreadFactory threadFactory) {
             super(corePoolSize, maximumPoolSize, keepAliveTime, unit, workQueue, threadFactory);
             setRejectedExecutionHandler(rejectedExecHandler);
         }
 
         @Override
         public void execute(Runnable task) {
-            TASK_COUNT.increment();
+            TaskExecutionMetricsHolder metrics = getRequestMetric(task);
+            if (metrics != null) {
+                metrics.getNumTasks().increment();
+            }
+            GLOBAL_TASK_EXECUTED_COUNTER.increment();
             super.execute(task);
         }
 
         @Override
         protected void beforeExecute(Thread worker, Runnable task) {
             InstrumentedJobFutureTask instrumentedTask = (InstrumentedJobFutureTask)task;
-            TASK_QUEUE_WAIT_TIME.update(System.currentTimeMillis() - instrumentedTask.getTaskSubmissionTime());
+            long queueWaitTime = System.currentTimeMillis() - instrumentedTask.getTaskSubmissionTime();
+            GLOBAL_TASK_QUEUE_WAIT_TIME.update(queueWaitTime);
+            TaskExecutionMetricsHolder metrics = getRequestMetric(task);
+            if (metrics != null) {
+                metrics.getTaskQueueWaitTime().change(queueWaitTime);
+            }
             super.beforeExecute(worker, instrumentedTask);
         }
 
@@ -254,9 +279,20 @@ public class JobManager<T> extends AbstractRoundRobinQueue<T> {
             try {
                 super.afterExecute(instrumentedTask, t);
             } finally {
-                TASK_EXECUTION_TIME.update(System.currentTimeMillis() - instrumentedTask.getTaskExecutionStartTime());
-                TASK_END_TO_END_TIME.update(System.currentTimeMillis() - instrumentedTask.getTaskSubmissionTime());
+                long taskExecutionTime = System.currentTimeMillis() - instrumentedTask.getTaskExecutionStartTime();
+                long endToEndTaskTime = System.currentTimeMillis() - instrumentedTask.getTaskSubmissionTime();
+                TaskExecutionMetricsHolder metrics = getRequestMetric(task);
+                if (metrics != null) {
+                    metrics.getTaskExecutionTime().change(taskExecutionTime);
+                    metrics.getTaskEndToEndTime().change(endToEndTaskTime);
+                }
+                GLOBAL_TASK_EXECUTION_TIME.update(taskExecutionTime);
+                GLOBAL_TASK_END_TO_END_TIME.update(endToEndTaskTime);
             }
+        }
+
+        private static TaskExecutionMetricsHolder getRequestMetric(Runnable task) {
+            return ((JobFutureTask)task).taskMetric;
         }
     }
 }

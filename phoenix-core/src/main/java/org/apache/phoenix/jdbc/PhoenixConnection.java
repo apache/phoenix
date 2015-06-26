@@ -123,7 +123,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     private final Properties info;
     private List<SQLCloseable> statements = new ArrayList<SQLCloseable>();
     private final Map<PDataType<?>, Format> formatters = new HashMap<>();
-    private MutationState mutationState;
+    private final MutationState mutationState;
     private final int mutateBatchSize;
     private final Long scn;
     private boolean isAutoCommit = false;
@@ -137,9 +137,9 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     private boolean isClosed = false;
     private Sampler<?> sampler;
     private boolean readOnly = false;
-    private Map<String, String> customTracingAnnotations = emptyMap(); 
     private Consistency consistency = Consistency.STRONG;
-
+    private Map<String, String> customTracingAnnotations = emptyMap();
+    private final boolean isRequestLevelMetricsEnabled;
     static {
         Tracing.addTraceMetricsSource();
     }
@@ -237,6 +237,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
                          ! Objects.equal(tenantId, function.getTenantId()));
             }
         };
+        this.isRequestLevelMetricsEnabled = JDBCUtil.isCollectingRequestLevelMetricsEnabled(url, info, this.services.getProps());
         this.mutationState = newMutationState(maxSize);
         this.metaData = metaData.pruneTables(pruner);
         this.metaData = metaData.pruneFunctions(pruner);
@@ -438,6 +439,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
             return;
         }
         try {
+            clearMetrics();
             try {
                 if (traceScope != null) {
                     traceScope.close();
@@ -865,5 +867,24 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
 
     public void setTraceScope(TraceScope traceScope) {
         this.traceScope = traceScope;
+    }
+    
+    public Map<String, Map<String, Long>> getMutationMetrics() {
+        return mutationState.getMutationMetricQueue().aggregate();
+    }
+    
+    public Map<String, Map<String, Long>> getReadMetrics() {
+        return mutationState.getReadMetricQueue() != null ? mutationState.getReadMetricQueue().aggregate() : Collections.<String, Map<String, Long>>emptyMap();
+    }
+    
+    public boolean isRequestLevelMetricsEnabled() {
+        return isRequestLevelMetricsEnabled;
+    }
+    
+    public void clearMetrics() {
+        mutationState.getMutationMetricQueue().clearMetrics();
+        if (mutationState.getReadMetricQueue() != null) {
+            mutationState.getReadMetricQueue().clearMetrics();
+        }
     }
 }

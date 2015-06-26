@@ -19,67 +19,52 @@ package org.apache.phoenix.monitoring;
 
 import java.util.concurrent.atomic.AtomicLong;
 
-import javax.annotation.concurrent.ThreadSafe;
-
 /**
- * Incrementing only counter that keeps track of the 
- * number of occurrences of something.
- * 
+ * Version of {@link Metric} that can be used when the metric is being concurrently accessed or modified by multiple
+ * threads.
  */
-@ThreadSafe
-class Counter implements Metric {
-    
-    private final AtomicLong counter;
-    private final String name;
-    private final String description;
-    
-    public Counter(String name, String description) {
-        this.name = name;
-        this.description = description;
-        this.counter = new AtomicLong(0);
+public class AtomicMetric implements Metric {
+
+    private final MetricType type;
+    private final AtomicLong value = new AtomicLong();
+
+    public AtomicMetric(MetricType type) {
+        this.type = type;
     }
-    
-    public long increment() {
-        return counter.incrementAndGet();
-    }
-    
-    public long getCurrentCount() {
-        return counter.get();
-    }
-    
+
     @Override
     public String getName() {
-        return name;
+        return type.name();
     }
-    
+
     @Override
     public String getDescription() {
-        return description;
+        return type.description();
     }
-    
+
     @Override
-    public void reset() {
-        counter.set(0);
+    public long getValue() {
+        return value.get();
     }
-    
+
     @Override
-    public String toString() {
-        return "Name: " + name + ", Current count: " + counter.get();
+    public void change(long delta) {
+        value.addAndGet(delta);
     }
-    
+
+    @Override
+    public void increment() {
+        value.incrementAndGet();
+    }
+
     @Override
     public String getCurrentMetricState() {
-        return toString();
+        return getName() + ": " + value.get();
     }
 
     @Override
-    public long getNumberOfSamples() {
-        return getCurrentCount();
+    public void reset() {
+        value.set(0);
     }
 
-    @Override
-    public long getTotalSum() {
-        return getCurrentCount();
-    }
-    
 }

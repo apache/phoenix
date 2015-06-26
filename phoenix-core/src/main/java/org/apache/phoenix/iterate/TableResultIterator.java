@@ -24,6 +24,7 @@ import java.util.List;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.monitoring.CombinableMetric;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.Closeables;
@@ -44,9 +45,10 @@ public class TableResultIterator extends ExplainTable implements ResultIterator 
     private final Scan scan;
     private final HTableInterface htable;
     private volatile ResultIterator delegate;
-
-    public TableResultIterator(StatementContext context, TableRef tableRef) throws SQLException {
-        this(context, tableRef, context.getScan());
+    private final CombinableMetric scanMetrics;
+    
+    public TableResultIterator(StatementContext context, TableRef tableRef, CombinableMetric scanMetrics) throws SQLException {
+        this(context, tableRef, context.getScan(), scanMetrics);
     }
 
     /*
@@ -62,7 +64,7 @@ public class TableResultIterator extends ExplainTable implements ResultIterator 
                 delegate = this.delegate;
                 if (delegate == null) {
                     try {
-                        this.delegate = delegate = isClosing ? ResultIterator.EMPTY_ITERATOR : new ScanningResultIterator(htable.getScanner(scan));
+                        this.delegate = delegate = isClosing ? ResultIterator.EMPTY_ITERATOR : new ScanningResultIterator(htable.getScanner(scan), scanMetrics);
                     } catch (IOException e) {
                         Closeables.closeQuietly(htable);
                         throw ServerUtil.parseServerException(e);
@@ -73,13 +75,14 @@ public class TableResultIterator extends ExplainTable implements ResultIterator 
         return delegate;
     }
     
-    public TableResultIterator(StatementContext context, TableRef tableRef, Scan scan) throws SQLException {
-        this(context, tableRef, scan, ScannerCreation.IMMEDIATE);
+    public TableResultIterator(StatementContext context, TableRef tableRef, Scan scan, CombinableMetric scanMetrics) throws SQLException {
+        this(context, tableRef, scan, scanMetrics, ScannerCreation.IMMEDIATE);
     }
 
-    public TableResultIterator(StatementContext context, TableRef tableRef, Scan scan, ScannerCreation creationMode) throws SQLException {
+    public TableResultIterator(StatementContext context, TableRef tableRef, Scan scan, CombinableMetric scanMetrics, ScannerCreation creationMode) throws SQLException {
         super(context, tableRef);
         this.scan = scan;
+        this.scanMetrics = scanMetrics;
         htable = context.getConnection().getQueryServices().getTable(tableRef.getTable().getPhysicalName().getBytes());
         if (creationMode == ScannerCreation.IMMEDIATE) {
         	getDelegate(false);

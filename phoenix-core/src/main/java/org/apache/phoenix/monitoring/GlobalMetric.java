@@ -18,46 +18,20 @@
 package org.apache.phoenix.monitoring;
 
 /**
- * Interface that represents phoenix-internal metric.
+ * Class that exposes the various internal phoenix metrics collected
+ * at the JVM level. Because metrics are dynamic in nature, it is not guaranteed that the
+ * state exposed will always be in sync with each other. One should use
+ * these metrics primarily for monitoring and debugging purposes. 
  */
-public interface Metric {
-    /**
-     * @return Name of the metric
-     */
-    public String getName();
-
-    /**
-     * @return Description of the metric
-     */
-    public String getDescription();
-
-    /**
-     * @return Current value of the metric
-     */
-    public long getValue();
-
-    /**
-     * Change the metric by the specified amount
-     * 
-     * @param delta
-     *            amount by which the metric value should be changed
-     */
-    public void change(long delta);
-
-    /**
-     * Change the value of metric by 1
-     */
-    public void increment();
-
-    /**
-     * @return String that represents the current state of the metric. Typically used for logging or reporting purposes.
-     */
-    public String getCurrentMetricState();
+public interface GlobalMetric extends Metric {
     
     /**
-     * Reset the metric
+     * @return Number of samples collected since the last {@link #reset()} call.
      */
-    public void reset();
-
+    public long getNumberOfSamples();
+    
+    /**
+     * @return Sum of the values of the metric sampled since the last {@link #reset()} call.
+     */
+    public long getTotalSum();
 }
-

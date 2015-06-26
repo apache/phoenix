@@ -32,6 +32,8 @@ import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.monitoring.OverAllQueryMetrics;
+import org.apache.phoenix.monitoring.ReadMetricQueue;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
@@ -41,6 +43,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.NumberUtil;
+import org.apache.phoenix.util.ReadOnlyProps;
 
 import com.google.common.collect.Maps;
 
@@ -80,9 +83,18 @@ public class StatementContext {
     private TimeRange scanTimeRange = null;
 
     private Map<SelectStatement, Object> subqueryResults;
-
+    private final ReadMetricQueue readMetricsQueue;
+    private final OverAllQueryMetrics overAllQueryMetrics;
+    
     public StatementContext(PhoenixStatement statement) {
         this(statement, new Scan());
+    }
+    
+    /**
+     *  Constructor that lets you override whether or not to collect request level metrics.
+     */
+    public StatementContext(PhoenixStatement statement, boolean collectRequestLevelMetrics) {
+        this(statement, FromCompiler.EMPTY_TABLE_RESOLVER, new Scan(), new SequenceManager(statement), collectRequestLevelMetrics);
     }
 
     public StatementContext(PhoenixStatement statement, Scan scan) {
@@ -94,6 +106,10 @@ public class StatementContext {
     }
 
     public StatementContext(PhoenixStatement statement, ColumnResolver resolver, Scan scan, SequenceManager seqManager) {
+        this(statement, resolver, scan, seqManager, statement.getConnection().isRequestLevelMetricsEnabled());
+    }
+    
+    public StatementContext(PhoenixStatement statement, ColumnResolver resolver, Scan scan, SequenceManager seqManager, boolean isRequestMetricsEnabled) {
         this.statement = statement;
         this.resolver = resolver;
         this.scan = scan;
@@ -102,20 +118,24 @@ public class StatementContext {
         this.aggregates = new AggregationManager();
         this.expressions = new ExpressionManager();
         PhoenixConnection connection = statement.getConnection();
-        this.dateFormat = connection.getQueryServices().getProps().get(QueryServices.DATE_FORMAT_ATTRIB, DateUtil.DEFAULT_DATE_FORMAT);
+        ReadOnlyProps props = connection.getQueryServices().getProps();
+        this.dateFormat = props.get(QueryServices.DATE_FORMAT_ATTRIB, DateUtil.DEFAULT_DATE_FORMAT);
         this.dateFormatter = DateUtil.getDateFormatter(dateFormat);
-        this.timeFormat = connection.getQueryServices().getProps().get(QueryServices.TIME_FORMAT_ATTRIB, DateUtil.DEFAULT_TIME_FORMAT);
+        this.timeFormat = props.get(QueryServices.TIME_FORMAT_ATTRIB, DateUtil.DEFAULT_TIME_FORMAT);
         this.timeFormatter = DateUtil.getTimeFormatter(timeFormat);
-        this.timestampFormat = connection.getQueryServices().getProps().get(QueryServices.TIMESTAMP_FORMAT_ATTRIB, DateUtil.DEFAULT_TIMESTAMP_FORMAT);
+        this.timestampFormat = props.get(QueryServices.TIMESTAMP_FORMAT_ATTRIB, DateUtil.DEFAULT_TIMESTAMP_FORMAT);
         this.timestampFormatter = DateUtil.getTimestampFormatter(timestampFormat);
-        this.dateFormatTimeZone = TimeZone.getTimeZone(
-                connection.getQueryServices().getProps().get(QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB, DateUtil.DEFAULT_TIME_ZONE_ID));
-        this.numberFormat = connection.getQueryServices().getProps().get(QueryServices.NUMBER_FORMAT_ATTRIB, NumberUtil.DEFAULT_NUMBER_FORMAT);
+        this.dateFormatTimeZone = TimeZone.getTimeZone(props.get(QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB,
+                DateUtil.DEFAULT_TIME_ZONE_ID));
+        this.numberFormat = props.get(QueryServices.NUMBER_FORMAT_ATTRIB, NumberUtil.DEFAULT_NUMBER_FORMAT);
         this.tempPtr = new ImmutableBytesWritable();
         this.currentTable = resolver != null && !resolver.getTables().isEmpty() ? resolver.getTables().get(0) : null;
-        this.whereConditionColumns = new ArrayList<Pair<byte[],byte[]>>();
-        this.dataColumns = this.currentTable == null ? Collections.<PColumn, Integer>emptyMap() : Maps.<PColumn, Integer>newLinkedHashMap();
-        this.subqueryResults = Maps.<SelectStatement, Object>newHashMap();
+        this.whereConditionColumns = new ArrayList<Pair<byte[], byte[]>>();
+        this.dataColumns = this.currentTable == null ? Collections.<PColumn, Integer> emptyMap() : Maps
+                .<PColumn, Integer> newLinkedHashMap();
+        this.subqueryResults = Maps.<SelectStatement, Object> newHashMap();
+        this.readMetricsQueue = new ReadMetricQueue(isRequestMetricsEnabled);
+        this.overAllQueryMetrics = new OverAllQueryMetrics(isRequestMetricsEnabled);
     }
 
     /**
@@ -285,4 +305,13 @@ public class StatementContext {
     public void setSubqueryResult(SelectStatement select, Object result) {
         subqueryResults.put(select, result);
     }
+    
+    public ReadMetricQueue getReadMetricsQueue() {
+        return readMetricsQueue;
+    }
+    
+    public OverAllQueryMetrics getOverallQueryMetrics() {
+        return overAllQueryMetrics;
+    }
+    
 }
