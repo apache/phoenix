@@ -18,7 +18,7 @@
 package org.apache.phoenix.iterate;
 
 import static com.google.common.base.Preconditions.checkArgument;
-import static org.apache.phoenix.monitoring.PhoenixMetrics.CountMetric.FAILED_QUERY;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_FAILED_QUERY_COUNTER;
 
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -268,7 +268,7 @@ public class RoundRobinResultIterator implements ResultIterator {
                 }
             } finally {
                 if (toThrow != null) {
-                    FAILED_QUERY.increment();
+                    GLOBAL_FAILED_QUERY_COUNTER.increment();
                     throw toThrow;
                 }
             }

@@ -161,7 +161,6 @@ public class JDBCUtil {
         }
         return Boolean.valueOf(autoCommit);
     }
-
     /**
      * Retrieve the value of the optional consistency read setting from JDBC url or connection
      * properties.
@@ -181,5 +180,10 @@ public class JDBCUtil {
         }
 
         return Consistency.STRONG;
+    }
+    
+    public static boolean isCollectingRequestLevelMetricsEnabled(String url, Properties overrideProps, ReadOnlyProps queryServicesProps) throws SQLException {
+        String batchSizeStr = findProperty(url, overrideProps, PhoenixRuntime.REQUEST_METRIC_ATTRIB);
+        return (batchSizeStr == null ? queryServicesProps.getBoolean(QueryServices.COLLECT_REQUEST_LEVEL_METRICS, QueryServicesOptions.DEFAULT_REQUEST_LEVEL_METRICS_ENABLED) : Boolean.parseBoolean(batchSizeStr));
     }
 }

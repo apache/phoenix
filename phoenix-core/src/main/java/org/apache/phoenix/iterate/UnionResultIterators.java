@@ -22,6 +22,9 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.monitoring.OverAllQueryMetrics;
+import org.apache.phoenix.monitoring.ReadMetricQueue;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.util.ServerUtil;
 
@@ -39,14 +42,22 @@ public class UnionResultIterators implements ResultIterators {
     private final List<List<Scan>> scans;
     private final List<PeekingResultIterator> iterators;
     private final List<QueryPlan> plans;
-
-    public UnionResultIterators(List<QueryPlan> plans) throws SQLException {
+    private final List<ReadMetricQueue> readMetricsList;
+    private final List<OverAllQueryMetrics> overAllQueryMetricsList;
+    private boolean closed;
+    private final StatementContext parentStmtCtx;
+    public UnionResultIterators(List<QueryPlan> plans, StatementContext parentStmtCtx) throws SQLException {
+        this.parentStmtCtx = parentStmtCtx;
         this.plans = plans;
         int nPlans = plans.size();
         iterators = Lists.newArrayListWithExpectedSize(nPlans);
         splits = Lists.newArrayListWithExpectedSize(nPlans * 30); 
         scans = Lists.newArrayListWithExpectedSize(nPlans * 10); 
+        readMetricsList = Lists.newArrayListWithCapacity(nPlans);
+        overAllQueryMetricsList = Lists.newArrayListWithCapacity(nPlans);
         for (QueryPlan plan : this.plans) {
+            readMetricsList.add(plan.getContext().getReadMetricsQueue());
+            overAllQueryMetricsList.add(plan.getContext().getOverallQueryMetrics());
             iterators.add(LookAheadResultIterator.wrap(plan.iterator()));
             splits.addAll(plan.getSplits()); 
             scans.addAll(plan.getScans());
@@ -59,32 +70,47 @@ public class UnionResultIterators implements ResultIterators {
     }
 
     @Override
-    public void close() throws SQLException {   
-        SQLException toThrow = null;
-        try {
-            if (iterators != null) {
-                for (int index=0; index < iterators.size(); index++) {
-                    PeekingResultIterator iterator = iterators.get(index);
-                    try {
-                        iterator.close();
-                    } catch (Exception e) {
-                        if (toThrow == null) {
-                            toThrow = ServerUtil.parseServerException(e);
-                        } else {
-                            toThrow.setNextException(ServerUtil.parseServerException(e));
+    public void close() throws SQLException {
+        if (!closed) {
+            closed = true;
+            SQLException toThrow = null;
+            try {
+                if (iterators != null) {
+                    for (int index=0; index < iterators.size(); index++) {
+                        PeekingResultIterator iterator = iterators.get(index);
+                        try {
+                            iterator.close();
+                        } catch (Exception e) {
+                            if (toThrow == null) {
+                                toThrow = ServerUtil.parseServerException(e);
+                            } else {
+                                toThrow.setNextException(ServerUtil.parseServerException(e));
+                            }
                         }
                     }
                 }
-            }
-        } catch (Exception e) {
-            toThrow = ServerUtil.parseServerException(e);
-        } finally {
-            if (toThrow != null) {
-                throw toThrow;
+            } catch (Exception e) {
+                toThrow = ServerUtil.parseServerException(e);
+            } finally {
+                setMetricsInParentContext();
+                if (toThrow != null) {
+                    throw toThrow;
+                }
             }
         }
     }
-
+    
+    private void setMetricsInParentContext() {
+        ReadMetricQueue parentCtxReadMetrics = parentStmtCtx.getReadMetricsQueue();
+        for (ReadMetricQueue readMetrics : readMetricsList) {
+            parentCtxReadMetrics.combineReadMetrics(readMetrics);
+        }
+        OverAllQueryMetrics parentCtxQueryMetrics = parentStmtCtx.getOverallQueryMetrics();
+        for (OverAllQueryMetrics metric : overAllQueryMetricsList) {
+            parentCtxQueryMetrics.combine(metric);
+        }
+    }
+    
     @Override
     public List<List<Scan>> getScans() {
         return scans;

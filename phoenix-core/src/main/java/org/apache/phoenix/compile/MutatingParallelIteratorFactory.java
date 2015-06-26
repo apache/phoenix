@@ -35,9 +35,9 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.tuple.SingleKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.KeyValueUtil;
 
 /**
@@ -53,21 +53,34 @@ public abstract class MutatingParallelIteratorFactory implements ParallelIterato
     /**
      * Method that does the actual mutation work
      */
-    abstract protected MutationState mutate(StatementContext context, ResultIterator iterator, PhoenixConnection connection) throws SQLException;
+    abstract protected MutationState mutate(StatementContext parentContext, ResultIterator iterator, PhoenixConnection connection) throws SQLException;
     
     @Override
-    public PeekingResultIterator newIterator(StatementContext context, ResultIterator iterator, Scan scan) throws SQLException {
-        final PhoenixConnection connection = new PhoenixConnection(this.connection);
-        MutationState state = mutate(context, iterator, connection);
+    public PeekingResultIterator newIterator(final StatementContext parentContext, ResultIterator iterator, Scan scan, String tableName) throws SQLException {
+        final PhoenixConnection clonedConnection = new PhoenixConnection(this.connection);
+        
+        MutationState state = mutate(parentContext, iterator, clonedConnection);
+        
         long totalRowCount = state.getUpdateCount();
-        if (connection.getAutoCommit()) {
-            connection.getMutationState().join(state);
-            connection.commit();
-            ConnectionQueryServices services = connection.getQueryServices();
-            int maxSize = services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_ATTRIB,QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE);
-            state = new MutationState(maxSize, connection, totalRowCount);
+        if (clonedConnection.getAutoCommit()) {
+            clonedConnection.getMutationState().join(state);
+            clonedConnection.commit();
+            ConnectionQueryServices services = clonedConnection.getQueryServices();
+            int maxSize = services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_ATTRIB, QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE);
+            /*
+             * Everything that was mutated as part of the clonedConnection has been committed. However, we want to
+             * report the mutation work done using this clonedConnection as part of the overall mutation work of the
+             * parent connection. So we need to set those metrics in the empty mutation state so that they could be
+             * combined with the parent connection's mutation metrics (as part of combining mutation state) in the
+             * close() method of the iterator being returned. Don't combine the read metrics in parent context yet
+             * though because they are possibly being concurrently modified by other threads at this stage. Instead we
+             * will get hold of the read metrics when all the mutating iterators are done.
+             */
+            state = MutationState.emptyMutationState(maxSize, clonedConnection);
+            state.getMutationMetricQueue().combineMetricQueues(clonedConnection.getMutationState().getMutationMetricQueue());
         }
         final MutationState finalState = state;
+        
         byte[] value = PLong.INSTANCE.toBytes(totalRowCount);
         KeyValue keyValue = KeyValueUtil.newKeyValue(UNGROUPED_AGG_ROW_KEY, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, AGG_TIMESTAMP, value, 0, value.length);
         final Tuple tuple = new SingleKeyValueTuple(keyValue);
@@ -90,13 +103,17 @@ public abstract class MutatingParallelIteratorFactory implements ParallelIterato
             @Override
             public void close() throws SQLException {
                 try {
-                    // Join the child mutation states in close, since this is called in a single threaded manner
-                    // after the parallel results have been processed.
-                    if (!connection.getAutoCommit()) {
-                        MutatingParallelIteratorFactory.this.connection.getMutationState().join(finalState);
-                    }
+                    /* 
+                     * Join the child mutation states in close, since this is called in a single threaded manner
+                     * after the parallel results have been processed. 
+                     * If auto-commit is on for the cloned child connection, then the finalState here is an empty mutation 
+                     * state (with no mutations). However, it still has the metrics for mutation work done by the 
+                     * mutating-iterator. Joining the mutation state makes sure those metrics are passed over
+                     * to the parent connection.
+                     */ 
+                    MutatingParallelIteratorFactory.this.connection.getMutationState().join(finalState);
                 } finally {
-                    connection.close();
+                    clonedConnection.close();
                 }
             }
 

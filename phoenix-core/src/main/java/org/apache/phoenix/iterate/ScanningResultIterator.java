@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.iterate;
 
-import static org.apache.phoenix.monitoring.PhoenixMetrics.SizeMetric.SCAN_BYTES;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_SCAN_BYTES;
 
 import java.io.IOException;
 import java.sql.SQLException;
@@ -28,15 +28,20 @@ import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
-import org.apache.phoenix.monitoring.PhoenixMetrics;
+import org.apache.phoenix.monitoring.CombinableMetric.NoOpRequestMetric;
+import org.apache.phoenix.monitoring.GlobalClientMetrics;
+import org.apache.phoenix.monitoring.CombinableMetric;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ServerUtil;
 
 public class ScanningResultIterator implements ResultIterator {
     private final ResultScanner scanner;
-    public ScanningResultIterator(ResultScanner scanner) {
+    private final CombinableMetric scanMetrics;
+    
+    public ScanningResultIterator(ResultScanner scanner, CombinableMetric scanMetrics) {
         this.scanner = scanner;
+        this.scanMetrics = scanMetrics;
     }
     
     @Override
@@ -66,17 +71,18 @@ public class ScanningResultIterator implements ResultIterator {
 		return "ScanningResultIterator [scanner=" + scanner + "]";
 	}
 	
-	private static void calculateScanSize(Result result) {
-	    if (PhoenixMetrics.isMetricsEnabled()) {
-	        if (result != null) {
-	            Cell[] cells = result.rawCells();
-	            long scanResultSize = 0;
-	            for (Cell cell : cells) {
-	                KeyValue kv = KeyValueUtil.ensureKeyValue(cell);
-	                scanResultSize += kv.heapSize();
-	            }
-	            SCAN_BYTES.update(scanResultSize);
-	        }
-	    }
-	}
+    private void calculateScanSize(Result result) {
+        if (GlobalClientMetrics.isMetricsEnabled() || scanMetrics != NoOpRequestMetric.INSTANCE) {
+            if (result != null) {
+                Cell[] cells = result.rawCells();
+                long scanResultSize = 0;
+                for (Cell cell : cells) {
+                    KeyValue kv = KeyValueUtil.ensureKeyValue(cell);
+                    scanResultSize += kv.heapSize();
+                }
+                scanMetrics.change(scanResultSize);
+                GLOBAL_SCAN_BYTES.update(scanResultSize);
+            }
+        }
+    }
 }
