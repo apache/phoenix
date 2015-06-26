@@ -27,6 +27,7 @@ import java.io.Reader;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.util.ArrayList;
@@ -34,6 +35,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.TreeSet;
@@ -61,8 +63,9 @@ import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
-import org.apache.phoenix.monitoring.Metric;
-import org.apache.phoenix.monitoring.PhoenixMetrics;
+import org.apache.phoenix.jdbc.PhoenixResultSet;
+import org.apache.phoenix.monitoring.GlobalClientMetrics;
+import org.apache.phoenix.monitoring.GlobalMetric;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
@@ -142,7 +145,7 @@ public class PhoenixRuntime {
     public static final String ANNOTATION_ATTRIB_PREFIX = "phoenix.annotation.";
 
     /**
-     * Use this connection property to explicity enable or disable auto-commit on a new connection.
+     * Use this connection property to explicitly enable or disable auto-commit on a new connection.
      */
     public static final String AUTO_COMMIT_ATTRIB = "AutoCommit";
 
@@ -152,6 +155,11 @@ public class PhoenixRuntime {
      * upserting data into them, and getting the uncommitted state through {@link #getUncommittedData(Connection)}
      */
     public final static String CONNECTIONLESS = "none";
+    
+    /**
+     * Use this connection property to explicitly enable or disable request level metric collection.
+     */
+    public static final String REQUEST_METRIC_ATTRIB = "RequestMetric";
 
     private static final String HEADER_IN_LINE = "in-line";
     private static final String SQL_FILE_EXT = ".sql";
@@ -980,9 +988,162 @@ public class PhoenixRuntime {
     }
     
     /**
-     * Exposes the various internal phoenix metrics. 
+     * Exposes the various internal phoenix metrics collected at the client JVM level. 
      */
-    public static Collection<Metric> getInternalPhoenixMetrics() {
-        return PhoenixMetrics.getMetrics();
+    public static Collection<GlobalMetric> getGlobalPhoenixClientMetrics() {
+        return GlobalClientMetrics.getMetrics();
     }
-}
+    
+    /**
+     * 
+     * @return whether or not the global client metrics are being collected
+     */
+    public static boolean areGlobalClientMetricsBeingCollected() {
+        return GlobalClientMetrics.isMetricsEnabled();
+    }
+    
+    /**
+     * Method to expose the metrics associated with performing reads using the passed result set. A typical pattern is:
+     * 
+     * <pre>
+     * {@code
+     * Map<String, Map<String, Long>> overAllQueryMetrics = null;
+     * Map<String, Map<String, Long>> requestReadMetrics = null;
+     * try (ResultSet rs = stmt.executeQuery()) {
+     *    while(rs.next()) {
+     *      .....
+     *    }
+     *    overAllQueryMetrics = PhoenixRuntime.getOverAllReadRequestMetrics(rs);
+     *    requestReadMetrics = PhoenixRuntime.getRequestReadMetrics(rs);
+     *    PhoenixRuntime.resetMetrics(rs);
+     * }
+     * </pre>
+     * 
+     * @param rs
+     *            result set to get the metrics for
+     * @return a map of (table name) -> (map of (metric name) -> (metric value))
+     * @throws SQLException
+     */
+    public static Map<String, Map<String, Long>> getRequestReadMetrics(ResultSet rs) throws SQLException {
+        PhoenixResultSet resultSet = rs.unwrap(PhoenixResultSet.class);
+        return resultSet.getReadMetrics();
+    }
+
+    /**
+     * Method to expose the overall metrics associated with executing a query via phoenix. A typical pattern of
+     * accessing request level read metrics and overall read query metrics is:
+     * 
+     * <pre>
+     * {@code
+     * Map<String, Map<String, Long>> overAllQueryMetrics = null;
+     * Map<String, Map<String, Long>> requestReadMetrics = null;
+     * try (ResultSet rs = stmt.executeQuery()) {
+     *    while(rs.next()) {
+     *      .....
+     *    }
+     *    overAllQueryMetrics = PhoenixRuntime.getOverAllReadRequestMetrics(rs);
+     *    requestReadMetrics = PhoenixRuntime.getRequestReadMetrics(rs);
+     *    PhoenixRuntime.resetMetrics(rs);
+     * }
+     * </pre>
+     * 
+     * @param rs
+     *            result set to get the metrics for
+     * @return a map of metric name -> metric value
+     * @throws SQLException
+     */
+    public static Map<String, Long> getOverAllReadRequestMetrics(ResultSet rs) throws SQLException {
+        PhoenixResultSet resultSet = rs.unwrap(PhoenixResultSet.class);
+        return resultSet.getOverAllRequestReadMetrics();
+    }
+
+    /**
+     * Method to expose the metrics associated with sending over mutations to HBase. These metrics are updated when
+     * commit is called on the passed connection. Mutation metrics are accumulated for the connection till
+     * {@link #resetMetrics(Connection)} is called or the connection is closed. Example usage:
+     * 
+     * <pre>
+     * {@code
+     * Map<String, Map<String, Long>> mutationWriteMetrics = null;
+     * Map<String, Map<String, Long>> mutationReadMetrics = null;
+     * try (Connection conn = DriverManager.getConnection(url)) {
+     *    conn.createStatement.executeUpdate(dml1);
+     *    ....
+     *    conn.createStatement.executeUpdate(dml2);
+     *    ...
+     *    conn.createStatement.executeUpdate(dml3);
+     *    ...
+     *    conn.commit();
+     *    mutationWriteMetrics = PhoenixRuntime.getWriteMetricsForMutationsSinceLastReset(conn);
+     *    mutationReadMetrics = PhoenixRuntime.getReadMetricsForMutationsSinceLastReset(conn);
+     *    PhoenixRuntime.resetMetrics(rs);
+     * }
+     * </pre>
+     *  
+     * @param conn
+     *            connection to get the metrics for
+     * @return a map of (table name) -> (map of (metric name) -> (metric value))
+     * @throws SQLException
+     */
+    public static Map<String, Map<String, Long>> getWriteMetricsForMutationsSinceLastReset(Connection conn) throws SQLException {
+        PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
+        return pConn.getMutationMetrics();
+    }
+
+    /**
+     * Method to expose the read metrics associated with executing a dml statement. These metrics are updated when
+     * commit is called on the passed connection. Read metrics are accumulated till {@link #resetMetrics(Connection)} is
+     * called or the connection is closed. Example usage:
+     * 
+     * <pre>
+     * {@code
+     * Map<String, Map<String, Long>> mutationWriteMetrics = null;
+     * Map<String, Map<String, Long>> mutationReadMetrics = null;
+     * try (Connection conn = DriverManager.getConnection(url)) {
+     *    conn.createStatement.executeUpdate(dml1);
+     *    ....
+     *    conn.createStatement.executeUpdate(dml2);
+     *    ...
+     *    conn.createStatement.executeUpdate(dml3);
+     *    ...
+     *    conn.commit();
+     *    mutationWriteMetrics = PhoenixRuntime.getWriteMetricsForMutationsSinceLastReset(conn);
+     *    mutationReadMetrics = PhoenixRuntime.getReadMetricsForMutationsSinceLastReset(conn);
+     *    PhoenixRuntime.resetMetrics(rs);
+     * }
+     * </pre> 
+     * @param conn
+     *            connection to get the metrics for
+     * @return  a map of (table name) -> (map of (metric name) -> (metric value))
+     * @throws SQLException
+     */
+    public static Map<String, Map<String, Long>> getReadMetricsForMutationsSinceLastReset(Connection conn) throws SQLException {
+        PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
+        return pConn.getReadMetrics();
+    }
+
+    /**
+     * Reset the read metrics collected in the result set.
+     * 
+     * @see {@link #getRequestReadMetrics(ResultSet)} {@link #getOverAllReadRequestMetrics(ResultSet)}
+     * @param rs
+     * @throws SQLException
+     */
+    public static void resetMetrics(ResultSet rs) throws SQLException {
+        PhoenixResultSet prs = rs.unwrap(PhoenixResultSet.class);
+        prs.resetMetrics();
+    }
+    
+    /**
+     * Reset the mutation and reads-for-mutations metrics collected in the connection.
+     * 
+     * @see {@link #getReadMetricsForMutationsSinceLastReset(Connection)} {@link #getWriteMetricsForMutationsSinceLastReset(Connection)}
+     * @param conn
+     * @throws SQLException
+     */
+    public static void resetMetrics(Connection conn) throws SQLException {
+        PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
+        pConn.clearMetrics();
+    }
+    
+ }

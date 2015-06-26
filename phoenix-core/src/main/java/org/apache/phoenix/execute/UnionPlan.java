@@ -49,7 +49,7 @@ public class UnionPlan implements QueryPlan {
     private final FilterableStatement statement;
     private final ParameterMetaData paramMetaData;
     private final OrderBy orderBy;
-    private final StatementContext context;
+    private final StatementContext parentContext;
     private final Integer limit;
     private final GroupBy groupBy;
     private final RowProjector projector;
@@ -59,7 +59,7 @@ public class UnionPlan implements QueryPlan {
 
     public UnionPlan(StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector,
             Integer limit, OrderBy orderBy, GroupBy groupBy, List<QueryPlan> plans, ParameterMetaData paramMetaData) throws SQLException {
-        this.context = context;
+        this.parentContext = context;
         this.statement = statement;
         this.tableRef = table;
         this.projector = projector;
@@ -128,7 +128,7 @@ public class UnionPlan implements QueryPlan {
     }
 
     public final ResultIterator iterator(final List<? extends SQLCloseable> dependencies) throws SQLException {
-        this.iterators = new UnionResultIterators(plans);
+        this.iterators = new UnionResultIterators(plans, parentContext);
         ResultIterator scanner;      
         boolean isOrdered = !orderBy.getOrderByExpressions().isEmpty();
 
@@ -175,7 +175,7 @@ public class UnionPlan implements QueryPlan {
 
     @Override
     public StatementContext getContext() {
-        return context;
+        return parentContext;
     }
 
     @Override
