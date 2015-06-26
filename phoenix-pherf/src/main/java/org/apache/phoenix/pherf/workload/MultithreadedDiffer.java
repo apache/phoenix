@@ -21,20 +21,18 @@ package org.apache.phoenix.pherf.workload;
 import java.util.Calendar;
 import java.util.Date;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import org.apache.phoenix.pherf.PherfConstants;
 import org.apache.phoenix.pherf.configuration.Query;
 import org.apache.phoenix.pherf.result.RunTime;
 import org.apache.phoenix.pherf.result.ThreadTime;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 class MultithreadedDiffer implements Runnable {
     private static final Logger logger = LoggerFactory.getLogger(MultiThreadedRunner.class);
     private Thread t;
     private Query query;
     private ThreadTime threadTime;
-    private String threadName;
     private long numberOfExecutions;
     private long executionDurationInMs;
     private QueryVerifier queryVerifier = new QueryVerifier(true);
@@ -72,7 +70,6 @@ class MultithreadedDiffer implements Runnable {
     MultithreadedDiffer(String threadName, Query query, ThreadTime threadTime,
             long numberOfExecutions, long executionDurationInMs) {
         this.query = query;
-        this.threadName = threadName;
         this.threadTime = threadTime;
         this.numberOfExecutions = numberOfExecutions;
         this.executionDurationInMs = executionDurationInMs;
