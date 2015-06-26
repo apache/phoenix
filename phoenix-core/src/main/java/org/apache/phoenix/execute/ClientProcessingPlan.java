@@ -17,11 +17,15 @@
  */
 package org.apache.phoenix.execute;
 
+import java.sql.SQLException;
+
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.iterate.DefaultParallelScanGrouper;
+import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.schema.TableRef;
 
@@ -78,5 +82,10 @@ public abstract class ClientProcessingPlan extends DelegateQueryPlan {
     @Override
     public FilterableStatement getStatement() {
         return statement;
+    }
+    
+    @Override
+    public ResultIterator iterator() throws SQLException {
+        return iterator(DefaultParallelScanGrouper.getInstance());
     }
 }

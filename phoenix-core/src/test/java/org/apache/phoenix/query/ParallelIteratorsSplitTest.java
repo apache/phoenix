@@ -44,6 +44,7 @@ import org.apache.phoenix.compile.SequenceManager;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.iterate.ParallelIterators;
+import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.iterate.SpoolingResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -367,6 +368,11 @@ public class ParallelIteratorsSplitTest extends BaseConnectionlessQueryTest {
                 return ExplainPlan.EMPTY_PLAN;
             }
 
+            @Override
+            public ResultIterator iterator(ParallelScanGrouper scanGrouper) throws SQLException {
+                return ResultIterator.EMPTY_ITERATOR;
+            }
+            
             @Override
             public ResultIterator iterator() throws SQLException {
                 return ResultIterator.EMPTY_ITERATOR;

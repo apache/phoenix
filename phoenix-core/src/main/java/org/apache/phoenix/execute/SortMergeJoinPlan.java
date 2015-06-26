@@ -44,7 +44,9 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.TupleProjector.ProjectedValueTuple;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.iterate.DefaultParallelScanGrouper;
 import org.apache.phoenix.iterate.MappedByteBufferQueue;
+import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixParameterMetaData;
 import org.apache.phoenix.parse.FilterableStatement;
@@ -114,10 +116,15 @@ public class SortMergeJoinPlan implements QueryPlan {
     }
 
     @Override
-    public ResultIterator iterator() throws SQLException {        
+    public ResultIterator iterator(ParallelScanGrouper scanGrouper) throws SQLException {        
         return type == JoinType.Semi || type == JoinType.Anti ? 
-                new SemiAntiJoinIterator(lhsPlan.iterator(), rhsPlan.iterator()) :
-                new BasicJoinIterator(lhsPlan.iterator(), rhsPlan.iterator());
+                new SemiAntiJoinIterator(lhsPlan.iterator(scanGrouper), rhsPlan.iterator(scanGrouper)) :
+                new BasicJoinIterator(lhsPlan.iterator(scanGrouper), rhsPlan.iterator(scanGrouper));
+    }
+    
+    @Override
+    public ResultIterator iterator() throws SQLException {        
+        return iterator(DefaultParallelScanGrouper.getInstance());
     }
 
     @Override
