@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import static com.google.common.collect.Lists.newArrayListWithExpectedSize;
+import static org.apache.phoenix.exception.SQLExceptionCode.NOT_NULLABLE_COLUMN_IN_ROW_KEY;
 import static org.apache.phoenix.util.TestUtil.analyzeTable;
 import static org.apache.phoenix.util.TestUtil.getAllSplits;
 import static org.junit.Assert.assertArrayEquals;
@@ -532,15 +533,20 @@ public class ViewIT extends BaseViewIT {
         conn.createStatement().execute(ddl);
     }
     
-    @Test(expected=SQLException.class)
+    @Test
     public void testViewAddsNotNullPKColumn() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         String ddl = "CREATE TABLE tp (k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, v1 DECIMAL, CONSTRAINT pk PRIMARY KEY (k1, k2))";
         conn.createStatement().execute(ddl);
         ddl = "CREATE VIEW v1  AS SELECT * FROM tp WHERE v1 = 1.0";
         conn.createStatement().execute(ddl);
-        ddl = "ALTER VIEW V1 ADD k3 VARCHAR NOT NULL PRIMARY KEY"; // can only add nullable PKs via ALTER VIEW/TABLE
-        conn.createStatement().execute(ddl);
+        try {
+            ddl = "ALTER VIEW V1 ADD k3 VARCHAR NOT NULL PRIMARY KEY"; 
+            conn.createStatement().execute(ddl);
+            fail("can only add nullable PKs via ALTER VIEW/TABLE");
+        } catch (SQLException e) {
+            assertEquals(NOT_NULLABLE_COLUMN_IN_ROW_KEY.getErrorCode(), e.getErrorCode());
+        }
     }
     
     private void assertPKs(ResultSet rs, String[] expectedPKs) throws SQLException {
