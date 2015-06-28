@@ -593,7 +593,7 @@ UNSIGNED_INT
 "Data Types","BIGINT Type","
 BIGINT
 ","
-Possible values: -9223372036854775807 to 9223372036854775807.
+Possible values: -9223372036854775808 to 9223372036854775807.
 Mapped to ""java.lang.Long"". The binary representation is an 8 byte
 long with the sign bit flipped (so that negative values sorts before positive values).
 ","
