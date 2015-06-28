@@ -17,9 +17,7 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.List;
 
-/**
- * Created by WangLei on 2015/3/20.
- */
+
 @FunctionParseNode.BuiltInFunction(name=ArrayToJsonFunction.NAME,  args={
         @FunctionParseNode.Argument(allowedTypes={PVarchar.class})} )
 public class ArrayToJsonFunction extends ScalarFunction {
