@@ -21,12 +21,16 @@ package org.apache.phoenix.schema.json;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
 
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.schema.EqualityNotSupportedException;
-import org.apache.phoenix.schema.types.PJson;
+import org.apache.phoenix.schema.types.*;
 import org.codehaus.jackson.JsonFactory;
 import org.codehaus.jackson.JsonNode;
 import org.codehaus.jackson.JsonParser;
@@ -231,4 +235,121 @@ public class PhoenixJson implements Comparable<PhoenixJson> {
         }
         return new PhoenixJson(node, node.toString());
     }
+
+    public int getJsonArrayLength() {
+        int count = 0;
+        Iterator<JsonNode> elements = this.rootNode.getElements();
+        while(elements.hasNext()){
+            elements.next();
+            count++;
+        }
+        return count;
+    }
+
+    public Object[] getJsonArrayElements() {
+        List<String> elementlist = new ArrayList();
+        Iterator<JsonNode> elements = this.rootNode.getElements();
+        while(elements.hasNext()){
+            JsonNode e = elements.next();
+            elementlist.add(e.toString());
+        }
+        return elementlist.toArray();
+    }
+
+    public Object[] getJsonObjectKeys() {
+        List<String> elementlist = new ArrayList();
+        Iterator<String> fieldnames = this.rootNode.getFieldNames();
+        while(fieldnames.hasNext()){
+            elementlist.add(fieldnames.next());
+        }
+        return elementlist.toArray();
+    }
+
+    public Object[] getJsonFields() {
+        List<String> elementlist = new ArrayList();
+        Iterator<Map.Entry<String, JsonNode>> fields = this.rootNode.getFields();
+
+        while(fields.hasNext()){
+            String fieldsstr = "";
+            Map.Entry<String, JsonNode> entry = fields.next();
+            fieldsstr += entry.getKey() +","+entry.getValue().toString();
+            elementlist.add(fieldsstr);
+        }
+        return elementlist.toArray();
+    }
+    public String PopulateRecord(String [] types) {
+        String records = "";
+        for(int i =0 ;i < types.length; i++){
+            List<JsonNode> nodelist =this.rootNode.findValues(types[i]);
+            if(nodelist.size()!=0){
+                records += nodelist.get(0).toString();
+            }else{
+                records += "null";
+            }
+            if(i != types.length-1){
+                records +=",";
+            }
+        }
+        return records;
+    }
+    public Object[] PopulateRecordSet(String[] types) {
+        List<String> recordslist = new ArrayList();
+        Iterator<JsonNode> elements = this.rootNode.getElements();
+        while(elements.hasNext()){
+            JsonNode e = elements.next();
+            String records = "";
+            for(int i =0 ;i < types.length; i++){
+                List<JsonNode> nodelist =e.findValues(types[i]);
+                if(nodelist.size()!=0){
+                    records += nodelist.get(0).toString();
+                }else{
+                    records += "null";
+                }
+                if(i != types.length-1){
+                    records +=",";
+                }
+            }
+            recordslist.add(records);
+        }
+        return recordslist.toArray();
+    }
+
+
+
+
+    public static String DataToJsonValue(PDataType targetType, Object obj) {
+        String Value = null;
+        if (obj != null) {
+            if (PDataType.equalsAny(targetType, PUnsignedDouble.INSTANCE, PUnsignedFloat.INSTANCE,
+                    PDouble.INSTANCE)) {
+                Value = PDouble.INSTANCE.toStringLiteral( obj,null);
+
+            } else if (PDataType.equalsAny(targetType, PInteger.INSTANCE, PUnsignedSmallint.INSTANCE,
+                    PUnsignedLong.INSTANCE, PUnsignedInt.INSTANCE,PUnsignedTinyint.INSTANCE)) {
+                Value = PLong.INSTANCE.toStringLiteral(obj,null);
+            }else if (PDataType.equalsAny(targetType, PBoolean.INSTANCE)) {
+                Value = PBoolean.INSTANCE.toStringLiteral(obj,null);
+            } else if (PDataType.equalsAny(targetType, PVarchar.INSTANCE,PChar.INSTANCE)) {
+                Value = "\"";
+                String tmp = PVarchar.INSTANCE.toStringLiteral(obj,null);
+                Value += tmp.substring(1,tmp.length()-1);
+                Value += "\"";
+            }else if (PDataType.equalsAny(targetType,PDate.INSTANCE,PTime.INSTANCE,PTimestamp.INSTANCE)){
+                Value = "\"";
+                String tmp = PVarchar.INSTANCE.toStringLiteral(obj,null);
+                Value += tmp.substring(1,tmp.length()-1);
+                Value += "\"";
+            } else{
+                Value = "\"";
+                String tmp = PVarchar.INSTANCE.toStringLiteral(obj,null);
+                Value += tmp.substring(1,tmp.length()-1);
+                Value += "\"";
+            }
+        }else{
+            Value = "null";
+        }
+        return Value ;
+    }
+
+
 }
