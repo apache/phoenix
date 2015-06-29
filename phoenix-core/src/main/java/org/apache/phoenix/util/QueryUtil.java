@@ -59,7 +59,7 @@ public final class QueryUtil {
     /**
      *  Column family name index within ResultSet resulting from {@link DatabaseMetaData#getColumns(String, String, String, String)}
      */
-    public static final int COLUMN_FAMILY_POSITION = 24;
+    public static final int COLUMN_FAMILY_POSITION = 25;
 
     /**
      *  Column name index within ResultSet resulting from {@link DatabaseMetaData#getColumns(String, String, String, String)}
