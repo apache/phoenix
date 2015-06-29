@@ -52,9 +52,10 @@ public class RowProjector {
     private final int estimatedSize;
     private final boolean isProjectEmptyKeyValue;
     private final boolean cloneRequired;
+    private final boolean hasUDFs;
     
     public RowProjector(RowProjector projector, boolean isProjectEmptyKeyValue) {
-        this(projector.getColumnProjectors(), projector.getEstimatedRowByteSize(), isProjectEmptyKeyValue);
+        this(projector.getColumnProjectors(), projector.getEstimatedRowByteSize(), isProjectEmptyKeyValue, projector.hasUDFs);
     }
     /**
      * Construct RowProjector based on a list of ColumnProjectors.
@@ -64,6 +65,18 @@ public class RowProjector {
      * @param estimatedRowSize 
      */
     public RowProjector(List<? extends ColumnProjector> columnProjectors, int estimatedRowSize, boolean isProjectEmptyKeyValue) {
+        this(columnProjectors, estimatedRowSize, isProjectEmptyKeyValue, false);
+    }
+    /**
+     * Construct RowProjector based on a list of ColumnProjectors.
+     * @param columnProjectors ordered list of ColumnProjectors corresponding to projected columns in SELECT clause
+     * aggregating coprocessor. Only required in the case of an aggregate query with a limit clause and otherwise may
+     * be null.
+     * @param estimatedRowSize 
+     * @param isProjectEmptyKeyValue
+     * @param hasUDFs
+     */
+    public RowProjector(List<? extends ColumnProjector> columnProjectors, int estimatedRowSize, boolean isProjectEmptyKeyValue, boolean hasUDFs) {
         this.columnProjectors = Collections.unmodifiableList(columnProjectors);
         int position = columnProjectors.size();
         reverseIndex = ArrayListMultimap.<String, Integer>create();
@@ -82,15 +95,18 @@ public class RowProjector {
         this.someCaseSensitive = someCaseSensitive;
         this.estimatedSize = estimatedRowSize;
         this.isProjectEmptyKeyValue = isProjectEmptyKeyValue;
+        this.hasUDFs = hasUDFs;
         boolean hasPerInvocationExpression = false;
-        for (int i = 0; i < this.columnProjectors.size(); i++) {
-            Expression expression = this.columnProjectors.get(i).getExpression();
-            if (expression.getDeterminism() == Determinism.PER_INVOCATION) {
-                hasPerInvocationExpression = true;
-                break;
+        if (!hasUDFs) {
+            for (int i = 0; i < this.columnProjectors.size(); i++) {
+                Expression expression = this.columnProjectors.get(i).getExpression();
+                if (expression.getDeterminism() == Determinism.PER_INVOCATION) {
+                    hasPerInvocationExpression = true;
+                    break;
+                }
             }
         }
-        this.cloneRequired = hasPerInvocationExpression;
+        this.cloneRequired = hasPerInvocationExpression || hasUDFs;
     }
 
     public RowProjector cloneIfNecessary() {
@@ -114,7 +130,7 @@ public class RowProjector {
         }
         return new RowProjector(clonedColProjectors, 
                 this.getEstimatedRowByteSize(),
-                this.isProjectEmptyKeyValue());
+                this.isProjectEmptyKeyValue(), this.hasUDFs);
     }
 
     public boolean isProjectEmptyKeyValue() {

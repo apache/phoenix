@@ -36,6 +36,7 @@ import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.parse.ComparisonParseNode;
 import org.apache.phoenix.parse.CompoundParseNode;
 import org.apache.phoenix.parse.ExistsParseNode;
+import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.InParseNode;
 import org.apache.phoenix.parse.JoinTableNode.JoinType;
 import org.apache.phoenix.parse.LiteralParseNode;
@@ -51,6 +52,7 @@ import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.parse.TableNode;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
+import org.apache.phoenix.schema.TableNotFoundException;
 
 import com.google.common.collect.Lists;
 
@@ -139,7 +141,7 @@ public class SubqueryRewriter extends ParseNodeRewriter {
         }
         
         SubqueryParseNode subqueryNode = (SubqueryParseNode) l.get(1);
-        SelectStatement subquery = subqueryNode.getSelectNode();
+        SelectStatement subquery = fixSubqueryStatement(subqueryNode.getSelectNode());
         String rhsTableAlias = ParseNodeFactory.createTempAlias();
         List<AliasedNode> selectNodes = fixAliasedNodes(subquery.getSelect(), true);
         subquery = NODE_FACTORY.select(subquery, !node.isSubqueryDistinct(), selectNodes);
@@ -160,7 +162,7 @@ public class SubqueryRewriter extends ParseNodeRewriter {
         }
         
         SubqueryParseNode subqueryNode = (SubqueryParseNode) l.get(0);
-        SelectStatement subquery = subqueryNode.getSelectNode();
+        SelectStatement subquery = fixSubqueryStatement(subqueryNode.getSelectNode());
         String rhsTableAlias = ParseNodeFactory.createTempAlias();
         JoinConditionExtractor conditionExtractor = new JoinConditionExtractor(subquery, resolver, connection, rhsTableAlias);
         ParseNode where = subquery.getWhere() == null ? null : subquery.getWhere().accept(conditionExtractor);
@@ -199,7 +201,7 @@ public class SubqueryRewriter extends ParseNodeRewriter {
         }
         
         SubqueryParseNode subqueryNode = (SubqueryParseNode) secondChild;
-        SelectStatement subquery = subqueryNode.getSelectNode();
+        SelectStatement subquery = fixSubqueryStatement(subqueryNode.getSelectNode());
         String rhsTableAlias = ParseNodeFactory.createTempAlias();
         JoinConditionExtractor conditionExtractor = new JoinConditionExtractor(subquery, resolver, connection, rhsTableAlias);
         ParseNode where = subquery.getWhere() == null ? null : subquery.getWhere().accept(conditionExtractor);
@@ -282,7 +284,7 @@ public class SubqueryRewriter extends ParseNodeRewriter {
         }
         
         SubqueryParseNode subqueryNode = (SubqueryParseNode) firstChild;
-        SelectStatement subquery = subqueryNode.getSelectNode();
+        SelectStatement subquery = fixSubqueryStatement(subqueryNode.getSelectNode());
         String rhsTableAlias = ParseNodeFactory.createTempAlias();
         JoinConditionExtractor conditionExtractor = new JoinConditionExtractor(subquery, resolver, connection, rhsTableAlias);
         ParseNode where = subquery.getWhere() == null ? null : subquery.getWhere().accept(conditionExtractor);
@@ -339,7 +341,7 @@ public class SubqueryRewriter extends ParseNodeRewriter {
                 groupbyNodes.set(i - 1, aliasedNode.getNode());
             }
             SelectStatement derivedTableStmt = NODE_FACTORY.select(subquery, subquery.isDistinct(), derivedTableSelect, where, derivedTableGroupBy, true);
-            subquery = NODE_FACTORY.select(NODE_FACTORY.derivedTable(derivedTableAlias, derivedTableStmt), subquery.getHint(), false, selectNodes, null, groupbyNodes, null, Collections.<OrderByNode> emptyList(), null, subquery.getBindCount(), true, false);
+            subquery = NODE_FACTORY.select(NODE_FACTORY.derivedTable(derivedTableAlias, derivedTableStmt), subquery.getHint(), false, selectNodes, null, groupbyNodes, null, Collections.<OrderByNode> emptyList(), null, subquery.getBindCount(), true, false, Collections.<SelectStatement>emptyList(), subquery.getUdfParseNodes());
         }
         
         ParseNode onNode = conditionExtractor.getJoinCondition();
@@ -355,6 +357,14 @@ public class SubqueryRewriter extends ParseNodeRewriter {
         secondChild = NODE_FACTORY.comparison(secondChild.getFilterOp(), secondChild.getLHS(), NODE_FACTORY.elementRef(Lists.newArrayList(firstChild, NODE_FACTORY.literal(1))));
         
         return Lists.newArrayList(firstChild, secondChild);
+    }
+    
+    private SelectStatement fixSubqueryStatement(SelectStatement select) {
+        if (!select.isUnion())
+            return select;
+        
+        // Wrap as a derived table.
+        return NODE_FACTORY.select(NODE_FACTORY.derivedTable(ParseNodeFactory.createTempAlias(), select), HintNode.EMPTY_HINT_NODE, false, select.getSelect(), null, null, null, null, null, select.getBindCount(), false, false, Collections.<SelectStatement> emptyList(), select.getUdfParseNodes());
     }
     
     private List<AliasedNode> fixAliasedNodes(List<AliasedNode> nodes, boolean addSelectOne) {
@@ -548,6 +558,7 @@ public class SubqueryRewriter extends ParseNodeRewriter {
                 localResolver.resolveColumn(node.getSchemaName(), node.getTableName(), node.getName());
                 addType(true);
                 return null;
+            } catch (TableNotFoundException e) {
             } catch (ColumnNotFoundException e) { 
             } catch (ColumnFamilyNotFoundException e) {
             }

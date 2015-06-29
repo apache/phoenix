@@ -33,17 +33,13 @@ public class ResultManager {
     private final ResultUtil util;
     private final PherfConstants.RunMode runMode;
 
-
     public ResultManager(String fileNameSeed, PherfConstants.RunMode runMode) {
-        this(runMode, Arrays.asList(
-                new XMLResultHandler(fileNameSeed, ResultFileDetails.XML),
+        this(runMode, Arrays.asList(new XMLResultHandler(fileNameSeed, ResultFileDetails.XML),
                 new ImageResultHandler(fileNameSeed, ResultFileDetails.IMAGE),
-						new CSVResultHandler(
-								fileNameSeed,
-								runMode == RunMode.PERFORMANCE ? ResultFileDetails.CSV_DETAILED_PERFORMANCE
-										: ResultFileDetails.CSV_DETAILED_FUNCTIONAL),
-                new CSVResultHandler(fileNameSeed, ResultFileDetails.CSV_AGGREGATE_PERFORMANCE)
-        ));
+                new CSVResultHandler(fileNameSeed, runMode == RunMode.PERFORMANCE ?
+                        ResultFileDetails.CSV_DETAILED_PERFORMANCE :
+                        ResultFileDetails.CSV_DETAILED_FUNCTIONAL),
+                new CSVResultHandler(fileNameSeed, ResultFileDetails.CSV_AGGREGATE_PERFORMANCE)));
     }
 
     public ResultManager(PherfConstants.RunMode runMode, List<ResultHandler> resultHandlers) {
@@ -81,6 +77,7 @@ public class ResultManager {
 
     /**
      * Write a combined set of results for each result in the list.
+     *
      * @param dataModelResults List<{@link DataModelResult > </>}
      * @throws Exception
      */
@@ -89,7 +86,9 @@ public class ResultManager {
 
         CSVResultHandler detailsCSVWriter = null;
         try {
-            detailsCSVWriter = new CSVResultHandler(PherfConstants.COMBINED_FILE_NAME, ResultFileDetails.CSV_DETAILED_PERFORMANCE);
+            detailsCSVWriter =
+                    new CSVResultHandler(PherfConstants.COMBINED_FILE_NAME,
+                            ResultFileDetails.CSV_DETAILED_PERFORMANCE);
             for (DataModelResult dataModelResult : dataModelResults) {
                 util.write(detailsCSVWriter, dataModelResult, runMode);
             }

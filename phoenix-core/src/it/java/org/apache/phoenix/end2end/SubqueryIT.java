@@ -200,7 +200,7 @@ public class SubqueryIT extends BaseHBaseManagedTimeIT {
                 "    PARALLEL LEFT-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_item\n" +
                 "            SERVER FILTER BY FIRST KEY ONLY\n" +
-                "            SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY \\[\".+.0:NAME\", \".+.:item_id\"\\]\n" +
+                "            SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY \\[\".+.:item_id\", \".+.0:NAME\"\\]\n" +
                 "        CLIENT MERGE SORT\n" +
                 "            PARALLEL ANTI-JOIN TABLE 0 \\(SKIP MERGE\\)\n" +
                 "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
@@ -209,7 +209,7 @@ public class SubqueryIT extends BaseHBaseManagedTimeIT {
                 "    PARALLEL LEFT-JOIN TABLE 1\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_item\n" +
                 "            SERVER FILTER BY FIRST KEY ONLY\n" +
-                "            SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY \\[\".+.0:NAME\", \".+.:item_id\"\\]\n" +
+                "            SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY \\[\".+.:item_id\", \".+.0:NAME\"\\]\n" +
                 "        CLIENT MERGE SORT\n" +
                 "            PARALLEL SEMI-JOIN TABLE 0 \\(SKIP MERGE\\)\n" +
                 "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
@@ -274,7 +274,7 @@ public class SubqueryIT extends BaseHBaseManagedTimeIT {
                 "    PARALLEL LEFT-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + JOIN_ITEM_TABLE_DISPLAY_NAME + " \\[-32768\\]\n" +
                 "            SERVER FILTER BY FIRST KEY ONLY\n" +
-                "            SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY \\[\".+.0:NAME\", \".+.:item_id\"\\]\n" +
+                "            SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY \\[\".+.:item_id\", \".+.0:NAME\"\\]\n" +
                 "        CLIENT MERGE SORT\n" +
                 "            PARALLEL ANTI-JOIN TABLE 0 \\(SKIP MERGE\\)\n" +
                 "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
@@ -283,7 +283,7 @@ public class SubqueryIT extends BaseHBaseManagedTimeIT {
                 "    PARALLEL LEFT-JOIN TABLE 1\n" +
                 "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + JOIN_ITEM_TABLE_DISPLAY_NAME + " \\[-32768\\]\n" +
                 "            SERVER FILTER BY FIRST KEY ONLY\n" +
-                "            SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY \\[\".+.0:NAME\", \".+.:item_id\"\\]\n" +
+                "            SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY \\[\".+.:item_id\", \".+.0:NAME\"\\]\n" +
                 "        CLIENT MERGE SORT\n" +
                 "            PARALLEL SEMI-JOIN TABLE 0 \\(SKIP MERGE\\)\n" +
                 "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
@@ -633,6 +633,24 @@ public class SubqueryIT extends BaseHBaseManagedTimeIT {
             String query = "SELECT \"order_id\", name FROM " + JOIN_ORDER_TABLE_FULL_NAME + " o JOIN " + JOIN_ITEM_TABLE_FULL_NAME + " i ON o.\"item_id\" = i.\"item_id\" WHERE quantity = (SELECT max(quantity) FROM " + JOIN_ORDER_TABLE_FULL_NAME + " q WHERE o.\"item_id\" = q.\"item_id\")";
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000001");
+            assertEquals(rs.getString(2), "T1");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000003");
+            assertEquals(rs.getString(2), "T2");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000004");
+            assertEquals(rs.getString(2), "T6");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000005");
+            assertEquals(rs.getString(2), "T3");
+
+            assertFalse(rs.next());
+
+            query = "SELECT \"order_id\", name FROM " + JOIN_ORDER_TABLE_FULL_NAME + " o JOIN " + JOIN_ITEM_TABLE_FULL_NAME + " i ON o.\"item_id\" = i.\"item_id\" WHERE quantity = (SELECT max(quantity) FROM " + JOIN_ITEM_TABLE_FULL_NAME + " i2 JOIN " + JOIN_ORDER_TABLE_FULL_NAME + " q ON i2.\"item_id\" = q.\"item_id\" WHERE o.\"item_id\" = i2.\"item_id\")";
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
             assertTrue (rs.next());
             assertEquals(rs.getString(1), "000000000000001");
             assertEquals(rs.getString(2), "T1");

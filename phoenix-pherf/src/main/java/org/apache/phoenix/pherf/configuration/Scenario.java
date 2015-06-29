@@ -34,10 +34,12 @@ public class Scenario {
     private int rowCount;
     private Map<String, String> phoenixProperties;
     private DataOverride dataOverride;
-    private List<QuerySet> querySet = new ArrayList<QuerySet>();
+    private List<QuerySet> querySet = new ArrayList<>();
+    private WriteParams writeParams;
     private String name;
 
     public Scenario() {
+        writeParams = new WriteParams();
     }
 
     /**
@@ -124,6 +126,7 @@ public class Scenario {
         return querySet;
     }
 
+    @SuppressWarnings("unused")
     public void setQuerySet(List<QuerySet> querySet) {
         this.querySet = querySet;
     }
@@ -160,4 +163,24 @@ public class Scenario {
         this.name = name;
     }
 
+    public WriteParams getWriteParams() {
+        return writeParams;
+    }
+
+    public void setWriteParams(WriteParams writeParams) {
+        this.writeParams = writeParams;
+    }
+
+    @Override
+    public String toString() {
+        StringBuilder stringBuilder = new StringBuilder();
+        stringBuilder.append("Name:" + name);
+        stringBuilder.append("Table Name:" + tableName);
+        stringBuilder.append("Row Count:" + rowCount);
+        stringBuilder.append("Data Override:" + dataOverride);
+        for (QuerySet query : querySet) {
+            stringBuilder.append(query + ";");
+        }
+        return stringBuilder.toString();
+    }
 }

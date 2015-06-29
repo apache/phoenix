@@ -19,6 +19,7 @@ package org.apache.phoenix.end2end;
  
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
@@ -34,6 +35,16 @@ import org.junit.Test;
 
 public class EvaluationOfORIT extends BaseHBaseManagedTimeIT{
 		
+    @Test
+    public void testFalseOrFalse() throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        ResultSet rs = conn.createStatement().executeQuery("SELECT (FALSE OR FALSE) AS B FROM SYSTEM.CATALOG LIMIT 1");
+        assertTrue(rs.next());
+        assertFalse(rs.getBoolean(1));
+        conn.close();
+    }
+    
 	@Test
 	public void testPKOrNotPKInOREvaluation() throws SQLException {
 	    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);

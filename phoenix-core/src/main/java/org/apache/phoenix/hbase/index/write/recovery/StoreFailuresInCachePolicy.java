@@ -23,7 +23,7 @@ import java.util.List;
 import org.apache.hadoop.hbase.Stoppable;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.regionserver.HRegion;
+import org.apache.hadoop.hbase.regionserver.Region;
 
 import com.google.common.collect.Multimap;
 import org.apache.phoenix.hbase.index.exception.MultiIndexWriteFailureException;
@@ -41,7 +41,7 @@ public class StoreFailuresInCachePolicy implements IndexFailurePolicy {
 
   private KillServerOnFailurePolicy delegate;
   private PerRegionIndexWriteCache cache;
-  private HRegion region;
+  private Region region;
 
   /**
    * @param failedIndexEdits cache to update when we find a failure

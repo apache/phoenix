@@ -29,10 +29,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.NavigableSet;
+import java.util.Queue;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -132,7 +134,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
     }
     
     public BaseResultIterators(QueryPlan plan, Integer perScanLimit) throws SQLException {
-        super(plan.getContext(), plan.getTableRef(), plan.getGroupBy(), plan.getOrderBy(), plan.getStatement().getHint());
+        super(plan.getContext(), plan.getTableRef(), plan.getGroupBy(), plan.getOrderBy(), plan.getStatement().getHint(), plan.getLimit());
         this.plan = plan;
         StatementContext context = plan.getContext();
         TableRef tableRef = plan.getTableRef();
@@ -513,7 +515,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         // Capture all iterators so that if something goes wrong, we close them all
         // The iterators list is based on the submission of work, so it may not
         // contain them all (for example if work was rejected from the queue)
-        List<PeekingResultIterator> allIterators = Lists.newArrayListWithExpectedSize(this.splits.size());
+        Queue<PeekingResultIterator> allIterators = new ConcurrentLinkedQueue<>();
         List<PeekingResultIterator> iterators = new ArrayList<PeekingResultIterator>(numScans);
         final List<List<Pair<Scan,Future<PeekingResultIterator>>>> futures = Lists.newArrayListWithExpectedSize(numScans);
         allFutures.add(futures);
@@ -556,7 +558,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                             // Add any concatIterators that were successful so far
                             // as we need these to be in order
                             addIterator(iterators, concatIterators);
-                            concatIterators = Collections.emptyList();
+                            concatIterators = Lists.newArrayList();
                             submitWork(newNestedScans, newFutures, allIterators, newNestedScans.size());
                             allFutures.add(newFutures);
                             for (List<Pair<Scan,Future<PeekingResultIterator>>> newFuture : reverseIfNecessary(newFutures, isReverse)) {
@@ -680,7 +682,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
 
     abstract protected String getName();    
     abstract protected void submitWork(List<List<Scan>> nestedScans, List<List<Pair<Scan,Future<PeekingResultIterator>>>> nestedFutures,
-            List<PeekingResultIterator> allIterators, int estFlattenedSize);
+            Queue<PeekingResultIterator> allIterators, int estFlattenedSize);
     
     @Override
     public int size() {

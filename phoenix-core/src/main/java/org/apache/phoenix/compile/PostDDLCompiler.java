@@ -34,6 +34,7 @@ import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixParameterMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.AmbiguousColumnException;
@@ -123,6 +124,11 @@ public class PostDDLCompiler {
                             public List<TableRef> getTables() {
                                 return Collections.singletonList(tableRef);
                             }
+                            
+                            public java.util.List<PFunction> getFunctions() {
+                                return Collections.emptyList();
+                            };
+                            
                             @Override
                             public TableRef resolveTable(String schemaName, String tableName)
                                     throws SQLException {
@@ -135,6 +141,14 @@ public class PostDDLCompiler {
                                         : tableRef.getTable().getColumn(colName);
                                 return new ColumnRef(tableRef, column.getPosition());
                             }
+                            
+                            public PFunction resolveFunction(String functionName) throws SQLException {
+                                throw new UnsupportedOperationException();
+                            };
+
+                            public boolean hasUDFs() {
+                                return false;
+                            };
                         };
                         PhoenixStatement statement = new PhoenixStatement(connection);
                         StatementContext context = new StatementContext(statement, resolver, scan, new SequenceManager(statement));

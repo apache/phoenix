@@ -72,7 +72,7 @@ public class ClientTimeArithmeticQueryIT extends BaseQueryIT {
     
     @Test
     public void testDateAdd() throws Exception {
-        String query = "SELECT entity_id, b_string FROM ATABLE WHERE a_date + 0.5d < ?";
+        String query = "SELECT entity_id, b_string FROM ATABLE WHERE a_date + CAST(0.5 AS DOUBLE) < ?";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
@@ -236,7 +236,7 @@ public class ClientTimeArithmeticQueryIT extends BaseQueryIT {
     }
     @Test
     public void testDoubleSubtractionExpression() throws Exception {
-        String query = "SELECT entity_id FROM aTable where a_double - 0.0002d  < 0";
+        String query = "SELECT entity_id FROM aTable where a_double - CAST(0.0002 AS DOUBLE)  < 0";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -338,7 +338,7 @@ public class ClientTimeArithmeticQueryIT extends BaseQueryIT {
     
     @Test
     public void testDoubleDivideExpression() throws Exception {
-        String query = "SELECT entity_id FROM aTable where a_double / 3.0d = 0.0003";
+        String query = "SELECT entity_id FROM aTable where a_double / CAST(3.0 AS DOUBLE) = 0.0003";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -455,7 +455,7 @@ public class ClientTimeArithmeticQueryIT extends BaseQueryIT {
     
     @Test
     public void testDoubleMultiplyExpression() throws Exception {
-        String query = "SELECT entity_id FROM aTable where A_DOUBLE * 2.0d = 0.0002";
+        String query = "SELECT entity_id FROM aTable where A_DOUBLE * CAST(2.0 AS DOUBLE) = 0.0002";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -577,7 +577,7 @@ public class ClientTimeArithmeticQueryIT extends BaseQueryIT {
     
     @Test
     public void testDateSubtract() throws Exception {
-        String query = "SELECT entity_id, b_string FROM ATABLE WHERE a_date - 0.5d > ?";
+        String query = "SELECT entity_id, b_string FROM ATABLE WHERE a_date - CAST(0.5 AS DOUBLE) > ?";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);

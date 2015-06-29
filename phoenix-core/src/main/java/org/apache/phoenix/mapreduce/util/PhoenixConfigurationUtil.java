@@ -17,18 +17,21 @@
  */
 package org.apache.phoenix.mapreduce.util;
 
-import static org.apache.commons.lang.StringUtils.isNotEmpty;
-
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 
+import com.google.common.base.Joiner;
+import com.google.common.base.Preconditions;
+import com.google.common.base.Splitter;
+import com.google.common.collect.Lists;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.mapreduce.TableMapReduceUtil;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.lib.db.DBInputFormat.NullDBWritable;
@@ -42,10 +45,7 @@ import org.apache.phoenix.util.ColumnInfo;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 
-import com.google.common.base.Joiner;
-import com.google.common.base.Preconditions;
-import com.google.common.base.Splitter;
-import com.google.common.collect.Lists;
+import static org.apache.commons.lang.StringUtils.isNotEmpty;
 
 /**
  * A utility class to set properties on the {#link Configuration} instance.
@@ -90,7 +90,11 @@ public final class PhoenixConfigurationUtil {
     
     /** Configuration key for the class name of an ImportPreUpsertKeyValueProcessor */
     public static final String UPSERT_HOOK_CLASS_CONFKEY = "phoenix.mapreduce.import.kvprocessor";
+
+    public static final String MAPREDUCE_INPUT_CLUSTER_QUORUM = "phoenix.mapreduce.input.cluster.quorum";
     
+    public static final String MAPREDUCE_OUTPUT_CLUSTER_QUORUM = "phoneix.mapreduce.output.cluster.quorum";
+
     public enum SchemaType {
         TABLE,
         QUERY;
@@ -165,6 +169,28 @@ public final class PhoenixConfigurationUtil {
         configuration.setLong(UPSERT_BATCH_SIZE, batchSize);
     }
     
+    /**
+     * Sets which HBase cluster a Phoenix MapReduce job should read from
+     * @param configuration
+     * @param quorum ZooKeeper quorum string for HBase cluster the MapReduce job will read from
+     */
+    public static void setInputCluster(final Configuration configuration,
+            final String quorum) {
+        Preconditions.checkNotNull(configuration);
+        configuration.set(MAPREDUCE_INPUT_CLUSTER_QUORUM, quorum);
+    }
+
+    /**
+     * Sets which HBase cluster a Phoenix MapReduce job should write to
+     * @param configuration
+     * @param quorum ZooKeeper quorum string for HBase cluster the MapReduce job will write to
+     */
+    public static void setOutputCluster(final Configuration configuration,
+            final String quorum) {
+        Preconditions.checkNotNull(configuration);
+        configuration.set(MAPREDUCE_OUTPUT_CLUSTER_QUORUM, quorum);
+    }
+        
     public static Class<?> getInputClass(final Configuration configuration) {
         return configuration.getClass(INPUT_CLASS, NullDBWritable.class);
     }
@@ -182,7 +208,7 @@ public final class PhoenixConfigurationUtil {
         if(isNotEmpty(columnInfoStr)) {
             return ColumnInfoToStringEncoderDecoder.decode(columnInfoStr);
         }
-        final Connection connection = ConnectionUtil.getConnection(configuration);
+        final Connection connection = ConnectionUtil.getOutputConnection(configuration);
         String upsertColumns = configuration.get(UPSERT_COLUMNS);
         List<String> upsertColumnList = null;
         if(isNotEmpty(upsertColumns)) {
@@ -232,7 +258,7 @@ public final class PhoenixConfigurationUtil {
         }
         final String tableName = getInputTableName(configuration);
         Preconditions.checkNotNull(tableName);
-        final Connection connection = ConnectionUtil.getConnection(configuration);
+        final Connection connection = ConnectionUtil.getInputConnection(configuration);
         final List<String> selectColumnList = getSelectColumnList(configuration);
         final List<ColumnInfo> columnMetadataList = PhoenixRuntime.generateColumnInfo(connection, tableName, selectColumnList);
         final String encodedColumnInfos = ColumnInfoToStringEncoderDecoder.encode(columnMetadataList);
@@ -276,7 +302,7 @@ public final class PhoenixConfigurationUtil {
         Preconditions.checkNotNull(configuration);
         long batchSize = configuration.getLong(UPSERT_BATCH_SIZE, DEFAULT_UPSERT_BATCH_SIZE);
         if(batchSize <= 0) {
-           Connection conn = ConnectionUtil.getConnection(configuration);
+           Connection conn = ConnectionUtil.getOutputConnection(configuration);
            batchSize = ((PhoenixConnection) conn).getMutateBatchSize();
            conn.close();
         }
@@ -308,6 +334,34 @@ public final class PhoenixConfigurationUtil {
     public static String getOutputTableName(Configuration configuration) {
         Preconditions.checkNotNull(configuration);
         return configuration.get(OUTPUT_TABLE_NAME);
+    }
+    
+    /**
+     * Returns the ZooKeeper quorum string for the HBase cluster a Phoenix MapReduce job will read from
+     * @param configuration
+     * @return ZooKeeper quorum string
+     */
+    public static String getInputCluster(final Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        String quorum = configuration.get(MAPREDUCE_INPUT_CLUSTER_QUORUM);
+        if (quorum == null) {
+            quorum = configuration.get(HConstants.ZOOKEEPER_QUORUM);
+        }
+        return quorum;
+    }
+
+    /**
+     * Returns the ZooKeeper quorum string for the HBase cluster a Phoenix MapReduce job will write to
+     * @param configuration
+     * @return ZooKeeper quorum string
+     */
+    public static String getOutputCluster(final Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        String quorum = configuration.get(MAPREDUCE_OUTPUT_CLUSTER_QUORUM);
+        if (quorum == null) {
+            quorum = configuration.get(HConstants.ZOOKEEPER_QUORUM);
+        }
+        return quorum;
     }
 
     public static void loadHBaseConfiguration(Job job) throws IOException {

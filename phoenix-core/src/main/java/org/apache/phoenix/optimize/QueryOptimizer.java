@@ -235,7 +235,7 @@ public class QueryOptimizer {
         if (PIndexState.ACTIVE.equals(resolver.getTables().get(0).getTable().getIndexState())) {
             try {
             	// translate nodes that match expressions that are indexed to the associated column parse node
-                indexSelect = ParseNodeRewriter.rewrite(indexSelect, new  IndexExpressionParseNodeRewriter(index, statement.getConnection()));
+                indexSelect = ParseNodeRewriter.rewrite(indexSelect, new  IndexExpressionParseNodeRewriter(index, statement.getConnection(), indexSelect.getUdfParseNodes()));
                 QueryCompiler compiler = new QueryCompiler(statement, indexSelect, resolver, targetColumns, parallelIteratorFactory, dataPlan.getContext().getSequenceManager(), isProjected);
                 
                 QueryPlan plan = compiler.compile();
@@ -290,7 +290,7 @@ public class QueryOptimizer {
                             aliasedNodes.add(FACTORY.aliasedNode(null, indexColNode));
                             nodes.add(new ColumnParseNode(null, '"' + column.getName().getString() + '"'));
                         }
-                        SelectStatement innerSelect = FACTORY.select(indexSelect.getFrom(), indexSelect.getHint(), false, aliasedNodes, where, null, null, null, indexSelect.getLimit(), indexSelect.getBindCount(), false, indexSelect.hasSequence());
+                        SelectStatement innerSelect = FACTORY.select(indexSelect.getFrom(), indexSelect.getHint(), false, aliasedNodes, where, null, null, null, indexSelect.getLimit(), indexSelect.getBindCount(), false, indexSelect.hasSequence(), Collections.<SelectStatement>emptyList(), indexSelect.getUdfParseNodes());
                         ParseNode outerWhere = FACTORY.in(nodes.size() == 1 ? nodes.get(0) : FACTORY.rowValueConstructor(nodes), FACTORY.subquery(innerSelect, false), false, true);
                         ParseNode extractedCondition = whereRewriter.getExtractedCondition();
                         if (extractedCondition != null) {

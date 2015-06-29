@@ -24,17 +24,20 @@ import java.util.LinkedHashSet;
 import java.util.List;
 
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
-import org.apache.phoenix.compile.TrackOrderPreservingExpressionCompiler.Ordering;
+import org.apache.phoenix.compile.OrderPreservingTracker.Ordering;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.OrderByExpression;
-import org.apache.phoenix.parse.FilterableStatement;
+import org.apache.phoenix.parse.LiteralParseNode;
 import org.apache.phoenix.parse.OrderByNode;
+import org.apache.phoenix.parse.ParseNode;
+import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.types.PInteger;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
@@ -77,24 +80,34 @@ public class OrderByCompiler {
      * @throws SQLException
      */
     public static OrderBy compile(StatementContext context,
-                                  FilterableStatement statement,
+                                  SelectStatement statement,
                                   GroupBy groupBy, Integer limit, 
+                                  RowProjector projector,
                                   boolean isInRowKeyOrder) throws SQLException {
         List<OrderByNode> orderByNodes = statement.getOrderBy();
         if (orderByNodes.isEmpty()) {
             return OrderBy.EMPTY_ORDER_BY;
         }
+        ExpressionCompiler compiler = new ExpressionCompiler(context, groupBy);
         // accumulate columns in ORDER BY
-        TrackOrderPreservingExpressionCompiler visitor = 
-                new TrackOrderPreservingExpressionCompiler(context, groupBy, 
-                        orderByNodes.size(), Ordering.ORDERED, null);
+        OrderPreservingTracker tracker = 
+                new OrderPreservingTracker(context, groupBy, Ordering.ORDERED, orderByNodes.size());
         LinkedHashSet<OrderByExpression> orderByExpressions = Sets.newLinkedHashSetWithExpectedSize(orderByNodes.size());
         for (OrderByNode node : orderByNodes) {
-            boolean isAscending = node.isAscending();
-            Expression expression = node.getNode().accept(visitor);
-            if (!expression.isStateless() && visitor.addEntry(expression, isAscending ? SortOrder.ASC : SortOrder.DESC)) {
+            ParseNode parseNode = node.getNode();
+            Expression expression = null;
+            if (parseNode instanceof LiteralParseNode && ((LiteralParseNode)parseNode).getType() == PInteger.INSTANCE){
+                Integer index = (Integer)((LiteralParseNode)parseNode).getValue();
+                int size = projector.getColumnProjectors().size();
+                if (index > size || index <= 0 ) {
+                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.PARAM_INDEX_OUT_OF_BOUND)
+                    .build().buildException();
+                }
+                expression = projector.getColumnProjector(index-1).getExpression();
+            } else {
+                expression = node.getNode().accept(compiler);
                 // Detect mix of aggregate and non aggregates (i.e. ORDER BY txns, SUM(txns)
-                if (!visitor.isAggregate()) {
+                if (!expression.isStateless() && !compiler.isAggregate()) {
                     if (statement.isAggregate() || statement.isDistinct()) {
                         // Detect ORDER BY not in SELECT DISTINCT: SELECT DISTINCT count(*) FROM t ORDER BY x
                         if (statement.isDistinct()) {
@@ -104,21 +117,29 @@ public class OrderByCompiler {
                         ExpressionCompiler.throwNonAggExpressionInAggException(expression.toString());
                     }
                 }
+            }
+            if (!expression.isStateless()) {
+                boolean isAscending = node.isAscending();
+                boolean isNullsLast = node.isNullsLast();
+                tracker.track(expression, isAscending ? SortOrder.ASC : SortOrder.DESC, isNullsLast);
+                // FIXME: this isn't correct. If we have a schema where column A is DESC,
+                // An ORDER BY A should still be ASC.
                 if (expression.getSortOrder() == SortOrder.DESC) {
                     isAscending = !isAscending;
+                    isNullsLast = !isNullsLast;
                 }
-                OrderByExpression orderByExpression = new OrderByExpression(expression, node.isNullsLast(), isAscending);
+                OrderByExpression orderByExpression = new OrderByExpression(expression, isNullsLast, isAscending);
                 orderByExpressions.add(orderByExpression);
             }
-            visitor.reset();
+            compiler.reset();
         }
        
         if (orderByExpressions.isEmpty()) {
             return OrderBy.EMPTY_ORDER_BY;
         }
         // If we're ordering by the order returned by the scan, we don't need an order by
-        if (isInRowKeyOrder && visitor.isOrderPreserving()) {
-            if (visitor.isReverse()) {
+        if (isInRowKeyOrder && tracker.isOrderPreserving()) {
+            if (tracker.isReverse()) {
                 // Don't use reverse scan if we're using a skip scan, as our skip scan doesn't support this yet.
                 // REV_ROW_KEY_ORDER_BY scan would not take effect for a projected table, so don't return it for such table types.
                 if (context.getConnection().getQueryServices().getProps().getBoolean(QueryServices.USE_REVERSE_SCAN_ATTRIB, QueryServicesOptions.DEFAULT_USE_REVERSE_SCAN)
@@ -134,7 +155,6 @@ public class OrderByCompiler {
 
         return new OrderBy(Lists.newArrayList(orderByExpressions.iterator()));
     }
-
 
     private OrderByCompiler() {
     }

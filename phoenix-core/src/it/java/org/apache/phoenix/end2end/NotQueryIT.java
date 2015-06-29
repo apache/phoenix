@@ -207,7 +207,7 @@ public class NotQueryIT extends BaseQueryIT {
     @Test
     public void testNotEqualsByFloat() throws Exception {
         String query = "SELECT a_float -- and here comment\n" + 
-        "FROM aTable WHERE organization_id=? and a_float != 0.01d and a_float <= 0.02d";
+        "FROM aTable WHERE organization_id=? and a_float != CAST(0.01 AS FLOAT) and a_float <= CAST(0.02 AS FLOAT)";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -226,7 +226,7 @@ public class NotQueryIT extends BaseQueryIT {
     @Test
     public void testNotEqualsByUnsignedFloat() throws Exception {
         String query = "SELECT a_unsigned_float -- and here comment\n" + 
-        "FROM aTable WHERE organization_id=? and a_unsigned_float != 0.01d and a_unsigned_float <= 0.02d";
+        "FROM aTable WHERE organization_id=? and a_unsigned_float != 0.01 and a_unsigned_float <= 0.02";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -245,7 +245,7 @@ public class NotQueryIT extends BaseQueryIT {
     @Test
     public void testNotEqualsByDouble() throws Exception {
         String query = "SELECT a_double -- and here comment\n" + 
-        "FROM aTable WHERE organization_id=? and a_double != 0.0001d and a_double <= 0.0002d";
+        "FROM aTable WHERE organization_id=? and a_double != CAST(0.0001 AS DOUBLE) and a_double <= CAST(0.0002 AS DOUBLE)";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -264,7 +264,7 @@ public class NotQueryIT extends BaseQueryIT {
     @Test
     public void testNotEqualsByUnsignedDouble() throws Exception {
         String query = "SELECT a_unsigned_double -- and here comment\n" + 
-        "FROM aTable WHERE organization_id=? and a_unsigned_double != 0.0001d and a_unsigned_double <= 0.0002d";
+        "FROM aTable WHERE organization_id=? and a_unsigned_double != 0.0001 and a_unsigned_double <= 0.0002";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);

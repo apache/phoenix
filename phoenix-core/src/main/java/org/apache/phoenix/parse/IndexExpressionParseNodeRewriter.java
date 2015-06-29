@@ -37,50 +37,22 @@ public class IndexExpressionParseNodeRewriter extends ParseNodeRewriter {
 
     private final Map<ParseNode, ParseNode> indexedParseNodeToColumnParseNodeMap;
     
-    private static class ColumnParseNodeVisitor extends StatelessTraverseAllParseNodeVisitor {
-        
-        private boolean isParseNodeCaseSensitive;
-        
-        public void reset() {
-            this.isParseNodeCaseSensitive = false;
-        }
-        
-        @Override
-        public Void visit(ColumnParseNode node) throws SQLException {
-            isParseNodeCaseSensitive = isParseNodeCaseSensitive  || node.isCaseSensitive() || node.isTableNameCaseSensitive();
-            return null;
-        }
-        
-        public boolean isParseNodeCaseSensitive() {
-            return isParseNodeCaseSensitive;
-        }
-        
-    }
-
-    public IndexExpressionParseNodeRewriter(PTable index, PhoenixConnection connection) throws SQLException {
+    public IndexExpressionParseNodeRewriter(PTable index, PhoenixConnection connection, Map<String, UDFParseNode> udfParseNodes) throws SQLException {
         indexedParseNodeToColumnParseNodeMap = Maps.newHashMapWithExpectedSize(index.getColumns().size());
         NamedTableNode tableNode = NamedTableNode.create(null,
                 TableName.create(index.getParentSchemaName().getString(), index.getParentTableName().getString()),
                 Collections.<ColumnDef> emptyList());
-        ColumnResolver dataResolver = FromCompiler.getResolver(tableNode, connection);
+        ColumnResolver dataResolver = FromCompiler.getResolver(tableNode, connection, udfParseNodes);
         StatementContext context = new StatementContext(new PhoenixStatement(connection), dataResolver);
         IndexStatementRewriter rewriter = new IndexStatementRewriter(dataResolver, null);
         ExpressionCompiler expressionCompiler = new ExpressionCompiler(context);
-        ColumnParseNodeVisitor columnParseNodeVisitor = new ColumnParseNodeVisitor();
         int indexPosOffset = (index.getBucketNum() == null ? 0 : 1) + (index.isMultiTenant() ? 1 : 0) + (index.getViewIndexId() == null ? 0 : 1);
         List<PColumn> pkColumns = index.getPKColumns();
 		for (int i=indexPosOffset; i<pkColumns.size(); ++i) {
         	PColumn column = pkColumns.get(i);
         	String expressionStr = IndexUtil.getIndexColumnExpressionStr(column);
             ParseNode expressionParseNode  = SQLParser.parseCondition(expressionStr);
-            columnParseNodeVisitor.reset();
-            expressionParseNode.accept(columnParseNodeVisitor);
-            String colName = column.getName().getString();
-            if (columnParseNodeVisitor.isParseNodeCaseSensitive()) {
-                // force column name to be case sensitive name by surround with double quotes
-                colName = "\"" + colName + "\"";
-            }
-            
+            String colName = "\"" + column.getName().getString() + "\"";
             Expression dataExpression = expressionParseNode.accept(expressionCompiler);
             PDataType expressionDataType = dataExpression.getDataType();
             ParseNode indexedParseNode = expressionParseNode.accept(rewriter);

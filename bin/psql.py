@@ -26,17 +26,14 @@ import phoenix_utils
 
 phoenix_utils.setPath()
 
-if os.name == 'nt':
-    args = subprocess.list2cmdline(sys.argv[1:])
-else:
-    import pipes    # pipes module isn't available on Windows
-    args = " ".join([pipes.quote(v) for v in sys.argv[1:]])
+args = phoenix_utils.shell_quote(sys.argv[1:])
 
 # HBase configuration folder path (where hbase-site.xml reside) for
 # HBase/Phoenix client side property override
-java_cmd = 'java -cp "' + phoenix_utils.hbase_conf_path + os.pathsep + phoenix_utils.phoenix_client_jar + \
+java_cmd = 'java -cp "' + phoenix_utils.hbase_conf_dir + os.pathsep + phoenix_utils.phoenix_client_jar + \
     '" -Dlog4j.configuration=file:' + \
     os.path.join(phoenix_utils.current_dir, "log4j.properties") + \
     " org.apache.phoenix.util.PhoenixRuntime " + args 
 
-subprocess.call(java_cmd, shell=True)
+exitcode = subprocess.call(java_cmd, shell=True)
+sys.exit(exitcode)

@@ -27,6 +27,7 @@ import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.StringUtil;
 
 import com.google.common.collect.Lists;
 
@@ -73,7 +74,8 @@ public class PostIndexDDLCompiler {
         for (int i = posOffset; i < nIndexPKColumns; i++) {
             PColumn col = indexPKColumns.get(i);
             String indexColName = col.getName().getString();
-            String dataColName = col.getExpressionStr();
+            // need to escape backslash as this used in the SELECT statement
+            String dataColName = StringUtil.escapeBackslash(col.getExpressionStr());
             dataColumns.append(dataColName).append(",");
             indexColumns.append('"').append(indexColName).append("\",");
             indexColumnNames.add(indexColName);

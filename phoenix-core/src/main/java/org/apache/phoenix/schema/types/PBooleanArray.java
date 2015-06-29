@@ -17,10 +17,11 @@
  */
 package org.apache.phoenix.schema.types;
 
+import java.sql.Types;
+
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.schema.SortOrder;
-
-import java.sql.Types;
+import org.apache.phoenix.schema.types.PhoenixArray.PrimitiveBooleanPhoenixArray;
 
 public class PBooleanArray extends PArrayDataType<boolean[]> {
 
@@ -73,20 +74,20 @@ public class PBooleanArray extends PArrayDataType<boolean[]> {
     return isCoercibleTo(targetType, this);
   }
 
-  @Override
-  public boolean isCoercibleTo(PDataType targetType, Object value) {
-    if (value == null) {
-      return true;
+    @Override
+    public boolean isCoercibleTo(PDataType targetType, Object value) {
+        if (value == null) {
+            return true;
+        }
+        PrimitiveBooleanPhoenixArray pArr = (PrimitiveBooleanPhoenixArray) value;
+        boolean[] booleanArr = (boolean[]) pArr.array;
+        for (boolean b : booleanArr) {
+            if (!super.isCoercibleTo(PInteger.INSTANCE, b)) {
+                return false;
+            }
+        }
+        return true;
     }
-    PhoenixArray pArr = (PhoenixArray) value;
-    Object[] booleanArr = (Object[]) pArr.array;
-    for (Object i : booleanArr) {
-      if (!super.isCoercibleTo(PBoolean.INSTANCE, i)) {
-        return false;
-      }
-    }
-    return true;
-  }
 
   @Override
   public int getResultSetSqlType() {

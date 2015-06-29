@@ -289,24 +289,6 @@ public class QueryParserTest {
     }
 
     @Test
-    public void testUnknownFunction() throws Exception {
-        String sql = ((
-            "select /*gatherSlowStats*/ bogus_function(ind.key_prefix) from core.search_name_lookup ind\n" +
-            "where (ind.name = 'X')\n" +
-            "and rownum <= 2000\n" +
-            "and (ind.organization_id = '000000000000000')\n" +
-            "and (ind.key_prefix = '00T')\n" +
-            "and (ind.name_type = 't')"
-            ));
-        try {
-            parseQuery(sql);
-            fail();
-        } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.UNKNOWN_FUNCTION.getErrorCode(), e.getErrorCode());
-        }
-    }
-
-    @Test
     public void testNegativeNonBooleanWhere() throws Exception {
         String sql = ((
             "select /*gatherSlowStats*/ max( distinct 1) from core.search_name_lookup ind\n" +
@@ -635,19 +617,6 @@ public class QueryParserTest {
     }
 
     @Test
-    public void testInvalidUpsertSelectHint() throws Exception {
-        String sql = (
-                (
-                        "upsert into t select /*+ NO_INDEX */ k from t where k in ( 1,2 )"));
-        try {
-            parseQuery(sql);
-            fail();
-        } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.PARSER_ERROR.getErrorCode(), e.getErrorCode());
-        }
-    }
-
-    @Test
     public void testTableNameStartsWithUnderscore() throws Exception {
         String sql = (
                 (
@@ -746,6 +715,24 @@ public class QueryParserTest {
                 (
                         "select * from t where d = UNSIGNED_TIMESTAMP '2013-11-04 09:12:00'"));
         parseQuery(sql);
+    }
+    
+    @Test
+    public void testParseDateEquality() throws Exception {
+        SQLParser parser = new SQLParser(new StringReader(
+            "select a from b\n" +
+            "where date '2014-01-04' = date '2014-01-04'"
+            ));
+        parser.parseStatement();
+    }
+
+    @Test
+    public void testParseDateIn() throws Exception {
+        SQLParser parser = new SQLParser(new StringReader(
+            "select a from b\n" +
+            "where date '2014-01-04' in (date '2014-01-04')"
+            ));
+        parser.parseStatement();
     }
     
     @Test

@@ -19,11 +19,19 @@ package org.apache.phoenix.expression;
 
 import java.util.Map;
 
+import org.apache.phoenix.expression.function.AbsFunction;
 import org.apache.phoenix.expression.function.ArrayAllComparisonExpression;
 import org.apache.phoenix.expression.function.ArrayAnyComparisonExpression;
+import org.apache.phoenix.expression.function.ArrayAppendFunction;
+import org.apache.phoenix.expression.function.ArrayConcatFunction;
 import org.apache.phoenix.expression.function.ArrayElemRefExpression;
 import org.apache.phoenix.expression.function.ArrayIndexFunction;
 import org.apache.phoenix.expression.function.ArrayLengthFunction;
+import org.apache.phoenix.expression.function.ArrayPrependFunction;
+import org.apache.phoenix.expression.function.ByteBasedRegexpReplaceFunction;
+import org.apache.phoenix.expression.function.ByteBasedRegexpSplitFunction;
+import org.apache.phoenix.expression.function.ByteBasedRegexpSubstrFunction;
+import org.apache.phoenix.expression.function.CbrtFunction;
 import org.apache.phoenix.expression.function.CeilDateExpression;
 import org.apache.phoenix.expression.function.CeilDecimalExpression;
 import org.apache.phoenix.expression.function.CeilFunction;
@@ -31,29 +39,39 @@ import org.apache.phoenix.expression.function.CeilTimestampExpression;
 import org.apache.phoenix.expression.function.CoalesceFunction;
 import org.apache.phoenix.expression.function.ConvertTimezoneFunction;
 import org.apache.phoenix.expression.function.CountAggregateFunction;
+import org.apache.phoenix.expression.function.DayOfMonthFunction;
 import org.apache.phoenix.expression.function.DecodeFunction;
 import org.apache.phoenix.expression.function.DistinctCountAggregateFunction;
 import org.apache.phoenix.expression.function.DistinctValueAggregateFunction;
 import org.apache.phoenix.expression.function.EncodeFunction;
+import org.apache.phoenix.expression.function.ExpFunction;
 import org.apache.phoenix.expression.function.ExternalSqlTypeIdFunction;
 import org.apache.phoenix.expression.function.FirstValueFunction;
 import org.apache.phoenix.expression.function.FloorDateExpression;
 import org.apache.phoenix.expression.function.FloorDecimalExpression;
 import org.apache.phoenix.expression.function.FloorFunction;
+import org.apache.phoenix.expression.function.HourFunction;
 import org.apache.phoenix.expression.function.IndexStateNameFunction;
+import org.apache.phoenix.expression.function.InstrFunction;
 import org.apache.phoenix.expression.function.InvertFunction;
 import org.apache.phoenix.expression.function.LTrimFunction;
 import org.apache.phoenix.expression.function.LastValueFunction;
 import org.apache.phoenix.expression.function.LengthFunction;
+import org.apache.phoenix.expression.function.LnFunction;
+import org.apache.phoenix.expression.function.LogFunction;
 import org.apache.phoenix.expression.function.LowerFunction;
 import org.apache.phoenix.expression.function.LpadFunction;
 import org.apache.phoenix.expression.function.MD5Function;
 import org.apache.phoenix.expression.function.MaxAggregateFunction;
 import org.apache.phoenix.expression.function.MinAggregateFunction;
+import org.apache.phoenix.expression.function.MinuteFunction;
+import org.apache.phoenix.expression.function.MonthFunction;
+import org.apache.phoenix.expression.function.NowFunction;
 import org.apache.phoenix.expression.function.NthValueFunction;
 import org.apache.phoenix.expression.function.PercentRankAggregateFunction;
 import org.apache.phoenix.expression.function.PercentileContAggregateFunction;
 import org.apache.phoenix.expression.function.PercentileDiscAggregateFunction;
+import org.apache.phoenix.expression.function.PowerFunction;
 import org.apache.phoenix.expression.function.RTrimFunction;
 import org.apache.phoenix.expression.function.RandomFunction;
 import org.apache.phoenix.expression.function.RegexpReplaceFunction;
@@ -67,10 +85,15 @@ import org.apache.phoenix.expression.function.RoundTimestampExpression;
 import org.apache.phoenix.expression.function.SQLIndexTypeFunction;
 import org.apache.phoenix.expression.function.SQLTableTypeFunction;
 import org.apache.phoenix.expression.function.SQLViewTypeFunction;
+import org.apache.phoenix.expression.function.SecondFunction;
 import org.apache.phoenix.expression.function.SignFunction;
 import org.apache.phoenix.expression.function.SqlTypeNameFunction;
+import org.apache.phoenix.expression.function.SqrtFunction;
 import org.apache.phoenix.expression.function.StddevPopFunction;
 import org.apache.phoenix.expression.function.StddevSampFunction;
+import org.apache.phoenix.expression.function.StringBasedRegexpReplaceFunction;
+import org.apache.phoenix.expression.function.StringBasedRegexpSplitFunction;
+import org.apache.phoenix.expression.function.StringBasedRegexpSubstrFunction;
 import org.apache.phoenix.expression.function.SubstrFunction;
 import org.apache.phoenix.expression.function.SumAggregateFunction;
 import org.apache.phoenix.expression.function.TimezoneOffsetFunction;
@@ -81,14 +104,16 @@ import org.apache.phoenix.expression.function.ToTimeFunction;
 import org.apache.phoenix.expression.function.ToTimestampFunction;
 import org.apache.phoenix.expression.function.TrimFunction;
 import org.apache.phoenix.expression.function.TruncFunction;
+import org.apache.phoenix.expression.function.UDFExpression;
 import org.apache.phoenix.expression.function.UpperFunction;
+import org.apache.phoenix.expression.function.WeekFunction;
 import org.apache.phoenix.expression.function.YearFunction;
 
 import com.google.common.collect.Maps;
 
 /**
  *
- * Enumeration of all Expression types that may be evaluated on the server-side.
+ * Enumeration of all Expression types that will be looked up. They may be evaluated on the server-side.
  * Used during serialization and deserialization to pass Expression between client
  * and server.
  *
@@ -127,7 +152,7 @@ public enum ExpressionType {
     SumAggregateFunction(SumAggregateFunction.class),
     MinAggregateFunction(MinAggregateFunction.class),
     MaxAggregateFunction(MaxAggregateFunction.class),
-    LikeExpression(LikeExpression.class),
+    StringBasedLikeExpression(StringBasedLikeExpression.class),
     NotExpression(NotExpression.class),
     CaseExpression(CaseExpression.class),
     InListExpression(InListExpression.class),
@@ -143,9 +168,9 @@ public enum ExpressionType {
     LongDivideExpression(LongDivideExpression.class),
     DecimalDivideExpression(DecimalDivideExpression.class),
     CoalesceFunction(CoalesceFunction.class),
-    RegexpReplaceFunction(RegexpReplaceFunction.class),
+    StringBasedRegexpReplaceFunction(StringBasedRegexpReplaceFunction.class),
     SQLTypeNameFunction(SqlTypeNameFunction.class),
-    RegexpSubstrFunction(RegexpSubstrFunction.class),
+    StringBasedRegexpSubstrFunction(StringBasedRegexpSubstrFunction.class),
     StringConcatExpression(StringConcatExpression.class),
     LengthFunction(LengthFunction.class),
     LTrimFunction(LTrimFunction.class),
@@ -190,14 +215,41 @@ public enum ExpressionType {
     SQLIndexTypeFunction(SQLIndexTypeFunction.class),
     ModulusExpression(ModulusExpression.class),
     DistinctValueAggregateFunction(DistinctValueAggregateFunction.class),
-    RegexpSplitFunctiond(RegexpSplitFunction.class),
+    StringBasedRegexpSplitFunction(StringBasedRegexpSplitFunction.class),
     RandomFunction(RandomFunction.class),
     ToTimeFunction(ToTimeFunction.class),
     ToTimestampFunction(ToTimestampFunction.class),
+    ByteBasedLikeExpression(ByteBasedLikeExpression.class),
+    ByteBasedRegexpReplaceFunction(ByteBasedRegexpReplaceFunction.class),
+    ByteBasedRegexpSubstrFunction(ByteBasedRegexpSubstrFunction.class),
+    ByteBasedRegexpSplitFunction(ByteBasedRegexpSplitFunction.class),
+    LikeExpression(LikeExpression.class),
+    RegexpReplaceFunction(RegexpReplaceFunction.class),
+    RegexpSubstrFunction(RegexpSubstrFunction.class),
+    RegexpSplitFunction(RegexpSplitFunction.class),
     SignFunction(SignFunction.class),
-    YearFunction(YearFunction.class)
+    YearFunction(YearFunction.class),
+    MonthFunction(MonthFunction.class),
+    SecondFunction(SecondFunction.class),
+    WeekFunction(WeekFunction.class),
+    HourFunction(HourFunction.class),
+    NowFunction(NowFunction.class),
+    InstrFunction(InstrFunction.class),
+    MinuteFunction(MinuteFunction.class),
+    DayOfMonthFunction(DayOfMonthFunction.class),
+    ArrayAppendFunction(ArrayAppendFunction.class),
+    UDFExpression(UDFExpression.class),
+    ArrayPrependFunction(ArrayPrependFunction.class),
+    SqrtFunction(SqrtFunction.class),
+    AbsFunction(AbsFunction.class),
+    CbrtFunction(CbrtFunction.class),
+    LnFunction(LnFunction.class),
+    LogFunction(LogFunction.class),
+    ExpFunction(ExpFunction.class),
+    PowerFunction(PowerFunction.class),
+    ArrayConcatFunction(ArrayConcatFunction.class)
     ;
-    
+
     ExpressionType(Class<? extends Expression> clazz) {
         this.clazz = clazz;
     }

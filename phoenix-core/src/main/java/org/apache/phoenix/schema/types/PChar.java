@@ -25,6 +25,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.DataExceedsCapacityException;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.StringUtil;
 
 import com.google.common.base.Strings;
@@ -41,13 +42,13 @@ public class PChar extends PDataType<String> {
   }
 
     @Override
-    public void pad(ImmutableBytesWritable ptr, Integer maxLength) {
+    public void pad(ImmutableBytesWritable ptr, Integer maxLength, SortOrder sortOrder) {
       if (ptr.getLength() >= maxLength) {
         return;
       }
       byte[] newBytes = new byte[maxLength];
       System.arraycopy(ptr.get(), ptr.getOffset(), newBytes, 0, ptr.getLength());
-      Arrays.fill(newBytes, ptr.getLength(), maxLength, StringUtil.SPACE_UTF8);
+      Arrays.fill(newBytes, ptr.getLength(), maxLength, sortOrder == SortOrder.ASC ? StringUtil.SPACE_UTF8 : StringUtil.INVERTED_SPACE_UTF8);
       ptr.set(newBytes);
     }
 
@@ -55,7 +56,7 @@ public class PChar extends PDataType<String> {
     public Object pad(Object object, Integer maxLength) {
       String s = (String) object;
       if (s == null) {
-        return s;
+        return Strings.padEnd("", maxLength, ' ');
       }
       if (s.length() == maxLength) {
         return object;
@@ -69,7 +70,7 @@ public class PChar extends PDataType<String> {
     @Override
     public byte[] toBytes(Object object) {
       if (object == null) {
-        throw newIllegalDataException(this + " may not be null");
+        return ByteUtil.EMPTY_BYTE_ARRAY;
       }
       byte[] b = PVarchar.INSTANCE.toBytes(object);
       if (b.length != ((String) object).length()) {

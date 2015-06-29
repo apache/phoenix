@@ -70,6 +70,8 @@ public class SubselectRewriter extends ParseNodeRewriter {
         while (from != null && from instanceof DerivedTableNode) {
             DerivedTableNode derivedTable = (DerivedTableNode) from;
             SelectStatement subselect = derivedTable.getSelect();
+            if (subselect.isUnion())
+                break;
             ColumnResolver resolver = FromCompiler.getResolverForQuery(subselect, connection);
             SubselectRewriter rewriter = new SubselectRewriter(resolver, subselect.getSelect(), derivedTable.getAlias());
             SelectStatement ret = rewriter.flatten(select, subselect);
@@ -202,7 +204,8 @@ public class SubselectRewriter extends ParseNodeRewriter {
             isAggregateRewrite = true;
         }
         
-        return NODE_FACTORY.select(subselect.getFrom(), hintRewrite, isDistinctRewrite, selectNodesRewrite, whereRewrite, groupByRewrite, havingRewrite, orderByRewrite, limitRewrite, select.getBindCount(), isAggregateRewrite, select.hasSequence());
+        return NODE_FACTORY.select(subselect.getFrom(), hintRewrite, isDistinctRewrite, selectNodesRewrite, whereRewrite, groupByRewrite, 
+            havingRewrite, orderByRewrite, limitRewrite, select.getBindCount(), isAggregateRewrite, select.hasSequence(), select.getSelects(), select.getUdfParseNodes());
     }
     
     private SelectStatement applyPostFilters(SelectStatement statement, List<ParseNode> postFilters) throws SQLException {

@@ -18,6 +18,7 @@
 
 package org.apache.phoenix.pherf;
 
+import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -27,7 +28,6 @@ import java.util.List;
 
 import org.apache.phoenix.pherf.configuration.*;
 import org.apache.phoenix.pherf.rules.DataValue;
-import org.apache.phoenix.pherf.workload.WorkloadExecutor;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,52 +38,55 @@ import javax.xml.bind.Marshaller;
 
 import static org.junit.Assert.*;
 
-public class ConfigurationParserTest {
+public class ConfigurationParserTest extends ResultBaseTest {
     private static final Logger logger = LoggerFactory.getLogger(ConfigurationParserTest.class);
 
     @Test
-    public void testConfigFilesParsing() {
-        try {
-        	WorkloadExecutor workloadExec = new WorkloadExecutor();
-            List<Scenario> scenarioList = workloadExec.getParser().getScenarios();
-            assertTrue("Could not load the scenarios from xml.", (scenarioList != null) && (scenarioList.size() > 0));
-            logger.info("Number of scenarios loaded: " + scenarioList.size());
-
-        } catch (Exception e) {
-            e.printStackTrace();
-            fail();
+    public void testReadWriteWorkloadReader() throws Exception {
+        String scenarioName = "testScenarioRW";
+        List<Scenario> scenarioList = getScenarios();
+        Scenario target = null;
+        for (Scenario scenario : scenarioList) {
+            if (scenarioName.equals(scenario.getName())) {
+                target = scenario;
+            }
         }
+        assertNotNull("Could not find scenario: " + scenarioName, target);
+        WriteParams params = target.getWriteParams();
+
+        assertNotNull("Could not find writeParams in scenario: " + scenarioName, params);
+        assertNotNull("Could not find batch size: ", params.getBatchSize());
+        assertNotNull("Could not find execution duration: ", params.getExecutionDurationInMs());
+        assertNotNull("Could not find sleep duration: ", params.getThreadSleepDuration());
+        assertNotNull("Could not find writer count: ", params.getWriterThreadCount());
     }
 
-	@Test
+    @Test
     // TODO Break this into multiple smaller tests.
-    public void testConfigReader(){
-		URL resourceUrl = getClass().getResource("/scenario/test_scenario.xml");
-        assertNotNull("Test data XML file is missing", resourceUrl);
+    public void testConfigReader() {
+        try {
 
-		try {
-//            writeXML();
-			Path resourcePath = Paths.get(resourceUrl.toURI());
-            DataModel data = XMLConfigParser.readDataModel(resourcePath);
-            List<Scenario> scenarioList = data.getScenarios();
-            assertTrue("Could not load the scenarios from xml.", (scenarioList != null) && (scenarioList.size() > 0));
-            List<Column> dataMappingColumns = data.getDataMappingColumns();
-            assertTrue("Could not load the data columns from xml.", (dataMappingColumns != null) && (dataMappingColumns.size() > 0));
+            logger.debug("DataModel: " + writeXML());
+            List<Scenario> scenarioList = getScenarios();
+            List<Column> dataMappingColumns = getDataModel().getDataMappingColumns();
+            assertTrue("Could not load the data columns from xml.",
+                    (dataMappingColumns != null) && (dataMappingColumns.size() > 0));
             assertTrue("Could not load the data DataValue list from xml.",
                     (dataMappingColumns.get(6).getDataValues() != null)
-                    && (dataMappingColumns.get(6).getDataValues().size() > 0));
+                            && (dataMappingColumns.get(6).getDataValues().size() > 0));
 
             assertDateValue(dataMappingColumns);
 
             // Validate column mappings
             for (Column column : dataMappingColumns) {
-                assertNotNull("Column ("+ column.getName() + ") is missing its type",column.getType());
+                assertNotNull("Column (" + column.getName() + ") is missing its type",
+                        column.getType());
             }
 
-            Scenario scenario = scenarioList.get(0);
+            Scenario scenario = scenarioList.get(1);
             assertNotNull(scenario);
             assertEquals("PHERF.TEST_TABLE", scenario.getTableName());
-            assertEquals(50, scenario.getRowCount());
+            assertEquals(30, scenario.getRowCount());
             assertEquals(1, scenario.getDataOverride().getColumn().size());
             QuerySet qs = scenario.getQuerySet().get(0);
             assertEquals(ExecutionType.SERIAL, qs.getExecutionType());
@@ -98,27 +101,50 @@ public class ConfigurationParserTest {
             assertEquals("select count(*) from PHERF.TEST_TABLE", firstQuery.getStatement());
             assertEquals("123456789012345", firstQuery.getTenantId());
             assertEquals(null, firstQuery.getDdl());
-            assertEquals(0, (long)firstQuery.getExpectedAggregateRowCount());
+            assertEquals(0, (long) firstQuery.getExpectedAggregateRowCount());
 
             Query secondQuery = qs.getQuery().get(1);
-            assertEquals("Could not get statement.", "select sum(SOME_INT) from PHERF.TEST_TABLE", secondQuery.getStatement());
+            assertEquals("Could not get statement.", "select sum(SOME_INT) from PHERF.TEST_TABLE",
+                    secondQuery.getStatement());
             assertEquals("Could not get queryGroup.", "g1", secondQuery.getQueryGroup());
 
             // Make sure anything in the overrides matches a real column in the data mappings
             DataOverride override = scenario.getDataOverride();
             for (Column column : override.getColumn()) {
-                assertTrue("Could not lookup Column (" + column.getName() + ") in DataMapping columns: " + dataMappingColumns, dataMappingColumns.contains(column));
+                assertTrue("Could not lookup Column (" + column.getName()
+                        + ") in DataMapping columns: " + dataMappingColumns,
+                        dataMappingColumns.contains(column));
             }
 
-		} catch (Exception e) {
-			e.printStackTrace();
-			fail();
-		}
-	}
+        } catch (Exception e) {
+            e.printStackTrace();
+            fail();
+        }
+    }
+
+    private URL getResourceUrl() {
+        URL resourceUrl = getClass().getResource("/scenario/test_scenario.xml");
+        assertNotNull("Test data XML file is missing", resourceUrl);
+        return resourceUrl;
+    }
+
+    private List<Scenario> getScenarios() throws URISyntaxException, JAXBException{
+        DataModel data = getDataModel();
+        List<Scenario> scenarioList = data.getScenarios();
+        assertTrue("Could not load the scenarios from xml.",
+                (scenarioList != null) && (scenarioList.size() > 0));
+        return scenarioList;
+    }
+
+    private DataModel getDataModel() throws URISyntaxException, JAXBException {
+        Path resourcePath = Paths.get(getResourceUrl().toURI());
+        return XMLConfigParser.readDataModel(resourcePath);
+    }
 
     private void assertDateValue(List<Column> dataMappingColumns) {
         for (Column dataMapping : dataMappingColumns) {
-            if ((dataMapping.getType() == DataTypeMapping.DATE) && (dataMapping.getName().equals("CREATED_DATE"))) {
+            if ((dataMapping.getType() == DataTypeMapping.DATE) && (dataMapping.getName()
+                    .equals("CREATED_DATE"))) {
                 // First rule should have min/max set
                 assertNotNull(dataMapping.getDataValues().get(0).getMinValue());
                 assertNotNull(dataMapping.getDataValues().get(0).getMaxValue());
@@ -138,7 +164,8 @@ public class ConfigurationParserTest {
     /*
         Used for debugging to dump out a simple xml filed based on the bound objects.
      */
-	private void writeXML() {
+    private String writeXML() {
+        DataModel data = new DataModel();
         try {
             DataValue dataValue = new DataValue();
             dataValue.setDistribution(20);
@@ -154,8 +181,6 @@ public class ConfigurationParserTest {
             List<Column> columnList = new ArrayList<>();
             columnList.add(column);
 
-            DataModel data = new DataModel();
-            data.setRelease("192");
             data.setDataMappingColumns(columnList);
 
             Scenario scenario = new Scenario();
@@ -196,5 +221,6 @@ public class ConfigurationParserTest {
             // some exception occured
             e.printStackTrace();
         }
+        return data.toString();
     }
 }

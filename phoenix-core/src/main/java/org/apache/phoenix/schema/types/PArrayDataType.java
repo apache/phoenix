@@ -21,6 +21,8 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.text.Format;
+import java.util.LinkedList;
+import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -125,6 +127,19 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
             }
         }
         return 0;
+    }
+
+    public static int serializeNulls(byte[] bytes, int position, int nulls){
+        int nMultiplesOver255 = nulls / 255;
+        while (nMultiplesOver255-- > 0) {
+            bytes[position++] = 1;
+        }
+        int nRemainingNulls = nulls % 255;
+        if (nRemainingNulls > 0) {
+            byte nNullByte = SortOrder.invert((byte)(nRemainingNulls-1));
+            bytes[position++] = nNullByte;
+        }
+        return position;
     }
  
     public static void writeEndSeperatorForVarLengthArray(DataOutputStream oStream) throws IOException {
@@ -242,6 +257,10 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
                 if (!pArr.isPrimitiveType()) {
                     pArr = new PhoenixArray(pArr, desiredMaxLength);
                 }
+            }
+            //Coerce to new max length when only max lengths differ
+            if(actualType == desiredType && !pArr.isPrimitiveType() && maxLength != null && maxLength != desiredMaxLength){
+               pArr = new PhoenixArray(pArr, desiredMaxLength);
             }
             baseType = desiredBaseType;
             ptr.set(toBytes(pArr, baseType, expectedModifier));
@@ -454,6 +473,374 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
         }
         // This should not happen
         return null;
+    }
+
+    public static boolean appendItemToArray(ImmutableBytesWritable ptr, int length, int offset, byte[] arrayBytes, PDataType baseType, int arrayLength, Integer maxLength, SortOrder sortOrder) {
+        if (ptr.getLength() == 0) {
+            ptr.set(arrayBytes, offset, length);
+            return true;
+        }
+
+        int elementLength = maxLength == null ? ptr.getLength() : maxLength;
+
+        //padding
+        if (elementLength > ptr.getLength()) {
+            baseType.pad(ptr, elementLength, sortOrder);
+        }
+
+        int elementOffset = ptr.getOffset();
+        byte[] elementBytes = ptr.get();
+
+        byte[] newArray;
+        if (!baseType.isFixedWidth()) {
+
+            int offsetArrayPosition = Bytes.toInt(arrayBytes, offset + length - Bytes.SIZEOF_INT - Bytes.SIZEOF_INT - Bytes.SIZEOF_BYTE, Bytes.SIZEOF_INT);
+            int offsetArrayLength = length - offsetArrayPosition - Bytes.SIZEOF_INT - Bytes.SIZEOF_INT - Bytes.SIZEOF_BYTE;
+
+            //checks whether offset array consists of shorts or integers
+            boolean useInt = offsetArrayLength / Math.abs(arrayLength) == Bytes.SIZEOF_INT;
+            boolean convertToInt = false;
+
+            int newElementPosition = offsetArrayPosition - 2 * Bytes.SIZEOF_BYTE;
+
+            if (!useInt) {
+                if (PArrayDataType.useShortForOffsetArray(newElementPosition)) {
+                    newArray = new byte[length + elementLength + Bytes.SIZEOF_SHORT + Bytes.SIZEOF_BYTE];
+                } else {
+                    newArray = new byte[length + elementLength + arrayLength * Bytes.SIZEOF_SHORT + Bytes.SIZEOF_INT + Bytes.SIZEOF_BYTE];
+                    convertToInt = true;
+                }
+            } else {
+                newArray = new byte[length + elementLength + Bytes.SIZEOF_INT + Bytes.SIZEOF_BYTE];
+            }
+
+            int newOffsetArrayPosition = newElementPosition + elementLength + 3 * Bytes.SIZEOF_BYTE;
+
+            System.arraycopy(arrayBytes, offset, newArray, 0, newElementPosition);
+            System.arraycopy(elementBytes, elementOffset, newArray, newElementPosition, elementLength);
+
+            arrayLength = (Math.abs(arrayLength) + 1) * (int) Math.signum(arrayLength);
+            if (useInt) {
+                System.arraycopy(arrayBytes, offset + offsetArrayPosition, newArray, newOffsetArrayPosition, offsetArrayLength);
+                Bytes.putInt(newArray, newOffsetArrayPosition + offsetArrayLength, newElementPosition);
+
+                writeEndBytes(newArray, newOffsetArrayPosition, offsetArrayLength, arrayLength, arrayBytes[offset + length - 1], true);
+            } else {
+                if (!convertToInt) {
+                    System.arraycopy(arrayBytes, offset + offsetArrayPosition, newArray, newOffsetArrayPosition, offsetArrayLength);
+                    Bytes.putShort(newArray, newOffsetArrayPosition + offsetArrayLength, (short) (newElementPosition - Short.MAX_VALUE));
+
+                    writeEndBytes(newArray, newOffsetArrayPosition, offsetArrayLength, arrayLength, arrayBytes[offset + length - 1], false);
+                } else {
+                    int off = newOffsetArrayPosition;
+                    for (int arrayIndex = 0; arrayIndex < Math.abs(arrayLength) - 1; arrayIndex++) {
+                        Bytes.putInt(newArray, off, getOffset(arrayBytes, arrayIndex, true, offsetArrayPosition + offset));
+                        off += Bytes.SIZEOF_INT;
+                    }
+
+                    Bytes.putInt(newArray, off, newElementPosition);
+                    Bytes.putInt(newArray, off + Bytes.SIZEOF_INT, newOffsetArrayPosition);
+                    Bytes.putInt(newArray, off + 2 * Bytes.SIZEOF_INT, -arrayLength);
+                    Bytes.putByte(newArray, off + 3 * Bytes.SIZEOF_INT, arrayBytes[offset + length - 1]);
+
+                }
+            }
+        } else {
+            newArray = new byte[length + elementLength];
+
+            System.arraycopy(arrayBytes, offset, newArray, 0, length);
+            System.arraycopy(elementBytes, elementOffset, newArray, length, elementLength);
+        }
+
+        ptr.set(newArray);
+
+        return true;
+    }
+
+    private static void writeEndBytes(byte[] array, int newOffsetArrayPosition, int offsetArrayLength, int arrayLength, byte header, boolean useInt) {
+        int byteSize = useInt ? Bytes.SIZEOF_INT : Bytes.SIZEOF_SHORT;
+
+        Bytes.putInt(array, newOffsetArrayPosition + offsetArrayLength + byteSize, newOffsetArrayPosition);
+        Bytes.putInt(array, newOffsetArrayPosition + offsetArrayLength + byteSize + Bytes.SIZEOF_INT, arrayLength);
+        Bytes.putByte(array, newOffsetArrayPosition + offsetArrayLength + byteSize + 2 * Bytes.SIZEOF_INT, header);
+    }
+
+    public static boolean prependItemToArray(ImmutableBytesWritable ptr, int length, int offset, byte[] arrayBytes, PDataType baseType, int arrayLength, Integer maxLength, SortOrder sortOrder) {
+        int elementLength = maxLength == null ? ptr.getLength() : maxLength;
+        if (ptr.getLength() == 0) {
+            elementLength = 0;
+        }
+        //padding
+        if (elementLength > ptr.getLength()) {
+            baseType.pad(ptr, elementLength, sortOrder);
+        }
+        int elementOffset = ptr.getOffset();
+        byte[] elementBytes = ptr.get();
+
+        byte[] newArray;
+        if (!baseType.isFixedWidth()) {
+            int offsetArrayPosition = Bytes.toInt(arrayBytes, offset + length - Bytes.SIZEOF_INT - Bytes.SIZEOF_INT - Bytes.SIZEOF_BYTE, Bytes.SIZEOF_INT);
+            int offsetArrayLength = length - offsetArrayPosition - Bytes.SIZEOF_INT - Bytes.SIZEOF_INT - Bytes.SIZEOF_BYTE;
+            arrayLength = Math.abs(arrayLength);
+
+            //checks whether offset array consists of shorts or integers
+            boolean useInt = offsetArrayLength / arrayLength == Bytes.SIZEOF_INT;
+            boolean convertToInt = false;
+            int endElementPosition = getOffset(arrayBytes, arrayLength - 1, !useInt, offsetArrayPosition + offset) + elementLength + Bytes.SIZEOF_BYTE;
+            int newOffsetArrayPosition;
+            int lengthIncrease;
+            int firstNonNullElementPosition = 0;
+            int currentPosition = 0;
+            //handle the case where prepended element is null
+            if (elementLength == 0) {
+                int nulls = 1;
+                //counts the number of nulls which are already at the beginning of the array
+                for (int index = 0; index < arrayLength; index++) {
+                    int currOffset = getOffset(arrayBytes, index, !useInt, offsetArrayPosition + offset);
+                    if (arrayBytes[offset + currOffset] == QueryConstants.SEPARATOR_BYTE) {
+                        nulls++;
+                    } else {
+                        //gets the offset of the first element after nulls at the beginning
+                        firstNonNullElementPosition = currOffset;
+                        break;
+                    }
+                }
+
+                int nMultiplesOver255 = nulls / 255;
+                int nRemainingNulls = nulls % 255;
+
+                //Calculates the increase in length due to prepending the null
+                //There is a length increase only when nRemainingNulls == 1
+                //nRemainingNulls == 1 and nMultiplesOver255 == 0 means there were no nulls at the beginning previously.
+                //At that case we need to increase the length by two bytes, one for separator byte and one for null count.
+                //ex: initial array - 65 0 66 0 0 0 after prepending null - 0 1(inverted) 65 0 66 0 0 0
+                //nRemainingNulls == 1 and nMultiplesOver255 != 0 means there were null at the beginning previously.
+                //In this case due to prepending nMultiplesOver255 is increased by 1.
+                //We need to increase the length by one byte to store increased that.
+                //ex: initial array - 0 1 65 0 66 0 0 0 after prepending null - 0 1 1(inverted) 65 0 66 0 0 0
+                //nRemainingNulls == 0 case.
+                //ex: initial array - 0 254(inverted) 65 0 66 0 0 0 after prepending null - 0 1 65 0 66 0 0 0
+                //nRemainingNulls > 1 case.
+                //ex: initial array - 0 45(inverted) 65 0 66 0 0 0 after prepending null - 0 46(inverted) 65 0 66 0 0 0
+                lengthIncrease = nRemainingNulls == 1 ? (nMultiplesOver255 == 0 ? 2 * Bytes.SIZEOF_BYTE : Bytes.SIZEOF_BYTE) : 0;
+                endElementPosition = getOffset(arrayBytes, arrayLength - 1, !useInt, offsetArrayPosition + offset) + lengthIncrease;
+                if (!useInt) {
+                    if (PArrayDataType.useShortForOffsetArray(endElementPosition)) {
+                        newArray = new byte[length + Bytes.SIZEOF_SHORT + lengthIncrease];
+                    } else {
+                        newArray = new byte[length + arrayLength * Bytes.SIZEOF_SHORT + Bytes.SIZEOF_INT + lengthIncrease];
+                        convertToInt = true;
+                    }
+                } else {
+                    newArray = new byte[length + Bytes.SIZEOF_INT + lengthIncrease];
+                }
+                newArray[currentPosition] = QueryConstants.SEPARATOR_BYTE;
+                currentPosition++;
+
+                newOffsetArrayPosition = offsetArrayPosition + lengthIncrease;
+                //serialize nulls at the beginning
+                currentPosition = serializeNulls(newArray, currentPosition, nulls);
+            } else {
+                if (!useInt) {
+                    if (PArrayDataType.useShortForOffsetArray(endElementPosition)) {
+                        newArray = new byte[length + elementLength + Bytes.SIZEOF_SHORT + Bytes.SIZEOF_BYTE];
+                    } else {
+                        newArray = new byte[length + elementLength + arrayLength * Bytes.SIZEOF_SHORT + Bytes.SIZEOF_INT + Bytes.SIZEOF_BYTE];
+                        convertToInt = true;
+                    }
+                } else {
+                    newArray = new byte[length + elementLength + Bytes.SIZEOF_INT + Bytes.SIZEOF_BYTE];
+                }
+                newOffsetArrayPosition = offsetArrayPosition + Bytes.SIZEOF_BYTE + elementLength;
+
+                lengthIncrease = elementLength + Bytes.SIZEOF_BYTE;
+                System.arraycopy(elementBytes, elementOffset, newArray, 0, elementLength);
+                currentPosition += elementLength + Bytes.SIZEOF_BYTE;
+            }
+
+            System.arraycopy(arrayBytes, firstNonNullElementPosition + offset, newArray, currentPosition, offsetArrayPosition);
+
+            arrayLength = arrayLength + 1;
+            //writes the new offset and changes the previous offsets
+            if (useInt || convertToInt) {
+                writeNewOffsets(arrayBytes, newArray, false, !useInt, newOffsetArrayPosition, arrayLength, offsetArrayPosition, offset, lengthIncrease, length);
+            } else {
+                writeNewOffsets(arrayBytes, newArray, true, true, newOffsetArrayPosition, arrayLength, offsetArrayPosition, offset, lengthIncrease, length);
+            }
+        } else {
+            newArray = new byte[length + elementLength];
+
+            System.arraycopy(elementBytes, elementOffset, newArray, 0, elementLength);
+            System.arraycopy(arrayBytes, offset, newArray, elementLength, length);
+        }
+
+        ptr.set(newArray);
+        return true;
+    }
+
+    private static void writeNewOffsets(byte[] arrayBytes, byte[] newArray, boolean useShortNew, boolean useShortPrevious, int newOffsetArrayPosition, int arrayLength, int offsetArrayPosition, int offset, int offsetShift, int length) {
+        int currentPosition = newOffsetArrayPosition;
+        int offsetArrayElementSize = useShortNew ? Bytes.SIZEOF_SHORT : Bytes.SIZEOF_INT;
+        if (useShortNew) {
+            Bytes.putShort(newArray, currentPosition, (short) (0 - Short.MAX_VALUE));
+        } else {
+            Bytes.putInt(newArray, currentPosition, 0);
+        }
+
+        currentPosition += offsetArrayElementSize;
+        boolean nullsAtBeginning = true;
+        for (int arrayIndex = 0; arrayIndex < arrayLength - 1; arrayIndex++) {
+            int oldOffset = getOffset(arrayBytes, arrayIndex, useShortPrevious, offsetArrayPosition + offset);
+            if (arrayBytes[offset + oldOffset] == QueryConstants.SEPARATOR_BYTE && nullsAtBeginning) {
+                if (useShortNew) {
+                    Bytes.putShort(newArray, currentPosition, (short) (oldOffset - Short.MAX_VALUE));
+                } else {
+                    Bytes.putInt(newArray, currentPosition, oldOffset);
+                }
+            } else {
+                if (useShortNew) {
+                    Bytes.putShort(newArray, currentPosition, (short) (oldOffset + offsetShift - Short.MAX_VALUE));
+                } else {
+                    Bytes.putInt(newArray, currentPosition, oldOffset + offsetShift);
+                }
+                nullsAtBeginning = false;
+            }
+            currentPosition += offsetArrayElementSize;
+        }
+
+        Bytes.putInt(newArray, currentPosition, newOffsetArrayPosition);
+        currentPosition += Bytes.SIZEOF_INT;
+        Bytes.putInt(newArray, currentPosition, useShortNew ? arrayLength : -arrayLength);
+        currentPosition += Bytes.SIZEOF_INT;
+        Bytes.putByte(newArray, currentPosition, arrayBytes[offset + length - 1]);
+    }
+
+    public static boolean concatArrays(ImmutableBytesWritable ptr, int array1BytesLength, int array1BytesOffset, byte[] array1Bytes, PDataType baseType, int actualLengthOfArray1, int actualLengthOfArray2) {
+        int array2BytesLength = ptr.getLength();
+        int array2BytesOffset = ptr.getOffset();
+        byte[] array2Bytes = ptr.get();
+
+        byte[] newArray;
+
+        if (!baseType.isFixedWidth()) {
+            int offsetArrayPositionArray1 = Bytes.toInt(array1Bytes, array1BytesOffset + array1BytesLength - Bytes.SIZEOF_INT - Bytes.SIZEOF_INT - Bytes.SIZEOF_BYTE, Bytes.SIZEOF_INT);
+            int offsetArrayPositionArray2 = Bytes.toInt(array2Bytes, array2BytesOffset + array2BytesLength - Bytes.SIZEOF_INT - Bytes.SIZEOF_INT - Bytes.SIZEOF_BYTE, Bytes.SIZEOF_INT);
+            int offsetArrayLengthArray1 = array1BytesLength - offsetArrayPositionArray1 - Bytes.SIZEOF_INT - Bytes.SIZEOF_INT - Bytes.SIZEOF_BYTE;
+            int offsetArrayLengthArray2 = array2BytesLength - offsetArrayPositionArray2 - Bytes.SIZEOF_INT - Bytes.SIZEOF_INT - Bytes.SIZEOF_BYTE;
+            int newArrayLength = actualLengthOfArray1 + actualLengthOfArray2;
+            int nullsAtTheEndOfArray1 = 0;
+            int nullsAtTheBeginningOfArray2 = 0;
+            //checks whether offset array consists of shorts or integers
+            boolean useIntArray1 = offsetArrayLengthArray1 / actualLengthOfArray1 == Bytes.SIZEOF_INT;
+            boolean useIntArray2 = offsetArrayLengthArray2 / actualLengthOfArray2 == Bytes.SIZEOF_INT;
+            boolean useIntNewArray = false;
+            //count nulls at the end of array 1
+            for (int index = actualLengthOfArray1 - 1; index > -1; index--) {
+                int offset = getOffset(array1Bytes, index, !useIntArray1, array1BytesOffset + offsetArrayPositionArray1);
+                if (array1Bytes[array1BytesOffset + offset] == QueryConstants.SEPARATOR_BYTE) {
+                    nullsAtTheEndOfArray1++;
+                } else {
+                    break;
+                }
+            }
+            //count nulls at the beginning of the array 2
+            int array2FirstNonNullElementOffset = 0;
+            int array2FirstNonNullIndex = 0;
+            for (int index = 0; index < actualLengthOfArray2; index++) {
+                int offset = getOffset(array2Bytes, index, !useIntArray2, array2BytesOffset + offsetArrayPositionArray2);
+                if (array2Bytes[array2BytesOffset + offset] == QueryConstants.SEPARATOR_BYTE) {
+                    nullsAtTheBeginningOfArray2++;
+                } else {
+                    array2FirstNonNullIndex = index;
+                    array2FirstNonNullElementOffset = offset;
+                    break;
+                }
+            }
+            int nullsInMiddleAfterConcat = nullsAtTheEndOfArray1 + nullsAtTheBeginningOfArray2;
+            int bytesForNullsBefore = nullsAtTheBeginningOfArray2 / 255 + (nullsAtTheBeginningOfArray2 % 255 == 0 ? 0 : 1);
+            int bytesForNullsAfter = nullsInMiddleAfterConcat / 255 + (nullsInMiddleAfterConcat % 255 == 0 ? 0 : 1);
+            //Increase of length required to store nulls
+            int lengthIncreaseForNulls = bytesForNullsAfter - bytesForNullsBefore;
+            //Length increase incremented by one when there were no nulls at the beginning of array and when there are
+            //nulls at the end of array 1 as we need to allocate a byte for separator byte in this case.
+            lengthIncreaseForNulls += nullsAtTheBeginningOfArray2 == 0 && nullsAtTheEndOfArray1 != 0 ? Bytes.SIZEOF_BYTE : 0;
+            int newOffsetArrayPosition = offsetArrayPositionArray1 + offsetArrayPositionArray2 + lengthIncreaseForNulls - 2 * Bytes.SIZEOF_BYTE;
+            int endElementPositionOfArray2 = getOffset(array2Bytes, actualLengthOfArray2 - 1, !useIntArray2, array2BytesOffset + offsetArrayPositionArray2);
+            int newEndElementPosition = lengthIncreaseForNulls + endElementPositionOfArray2 + offsetArrayPositionArray1 - 2 * Bytes.SIZEOF_BYTE;
+            //Creates a byre array to store the concatenated array
+            if (PArrayDataType.useShortForOffsetArray(newEndElementPosition)) {
+                newArray = new byte[newOffsetArrayPosition + newArrayLength * Bytes.SIZEOF_SHORT + Bytes.SIZEOF_INT + Bytes.SIZEOF_INT + Bytes.SIZEOF_BYTE];
+            } else {
+                useIntNewArray = true;
+                newArray = new byte[newOffsetArrayPosition + newArrayLength * Bytes.SIZEOF_INT + Bytes.SIZEOF_INT + Bytes.SIZEOF_INT + Bytes.SIZEOF_BYTE];
+            }
+
+            int currentPosition = 0;
+            //Copies all the elements from array 1 to new array
+            System.arraycopy(array1Bytes, array1BytesOffset, newArray, currentPosition, offsetArrayPositionArray1 - 2 * Bytes.SIZEOF_BYTE);
+            currentPosition = offsetArrayPositionArray1 - 2 * Bytes.SIZEOF_BYTE;
+            int array2StartingPosition = currentPosition;
+            currentPosition += nullsInMiddleAfterConcat != 0 ? 1 : 0;
+            //Writes nulls in the middle of the array.
+            currentPosition = serializeNulls(newArray, currentPosition, nullsInMiddleAfterConcat);
+            //Copies the elements from array 2 beginning from the first non null element.
+            System.arraycopy(array2Bytes, array2BytesOffset + array2FirstNonNullElementOffset, newArray, currentPosition, offsetArrayPositionArray2 - array2FirstNonNullElementOffset);
+            currentPosition += offsetArrayPositionArray2 - array2FirstNonNullElementOffset;
+
+            //Writing offset arrays
+            if (useIntNewArray) {
+                //offsets for the elements from array 1. Simply copied.
+                for (int index = 0; index < actualLengthOfArray1; index++) {
+                    int offset = getOffset(array1Bytes, index, !useIntArray1, array1BytesOffset + offsetArrayPositionArray1);
+                    Bytes.putInt(newArray, currentPosition, offset);
+                    currentPosition += Bytes.SIZEOF_INT;
+                }
+                //offsets for nulls in the middle
+                for (int index = 0; index < array2FirstNonNullIndex; index++) {
+                    int offset = getOffset(array2Bytes, index, !useIntArray2, array2BytesOffset + offsetArrayPositionArray2);
+                    Bytes.putInt(newArray, currentPosition, offset + array2StartingPosition);
+                    currentPosition += Bytes.SIZEOF_INT;
+                }
+                //offsets for the elements from the first non null element from array 2
+                int part2NonNullStartingPosition = array2StartingPosition + bytesForNullsAfter + (bytesForNullsAfter == 0 ? 0 : Bytes.SIZEOF_BYTE);
+                for (int index = array2FirstNonNullIndex; index < actualLengthOfArray2; index++) {
+                    int offset = getOffset(array2Bytes, index, !useIntArray2, array2BytesOffset + offsetArrayPositionArray2);
+                    Bytes.putInt(newArray, currentPosition, offset - array2FirstNonNullElementOffset + part2NonNullStartingPosition);
+                    currentPosition += Bytes.SIZEOF_INT;
+                }
+            } else {
+                //offsets for the elements from array 1. Simply copied.
+                for (int index = 0; index < actualLengthOfArray1; index++) {
+                    int offset = getOffset(array1Bytes, index, !useIntArray1, array1BytesOffset + offsetArrayPositionArray1);
+                    Bytes.putShort(newArray, currentPosition, (short) (offset - Short.MAX_VALUE));
+                    currentPosition += Bytes.SIZEOF_SHORT;
+                }
+                //offsets for nulls in the middle
+                for (int index = 0; index < array2FirstNonNullIndex; index++) {
+                    int offset = getOffset(array2Bytes, index, !useIntArray2, array2BytesOffset + offsetArrayPositionArray2);
+                    Bytes.putShort(newArray, currentPosition, (short) (offset + array2StartingPosition - Short.MAX_VALUE));
+                    currentPosition += Bytes.SIZEOF_SHORT;
+                }
+                //offsets for the elements from the first non null element from array 2
+                int part2NonNullStartingPosition = array2StartingPosition + bytesForNullsAfter + (bytesForNullsAfter == 0 ? 0 : Bytes.SIZEOF_BYTE);
+                for (int index = array2FirstNonNullIndex; index < actualLengthOfArray2; index++) {
+                    int offset = getOffset(array2Bytes, index, !useIntArray2, array2BytesOffset + offsetArrayPositionArray2);
+                    Bytes.putShort(newArray, currentPosition, (short) (offset - array2FirstNonNullElementOffset + part2NonNullStartingPosition - Short.MAX_VALUE));
+                    currentPosition += Bytes.SIZEOF_SHORT;
+                }
+            }
+            Bytes.putInt(newArray, currentPosition, newOffsetArrayPosition);
+            currentPosition += Bytes.SIZEOF_INT;
+            Bytes.putInt(newArray, currentPosition, useIntNewArray ? -newArrayLength : newArrayLength);
+            currentPosition += Bytes.SIZEOF_INT;
+            Bytes.putByte(newArray, currentPosition, array1Bytes[array1BytesOffset + array1BytesLength - 1]);
+        } else {
+            newArray = new byte[array1BytesLength + array2BytesLength];
+            System.arraycopy(array1Bytes, array1BytesOffset, newArray, 0, array1BytesLength);
+            System.arraycopy(array2Bytes, array2BytesOffset, newArray, array1BytesLength, array2BytesLength);
+        }
+        ptr.set(newArray);
+        return true;
     }
 
     public static int serailizeOffsetArrayIntoStream(DataOutputStream oStream, TrustedByteArrayOutputStream byteStream,
@@ -669,5 +1056,94 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
         }
         buf.append(']');
         return buf.toString();
+    }
+
+    static public class PArrayDataTypeBytesArrayBuilder<T> {
+        static private final int BYTE_ARRAY_DEFAULT_SIZE = 128;
+
+        private PDataType baseType;
+        private SortOrder sortOrder;
+        private List<Integer> offsetPos;
+        private TrustedByteArrayOutputStream byteStream;
+        private DataOutputStream oStream;
+        private int nulls;
+
+        public PArrayDataTypeBytesArrayBuilder(PDataType baseType, SortOrder sortOrder) {
+            this.baseType = baseType;
+            this.sortOrder = sortOrder;
+            offsetPos = new LinkedList<Integer>();
+            byteStream = new TrustedByteArrayOutputStream(BYTE_ARRAY_DEFAULT_SIZE);
+            oStream = new DataOutputStream(byteStream);
+            nulls = 0;
+        }
+
+        private void close() {
+            try {
+                if (byteStream != null) byteStream.close();
+                if (oStream != null) oStream.close();
+                byteStream = null;
+                oStream = null;
+            } catch (IOException ioe) {
+            }
+        }
+
+        public boolean appendElem(byte[] bytes) {
+            return appendElem(bytes, 0, bytes.length);
+        }
+
+        public boolean appendElem(byte[] bytes, int offset, int len) {
+            if (oStream == null || byteStream == null) return false;
+            try {
+                if (!baseType.isFixedWidth()) {
+                    if (len == 0) {
+                        offsetPos.add(byteStream.size());
+                        nulls++;
+                    } else {
+                        nulls = serializeNulls(oStream, nulls);
+                        offsetPos.add(byteStream.size());
+                        if (sortOrder == SortOrder.DESC) {
+                            SortOrder.invert(bytes, offset, bytes, offset, len);
+                        }
+                        oStream.write(bytes, offset, len);
+                        oStream.write(QueryConstants.SEPARATOR_BYTE);
+                    }
+                } else {
+                    if (sortOrder == SortOrder.DESC) {
+                        SortOrder.invert(bytes, offset, bytes, offset, len);
+                    }
+                    oStream.write(bytes, offset, len);
+                }
+                return true;
+            } catch (IOException e) {
+            }
+            return false;
+        }
+
+        public byte[] getBytesAndClose() {
+            try {
+                if (!baseType.isFixedWidth()) {
+                    int noOfElements = offsetPos.size();
+                    int[] offsetPosArray = new int[noOfElements];
+                    int index = 0;
+                    for (Integer i : offsetPos) {
+                        offsetPosArray[index] = i;
+                        ++index;
+                    }
+                    PArrayDataType.writeEndSeperatorForVarLengthArray(oStream);
+                    noOfElements =
+                            PArrayDataType.serailizeOffsetArrayIntoStream(oStream, byteStream,
+                                noOfElements, offsetPosArray[offsetPosArray.length - 1],
+                                offsetPosArray);
+                    serializeHeaderInfoIntoStream(oStream, noOfElements);
+                }
+                ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+                ptr.set(byteStream.getBuffer(), 0, byteStream.size());
+                return ByteUtil.copyKeyBytesIfNecessary(ptr);
+            } catch (IOException e) {
+            } finally {
+                close();
+            }
+            return null;
+        }
     }
 }

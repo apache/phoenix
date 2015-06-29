@@ -307,6 +307,21 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
     return getClass() == o.getClass();
   }
 
+    /**
+     * @return true if {@link PDataType} can be declared as primary key otherwise false.
+     */
+    public boolean canBePrimaryKey() {
+        return true;
+    }
+
+    /**
+     * @return true if {@link PDataType} supports equality operators (=,!=,<,>,<=,>=) otherwise
+     *         false.
+     */
+    public boolean isEqualitySupported() {
+        return true;
+    }
+  
   /**
    * @return true when {@code lhs} equals any of {@code rhs}.
    */
@@ -503,6 +518,7 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
   public final static Integer LONG_PRECISION = 19;
   public final static Integer SHORT_PRECISION = 5;
   public final static Integer BYTE_PRECISION = 3;
+  public final static Integer DOUBLE_PRECISION = 15;
 
   public static final int ARRAY_TYPE_BASE = 3000;
   public static final String ARRAY_TYPE_SUFFIX = "ARRAY";
@@ -792,7 +808,7 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
   public final boolean isNull(byte[] value) {
     return value == null || value.length == 0;
   }
-
+  
   public byte[] toBytes(Object object, SortOrder sortOrder) {
     Preconditions.checkNotNull(sortOrder);
     byte[] bytes = toBytes(object);
@@ -1094,12 +1110,19 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
     return toStringLiteral(o, formatter);
   }
   
-  public String toStringLiteral(Object o, Format formatter) {
-      if (formatter != null) {
-          return formatter.format(o);
+    public String toStringLiteral(Object o, Format formatter) {
+        if (formatter != null) {
+            return formatter.format(o);
+        } else if (null == o) {
+            return String.valueOf(o);
         }
         return o.toString();
-  }
+    }
+
+    public String toStringLiteral(Object o) {
+        // use default formatter when one is unspecified
+        return toStringLiteral(o, null);
+    }
 
   private static final PhoenixArrayFactory DEFAULT_ARRAY_FACTORY = new PhoenixArrayFactory() {
     @Override public PhoenixArray newArray(PDataType type, Object[] elements) {
@@ -1144,17 +1167,17 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
       return null;
     }
     for (PDataType type : PDataType.values()) {
-      if (type.isArrayType()) {
-        PhoenixArray arr = (PhoenixArray) value;
-        if ((type.getSqlType() == arr.baseType.sqlType + PDataType.ARRAY_TYPE_BASE)
-            && type.getJavaClass().isInstance(value)) {
-          return type;
+        if(type.getJavaClass().isInstance(value)){
+    		if (type.isArrayType()) {
+    			PhoenixArray arr = (PhoenixArray) value;
+    			if ((type.getSqlType() == arr.baseType.sqlType
+    					+ PDataType.ARRAY_TYPE_BASE)) {
+    				return type;
+    			}
+    		} else {
+    			return type;
+    		}
         }
-      } else {
-        if (type.getJavaClass().isInstance(value)) {
-          return type;
-        }
-      }
     }
     throw new UnsupportedOperationException(
         "Unsupported literal value [" + value + "] of type " + value.getClass().getName());
@@ -1172,7 +1195,7 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
     return object;
   }
 
-  public void pad(ImmutableBytesWritable ptr, Integer maxLength) {
+  public void pad(ImmutableBytesWritable ptr, Integer maxLength, SortOrder sortOrder) {
   }
 
   public static PDataType arrayBaseType(PDataType arrayType) {

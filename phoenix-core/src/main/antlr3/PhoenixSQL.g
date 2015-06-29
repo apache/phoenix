@@ -70,6 +70,7 @@ tokens
     KEY='key';
     ALTER='alter';
     COLUMN='column';
+    SESSION='session';
     TABLE='table';
     ADD='add';
     SPLIT='split';
@@ -112,6 +113,15 @@ tokens
     TRACE='trace';
     ASYNC='async';
     SAMPLING='sampling';
+    UNION='union';
+    FUNCTION='function';
+    AS='as';
+    TEMPORARY='temporary';
+    RETURNS='returns';
+    USING='using';
+    JAR='jar';
+    DEFAULTVALUE='defaultvalue';
+    CONSTANT = 'constant';
 }
 
 
@@ -142,13 +152,18 @@ import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ListMultimap;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
+import java.lang.Boolean;
 import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Stack;
 import java.sql.SQLException;
 import org.apache.phoenix.expression.function.CountAggregateFunction;
+import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.parse.PFunction;
+import org.apache.phoenix.parse.PFunction.FunctionArgument;
+import org.apache.phoenix.parse.UDFParseNode;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.IllegalDataException;
@@ -204,6 +219,7 @@ package org.apache.phoenix.parse;
     private int anonBindNum;
     private ParseNodeFactory factory;
     private ParseContext.Stack contextStack = new ParseContext.Stack();
+    private Map<String, UDFParseNode> udfParseNodes = new HashMap<String, UDFParseNode>(1);
 
     public void setParseNodeFactory(ParseNodeFactory factory) {
         this.factory = factory;
@@ -339,30 +355,37 @@ package org.apache.phoenix.parse;
 // Used to incrementally parse a series of semicolon-terminated SQL statement
 // Note than unlike the rule below an EOF is not expected at the end.
 nextStatement returns [BindableStatement ret]
-    :  s=oneStatement {$ret = s;} SEMICOLON
+    :  s=oneStatement {
+    		try {
+    			$ret = s;
+    		} finally {
+    			udfParseNodes.clear();
+    		}
+    	} SEMICOLON
     |  EOF
     ;
 
 // Parses a single SQL statement (expects an EOF after the select statement).
 statement returns [BindableStatement ret]
-    :   s=oneStatement {$ret = s;} EOF
+    :   s=oneStatement {
+        		try {
+    			$ret = s;
+    		} finally {
+    			udfParseNodes.clear();
+    		}
+    	} EOF
     ;
 
 // Parses a select statement which must be the only statement (expects an EOF after the statement).
 query returns [SelectStatement ret]
-    :   SELECT s=hinted_select_node EOF {$ret=s;}
+    :   s=select_node EOF {$ret=s;}
     ;
 
 // Parses a single SQL statement (expects an EOF after the select statement).
 oneStatement returns [BindableStatement ret]
-    :   (SELECT s=hinted_select_node {$ret=s;} 
-    |    ns=non_select_node {$ret=ns;}
-        )
-    ;
-
-non_select_node returns [BindableStatement ret]
 @init{ contextStack.push(new ParseContext()); }
-    :  (s=upsert_node
+    :  (s=select_node
+    |	s=upsert_node
     |   s=delete_node
     |   s=create_table_node
     |   s=create_view_node
@@ -372,6 +395,9 @@ non_select_node returns [BindableStatement ret]
     |   s=alter_index_node
     |   s=alter_table_node
     |   s=trace_node
+    |   s=create_function_node
+    |   s=drop_function_node
+    |   s=alter_session_node
     |	s=create_sequence_node
     |	s=drop_sequence_node
     |   s=update_statistics_node
@@ -411,7 +437,7 @@ create_index_node returns [CreateIndexStatement ret]
         (async=ASYNC)?
         (p=fam_properties)?
         (SPLIT ON v=value_expression_list)?
-        {ret = factory.createIndex(i, factory.namedTable(null,t), ik, icrefs, v, p, ex!=null, l==null ? IndexType.getDefault() : IndexType.LOCAL, async != null, getBindCount()); }
+        {ret = factory.createIndex(i, factory.namedTable(null,t), ik, icrefs, v, p, ex!=null, l==null ? IndexType.getDefault() : IndexType.LOCAL, async != null, getBindCount(), new HashMap<String, UDFParseNode>(udfParseNodes)); }
     ;
 
 // Parse a create sequence statement.
@@ -427,7 +453,7 @@ create_sequence_node returns [CreateSequenceStatement ret]
     ;
 
 int_literal_or_bind returns [ParseNode ret]
-    : n=int_literal { $ret = n; }
+    : n=int_or_long_literal { $ret = n; }
     | b=bind_expression { $ret = b; }
     ;
 
@@ -512,6 +538,31 @@ trace_node returns [TraceStatement ret]
        {ret = factory.trace(Tracing.isTraceOn(flag.getText()), s == null ? Tracing.isTraceOn(flag.getText()) ? 1.0 : 0.0 : (((BigDecimal)s.getValue())).doubleValue());}
     ;
 
+// Parse a trace statement.
+create_function_node returns [CreateFunctionStatement ret]
+    :   CREATE (temp=TEMPORARY)? FUNCTION function=identifier 
+       (LPAREN args=zero_or_more_data_types RPAREN)
+       RETURNS r=identifier AS (className= jar_path)
+       (USING JAR (jarPath = jar_path))?
+        {
+            $ret = factory.createFunction(new PFunction(SchemaUtil.normalizeIdentifier(function), args,r,(String)className.getValue(), jarPath == null ? null : (String)jarPath.getValue()), temp!=null);;
+        } 
+    ;
+
+jar_path returns [LiteralParseNode ret]
+    : l=literal { $ret = l; }
+    ;
+
+drop_function_node returns [DropFunctionStatement ret]
+    : DROP FUNCTION (IF ex=EXISTS)? function=identifier {$ret = factory.dropFunction(SchemaUtil.normalizeIdentifier(function), ex!=null);}
+    ;
+
+// Parse an alter session statement.
+alter_session_node returns [AlterSessionStatement ret]
+    :   ALTER SESSION (SET p=properties)
+       {ret = factory.alterSession(p);}
+    ;
+
 // Parse an alter table statement.
 alter_table_node returns [AlterTableStatement ret]
     :   ALTER (TABLE | v=VIEW) t=from_table_name
@@ -520,8 +571,8 @@ alter_table_node returns [AlterTableStatement ret]
     ;
 
 update_statistics_node returns [UpdateStatisticsStatement ret]
-	:   UPDATE STATISTICS t=from_table_name (s=INDEX | s=ALL | s=COLUMNS)?
-		{ret = factory.updateStatistics(factory.namedTable(null, t), s == null ? StatisticsCollectionScope.getDefault() : StatisticsCollectionScope.valueOf(SchemaUtil.normalizeIdentifier(s.getText())));}
+	:   UPDATE STATISTICS t=from_table_name (s=INDEX | s=ALL | s=COLUMNS)? (SET (p=properties))?
+		{ret = factory.updateStatistics(factory.namedTable(null, t), s == null ? StatisticsCollectionScope.getDefault() : StatisticsCollectionScope.valueOf(SchemaUtil.normalizeIdentifier(s.getText())), p);}
 	;
 
 prop_name returns [String ret]
@@ -570,41 +621,43 @@ dyn_column_name_or_def returns [ColumnDef ret]
             SortOrder.getDefault()); }
     ;
 
-select_expression returns [SelectStatement ret]
-    :  SELECT s=select_node {$ret = s;}
+subquery_expression returns [ParseNode ret]
+    :  s=select_node {$ret = factory.subquery(s, false);}
     ;
     
-subquery_expression returns [ParseNode ret]
-    :  s=select_expression {$ret = factory.subquery(s, false);}
+single_select returns [SelectStatement ret]
+@init{ contextStack.push(new ParseContext()); }
+    :   SELECT (h=hintClause)? 
+        (d=DISTINCT | ALL)? sel=select_list
+        FROM from=parseFrom
+        (WHERE where=expression)?
+        (GROUP BY group=group_by)?
+        (HAVING having=expression)?
+        { ParseContext context = contextStack.peek(); $ret = factory.select(from, h, d!=null, sel, where, group, having, null, null, getBindCount(), context.isAggregate(), context.hasSequences(), null, new HashMap<String,UDFParseNode>(udfParseNodes)); }
+    ;
+finally{ contextStack.pop(); }
+
+unioned_selects returns [List<SelectStatement> ret]
+@init{ret = new ArrayList<SelectStatement>();}
+    :   s=single_select {ret.add(s);} (UNION ALL s=single_select {ret.add(s);})*
     ;
     
 // Parse a full select expression structure.
 select_node returns [SelectStatement ret]
 @init{ contextStack.push(new ParseContext()); }
-    :   (d=DISTINCT | ALL)? sel=select_list
-        FROM from=parseFrom
-        (WHERE where=expression)?
-        (GROUP BY group=group_by)?
-        (HAVING having=expression)?
+    :   u=unioned_selects
         (ORDER BY order=order_by)?
         (LIMIT l=limit)?
-        { ParseContext context = contextStack.peek(); $ret = factory.select(from, null, d!=null, sel, where, group, having, order, l, getBindCount(), context.isAggregate(), context.hasSequences()); }
+        { ParseContext context = contextStack.peek(); $ret = factory.select(u, order, l, getBindCount(), context.isAggregate()); }
     ;
 finally{ contextStack.pop(); }
-
-// Parse a full select expression structure.
-hinted_select_node returns [SelectStatement ret]
-    :   (hint=hintClause)? 
-        s=select_node
-        { $ret = factory.select(s, hint); }
-    ;
 
 // Parse a full upsert expression structure.
 upsert_node returns [UpsertStatement ret]
     :   UPSERT (hint=hintClause)? INTO t=from_table_name
         (LPAREN p=upsert_column_refs RPAREN)?
-        ((VALUES LPAREN v=one_or_more_expressions RPAREN) | s=select_expression)
-        {ret = factory.upsert(factory.namedTable(null,t,p == null ? null : p.getFirst()), hint, p == null ? null : p.getSecond(), v, s, getBindCount()); }
+        ((VALUES LPAREN v=one_or_more_expressions RPAREN) | s=select_node)
+        {ret = factory.upsert(factory.namedTable(null,t,p == null ? null : p.getFirst()), hint, p == null ? null : p.getSecond(), v, s, getBindCount(), new HashMap<String, UDFParseNode>(udfParseNodes)); }
     ;
 
 upsert_column_refs returns [Pair<List<ColumnDef>,List<ColumnName>> ret]
@@ -619,12 +672,12 @@ delete_node returns [DeleteStatement ret]
         (WHERE v=expression)?
         (ORDER BY order=order_by)?
         (LIMIT l=limit)?
-        {ret = factory.delete(factory.namedTable(null,t), hint, v, order, l, getBindCount()); }
+        {ret = factory.delete(factory.namedTable(null,t), hint, v, order, l, getBindCount(), new HashMap<String, UDFParseNode>(udfParseNodes)); }
     ;
 
 limit returns [LimitNode ret]
     : b=bind_expression { $ret = factory.limit(b); }
-    | l=int_literal { $ret = factory.limit(l); }
+    | l=int_or_long_literal { $ret = factory.limit(l); }
     ;
     
 sampling_rate returns [LiteralParseNode ret]
@@ -689,7 +742,7 @@ table_factor returns [TableNode ret]
     :   LPAREN t=table_list RPAREN { $ret = t; }
     |   n=bind_name ((AS)? alias=identifier)? { $ret = factory.bindTable(alias, factory.table(null,n)); } // TODO: review
     |   f=from_table_name ((AS)? alias=identifier)? (LPAREN cdefs=dyn_column_defs RPAREN)? { $ret = factory.namedTable(alias,f,cdefs); }
-    |   LPAREN SELECT s=hinted_select_node RPAREN ((AS)? alias=identifier)? { $ret = factory.derivedTable(alias, s); }
+    |   LPAREN s=select_node RPAREN ((AS)? alias=identifier)? { $ret = factory.derivedTable(alias, s); }
     ;
 
 join_type returns [JoinTableNode.JoinType ret]
@@ -807,17 +860,19 @@ term returns [ParseNode ret]
             if (!contextStack.isEmpty()) {
             	contextStack.peek().setAggregate(f.isAggregate());
             }
+            if(f instanceof UDFParseNode) udfParseNodes.put(f.getName(),(UDFParseNode)f);
             $ret = f;
         } 
     |   field=identifier LPAREN t=ASTERISK RPAREN 
         {
             if (!isCountFunction(field)) {
-                throwRecognitionException(t); 
+                throwRecognitionException(t);
             }
             FunctionParseNode f = factory.function(field, LiteralParseNode.STAR);
             if (!contextStack.isEmpty()) {
             	contextStack.peek().setAggregate(f.isAggregate());
             }
+            if(f instanceof UDFParseNode) udfParseNodes.put(f.getName(),(UDFParseNode)f);
             $ret = f;
         } 
     |   field=identifier LPAREN t=DISTINCT l=zero_or_more_expressions RPAREN 
@@ -826,6 +881,7 @@ term returns [ParseNode ret]
             if (!contextStack.isEmpty()) {
             	contextStack.peek().setAggregate(f.isAggregate());
             }
+            if(f instanceof UDFParseNode) udfParseNodes.put(f.getName(),(UDFParseNode)f);
             $ret = f;
         }
     |   e=case_statement { $ret = e; }
@@ -859,6 +915,18 @@ zero_or_more_expressions returns [List<ParseNode> ret]
     :  (v = expression {$ret.add(v);})?  (COMMA v = expression {$ret.add(v);} )*
 ;
 
+zero_or_more_data_types returns [List<FunctionArgument> ret]
+@init{ret = new ArrayList<FunctionArgument>(); }
+    : (fa = function_argument {$ret.add(fa);})? (COMMA fa = function_argument {$ret.add(fa);})* 
+	;
+
+function_argument returns [FunctionArgument ret]
+	: (dt = identifier (LPAREN l=NUMBER (COMMA s=NUMBER)? RPAREN)? ar=ARRAY? (lsq=LSQUARE (a=NUMBER)? RSQUARE)? (c = CONSTANT)? (DEFAULTVALUE EQ dv = value_expression)? (MINVALUE EQ minv = value_expression)?  (MAXVALUE EQ maxv = value_expression)? 
+	{ $ret = new FunctionArgument(dt,  ar != null || lsq != null, c!=null, 
+    dv == null ? null : LiteralExpression.newConstant(((LiteralParseNode)dv).getValue()), 
+    minv == null ? null : LiteralExpression.newConstant(((LiteralParseNode)minv).getValue()), 
+    maxv == null ? null : LiteralExpression.newConstant(((LiteralParseNode)maxv).getValue()));})
+	;
 value_expression_list returns [List<ParseNode> ret]
 @init{ret = new ArrayList<ParseNode>(); }
     :  LPAREN e = value_expression {$ret.add(e);}  (COMMA e = value_expression {$ret.add(e);} )* RPAREN
@@ -888,19 +956,18 @@ literal_or_bind returns [ParseNode ret]
 
 // Get a string, integer, double, date, boolean, or NULL value.
 literal returns [LiteralParseNode ret]
-    :   t=STRING_LITERAL {
-            ret = factory.literal(t.getText()); 
+    :   s=STRING_LITERAL {
+            ret = factory.literal(s.getText()); 
         }
-    |   l=int_literal { ret = l; }
-    |   l=long_literal { ret = l; }
-    |   l=double_literal { ret = l; }
-    |   t=DECIMAL {
-            try {
-                ret = factory.literal(new BigDecimal(t.getText()));
-            } catch (NumberFormatException e) { // Shouldn't happen since we just parsed a decimal
-                throwRecognitionException(t);
-            }
+    |   n=NUMBER {
+            ret = factory.wholeNumber(n.getText());
         }
+    |   d=DECIMAL  {
+            ret = factory.realNumber(d.getText());
+        }
+    |   dbl=DOUBLE  {
+            ret = factory.literal(Double.valueOf(dbl.getText()));
+        }    
     |   NULL {ret = factory.literal(null);}
     |   TRUE {ret = factory.literal(Boolean.TRUE);} 
     |   FALSE {ret = factory.literal(Boolean.FALSE);}
@@ -913,42 +980,9 @@ literal returns [LiteralParseNode ret]
         }
     ;
     
-int_literal returns [LiteralParseNode ret]
+int_or_long_literal returns [LiteralParseNode ret]
     :   n=NUMBER {
-            try {
-                Long v = Long.valueOf(n.getText());
-                if (v >= Integer.MIN_VALUE && v <= Integer.MAX_VALUE) {
-                    ret = factory.literal(v.intValue());
-                } else {
-                    ret = factory.literal(v);
-                }
-            } catch (NumberFormatException e) { // Shouldn't happen since we just parsed a number
-                throwRecognitionException(n);
-            }
-        }
-    ;
-
-long_literal returns [LiteralParseNode ret]
-    :   l=LONG {
-            try {
-                String lt = l.getText();
-                Long v = Long.valueOf(lt.substring(0, lt.length() - 1));
-                ret = factory.literal(v);
-            } catch (NumberFormatException e) { // Shouldn't happen since we just parsed a number
-                throwRecognitionException(l);
-            }
-        }
-    ;
-
-double_literal returns [LiteralParseNode ret]
-    :   d=DOUBLE {
-            try {
-                String dt = d.getText();
-                Double v = Double.valueOf(dt.substring(0, dt.length() - 1));
-                ret = factory.literal(v);
-            } catch (NumberFormatException e) { // Shouldn't happen since we just parsed a number
-                throwRecognitionException(d);
-            }
+            ret = factory.intOrLong(n.getText());
         }
     ;
 
@@ -998,17 +1032,18 @@ NUMBER
     :   POSINTEGER
     ;
 
-LONG
-    :   POSINTEGER ('L'|'l')
-    ;
-
-// Exponential format is not supported.
 DECIMAL
-    :   POSINTEGER? '.' POSINTEGER
+	:	POSINTEGER? '.' POSINTEGER
+	;
+	
+DOUBLE
+    :   '.' POSINTEGER Exponent
+    |   POSINTEGER '.' Exponent
+    |   POSINTEGER ('.' (POSINTEGER (Exponent)?)? | Exponent)
     ;
 
-DOUBLE
-    :   DECIMAL ('D'|'d')
+Exponent
+    :    ('e' | 'E') ( PLUS | MINUS )? POSINTEGER
     ;
 
 DOUBLE_QUOTE

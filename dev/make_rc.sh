@@ -74,6 +74,8 @@ rm -rf $(find . -type d -name archive-tmp);
 cp $(find -iname phoenix-$PHOENIX-client-minimal.jar) $DIR_COMMON;
 cp $(find -iname phoenix-$PHOENIX-client-without-hbase.jar) $DIR_COMMON;
 cp $(find -iname phoenix-core-$PHOENIX.jar) $DIR_COMMON;
+cp $(find -iname phoenix-server-$PHOENIX-runnable.jar) $DIR_COMMON;
+cp $(find -iname phoenix-$PHOENIX-query-server-thin-client.jar) $DIR_COMMON;
 
 # Copy release docs
 function_copy() {
@@ -101,6 +103,9 @@ function_copy_hadoop_specific_jars() {
   cp $(find -iname phoenix-$PHOENIX-client.jar) $DIR_HADOOP$1/phoenix-$PHOENIX-client-hadoop$1.jar;
   cp $(find -iname phoenix-$PHOENIX-server.jar) $DIR_HADOOP$1/phoenix-$PHOENIX-server-hadoop$1.jar;
   cp $(find -iname phoenix-core-$PHOENIX-tests.jar) $DIR_HADOOP$1/phoenix-core-$PHOENIX-tests-hadoop$1.jar;
+  cp $(find -iname phoenix-server-$PHOENIX.jar) $DIR_HADOOP$1/phoenix-server-$PHOENIX-hadoop$1.jar;
+  cp $(find -iname phoenix-server-$PHOENIX-tests.jar) $DIR_HADOOP$1/phoenix-server-$PHOENIX-tests-hadoop$1.jar;
+  cp $(find -iname phoenix-server-client-$PHOENIX.jar) $DIR_HADOOP$1/phoenix-server-client-$PHOENIX-hadoop$1.jar;
   cp $(find -iname phoenix-flume-$PHOENIX.jar) $DIR_HADOOP$1/phoenix-flume-$PHOENIX-hadoop$1.jar;
   cp $(find -iname phoenix-flume-$PHOENIX-tests.jar) $DIR_HADOOP$1/phoenix-flume-$PHOENIX-tests-hadoop$1.jar;
   cp $(find -iname phoenix-pig-$PHOENIX.jar) $DIR_HADOOP$1/phoenix-pig-$PHOENIX-hadoop$1.jar;

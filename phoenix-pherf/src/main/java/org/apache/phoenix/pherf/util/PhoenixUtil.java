@@ -30,6 +30,8 @@ import java.util.*;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
+import org.apache.phoenix.pherf.configuration.Query;
+import org.apache.phoenix.pherf.configuration.QuerySet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,36 +40,48 @@ public class PhoenixUtil {
 	private static final Logger logger = LoggerFactory.getLogger(PhoenixUtil.class);
 	private static String zookeeper;
 	private static int rowCountOverride = 0;
-	
+    private boolean testEnabled;
+    private static PhoenixUtil instance;
+
+    private PhoenixUtil() {
+        this(false);
+    }
+
+    private PhoenixUtil(final boolean testEnabled) {
+        this.testEnabled = testEnabled;
+    }
+
+    public static PhoenixUtil create() {
+        return create(false);
+    }
+
+    public static PhoenixUtil create(final boolean testEnabled) {
+        instance = instance != null ? instance : new PhoenixUtil(testEnabled);
+        return instance;
+    }
+
     public Connection getConnection() throws Exception{
     	return getConnection(null);
     }
 	
-    public Connection getConnection(String tenantId) throws Exception{
-		if (null == zookeeper) {
-			throw new IllegalArgumentException("Zookeeper must be set before initializing connection!");
-		}
-    	Properties props = new Properties();
-    	if (null != tenantId) {
-    		props.setProperty("TenantId", tenantId);
-   			logger.debug("\nSetting tenantId to " + tenantId);
-    	}
-    	Connection connection = DriverManager.getConnection("jdbc:phoenix:" + zookeeper, props);
-        return connection;
+    public Connection getConnection(String tenantId) throws Exception {
+        return getConnection(tenantId, testEnabled);
     }
 
-    public static void writeSfdcClientProperty() throws IOException {
-		Configuration conf = HBaseConfiguration.create();
-		Map<String, String> sfdcProperty = conf.getValByRegex("sfdc");
-    	Properties props = new Properties();
-		for (Map.Entry<String, String> entry : sfdcProperty.entrySet()) {
-			props.put(entry.getKey(), entry.getValue());
-			logger.debug("\nSetting sfdc connection property " + entry.getKey() + " to " + entry.getValue());
-		}
-        OutputStream out = new java.io.FileOutputStream(new File("sfdc-hbase-client.properties"));
-        props.store(out,"client properties");
+    private Connection getConnection(String tenantId, boolean testEnabled) throws Exception {
+        if (null == zookeeper) {
+            throw new IllegalArgumentException(
+                    "Zookeeper must be set before initializing connection!");
+        }
+        Properties props = new Properties();
+        if (null != tenantId) {
+            props.setProperty("TenantId", tenantId);
+            logger.debug("\nSetting tenantId to " + tenantId);
+        }
+        String url = "jdbc:phoenix:" + zookeeper + (testEnabled ? ";test=true" : "");
+        return DriverManager.getConnection(url, props);
     }
- 
+
     public boolean executeStatement(String sql) throws Exception {
         Connection connection = null;
         boolean result = false;
@@ -100,7 +114,8 @@ public class PhoenixUtil {
         }
         return result;
     }
-    
+
+    @SuppressWarnings("unused")
     public boolean executeStatement(PreparedStatement preparedStatement, Connection connection) {
     	boolean result = false;
         try {
@@ -112,16 +127,6 @@ public class PhoenixUtil {
         return result;
     }
 
-    public ResultSet executeQuery(PreparedStatement preparedStatement, Connection connection) {
-        ResultSet resultSet = null;
-        try {
-            resultSet = preparedStatement.executeQuery();
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-        return resultSet;
-    }
-    
     /**
      * Delete existing tables with schema name set as {@link PherfConstants#PHERF_SCHEMA_NAME} with regex comparison 
      * 
@@ -129,14 +134,14 @@ public class PhoenixUtil {
      * @throws SQLException
      * @throws Exception
      */
-    public void deleteTables(String regexMatch) throws SQLException, Exception {
+    public void deleteTables(String regexMatch) throws Exception {
     	regexMatch = regexMatch.toUpperCase().replace("ALL", ".*");
     	Connection conn = getConnection();
     	try {
         	ResultSet resultSet = getTableMetaData(PherfConstants.PHERF_SCHEMA_NAME, null, conn);
 	    	while (resultSet.next()) {
-	    		String tableName = resultSet.getString("TABLE_SCHEM") == null ? resultSet.getString("TABLE_NAME") : 
-	    						   resultSet.getString("TABLE_SCHEM") + "." + resultSet.getString("TABLE_NAME");
+	    		String tableName = resultSet.getString("TABLE_SCHEMA") == null ? resultSet.getString("TABLE_NAME") :
+	    						   resultSet.getString("TABLE_SCHEMA") + "." + resultSet.getString("TABLE_NAME");
 	    		if (tableName.matches(regexMatch)) {
 		    		logger.info("\nDropping " + tableName);
 		    		executeStatement("DROP TABLE " + tableName + " CASCADE", conn);
@@ -179,8 +184,33 @@ public class PhoenixUtil {
     	
     	return Collections.unmodifiableList(columnList);
     }
-    
-	public static String getZookeeper() {
+
+    /**
+     * Execute all querySet DDLs first based on tenantId if specified. This is executed
+     * first since we don't want to run DDLs in parallel to executing queries.
+     *
+     * @param querySet
+     * @throws Exception
+     */
+    public void executeQuerySetDdls(QuerySet querySet) throws Exception {
+        for (Query query : querySet.getQuery()) {
+            if (null != query.getDdl()) {
+                Connection conn = null;
+                try {
+                    logger.info("\nExecuting DDL:" + query.getDdl() + " on tenantId:" + query
+                            .getTenantId());
+                    executeStatement(query.getDdl(),
+                            conn = getConnection(query.getTenantId()));
+                } finally {
+                    if (null != conn) {
+                        conn.close();
+                    }
+                }
+            }
+        }
+    }
+
+    public static String getZookeeper() {
 		return zookeeper;
 	}
 

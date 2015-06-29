@@ -731,7 +731,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         assertEquals(
                 rowKeyFilter(like(
                     ENTITY_ID,
-                    likeArg)),
+                    likeArg,
+                    context)),
                 filter);
 
         byte[] startRow = ByteUtil.concat(
@@ -757,7 +758,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         assertEquals(
                 rowKeyFilter(like(
                     ENTITY_ID,
-                    likeArg)),
+                    likeArg,
+                    context)),
                 filter);
 
         byte[] startRow = ByteUtil.concat(
@@ -783,7 +785,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         assertEquals(
                 rowKeyFilter(like(
                     substr(ENTITY_ID,1,10),
-                    likeArg)),
+                    likeArg,
+                    context)),
                 filter);
 
         byte[] startRow = ByteUtil.concat(
@@ -809,7 +812,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         assertEquals(
                 rowKeyFilter(like(
                     substr(ENTITY_ID,4,10),
-                    likeArg)),
+                    likeArg,
+                    context)),
                 filter);
 
         byte[] startRow = PVarchar.INSTANCE.toBytes(tenantId);
@@ -832,7 +836,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         assertEquals(
                 rowKeyFilter(like(
                     ENTITY_ID,
-                    likeArg)),
+                    likeArg,
+                    context)),
                 filter);
 
         byte[] startRow = PVarchar.INSTANCE.toBytes(tenantId);
@@ -855,7 +860,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         assertEquals(
                 rowKeyFilter(not(like(
                     ENTITY_ID,
-                    likeArg))),
+                    likeArg,
+                    context))),
                 filter);
 
         byte[] startRow = PVarchar.INSTANCE.toBytes(tenantId);
@@ -1270,6 +1276,22 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         Filter filter = scan.getFilter();
         assertNotNull(filter);
         assertTrue(filter instanceof RowKeyComparisonFilter);
+        assertArrayEquals(HConstants.EMPTY_START_ROW, scan.getStartRow());
+        assertArrayEquals(HConstants.EMPTY_END_ROW, scan.getStopRow());
+    }
+    
+    @Test
+    public void testRVCExpressionWithNonFirstLeadingColOfRowKey() throws SQLException {
+        String old_value = "value";
+        String orgId = getOrganizationId();
+        
+        String query = "select * from entity_history where (old_value, organization_id) >= (?,?)";
+        List<Object> binds = Arrays.<Object>asList(old_value, orgId);
+        StatementContext context = compileStatement(query, binds);
+        Scan scan = context.getScan();
+        Filter filter = scan.getFilter();
+        assertNotNull(filter);
+        assertTrue(filter instanceof SingleKeyValueComparisonFilter);
         assertArrayEquals(HConstants.EMPTY_START_ROW, scan.getStartRow());
         assertArrayEquals(HConstants.EMPTY_END_ROW, scan.getStopRow());
     }
@@ -1758,6 +1780,26 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
             PChar.INSTANCE.toBytes(entityId2), 15)), k2.getLowerRange());
     }
     
+    
+    @Test
+    public void testRVCInView() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute("CREATE TABLE TEST_TABLE.TEST1 (\n" + 
+                "PK1 CHAR(3) NOT NULL, \n" + 
+                "PK2 CHAR(3) NOT NULL,\n" + 
+                "DATA1 CHAR(10)\n" + 
+                "CONSTRAINT PK PRIMARY KEY (PK1, PK2))");
+        conn.createStatement().execute("CREATE VIEW TEST_TABLE.FOO AS SELECT * FROM TEST_TABLE.TEST1 WHERE PK1 = 'FOO'");
+        String query = "SELECT * FROM TEST_TABLE.FOO WHERE PK2 < '004' AND (PK1,PK2) > ('FOO','002') LIMIT 2";
+        Scan scan = compileStatement(query, Collections.emptyList(), 2).getScan();
+        byte[] startRow = ByteUtil.nextKey(ByteUtil.concat(PChar.INSTANCE.toBytes("FOO"),
+                PVarchar.INSTANCE.toBytes("002")));
+        assertArrayEquals(startRow, scan.getStartRow());
+        byte[] stopRow = ByteUtil.concat(PChar.INSTANCE.toBytes("FOO"),
+                PChar.INSTANCE.toBytes("004"));
+        assertArrayEquals(stopRow, scan.getStopRow());
+    }
+
     private static StatementContext compileStatementTenantSpecific(String tenantId, String query, List<Object> binds) throws Exception {
     	PhoenixConnection pconn = getTenantSpecificConnection("tenantId").unwrap(PhoenixConnection.class);
         PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);

@@ -18,60 +18,57 @@
 
 package org.apache.phoenix.pherf.result;
 
-import java.util.ArrayList;
-import java.util.List;
+import org.apache.phoenix.pherf.configuration.DataModel;
 
 import javax.xml.bind.annotation.XmlAttribute;
 import javax.xml.bind.annotation.XmlRootElement;
+import java.util.ArrayList;
+import java.util.List;
 
-import org.apache.phoenix.pherf.configuration.DataModel;
+@XmlRootElement(namespace = "org.apache.phoenix.pherf.result") public class DataModelResult
+        extends DataModel {
+    private List<ScenarioResult> scenarioResult = new ArrayList<ScenarioResult>();
+    private String zookeeper;
 
-@XmlRootElement(namespace = "org.apache.phoenix.pherf.result")
-public class DataModelResult extends DataModel {
-	private List<ScenarioResult> scenarioResult = new ArrayList<ScenarioResult>();
-	private String zookeeper;
+    public List<ScenarioResult> getScenarioResult() {
+        return scenarioResult;
+    }
 
-	public List<ScenarioResult> getScenarioResult() {
-		return scenarioResult;
-	}
+    @SuppressWarnings("unused") public void setScenarioResult(List<ScenarioResult> scenarioResult) {
+        this.scenarioResult = scenarioResult;
+    }
 
-	public void setScenarioResult(List<ScenarioResult> scenarioResult) {
-		this.scenarioResult = scenarioResult;
-	}
-	
-	public DataModelResult() {
-	}
+    public DataModelResult() {
+    }
 
-    private DataModelResult(String name, String release, String zookeeper) {
+    private DataModelResult(String name, String zookeeper) {
         this.setName(name);
-        this.setRelease(release);
         this.zookeeper = zookeeper;
     }
 
     /**
      * Copy constructor
-     * 
+     *
      * @param dataModelResult
      */
     public DataModelResult(DataModelResult dataModelResult) {
-        this(dataModelResult.getName(), dataModelResult.getRelease(), dataModelResult.getZookeeper());
+        this(dataModelResult.getName(), dataModelResult.getZookeeper());
         this.scenarioResult = dataModelResult.getScenarioResult();
     }
-	
-	public DataModelResult(DataModel dataModel, String zookeeper) {
-	    this(dataModel.getName(), dataModel.getRelease(), zookeeper);
-	}
-	
-	public DataModelResult(DataModel dataModel) {
-		this(dataModel, null);
-	}
 
-	@XmlAttribute()
-	public String getZookeeper() {
-		return zookeeper;
-	}
+    public DataModelResult(DataModel dataModel, String zookeeper) {
+        this(dataModel.getName(), zookeeper);
+    }
 
-	public void setZookeeper(String zookeeper) {
-		this.zookeeper = zookeeper;
-	}
+    public DataModelResult(DataModel dataModel) {
+        this(dataModel, null);
+    }
+
+    @XmlAttribute() public String getZookeeper() {
+        return zookeeper;
+    }
+
+    public void setZookeeper(String zookeeper) {
+        this.zookeeper = zookeeper;
+    }
 }

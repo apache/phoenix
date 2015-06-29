@@ -1362,6 +1362,65 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
         conn.close();
     }
 
+    @Test
+    public void testRVCWithRowKeyNotLeading() throws Exception {
+        String ddl = "CREATE TABLE sorttest4 (rownum BIGINT primary key, name varchar(16), age integer)";
+        Connection conn = nextConnection(getUrl());
+        conn.createStatement().execute(ddl);
+        conn.close();
+        conn = nextConnection(getUrl());
+        String dml = "UPSERT INTO sorttest4 (rownum, name, age) values (?, ?, ?)";
+        PreparedStatement stmt = conn.prepareStatement(dml);
+        stmt.setInt(1, 1);
+        stmt.setString(2, "A");
+        stmt.setInt(3, 1);
+        stmt.executeUpdate();
+        stmt.setInt(1, 2);
+        stmt.setString(2, "B");
+        stmt.setInt(3, 2);
+        stmt.executeUpdate();
+        conn.commit();
+        conn.close();
+        // the below query should only return one record -> (1, "A", 1)
+        String query = "SELECT rownum, name, age FROM sorttest4 where (age, rownum) < (2, 2)";
+        conn = nextConnection(getUrl());
+        ResultSet rs = conn.createStatement().executeQuery(query);
+        int numRecords = 0;
+        while (rs.next()) {
+            assertEquals(1, rs.getInt(1));
+            assertEquals("A", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            numRecords++;
+        }
+        assertEquals(1, numRecords);
+    }
 
-
+    @Test
+    public void testRVCInView() throws Exception {
+        Connection conn = nextConnection(getUrl());
+        conn.createStatement().execute("CREATE TABLE TEST_TABLE.TEST1 (\n" + 
+                "PK1 CHAR(3) NOT NULL, \n" + 
+                "PK2 CHAR(3) NOT NULL,\n" + 
+                "DATA1 CHAR(10)\n" + 
+                "CONSTRAINT PK PRIMARY KEY (PK1, PK2))");
+        conn.close();
+        conn = nextConnection(getUrl());
+        conn.createStatement().execute("CREATE VIEW TEST_TABLE.FOO AS SELECT * FROM TEST_TABLE.TEST1 WHERE PK1 = 'FOO'");
+        conn.close();
+        conn = nextConnection(getUrl());
+        conn.createStatement().execute("UPSERT INTO TEST_TABLE.TEST1 VALUES('FOO','001','SOMEDATA')");
+        conn.createStatement().execute("UPSERT INTO TEST_TABLE.TEST1 VALUES('FOO','002','SOMEDATA')");
+        conn.createStatement().execute("UPSERT INTO TEST_TABLE.TEST1 VALUES('FOO','003','SOMEDATA')");
+        conn.createStatement().execute("UPSERT INTO TEST_TABLE.TEST1 VALUES('FOO','004','SOMEDATA')");
+        conn.createStatement().execute("UPSERT INTO TEST_TABLE.TEST1 VALUES('FOO','005','SOMEDATA')");
+        conn.commit();
+        conn.close();
+        
+        conn = nextConnection(getUrl());        
+        ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM TEST_TABLE.FOO WHERE PK2 < '004' AND (PK1,PK2) > ('FOO','002') LIMIT 2");
+        assertTrue(rs.next());
+        assertEquals("003", rs.getString("PK2"));
+        assertFalse(rs.next());
+        conn.close();
+    }
 }

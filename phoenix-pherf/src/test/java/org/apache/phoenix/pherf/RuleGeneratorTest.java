@@ -19,29 +19,29 @@
 package org.apache.phoenix.pherf;
 
 import org.apache.phoenix.pherf.configuration.*;
-import org.apache.phoenix.pherf.loaddata.DataLoader;
+import org.apache.phoenix.pherf.workload.WriteWorkload;
 import org.apache.phoenix.pherf.rules.DataValue;
 import org.apache.phoenix.pherf.rules.RulesApplier;
+import org.apache.phoenix.pherf.util.PhoenixUtil;
 import org.joda.time.DateTime;
 import org.joda.time.format.DateTimeFormat;
 import org.joda.time.format.DateTimeFormatter;
 import org.junit.Test;
 
-import java.sql.Types;
 import java.util.*;
 
 import static org.junit.Assert.*;
 
-public class RuleGeneratorTest extends BaseTestWithCluster {
+public class RuleGeneratorTest {
+    private static PhoenixUtil util = PhoenixUtil.create(true);
+    private static final String matcherScenario = PherfConstants.SCENARIO_ROOT_PATTERN + ".xml";
 
     @Test
     public void testDateGenerator() throws Exception {
         XMLConfigParser parser = new XMLConfigParser(matcherScenario);
         DataModel model = parser.getDataModels().get(0);
-        DataLoader loader = new DataLoader(parser);
+        WriteWorkload loader = new WriteWorkload(parser);
         RulesApplier rulesApplier = loader.getRulesApplier();
-        int sampleSize = 100;
-        List<String> values = new ArrayList<>(sampleSize);
 
         for (Column dataMapping : model.getDataMappingColumns()) {
             if ((dataMapping.getType() == DataTypeMapping.DATE) && (dataMapping.getName().equals("CREATED_DATE"))) {
@@ -67,7 +67,7 @@ public class RuleGeneratorTest extends BaseTestWithCluster {
     public void testNullChance() throws Exception {
         XMLConfigParser parser = new XMLConfigParser(matcherScenario);
         DataModel model = parser.getDataModels().get(0);
-        DataLoader loader = new DataLoader(parser);
+        WriteWorkload loader = new WriteWorkload(parser);
         RulesApplier rulesApplier = loader.getRulesApplier();
         int sampleSize = 100;
         List<String> values = new ArrayList<>(sampleSize);
@@ -95,7 +95,7 @@ public class RuleGeneratorTest extends BaseTestWithCluster {
     public void testSequentialDataSequence() throws Exception {
         XMLConfigParser parser = new XMLConfigParser(matcherScenario);
         DataModel model = parser.getDataModels().get(0);
-        DataLoader loader = new DataLoader(parser);
+        WriteWorkload loader = new WriteWorkload(parser);
         RulesApplier rulesApplier = loader.getRulesApplier();
 
         Column targetColumn = null;
@@ -180,7 +180,7 @@ public class RuleGeneratorTest extends BaseTestWithCluster {
         expectedValues.add("cCCyYhnNbBs9kWr");
 
         XMLConfigParser parser = new XMLConfigParser(".*test_scenario.xml");
-        DataLoader loader = new DataLoader(parser);
+        WriteWorkload loader = new WriteWorkload(parser);
         RulesApplier rulesApplier = loader.getRulesApplier();
         Scenario scenario = parser.getScenarios().get(0);
 

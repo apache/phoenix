@@ -83,7 +83,7 @@ public class PVarchar extends PDataType<String> {
 
   @Override
   public boolean isCoercibleTo(PDataType targetType) {
-    return equalsAny(targetType, this, PChar.INSTANCE, PVarbinary.INSTANCE, PBinary.INSTANCE);
+    return equalsAny(targetType, this, PChar.INSTANCE, PVarbinary.INSTANCE, PBinary.INSTANCE, PJson.INSTANCE);
   }
 
   @Override
@@ -143,7 +143,7 @@ public class PVarchar extends PDataType<String> {
     if (formatter != null) {
       return "'" + formatter.format(o) + "'";
     }
-    return "'" + StringUtil.escapeStringConstant(o.toString()) + "'";
+    return null == o ? String.valueOf(o) : "'" + StringUtil.escapeStringConstant(o.toString()) + "'";
   }
 
   private char[] sampleChars = new char[1];

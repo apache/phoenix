@@ -23,12 +23,15 @@ import java.util.Map;
 
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.AmbiguousTableException;
 import org.apache.phoenix.schema.ColumnAlreadyExistsException;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ConcurrentTableMutationException;
+import org.apache.phoenix.schema.FunctionAlreadyExistsException;
+import org.apache.phoenix.schema.FunctionNotFoundException;
 import org.apache.phoenix.schema.ReadOnlyTableException;
 import org.apache.phoenix.schema.SequenceAlreadyExistsException;
 import org.apache.phoenix.schema.SequenceNotFoundException;
@@ -83,6 +86,7 @@ public enum SQLExceptionCode {
     SUBQUERY_RETURNS_DIFFERENT_NUMBER_OF_FIELDS(216, "22016", "Sub-query must return the same number of fields as the left-hand-side expression of 'IN'."),
     AMBIGUOUS_JOIN_CONDITION(217, "22017", "Amibiguous or non-equi join condition specified. Consider using table list with where clause."),
     CONSTRAINT_VIOLATION(218, "22018", "Constraint violatioin."),
+    INVALID_JSON_DATA(219, "22000", "Invalid json data."),
     
     /**
      * Constraint Violation (errorcode 03, sqlstate 23)
@@ -144,7 +148,7 @@ public enum SQLExceptionCode {
     ORDER_BY_ARRAY_NOT_SUPPORTED(515, "42893", "ORDER BY of an array type is not allowed"),
     NON_EQUALITY_ARRAY_COMPARISON(516, "42894", "Array types may only be compared using = or !="),
     INVALID_NOT_NULL_CONSTRAINT(517, "42895", "Invalid not null constraint on non primary key column"),
-
+    NON_EQUALITY_COMPARISON(523, "42900", "Could not identify an equality operator"),
     /**
      *  Invalid Transaction State (errorcode 05, sqlstate 25)
      */
@@ -158,6 +162,12 @@ public enum SQLExceptionCode {
      AGGREGATE_EXPRESSION_NOT_ALLOWED_IN_INDEX(520, "42897", "Aggreagaate expression not allowed in an index"),
      NON_DETERMINISTIC_EXPRESSION_NOT_ALLOWED_IN_INDEX(521, "42898", "Non-deterministic expression not allowed in an index"),
      STATELESS_EXPRESSION_NOT_ALLOWED_IN_INDEX(522, "42899", "Stateless expression not allowed in an index"),
+
+     /** 
+      * Union All related errors
+      */
+     SELECT_COLUMN_NUM_IN_UNIONALL_DIFFS(525, "42902", "SELECT column number differs in a Union All query is not allowed"),
+     SELECT_COLUMN_TYPE_IN_UNIONALL_DIFFS(526, "42903", "SELECT column types differ in a Union All query is not allowed"),
 
      /** 
      * HBase and Phoenix specific implementation defined sub-classes.
@@ -314,7 +324,22 @@ public enum SQLExceptionCode {
             return new SQLTimeoutException(OPERATION_TIMED_OUT.getMessage(),
                     OPERATION_TIMED_OUT.getSQLState(), OPERATION_TIMED_OUT.getErrorCode());
         }
-    }), 
+    }),
+    FUNCTION_UNDEFINED(6001, "42F01", "Function undefined.", new Factory() {
+        @Override
+        public SQLException newException(SQLExceptionInfo info) {
+            return new FunctionNotFoundException(info.getFunctionName());
+        }
+    }),
+    FUNCTION_ALREADY_EXIST(6002, "42F02", "Function already exists.", new Factory() {
+        @Override
+        public SQLException newException(SQLExceptionInfo info) {
+            return new FunctionAlreadyExistsException(info.getSchemaName(), info.getTableName());
+        }
+    }),
+    UNALLOWED_USER_DEFINED_FUNCTIONS(6003, "42F03",
+            "User defined functions are configured to not be allowed. To allow configure "
+                    + QueryServices.ALLOW_USER_DEFINED_FUNCTIONS_ATTRIB + " to true."),
     ;
 
     private final int errorCode;

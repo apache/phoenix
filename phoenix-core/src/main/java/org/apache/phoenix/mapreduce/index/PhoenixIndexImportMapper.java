@@ -73,7 +73,7 @@ public class PhoenixIndexImportMapper extends Mapper<NullWritable, PhoenixIndexD
             indexTableName = PhoenixConfigurationUtil.getOutputTableName(configuration);
             final Properties overrideProps = new Properties ();
             overrideProps.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, configuration.get(PhoenixConfigurationUtil.CURRENT_SCN_VALUE));
-            connection = ConnectionUtil.getConnection(configuration,overrideProps);
+            connection = ConnectionUtil.getOutputConnection(configuration,overrideProps);
             connection.setAutoCommit(false);
             final String upsertQuery = PhoenixConfigurationUtil.getUpsertStatement(configuration);
             this.pStatement = connection.prepareStatement(upsertQuery);

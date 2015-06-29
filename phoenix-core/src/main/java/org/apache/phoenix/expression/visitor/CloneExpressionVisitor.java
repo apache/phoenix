@@ -47,6 +47,7 @@ import org.apache.phoenix.expression.function.ArrayAnyComparisonExpression;
 import org.apache.phoenix.expression.function.ArrayElemRefExpression;
 import org.apache.phoenix.expression.function.ScalarFunction;
 import org.apache.phoenix.expression.function.SingleAggregateFunction;
+import org.apache.phoenix.expression.function.UDFExpression;
 
 public class CloneExpressionVisitor extends TraverseAllExpressionVisitor<Expression> {
 
@@ -100,6 +101,11 @@ public class CloneExpressionVisitor extends TraverseAllExpressionVisitor<Express
         return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node :  node.clone(l);
     }
 
+    public Expression visitLeave(UDFExpression node, List<Expression> l) {
+        return new UDFExpression(l, node.getTenantId(), node.getFunctionClassName(),
+                node.getJarPath(), node.getUdfFunction());
+    }
+
     @Override
     public Expression visitLeave(ComparisonExpression node, List<Expression> l) {
         return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node :  node.clone(l);
@@ -107,7 +113,8 @@ public class CloneExpressionVisitor extends TraverseAllExpressionVisitor<Express
 
     @Override
     public Expression visitLeave(LikeExpression node, List<Expression> l) {
-        return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node :  new LikeExpression(l);
+        return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node : node
+                .clone(l);
     }
 
     @Override

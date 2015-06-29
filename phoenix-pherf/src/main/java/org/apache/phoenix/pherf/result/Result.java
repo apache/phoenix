@@ -27,14 +27,15 @@ import java.util.List;
  */
 public class Result {
     private final List<ResultValue> resultValues;
+
+    // Placeholder for future work
     private final ResultFileDetails type;
     private final String header;
 
     /**
-     *
-     * @param type {@link org.apache.phoenix.pherf.result.file.ResultFileDetails} Currently unused, but gives metadata about the
-     *                                                           contents of the result.
-     * @param header Used for CSV, otherwise pass null. For CSV pass comma separated string of header fields.
+     * @param type          {@link org.apache.phoenix.pherf.result.file.ResultFileDetails} Currently unused, but gives metadata about the
+     *                      contents of the result.
+     * @param header        Used for CSV, otherwise pass null. For CSV pass comma separated string of header fields.
      * @param messageValues List<{@link ResultValue} All fields combined represent the data
      *                      for a row to be written.
      */
@@ -50,5 +51,9 @@ public class Result {
 
     public String getHeader() {
         return header;
+    }
+
+    public ResultFileDetails getType() {
+        return type;
     }
 }

@@ -34,12 +34,15 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
+import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.call.CallRunner;
 import org.apache.phoenix.compile.ColumnProjector;
 import org.apache.phoenix.compile.ColumnResolver;
+import org.apache.phoenix.compile.CreateFunctionCompiler;
 import org.apache.phoenix.compile.CreateIndexCompiler;
 import org.apache.phoenix.compile.CreateSequenceCompiler;
 import org.apache.phoenix.compile.CreateTableCompiler;
@@ -72,14 +75,17 @@ import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.parse.AddColumnStatement;
 import org.apache.phoenix.parse.AliasedNode;
 import org.apache.phoenix.parse.AlterIndexStatement;
+import org.apache.phoenix.parse.AlterSessionStatement;
 import org.apache.phoenix.parse.BindableStatement;
 import org.apache.phoenix.parse.ColumnDef;
 import org.apache.phoenix.parse.ColumnName;
+import org.apache.phoenix.parse.CreateFunctionStatement;
 import org.apache.phoenix.parse.CreateIndexStatement;
 import org.apache.phoenix.parse.CreateSequenceStatement;
 import org.apache.phoenix.parse.CreateTableStatement;
 import org.apache.phoenix.parse.DeleteStatement;
 import org.apache.phoenix.parse.DropColumnStatement;
+import org.apache.phoenix.parse.DropFunctionStatement;
 import org.apache.phoenix.parse.DropIndexStatement;
 import org.apache.phoenix.parse.DropSequenceStatement;
 import org.apache.phoenix.parse.DropTableStatement;
@@ -91,6 +97,7 @@ import org.apache.phoenix.parse.LimitNode;
 import org.apache.phoenix.parse.NamedNode;
 import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.OrderByNode;
+import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.PrimaryKeyConstraint;
@@ -99,6 +106,7 @@ import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.parse.TableNode;
 import org.apache.phoenix.parse.TraceStatement;
+import org.apache.phoenix.parse.UDFParseNode;
 import org.apache.phoenix.parse.UpdateStatisticsStatement;
 import org.apache.phoenix.parse.UpsertStatement;
 import org.apache.phoenix.query.KeyRange;
@@ -126,6 +134,7 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.PhoenixContextExecutor;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
@@ -155,6 +164,7 @@ import com.google.common.collect.Lists;
  * @since 0.1
  */
 public class PhoenixStatement implements Statement, SQLCloseable, org.apache.phoenix.jdbc.Jdbc7Shim.Statement {
+	
     private static final Logger logger = LoggerFactory.getLogger(PhoenixStatement.class);
     
     public enum Operation {
@@ -249,6 +259,7 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
                         setLastResultSet(rs);
                         setLastUpdateCount(NO_UPDATE);
                         setLastUpdateOperation(stmt.getOperation());
+                        connection.incrementStatementExecutionCounter();
                         return rs;
                     } catch (RuntimeException e) {
                         // FIXME: Expression.evaluate does not throw SQLException
@@ -301,6 +312,7 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
                                 int lastUpdateCount = (int) Math.min(Integer.MAX_VALUE, state.getUpdateCount());
                                 setLastUpdateCount(lastUpdateCount);
                                 setLastUpdateOperation(stmt.getOperation());
+                                connection.incrementStatementExecutionCounter();
                                 return lastUpdateCount;
                             } catch (RuntimeException e) {
                                 // FIXME: Expression.evaluate does not throw SQLException
@@ -325,13 +337,22 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
     
     private static class ExecutableSelectStatement extends SelectStatement implements CompilableStatement {
         private ExecutableSelectStatement(TableNode from, HintNode hint, boolean isDistinct, List<AliasedNode> select, ParseNode where,
-                List<ParseNode> groupBy, ParseNode having, List<OrderByNode> orderBy, LimitNode limit, int bindCount, boolean isAggregate, boolean hasSequence) {
-            super(from, hint, isDistinct, select, where, groupBy, having, orderBy, limit, bindCount, isAggregate, hasSequence);
+                List<ParseNode> groupBy, ParseNode having, List<OrderByNode> orderBy, LimitNode limit, int bindCount, boolean isAggregate, boolean hasSequence, Map<String, UDFParseNode> udfParseNodes) {
+            this(from, hint, isDistinct, select, where, groupBy, having, orderBy, limit, bindCount, isAggregate, hasSequence, Collections.<SelectStatement>emptyList(), udfParseNodes);
         }
 
+        private ExecutableSelectStatement(TableNode from, HintNode hint, boolean isDistinct, List<AliasedNode> select, ParseNode where,
+                List<ParseNode> groupBy, ParseNode having, List<OrderByNode> orderBy, LimitNode limit, int bindCount, boolean isAggregate,
+                boolean hasSequence, List<SelectStatement> selects, Map<String, UDFParseNode> udfParseNodes) {
+            super(from, hint, isDistinct, select, where, groupBy, having, orderBy, limit, bindCount, isAggregate, hasSequence, selects, udfParseNodes);
+        }
+        
         @SuppressWarnings("unchecked")
         @Override
         public QueryPlan compilePlan(PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
+            if(!getUdfParseNodes().isEmpty()) {
+                stmt.throwIfUnallowedUserDefinedFunctions();
+            }
             SelectStatement select = SubselectRewriter.flatten(this, stmt.getConnection());
             ColumnResolver resolver = FromCompiler.getResolverForQuery(select, stmt.getConnection());
             select = StatementNormalizer.normalize(select, resolver);
@@ -344,6 +365,7 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
             plan.getContext().getSequenceManager().validateSequences(seqAction);
             return plan;
         }
+
     }
     
     private static final byte[] EXPLAIN_PLAN_FAMILY = QueryConstants.SINGLE_COLUMN_FAMILY;
@@ -482,19 +504,26 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
                 public boolean isRowKeyOrdered() {
                     return true;
                 }
-                
+
+                @Override
+                public boolean useRoundRobinIterator() throws SQLException {
+                    return false;
+                }
             };
         }
     }
 
     private static class ExecutableUpsertStatement extends UpsertStatement implements CompilableStatement {
-        private ExecutableUpsertStatement(NamedTableNode table, HintNode hintNode, List<ColumnName> columns, List<ParseNode> values, SelectStatement select, int bindCount) {
-            super(table, hintNode, columns, values, select, bindCount);
+        private ExecutableUpsertStatement(NamedTableNode table, HintNode hintNode, List<ColumnName> columns, List<ParseNode> values, SelectStatement select, int bindCount, Map<String, UDFParseNode> udfParseNodes) {
+            super(table, hintNode, columns, values, select, bindCount, udfParseNodes);
         }
 
         @SuppressWarnings("unchecked")
         @Override
         public MutationPlan compilePlan(PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
+            if(!getUdfParseNodes().isEmpty()) {
+                stmt.throwIfUnallowedUserDefinedFunctions();
+            }
             UpsertCompiler compiler = new UpsertCompiler(stmt);
             MutationPlan plan = compiler.compile(this);
             plan.getContext().getSequenceManager().validateSequences(seqAction);
@@ -503,13 +532,16 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
     }
     
     private static class ExecutableDeleteStatement extends DeleteStatement implements CompilableStatement {
-        private ExecutableDeleteStatement(NamedTableNode table, HintNode hint, ParseNode whereNode, List<OrderByNode> orderBy, LimitNode limit, int bindCount) {
-            super(table, hint, whereNode, orderBy, limit, bindCount);
+        private ExecutableDeleteStatement(NamedTableNode table, HintNode hint, ParseNode whereNode, List<OrderByNode> orderBy, LimitNode limit, int bindCount, Map<String, UDFParseNode> udfParseNodes) {
+            super(table, hint, whereNode, orderBy, limit, bindCount, udfParseNodes);
         }
 
         @SuppressWarnings("unchecked")
         @Override
         public MutationPlan compilePlan(PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
+            if(!getUdfParseNodes().isEmpty()) {
+                stmt.throwIfUnallowedUserDefinedFunctions();
+            }
             DeleteCompiler compiler = new DeleteCompiler(stmt);
             MutationPlan plan = compiler.compile(this);
             plan.getContext().getSequenceManager().validateSequences(seqAction);
@@ -532,16 +564,76 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         }
     }
 
+    private static class ExecutableCreateFunctionStatement extends CreateFunctionStatement implements CompilableStatement {
+
+        public ExecutableCreateFunctionStatement(PFunction functionInfo, boolean temporary) {
+            super(functionInfo, temporary);
+        }
+
+
+        @SuppressWarnings("unchecked")
+        @Override
+        public MutationPlan compilePlan(final PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
+            stmt.throwIfUnallowedUserDefinedFunctions();
+            CreateFunctionCompiler compiler = new CreateFunctionCompiler(stmt);
+            return compiler.compile(this);
+        }
+    }
+
+    private static class ExecutableDropFunctionStatement extends DropFunctionStatement implements CompilableStatement {
+
+        public ExecutableDropFunctionStatement(String functionName, boolean ifNotExists) {
+            super(functionName, ifNotExists);
+        }
+
+        @SuppressWarnings("unchecked")
+        @Override
+        public MutationPlan compilePlan(final PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
+                final StatementContext context = new StatementContext(stmt);
+                return new MutationPlan() {
+
+                    @Override
+                    public StatementContext getContext() {
+                        return context;
+                    }
+
+                    @Override
+                    public ParameterMetaData getParameterMetaData() {
+                        return PhoenixParameterMetaData.EMPTY_PARAMETER_META_DATA;
+                    }
+
+                    @Override
+                    public ExplainPlan getExplainPlan() throws SQLException {
+                        return new ExplainPlan(Collections.singletonList("DROP TABLE"));
+                    }
+
+                    @Override
+                    public PhoenixConnection getConnection() {
+                        return stmt.getConnection();
+                    }
+
+                    @Override
+                    public MutationState execute() throws SQLException {
+                        MetaDataClient client = new MetaDataClient(getConnection());
+                        return client.dropFunction(ExecutableDropFunctionStatement.this);
+                    }
+                };
+        }
+    }
+    
     private static class ExecutableCreateIndexStatement extends CreateIndexStatement implements CompilableStatement {
 
         public ExecutableCreateIndexStatement(NamedNode indexName, NamedTableNode dataTable, IndexKeyConstraint ikConstraint, List<ColumnName> includeColumns, List<ParseNode> splits,
-                ListMultimap<String,Pair<String,Object>> props, boolean ifNotExists, IndexType indexType, boolean async, int bindCount) {
-            super(indexName, dataTable, ikConstraint, includeColumns, splits, props, ifNotExists, indexType, async , bindCount);
+                ListMultimap<String,Pair<String,Object>> props, boolean ifNotExists, IndexType indexType, boolean async, int bindCount, Map<String, UDFParseNode> udfParseNodes) {
+            super(indexName, dataTable, ikConstraint, includeColumns, splits, props, ifNotExists, indexType, async , bindCount, udfParseNodes);
         }
 
         @SuppressWarnings("unchecked")
         @Override
         public MutationPlan compilePlan(PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
+            if(!getUdfParseNodes().isEmpty()) {
+                stmt.throwIfUnallowedUserDefinedFunctions();
+            }
             CreateIndexCompiler compiler = new CreateIndexCompiler(stmt);
             return compiler.compile(this);
         }
@@ -715,10 +807,58 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         }
     }
 
+    private static class ExecutableAlterSessionStatement extends AlterSessionStatement implements CompilableStatement {
+
+        public ExecutableAlterSessionStatement(Map<String,Object> props) {
+            super(props);
+        }
+
+        @SuppressWarnings("unchecked")
+        @Override
+        public MutationPlan compilePlan(final PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
+            final StatementContext context = new StatementContext(stmt);
+            return new MutationPlan() {
+
+                @Override
+                public StatementContext getContext() {
+                    return context;
+                }
+
+                @Override
+                public ParameterMetaData getParameterMetaData() {
+                    return PhoenixParameterMetaData.EMPTY_PARAMETER_META_DATA;
+                }
+
+                @Override
+                public ExplainPlan getExplainPlan() throws SQLException {
+                    return new ExplainPlan(Collections.singletonList("ALTER SESSION"));
+                }
+
+                @Override
+                public PhoenixConnection getConnection() {
+                    return stmt.getConnection();
+                }
+
+                @Override
+                public MutationState execute() throws SQLException {
+                    Object consistency = getProps().get(PhoenixRuntime.CONSISTENCY_ATTRIB.toUpperCase());
+                    if(consistency != null) {
+                        if (((String)consistency).equalsIgnoreCase(Consistency.TIMELINE.toString())){
+                            getConnection().setConsistency(Consistency.TIMELINE);
+                        } else {
+                            getConnection().setConsistency(Consistency.STRONG);
+                        }
+                    }
+                    return new MutationState(0, context.getConnection());
+                }
+            };
+        }
+    }
+
     private static class ExecutableUpdateStatisticsStatement extends UpdateStatisticsStatement implements
             CompilableStatement {
-        public ExecutableUpdateStatisticsStatement(NamedTableNode table, StatisticsCollectionScope scope) {
-            super(table, scope);
+        public ExecutableUpdateStatisticsStatement(NamedTableNode table, StatisticsCollectionScope scope, Map<String,Object> props) {
+            super(table, scope, props);
         }
 
         @SuppressWarnings("unchecked")
@@ -841,21 +981,21 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
 
     protected static class ExecutableNodeFactory extends ParseNodeFactory {
         @Override
-        public ExecutableSelectStatement select(TableNode from, HintNode hint, boolean isDistinct, List<AliasedNode> select,
-                                                ParseNode where, List<ParseNode> groupBy, ParseNode having,
-                                                List<OrderByNode> orderBy, LimitNode limit, int bindCount, boolean isAggregate, boolean hasSequence) {
+        public ExecutableSelectStatement select(TableNode from, HintNode hint, boolean isDistinct, List<AliasedNode> select, ParseNode where,
+                List<ParseNode> groupBy, ParseNode having, List<OrderByNode> orderBy, LimitNode limit, int bindCount, boolean isAggregate,
+                boolean hasSequence, List<SelectStatement> selects, Map<String, UDFParseNode> udfParseNodes) {
             return new ExecutableSelectStatement(from, hint, isDistinct, select, where, groupBy == null ? Collections.<ParseNode>emptyList() : groupBy,
-                    having, orderBy == null ? Collections.<OrderByNode>emptyList() : orderBy, limit, bindCount, isAggregate, hasSequence);
+                    having, orderBy == null ? Collections.<OrderByNode>emptyList() : orderBy, limit, bindCount, isAggregate, hasSequence, selects == null ? Collections.<SelectStatement>emptyList() : selects, udfParseNodes);
+        }
+
+        @Override
+        public ExecutableUpsertStatement upsert(NamedTableNode table, HintNode hintNode, List<ColumnName> columns, List<ParseNode> values, SelectStatement select, int bindCount, Map<String, UDFParseNode> udfParseNodes) {
+            return new ExecutableUpsertStatement(table, hintNode, columns, values, select, bindCount, udfParseNodes);
         }
         
         @Override
-        public ExecutableUpsertStatement upsert(NamedTableNode table, HintNode hintNode, List<ColumnName> columns, List<ParseNode> values, SelectStatement select, int bindCount) {
-            return new ExecutableUpsertStatement(table, hintNode, columns, values, select, bindCount);
-        }
-        
-        @Override
-        public ExecutableDeleteStatement delete(NamedTableNode table, HintNode hint, ParseNode whereNode, List<OrderByNode> orderBy, LimitNode limit, int bindCount) {
-            return new ExecutableDeleteStatement(table, hint, whereNode, orderBy, limit, bindCount);
+        public ExecutableDeleteStatement delete(NamedTableNode table, HintNode hint, ParseNode whereNode, List<OrderByNode> orderBy, LimitNode limit, int bindCount, Map<String, UDFParseNode> udfParseNodes) {
+            return new ExecutableDeleteStatement(table, hint, whereNode, orderBy, limit, bindCount, udfParseNodes);
         }
         
         @Override
@@ -873,14 +1013,18 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         }
         
         @Override
+        public CreateFunctionStatement createFunction(PFunction functionInfo, boolean temporary) {
+            return new ExecutableCreateFunctionStatement(functionInfo, temporary);
+        }
+        @Override
         public DropSequenceStatement dropSequence(TableName tableName, boolean ifExists, int bindCount){
             return new ExecutableDropSequenceStatement(tableName, ifExists, bindCount);
         }
         
         @Override
         public CreateIndexStatement createIndex(NamedNode indexName, NamedTableNode dataTable, IndexKeyConstraint ikConstraint, List<ColumnName> includeColumns, List<ParseNode> splits,
-                ListMultimap<String,Pair<String,Object>> props, boolean ifNotExists, IndexType indexType, boolean async, int bindCount) {
-            return new ExecutableCreateIndexStatement(indexName, dataTable, ikConstraint, includeColumns, splits, props, ifNotExists, indexType, async, bindCount);
+                ListMultimap<String,Pair<String,Object>> props, boolean ifNotExists, IndexType indexType, boolean async, int bindCount, Map<String, UDFParseNode> udfParseNodes) {
+            return new ExecutableCreateIndexStatement(indexName, dataTable, ikConstraint, includeColumns, splits, props, ifNotExists, indexType, async, bindCount, udfParseNodes);
         }
         
         @Override
@@ -896,6 +1040,11 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         @Override
         public DropTableStatement dropTable(TableName tableName, PTableType tableType, boolean ifExists, boolean cascade) {
             return new ExecutableDropTableStatement(tableName, tableType, ifExists, cascade);
+        }
+
+        @Override
+        public DropFunctionStatement dropFunction(String functionName, boolean ifExists) {
+            return new ExecutableDropFunctionStatement(functionName, ifExists);
         }
         
         @Override
@@ -914,13 +1063,18 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         }
 
         @Override
+        public AlterSessionStatement alterSession(Map<String, Object> props) {
+            return new ExecutableAlterSessionStatement(props);
+        }
+
+        @Override
         public ExplainStatement explain(BindableStatement statement) {
             return new ExecutableExplainStatement(statement);
         }
 
         @Override
-        public UpdateStatisticsStatement updateStatistics(NamedTableNode table, StatisticsCollectionScope scope) {
-            return new ExecutableUpdateStatisticsStatement(table, scope);
+        public UpdateStatisticsStatement updateStatistics(NamedTableNode table, StatisticsCollectionScope scope, Map<String,Object> props) {
+            return new ExecutableUpdateStatisticsStatement(table, scope, props);
         }
     }
     
@@ -1340,4 +1494,16 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
     private void setLastQueryPlan(QueryPlan lastQueryPlan) {
         this.lastQueryPlan = lastQueryPlan;
     }
+    
+    private void throwIfUnallowedUserDefinedFunctions() throws SQLException {
+        if (!connection
+                .getQueryServices()
+                .getProps()
+                .getBoolean(QueryServices.ALLOW_USER_DEFINED_FUNCTIONS_ATTRIB,
+                    QueryServicesOptions.DEFAULT_ALLOW_USER_DEFINED_FUNCTIONS)) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.UNALLOWED_USER_DEFINED_FUNCTIONS)
+                    .build().buildException();
+        }
+    }
+
 }

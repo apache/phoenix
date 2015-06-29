@@ -50,6 +50,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixParameterMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.FilterableStatement;
+import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.ColumnRef;
@@ -313,6 +314,11 @@ public class ParallelIteratorsSplitTest extends BaseConnectionlessQueryTest {
             final ScanRanges scanRanges) throws SQLException {
         final List<TableRef> tableRefs = Collections.singletonList(tableRef);
         ColumnResolver resolver = new ColumnResolver() {
+            
+            @Override
+            public List<PFunction> getFunctions() {
+                return Collections.emptyList();
+            }
 
             @Override
             public List<TableRef> getTables() {
@@ -329,7 +335,16 @@ public class ParallelIteratorsSplitTest extends BaseConnectionlessQueryTest {
             public ColumnRef resolveColumn(String schemaName, String tableName, String colName) throws SQLException {
                 throw new UnsupportedOperationException();
             }
+
+            @Override
+            public PFunction resolveFunction(String functionName) throws SQLException {
+                throw new UnsupportedOperationException();
+            }
             
+            @Override
+            public boolean hasUDFs() {
+                return false;
+            }
         };
         PhoenixConnection connection = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
         final PhoenixStatement statement = new PhoenixStatement(connection);
@@ -410,6 +425,11 @@ public class ParallelIteratorsSplitTest extends BaseConnectionlessQueryTest {
             @Override
             public List<List<Scan>> getScans() {
                 return null;
+            }
+
+            @Override
+            public boolean useRoundRobinIterator() {
+                return false;
             }
             
         }, null, new SpoolingResultIterator.SpoolingResultIteratorFactory(context.getConnection().getQueryServices()));

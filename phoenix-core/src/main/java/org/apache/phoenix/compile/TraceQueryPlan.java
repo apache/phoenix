@@ -226,4 +226,9 @@ public class TraceQueryPlan implements QueryPlan {
     public boolean isRowKeyOrdered() {
         return false;
     }
+    
+    @Override
+    public boolean useRoundRobinIterator() {
+        return false;
+    }
 }

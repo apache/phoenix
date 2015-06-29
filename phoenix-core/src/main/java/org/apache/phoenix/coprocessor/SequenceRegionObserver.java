@@ -38,8 +38,8 @@ import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.TimeRange;
-import org.apache.hadoop.hbase.regionserver.HRegion;
-import org.apache.hadoop.hbase.regionserver.HRegion.RowLock;
+import org.apache.hadoop.hbase.regionserver.Region;
+import org.apache.hadoop.hbase.regionserver.Region.RowLock;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -88,9 +88,9 @@ public class SequenceRegionObserver extends BaseRegionObserver {
                         QueryConstants.EMPTY_COLUMN_BYTES, timestamp, errorCodeBuf)));
     }
     
-    private static void acquireLock(HRegion region, byte[] key, List<RowLock> locks)
+    private static void acquireLock(Region region, byte[] key, List<RowLock> locks)
         throws IOException {
-        RowLock rowLock = region.getRowLock(key);
+        RowLock rowLock = region.getRowLock(key, true);
         if (rowLock == null) {
             throw new IOException("Failed to acquire lock on " + Bytes.toStringBinary(key));
         }
@@ -114,7 +114,7 @@ public class SequenceRegionObserver extends BaseRegionObserver {
         // We need to set this to prevent region.increment from being called
         e.bypass();
         e.complete();
-        HRegion region = env.getRegion();
+        Region region = env.getRegion();
         byte[] row = increment.getRow();
         List<RowLock> locks = Lists.newArrayList();
         TimeRange tr = increment.getTimeRange();
@@ -251,7 +251,7 @@ public class SequenceRegionObserver extends BaseRegionObserver {
                 }
                 // update the KeyValues on the server
                 Mutation[] mutations = new Mutation[]{put};
-                region.batchMutate(mutations);
+                region.batchMutate(mutations, HConstants.NO_NONCE, HConstants.NO_NONCE);
                 // return a Result with the updated KeyValues
                 return Result.create(cells);
             } finally {
@@ -345,7 +345,7 @@ public class SequenceRegionObserver extends BaseRegionObserver {
         // We need to set this to prevent region.append from being called
         e.bypass();
         e.complete();
-        HRegion region = env.getRegion();
+        Region region = env.getRegion();
         byte[] row = append.getRow();
         List<RowLock> locks = Lists.newArrayList();
         region.startRegionOperation();
@@ -400,7 +400,7 @@ public class SequenceRegionObserver extends BaseRegionObserver {
                     }
                 }
                 Mutation[] mutations = new Mutation[]{m};
-                region.batchMutate(mutations);
+                region.batchMutate(mutations, HConstants.NO_NONCE, HConstants.NO_NONCE);
                 long serverTimestamp = MetaDataUtil.getClientTimeStamp(m);
                 // Return result with single KeyValue. The only piece of information
                 // the client cares about is the timestamp, which is the timestamp of

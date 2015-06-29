@@ -105,6 +105,11 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
     public static final int SCHEMA_NAME_INDEX = 1;
     public static final int TENANT_ID_INDEX = 0;
 
+
+    public static final int TYPE_INDEX = 2;
+    public static final int FUNTION_NAME_INDEX = 1;
+    
+
     public static final String SYSTEM_CATALOG_SCHEMA = QueryConstants.SYSTEM_SCHEMA_NAME;
     public static final byte[] SYSTEM_CATALOG_SCHEMA_BYTES = QueryConstants.SYSTEM_SCHEMA_NAME_BYTES;
     public static final String SYSTEM_CATALOG_TABLE = "CATALOG";
@@ -203,11 +208,38 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
     public static final byte[] IS_VIEW_REFERENCED_BYTES = Bytes.toBytes(IS_VIEW_REFERENCED);
     public static final String VIEW_INDEX_ID = "VIEW_INDEX_ID";
     public static final byte[] VIEW_INDEX_ID_BYTES = Bytes.toBytes(VIEW_INDEX_ID);
+    public static final String BASE_COLUMN_COUNT = "BASE_COLUMN_COUNT";
+    public static final byte[] BASE_COLUMN_COUNT_BYTES = Bytes.toBytes(BASE_COLUMN_COUNT);
 
     public static final String TABLE_FAMILY = QueryConstants.DEFAULT_COLUMN_FAMILY;
     public static final byte[] TABLE_FAMILY_BYTES = QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
 
     public static final String TYPE_SEQUENCE = "SEQUENCE";
+    public static final String SYSTEM_FUNCTION_TABLE = "FUNCTION";
+    public static final String SYSTEM_FUNCTION_NAME = SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA, SYSTEM_FUNCTION_TABLE);
+    public static final byte[] SYSTEM_FUNCTION_NAME_BYTES = Bytes.toBytes(SYSTEM_FUNCTION_NAME);
+
+    public static final String FUNCTION_NAME = "FUNCTION_NAME";
+    public static final byte[] FUNCTION_NAME_BYTES = Bytes.toBytes(FUNCTION_NAME);
+    public static final String CLASS_NAME = "CLASS_NAME";
+    public static final byte[] CLASS_NAME_BYTES = Bytes.toBytes(CLASS_NAME);
+    public static final String JAR_PATH = "JAR_PATH";
+    public static final byte[] JAR_PATH_BYTES = Bytes.toBytes(JAR_PATH);
+    public static final String TYPE = "TYPE";
+    public static final byte[] TYPE_BYTES = Bytes.toBytes(TYPE);
+    public static final String ARG_POSITION = "ARG_POSITION";
+    public static final byte[] ARG_POSITION_TYPE = Bytes.toBytes(ARG_POSITION);
+    public static final String RETURN_TYPE = "RETURN_TYPE";
+    public static final byte[] RETURN_TYPE_BYTES = Bytes.toBytes(RETURN_TYPE);
+    public static final String IS_ARRAY = "IS_ARRAY";
+    public static final byte[] IS_ARRAY_BYTES = Bytes.toBytes(IS_ARRAY);
+    public static final String IS_CONSTANT = "IS_CONSTANT";
+    public static final byte[] IS_CONSTANT_BYTES = Bytes.toBytes(IS_CONSTANT);
+    public static final String DEFAULT_VALUE = "DEFAULT_VALUE";
+    public static final byte[] DEFAULT_VALUE_BYTES = Bytes.toBytes(DEFAULT_VALUE);
+    public static final String NUM_ARGS = "NUM_ARGS";
+    public static final byte[] NUM_ARGS_BYTES = Bytes.toBytes(NUM_ARGS);
+    
     public static final byte[] SEQUENCE_FAMILY_BYTES = QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
     public static final String SEQUENCE_SCHEMA_NAME = SYSTEM_CATALOG_SCHEMA;
     public static final byte[] SEQUENCE_SCHEMA_NAME_BYTES = Bytes.toBytes(SEQUENCE_SCHEMA_NAME);
@@ -277,7 +309,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
     public static final int MUTABLE_SI_VERSION_THRESHOLD = VersionUtil.encodeVersion("0", "94", "10");
     /** Version below which we fall back on the generic KeyValueBuilder */
     public static final int CLIENT_KEY_VALUE_BUILDER_THRESHOLD = VersionUtil.encodeVersion("0", "94", "14");
-
+    
     PhoenixDatabaseMetaData(PhoenixConnection connection) throws SQLException {
         this.emptyResultSet = new PhoenixResultSet(ResultIterator.EMPTY_ITERATOR, RowProjector.EMPTY_PROJECTOR, new PhoenixStatement(connection));
         this.connection = connection;

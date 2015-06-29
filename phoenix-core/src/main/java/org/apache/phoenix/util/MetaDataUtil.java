@@ -49,16 +49,16 @@ import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.types.PBoolean;
-import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.PName;
-import org.apache.phoenix.schema.types.PSmallint;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.schema.types.PBoolean;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.schema.types.PSmallint;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -79,21 +79,22 @@ public class MetaDataUtil {
     public static final String PARENT_TABLE_KEY = "PARENT_TABLE";
     public static final byte[] PARENT_TABLE_KEY_BYTES = Bytes.toBytes("PARENT_TABLE");
     
-    public static boolean areClientAndServerCompatible(long version) {
+    public static boolean areClientAndServerCompatible(long serverHBaseAndPhoenixVersion) {
         // As of 3.0, we allow a client and server to differ for the minor version.
         // Care has to be taken to upgrade the server before the client, as otherwise
         // the client may call expressions that don't yet exist on the server.
         // Differing by the patch version has always been allowed.
         // Only differing by the major version is not allowed.
-        return areClientAndServerCompatible(MetaDataUtil.decodePhoenixVersion(version), MetaDataProtocol.PHOENIX_MAJOR_VERSION);
+        return areClientAndServerCompatible(MetaDataUtil.decodePhoenixVersion(serverHBaseAndPhoenixVersion), MetaDataProtocol.PHOENIX_MAJOR_VERSION, MetaDataProtocol.PHOENIX_MINOR_VERSION);
     }
 
     // Default scope for testing
-    static boolean areClientAndServerCompatible(int version, int pMajor) {
+    static boolean areClientAndServerCompatible(int serverVersion, int clientMajorVersion, int clientMinorVersion) {
         // A server and client with the same major and minor version number must be compatible.
         // So it's important that we roll the PHOENIX_MAJOR_VERSION or PHOENIX_MINOR_VERSION
         // when we make an incompatible change.
-        return VersionUtil.encodeMaxMinorVersion(pMajor) >= version && VersionUtil.encodeMinMinorVersion(pMajor) <= version;
+        return VersionUtil.encodeMinPatchVersion(clientMajorVersion, clientMinorVersion) <= serverVersion && // Minor major and minor cannot be ahead of server
+                VersionUtil.encodeMaxMinorVersion(clientMajorVersion) >= serverVersion; // Major version must at least be up to server version
     }
 
     // Given the encoded integer representing the phoenix version in the encoded version value.
@@ -129,6 +130,11 @@ public class MetaDataUtil {
         return major + "." + minor + "." + patch;
     }
 
+    public static int encodePhoenixVersion() {
+        return VersionUtil.encodeVersion(MetaDataProtocol.PHOENIX_MAJOR_VERSION, MetaDataProtocol.PHOENIX_MINOR_VERSION,
+                MetaDataProtocol.PHOENIX_PATCH_NUMBER);
+    }
+
     public static long encodeHBaseAndPhoenixVersions(String hbaseVersion) {
         return (((long) VersionUtil.encodeVersion(hbaseVersion)) << (Byte.SIZE * 5)) |
                 (((long) VersionUtil.encodeVersion(MetaDataProtocol.PHOENIX_MAJOR_VERSION, MetaDataProtocol.PHOENIX_MINOR_VERSION,
@@ -139,7 +145,12 @@ public class MetaDataUtil {
         Mutation m = getTableHeaderRow(tableMetadata);
         getVarChars(m.getRow(), 3, rowKeyMetaData);
     }
-    
+
+    public static void getTenantIdAndFunctionName(List<Mutation> functionMetadata, byte[][] rowKeyMetaData) {
+        Mutation m = getTableHeaderRow(functionMetadata);
+        getVarChars(m.getRow(), 2, rowKeyMetaData);
+    }
+
     public static byte[] getParentTableName(List<Mutation> tableMetadata) {
         if (tableMetadata.size() == 1) {
             return null;

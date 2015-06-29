@@ -57,7 +57,7 @@ public class FilteredKeyValueScanner implements KeyValueScanner {
     /**
      * Same a {@link KeyValueScanner#next()} except that we filter out the next {@link KeyValue} until we find one that
      * passes the filter.
-     * 
+     *
      * @return the next {@link KeyValue} or <tt>null</tt> if no next {@link KeyValue} is present and passes all the
      *         filters.
      */
@@ -162,7 +162,7 @@ public class FilteredKeyValueScanner implements KeyValueScanner {
     // Added for compatibility with HBASE-13109
     // Once we drop support for older versions, add an @override annotation here
     // and figure out how to get the next indexed key
-    public byte[] getNextIndexedKey() {
+    public Cell getNextIndexedKey() {
         return null; // indicate that we cannot use the optimization
     }
 }

@@ -22,6 +22,8 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Strings.isNullOrEmpty;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_FUNCTION_NAME_BYTES;
+
 
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -201,6 +203,15 @@ public class SchemaUtil {
         return ByteUtil.concat(tenantId, QueryConstants.SEPARATOR_BYTE_ARRAY, schemaName, QueryConstants.SEPARATOR_BYTE_ARRAY, tableName);
     }
 
+    /**
+     * Get the key used in the Phoenix function data row for a function definition
+     * @param tenantId
+     * @param functionName
+     */
+    public static byte[] getFunctionKey(byte[] tenantId, byte[] functionName) {
+        return ByteUtil.concat(tenantId, QueryConstants.SEPARATOR_BYTE_ARRAY, functionName);
+    }
+
     public static byte[] getTableKey(String tenantId, String schemaName, String tableName) {
         return ByteUtil.concat(tenantId == null  ? ByteUtil.EMPTY_BYTE_ARRAY : Bytes.toBytes(tenantId), QueryConstants.SEPARATOR_BYTE_ARRAY, schemaName == null ? ByteUtil.EMPTY_BYTE_ARRAY : Bytes.toBytes(schemaName), QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes(tableName));
     }
@@ -373,7 +384,11 @@ public class SchemaUtil {
     public static boolean isMetaTable(byte[] tableName) {
         return Bytes.compareTo(tableName, SYSTEM_CATALOG_NAME_BYTES) == 0;
     }
-    
+
+    public static boolean isFunctionTable(byte[] tableName) {
+        return Bytes.compareTo(tableName, SYSTEM_FUNCTION_NAME_BYTES) == 0;
+    }
+
     public static boolean isStatsTable(byte[] tableName) {
         return Bytes.compareTo(tableName, SYSTEM_STATS_NAME_BYTES) == 0;
     }
@@ -403,7 +418,7 @@ public class SchemaUtil {
         if (QueryConstants.SYSTEM_SCHEMA_NAME.equals(schemaName)) return true;
         return false;
     }
-
+    
     // Given the splits and the rowKeySchema, find out the keys that 
     public static byte[][] processSplits(byte[][] splits, LinkedHashSet<PColumn> pkColumns, Integer saltBucketNum, boolean defaultRowKeyOrder) throws SQLException {
         // FIXME: shouldn't this return if splits.length == 0?

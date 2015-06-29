@@ -73,8 +73,9 @@ public class RowKeyComparisonFilter extends BooleanExpressionFilter {
         if (evaluate) {
             inputTuple.setKey(v.getRowArray(), v.getRowOffset(), v.getRowLength());
             this.keepRow = Boolean.TRUE.equals(evaluate(inputTuple));
-            if (logger.isDebugEnabled()) {
-                logger.debug("RowKeyComparisonFilter: " + (this.keepRow ? "KEEP" : "FILTER")  + " row " + inputTuple);
+            if (logger.isTraceEnabled()) {
+                logger.trace("RowKeyComparisonFilter: " + (this.keepRow ? "KEEP" : "FILTER")
+                        + " row " + inputTuple);
             }
             evaluate = false;
         }

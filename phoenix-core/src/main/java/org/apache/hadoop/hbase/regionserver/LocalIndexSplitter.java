@@ -52,8 +52,8 @@ public class LocalIndexSplitter extends BaseRegionObserver {
 
     private static final Log LOG = LogFactory.getLog(LocalIndexSplitter.class);
 
-    private SplitTransaction st = null;
-    private PairOfSameType<HRegion> daughterRegions = null;
+    private SplitTransactionImpl st = null; // FIXME: Uses private type
+    private PairOfSameType<Region> daughterRegions = null;
     private static final ParseNodeFactory FACTORY = new ParseNodeFactory();
     private static final int SPLIT_TXN_MINIMUM_SUPPORTED_VERSION = VersionUtil
             .encodeVersion("0.98.9");
@@ -74,17 +74,18 @@ public class LocalIndexSplitter extends BaseRegionObserver {
                     TableName.valueOf(MetaDataUtil.getLocalIndexPhysicalName(tableDesc.getName()));
             if (!MetaTableAccessor.tableExists(rss.getConnection(), indexTable)) return;
 
-            HRegion indexRegion = IndexUtil.getIndexRegion(environment);
+            Region indexRegion = IndexUtil.getIndexRegion(environment);
             if (indexRegion == null) {
                 LOG.warn("Index region corresponindg to data region " + environment.getRegion()
                         + " not in the same server. So skipping the split.");
                 ctx.bypass();
                 return;
             }
+            // FIXME: Uses private type
             try {
                 int encodedVersion = VersionUtil.encodeVersion(environment.getHBaseVersion());
                 if(encodedVersion >= SPLIT_TXN_MINIMUM_SUPPORTED_VERSION) {
-                    st = new SplitTransaction(indexRegion, splitKey);
+                    st = new SplitTransactionImpl(indexRegion, splitKey);
                     st.useZKForAssignment =
                             environment.getConfiguration().getBoolean("hbase.assignment.usezk",
                                 true);
@@ -98,7 +99,7 @@ public class LocalIndexSplitter extends BaseRegionObserver {
                     ctx.bypass();
                     return;
                 }
-                indexRegion.forceSplit(splitKey);
+                ((HRegion)indexRegion).forceSplit(splitKey);
                 daughterRegions = st.stepsBeforePONR(rss, rss, false);
                 HRegionInfo copyOfParent = new HRegionInfo(indexRegion.getRegionInfo());
                 copyOfParent.setOffline(true);

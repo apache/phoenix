@@ -52,6 +52,24 @@ public class XMLConfigParser {
         return dataModels;
     }
 
+    public DataModel getDataModelByName(String name) {
+        for (DataModel dataModel : getDataModels()) {
+            if (dataModel.getName().equals(name)) {
+                return dataModel;
+            }
+        }
+        return null;
+    }
+
+    public Scenario getScenarioByName(String name) throws Exception {
+        for (Scenario scenario : getScenarios()) {
+            if (scenario.getName().equals(name)) {
+                return scenario;
+            }
+        }
+        return null;
+    }
+
     public synchronized Collection<Path> getPaths(String strPattern) throws Exception {
         if (paths != null) {
             return paths;
@@ -65,7 +83,7 @@ public class XMLConfigParser {
             return scenarios;
         }
 
-        scenarios = (List<Scenario>) Collections.synchronizedCollection(new ArrayList<Scenario>());
+        scenarios = Collections.synchronizedList(new ArrayList<Scenario>());
         for (Path path : getPaths(getFilePattern())) {
             try {
                 List<Scenario> scenarioList = XMLConfigParser.readDataModel(path).getScenarios();
@@ -87,7 +105,8 @@ public class XMLConfigParser {
      * Unmarshall an XML data file
      *
      * @param file Name of File
-     * @return
+     * @return {@link org.apache.phoenix.pherf.configuration.DataModel} Returns DataModel from
+     * XML configuration
      * @throws JAXBException
      */
     // TODO Remove static calls
@@ -119,6 +138,7 @@ public class XMLConfigParser {
     }
 
     // TODO Remove static calls
+    @SuppressWarnings("unused")
     public static void writeDataModel(DataModel data, OutputStream output) throws JAXBException {
         // create JAXB context and initializing Marshaller
         JAXBContext jaxbContext = JAXBContext.newInstance(DataModel.class);
@@ -150,8 +170,6 @@ public class XMLConfigParser {
     }
 
     private Collection<Path> getResources(String pattern) throws Exception {
-        Collection<Path> resourceFiles = new ArrayList<Path>();
-        resourceFiles = resourceList.getResourceList(pattern);
-        return resourceFiles;
+        return resourceList.getResourceList(pattern);
     }
 }

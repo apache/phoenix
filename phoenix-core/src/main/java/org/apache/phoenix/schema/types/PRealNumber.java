@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.schema.types;
 
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.SortOrder;
 
@@ -35,5 +36,12 @@ public abstract class PRealNumber<T> extends PNumericType<T> {
             throw new IllegalDataException();
         }
         return (d > 0) ? 1 : ((d < 0) ? -1 : 0);
+    }
+
+    @Override
+    public void abs(byte[] bytes, int offset, int length, SortOrder sortOrder,
+            ImmutableBytesWritable outPtr) {
+        double d = getCodec().decodeDouble(bytes, offset, sortOrder);
+        getCodec().encodeDouble(Math.abs(d), outPtr);
     }
 }

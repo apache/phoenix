@@ -542,6 +542,10 @@ public class WhereOptimizer {
                 int span = position - initialPosition;
                 return new SingleKeySlot(new RowValueConstructorKeyPart(table.getPKColumns().get(initialPosition), rvc, span, childSlots), initialPosition, span, EVERYTHING_RANGES);
             }
+            // If we don't clear the child list, we end up passing some of
+            // the child expressions of previous matches up the tree, causing
+            // those expressions to form the scan start/stop key. PHOENIX-1753
+            childSlots.clear();
             return null;
         }
 
@@ -643,23 +647,30 @@ public class WhereOptimizer {
                 if (childSlot == EMPTY_KEY_SLOTS) {
                     return EMPTY_KEY_SLOTS;
                 }
-                // FIXME: get rid of this min/max range BS now that a key range can span multiple columns
+                // FIXME: get rid of this special-cased min/max range now that a key range can span multiple columns
                 if (childSlot.getMinMaxRange() != null) { // Only set if in initial pk position
-                    // TODO: potentially use KeySlot.intersect here. However, we can't intersect the key ranges in the slot
-                    // with our minMaxRange, since it spans columns and this would mess up our skip scan.
+                    // TODO: fix intersectSlots so that it works with RVCs. We'd just need to fill in the leading parts
+                    // of the key with the minMaxRange and then intersect the key parts that overlap.
                     minMaxRange = minMaxRange.intersect(childSlot.getMinMaxRange());
                     for (KeySlot slot : childSlot) {
                         if (slot != null) {
-                    	    minMaxExtractNodes.addAll(slot.getKeyPart().getExtractNodes());
+                            // We can only definitely extract the expression nodes that start from the
+                            // leading PK column. They may get extracted at the end if we end up having
+                            // expressions matching the leading PK columns, but otherwise we'll be forced
+                            // to execute the expression in a filter.
+                            if (slot.getPKPosition() == initPosition) {
+                                minMaxExtractNodes.addAll(slot.getKeyPart().getExtractNodes());
+                            } else {
+                                if (!intersectSlots(keySlot, slot)) {
+                                    return EMPTY_KEY_SLOTS;
+                                }
+                            }
                         }
                     }
                 } else {
                     for (KeySlot slot : childSlot) {
-                        // We have a nested AND with nothing for this slot, so continue
-                        if (slot == null) {
-                            continue;
-                        }
-                        if (!intersectSlots(keySlot, slot)) {
+                        // The slot will be null if we have no condition for this slot
+                        if (slot != null && !intersectSlots(keySlot, slot)) {
                             return EMPTY_KEY_SLOTS;
                         }
                     }
@@ -1206,7 +1217,7 @@ public class WhereOptimizer {
                     Integer length = getColumn().getMaxLength();
                     if (length != null) {
                         // Go through type to pad as the fill character depends on the type.
-                        type.pad(ptr, length);
+                        type.pad(ptr, length, getColumn().getSortOrder());
                     }
                 }
                 byte[] key = ByteUtil.copyKeyBytesIfNecessary(ptr);

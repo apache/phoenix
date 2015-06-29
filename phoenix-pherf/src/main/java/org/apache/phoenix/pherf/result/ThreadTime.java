@@ -18,12 +18,11 @@
 
 package org.apache.phoenix.pherf.result;
 
+import javax.xml.bind.annotation.XmlAttribute;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
-
-import javax.xml.bind.annotation.XmlAttribute;
 
 public class ThreadTime {
     private List<RunTime> runTimesInMs = Collections.synchronizedList(new ArrayList<RunTime>());
@@ -33,6 +32,7 @@ public class ThreadTime {
         return this.runTimesInMs;
     }
 
+    @SuppressWarnings("unused")
     public synchronized void setRunTimesInMs(List<RunTime> runTimesInMs) {
         this.runTimesInMs = runTimesInMs;
     }
@@ -83,23 +83,22 @@ public class ThreadTime {
         return Collections.max(getRunTimesInMs());
     }
 
-    @XmlAttribute()
-    public String getThreadName() {
+    @XmlAttribute() public String getThreadName() {
         return threadName;
     }
 
     public void setThreadName(String threadName) {
         this.threadName = threadName;
     }
-    
+
     private String parseThreadName(boolean getConcurrency) {
-    	if (getThreadName() == null || !getThreadName().contains(",")) return null;
-    	String[] threadNameSet = getThreadName().split(",");
-    	if (getConcurrency) {
-    		return threadNameSet[1];}
-    	else {
-    		return threadNameSet[0];
-    	}
+        if (getThreadName() == null || !getThreadName().contains(",")) return null;
+        String[] threadNameSet = getThreadName().split(",");
+        if (getConcurrency) {
+            return threadNameSet[1];
+        } else {
+            return threadNameSet[0];
+        }
     }
 
     public List<List<ResultValue>> getCsvPerformanceRepresentation(ResultUtil util) {
@@ -109,11 +108,14 @@ public class ThreadTime {
             List<ResultValue> rowValues = new ArrayList(getRunTimesInMs().size());
             rowValues.add(new ResultValue(util.convertNull(parseThreadName(false))));
             rowValues.add(new ResultValue(util.convertNull(parseThreadName(true))));
-            rowValues.add(new ResultValue(String.valueOf(getRunTimesInMs().get(i).getResultRowCount())));
+            rowValues.add(new ResultValue(
+                    String.valueOf(getRunTimesInMs().get(i).getResultRowCount())));
             if (getRunTimesInMs().get(i).getMessage() == null) {
-                rowValues.add(new ResultValue(util.convertNull(String.valueOf(getRunTimesInMs().get(i).getElapsedDurationInMs()))));
+                rowValues.add(new ResultValue(util.convertNull(
+                        String.valueOf(getRunTimesInMs().get(i).getElapsedDurationInMs()))));
             } else {
-                rowValues.add(new ResultValue(util.convertNull(getRunTimesInMs().get(i).getMessage())));
+                rowValues.add(new ResultValue(
+                        util.convertNull(getRunTimesInMs().get(i).getMessage())));
             }
             rows.add(rowValues);
         }
@@ -128,7 +130,8 @@ public class ThreadTime {
             rowValues.add(new ResultValue(util.convertNull(parseThreadName(false))));
             rowValues.add(new ResultValue(util.convertNull(parseThreadName(true))));
             rowValues.add(new ResultValue(util.convertNull(getRunTimesInMs().get(i).getMessage())));
-            rowValues.add(new ResultValue(util.convertNull(getRunTimesInMs().get(i).getExplainPlan())));
+            rowValues.add(new ResultValue(
+                    util.convertNull(getRunTimesInMs().get(i).getExplainPlan())));
             rows.add(rowValues);
         }
         return rows;

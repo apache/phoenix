@@ -41,4 +41,12 @@ public abstract class PNumericType<T> extends PDataType<T> {
 
     abstract public int signum(byte[] bytes, int offset, int length, SortOrder sortOrder,
             Integer maxLength, Integer scale);
+
+    abstract public void abs(byte[] bytes, int offset, int length, SortOrder sortOrder,
+            ImmutableBytesWritable outPtr);
+
+    public final void abs(ImmutableBytesWritable ptr, SortOrder sortOrder,
+            ImmutableBytesWritable outPtr) {
+        abs(ptr.get(), ptr.getOffset(), ptr.getLength(), sortOrder, outPtr);
+    }
 }

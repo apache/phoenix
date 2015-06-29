@@ -26,21 +26,11 @@ import java.util.List;
 
 @XmlRootElement(name = "datamodel")
 public class DataModel {
-    private String release;
     private String name;
     private List<Scenario> scenarios;
     private List<Column> dataMappingColumns;
 
     public DataModel() {
-    }
-
-    public String getRelease() {
-        return this.release;
-    }
-
-    @XmlAttribute()
-    public void setRelease(String release) {
-        this.release = release;
     }
 
     public List<Scenario> getScenarios() {
@@ -71,5 +61,14 @@ public class DataModel {
 	public void setName(String name) {
 		this.name = name;
 	}
-}
 
+    @Override
+    public String toString() {
+        StringBuilder stringBuilder = new StringBuilder();
+        for (Scenario scenario : getScenarios()) {
+            stringBuilder.append("Scenario: " + scenario.getName());
+            stringBuilder.append("[" + scenario + "]");
+        }
+        return stringBuilder.toString();
+    }
+}

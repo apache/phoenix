@@ -29,9 +29,14 @@ import java.util.List;
  */
 public interface ResultHandler {
     public void write(Result result) throws Exception;
+
     public void flush() throws Exception;
+
     public void close() throws Exception;
+
     public List<Result> read() throws Exception;
+
     public boolean isClosed();
+
     public ResultFileDetails getResultFileDetails();
 }
