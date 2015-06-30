@@ -448,7 +448,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         conn.commit();
 
         assertIndexExists(conn,true);
-        conn.createStatement().execute("ALTER TABLE " + DATA_TABLE_FULL_NAME + " ADD v3 VARCHAR, k2 DECIMAL PRIMARY KEY");
+        conn.createStatement().execute("ALTER TABLE " + DATA_TABLE_FULL_NAME + " ADD v3 VARCHAR, k2 DECIMAL PRIMARY KEY, k3 DECIMAL PRIMARY KEY");
         rs = conn.getMetaData().getPrimaryKeys("", SCHEMA_NAME, DATA_TABLE_NAME);
         assertTrue(rs.next());
         assertEquals("K",rs.getString("COLUMN_NAME"));
@@ -456,6 +456,10 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         assertTrue(rs.next());
         assertEquals("K2",rs.getString("COLUMN_NAME"));
         assertEquals(2, rs.getShort("KEY_SEQ"));
+        assertTrue(rs.next());
+        assertEquals("K3",rs.getString("COLUMN_NAME"));
+        assertEquals(3, rs.getShort("KEY_SEQ"));
+        assertFalse(rs.next());
 
         rs = conn.getMetaData().getPrimaryKeys("", SCHEMA_NAME, INDEX_TABLE_NAME);
         assertTrue(rs.next());
@@ -467,6 +471,10 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         assertTrue(rs.next());
         assertEquals(IndexUtil.INDEX_COLUMN_NAME_SEP + "K2",rs.getString("COLUMN_NAME"));
         assertEquals(3, rs.getShort("KEY_SEQ"));
+        assertTrue(rs.next());
+        assertEquals(IndexUtil.INDEX_COLUMN_NAME_SEP + "K3",rs.getString("COLUMN_NAME"));
+        assertEquals(4, rs.getShort("KEY_SEQ"));
+        assertFalse(rs.next());
 
         query = "SELECT * FROM " + DATA_TABLE_FULL_NAME;
         rs = conn.createStatement().executeQuery(query);
@@ -478,19 +486,21 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         assertFalse(rs.next());
 
         // load some data into the table
-        stmt = conn.prepareStatement("UPSERT INTO " + DATA_TABLE_FULL_NAME + "(K,K2,V1,V2) VALUES(?,?,?,?)");
+        stmt = conn.prepareStatement("UPSERT INTO " + DATA_TABLE_FULL_NAME + "(K,K2,V1,V2,K3) VALUES(?,?,?,?,?)");
         stmt.setString(1, "b");
         stmt.setBigDecimal(2, BigDecimal.valueOf(2));
         stmt.setString(3, "y");
         stmt.setString(4, "2");
+        stmt.setBigDecimal(5, BigDecimal.valueOf(3));
         stmt.execute();
         conn.commit();
 
-        query = "SELECT k,k2 FROM " + DATA_TABLE_FULL_NAME + " WHERE v1='y'";
+        query = "SELECT k,k2,k3 FROM " + DATA_TABLE_FULL_NAME + " WHERE v1='y'";
         rs = conn.createStatement().executeQuery(query);
         assertTrue(rs.next());
         assertEquals("b",rs.getString(1));
         assertEquals(BigDecimal.valueOf(2),rs.getBigDecimal(2));
+        assertEquals(BigDecimal.valueOf(3),rs.getBigDecimal(3));
         assertFalse(rs.next());
     }
 
@@ -2345,6 +2355,21 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         return false;
     }
     
+    private int getIndexOfPkColumn(PhoenixConnection conn, String columnName, String tableName) throws SQLException {
+        String normalizedTableName = SchemaUtil.normalizeIdentifier(tableName);
+        PTable table = conn.getMetaDataCache().getTable(new PTableKey(conn.getTenantId(), normalizedTableName));
+        List<PColumn> pkCols = table.getPKColumns();
+        String normalizedColumnName = SchemaUtil.normalizeIdentifier(columnName);
+        int i = 0;
+        for (PColumn pkCol : pkCols) {
+            if (pkCol.getName().getString().equals(normalizedColumnName)) {
+                return i;
+            }
+            i++;
+        }
+        return -1;
+    }
+    
     private Connection getTenantConnection(String tenantId) throws Exception {
         Properties tenantProps = new Properties();
         tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
@@ -2444,35 +2469,35 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
 
             ResultSet rs = tenantConn.createStatement().executeQuery("SELECT K2, K3, V3 FROM " + view1);
             PhoenixConnection phxConn = tenantConn.unwrap(PhoenixConnection.class);
-            assertTrue(checkColumnPartOfPk(phxConn, "k2", view1));
-            assertTrue(checkColumnPartOfPk(phxConn, "k3", view1));
+            assertEquals(2, getIndexOfPkColumn(phxConn, "k2", view1));
+            assertEquals(3, getIndexOfPkColumn(phxConn, "k3", view1));
             assertEquals(1, getTableSequenceNumber(phxConn, view1));
             assertEquals(4, getMaxKeySequenceNumber(phxConn, view1));
             verifyNewColumns(rs, "K2", "K3", "V3");
 
 
             rs = tenantConn.createStatement().executeQuery("SELECT K2, K3, V3 FROM " + view2);
-            assertTrue(checkColumnPartOfPk(phxConn, "k2", view2));
-            assertTrue(checkColumnPartOfPk(phxConn, "k3", view2));
+            assertEquals(2, getIndexOfPkColumn(phxConn, "k2", view2));
+            assertEquals(3, getIndexOfPkColumn(phxConn, "k3", view2));
             assertEquals(1, getTableSequenceNumber(phxConn, view2));
             assertEquals(4, getMaxKeySequenceNumber(phxConn, view2));
             verifyNewColumns(rs, "K2", "K3", "V3");
 
-            assertTrue(checkColumnPartOfPk(phxConn, IndexUtil.getIndexColumnName(null, "k2"), view2Index));
-            assertTrue(checkColumnPartOfPk(phxConn, IndexUtil.getIndexColumnName(null, "k3"), view2Index));
+            assertEquals(4, getIndexOfPkColumn(phxConn, IndexUtil.getIndexColumnName(null, "k2"), view2Index));
+            assertEquals(5, getIndexOfPkColumn(phxConn, IndexUtil.getIndexColumnName(null, "k3"), view2Index));
             assertEquals(1, getTableSequenceNumber(phxConn, view2Index));
             assertEquals(6, getMaxKeySequenceNumber(phxConn, view2Index));
         }
         try (Connection tenantConn = getTenantConnection(tenant2)) {
             ResultSet rs = tenantConn.createStatement().executeQuery("SELECT K2, K3, V3 FROM " + view3);
             PhoenixConnection phxConn = tenantConn.unwrap(PhoenixConnection.class);
-            assertTrue(checkColumnPartOfPk(phxConn, "k2", view3));
-            assertTrue(checkColumnPartOfPk(phxConn, "k3", view3));
+            assertEquals(2, getIndexOfPkColumn(phxConn, "k2", view3));
+            assertEquals(3, getIndexOfPkColumn(phxConn, "k3", view3));
             assertEquals(1, getTableSequenceNumber(phxConn, view3));
             verifyNewColumns(rs, "K22", "K33", "V33");
 
-            assertTrue(checkColumnPartOfPk(phxConn, IndexUtil.getIndexColumnName(null, "k2"), view3Index));
-            assertTrue(checkColumnPartOfPk(phxConn, IndexUtil.getIndexColumnName(null, "k3"), view3Index));
+            assertEquals(4, getIndexOfPkColumn(phxConn, IndexUtil.getIndexColumnName(null, "k2"), view3Index));
+            assertEquals(5, getIndexOfPkColumn(phxConn, IndexUtil.getIndexColumnName(null, "k3"), view3Index));
             assertEquals(1, getTableSequenceNumber(phxConn, view3Index));
             assertEquals(6, getMaxKeySequenceNumber(phxConn, view3Index));
         }

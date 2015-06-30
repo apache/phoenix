@@ -1173,13 +1173,13 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
     }
 
     private static final byte[] PHYSICAL_TABLE_BYTES = new byte[] {PTable.LinkType.PHYSICAL_TABLE.getSerializedValue()};
-    private static final byte[] PARENT_TABLE_BYTES = new byte[] {PTable.LinkType.PARENT_TABLE.getSerializedValue()};
 
     /**
      * @param tableName parent table's name
      * Looks for whether child views exist for the table specified by table.
      * TODO: should we pass a timestamp here?
      */
+
     private TableViewFinderResult findChildViews(HRegion region, byte[] tenantId, PTable table, byte[] linkTypeBytes) throws IOException {
         byte[] schemaName = table.getSchemaName().getBytes();
         byte[] tableName = table.getTableName().getBytes();
@@ -1462,7 +1462,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
           SQLException;
     }
 
-    @SuppressWarnings("deprecation")
     private MetaDataMutationResult
     mutateColumn(List<Mutation> tableMetadata, ColumnMutator mutator) throws IOException {
         byte[][] rowKeyMetaData = new byte[5][];
