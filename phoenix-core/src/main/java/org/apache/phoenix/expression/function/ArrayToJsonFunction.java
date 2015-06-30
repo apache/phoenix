@@ -21,7 +21,7 @@ import java.util.List;
 @FunctionParseNode.BuiltInFunction(name=ArrayToJsonFunction.NAME,  args={
         @FunctionParseNode.Argument(allowedTypes={PVarchar.class})} )
 public class ArrayToJsonFunction extends ScalarFunction {
-    public static final String NAME = "Array_To_Json";
+    public static final String NAME = "ARRAY_TO_JSON";
 
     public ArrayToJsonFunction() {
     }
@@ -52,7 +52,7 @@ public class ArrayToJsonFunction extends ScalarFunction {
             tmp.set(ptr.get());
             PArrayDataType.positionAtArrayElement(tmp, i - 1,baseType, arrayExpr.getMaxLength());
             Object re =baseType.toObject(tmp);
-            builder.append(PhoenixJson.DataToJsonValue(baseType, re));
+            builder.append(PhoenixJson.dataToJsonValue(baseType, re));
             if(i != length)
             builder.append(",");
         }
@@ -64,7 +64,8 @@ public class ArrayToJsonFunction extends ScalarFunction {
             byte[] json = PJson.INSTANCE.toBytes(phoenixJson);
             ptr.set(json);
         } catch (SQLException sqe) {
-            System.out.println(sqe.getMessage());
+            new IllegalDataException(new SQLExceptionInfo.Builder(SQLExceptionCode.ILLEGAL_DATA)
+                    .setRootCause(sqe).build().buildException());
         }
         return true;
     }

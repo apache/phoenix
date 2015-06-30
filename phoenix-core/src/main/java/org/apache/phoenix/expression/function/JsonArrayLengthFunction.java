@@ -2,13 +2,17 @@ package org.apache.phoenix.expression.function;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.compile.KeyPart;
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
+import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.json.PhoenixJson;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.*;
 
+import java.sql.SQLException;
 import java.util.List;
 
 @BuiltInFunction(name = JsonArrayLengthFunction.NAME, args = {
@@ -34,12 +38,17 @@ public class JsonArrayLengthFunction extends ScalarFunction {
         if (ptr.getLength() == 0) {
             return false;
         }
-        PhoenixJson phoenixJson =
-                (PhoenixJson) PJson.INSTANCE.toObject(ptr.get(), ptr.getOffset(),
-                        ptr.getLength());
-        int length = phoenixJson.getJsonArrayLength();
-        byte[] array = PInteger.INSTANCE.toBytes(length);
-        ptr.set(array);
+        try{
+            PhoenixJson phoenixJson =
+                    (PhoenixJson) PJson.INSTANCE.toObject(ptr.get(), ptr.getOffset(),
+                            ptr.getLength());
+            int length = phoenixJson.getJsonArrayLength();
+            byte[] array = PInteger.INSTANCE.toBytes(length);
+            ptr.set(array);
+        } catch (SQLException sqe) {
+            new IllegalDataException(new SQLExceptionInfo.Builder(SQLExceptionCode.ILLEGAL_DATA)
+                    .setRootCause(sqe).build().buildException());
+        }
 
         return true;
     }

@@ -20,6 +20,7 @@ package org.apache.phoenix.schema.json;
 
 import java.io.IOException;
 import java.sql.SQLException;
+import java.text.Format;
 import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -236,26 +237,48 @@ public class PhoenixJson implements Comparable<PhoenixJson> {
         return new PhoenixJson(node, node.toString());
     }
 
-    public int getJsonArrayLength() {
-        int count = 0;
-        Iterator<JsonNode> elements = this.rootNode.getElements();
-        while(elements.hasNext()){
-            elements.next();
-            count++;
-        }
-        return count;
+    /**
+     * If the current {@link PhoenixJson} is a JsonArray,then it returns the length of the JsonArray
+     * For example:[1,2,3] ,it will return 3
+     * Its required for json_array_length().
+     * @throws SQLException
+     */
+    public int getJsonArrayLength() throws SQLException {
+       if(this.rootNode.isArray()){
+           return this.rootNode.size();
+       }else{
+           throw new SQLException("The JsonNode should be an Array");
+       }
     }
 
-    public Object[] getJsonArrayElements() {
-        List<String> elementlist = new ArrayList();
-        Iterator<JsonNode> elements = this.rootNode.getElements();
-        while(elements.hasNext()){
-            JsonNode e = elements.next();
-            elementlist.add(e.toString());
+    /**
+     * If the current {@link PhoenixJson} is a JsonArray,then it returns the set of array elements
+     * For example:[1,false,[2,"string"]]
+     * it will return (new Object[]{"1","false","[2,\"string\"]"})
+     * Its required for json_array_elements().
+     * @return {@link String[]} as the set of JSON elements
+     * @throws SQLException
+     */
+    public Object[] getJsonArrayElements() throws SQLException {
+        if(this.rootNode.isArray()) {
+            List<String> elementlist = new ArrayList();
+            Iterator<JsonNode> elements = this.rootNode.getElements();
+            while (elements.hasNext()) {
+                JsonNode e = elements.next();
+                elementlist.add(e.toString());
+            }
+            return elementlist.toArray();
+        }else{
+            throw new SQLException("The JsonNode should be an Array");
         }
-        return elementlist.toArray();
     }
-
+    /**
+     * It returns the set of JSON keys for the current {@link PhoenixJson}.Only the outermost keys will be generated
+     * For example:{"f1":"abc","f2":{"f3":"a", "f4":"b"}}
+     * it will return (new Object[]{"f1","f2"})
+     * Its required for json_object_keys().
+     * @return {@link String[]} as the set of JSON keys
+     */
     public Object[] getJsonObjectKeys() {
         List<String> elementlist = new ArrayList();
         Iterator<String> fieldnames = this.rootNode.getFieldNames();
@@ -265,91 +288,145 @@ public class PhoenixJson implements Comparable<PhoenixJson> {
         return elementlist.toArray();
     }
 
+    /**
+     * It returns the SET of JSON key/value pairs for the current {@link PhoenixJson}.Only the outermost key/value will be generated
+     * Probably it seems we should use a special SET class which can hold different types of elements.
+     * but we use the {@link org.apache.phoenix.schema.types.PVarcharArray} as an alternative of SET TYPE
+     * when implementing the build-in function ,so we use {@link String} directly to store the pair
+     * and in this case we use "," to separate key and value
+     * For example:{"f1":"abc","f2":"edf"}
+     * it will return (new Object[]{"f1,abc","f2,edf"})
+     *
+     * Its required for json_each().
+     * @return {@link String[]} as the SET of JSON key/value pairs
+     */
     public Object[] getJsonFields() {
         List<String> elementlist = new ArrayList();
         Iterator<Map.Entry<String, JsonNode>> fields = this.rootNode.getFields();
-
         while(fields.hasNext()){
-            String fieldsstr = "";
             Map.Entry<String, JsonNode> entry = fields.next();
-            fieldsstr += entry.getKey() +","+entry.getValue().toString();
-            elementlist.add(fieldsstr);
+            StringBuilder fieldBuilder = new StringBuilder();
+            fieldBuilder.append(entry.getKey());
+            fieldBuilder.append(",");
+            fieldBuilder.append(entry.getValue().toString());
+            elementlist.add(fieldBuilder.toString());
         }
         return elementlist.toArray();
     }
-    public String PopulateRecord(String [] types) {
-        String records = "";
+    /**
+     * Expands the object in current {@link PhoenixJson} to a record whose columns match the record type defined by base.
+     * Conversion will be best effort; columns in base with no corresponding key will be left null.
+     * If a column is specified more than once, the last value is used.
+     * Also use "," to separate each columns
+     * For example:types :{"a","b"} json: {"a":"1","b":"2"}
+     * it will return new String("1,2")
+     *
+     * Its required for json_populate_record().
+     * @param types {@link String} the record type
+     * @return {@link String} as the result record
+     */
+    public String jsonPopulateRecord(String [] types) {
+        StringBuilder recordsBuilder = new StringBuilder();
         for(int i =0 ;i < types.length; i++){
             List<JsonNode> nodelist =this.rootNode.findValues(types[i]);
             if(nodelist.size()!=0){
-                records += nodelist.get(0).toString();
+                recordsBuilder.append(nodelist.get(0).toString());
             }else{
-                records += "null";
+                recordsBuilder.append("null");
             }
             if(i != types.length-1){
-                records +=",";
+                recordsBuilder.append(",");
             }
         }
-        return records;
+        return recordsBuilder.toString();
     }
-    public Object[] PopulateRecordSet(String[] types) {
-        List<String> recordslist = new ArrayList();
+    /**
+     * Expands the outermost set of objects in current {@link PhoenixJson} to a SET of records whose columns match the record type defined by base.
+     * Conversion will be best effort; columns in base with no corresponding key will be left null.
+     * If a column is specified more than once, the last value is used.
+     * Also use "," to separate each columns
+     * For example:types :{"a","b"} json: {[{"a":"1","b":"2"},{"a":"3","b":"4"}]}
+     * it will return (new Object[]{"1,2","3,4"})
+     *
+     * Its required for json_populate_recordset().
+     * @param types {@link String} the record type
+     * @return {@link String[]} as the SET of records
+     */
+    public Object[] jsonPopulateRecordSet(String[] types) {
+        List<String> recordsList = new ArrayList();
         Iterator<JsonNode> elements = this.rootNode.getElements();
         while(elements.hasNext()){
             JsonNode e = elements.next();
-            String records = "";
+            StringBuilder recordsBuilder = new StringBuilder();
             for(int i =0 ;i < types.length; i++){
                 List<JsonNode> nodelist =e.findValues(types[i]);
                 if(nodelist.size()!=0){
-                    records += nodelist.get(0).toString();
+                    recordsBuilder.append(nodelist.get(0).toString());
                 }else{
-                    records += "null";
+                    recordsBuilder.append("null");
                 }
                 if(i != types.length-1){
-                    records +=",";
+                    recordsBuilder.append(",");
                 }
             }
-            recordslist.add(records);
+            recordsList.add(recordsBuilder.toString());
         }
-        return recordslist.toArray();
+        return recordsList.toArray();
     }
 
 
-
-
-    public static String DataToJsonValue(PDataType targetType, Object obj) {
-        String Value = null;
+    /**
+     * Returns the value as JSON.
+     * If the data type is not built in, and there is a cast from the type to json,
+     * the cast function will be used to perform the conversion.
+     * Otherwise, for any value other than a number, a Boolean, or a null value,
+     * the text representation will be used, escaped and quoted so that it is legal JSON.
+     * If the formatter is given ,perform the conversion based on it.
+     *
+     * Its required for to_json(),array_to_json().
+     * @param targetType {@link PDataType} type of the value
+     * @param obj {@link Object} the value object
+     * @param formatter {@link Format}  format of the value
+     * @return {@link String} as JSON
+     */
+    public static String dataToJsonValue(PDataType targetType, Object obj,Format formatter) {
+        StringBuilder  valueBuilder = new StringBuilder();
         if (obj != null) {
             if (PDataType.equalsAny(targetType, PUnsignedDouble.INSTANCE, PUnsignedFloat.INSTANCE,
                     PDouble.INSTANCE)) {
-                Value = PDouble.INSTANCE.toStringLiteral( obj,null);
+                valueBuilder.append(PDouble.INSTANCE.toStringLiteral(obj, formatter));
 
             } else if (PDataType.equalsAny(targetType, PInteger.INSTANCE, PUnsignedSmallint.INSTANCE,
                     PUnsignedLong.INSTANCE, PUnsignedInt.INSTANCE,PUnsignedTinyint.INSTANCE)) {
-                Value = PLong.INSTANCE.toStringLiteral(obj,null);
+                valueBuilder.append(PLong.INSTANCE.toStringLiteral(obj, formatter));
             }else if (PDataType.equalsAny(targetType, PBoolean.INSTANCE)) {
-                Value = PBoolean.INSTANCE.toStringLiteral(obj,null);
+                valueBuilder.append(PBoolean.INSTANCE.toStringLiteral(obj, formatter));
             } else if (PDataType.equalsAny(targetType, PVarchar.INSTANCE,PChar.INSTANCE)) {
-                Value = "\"";
-                String tmp = PVarchar.INSTANCE.toStringLiteral(obj,null);
-                Value += tmp.substring(1,tmp.length()-1);
-                Value += "\"";
+                valueBuilder.append("\"");
+                String tmp = PVarchar.INSTANCE.toStringLiteral(obj,formatter);
+                valueBuilder.append(tmp.substring(1,tmp.length()-1));
+                valueBuilder.append("\"");
             }else if (PDataType.equalsAny(targetType,PDate.INSTANCE,PTime.INSTANCE,PTimestamp.INSTANCE)){
-                Value = "\"";
-                String tmp = PVarchar.INSTANCE.toStringLiteral(obj,null);
-                Value += tmp.substring(1,tmp.length()-1);
-                Value += "\"";
+                valueBuilder.append("\"");
+                String tmp = PVarchar.INSTANCE.toStringLiteral(obj,formatter);
+                valueBuilder.append(tmp.substring(1,tmp.length()-1));
+                valueBuilder.append("\"");
             } else{
-                Value = "\"";
-                String tmp = PVarchar.INSTANCE.toStringLiteral(obj,null);
-                Value += tmp.substring(1,tmp.length()-1);
-                Value += "\"";
+                valueBuilder.append("\"");
+                String tmp = PVarchar.INSTANCE.toStringLiteral(obj,formatter);
+                valueBuilder.append(tmp.substring(1,tmp.length()-1));
+                valueBuilder.append("\"");
             }
         }else{
-            Value = "null";
+            valueBuilder.append("null");
         }
-        return Value ;
+        return valueBuilder.toString() ;
     }
+
+    public static String dataToJsonValue(PDataType targetType, Object obj){
+        return dataToJsonValue(targetType,obj,null);
+    }
+
 
 
 }

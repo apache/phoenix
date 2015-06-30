@@ -56,7 +56,7 @@ public class JsonPopulateRecordFunction extends ScalarFunction {
                         ptr.getLength());
         try {
             String[] types = (String[]) phoenixArray.getArray();
-            String records = phoenixJson.PopulateRecord(types);
+            String records = phoenixJson.jsonPopulateRecord(types);
             byte[] array = PVarchar.INSTANCE.toBytes(records);
             ptr.set(array);
 

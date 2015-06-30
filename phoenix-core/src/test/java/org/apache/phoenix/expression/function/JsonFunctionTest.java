@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.apache.phoenix.expression.function;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -18,16 +35,27 @@ import java.util.List;
 import static org.junit.Assert.assertEquals;
 
 
+/**
+ * Unit tests for JSON build-in function.
+ * Testing function includes below:
+ * {@link ArrayToJsonFunction}
+ * {@link JsonArrayElementsFunction}
+ * {@link JsonPopulateRecordFunction}
+ * {@link JsonPopulateRecordSetFunction}
+ * {@link JsonArrayLengthFunction}
+ * {@link JsonObjectKeysFunction}
+ * {@link ToJsonFunction}
+ * {@link JsonEachFunction}
+ *
+ */
 public class JsonFunctionTest {
     public static final String TEST_JSON_STR =
             "{\"f2\":{\"f3\":\"value\"},\"f4\":{\"f5\":99,\"f6\":[1,true,\"foo\"]},\"f7\":true}";
 
-    public PhoenixJson testArrayToJson (Object[] array,PDataType datatype,PArrayDataType arraydatatype) throws Exception {
-        LiteralExpression arrayExpr;
-        List<Expression> children;
-        PhoenixArray pa =PArrayDataType.instantiatePhoenixArray( datatype,array);
-        arrayExpr = LiteralExpression.newConstant(pa,arraydatatype );
-        children = Arrays.<Expression>asList(arrayExpr);
+    private static PhoenixJson testArrayToJson (Object[] array,PDataType datatype,PArrayDataType arraydatatype) throws Exception {
+        PhoenixArray pa = PArrayDataType.instantiatePhoenixArray( datatype,array);
+        LiteralExpression arrayExpr = LiteralExpression.newConstant(pa,arraydatatype );
+        List<Expression>  children = Arrays.<Expression>asList(arrayExpr);
         ArrayToJsonFunction e = new ArrayToJsonFunction(children);
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         boolean evaluated = e.evaluate(null, ptr);
@@ -39,18 +67,18 @@ public class JsonFunctionTest {
     public void testNumberArrayToJson() throws Exception {
         Object[] testarray = new Object[]{1,12,32,432};
         PhoenixJson result = testArrayToJson(testarray, PInteger.INSTANCE, PIntegerArray.INSTANCE);
-        String expected ="[1,12,32,432]";
+        String expected = "[1,12,32,432]";
         assertEquals(result.serializeToString(), expected);
         Object[] testarray2 = new Object[]{1.12,12.34,32.45,432.78};
         PhoenixJson result2 = testArrayToJson(testarray2, PDouble.INSTANCE, PDoubleArray.INSTANCE);
-        String expected2 ="[1.12,12.34,32.45,432.78]";
+        String expected2 = "[1.12,12.34,32.45,432.78]";
         assertEquals(result2.serializeToString(), expected2);
     }
     @Test
     public void testBooleanArrayToJson() throws Exception {
         Object[] testarray = new Object[]{false,true};
         PhoenixJson result = testArrayToJson(testarray, PBoolean.INSTANCE, PBooleanArray.INSTANCE);
-        String expected ="[false,true]";
+        String expected = "[false,true]";
         assertEquals(result.toString(), expected);
     }
 
@@ -92,12 +120,10 @@ public class JsonFunctionTest {
     }
 
 
-    public String[] JsonArrayElements (String json) throws Exception {
+    private static  String[] jsonArrayElements (String json) throws Exception {
         PhoenixJson phoenixJson = PhoenixJson.getInstance(json);
-        LiteralExpression JsonExpr;
-        List<Expression> children;
-        JsonExpr = LiteralExpression.newConstant(phoenixJson,PJson.INSTANCE );
-        children = Arrays.<Expression>asList(JsonExpr);
+        LiteralExpression JsonExpr = LiteralExpression.newConstant(phoenixJson,PJson.INSTANCE );
+        List<Expression> children = Arrays.<Expression>asList(JsonExpr);
         JsonArrayElementsFunction e = new JsonArrayElementsFunction(children);
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         boolean evaluated = e.evaluate(null, ptr);
@@ -109,21 +135,18 @@ public class JsonFunctionTest {
     public void testJsonArrayElements() throws Exception {
         String json = "[1,true,\"string\",[2,false]]";
         Object[] expected = new Object[]{"1","true","\"string\"","[2,false]"};
-        String[] result = JsonArrayElements(json);
-
+        String[] result = jsonArrayElements(json);
         assertEquals(result.length, expected.length);
         for(int i = 0; i<result.length;i++){
             assertEquals(result[i], expected[i]);
         }
     }
-    public String JsonPopulateRecord (Object[] types,String json) throws Exception {
-        List<Expression> children;
+    private static String jsonPopulateRecord (Object[] types,String json) throws Exception {
         PhoenixArray pa =PArrayDataType.instantiatePhoenixArray( PVarchar.INSTANCE,types);
         LiteralExpression typesExpr = LiteralExpression.newConstant(pa,PVarcharArray.INSTANCE );
         PhoenixJson phoenixJson = PhoenixJson.getInstance(json);
-        LiteralExpression JsonExpr;
-        JsonExpr = LiteralExpression.newConstant(phoenixJson,PJson.INSTANCE );
-        children = Arrays.<Expression>asList(typesExpr,JsonExpr);
+        LiteralExpression JsonExpr= LiteralExpression.newConstant(phoenixJson,PJson.INSTANCE );
+        List<Expression> children = Arrays.<Expression>asList(typesExpr,JsonExpr);
         JsonPopulateRecordFunction e = new JsonPopulateRecordFunction(children);
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         boolean evaluated = e.evaluate(null, ptr);
@@ -136,18 +159,16 @@ public class JsonFunctionTest {
         Object[] types= new Object[]{"a","b"};
         String json = "{\"a\":1,\"b\":2}";
         String expected = "1,2";
-        String result = JsonPopulateRecord(types,json);
+        String result = jsonPopulateRecord(types, json);
         assertEquals(result, expected);
     }
 
-    public String[] JsonPopulateRecordSet (Object[] types,String json) throws Exception {
-        List<Expression> children;
+    private static String[] jsonPopulateRecordSet (Object[] types,String json) throws Exception {
         PhoenixArray pa =PArrayDataType.instantiatePhoenixArray( PVarchar.INSTANCE,types);
         LiteralExpression typesExpr = LiteralExpression.newConstant(pa,PVarcharArray.INSTANCE );
         PhoenixJson phoenixJson = PhoenixJson.getInstance(json);
-        LiteralExpression JsonExpr;
-        JsonExpr = LiteralExpression.newConstant(phoenixJson,PJson.INSTANCE );
-        children = Arrays.<Expression>asList(typesExpr,JsonExpr);
+        LiteralExpression JsonExpr = LiteralExpression.newConstant(phoenixJson,PJson.INSTANCE );
+        List<Expression> children = Arrays.<Expression>asList(typesExpr,JsonExpr);
         JsonPopulateRecordSetFunction e = new JsonPopulateRecordSetFunction(children);
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         boolean evaluated = e.evaluate(null, ptr);
@@ -161,19 +182,17 @@ public class JsonFunctionTest {
         Object[] types= new Object[]{"a","b"};
         String json = "[{\"a\":1,\"b\":2},{\"a\":2,\"b\":3},{\"a\":4,\"b\":5}]";
         Object[] expected = new Object[]{"1,2","2,3","4,5"};
-        String[] result = JsonPopulateRecordSet(types,json);
+        String[] result = jsonPopulateRecordSet(types, json);
         assertEquals(result.length, expected.length);
         for(int i = 0; i<result.length;i++){
             assertEquals(result[i], expected[i]);
         }
     }
 
-    public int JsonArrayLength (String json) throws Exception {
+    private static int jsonArrayLength (String json) throws Exception {
         PhoenixJson phoenixJson = PhoenixJson.getInstance(json);
-        LiteralExpression JsonExpr;
-        List<Expression> children;
-        JsonExpr = LiteralExpression.newConstant(phoenixJson,PJson.INSTANCE );
-        children = Arrays.<Expression>asList(JsonExpr);
+        LiteralExpression JsonExpr = LiteralExpression.newConstant(phoenixJson,PJson.INSTANCE );
+        List<Expression> children= Arrays.<Expression>asList(JsonExpr);
         JsonArrayLengthFunction e = new JsonArrayLengthFunction(children);
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         boolean evaluated = e.evaluate(null, ptr);
@@ -185,16 +204,14 @@ public class JsonFunctionTest {
     public void testJsonArrayLength() throws Exception {
         String array1 = "[1,true,\"string\",[2,false]]";
         String array2 = "[1,2.34,[1,\"abc\"],4,true,\"string\",[2,false]]";
-        assertEquals(JsonArrayLength(array1),4);
-        assertEquals(JsonArrayLength(array2),7);
+        assertEquals(jsonArrayLength(array1),4);
+        assertEquals(jsonArrayLength(array2),7);
     }
 
 
-    public PhoenixJson ToJson (Object obj,PDataType datatype) throws Exception {
-        List<Expression> children;
-        //LiteralExpression op =LiteralExpression.newConstant(new BigDecimal("9999.1"), PDecimal.INSTANCE);
+    private static PhoenixJson toJson (Object obj,PDataType datatype) throws Exception {
         LiteralExpression op =LiteralExpression.newConstant(obj, datatype);
-        children = Arrays.<Expression>asList(op);
+        List<Expression> children = Arrays.<Expression>asList(op);
         ToJsonFunction e = new ToJsonFunction(children);
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         boolean evaluated = e.evaluate(null, ptr);
@@ -205,28 +222,26 @@ public class JsonFunctionTest {
 
     @Test
     public void testToJson() throws Exception {
-        assertEquals(ToJson(-256, PInteger.INSTANCE).serializeToString(),"-256");
-        assertEquals(ToJson(-256, PLong.INSTANCE).serializeToString(),"-256");
-        assertEquals(ToJson(-1, PSmallint.INSTANCE).serializeToString(),"-1");
-        assertEquals(ToJson(-1, PTinyint.INSTANCE).serializeToString(),"-1");
-        assertEquals(ToJson(12, PUnsignedInt.INSTANCE).serializeToString(),"12");
-        assertEquals(ToJson(12, PUnsignedSmallint.INSTANCE).serializeToString(),"12");
-        assertEquals(ToJson(12, PUnsignedLong.INSTANCE).serializeToString(),"12");
-        assertEquals(ToJson(123.456, PDouble.INSTANCE).serializeToString(),"123.456");
-        assertEquals(ToJson(123.456, PFloat.INSTANCE).serializeToString(),"123.456");
-        assertEquals(ToJson(123.456,PUnsignedDouble.INSTANCE).serializeToString(),"123.456");
-        assertEquals(ToJson(123.456, PUnsignedFloat.INSTANCE).serializeToString(),"123.456");
-        assertEquals(ToJson(false, PBoolean.INSTANCE).serializeToString(),"false");
-        assertEquals(ToJson(true, PBoolean.INSTANCE).serializeToString(),"true");
-        assertEquals(ToJson("string_abc", PVarchar.INSTANCE).toString(),"\"string_abc\"");
-        assertEquals(ToJson("string_abc", PVarchar.INSTANCE).serializeToString(),"string_abc");
+        assertEquals(toJson(-256, PInteger.INSTANCE).serializeToString(),"-256");
+        assertEquals(toJson(-256, PLong.INSTANCE).serializeToString(),"-256");
+        assertEquals(toJson(-1, PSmallint.INSTANCE).serializeToString(),"-1");
+        assertEquals(toJson(-1, PTinyint.INSTANCE).serializeToString(),"-1");
+        assertEquals(toJson(12, PUnsignedInt.INSTANCE).serializeToString(),"12");
+        assertEquals(toJson(12, PUnsignedSmallint.INSTANCE).serializeToString(),"12");
+        assertEquals(toJson(12, PUnsignedLong.INSTANCE).serializeToString(),"12");
+        assertEquals(toJson(123.456, PDouble.INSTANCE).serializeToString(),"123.456");
+        assertEquals(toJson(123.456, PFloat.INSTANCE).serializeToString(),"123.456");
+        assertEquals(toJson(123.456, PUnsignedDouble.INSTANCE).serializeToString(),"123.456");
+        assertEquals(toJson(123.456, PUnsignedFloat.INSTANCE).serializeToString(),"123.456");
+        assertEquals(toJson(false, PBoolean.INSTANCE).serializeToString(),"false");
+        assertEquals(toJson(true, PBoolean.INSTANCE).serializeToString(),"true");
+        assertEquals(toJson("string_abc", PVarchar.INSTANCE).toString(),"\"string_abc\"");
+        assertEquals(toJson("string_abc", PVarchar.INSTANCE).serializeToString(),"string_abc");
     }
-    public String[] JsonObjectKeys (String json) throws Exception {
+    private static String[] jsonObjectKeys (String json) throws Exception {
         PhoenixJson phoenixJson = PhoenixJson.getInstance(json);
-        LiteralExpression JsonExpr;
-        List<Expression> children;
-        JsonExpr = LiteralExpression.newConstant(phoenixJson,PJson.INSTANCE );
-        children = Arrays.<Expression>asList(JsonExpr);
+        LiteralExpression JsonExpr = LiteralExpression.newConstant(phoenixJson,PJson.INSTANCE );
+        List<Expression> children = Arrays.<Expression>asList(JsonExpr);
         JsonObjectKeysFunction e = new JsonObjectKeysFunction(children);
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         boolean evaluated = e.evaluate(null, ptr);
@@ -234,12 +249,10 @@ public class JsonFunctionTest {
         return (String[] )pa.getArray();
     }
 
-
-
     @Test
     public void testJsonObjectKeys() throws Exception {
         Object[] expected = new Object[]{"f2","f4","f7"};
-        String[] result = JsonObjectKeys(TEST_JSON_STR);
+        String[] result = jsonObjectKeys(TEST_JSON_STR);
 
         assertEquals(result.length, expected.length);
         for(int i = 0; i<result.length;i++){
@@ -247,12 +260,10 @@ public class JsonFunctionTest {
         }
     }
 
-    public String[] JsonEach (String json) throws Exception {
+    private static String[] jsonEach (String json) throws Exception {
         PhoenixJson phoenixJson = PhoenixJson.getInstance(json);
-        LiteralExpression JsonExpr;
-        List<Expression> children;
-        JsonExpr = LiteralExpression.newConstant(phoenixJson,PJson.INSTANCE );
-        children = Arrays.<Expression>asList(JsonExpr);
+        LiteralExpression JsonExpr = LiteralExpression.newConstant(phoenixJson,PJson.INSTANCE );
+        List<Expression> children = Arrays.<Expression>asList(JsonExpr);
         JsonEachFunction e = new JsonEachFunction(children);
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         boolean evaluated = e.evaluate(null, ptr);
@@ -262,7 +273,7 @@ public class JsonFunctionTest {
     @Test
     public void testJsonEach() throws Exception {
         Object[] expected = new Object[]{"f2,{\"f3\":\"value\"}","f4,{\"f5\":99,\"f6\":[1,true,\"foo\"]}","f7,true"};
-        String[] result = JsonEach(TEST_JSON_STR);
+        String[] result = jsonEach(TEST_JSON_STR);
 
         assertEquals(result.length, expected.length);
         for(int i = 0; i<result.length;i++){

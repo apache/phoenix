@@ -46,13 +46,14 @@ public class ToJsonFunction extends ScalarFunction {
         }
         PDataType baseType = expression.getDataType();
         Object re =baseType.toObject(ptr);
-        String jsons = PhoenixJson.DataToJsonValue(baseType, re);
+        String jsons = PhoenixJson.dataToJsonValue(baseType, re);
         try {
             PhoenixJson phoenixJson  = PhoenixJson.getInstance(jsons);
             byte[] json = PJson.INSTANCE.toBytes(phoenixJson);
             ptr.set(json);
         } catch (SQLException sqe) {
-            System.out.println(sqe.getMessage());
+            new IllegalDataException(new SQLExceptionInfo.Builder(SQLExceptionCode.ILLEGAL_DATA)
+                    .setRootCause(sqe).build().buildException());
         }
 
         return true;
