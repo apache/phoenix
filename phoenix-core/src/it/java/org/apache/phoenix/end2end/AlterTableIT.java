@@ -2149,23 +2149,13 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
                     "CREATE VIEW " + grandChildView + " AS SELECT * FROM " + childView;
             conn.createStatement().execute(grandChildViewDDL);
 
-            // dropping base table column from child view should fail
+            // dropping base table column from child view should succeed
             String dropColumnFromChildView = "ALTER VIEW " + childView + " DROP COLUMN V2";
-            try {
-                conn.createStatement().execute(dropColumnFromChildView);
-                fail("Dropping columns from a view that has child views on it is not allowed");
-            } catch (SQLException e) {
-                assertEquals(CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
-            }
+            conn.createStatement().execute(dropColumnFromChildView);
 
-            // dropping view specific column from child view should fail
+            // dropping view specific column from child view should succeed
             dropColumnFromChildView = "ALTER VIEW " + childView + " DROP COLUMN CHILD_VIEW_COL";
-            try {
-                conn.createStatement().execute(dropColumnFromChildView);
-                fail("Dropping columns from a view that has child views on it is not allowed");
-            } catch (SQLException e) {
-                assertEquals(SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
-            }
+            conn.createStatement().execute(dropColumnFromChildView);
             
             // Adding column to view that has child views is allowed
             String addColumnToChildView = "ALTER VIEW " + childView + " ADD V5 VARCHAR";
