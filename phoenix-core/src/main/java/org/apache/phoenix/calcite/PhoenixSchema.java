@@ -146,7 +146,7 @@ public class PhoenixSchema implements Schema {
 
     @Override
     public boolean isMutable() {
-        return false;
+        return true;
     }
 
     @Override

@@ -3,9 +3,13 @@ package org.apache.phoenix.calcite;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 
+import org.apache.calcite.config.CalciteConnectionProperty;
 import org.apache.calcite.jdbc.CalciteConnection;
 import org.apache.calcite.schema.SchemaPlus;
+import org.apache.calcite.util.JsonBuilder;
 import org.apache.phoenix.end2end.BaseClientManagedTimeIT;
+import org.apache.phoenix.schema.TableAlreadyExistsException;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -15,11 +19,13 @@ import java.io.PrintWriter;
 import java.sql.*;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 
 import static org.apache.phoenix.util.TestUtil.JOIN_CUSTOMER_TABLE_FULL_NAME;
 import static org.apache.phoenix.util.TestUtil.JOIN_ITEM_TABLE_FULL_NAME;
 import static org.apache.phoenix.util.TestUtil.JOIN_ORDER_TABLE_FULL_NAME;
 import static org.apache.phoenix.util.TestUtil.JOIN_SUPPLIER_TABLE_FULL_NAME;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.*;
 
 /**
@@ -219,6 +225,50 @@ public class CalciteTest extends BaseClientManagedTimeIT {
             DriverManager.getConnection("jdbc:phoenixcalcite:model=" + file.getAbsolutePath());
         return connection;
     }
+
+    private static Connection connectWithMaterialization(String... materializations) throws Exception {
+        assert materializations.length % 2 == 0;
+        final JsonBuilder builder = new JsonBuilder();
+        final List<Object> list = builder.list();
+        for (int i = 0; i < materializations.length; i++) {
+          String table = materializations[i++];
+          final Map<String, Object> map = builder.map();
+          map.put("table", table);
+          map.put("view", table + "v");
+          String sql = materializations[i];
+          final String sql2 = sql
+              .replaceAll("`", "\"");
+          map.put("sql", sql2);
+          list.add(map);
+        }
+        final String buf =
+            "materializations: " + builder.toJsonString(list);
+        final String schema = PHOENIX_SCHEMA.replace("type: ",
+                buf + ",\n"
+                + "type: ");
+
+        final File file = File.createTempFile("model", ".json");
+        final PrintWriter pw = new PrintWriter(new FileWriter(file));
+        pw.print(
+            "{\n"
+                + "  version: '1.0',\n"
+                + "  defaultSchema: 'phoenix',\n"
+                + "  schemas: [\n"
+                + schema + "\n"
+                + "  ]\n"
+                + "}\n");
+        pw.close();
+        Properties props = new Properties();
+        props.setProperty(
+                CalciteConnectionProperty.MATERIALIZATIONS_ENABLED.camelName(),
+                Boolean.toString(true));
+        props.setProperty(
+                CalciteConnectionProperty.CREATE_MATERIALIZATIONS.camelName(),
+                Boolean.toString(false));
+        final Connection connection =
+            DriverManager.getConnection("jdbc:phoenixcalcite:model=" + file.getAbsolutePath(), props);
+        return connection;
+    }
     
     @Before
     public void initTable() throws Exception {
@@ -233,6 +283,18 @@ public class CalciteTest extends BaseClientManagedTimeIT {
         connection.createStatement().execute("UPDATE STATISTICS " + JOIN_SUPPLIER_TABLE_FULL_NAME);
         connection.createStatement().execute("UPDATE STATISTICS " + JOIN_ORDER_TABLE_FULL_NAME);
         connection.close();
+    }
+    
+    protected void createIndices(String... indexDDL) throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        for (String ddl : indexDDL) {
+            try {
+                conn.createStatement().execute(ddl);
+            } catch (TableAlreadyExistsException e) {
+            }
+        }
+        conn.close();        
     }
     
     @Test public void testTableScan() throws Exception {
@@ -807,6 +869,69 @@ public class CalciteTest extends BaseClientManagedTimeIT {
                          new Object[] {"0000000004", "T4", null}, 
                          new Object[] {"0000000005", "T5", null}})
                .close();;
+    }
+    
+    @Test public void testIndex() {
+        try {
+            createIndices(
+                    "CREATE INDEX IDX1 ON aTable (a_string) INCLUDE (b_string, x_integer)",
+                    "CREATE INDEX IDX2 ON aTable (b_string) INCLUDE (a_string, y_integer)",
+                    "CREATE INDEX IDX_FULL ON aTable (b_string) INCLUDE (a_string, a_integer, a_date, a_time, a_timestamp, x_decimal, x_long, x_integer, y_integer, a_byte, a_short, a_float, a_double, a_unsigned_float, a_unsigned_double)");
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+        final Start start = new Start() {
+            @Override
+            Connection createConnection() throws Exception {
+                return connectWithMaterialization(
+                        "IDX1", "select a_string as \"0:A_STRING\", organization_id as \":ORGANIZATION_ID\", entity_id as \":ENTITY_ID\", b_string as \"0:B_STRING\", x_integer as \"0:X_INTEGER\" from aTable",
+                        "IDX2", "select b_string as \"0:B_STRING\", organization_id as \":ORGANIZATION_ID\", entity_id as \":ENTITY_ID\", a_string as \"0:A_STRING\", y_integer as \"0:Y_INTEGER\" from aTable",
+                        "IDX_FULL", "select b_string as \"0:B_STRING\", organization_id as \":ORGANIZATION_ID\", entity_id as \":ENTITY_ID\", a_string as \"0:A_STRING\", a_integer as \"0:A_INTEGER\", a_date as \"0:A_DATE\", a_time as \"0:A_TIME\", a_timestamp as \"0:A_TIMESTAMP\", x_decimal as \"0:X_DECIMAL\", x_long as \"0:X_LONG\", x_integer as \"0:X_INTEGER\", y_integer as \"0:Y_INTEGER\", a_byte as \"0:A_BYTE\", a_short as \"0:A_SHORT\", a_float as \"0:A_FLOAT\", a_double as \"0:A_DOUBLE\", a_unsigned_float as \"0:A_UNSIGNED_FLOAT\", a_unsigned_double as \"0:A_UNSIGNED_DOUBLE\" from aTable");
+            }
+        };
+        start.sql("select x_integer from aTable")
+            .explainIs("PhoenixToEnumerableConverter\n" +
+                       "  PhoenixToClientConverter\n" +
+                       "    PhoenixServerProject(X_INTEGER=[$4])\n" +
+                       "      PhoenixTableScan(table=[[phoenix, IDX1]])\n")
+            .close();
+        start.sql("select a_string from aTable order by a_string")
+            .explainIs("PhoenixToEnumerableConverter\n" +
+                       "  PhoenixToClientConverter\n" +
+                       "    PhoenixServerProject(A_STRING=[$0])\n" +
+                       "      PhoenixTableScan(table=[[phoenix, IDX1]])\n")
+            .close();
+        start.sql("select a_string from aTable order by organization_id")
+            .explainIs("PhoenixToEnumerableConverter\n" +
+                       "  PhoenixToClientConverter\n" +
+                       "    PhoenixServerProject(A_STRING=[$2])\n" +
+                       "      PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
+            .close();
+        start.sql("select a_integer from aTable order by a_string")
+            .explainIs("PhoenixToEnumerableConverter\n" +
+                       "  PhoenixClientProject(A_INTEGER=[$1])\n" +
+                       "    PhoenixServerSort(sort0=[$0], dir0=[ASC])\n" +
+                       "      PhoenixServerProject(A_STRING=[$2], A_INTEGER=[$4])\n" +
+                       "        PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
+            .close();
+        start.sql("select a_string, b_string from aTable where a_string = 'a'")
+            .explainIs("PhoenixToEnumerableConverter\n" +
+                       "  PhoenixToClientConverter\n" +
+                       "    PhoenixServerProject(0:A_STRING=[$0], 0:B_STRING=[$3])\n" +
+                       "      PhoenixTableScan(table=[[phoenix, IDX1]], filter=[=($0, 'a')])\n")
+            .close();
+        start.sql("select a_string, b_string from aTable where b_string = 'b'")
+            .explainIs("PhoenixToEnumerableConverter\n" +
+                       "  PhoenixToClientConverter\n" +
+                       "    PhoenixServerProject(A_STRING=[$3], B_STRING=[$0])\n" +
+                       "      PhoenixTableScan(table=[[phoenix, IDX2]], filter=[=($0, 'b')])\n")
+            .close();
+        start.sql("select a_string, b_string, x_integer, y_integer from aTable where b_string = 'b'")
+            .explainIs("PhoenixToEnumerableConverter\n" +
+                       "  PhoenixToClientConverter\n" +
+                       "    PhoenixServerProject(A_STRING=[$3], B_STRING=[$0], X_INTEGER=[$10], Y_INTEGER=[$11])\n" +
+                       "      PhoenixTableScan(table=[[phoenix, IDX_FULL]], filter=[=($0, 'b')])\n")
+        .close();
     }
     
     @Test public void testConnectJoinHsqldb() {

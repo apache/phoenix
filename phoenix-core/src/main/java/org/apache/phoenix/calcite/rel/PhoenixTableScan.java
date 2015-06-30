@@ -24,6 +24,7 @@ import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
+import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.SequenceManager;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.compile.WhereCompiler;
@@ -51,6 +52,8 @@ import com.google.common.collect.Lists;
 public class PhoenixTableScan extends TableScan implements PhoenixRel {
     public final RexNode filter;
     
+    private final ScanRanges scanRanges;
+    
     /**
      * This will not make a difference in implement(), but rather give a more accurate
      * estimate of the row count.
@@ -77,6 +80,28 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
         super(cluster, traits, table);
         this.filter = filter;
         this.statelessFetch = statelessFetch;
+        
+        ScanRanges scanRanges = null;
+        if (filter != null) {
+            try {
+                // TODO simplify this code
+                final PhoenixTable phoenixTable = table.unwrap(PhoenixTable.class);
+                PTable pTable = phoenixTable.getTable();
+                TableRef tableRef = new TableRef(CalciteUtils.createTempAlias(), pTable, HConstants.LATEST_TIMESTAMP, false);
+                Implementor tmpImplementor = new PhoenixRelImplementorImpl();
+                tmpImplementor.setTableRef(tableRef);
+                SelectStatement select = SelectStatement.SELECT_STAR;
+                PhoenixStatement stmt = new PhoenixStatement(phoenixTable.pc);
+                ColumnResolver resolver = FromCompiler.getResolver(tableRef);
+                StatementContext context = new StatementContext(stmt, resolver, new Scan(), new SequenceManager(stmt));
+                Expression filterExpr = CalciteUtils.toExpression(filter, tmpImplementor);
+                filterExpr = WhereOptimizer.pushKeyExpressionsToScan(context, select, filterExpr);
+                scanRanges = context.getScanRanges();
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+        }        
+        this.scanRanges = scanRanges;
     }
 
     @Override
@@ -94,9 +119,18 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
 
     @Override
     public RelOptCost computeSelfCost(RelOptPlanner planner) {
-        double rowCount = RelMetadataQuery.getRowCount(this);
+        double rowCount = super.getRows();
+        if (scanRanges != null) {
+            if (scanRanges.isPointLookup()) {
+                rowCount = 1;
+            } else if (scanRanges.getPkColumnSpan() > 0) {
+                // TODO
+                rowCount = rowCount * RelMetadataQuery.getSelectivity(this, filter);
+            }
+        }
+        int fieldCount = this.table.getRowType().getFieldCount();
         return planner.getCostFactory()
-                .makeCost(rowCount, rowCount + 1, 0)
+                .makeCost(rowCount * 2 * fieldCount / (fieldCount + 1), rowCount + 1, 0)
                 .multiplyBy(PHOENIX_FACTOR);
     }
     
