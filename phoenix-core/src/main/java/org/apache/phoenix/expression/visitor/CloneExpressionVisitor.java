@@ -31,6 +31,17 @@ import org.apache.phoenix.expression.DivideExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.InListExpression;
 import org.apache.phoenix.expression.IsNullExpression;
+import org.apache.phoenix.expression.JsonMultiKeySearchAndExpression;
+import org.apache.phoenix.expression.JsonMultiKeySearchOrExpression;
+import org.apache.phoenix.expression.JsonPathAsElementExpression;
+import org.apache.phoenix.expression.JsonPathAsTextExpression;
+import org.apache.phoenix.expression.JsonPointAsElementExpression;
+import org.apache.phoenix.expression.JsonPointAsTextExpression;
+import org.apache.phoenix.expression.JsonPointForArrayAsElementExpression;
+import org.apache.phoenix.expression.JsonPointForArrayAsTextExpression;
+import org.apache.phoenix.expression.JsonSingleKeySearchExpression;
+import org.apache.phoenix.expression.JsonSubsetExpression;
+import org.apache.phoenix.expression.JsonSupersetExpression;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.LikeExpression;
 import org.apache.phoenix.expression.LiteralExpression;
@@ -198,5 +209,55 @@ public class CloneExpressionVisitor extends TraverseAllExpressionVisitor<Express
     public Expression visitLeave(ArrayElemRefExpression node, List<Expression> l) {
         return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node :  new ArrayElemRefExpression(l);
     }
+//for JSON node 
+    
+    @Override
+    public Expression visitLeave(JsonSingleKeySearchExpression node, List<Expression> l) {
+        return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node :  new JsonSingleKeySearchExpression (l);
+    }
+    @Override
+    public Expression visitLeave(JsonSupersetExpression node, List<Expression> l) {
+        return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node :  new JsonSupersetExpression(l);
+    }
+    @Override
+    public Expression visitLeave(JsonSubsetExpression node, List<Expression> l) {
+        return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node :  new JsonSubsetExpression(l);
+    }
+    @Override
+    public Expression visitLeave(JsonMultiKeySearchOrExpression node, List<Expression> l) {
+        return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node :  new JsonMultiKeySearchOrExpression(l);
+    }
+    @Override
+    public Expression visitLeave(JsonMultiKeySearchAndExpression node, List<Expression> l) {
+        return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node :  new JsonMultiKeySearchAndExpression(l);
+    }
+    @Override
+    public Expression visitLeave(JsonPathAsTextExpression node, List<Expression> l) {
+        return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node :  new JsonPathAsTextExpression(l);
+    }
+    @Override
+    public Expression visitLeave(JsonPathAsElementExpression node, List<Expression> l) {
+        return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node :  new JsonPathAsElementExpression(l);
+    }
+   
+    public Expression visitLeave(JsonPointAsTextExpression node, List<Expression> l) {
+        return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node :  new JsonPointAsTextExpression(l);
+    }
 
+	@Override
+	public Expression visitLeave(JsonPointForArrayAsTextExpression node,
+			List<Expression> l) {
+		return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node :  new JsonPointForArrayAsTextExpression(l);
+	}
+	
+	@Override
+    public Expression visitLeave(JsonPointAsElementExpression node, List<Expression> l) {
+        return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node :  new JsonPointAsElementExpression(l);
+    }
+
+	@Override
+	public Expression visitLeave(JsonPointForArrayAsElementExpression node,
+			List<Expression> l) {
+		return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node :  new JsonPointForArrayAsElementExpression(l);
+	}
 }

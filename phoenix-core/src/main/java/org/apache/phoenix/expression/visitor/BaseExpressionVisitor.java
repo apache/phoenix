@@ -30,6 +30,17 @@ import org.apache.phoenix.expression.DivideExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.InListExpression;
 import org.apache.phoenix.expression.IsNullExpression;
+import org.apache.phoenix.expression.JsonMultiKeySearchAndExpression;
+import org.apache.phoenix.expression.JsonMultiKeySearchOrExpression;
+import org.apache.phoenix.expression.JsonPathAsElementExpression;
+import org.apache.phoenix.expression.JsonPathAsTextExpression;
+import org.apache.phoenix.expression.JsonPointAsElementExpression;
+import org.apache.phoenix.expression.JsonPointAsTextExpression;
+import org.apache.phoenix.expression.JsonPointForArrayAsElementExpression;
+import org.apache.phoenix.expression.JsonPointForArrayAsTextExpression;
+import org.apache.phoenix.expression.JsonSingleKeySearchExpression;
+import org.apache.phoenix.expression.JsonSubsetExpression;
+import org.apache.phoenix.expression.JsonSupersetExpression;
 import org.apache.phoenix.expression.LikeExpression;
 import org.apache.phoenix.expression.ModulusExpression;
 import org.apache.phoenix.expression.MultiplyExpression;
@@ -154,6 +165,63 @@ public abstract class BaseExpressionVisitor<E> implements ExpressionVisitor<E> {
     @Override
     public Iterator<Expression> visitEnter(ArrayElemRefExpression arrayElemRefExpression) {
         return null;
+    }
+    
+    //for JSON node
+    
+    @Override
+	public Iterator<Expression> visitEnter(JsonPointForArrayAsElementExpression jsonPointForArrayAsElementExpression){
+    	return null;
+    }
+	
+    @Override
+	public Iterator<Expression> visitEnter(JsonMultiKeySearchAndExpression jsonMultiKeySearchAndExpression){
+    	return null;
+    }
+	
+    @Override
+	public Iterator<Expression> visitEnter(JsonPathAsElementExpression jsonMultiKeySearchAndExpression){
+    	return null;
+    }
+	
+    @Override
+	public Iterator<Expression> visitEnter(JsonPathAsTextExpression jsonPathAdTextExpression){
+    	return null;
+    }
+	
+    @Override
+	public Iterator<Expression> visitEnter(JsonMultiKeySearchOrExpression jsonMultiKeySearchOrExpression){
+    	return null;
+    }
+	
+    @Override
+	public Iterator<Expression> visitEnter(JsonPointAsElementExpression jsonPointAsElementExpression){
+    	return null;
+    }
+	
+    @Override
+	public Iterator<Expression> visitEnter(JsonPointAsTextExpression jsonPointAsTextExpression){
+    	return null;
+    }
+	
+    @Override
+	public Iterator<Expression> visitEnter(JsonPointForArrayAsTextExpression jsonPointForArrayAsTextExpression){
+    	return null;
+    }
+	
+    @Override
+	public Iterator<Expression> visitEnter(JsonSingleKeySearchExpression jsonSingleKeySearchExpression){
+    	return null;
+    }
+	
+    @Override
+	public Iterator<Expression> visitEnter(JsonSubsetExpression jsonSubsetExpression){
+    	return null;
+    }
+	
+    @Override
+	public Iterator<Expression> visitEnter(JsonSupersetExpression jsonSupersetExpression){
+    	return null;
     }
 
 }

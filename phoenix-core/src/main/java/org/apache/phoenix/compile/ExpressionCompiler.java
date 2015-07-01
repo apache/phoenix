@@ -51,6 +51,17 @@ import org.apache.phoenix.expression.DoubleSubtractExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.InListExpression;
 import org.apache.phoenix.expression.IsNullExpression;
+import org.apache.phoenix.expression.JsonMultiKeySearchAndExpression;
+import org.apache.phoenix.expression.JsonMultiKeySearchOrExpression;
+import org.apache.phoenix.expression.JsonPathAsElementExpression;
+import org.apache.phoenix.expression.JsonPathAsTextExpression;
+import org.apache.phoenix.expression.JsonPointAsElementExpression;
+import org.apache.phoenix.expression.JsonPointAsTextExpression;
+import org.apache.phoenix.expression.JsonPointForArrayAsElementExpression;
+import org.apache.phoenix.expression.JsonPointForArrayAsTextExpression;
+import org.apache.phoenix.expression.JsonSingleKeySearchExpression;
+import org.apache.phoenix.expression.JsonSubsetExpression;
+import org.apache.phoenix.expression.JsonSupersetExpression;
 import org.apache.phoenix.expression.LikeExpression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.LongAddExpression;
@@ -89,6 +100,15 @@ import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunctionInfo;
 import org.apache.phoenix.parse.InListParseNode;
 import org.apache.phoenix.parse.IsNullParseNode;
+import org.apache.phoenix.parse.JsonMultiKeySearchOrParseNode;
+import org.apache.phoenix.parse.JsonMultiKeySeatchAndParseNode;
+import org.apache.phoenix.parse.JsonPathAsElementParseNode;
+import org.apache.phoenix.parse.JsonPathAsTextParseNode;
+import org.apache.phoenix.parse.JsonPointAsElementParseNode;
+import org.apache.phoenix.parse.JsonPointAsTextParseNode;
+import org.apache.phoenix.parse.JsonSingleKeySearchParseNode;
+import org.apache.phoenix.parse.JsonSubsetParseNode;
+import org.apache.phoenix.parse.JsonSupersetParseNode;
 import org.apache.phoenix.parse.LikeParseNode;
 import org.apache.phoenix.parse.LikeParseNode.LikeType;
 import org.apache.phoenix.parse.LiteralParseNode;
@@ -128,10 +148,13 @@ import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PDouble;
+import org.apache.phoenix.schema.types.PJson;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PUnsignedTimestamp;
 import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.schema.types.PVarcharArray;
 import org.apache.phoenix.schema.types.PhoenixArray;
 import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.IndexUtil;
@@ -1338,5 +1361,189 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     
     public int getTotalNodeCount() {
         return totalNodeCount;
+    }
+  //JSON node 
+    @Override
+    public boolean visitEnter(JsonSingleKeySearchParseNode node) {
+        return true;
+    }
+    
+    @Override
+    public boolean visitEnter(JsonSubsetParseNode node) {
+        return true;
+    }
+    
+    @Override
+    public boolean visitEnter(JsonSupersetParseNode node) {
+        return true;
+    }
+    
+    @Override
+    public boolean visitEnter(JsonMultiKeySearchOrParseNode node) {
+        return true;
+    }
+    
+    @Override
+    public boolean visitEnter(JsonMultiKeySeatchAndParseNode node) {
+        return true;
+    }
+    
+    @Override
+    public boolean visitEnter(JsonPathAsTextParseNode node) {
+        return true;
+    }
+    
+    @Override
+    public boolean visitEnter(JsonPathAsElementParseNode node) {
+        return true;
+    }
+    
+    @Override
+    public boolean visitEnter(JsonPointAsElementParseNode node) throws SQLException {
+        return true;
+    }
+    
+    @Override
+    public boolean visitEnter(JsonPointAsTextParseNode node){
+    	return true;
+    }
+    
+    
+    @Override
+    public Expression visitLeave(JsonSingleKeySearchParseNode node, List<Expression> children) throws SQLException {
+    	if(!(PJson.INSTANCE.isComparableTo(children.get(0).getDataType()))){
+    		throw TypeMismatchException.newException(children.get(0).getDataType(), children.get(1).getDataType());
+       	}
+    	if(!(PVarchar.INSTANCE.isComparableTo(children.get(1).getDataType()))){
+     		 throw TypeMismatchException.newException(children.get(0).getDataType(), children.get(1).getDataType());
+      	}
+        Expression expression = new JsonSingleKeySearchExpression(children);
+        return wrapGroupByExpression(expression);
+    }
+    
+    @Override
+    public Expression visitLeave(JsonSubsetParseNode node, List<Expression> children) throws SQLException {
+    	if(!(PJson.INSTANCE.isComparableTo(children.get(0).getDataType()))){
+    		throw TypeMismatchException.newException(children.get(0).getDataType(), children.get(1).getDataType());
+       	}
+    	if(!(PJson.INSTANCE.isComparableTo(children.get(1).getDataType()))){
+      		 throw TypeMismatchException.newException(children.get(0).getDataType(), children.get(1).getDataType());
+       	}
+       	LiteralExpression rhs=(LiteralExpression)children.get(1);
+        Expression expression = new JsonSubsetExpression(children);
+        return wrapGroupByExpression(expression);
+    }
+    
+    @Override
+    public Expression visitLeave(JsonSupersetParseNode node, List<Expression> children) throws SQLException {
+    	if(!(PJson.INSTANCE.isComparableTo(children.get(0).getDataType()))){
+    		throw TypeMismatchException.newException(children.get(0).getDataType(), children.get(1).getDataType());
+       	}
+    	if(!(PVarchar.INSTANCE.isComparableTo(children.get(1).getDataType()))){
+   		 throw TypeMismatchException.newException(children.get(0).getDataType(), children.get(1).getDataType());
+    	}
+    	LiteralExpression rhs=(LiteralExpression)children.get(1);
+        Expression expression = new JsonSupersetExpression(children);
+        return wrapGroupByExpression(expression);
+    }
+    
+    @Override
+    public Expression visitLeave(JsonMultiKeySearchOrParseNode node, List<Expression> children) throws SQLException {
+    	if(!(PJson.INSTANCE.isComparableTo(children.get(0).getDataType()))){
+    		throw TypeMismatchException.newException(children.get(0).getDataType(), children.get(1).getDataType());
+       	}
+    	if(children.get(1).getDataType()!=PVarcharArray.INSTANCE){
+    		 throw TypeMismatchException.newException(children.get(0).getDataType(), children.get(1).getDataType());
+    	}
+        Expression expression = new JsonMultiKeySearchOrExpression(children);
+        return wrapGroupByExpression(expression);
+    }
+    
+    @Override
+    public Expression visitLeave(JsonMultiKeySeatchAndParseNode node, List<Expression> children) throws SQLException {
+    	if(!(PJson.INSTANCE.isComparableTo(children.get(0).getDataType()))){
+    		throw TypeMismatchException.newException(children.get(0).getDataType(), children.get(1).getDataType());
+       	}
+    	if(children.get(1).getDataType()!=PVarcharArray.INSTANCE){
+   		 throw TypeMismatchException.newException(children.get(0).getDataType(), children.get(1).getDataType());
+    	}
+        Expression expression = new JsonMultiKeySearchAndExpression(children);
+        return wrapGroupByExpression(expression);
+    }
+    
+    @Override
+    public Expression visitLeave(JsonPathAsTextParseNode node, List<Expression> children) throws SQLException {
+    	if(!(PJson.INSTANCE.isComparableTo(children.get(0).getDataType()))){
+    		throw TypeMismatchException.newException(children.get(0).getDataType(), children.get(1).getDataType());
+       	}
+    	if(!(PVarchar.INSTANCE.isComparableTo(children.get(1).getDataType()))){
+    		 throw TypeMismatchException.newException(children.get(0).getDataType(), children.get(1).getDataType());
+    	}
+    	LiteralExpression rhs=(LiteralExpression)children.get(1);
+    	String v=(String)rhs.getValue();
+    	if(!v.startsWith("{")||!v.endsWith("}")){
+    		throw new SQLExceptionInfo.Builder(SQLExceptionCode.JSON_PATH_ERROR).build().buildException();
+    	}
+        Expression expression = new JsonPathAsTextExpression(children);
+        return wrapGroupByExpression(expression);
+    }
+    
+    @Override
+    public Expression visitLeave(JsonPathAsElementParseNode node, List<Expression> children) throws SQLException {
+    	if(!(PJson.INSTANCE.isComparableTo(children.get(0).getDataType()))){
+    		throw TypeMismatchException.newException(children.get(0).getDataType(), children.get(1).getDataType());
+       	}
+    	if(!(PVarchar.INSTANCE.isComparableTo(children.get(1).getDataType()))){
+    		 throw TypeMismatchException.newException(children.get(0).getDataType(), children.get(1).getDataType());
+    	}
+    	LiteralExpression rhs=(LiteralExpression)children.get(1);
+    	String v=(String)rhs.getValue();
+    	if(!v.startsWith("{")||!v.endsWith("}")){
+    		throw new SQLExceptionInfo.Builder(SQLExceptionCode.JSON_PATH_ERROR).build().buildException();
+    	}
+        Expression expression = new JsonPathAsElementExpression(children);
+        return wrapGroupByExpression(expression);
+    }
+    
+    @Override
+    public Expression visitLeave(JsonPointAsTextParseNode node,List <Expression> children)throws SQLException{
+    	 ParseNode lhsNode = node.getChildren().get(0);
+         ParseNode rhsNode = node.getChildren().get(1);
+         Expression lhs = children.get(0);
+         Expression rhs = children.get(1);
+         if ( !(rhs.getDataType().isCoercibleTo(PVarchar.INSTANCE)||rhs.getDataType().isCoercibleTo(PDecimal.INSTANCE))&&
+                 !(lhs.getDataType()==PJson.INSTANCE)) {
+             throw TypeMismatchException.newException(lhs.getDataType(), rhs.getDataType(), node.toString());
+         }
+         if (lhsNode instanceof BindParseNode) {
+             context.getBindManager().addParamMetaData((BindParseNode)lhsNode, rhs);
+         }
+         if (rhsNode instanceof BindParseNode) {
+             context.getBindManager().addParamMetaData((BindParseNode)rhsNode, lhs);
+         }
+         if(rhs.getDataType().isCoercibleTo(PVarchar.INSTANCE))return new JsonPointAsTextExpression(children);
+         else if(rhs.getDataType().isCoercibleTo(PDecimal.INSTANCE))return new JsonPointForArrayAsTextExpression(children);
+         else throw TypeMismatchException.newException(lhs.getDataType(), rhs.getDataType(), node.toString());
+    }
+    
+    @Override
+    public Expression visitLeave(JsonPointAsElementParseNode node, List <Expression> children) throws SQLException {
+    	ParseNode lhsNode = node.getChildren().get(0);
+        ParseNode rhsNode = node.getChildren().get(1);
+        Expression lhs = children.get(0);
+        Expression rhs = children.get(1);
+        if ( !(rhs.getDataType().isCoercibleTo(PVarchar.INSTANCE)||rhs.getDataType().isCoercibleTo(PDecimal.INSTANCE))&&
+                !(lhs.getDataType()==PJson.INSTANCE)) {
+            throw TypeMismatchException.newException(lhs.getDataType(), rhs.getDataType(), node.toString());
+        }
+        if (lhsNode instanceof BindParseNode) {
+            context.getBindManager().addParamMetaData((BindParseNode)lhsNode, rhs);
+        }
+        if (rhsNode instanceof BindParseNode) {
+            context.getBindManager().addParamMetaData((BindParseNode)rhsNode, lhs);
+        }
+        if(rhs.getDataType().isCoercibleTo(PVarchar.INSTANCE))return new JsonPointAsElementExpression(children);
+        else if(rhs.getDataType().isCoercibleTo(PDecimal.INSTANCE))return new JsonPointForArrayAsElementExpression(children);
+        else throw TypeMismatchException.newException(lhs.getDataType(), rhs.getDataType(), node.toString());
     }
 }

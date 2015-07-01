@@ -220,7 +220,43 @@ public class ParseNodeFactory {
     public AndParseNode and(List<ParseNode> children) {
         return new AndParseNode(children);
     }
-
+    //JSON ParseNode
+    public JsonPathAsTextParseNode jsonPathT(ParseNode lhs,ParseNode rhs) {
+        return new JsonPathAsTextParseNode(lhs,rhs);
+    }
+    
+    public JsonPathAsElementParseNode jsonPathE(ParseNode lhs,ParseNode rhs) {
+        return new JsonPathAsElementParseNode(lhs,rhs);
+    }
+    
+    public JsonPointAsElementParseNode jsonPointE(ParseNode lhs,ParseNode rhs) {
+        return new JsonPointAsElementParseNode(lhs,rhs);
+    }
+    
+    public JsonPointAsTextParseNode jsonPointT(ParseNode lhs,ParseNode rhs) {
+        return new JsonPointAsTextParseNode(lhs,rhs);
+    }
+    
+    public JsonSupersetParseNode jsonSuperset(ParseNode lhs,ParseNode rhs) {
+        return new JsonSupersetParseNode(lhs,rhs);
+    }
+    
+    public JsonSubsetParseNode jsonSubset(ParseNode lhs,ParseNode rhs) {
+        return new JsonSubsetParseNode(lhs,rhs);
+    }
+    
+    public JsonSingleKeySearchParseNode sSearch(ParseNode lhs,ParseNode rhs) {
+        return new JsonSingleKeySearchParseNode(lhs,rhs);
+    }
+    
+    public JsonMultiKeySearchOrParseNode mOrSearch(ParseNode lhs,ParseNode rhs) {
+        return new JsonMultiKeySearchOrParseNode(lhs,rhs);
+    }
+    
+    public JsonMultiKeySeatchAndParseNode mAndSearch(ParseNode lhs,ParseNode rhs) {
+        return new JsonMultiKeySeatchAndParseNode(lhs,rhs);
+    }
+    
     public FamilyWildcardParseNode family(String familyName){
     	    return new FamilyWildcardParseNode(familyName, false);
     }

@@ -26,7 +26,14 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.schema.EqualityNotSupportedException;
+import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.types.PBoolean;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDouble;
+import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PJson;
+import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.codehaus.jackson.JsonFactory;
 import org.codehaus.jackson.JsonNode;
 import org.codehaus.jackson.JsonParser;
@@ -51,6 +58,7 @@ public class PhoenixJson implements Comparable<PhoenixJson> {
      * keeping user data as it is.
      */
     private final String jsonAsString;
+    
 
     /**
      * Static Factory method to get an {@link PhoenixJson} object. It also validates the json and
@@ -213,8 +221,108 @@ public class PhoenixJson implements Comparable<PhoenixJson> {
     public int compareTo(PhoenixJson o) {
         throw new EqualityNotSupportedException(PJson.INSTANCE);
     }
+    /**
+     *  Get children JSON used for evaluate
+     * @param key for JSON key
+     * @return A Children JSON as PhoenixJson
+     */
+    public PhoenixJson getValue(String key)
+    {
+    	if(rootNode.has(key))
+    	{
+    		JsonNode children=rootNode.get(key);
+    		return new PhoenixJson(children,children.toString());
+    	}
+    	// didn't find key
+    	return null; 
+    }
+    /**
+     *  Get children JSON used for evaluate
+     * @param index for JSON array index
+     * @return A Children JSON as PhoenixJson
+     */
+    public PhoenixJson getValue(int index)
+    {
+    	if(rootNode.has(index))
+    	{
+    		JsonNode children=rootNode.get(index);
+    		return new PhoenixJson(children,children.toString());
+    	}
+    	// out of array index
+    	return null; 
+    }
+    
+    // this method is used to type check
+     public PDataType getValueAsPDataType()
+     {
+    	 PDataType valueDataType=PJson.INSTANCE;
+    	 if(rootNode.isValueNode())
+     	{
+     		if(rootNode.isBoolean())
+     		{
+     			valueDataType=PBoolean.INSTANCE;
+     		}
+     		else if(rootNode.isInt() || rootNode.isIntegralNumber())
+     		{
+     			valueDataType=PInteger.INSTANCE;
+     		}
+     		else if(rootNode.isLong())
+     		{
+     			valueDataType=PLong.INSTANCE;
+     		}
+     		//JSON didn't have float type
+     		else if(rootNode.isDouble() || rootNode.isFloatingPointNumber())
+     		{
+     			valueDataType=PDouble.INSTANCE;
+     		}
+     		else if(rootNode.isTextual())
+     		{
+     			valueDataType=PVarchar.INSTANCE;
+     		}
+     	}
+     	return valueDataType;
+     }
+ 
+     /*
+      * those methods are to get values from JSON key/value or JSON array
+      *  Be used in expression method -- evaluate()
+      *     Boolean Integer Long  Double String
+      */
+     
+     public byte[] valueWrapToBytes()
+     {
+    	 if(rootNode.isValueNode())
+     	{
+     		if(rootNode.isBoolean())
+     		{
+     			return PBoolean.INSTANCE.toBytes(rootNode.getValueAsBoolean(), SortOrder.getDefault());
+     		}
+     		else if(rootNode.isInt() || rootNode.isIntegralNumber())
+     		{
+     			return PInteger.INSTANCE.toBytes(rootNode.getValueAsInt(), SortOrder.getDefault());
+     		}
+     		else if(rootNode.isLong())
+     		{
+     			return PLong.INSTANCE.toBytes(rootNode.getValueAsLong(), SortOrder.getDefault());
+     		}
+     		//JSON didn't have float type
+     		else if(rootNode.isDouble() || rootNode.isFloatingPointNumber())
+     		{
+     			return PDouble.INSTANCE.toBytes(rootNode.getValueAsDouble(), SortOrder.getDefault());
+     		}
+     		else if(rootNode.isTextual())
+     		{
+     			return PVarchar.INSTANCE.toBytes(rootNode.getValueAsText(), SortOrder.getDefault());
+     		}
+     		else
+     		{
+     			return this.toBytes(); //can't cast to phoenix support type will be return as row bytes
+     		}
+     	}
+     	return this.toBytes(); //JSONarray/subJSON will cast as string
+     }
 
-    private PhoenixJson getPhoenixJsonInternal(String[] paths) {
+	private PhoenixJson getPhoenixJsonInternal(String[] paths) {
         JsonNode node = this.rootNode;
         for (String path : paths) {
             JsonNode nodeTemp = null;

@@ -588,4 +588,94 @@ public class ParseNodeRewriter extends TraverseAllParseNodeVisitor<ParseNode> {
             }
         });
     }
+//feature for JSON
+	@Override
+	public ParseNode visitLeave(JsonPathAsElementParseNode node,
+			List<ParseNode> nodes) throws SQLException {
+		 return leaveCompoundNode(node, nodes, new CompoundNodeFactory() {
+	            @Override
+	            public ParseNode createNode(List<ParseNode> children) {
+	                return NODE_FACTORY.jsonPathE(children.get(0), children.get(1));
+	            }
+	        });
+	}
+
+
+	@Override
+	public ParseNode visitLeave(JsonPointAsElementParseNode node,
+			List<ParseNode> nodes) throws SQLException {
+		return leaveCompoundNode(node, nodes, new CompoundNodeFactory() {
+            @Override
+            public ParseNode createNode(List<ParseNode> children) {
+                return NODE_FACTORY.jsonPointE(children.get(0), children.get(1));
+             
+            }
+        });
+	}
+
+	@Override
+	public ParseNode visitLeave(JsonPointAsTextParseNode node, List<ParseNode> nodes)
+			throws SQLException {
+		return leaveCompoundNode(node, nodes, new CompoundNodeFactory() {
+            @Override
+            public ParseNode createNode(List<ParseNode> children) {
+                return NODE_FACTORY.jsonPointT(children.get(0), children.get(1));
+            }
+        });
+	}
+
+	@Override
+	public ParseNode visitLeave(JsonSingleKeySearchParseNode node,List<ParseNode> nodes) throws SQLException {
+		 return leaveCompoundNode(node, nodes, new CompoundNodeFactory() {
+	            @Override
+	            public ParseNode createNode(List<ParseNode> children) {
+	                return NODE_FACTORY.sSearch(children.get(0),children.get(1));
+	            }
+	        });
+	}
+	@Override
+	public ParseNode visitLeave(JsonSubsetParseNode node,List<ParseNode> nodes) throws SQLException {
+		 return leaveCompoundNode(node, nodes, new CompoundNodeFactory() {
+	            @Override
+	            public ParseNode createNode(List<ParseNode> children) {
+	                return NODE_FACTORY.jsonSubset(children.get(0),children.get(1));
+	            }
+	        });
+	}
+	@Override
+	public ParseNode visitLeave(JsonSupersetParseNode  node,List<ParseNode> nodes) throws SQLException {
+		 return leaveCompoundNode(node, nodes, new CompoundNodeFactory() {
+	            @Override
+	            public ParseNode createNode(List<ParseNode> children) {
+	                return NODE_FACTORY.jsonSuperset(children.get(0),children.get(1));
+	            }
+	        });
+	}
+	@Override
+	public ParseNode visitLeave(JsonMultiKeySearchOrParseNode  node,List<ParseNode> nodes) throws SQLException {
+		 return leaveCompoundNode(node, nodes, new CompoundNodeFactory() {
+	            @Override
+	            public ParseNode createNode(List<ParseNode> children) {
+	                return NODE_FACTORY.mOrSearch(children.get(0),children.get(1));
+	            }
+	        });
+	}
+	@Override
+	public ParseNode visitLeave(JsonMultiKeySeatchAndParseNode  node,List<ParseNode> nodes) throws SQLException {
+		 return leaveCompoundNode(node, nodes, new CompoundNodeFactory() {
+	            @Override
+	            public ParseNode createNode(List<ParseNode> children) {
+	                return NODE_FACTORY.mAndSearch(children.get(0),children.get(1));
+	            }
+	        });
+	}
+	@Override
+	public ParseNode visitLeave(JsonPathAsTextParseNode  node,List<ParseNode> nodes) throws SQLException {
+		 return leaveCompoundNode(node, nodes, new CompoundNodeFactory() {
+	            @Override
+	            public ParseNode createNode(List<ParseNode> children) {
+	                return NODE_FACTORY.jsonPointT(children.get(0),children.get(1));
+	            }
+	        });
+	}
 }
