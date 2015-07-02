@@ -38,13 +38,6 @@ import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunctionInfo;
  * @since 0.1
  */
 public class SelectStatement implements FilterableStatement {
-    public static final SelectStatement SELECT_STAR =
-            new SelectStatement(
-                    null, null, false, 
-                    Collections.<AliasedNode>singletonList(new AliasedNode(null, WildcardParseNode.INSTANCE)),
-                    null, Collections.<ParseNode>emptyList(),
-                    null, Collections.<OrderByNode>emptyList(),
-                    null, 0, false, false, Collections.<SelectStatement>emptyList(), new HashMap<String, UDFParseNode>(1));
     public static final SelectStatement SELECT_ONE =
             new SelectStatement(
                     null, null, false, 

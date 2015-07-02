@@ -134,7 +134,7 @@ public class PhoenixServerJoin extends PhoenixAbstractJoin {
                 new int[] {leftTable.getColumns().size() - leftTable.getPKColumns().size()}, 
                 postFilterExpr, null);
         
-        return HashJoinPlan.create(SelectStatement.SELECT_STAR, leftPlan, hashJoinInfo, new HashJoinPlan.HashSubPlan[] {new HashJoinPlan.HashSubPlan(0, rightPlan, rightExprs, isSingleValueRhs, null, null)});
+        return HashJoinPlan.create((SelectStatement) (leftPlan.getStatement()), leftPlan, hashJoinInfo, new HashJoinPlan.HashSubPlan[] {new HashJoinPlan.HashSubPlan(0, rightPlan, rightExprs, isSingleValueRhs, null, null)});
     }
 
 }

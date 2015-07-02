@@ -90,7 +90,7 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
                 TableRef tableRef = new TableRef(CalciteUtils.createTempAlias(), pTable, HConstants.LATEST_TIMESTAMP, false);
                 Implementor tmpImplementor = new PhoenixRelImplementorImpl();
                 tmpImplementor.setTableRef(tableRef);
-                SelectStatement select = SelectStatement.SELECT_STAR;
+                SelectStatement select = SelectStatement.SELECT_ONE;
                 PhoenixStatement stmt = new PhoenixStatement(phoenixTable.pc);
                 ColumnResolver resolver = FromCompiler.getResolver(tableRef);
                 StatementContext context = new StatementContext(stmt, resolver, new Scan(), new SequenceManager(stmt));
@@ -156,7 +156,7 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
             PhoenixStatement stmt = new PhoenixStatement(phoenixTable.pc);
             ColumnResolver resolver = FromCompiler.getResolver(tableRef);
             StatementContext context = new StatementContext(stmt, resolver, new Scan(), new SequenceManager(stmt));
-            SelectStatement select = SelectStatement.SELECT_STAR;
+            SelectStatement select = SelectStatement.SELECT_ONE;
             if (filter != null) {
                 Expression filterExpr = CalciteUtils.toExpression(filter, implementor);
                 filterExpr = WhereOptimizer.pushKeyExpressionsToScan(context, select, filterExpr);
