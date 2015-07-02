@@ -684,9 +684,9 @@ public class MetaDataClient {
         argUpsert.setBytes(4, bytes);
         argUpsert.setBoolean(5, arg.isArrayType());
         argUpsert.setBoolean(6, arg.isConstant());
-        argUpsert.setString(7, arg.getDefaultValue() == null? null: (String)arg.getDefaultValue().getValue());
-        argUpsert.setString(8, arg.getMinValue() == null? null: (String)arg.getMinValue().getValue());
-        argUpsert.setString(9, arg.getMaxValue() == null? null: (String)arg.getMaxValue().getValue());
+        argUpsert.setString(7, arg.getDefaultValue() == null? null: arg.getDefaultValue().toString());
+        argUpsert.setString(8, arg.getMinValue() == null? null: arg.getMinValue().toString());
+        argUpsert.setString(9, arg.getMaxValue() == null? null: arg.getMaxValue().toString());
         argUpsert.execute();
     }
 
