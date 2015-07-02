@@ -35,6 +35,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.ColumnProjector;
 import org.apache.phoenix.compile.ExpressionProjector;
 import org.apache.phoenix.compile.RowProjector;
+import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -67,7 +68,6 @@ import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 
 
@@ -209,6 +209,8 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
     public static final byte[] IS_VIEW_REFERENCED_BYTES = Bytes.toBytes(IS_VIEW_REFERENCED);
     public static final String VIEW_INDEX_ID = "VIEW_INDEX_ID";
     public static final byte[] VIEW_INDEX_ID_BYTES = Bytes.toBytes(VIEW_INDEX_ID);
+    public static final String BASE_COLUMN_COUNT = "BASE_COLUMN_COUNT";
+    public static final byte[] BASE_COLUMN_COUNT_BYTES = Bytes.toBytes(BASE_COLUMN_COUNT);
 
     public static final String TABLE_FAMILY = QueryConstants.DEFAULT_COLUMN_FAMILY;
     public static final byte[] TABLE_FAMILY_BYTES = QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
@@ -310,7 +312,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
     public static final int CLIENT_KEY_VALUE_BUILDER_THRESHOLD = VersionUtil.encodeVersion("0", "94", "14");
     
     PhoenixDatabaseMetaData(PhoenixConnection connection) throws SQLException {
-        this.emptyResultSet = new PhoenixResultSet(ResultIterator.EMPTY_ITERATOR, RowProjector.EMPTY_PROJECTOR, new PhoenixStatement(connection));
+        this.emptyResultSet = new PhoenixResultSet(ResultIterator.EMPTY_ITERATOR, RowProjector.EMPTY_PROJECTOR, new StatementContext(new PhoenixStatement(connection), false));
         this.connection = connection;
     }
 
@@ -437,6 +439,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
                 DECIMAL_DIGITS + "," +
                 NUM_PREC_RADIX + "," +
                 NULLABLE + "," +
+                REMARKS + "," +
                 COLUMN_DEF + "," +
                 SQL_DATA_TYPE + "," +
                 SQL_DATETIME_SUB + "," +
@@ -508,11 +511,10 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
                 public PhoenixStatement newStatement(PhoenixConnection connection) {
                     return new PhoenixStatement(connection) {
                         @Override
-                        protected PhoenixResultSet newResultSet(ResultIterator iterator, RowProjector projector)
-                                throws SQLException {
-                            return new PhoenixResultSet(
-                                    new TenantColumnFilteringIterator(iterator, projector),
-                                    projector, this);
+                        protected PhoenixResultSet newResultSet(ResultIterator iterator, RowProjector projector,
+                                StatementContext context) throws SQLException {
+                            return new PhoenixResultSet(new TenantColumnFilteringIterator(iterator, projector),
+                                    projector, context);
                         }
                     };
                 }
@@ -522,7 +524,12 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
         }
         return stmt.executeQuery(buf.toString());
     }
-
+    
+//    private ColumnResolver getColumnResolverForCatalogTable() throws SQLException {
+//        TableRef tableRef = new TableRef(getTable(connection, SYSTEM_CATALOG_NAME));
+//        return FromCompiler.getResolver(tableRef);
+//    }
+    
     /**
      * Filters the tenant id column out of a column metadata result set (thus, where each row is a column definition).
      * The tenant id is by definition the first column of the primary key, but the primary key does not necessarily
@@ -1006,7 +1013,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
     }
     @Override
     public ResultSet getTableTypes() throws SQLException {
-        return new PhoenixResultSet(new MaterializedResultIterator(TABLE_TYPE_TUPLES), TABLE_TYPE_ROW_PROJECTOR, new PhoenixStatement(connection));
+        return new PhoenixResultSet(new MaterializedResultIterator(TABLE_TYPE_TUPLES), TABLE_TYPE_ROW_PROJECTOR, new StatementContext(new PhoenixStatement(connection), false));
     }
 
     /**

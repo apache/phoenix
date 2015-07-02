@@ -20,6 +20,7 @@ package org.apache.phoenix.query;
 import static org.apache.hadoop.hbase.HColumnDescriptor.TTL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_DROP_METADATA;
+import static org.apache.phoenix.util.UpgradeUtil.upgradeTo4_5_0;
 
 import java.io.IOException;
 import java.sql.SQLException;
@@ -116,6 +117,7 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.protobuf.ProtobufUtil;
+import org.apache.phoenix.schema.ColumnAlreadyExistsException;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.EmptySequenceCacheException;
 import org.apache.phoenix.schema.FunctionNotFoundException;
@@ -141,6 +143,7 @@ import org.apache.phoenix.schema.stats.PTableStats;
 import org.apache.phoenix.schema.stats.StatisticsUtil;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PUnsignedTinyint;
 import org.apache.phoenix.util.ByteUtil;
@@ -1823,21 +1826,16 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     }
 
-    /** 
-     * Keeping this to use for further upgrades. This method closes the oldMetaConnection.
-     */
-    private PhoenixConnection addColumnsIfNotExists(PhoenixConnection oldMetaConnection,
-        String tableName, long timestamp, String columns) throws SQLException {
-
+    private PhoenixConnection addColumn(PhoenixConnection oldMetaConnection, String tableName, long timestamp, String columns, boolean addIfNotExists) throws SQLException {
         Properties props = new Properties(oldMetaConnection.getClientInfo());
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(timestamp));
         // Cannot go through DriverManager or you end up in an infinite loop because it'll call init again
         PhoenixConnection metaConnection = new PhoenixConnection(this, oldMetaConnection.getURL(), props, oldMetaConnection.getMetaDataCache());
         SQLException sqlE = null;
         try {
-            metaConnection.createStatement().executeUpdate("ALTER TABLE " + tableName + " ADD IF NOT EXISTS " + columns );
+            metaConnection.createStatement().executeUpdate("ALTER TABLE " + tableName + " ADD " + (addIfNotExists ? " IF NOT EXISTS " : "") + columns );
         } catch (SQLException e) {
-            logger.warn("addColumnsIfNotExists failed due to:" + e);
+            logger.warn("Add column failed due to:" + e);
             sqlE = e;
         } finally {
             try {
@@ -1854,6 +1852,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
         }
         return metaConnection;
+    }
+    
+    /** 
+     * Keeping this to use for further upgrades. This method closes the oldMetaConnection.
+     */
+    private PhoenixConnection addColumnsIfNotExists(PhoenixConnection oldMetaConnection,
+            String tableName, long timestamp, String columns) throws SQLException {
+        return addColumn(oldMetaConnection, tableName, timestamp, columns, true);
     }
 
     @Override
@@ -1926,21 +1932,40 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                     }
                                 }
 
-                                // If the server side schema is at before MIN_SYSTEM_TABLE_TIMESTAMP_4_1_0 then 
-                                // we need to add INDEX_TYPE and INDEX_DISABLE_TIMESTAMP columns too.
-                                // TODO: Once https://issues.apache.org/jira/browse/PHOENIX-1614 is fixed,
-                                // we should just have a ALTER TABLE ADD IF NOT EXISTS statement with all
-                                // the column names that have been added to SYSTEM.CATALOG since 4.0.
+                                // If the server side schema is before MIN_SYSTEM_TABLE_TIMESTAMP_4_1_0 then
+                                // we need to add INDEX_TYPE and INDEX_DISABLE_TIMESTAMP columns too. 
+                                // TODO: Once https://issues.apache.org/jira/browse/PHOENIX-1614 is fixed, 
+                                // we should just have a ALTER TABLE ADD IF NOT EXISTS statement with all 
+                                // the column names that have been added to SYSTEM.CATALOG since 4.0. 
                                 if (currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_1_0) {
                                     columnsToAdd += ", " + PhoenixDatabaseMetaData.INDEX_TYPE + " " + PUnsignedTinyint.INSTANCE.getSqlTypeName()
                                             + ", " + PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP + " " + PLong.INSTANCE.getSqlTypeName();
                                 }
 
-                                // Ugh..need to assign to another local variable to keep eclipse happy.
-                                PhoenixConnection newMetaConnection = addColumnsIfNotExists(metaConnection,
-                                        PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-                                        MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP, columnsToAdd);
-                                metaConnection = newMetaConnection;
+                                // If we have some new columns from 4.1-4.3 to add, add them now.
+                                if (!columnsToAdd.isEmpty()) {
+                                    // Ugh..need to assign to another local variable to keep eclipse happy.
+                                    PhoenixConnection newMetaConnection = addColumnsIfNotExists(metaConnection,
+                                            PhoenixDatabaseMetaData.SYSTEM_CATALOG,
+                                            MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP, columnsToAdd);
+                                    metaConnection = newMetaConnection;
+                                }
+                                
+                                if (currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_5_0) {
+                                    columnsToAdd = PhoenixDatabaseMetaData.BASE_COLUMN_COUNT + " "
+                                            + PInteger.INSTANCE.getSqlTypeName();
+                                    try {
+                                        addColumn(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
+                                                MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP, columnsToAdd, false);
+                                        upgradeTo4_5_0(metaConnection);
+                                    } catch (ColumnAlreadyExistsException ignored) {
+                                        /* 
+                                         * Upgrade to 4.5 is a slightly special case. We use the fact that the column
+                                         * BASE_COLUMN_COUNT is already part of the meta-data schema as the signal that
+                                         * the server side upgrade has finished or is in progress.
+                                         */
+                                    }
+                                }
                             }
                             int nSaltBuckets = ConnectionQueryServicesImpl.this.props.getInt(QueryServices.SEQUENCE_SALT_BUCKETS_ATTRIB,
                                     QueryServicesOptions.DEFAULT_SEQUENCE_TABLE_SALT_BUCKETS);
@@ -1983,6 +2008,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 } else { 
                                     nSequenceSaltBuckets = getSaltBuckets(e);
                                 }
+                                
                             }
                             try {
                                 metaConnection.createStatement().executeUpdate(
@@ -2002,6 +2028,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             } catch (NewerTableAlreadyExistsException e) {
                             } catch (TableAlreadyExistsException e) {
                             }
+                            
 
                         } catch (Exception e) {
                             if (e instanceof SQLException) {

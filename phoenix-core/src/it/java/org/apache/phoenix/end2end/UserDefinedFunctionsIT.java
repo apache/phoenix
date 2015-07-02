@@ -36,8 +36,10 @@ import java.io.OutputStream;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.Statement;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.jar.Attributes;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
@@ -346,7 +348,7 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT{
             
         }
 
-        tenant2Conn.createStatement().execute("create function myfunction(INTEGER, INTEGER CONSTANT defaultValue='10' minvalue='1' maxvalue='15' ) returns INTEGER as 'org.apache.phoenix.end2end."+MY_SUM_CLASS_NAME+"' using jar "
+        tenant2Conn.createStatement().execute("create function myfunction(INTEGER, INTEGER CONSTANT defaultValue=10 minvalue=1 maxvalue=15 ) returns INTEGER as 'org.apache.phoenix.end2end."+MY_SUM_CLASS_NAME+"' using jar "
                 + "'"+util.getConfiguration().get(DYNAMIC_JARS_DIR_KEY) + "/myjar2.jar"+"'");
         try {
             tenant2Conn.createStatement().execute("create function myfunction(VARCHAR) returns VARCHAR as 'org.apache.phoenix.end2end.UnknownClass' using jar "
@@ -422,7 +424,7 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT{
         conn.commit();
         conn.createStatement().execute("create table t2(k integer primary key, k1 integer, lastname_reverse varchar)");
         conn.commit();
-        stmt.execute("create function mysum3(INTEGER, INTEGER CONSTANT defaultValue='10' minvalue='1' maxvalue='15' ) returns INTEGER as 'org.apache.phoenix.end2end."+MY_SUM_CLASS_NAME+"' using jar "
+        stmt.execute("create function mysum3(INTEGER, INTEGER CONSTANT defaultValue=10 minvalue=1 maxvalue=15 ) returns INTEGER as 'org.apache.phoenix.end2end."+MY_SUM_CLASS_NAME+"' using jar "
                 + "'"+util.getConfiguration().get(DYNAMIC_JARS_DIR_KEY) + "/myjar2.jar"+"'");
         stmt.execute("create function myreverse3(VARCHAR) returns VARCHAR as 'org.apache.phoenix.end2end."+MY_REVERSE_CLASS_NAME+"' using jar "
                 + "'"+util.getConfiguration().get(DYNAMIC_JARS_DIR_KEY) + "/myjar1.jar"+"'");
@@ -456,7 +458,7 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT{
         conn.createStatement().execute("create table t4(k integer primary key, k1 integer, lastname varchar)");
         stmt.execute("upsert into t4 values(1,1,'jock')");
         conn.commit();
-        stmt.execute("create function mysum(INTEGER, INTEGER CONSTANT defaultValue='10' minvalue='1' maxvalue='15' ) returns INTEGER as 'org.apache.phoenix.end2end."+MY_SUM_CLASS_NAME+"' using jar "
+        stmt.execute("create function mysum(INTEGER, INTEGER CONSTANT defaultValue=10 minvalue=1 maxvalue=15 ) returns INTEGER as 'org.apache.phoenix.end2end."+MY_SUM_CLASS_NAME+"' using jar "
                 + "'"+util.getConfiguration().get(DYNAMIC_JARS_DIR_KEY) + "/myjar2.jar"+"'");
         ResultSet rs = stmt.executeQuery("select mysum(k,12) from t4");
         assertTrue(rs.next());
@@ -479,7 +481,7 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT{
         conn.createStatement().execute("create table t9(k integer primary key, k1 integer, lastname varchar)");
         stmt.execute("upsert into t9 values(1,1,'jock')");
         conn.commit();
-        stmt.execute("create temporary function mysum9(INTEGER, INTEGER CONSTANT defaultValue='10' minvalue='1' maxvalue='15' ) returns INTEGER as 'org.apache.phoenix.end2end."+MY_SUM_CLASS_NAME+"' using jar "
+        stmt.execute("create temporary function mysum9(INTEGER, INTEGER CONSTANT defaultValue=10 minvalue=1 maxvalue=15 ) returns INTEGER as 'org.apache.phoenix.end2end."+MY_SUM_CLASS_NAME+"' using jar "
                 + "'"+util.getConfiguration().get(DYNAMIC_JARS_DIR_KEY) + "/myjar2.jar"+"'");
         ResultSet rs = stmt.executeQuery("select mysum9(k,12) from t9");
         assertTrue(rs.next());
@@ -521,7 +523,7 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT{
         ResultSet rs = stmt.executeQuery(query);
         rs.next();
         int numRowsBefore = rs.getInt(1);
-        stmt.execute("create function mysum6(INTEGER, INTEGER CONSTANT defaultValue='10' minvalue='1' maxvalue='15' ) returns INTEGER as 'org.apache.phoenix.end2end."+MY_SUM_CLASS_NAME+"' using jar "
+        stmt.execute("create function mysum6(INTEGER, INTEGER CONSTANT defaultValue=10 minvalue=1 maxvalue=15 ) returns INTEGER as 'org.apache.phoenix.end2end."+MY_SUM_CLASS_NAME+"' using jar "
                 + "'"+util.getConfiguration().get(DYNAMIC_JARS_DIR_KEY) + "/myjar2.jar"+"'");
         rs = stmt.executeQuery(query);
         rs.next();
@@ -549,7 +551,7 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT{
         } catch(FunctionNotFoundException e) {
             fail("FunctionNotFoundException should not be thrown");
         }
-        stmt.execute("create function mysum6(INTEGER, INTEGER CONSTANT defaultValue='10' minvalue='1' maxvalue='15' ) returns INTEGER as 'org.apache.phoenix.end2end."+MY_SUM_CLASS_NAME+"' using jar "
+        stmt.execute("create function mysum6(INTEGER, INTEGER CONSTANT defaultValue=10 minvalue=1 maxvalue=15 ) returns INTEGER as 'org.apache.phoenix.end2end."+MY_SUM_CLASS_NAME+"' using jar "
                 + "'"+util.getConfiguration().get(DYNAMIC_JARS_DIR_KEY) + "/myjar2.jar"+"'");
         try {
             rs = stmt.executeQuery("select mysum6(k1) from t6");
@@ -614,10 +616,22 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT{
             manifest.getMainAttributes().put(Attributes.Name.MANIFEST_VERSION, "1.0");
             FileOutputStream jarFos = new FileOutputStream(jarPath);
             JarOutputStream jarOutputStream = new JarOutputStream(jarFos, manifest);
-            String pathToAdd =packageName.replace('.', File.separatorChar)
-                    + File.separator;
-            jarOutputStream.putNextEntry(new JarEntry(pathToAdd));
-            jarOutputStream.closeEntry();
+            String pathToAdd = packageName.replace('.', '/') + '/';
+            String jarPathStr = new String(pathToAdd);
+            Set<String> pathsInJar = new HashSet<String>();
+
+            while (pathsInJar.add(jarPathStr)) {
+                int ix = jarPathStr.lastIndexOf('/', jarPathStr.length() - 2);
+                if (ix < 0) {
+                    break;
+                }
+                jarPathStr = jarPathStr.substring(0, ix);
+            }
+            for (String pathInJar : pathsInJar) {
+                jarOutputStream.putNextEntry(new JarEntry(pathInJar));
+                jarOutputStream.closeEntry();
+            }
+
             jarOutputStream.putNextEntry(new JarEntry(pathToAdd + classFile.getName()));
             byte[] allBytes = new byte[(int) classFile.length()];
             FileInputStream fis = new FileInputStream(classFile);

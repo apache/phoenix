@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.cache;
 
+import static org.apache.phoenix.monitoring.TaskExecutionMetricsHolder.NO_OP_INSTANCE;
 import static org.apache.phoenix.util.LogUtil.addCustomAnnotations;
 
 import java.io.Closeable;
@@ -57,6 +58,7 @@ import org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ServerCachin
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.job.JobManager.JobCallable;
 import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
+import org.apache.phoenix.monitoring.TaskExecutionMetricsHolder;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -225,6 +227,11 @@ public class ServerCacheClient {
                         @Override
                         public Object getJobId() {
                             return ServerCacheClient.this;
+                        }
+                        
+                        @Override
+                        public TaskExecutionMetricsHolder getTaskExecutionMetric() {
+                            return NO_OP_INSTANCE;
                         }
                     }));
                 } else {

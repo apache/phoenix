@@ -322,4 +322,5 @@ public interface PTable extends PMetaDataEntity {
 
     IndexType getIndexType();
     PTableStats getTableStats();
+    int getBaseColumnCount();
 }

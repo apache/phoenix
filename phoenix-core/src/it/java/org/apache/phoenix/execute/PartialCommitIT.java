@@ -260,6 +260,7 @@ public class PartialCommitIT {
         PhoenixConnection phxCon = new PhoenixConnection(con.unwrap(PhoenixConnection.class));
         final Map<TableRef,Map<ImmutableBytesPtr,MutationState.RowMutationState>> mutations = Maps.newTreeMap(new TableRefComparator());
         return new PhoenixConnection(phxCon) {
+            @Override
             protected MutationState newMutationState(int maxSize) {
                 return new MutationState(maxSize, this, mutations);
             };

@@ -39,39 +39,30 @@ public abstract class JavaMathOneArgumentFunction extends ScalarFunction {
 
     protected abstract double compute(double firstArg);
 
+    static double getArg(Expression exp, ImmutableBytesWritable ptr) {
+        if (exp.getDataType() == PDecimal.INSTANCE) {
+            return ((BigDecimal) exp.getDataType().toObject(ptr, exp.getSortOrder())).doubleValue();
+        } else {
+            return exp.getDataType().getCodec().decodeDouble(ptr, exp.getSortOrder());
+        }
+    }
+
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-        Expression childExpr = children.get(0);
         PDataType returnType = getDataType();
-        if (childExpr.evaluate(tuple, ptr)) {
-            if (ptr.getLength() == 0) {
-                return true;
-            }
-            double result;
-            if (childExpr.getDataType() == PDecimal.INSTANCE) {
-                result =
-                        ((BigDecimal) childExpr.getDataType().toObject(ptr,
-                            childExpr.getSortOrder())).doubleValue();
-            } else {
-                result =
-                        childExpr.getDataType().getCodec()
-                                .decodeDouble(ptr, childExpr.getSortOrder());
-            }
-            ptr.set(new byte[returnType.getByteSize()]);
-            returnType.getCodec().encodeDouble(compute(result), ptr);
-            return true;
-        } else {
-            return false;
-        }
+
+        Expression arg1Expr = children.get(0);
+        if (!arg1Expr.evaluate(tuple, ptr)) return false;
+        if (ptr.getLength() == 0) return true;
+        double arg1 = getArg(arg1Expr, ptr);
+
+        ptr.set(new byte[returnType.getByteSize()]);
+        returnType.getCodec().encodeDouble(compute(arg1), ptr);
+        return true;
     }
 
     @Override
     public PDataType getDataType() {
         return PDouble.INSTANCE;
-    }
-
-    @Override
-    public OrderPreserving preservesOrder() {
-        return OrderPreserving.YES;
     }
 }

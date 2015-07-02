@@ -65,7 +65,15 @@ def setPath():
         phoenix_class_path = os.getenv('PHOENIX_CLASS_PATH','')
 
     global hbase_conf_dir
-    hbase_conf_dir = os.getenv('HBASE_CONF_DIR', os.getenv('HBASE_CONF_PATH', '.'))
+    # if HBASE_CONF_DIR set explicitly, use that
+    hbase_conf_dir = os.getenv('HBASE_CONF_DIR', os.getenv('HBASE_CONF_PATH'))
+    if not hbase_conf_dir:
+        # else fall back to HBASE_HOME
+        if os.getenv('HBASE_HOME'):
+            hbase_conf_dir = os.path.join(os.getenv('HBASE_HOME'), "conf")
+        else:
+            # default to pwd
+            hbase_conf_dir = '.'
     global hbase_conf_path # keep conf_path around for backward compatibility
     hbase_conf_path = hbase_conf_dir
 

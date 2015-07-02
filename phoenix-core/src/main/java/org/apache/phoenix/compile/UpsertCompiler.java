@@ -118,43 +118,40 @@ public class UpsertCompiler {
         mutation.put(ptr, new RowMutationState(columnValues, statement.getConnection().getStatementExecutionCounter()));
     }
 
-    private static MutationState upsertSelect(PhoenixStatement statement, 
-            TableRef tableRef, RowProjector projector, ResultIterator iterator, int[] columnIndexes,
-            int[] pkSlotIndexes) throws SQLException {
-        try {
-            PhoenixConnection connection = statement.getConnection();
-            ConnectionQueryServices services = connection.getQueryServices();
-            int maxSize = services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_ATTRIB,QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE);
-            int batchSize = Math.min(connection.getMutateBatchSize(), maxSize);
-            boolean isAutoCommit = connection.getAutoCommit();
-            byte[][] values = new byte[columnIndexes.length][];
-            int rowCount = 0;
-            Map<ImmutableBytesPtr,RowMutationState> mutation = Maps.newHashMapWithExpectedSize(batchSize);
-            PTable table = tableRef.getTable();
-            ResultSet rs = new PhoenixResultSet(iterator, projector, statement);
+    private static MutationState upsertSelect(StatementContext childContext, TableRef tableRef, RowProjector projector,
+            ResultIterator iterator, int[] columnIndexes, int[] pkSlotIndexes) throws SQLException {
+        PhoenixStatement statement = childContext.getStatement();
+        PhoenixConnection connection = statement.getConnection();
+        ConnectionQueryServices services = connection.getQueryServices();
+        int maxSize = services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_ATTRIB,
+                QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE);
+        int batchSize = Math.min(connection.getMutateBatchSize(), maxSize);
+        boolean isAutoCommit = connection.getAutoCommit();
+        byte[][] values = new byte[columnIndexes.length][];
+        int rowCount = 0;
+        Map<ImmutableBytesPtr, RowMutationState> mutation = Maps.newHashMapWithExpectedSize(batchSize);
+        PTable table = tableRef.getTable();
+        try (ResultSet rs = new PhoenixResultSet(iterator, projector, childContext)) {
             ImmutableBytesWritable ptr = new ImmutableBytesWritable();
             while (rs.next()) {
                 for (int i = 0; i < values.length; i++) {
                     PColumn column = table.getColumns().get(columnIndexes[i]);
-                    byte[] bytes = rs.getBytes(i+1);
+                    byte[] bytes = rs.getBytes(i + 1);
                     ptr.set(bytes == null ? ByteUtil.EMPTY_BYTE_ARRAY : bytes);
-                    Object value = rs.getObject(i+1);
-                    int rsPrecision = rs.getMetaData().getPrecision(i+1);
+                    Object value = rs.getObject(i + 1);
+                    int rsPrecision = rs.getMetaData().getPrecision(i + 1);
                     Integer precision = rsPrecision == 0 ? null : rsPrecision;
-                    int rsScale = rs.getMetaData().getScale(i+1);
+                    int rsScale = rs.getMetaData().getScale(i + 1);
                     Integer scale = rsScale == 0 ? null : rsScale;
                     // We are guaranteed that the two column will have compatible types,
                     // as we checked that before.
-                    if (!column.getDataType().isSizeCompatible(ptr, value, column.getDataType(),
-                            precision, scale,
-                            column.getMaxLength(),column.getScale())) {
-                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY)
-                            .setColumnName(column.getName().getString())
-                            .setMessage("value=" + column.getDataType().toStringLiteral(ptr, null)).build().buildException();
-                    }
-                    column.getDataType().coerceBytes(ptr, value, column.getDataType(),
-                            precision, scale, SortOrder.getDefault(),
-                            column.getMaxLength(), column.getScale(), column.getSortOrder());
+                    if (!column.getDataType().isSizeCompatible(ptr, value, column.getDataType(), precision, scale,
+                            column.getMaxLength(), column.getScale())) { throw new SQLExceptionInfo.Builder(
+                            SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY).setColumnName(column.getName().getString())
+                            .setMessage("value=" + column.getDataType().toStringLiteral(ptr, null)).build()
+                            .buildException(); }
+                    column.getDataType().coerceBytes(ptr, value, column.getDataType(), precision, scale,
+                            SortOrder.getDefault(), column.getMaxLength(), column.getScale(), column.getSortOrder());
                     values[i] = ByteUtil.copyKeyBytesIfNecessary(ptr);
                 }
                 setValues(values, pkSlotIndexes, columnIndexes, table, mutation, statement);
@@ -169,8 +166,6 @@ public class UpsertCompiler {
             }
             // If auto commit is true, this last batch will be committed upon return
             return new MutationState(tableRef, mutation, rowCount / batchSize * batchSize, maxSize, connection);
-        } finally {
-            iterator.close();
         }
     }
 
@@ -186,14 +181,21 @@ public class UpsertCompiler {
         }
 
         @Override
-        protected MutationState mutate(StatementContext context, ResultIterator iterator, PhoenixConnection connection) throws SQLException {
-            if (context.getSequenceManager().getSequenceCount() > 0) {
+        protected MutationState mutate(StatementContext parentContext, ResultIterator iterator, PhoenixConnection connection) throws SQLException {
+            if (parentContext.getSequenceManager().getSequenceCount() > 0) {
                 throw new IllegalStateException("Cannot pipeline upsert when sequence is referenced");
             }
             PhoenixStatement statement = new PhoenixStatement(connection);
+            /*
+             * We don't want to collect any read metrics within the child context. This is because any read metrics that
+             * need to be captured are already getting collected in the parent statement context enclosed in the result
+             * iterator being used for reading rows out.
+             */
+            StatementContext childContext = new StatementContext(statement, false);
             // Clone the row projector as it's not thread safe and would be used simultaneously by
             // multiple threads otherwise.
-            return upsertSelect(statement, tableRef, projector.cloneIfNecessary(), iterator, columnIndexes, pkSlotIndexes);
+            MutationState state = upsertSelect(childContext, tableRef, projector.cloneIfNecessary(), iterator, columnIndexes, pkSlotIndexes);
+            return state;
         }
         
         public void setRowProjector(RowProjector projector) {
@@ -669,7 +671,7 @@ public class UpsertCompiler {
                 public MutationState execute() throws SQLException {
                     ResultIterator iterator = queryPlan.iterator();
                     if (parallelIteratorFactory == null) {
-                        return upsertSelect(statement, tableRef, projector, iterator, columnIndexes, pkSlotIndexes);
+                        return upsertSelect(new StatementContext(statement), tableRef, projector, iterator, columnIndexes, pkSlotIndexes);
                     }
                     try {
                         parallelIteratorFactory.setRowProjector(projector);
@@ -677,13 +679,21 @@ public class UpsertCompiler {
                         parallelIteratorFactory.setPkSlotIndexes(pkSlotIndexes);
                         Tuple tuple;
                         long totalRowCount = 0;
+                        StatementContext context = queryPlan.getContext();
                         while ((tuple=iterator.next()) != null) {// Runs query
                             Cell kv = tuple.getValue(0);
                             totalRowCount += PLong.INSTANCE.getCodec().decodeLong(kv.getValueArray(), kv.getValueOffset(), SortOrder.getDefault());
                         }
                         // Return total number of rows that have been updated. In the case of auto commit being off
                         // the mutations will all be in the mutation state of the current connection.
-                        return new MutationState(maxSize, statement.getConnection(), totalRowCount);
+                        MutationState mutationState = new MutationState(maxSize, statement.getConnection(), totalRowCount);
+                        /*
+                         *  All the metrics collected for measuring the reads done by the parallel mutating iterators
+                         *  is included in the ReadMetricHolder of the statement context. Include these metrics in the
+                         *  returned mutation state so they can be published on commit. 
+                         */
+                        mutationState.setReadMetricQueue(context.getReadMetricsQueue());
+                        return mutationState; 
                     } finally {
                         iterator.close();
                     }

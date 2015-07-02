@@ -18,30 +18,39 @@
 
 package org.apache.phoenix.pherf;
 
-import org.apache.phoenix.pherf.configuration.*;
-import org.apache.phoenix.pherf.loaddata.DataLoader;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
+
+import org.apache.phoenix.pherf.configuration.Column;
+import org.apache.phoenix.pherf.configuration.DataModel;
+import org.apache.phoenix.pherf.configuration.DataSequence;
+import org.apache.phoenix.pherf.configuration.DataTypeMapping;
+import org.apache.phoenix.pherf.configuration.Scenario;
+import org.apache.phoenix.pherf.configuration.XMLConfigParser;
 import org.apache.phoenix.pherf.rules.DataValue;
 import org.apache.phoenix.pherf.rules.RulesApplier;
-import org.apache.phoenix.pherf.util.PhoenixUtil;
+import org.apache.phoenix.pherf.workload.WriteWorkload;
 import org.joda.time.DateTime;
 import org.joda.time.format.DateTimeFormat;
 import org.joda.time.format.DateTimeFormatter;
 import org.junit.Test;
 
-import java.sql.Types;
-import java.util.*;
-
-import static org.junit.Assert.*;
-
 public class RuleGeneratorTest {
-    static PhoenixUtil util = new PhoenixUtil(true);
-    static final String matcherScenario = PherfConstants.SCENARIO_ROOT_PATTERN + ".xml";
+    private static final String matcherScenario = PherfConstants.SCENARIO_ROOT_PATTERN + ".xml";
 
     @Test
     public void testDateGenerator() throws Exception {
         XMLConfigParser parser = new XMLConfigParser(matcherScenario);
         DataModel model = parser.getDataModels().get(0);
-        DataLoader loader = new DataLoader(parser);
+        WriteWorkload loader = new WriteWorkload(parser);
         RulesApplier rulesApplier = loader.getRulesApplier();
 
         for (Column dataMapping : model.getDataMappingColumns()) {
@@ -68,7 +77,7 @@ public class RuleGeneratorTest {
     public void testNullChance() throws Exception {
         XMLConfigParser parser = new XMLConfigParser(matcherScenario);
         DataModel model = parser.getDataModels().get(0);
-        DataLoader loader = new DataLoader(parser);
+        WriteWorkload loader = new WriteWorkload(parser);
         RulesApplier rulesApplier = loader.getRulesApplier();
         int sampleSize = 100;
         List<String> values = new ArrayList<>(sampleSize);
@@ -96,7 +105,7 @@ public class RuleGeneratorTest {
     public void testSequentialDataSequence() throws Exception {
         XMLConfigParser parser = new XMLConfigParser(matcherScenario);
         DataModel model = parser.getDataModels().get(0);
-        DataLoader loader = new DataLoader(parser);
+        WriteWorkload loader = new WriteWorkload(parser);
         RulesApplier rulesApplier = loader.getRulesApplier();
 
         Column targetColumn = null;
@@ -181,7 +190,7 @@ public class RuleGeneratorTest {
         expectedValues.add("cCCyYhnNbBs9kWr");
 
         XMLConfigParser parser = new XMLConfigParser(".*test_scenario.xml");
-        DataLoader loader = new DataLoader(parser);
+        WriteWorkload loader = new WriteWorkload(parser);
         RulesApplier rulesApplier = loader.getRulesApplier();
         Scenario scenario = parser.getScenarios().get(0);
 

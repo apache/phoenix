@@ -174,9 +174,6 @@ public class PChar extends PDataType<String> {
 
     @Override
     public Object toObject(String value) {
-      if (value == null || value.length() == 0) {
-        throw newIllegalDataException(this + " may not be null");
-      }
       if (StringUtil.hasMultiByteChars(value)) {
         throw newIllegalDataException("CHAR types may only contain single byte characters (" + value + ")");
       }

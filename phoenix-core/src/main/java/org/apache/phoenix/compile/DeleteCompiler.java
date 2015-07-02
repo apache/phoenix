@@ -94,8 +94,9 @@ public class DeleteCompiler {
         this.statement = statement;
     }
     
-    private static MutationState deleteRows(PhoenixStatement statement, TableRef targetTableRef, TableRef indexTableRef, ResultIterator iterator, RowProjector projector, TableRef sourceTableRef) throws SQLException {
+    private static MutationState deleteRows(StatementContext childContext, TableRef targetTableRef, TableRef indexTableRef, ResultIterator iterator, RowProjector projector, TableRef sourceTableRef) throws SQLException {
         PTable table = targetTableRef.getTable();
+        PhoenixStatement statement = childContext.getStatement();
         PhoenixConnection connection = statement.getConnection();
         PName tenantId = connection.getTenantId();
         byte[] tenantIdBytes = null;
@@ -114,19 +115,18 @@ public class DeleteCompiler {
         if (indexTableRef != null) {
             indexMutations = Maps.newHashMapWithExpectedSize(batchSize);
         }
-        try {
-            List<PColumn> pkColumns = table.getPKColumns();
-            boolean isMultiTenant = table.isMultiTenant() && tenantIdBytes != null;
-            boolean isSharedViewIndex = table.getViewIndexId() != null;
-            int offset = (table.getBucketNum() == null ? 0 : 1);
-            byte[][] values = new byte[pkColumns.size()][];
-            if (isMultiTenant) {
-                values[offset++] = tenantIdBytes;
-            }
-            if (isSharedViewIndex) {
-                values[offset++] = MetaDataUtil.getViewIndexIdDataType().toBytes(table.getViewIndexId());
-            }
-            PhoenixResultSet rs = new PhoenixResultSet(iterator, projector, statement);
+        List<PColumn> pkColumns = table.getPKColumns();
+        boolean isMultiTenant = table.isMultiTenant() && tenantIdBytes != null;
+        boolean isSharedViewIndex = table.getViewIndexId() != null;
+        int offset = (table.getBucketNum() == null ? 0 : 1);
+        byte[][] values = new byte[pkColumns.size()][];
+        if (isMultiTenant) {
+            values[offset++] = tenantIdBytes;
+        }
+        if (isSharedViewIndex) {
+            values[offset++] = MetaDataUtil.getViewIndexIdDataType().toBytes(table.getViewIndexId());
+        }
+        try (PhoenixResultSet rs = new PhoenixResultSet(iterator, projector, childContext)) {
             int rowCount = 0;
             while (rs.next()) {
                 ImmutableBytesPtr ptr = new ImmutableBytesPtr();  // allocate new as this is a key in a Map
@@ -183,8 +183,6 @@ public class DeleteCompiler {
                 state.join(indexState);
             }
             return state;
-        } finally {
-            iterator.close();
         }
     }
     
@@ -199,9 +197,16 @@ public class DeleteCompiler {
         }
         
         @Override
-        protected MutationState mutate(StatementContext context, ResultIterator iterator, PhoenixConnection connection) throws SQLException {
+        protected MutationState mutate(StatementContext parentContext, ResultIterator iterator, PhoenixConnection connection) throws SQLException {
             PhoenixStatement statement = new PhoenixStatement(connection);
-            return deleteRows(statement, targetTableRef, indexTableRef, iterator, projector, sourceTableRef);
+            /*
+             * We don't want to collect any read metrics within the child context. This is because any read metrics that
+             * need to be captured are already getting collected in the parent statement context enclosed in the result
+             * iterator being used for reading rows out.
+             */
+            StatementContext ctx = new StatementContext(statement, false);
+            MutationState state = deleteRows(ctx, targetTableRef, indexTableRef, iterator, projector, sourceTableRef);
+            return state;
         }
         
         public void setTargetTableRef(TableRef tableRef) {
@@ -559,9 +564,14 @@ public class DeleteCompiler {
                             }
                             // Return total number of rows that have been delete. In the case of auto commit being off
                             // the mutations will all be in the mutation state of the current connection.
-                            return new MutationState(maxSize, connection, totalRowCount);
+                            MutationState state = new MutationState(maxSize, connection, totalRowCount);
+                            
+                            // set the read metrics accumulated in the parent context so that it can be published when the mutations are committed.
+                            state.setReadMetricQueue(plan.getContext().getReadMetricsQueue());
+                            
+                            return state;
                         } else {
-                            return deleteRows(statement, tableRef, deleteFromImmutableIndexToo ? plan.getTableRef() : null, iterator, plan.getProjector(), plan.getTableRef());
+                            return deleteRows(plan.getContext(), tableRef, deleteFromImmutableIndexToo ? plan.getTableRef() : null, iterator, plan.getProjector(), plan.getTableRef());
                         }
                     }
     

@@ -24,8 +24,9 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.schema.types.PDouble;
 
-@BuiltInFunction(name = SqrtFunction.NAME, args = { @Argument(allowedTypes = { PDecimal.class }) })
+@BuiltInFunction(name = SqrtFunction.NAME, args = { @Argument(allowedTypes = { PDouble.class, PDecimal.class }) })
 public class SqrtFunction extends JavaMathOneArgumentFunction {
 
     public static final String NAME = "SQRT";
@@ -45,5 +46,10 @@ public class SqrtFunction extends JavaMathOneArgumentFunction {
     @Override
     protected double compute(double firstArg) {
         return Math.sqrt(firstArg);
+    }
+
+    @Override
+    public OrderPreserving preservesOrder() {
+        return OrderPreserving.YES;
     }
 }

@@ -44,6 +44,9 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HBaseConfiguration;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.filter.Filter;
@@ -943,8 +946,11 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         PhoenixPreparedStatement pstmt = newPreparedStatement(pconn, query);
         QueryPlan plan = pstmt.optimizeQuery();
         Scan scan = plan.getContext().getScan();
-        assertEquals(QueryServicesOptions.DEFAULT_SCAN_CACHE_SIZE, pstmt.getFetchSize());
-        assertEquals(QueryServicesOptions.DEFAULT_SCAN_CACHE_SIZE, scan.getCaching());
+        Configuration config = HBaseConfiguration.create();
+        int defaultScannerCacheSize = config.getInt(HConstants.HBASE_CLIENT_SCANNER_CACHING,
+                HConstants.DEFAULT_HBASE_CLIENT_SCANNER_CACHING);
+        assertEquals(defaultScannerCacheSize, pstmt.getFetchSize());
+        assertEquals(defaultScannerCacheSize, scan.getCaching());
     }
 
     @Test

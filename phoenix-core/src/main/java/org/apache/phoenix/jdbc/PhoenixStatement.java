@@ -17,9 +17,9 @@
  */
 package org.apache.phoenix.jdbc;
 
-import static org.apache.phoenix.monitoring.PhoenixMetrics.CountMetric.MUTATION_COUNT;
-import static org.apache.phoenix.monitoring.PhoenixMetrics.CountMetric.QUERY_COUNT;
-import static org.apache.phoenix.monitoring.PhoenixMetrics.SizeMetric.QUERY_TIME;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_SQL_COUNTER;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_QUERY_TIME;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_SELECT_SQL_COUNTER;
 
 import java.io.IOException;
 import java.io.Reader;
@@ -71,6 +71,7 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.iterate.MaterializedResultIterator;
+import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.parse.AddColumnStatement;
 import org.apache.phoenix.parse.AliasedNode;
@@ -216,8 +217,8 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         return resultSets;
     }
     
-    protected PhoenixResultSet newResultSet(ResultIterator iterator, RowProjector projector) throws SQLException {
-        return new PhoenixResultSet(iterator, projector, this);
+    protected PhoenixResultSet newResultSet(ResultIterator iterator, RowProjector projector, StatementContext context) throws SQLException {
+        return new PhoenixResultSet(iterator, projector, context);
     }
     
     protected boolean execute(final CompilableStatement stmt) throws SQLException {
@@ -235,7 +236,7 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
     }
     
     protected PhoenixResultSet executeQuery(final CompilableStatement stmt) throws SQLException {
-        QUERY_COUNT.increment();
+        GLOBAL_SELECT_SQL_COUNTER.increment();
         try {
             return CallRunner.run(
                 new CallRunner.CallableThrowable<PhoenixResultSet, SQLException>() {
@@ -253,7 +254,9 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
                             String explainPlan = QueryUtil.getExplainPlan(resultIterator);
                             logger.debug(LogUtil.addCustomAnnotations("Explain plan: " + explainPlan, connection));
                         }
-                        PhoenixResultSet rs = newResultSet(resultIterator, plan.getProjector());
+                        StatementContext context = plan.getContext();
+                        context.getOverallQueryMetrics().startQuery();
+                        PhoenixResultSet rs = newResultSet(resultIterator, plan.getProjector(), context);
                         resultSets.add(rs);
                         setLastQueryPlan(plan);
                         setLastResultSet(rs);
@@ -272,7 +275,7 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
                         // Regardless of whether the query was successfully handled or not, 
                         // update the time spent so far. If needed, we can separate out the
                         // success times and failure times.
-                        QUERY_TIME.update(System.currentTimeMillis() - startTime);
+                        GLOBAL_QUERY_TIME.update(System.currentTimeMillis() - startTime);
                     }
                 }
                 }, PhoenixContextExecutor.inContext());
@@ -288,7 +291,7 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
                 SQLExceptionCode.READ_ONLY_CONNECTION).
                 build().buildException();
         }
-	    MUTATION_COUNT.increment();
+	    GLOBAL_MUTATION_SQL_COUNTER.increment();
         try {
             return CallRunner
                     .run(
@@ -444,6 +447,11 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
                 public ResultIterator iterator() throws SQLException {
                     return iterator;
                 }
+                
+                @Override
+                public ResultIterator iterator(ParallelScanGrouper scanGrouper) throws SQLException {
+                    return iterator;
+                }
 
                 @Override
                 public long getEstimatedSize() {
@@ -509,6 +517,7 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
                 public boolean useRoundRobinIterator() throws SQLException {
                     return false;
                 }
+                
             };
         }
     }

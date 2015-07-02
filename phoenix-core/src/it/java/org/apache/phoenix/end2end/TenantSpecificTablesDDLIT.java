@@ -17,9 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_DEFINE_PK_FOR_VIEW;
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_DROP_PK;
-import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_MODIFY_VIEW_PK;
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_MUTATE_TABLE;
 import static org.apache.phoenix.exception.SQLExceptionCode.TABLE_UNDEFINED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.KEY_SEQ;
@@ -158,16 +156,10 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
     }
     
     @Test
-    public void testTenantSpecificTableCannotDeclarePK() throws SQLException {
-        try {
+    public void testTenantSpecificTableCanDeclarePK() throws SQLException {
             createTestTable(PHOENIX_JDBC_TENANT_SPECIFIC_URL, "CREATE VIEW TENANT_TABLE2 ( \n" + 
                     "                tenant_col VARCHAR PRIMARY KEY) AS SELECT *\n" + 
                     "                FROM PARENT_TABLE", null, nextTimestamp());
-            fail();
-        }
-        catch (SQLException expected) {
-            assertEquals(CANNOT_DEFINE_PK_FOR_VIEW.getErrorCode(), expected.getErrorCode());
-        }
     }
     
     @Test(expected=ColumnAlreadyExistsException.class)
@@ -259,19 +251,12 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
     }
     
     @Test
-    public void testMutationOfPKInTenantTablesNotAllowed() throws Exception {
+    public void testDropOfPKInTenantTablesNotAllowed() throws Exception {
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(nextTimestamp()));
         Connection conn = DriverManager.getConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL, props);
         try {
-            try {
-                conn.createStatement().execute("alter table " + TENANT_TABLE_NAME + " add new_tenant_pk char(1) primary key");
-                fail();
-            }
-            catch (SQLException expected) {
-                assertEquals(CANNOT_MODIFY_VIEW_PK.getErrorCode(), expected.getErrorCode());
-            }
-            
+            // try removing a PK col
             try {
                 conn.createStatement().execute("alter table " + TENANT_TABLE_NAME + " drop column id");
                 fail();
@@ -291,25 +276,6 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(nextTimestamp()));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
-            // try adding a PK col
-            try {
-                conn.createStatement().execute("alter table " + PARENT_TABLE_NAME + " add new_pk varchar primary key");
-                fail();
-            }
-            catch (SQLException expected) {
-                assertEquals(CANNOT_MUTATE_TABLE.getErrorCode(), expected.getErrorCode());
-            }
-            
-            // try adding a non-PK col
-            try {
-                conn.createStatement().execute("alter table " + PARENT_TABLE_NAME + " add new_col char(1)");
-                fail();
-            }
-            catch (SQLException expected) {
-                assertEquals(CANNOT_MUTATE_TABLE.getErrorCode(), expected.getErrorCode());
-            }
-            
-            // try removing a PK col
             try {
                 conn.createStatement().execute("alter table " + PARENT_TABLE_NAME + " drop column id");
                 fail();

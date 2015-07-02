@@ -30,6 +30,8 @@ import org.apache.phoenix.schema.PMetaDataEntity;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.SizedUtil;
 
 public class PFunction implements PMetaDataEntity {
@@ -233,14 +235,18 @@ public class PFunction implements PMetaDataEntity {
         for(PFunctionArg arg: function.getArgumentsList()) {
             String argType = arg.getArgumentType();
             boolean isArrayType = arg.hasIsArrayType()?arg.getIsArrayType():false;
+			PDataType dataType = isArrayType ? PDataType.fromTypeId(PDataType
+					.sqlArrayType(SchemaUtil.normalizeIdentifier(SchemaUtil
+							.normalizeIdentifier(argType)))) : PDataType
+					.fromSqlTypeName(SchemaUtil.normalizeIdentifier(argType));
             boolean isConstant = arg.hasIsConstant()?arg.getIsConstant():false;
             String defaultValue = arg.hasDefaultValue()?arg.getDefaultValue():null;
             String minValue = arg.hasMinValue()?arg.getMinValue():null;
             String maxValue = arg.hasMaxValue()?arg.getMaxValue():null;
             args.add(new FunctionArgument(argType, isArrayType, isConstant,
-                    defaultValue == null ? null : LiteralExpression.newConstant(defaultValue),
-                    minValue == null ? null : LiteralExpression.newConstant(minValue),
-                    maxValue == null ? null : LiteralExpression.newConstant(maxValue)));
+                    defaultValue == null ? null : LiteralExpression.newConstant((new LiteralParseNode(dataType.toObject(defaultValue))).getValue()),
+                    minValue == null ? null : LiteralExpression.newConstant((new LiteralParseNode(dataType.toObject(minValue))).getValue()),
+                    maxValue == null ? null : LiteralExpression.newConstant((new LiteralParseNode(dataType.toObject(maxValue))).getValue())));
         }
         return new PFunction(tenantId,functionName, args, returnType, className, jarPath, timeStamp);
     }

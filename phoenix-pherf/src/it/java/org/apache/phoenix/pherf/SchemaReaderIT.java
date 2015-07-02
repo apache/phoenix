@@ -34,15 +34,12 @@ import java.sql.Connection;
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 
 public class SchemaReaderIT extends BaseHBaseManagedTimeIT {
-    protected static PhoenixUtil util = new PhoenixUtil(true);
+    protected static PhoenixUtil util = PhoenixUtil.create(true);
 
-	@Test
-    public void testSchemaReader() {
+    @Test public void testSchemaReader() {
         // Test for the unit test version of the schema files.
         assertApplySchemaTest();
     }
@@ -55,7 +52,8 @@ public class SchemaReaderIT extends BaseHBaseManagedTimeIT {
             List<Path> resources = new ArrayList<>(reader.getResourceList());
             assertTrue("Could not pull list of schema files.", resources.size() > 0);
             assertNotNull("Could not read schema file.", this.getClass().getResourceAsStream(
-                    PherfConstants.RESOURCE_DATAMODEL + "/" + resources.get(0).getFileName().toString()));
+                    PherfConstants.RESOURCE_DATAMODEL + "/" + resources.get(0).getFileName()
+                            .toString()));
             assertNotNull("Could not read schema file.", reader.resourceToString(resources.get(0)));
             reader.applySchema();
 
@@ -67,7 +65,10 @@ public class SchemaReaderIT extends BaseHBaseManagedTimeIT {
             DataModel data = XMLConfigParser.readDataModel(resourcePath);
             List<Scenario> scenarioList = data.getScenarios();
             Scenario scenario = scenarioList.get(0);
-            List<Column> columnList = util.getColumnsFromPhoenix(scenario.getSchemaName(), scenario.getTableNameWithoutSchemaName(), connection);
+            List<Column>
+                    columnList =
+                    util.getColumnsFromPhoenix(scenario.getSchemaName(),
+                            scenario.getTableNameWithoutSchemaName(), connection);
             assertTrue("Could not retrieve Metadata from Phoenix", columnList.size() > 0);
         } catch (Exception e) {
             fail("Could not initialize SchemaReader");

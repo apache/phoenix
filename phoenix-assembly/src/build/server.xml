@@ -38,6 +38,7 @@
         <include>org.iq80.snappy:snappy</include>
         <include>org.jruby.joni:joni</include>
         <include>org.jruby.jcodings:jcodings</include>
+	<include>joda-time:joda-time</include>
       </includes>
     </dependencySet>
     <dependencySet>

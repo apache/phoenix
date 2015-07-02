@@ -17,9 +17,6 @@
  */
 package org.apache.phoenix.memory;
 
-import static org.apache.phoenix.monitoring.PhoenixMetrics.SizeMetric.MEMORY_MANAGER_BYTES;
-import static org.apache.phoenix.monitoring.PhoenixMetrics.SizeMetric.MEMORY_WAIT_TIME;
-
 import org.apache.http.annotation.GuardedBy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -92,8 +89,6 @@ public class GlobalMemoryManager implements MemoryManager {
             }
             usedMemoryBytes += nBytes;
         }
-        MEMORY_WAIT_TIME.update(System.currentTimeMillis() - startTimeMs);
-        MEMORY_MANAGER_BYTES.update(nBytes);
         return nBytes;
     }
 

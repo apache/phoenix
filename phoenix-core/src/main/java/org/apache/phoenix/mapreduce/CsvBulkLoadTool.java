@@ -57,6 +57,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.job.JobManager;
+import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -255,17 +256,14 @@ public class CsvBulkLoadTool extends Configured implements Tool {
         }
         
         List<Future<Boolean>> runningJobs = new ArrayList<Future<Boolean>>();
-        boolean useInstrumentedPool = conn
-                .unwrap(PhoenixConnection.class)
-                .getQueryServices()
-                .getProps()
-                .getBoolean(QueryServices.METRICS_ENABLED,
-                        QueryServicesOptions.DEFAULT_IS_METRICS_ENABLED);
+        boolean useInstrumentedPool = GlobalClientMetrics.isMetricsEnabled()
+                || conn.unwrap(PhoenixConnection.class).isRequestLevelMetricsEnabled();
+                        
         ExecutorService executor =
                 JobManager.createThreadPoolExec(Integer.MAX_VALUE, 5, 20, useInstrumentedPool);
         try{
 	        for (TargetTableRef table : tablesToBeLoaded) {
-	        	Path tablePath = new Path(outputPath, table.getPhysicalName());
+	            Path tablePath = new Path(outputPath, table.getLogicalName());
 	        	Configuration jobConf = new Configuration(conf);
 	        	jobConf.set(CsvToKeyValueMapper.TABLE_NAME_CONFKEY, qualifiedTableName);
 	        	if (qualifiedTableName.compareToIgnoreCase(table.getLogicalName()) != 0) {

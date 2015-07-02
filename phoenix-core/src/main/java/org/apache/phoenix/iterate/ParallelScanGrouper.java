@@ -1,7 +1,4 @@
-<?xml version="1.0"?>
-<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
-<!--
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -10,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,19 +15,27 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
--->
-<configuration>
-  <property>
-    <name>hbase.defaults.for.version.skip</name>
-    <value>true</value>
-    <description>
-    Set to true to skip the 'hbase.defaults.for.version' check.
-    Setting this to true can be useful in contexts other than
-    the other side of a maven generation; i.e. running in an
-    ide.  You'll want to set this boolean to true to avoid
-    seeing the RuntimException complaint: "hbase-default.xml file
-    seems to be for and old version of HBase (@@@VERSION@@@), this
-    version is X.X.X-SNAPSHOT"
-    </description>
-  </property>
-</configuration>
+package org.apache.phoenix.iterate;
+
+import java.util.List;
+
+import org.apache.hadoop.hbase.client.Scan;
+import org.apache.phoenix.compile.QueryPlan;
+
+/**
+ * Interface for a parallel scan grouper
+ */
+public interface ParallelScanGrouper {
+
+	/**
+	 * Determines whether to create a new group of parallel scans.
+	 * 	
+	 * @param scans						current scan group
+	 * @param plan						current query plan
+	 * @param startKey					start key of scan
+	 * @param crossedRegionBoundary		whether we crossed a region boundary
+	 * @return true if we should create a new group of scans
+	 */
+	boolean shouldStartNewScan(QueryPlan plan, List<Scan> scans, byte[] startKey, boolean crossedRegionBoundary);
+	
+}

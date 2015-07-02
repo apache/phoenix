@@ -27,6 +27,8 @@ import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.execute.DelegateQueryPlan;
+import org.apache.phoenix.iterate.DefaultParallelScanGrouper;
+import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
 
 /**
@@ -86,7 +88,7 @@ public class PhoenixToEnumerableConverter extends ConverterImpl implements Enume
         return new DelegateQueryPlan(plan) {
             @Override
             public ResultIterator iterator() throws SQLException {
-                return delegate.iterator();
+                return iterator(DefaultParallelScanGrouper.getInstance());
             }
             @Override
             public ExplainPlan getExplainPlan() throws SQLException {
@@ -95,6 +97,11 @@ public class PhoenixToEnumerableConverter extends ConverterImpl implements Enume
             @Override
             public RowProjector getProjector() {
                 return phoenixImplementor.createRowProjector();
+            }
+            @Override
+            public ResultIterator iterator(ParallelScanGrouper scanGrouper)
+                    throws SQLException {
+                return delegate.iterator(scanGrouper);
             }
         };
     }
