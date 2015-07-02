@@ -35,7 +35,7 @@ public class JsonPointForArrayAsTextExpression extends BaseJSONExpression {
             }
             return false;
         }
-		 PhoenixJson source =(PhoenixJson) PJson.INSTANCE.toObject(ptr, children.get(0).getSortOrder());
+		 PhoenixJson source = (PhoenixJson) PJson.INSTANCE.toObject(ptr, children.get(0).getSortOrder());
 		if (!children.get(1).evaluate(tuple, ptr)) {
             if (logger.isDebugEnabled()) {
                 logger.debug("->> right value is null");

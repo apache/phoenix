@@ -247,7 +247,18 @@ public enum ExpressionType {
     LogFunction(LogFunction.class),
     ExpFunction(ExpFunction.class),
     PowerFunction(PowerFunction.class),
-    ArrayConcatFunction(ArrayConcatFunction.class)
+    ArrayConcatFunction(ArrayConcatFunction.class),
+    JsonSingleKeySearchExpression(JsonSingleKeySearchExpression.class),
+    JsonSubsetExpression(JsonSubsetExpression.class),
+    JsonSupersetExpression(JsonSupersetExpression.class),
+    JsonMultiKeySearchOrExpression(JsonMultiKeySearchOrExpression.class),
+    JsonMultiKeySearchAndExpression(JsonMultiKeySearchAndExpression.class),
+    JsonPathAsTextExpression(JsonPathAsTextExpression.class),
+    JsonPathAsElementExpression(JsonPathAsElementExpression.class),
+    JsonPointAsTextExpression(JsonPointAsTextExpression.class),
+    JsonPointForArrayAsTextExpression(JsonPointForArrayAsTextExpression.class),
+    JsonPointAsElementExpression(JsonPointAsElementExpression.class),
+    JsonPointForArrayAsElementExpression( JsonPointForArrayAsElementExpression.class)
     ;
 
     ExpressionType(Class<? extends Expression> clazz) {

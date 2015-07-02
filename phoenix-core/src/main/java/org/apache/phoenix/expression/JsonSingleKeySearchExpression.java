@@ -7,11 +7,12 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
+import org.apache.phoenix.schema.json.PhoenixJson;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PJson;
 import org.apache.phoenix.schema.types.PVarchar;
-import org.apache.phoenix.util.JSONutil;
 
 public class JsonSingleKeySearchExpression extends BaseCompoundExpression {
 	
@@ -22,32 +23,17 @@ public class JsonSingleKeySearchExpression extends BaseCompoundExpression {
     }
 	@Override
 	public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr)  {
-		if (!getPatternExpression().evaluate(tuple, ptr)) {
+		if (!children.get(1).evaluate(tuple, ptr)) {
             return false;
         }
 		String pattern = (String) PVarchar.INSTANCE.toObject(ptr);
-		if (!getStrExpression().evaluate(tuple, ptr)) {
+		if (!children.get(0).evaluate(tuple, ptr)) {
 	        return false;
 	    }
-		String value = (String) PVarchar.INSTANCE.toObject(ptr);
-		try
-		{
-			Object o= new JSONutil().mapJSON(pattern, value);
-			ptr.set(o!=null? PDataType.TRUE_BYTES : PDataType.FALSE_BYTES);
-		}
-		catch(IOException e)
-		{
-			e.printStackTrace();
-		}
-        return true;
+		PhoenixJson value = (PhoenixJson) PJson.INSTANCE.toObject(ptr, children.get(0).getSortOrder());
+		ptr.set(value.getValue(pattern)!=null? PDataType.TRUE_BYTES : PDataType.FALSE_BYTES);
+		return true;
 	}
-    private Expression getStrExpression() {
-        return children.get(0);
-    }
-
-    private Expression getPatternExpression() {
-        return children.get(1);
-    }
 	@Override
 	public <T> T accept(ExpressionVisitor<T> visitor) 
 	{

@@ -21,6 +21,7 @@ package org.apache.phoenix.schema.json;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.Arrays;
+import java.util.Map;
 
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -36,9 +37,11 @@ import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.codehaus.jackson.JsonFactory;
 import org.codehaus.jackson.JsonNode;
+import org.codehaus.jackson.JsonParseException;
 import org.codehaus.jackson.JsonParser;
 import org.codehaus.jackson.JsonParser.Feature;
 import org.codehaus.jackson.JsonProcessingException;
+import org.codehaus.jackson.map.JsonMappingException;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.codehaus.jackson.node.ValueNode;
 
@@ -339,4 +342,15 @@ public class PhoenixJson implements Comparable<PhoenixJson> {
         }
         return new PhoenixJson(node, node.toString());
     }
+	
+	/***
+	 * this is for keySerch function
+	 * 
+	 * @param index the keyword for key searching
+	 * @return true if JSON find key else false
+	 */
+	public boolean hasKey(String index) 
+	{
+		return rootNode.has(index);
+	}
 }
