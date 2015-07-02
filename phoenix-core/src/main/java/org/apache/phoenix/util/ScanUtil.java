@@ -672,12 +672,11 @@ public class ScanUtil {
          * not even row key order. Also no point doing round robin of scanners if fetch size
          * is 1.
          */
-        return fetchSize > 1 && !shouldRowsBeInRowKeyOrder(orderBy, context) && orderBy.getOrderByExpressions().isEmpty();
+        return fetchSize > 1 && !forceRowKeyOrder(context) && (orderBy.getOrderByExpressions().isEmpty() && orderBy != FWD_ROW_KEY_ORDER_BY && orderBy != REV_ROW_KEY_ORDER_BY);
     }
     
-    public static boolean shouldRowsBeInRowKeyOrder(OrderBy orderBy, StatementContext context) {
-        boolean forceRowKeyOrder = context.getConnection().getQueryServices().getProps()
+    public static boolean forceRowKeyOrder(StatementContext context) {
+        return context.getConnection().getQueryServices().getProps()
                 .getBoolean(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, QueryServicesOptions.DEFAULT_FORCE_ROW_KEY_ORDER);
-        return forceRowKeyOrder || orderBy == FWD_ROW_KEY_ORDER_BY || orderBy == REV_ROW_KEY_ORDER_BY;
     }
 }
