@@ -921,12 +921,13 @@ zero_or_more_data_types returns [List<FunctionArgument> ret]
 	;
 
 function_argument returns [FunctionArgument ret]
-	: (dt = identifier (LPAREN l=NUMBER (COMMA s=NUMBER)? RPAREN)? ar=ARRAY? (lsq=LSQUARE (a=NUMBER)? RSQUARE)? (c = CONSTANT)? (DEFAULTVALUE EQ dv = value_expression)? (MINVALUE EQ minv = value_expression)?  (MAXVALUE EQ maxv = value_expression)? 
+	: (dt = identifier (LPAREN l=NUMBER (COMMA s=NUMBER)? RPAREN)? ar=ARRAY? (lsq=LSQUARE (a=NUMBER)? RSQUARE)? (c = CONSTANT)? (DEFAULTVALUE EQ dv = expression)? (MINVALUE EQ minv = expression)?  (MAXVALUE EQ maxv = expression)? 
 	{ $ret = new FunctionArgument(dt,  ar != null || lsq != null, c!=null, 
     dv == null ? null : LiteralExpression.newConstant(((LiteralParseNode)dv).getValue()), 
     minv == null ? null : LiteralExpression.newConstant(((LiteralParseNode)minv).getValue()), 
     maxv == null ? null : LiteralExpression.newConstant(((LiteralParseNode)maxv).getValue()));})
 	;
+
 value_expression_list returns [List<ParseNode> ret]
 @init{ret = new ArrayList<ParseNode>(); }
     :  LPAREN e = value_expression {$ret.add(e);}  (COMMA e = value_expression {$ret.add(e);} )* RPAREN

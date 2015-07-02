@@ -133,6 +133,7 @@ import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.metrics.Metrics;
+import org.apache.phoenix.parse.LiteralParseNode;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PFunction.FunctionArgument;
 import org.apache.phoenix.protobuf.ProtobufUtil;
@@ -588,7 +589,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
     }
     
     private void addArgumentToFunction(List<Cell> results, PName functionName, PName type,
-        Cell[] functionKeyValues, List<FunctionArgument> arguments, short argPosition) {
+        Cell[] functionKeyValues, List<FunctionArgument> arguments, short argPosition) throws SQLException {
         int i = 0;
         int j = 0;
         while (i < results.size() && j < FUNCTION_ARG_KV_COLUMNS.size()) {
@@ -635,9 +636,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     maxValueKv.getValueLength());
         FunctionArgument arg =
                 new FunctionArgument(type.getString(), isArrayType, isConstant,
-                        defaultValue == null ? null : LiteralExpression.newConstant(defaultValue),
-                        minValue == null ? null : LiteralExpression.newConstant(minValue),
-                        maxValue == null ? null : LiteralExpression.newConstant(maxValue),
+                        defaultValue == null ? null : LiteralExpression.newConstant((new LiteralParseNode(defaultValue)).getValue()),
+                        minValue == null ? null : LiteralExpression.newConstant((new LiteralParseNode(minValue)).getValue()),
+                        maxValue == null ? null : LiteralExpression.newConstant((new LiteralParseNode(maxValue)).getValue()),
                         argPosition);
         arguments.add(arg);
     }
