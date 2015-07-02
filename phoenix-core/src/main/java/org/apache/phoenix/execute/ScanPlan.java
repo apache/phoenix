@@ -18,8 +18,6 @@
 package org.apache.phoenix.execute;
 
 
-import static org.apache.phoenix.util.ScanUtil.shouldRowsBeInRowKeyOrder;
-
 import java.sql.SQLException;
 import java.util.List;
 
@@ -187,7 +185,7 @@ public class ScanPlan extends BaseQueryPlan {
         if (isOrdered) {
             scanner = new MergeSortTopNResultIterator(iterators, limit, orderBy.getOrderByExpressions());
         } else {
-            if ((isSalted || table.getIndexType() == IndexType.LOCAL) && shouldRowsBeInRowKeyOrder(orderBy, context)) { 
+            if ((isSalted || table.getIndexType() == IndexType.LOCAL) && ScanUtil.forceRowKeyOrder(context)) { 
                 scanner = new MergeSortRowKeyResultIterator(iterators, isSalted ? SaltingUtil.NUM_SALTING_BYTES : 0, orderBy == OrderBy.REV_ROW_KEY_ORDER_BY);
             } else if (useRoundRobinIterator()) {
                 scanner = new RoundRobinResultIterator(iterators, this);
