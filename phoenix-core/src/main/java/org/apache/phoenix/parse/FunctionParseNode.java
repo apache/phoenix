@@ -419,14 +419,11 @@ public class FunctionParseNode extends CompoundParseNode {
             this.allowedTypes = new Class[] { dataType.getClass() };
             this.isConstant = arg.isConstant();
             this.defaultValue =
-                    arg.getDefaultValue() == null ? null : getExpFromConstant((String) arg
-                            .getDefaultValue().getValue());
+                    arg.getDefaultValue() == null ? null : arg.getDefaultValue();
             this.minValue =
-                    arg.getMinValue() == null ? null : getExpFromConstant((String) arg
-                            .getMinValue().getValue());
+                    arg.getMinValue() == null ? null : arg.getMinValue();
             this.maxValue =
-                    arg.getMaxValue() == null ? null : getExpFromConstant((String) arg
-                            .getMaxValue().getValue());
+                    arg.getMaxValue() == null ? null : arg.getMaxValue();
         }
         
         private LiteralExpression getExpFromConstant(String strValue) {
