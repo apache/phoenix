@@ -52,6 +52,25 @@ public class MD5FunctionIT extends BaseHBaseManagedTimeIT {
   }      
   
   @Test
+  public void testRetrieveCompositeKey() throws Exception {
+      String testString = "FOOBAR";
+      
+      Connection conn = DriverManager.getConnection(getUrl());
+      String ddl = "CREATE TABLE IF NOT EXISTS MD5_RETRIEVE_TEST (k1 CHAR(3) NOT NULL, k2 CHAR(3) NOT NULL, CONSTRAINT PK PRIMARY KEY (K1,K2))";
+      conn.createStatement().execute(ddl);
+      String dml = "UPSERT INTO MD5_RETRIEVE_TEST VALUES('FOO','BAR')";
+      conn.createStatement().execute(dml);
+      conn.commit();
+      
+      ResultSet rs = conn.createStatement().executeQuery("SELECT MD5((K1,K2)) FROM MD5_RETRIEVE_TEST");
+      assertTrue(rs.next());
+      byte[] first = MessageDigest.getInstance("MD5").digest(testString.getBytes());
+      byte[] second = rs.getBytes(1);
+      assertArrayEquals(first, second);
+      assertFalse(rs.next());
+  }      
+  
+  @Test
   public void testUpsert() throws Exception {
       String testString1 = "mwalsh1";
       String testString2 = "mwalsh2";
