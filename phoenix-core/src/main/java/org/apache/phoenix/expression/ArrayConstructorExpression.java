@@ -23,6 +23,7 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PArrayDataType;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 
 /**
@@ -32,8 +33,7 @@ public class ArrayConstructorExpression extends BaseCompoundExpression {
     private PDataType baseType;
     private int position = -1;
     private Object[] elements;
-    private TrustedByteArrayOutputStream byteStream = null;
-    private DataOutputStream oStream = null;
+    private final ImmutableBytesWritable valuePtr = new ImmutableBytesWritable();
     private int estimatedSize = 0;
     // store the offset postion in this.  Later based on the total size move this to a byte[]
     // and serialize into byte stream
@@ -54,13 +54,11 @@ public class ArrayConstructorExpression extends BaseCompoundExpression {
     private void init(PDataType baseType) {
         this.baseType = baseType;
         elements = new Object[getChildren().size()];
+        valuePtr.set(ByteUtil.EMPTY_BYTE_ARRAY);
         estimatedSize = PArrayDataType.estimateSize(this.children.size(), this.baseType);
         if (!this.baseType.isFixedWidth()) {
             offsetPos = new int[children.size()];
-            byteStream = new TrustedByteArrayOutputStream(estimatedSize);
-        } else {
-            byteStream = new TrustedByteArrayOutputStream(estimatedSize);
-        }            
+        }
     }
 
     @Override
@@ -73,14 +71,20 @@ public class ArrayConstructorExpression extends BaseCompoundExpression {
         super.reset();
         position = 0;
         Arrays.fill(elements, null);
+        valuePtr.set(ByteUtil.EMPTY_BYTE_ARRAY);
     }
 
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
+        if (position == elements.length) {
+            ptr.set(valuePtr.get(), valuePtr.getOffset(), valuePtr.getLength());
+            return true;
+        }
+        TrustedByteArrayOutputStream byteStream = new TrustedByteArrayOutputStream(estimatedSize);
+        DataOutputStream oStream = new DataOutputStream(byteStream);
         try {
             int noOfElements =  children.size();
             int nNulls = 0;
-            oStream = new DataOutputStream(byteStream);
             for (int i = position >= 0 ? position : 0; i < elements.length; i++) {
                 Expression child = children.get(i);
                 if (!child.evaluate(tuple, ptr)) {
@@ -125,6 +129,7 @@ public class ArrayConstructorExpression extends BaseCompoundExpression {
                 PArrayDataType.serializeHeaderInfoIntoStream(oStream, noOfElements);
             }
             ptr.set(byteStream.getBuffer(), 0, byteStream.size());
+            valuePtr.set(ptr.get(), ptr.getOffset(), ptr.getLength());
             return true;
         } catch (IOException e) {
             throw new RuntimeException("Exception while serializing the byte array");
