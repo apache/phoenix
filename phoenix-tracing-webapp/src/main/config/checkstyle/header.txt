@@ -14,29 +14,3 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.example;
-
-import java.io.IOException;
-
-import javax.servlet.ServletException;
-import javax.servlet.http.HttpServlet;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
-
-/**
- *
- * Server to show trace information
- *
- *
- * @since 4.5.5
- */
-
-public class TraceServlet extends HttpServlet {
-    protected void doGet(HttpServletRequest request, HttpServletResponse response)
-        throws ServletException, IOException {
-        response.setContentType("text/html");
-        response.setStatus(HttpServletResponse.SC_OK);
-        response.getWriter().println("<h1>Trace Servlet</h1>");
-        response.getWriter().println("session=" + request.getSession(true).getId());
-    }
-}
