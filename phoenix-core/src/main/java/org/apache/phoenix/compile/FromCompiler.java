@@ -710,7 +710,12 @@ public class FromCompiler {
                 if (theColumnFamilyRef != null) { return theColumnFamilyRef; }
                 throw new TableNotFoundException(cfName);
             } else {
-                TableRef tableRef = resolveTable(null, tableName);
+                TableRef tableRef = null;
+                try {
+                    tableRef = resolveTable(null, tableName);
+                } catch (TableNotFoundException e) {
+                    return resolveColumnFamily(null, cfName);
+                }
                 PColumnFamily columnFamily = tableRef.getTable().getColumnFamily(cfName);
                 return new ColumnFamilyRef(tableRef, columnFamily);
             }
