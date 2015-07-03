@@ -2204,10 +2204,10 @@ public class MetaDataClient {
             String familyName = null;
             String msg = null;
             // TODO: better to return error code
-            if (result.getColumnName() != null) {
+            if (result.getColumnName() != null && result.getColumnName() != null) {
                 familyName = result.getFamilyName() == null ? null : Bytes.toString(result.getFamilyName());
                 columnName = Bytes.toString(result.getColumnName());
-                msg = "Cannot drop column referenced by VIEW";
+                msg = "Cannot add/drop column referenced by VIEW";
             }
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_MUTATE_TABLE)
                 .setSchemaName(schemaName).setTableName(tableName).setFamilyName(familyName).setColumnName(columnName).setMessage(msg).build().buildException();
