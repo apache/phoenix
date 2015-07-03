@@ -64,6 +64,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import com.google.common.base.Objects;
@@ -2009,7 +2010,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
     }
     
     @Test
-    public void testAddColumnToTableWithViews() throws Exception {
+    public void testAddNewColumnToBaseTableWithViews() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         try {       
             conn.createStatement().execute("CREATE TABLE IF NOT EXISTS TABLEWITHVIEW ("
@@ -2020,12 +2021,176 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
                     + " )");
             assertTableDefinition(conn, "TABLEWITHVIEW", PTableType.TABLE, null, 0, 3, -1, "ID", "COL1", "COL2");
             
-            conn.createStatement().execute("CREATE VIEW VIEWOFTABLE ( VIEW_COL1 SMALLINT ) AS SELECT * FROM TABLEWITHVIEW");
-            assertTableDefinition(conn, "VIEWOFTABLE", PTableType.VIEW, "TABLEWITHVIEW", 0, 4, 3, "ID", "COL1", "COL2", "VIEW_COL1");
+            conn.createStatement().execute("CREATE VIEW VIEWOFTABLE ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR ) AS SELECT * FROM TABLEWITHVIEW");
+            assertTableDefinition(conn, "VIEWOFTABLE", PTableType.VIEW, "TABLEWITHVIEW", 0, 5, 3, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
             
             conn.createStatement().execute("ALTER TABLE TABLEWITHVIEW ADD COL3 char(10)");
-            assertTableDefinition(conn, "VIEWOFTABLE", PTableType.VIEW, "TABLEWITHVIEW", 1, 5, 4, "ID", "COL1", "COL2", "COL3", "VIEW_COL1");
+            assertTableDefinition(conn, "VIEWOFTABLE", PTableType.VIEW, "TABLEWITHVIEW", 1, 6, 4, "ID", "COL1", "COL2", "COL3", "VIEW_COL1", "VIEW_COL2");
+        } finally {
+            conn.close();
+        }
+    }
+    
+    @Test
+    public void testAddExistingViewColumnToBaseTableWithViews() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        try {       
+            conn.createStatement().execute("CREATE TABLE IF NOT EXISTS TABLEWITHVIEW ("
+                    + " ID char(10) NOT NULL,"
+                    + " COL1 integer NOT NULL,"
+                    + " COL2 bigint NOT NULL,"
+                    + " CONSTRAINT NAME_PK PRIMARY KEY (ID, COL1, COL2)"
+                    + " )");
+            assertTableDefinition(conn, "TABLEWITHVIEW", PTableType.TABLE, null, 0, 3, -1, "ID", "COL1", "COL2");
             
+            conn.createStatement().execute("CREATE VIEW VIEWOFTABLE ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR(256), VIEW_COL3 VARCHAR, VIEW_COL4 DECIMAL ) AS SELECT * FROM TABLEWITHVIEW");
+            assertTableDefinition(conn, "VIEWOFTABLE", PTableType.VIEW, "TABLEWITHVIEW", 0, 7, 3, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2", "VIEW_COL3", "VIEW_COL4");
+            
+            // upsert single row into view
+            String dml = "UPSERT INTO VIEWOFTABLE VALUES(?,?,?,?,?, ?, ?)";
+            PreparedStatement stmt = conn.prepareStatement(dml);
+            stmt.setString(1, "view1");
+            stmt.setInt(2, 12);
+            stmt.setInt(3, 13);
+            stmt.setInt(4, 14);
+            stmt.setString(5, "view5");
+            stmt.setString(6, "view6");
+            stmt.setInt(7, 17);
+            stmt.execute();
+            conn.commit();
+            
+            try {
+            	// should fail because there is already a view column with same name of different type
+            	conn.createStatement().execute("ALTER TABLE TABLEWITHVIEW ADD VIEW_COL1 char(10)");
+            	fail();
+            }
+            catch (SQLException e) {
+            	assertEquals("Unexpected exception", CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
+            }           
+            
+            try {
+            	// should fail because there is already a view column with same name with a higher scale
+            	conn.createStatement().execute("ALTER TABLE TABLEWITHVIEW ADD VIEW_COL1 DECIMAL(10,1)");
+            	fail();
+            }
+            catch (SQLException e) {
+            	assertEquals("Unexpected exception", CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
+            } 
+            
+            try {
+            	// should fail because there is already a view column with same name with a greater length
+            	conn.createStatement().execute("ALTER TABLE TABLEWITHVIEW ADD VIEW_COL1 VARCHAR(256)");
+            	fail();
+            }
+            catch (SQLException e) {
+            	assertEquals("Unexpected exception", CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
+            } 
+            
+            try {
+            	// should fail because there is already a view column with null length
+            	conn.createStatement().execute("ALTER TABLE TABLEWITHVIEW ADD VIEW_COL2 DECIMAL(9,2)");
+            	fail();
+            }
+            catch (SQLException e) {
+            	assertEquals("Unexpected exception", CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
+            }
+            
+            // validate that there were no columns added to the table or view
+            assertTableDefinition(conn, "TABLEWITHVIEW", PTableType.TABLE, null, 0, 3, -1, "ID", "COL1", "COL2");
+            assertTableDefinition(conn, "VIEWOFTABLE", PTableType.VIEW, "TABLEWITHVIEW", 0, 7, 3, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2", "VIEW_COL3", "VIEW_COL4");
+            
+            // should succeed because even though there already is a view column with same name,
+            // the column being added has a scale and max length that is equal to or greater
+            conn.createStatement().execute("ALTER TABLE TABLEWITHVIEW ADD VIEW_COL2 VARCHAR, VIEW_COL4 DECIMAL");
+            assertTableDefinition(conn, "TABLEWITHVIEW", PTableType.TABLE, null, 1, 4, -1, "ID", "COL1", "COL2", "VIEW_COL2", "VIEW_COL4");
+            assertTableDefinition(conn, "VIEWOFTABLE", PTableType.VIEW, "TABLEWITHVIEW", 1, 7, 5, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2", "VIEW_COL3", "VIEW_COL4");
+            
+            // query table
+            ResultSet rs = stmt.executeQuery("SELECT * FROM TABLEWITHVIEW");
+            assertTrue(rs.next());
+            assertEquals(rs.getString(1), "view1");
+            assertEquals(rs.getInt(2), 12);
+            assertEquals(rs.getInt(3), 13);
+            assertEquals(rs.getString(4), "view5");
+            assertEquals(rs.getInt(5), 17);
+            assertFalse(rs.next());
+
+            // query view
+            rs = stmt.executeQuery("SELECT * FROM VIEWOFTABLE");
+            assertTrue(rs.next());
+            assertEquals(rs.getString(1), "view1");
+            assertEquals(rs.getInt(2), 12);
+            assertEquals(rs.getInt(3), 13);
+            assertEquals(rs.getInt(4), 14);
+            assertEquals(rs.getString(5),"view5");
+            assertEquals(rs.getString(6),"view6");
+            assertEquals(rs.getInt(7), 17);
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
+    
+    @Test
+    @Ignore
+    // enable this test after https://issues.apache.org/jira/browse/PHOENIX-978 is fixed 
+    public void testAddExistingViewPkColumnToBaseTableWithViews() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        try {       
+            conn.createStatement().execute("CREATE TABLE IF NOT EXISTS TABLEWITHVIEW ("
+                    + " ID char(10) NOT NULL,"
+                    + " COL1 integer NOT NULL,"
+                    + " COL2 bigint NOT NULL,"
+                    + " CONSTRAINT NAME_PK PRIMARY KEY (ID, COL1, COL2)"
+                    + " )");
+            assertTableDefinition(conn, "TABLEWITHVIEW", PTableType.TABLE, null, 0, 3, -1, "ID", "COL1", "COL2");
+            
+            conn.createStatement().execute("CREATE VIEW VIEWOFTABLE ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR(256) CONSTRAINT pk PRIMARY KEY (VIEW_COL1, VIEW_COL2)) AS SELECT * FROM TABLEWITHVIEW");
+            assertTableDefinition(conn, "VIEWOFTABLE", PTableType.VIEW, "TABLEWITHVIEW", 0, 5, 3, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
+            
+            // upsert single row into view
+            String dml = "UPSERT INTO VIEWOFTABLE VALUES(?,?,?,?,?)";
+            PreparedStatement stmt = conn.prepareStatement(dml);
+            stmt.setString(1, "view1");
+            stmt.setInt(2, 12);
+            stmt.setInt(3, 13);
+            stmt.setInt(4, 14);
+            stmt.setString(5, "view5");
+            stmt.execute();
+            conn.commit();
+            
+            try {
+            	// should fail because there is already a pk view column with same name is a different slot 
+            	conn.createStatement().execute("ALTER TABLE TABLEWITHVIEW ADD VIEW_COL2 VARCHAR PRIMARY KEY");
+            	fail();
+            }
+            catch (SQLException e) {
+            	assertEquals("Unexpected exception", CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
+            }
+            
+            // add the pk column of the view to the base table
+            conn.createStatement().execute("ALTER TABLE TABLEWITHVIEW ADD VIEW_COL1 DECIMAL PRIMARY KEY");
+            assertTableDefinition(conn, "TABLEWITHVIEW", PTableType.TABLE, null, 1, 4, -1, "ID", "COL1", "COL2", "VIEW_COL1");
+            assertTableDefinition(conn, "VIEWOFTABLE", PTableType.VIEW, "TABLEWITHVIEW", 1, 5, 4, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
+            
+            // query table
+            ResultSet rs = stmt.executeQuery("SELECT * FROM TABLEWITHVIEW");
+            assertTrue(rs.next());
+            assertEquals(rs.getString(1), "view1");
+            assertEquals(rs.getInt(2), 12);
+            assertEquals(rs.getInt(3), 13);
+            assertEquals(rs.getInt(4), 14);
+            assertFalse(rs.next());
+
+            // query view
+            rs = stmt.executeQuery("SELECT * FROM VIEWOFTABLE");
+            assertTrue(rs.next());
+            assertEquals(rs.getString(1), "view1");
+            assertEquals(rs.getInt(2), 12);
+            assertEquals(rs.getInt(3), 13);
+            assertEquals(rs.getInt(4), 14);
+            assertEquals(rs.getString(5),"view5");
+            assertFalse(rs.next());
         } finally {
             conn.close();
         }
@@ -2045,34 +2210,46 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         ResultSet parentTableColumnsRs = null; 
         if (parentTableName != null) {
             parentTableColumnsRs = conn.getMetaData().getColumns(null, null, parentTableName, null);
+            parentTableColumnsRs.next();
         }
         
-        rs = conn.getMetaData().getColumns(null, null, tableName, null);
+        ResultSet viewColumnsRs = conn.getMetaData().getColumns(null, null, tableName, null);
         for (int i = 0; i < columnName.length; i++) {
             if (columnName[i] != null) {
-                assertTrue(rs.next());
-                assertEquals(getSystemCatalogEntriesForTable(conn, tableName, "Mismatch in columnName: i=" + i), columnName[i], rs.getString("COLUMN_NAME"));
-                assertEquals(getSystemCatalogEntriesForTable(conn, tableName, "Mismatch in ordinalPosition: i=" + i), i+1, rs.getInt("ORDINAL_POSITION"));
-                if (i < baseColumnCount && parentTableColumnsRs != null) {
-                    assertTrue(parentTableColumnsRs.next());
-                    ResultSetMetaData md = parentTableColumnsRs.getMetaData();
-                    assertEquals(md.getColumnCount(), rs.getMetaData().getColumnCount());
-                    for (int columnIndex = 1; columnIndex < md.getColumnCount(); columnIndex++) {
-                        String viewColumnValue = rs.getString(columnIndex);
+                assertTrue(viewColumnsRs.next());
+                assertEquals(getSystemCatalogEntriesForTable(conn, tableName, "Mismatch in columnName: i=" + i), columnName[i], viewColumnsRs.getString(PhoenixDatabaseMetaData.COLUMN_NAME));
+                assertEquals(getSystemCatalogEntriesForTable(conn, tableName, "Mismatch in ordinalPosition: i=" + i), i+1, viewColumnsRs.getInt(PhoenixDatabaseMetaData.ORDINAL_POSITION));
+                // validate that all the columns in the base table are present in the view   
+                if (parentTableColumnsRs != null && !parentTableColumnsRs.isAfterLast()) {
+                    ResultSetMetaData parentTableColumnsMetadata = parentTableColumnsRs.getMetaData();
+                    assertEquals(parentTableColumnsMetadata.getColumnCount(), viewColumnsRs.getMetaData().getColumnCount());
+                    
+                    // if you add a non-pk column that already exists in the view
+                    if (!viewColumnsRs.getString(PhoenixDatabaseMetaData.COLUMN_NAME).equals(parentTableColumnsRs.getString(PhoenixDatabaseMetaData.COLUMN_NAME))) {
+                    	continue;
+                    }
+                    
+                    for (int columnIndex = 1; columnIndex < parentTableColumnsMetadata.getColumnCount(); columnIndex++) {
+                        String viewColumnValue = viewColumnsRs.getString(columnIndex);
                         String parentTableColumnValue = parentTableColumnsRs.getString(columnIndex);
                         if (!Objects.equal(viewColumnValue, parentTableColumnValue)) {
-                            if (md.getColumnName(columnIndex).equals("TABLE_NAME")) {
+                            if (parentTableColumnsMetadata.getColumnName(columnIndex).equals(PhoenixDatabaseMetaData.TABLE_NAME)) {
                                 assertEquals(parentTableName, parentTableColumnValue);
                                 assertEquals(tableName, viewColumnValue);
-                            } else {
-                                fail(md.getColumnName(columnIndex) + "=" + parentTableColumnValue);
+                            } 
+                            else if (parentTableColumnsMetadata.getColumnName(columnIndex).equals(PhoenixDatabaseMetaData.ORDINAL_POSITION) && parentTableColumnsRs.getString("COLUMN_FAMILY")!=null) {
+                            	// its ok if the ordinal positions don't match for non-pk columns 
+                            }
+                            else {
+                                fail(parentTableColumnsMetadata.getColumnName(columnIndex) + " of base table " + parentTableColumnValue + " does not match view "+viewColumnValue) ;
                             }
                         }
                     }
+                    parentTableColumnsRs.next();
                 }
             }
         }
-        assertFalse(getSystemCatalogEntriesForTable(conn, tableName, ""), rs.next());
+        assertFalse(getSystemCatalogEntriesForTable(conn, tableName, ""), viewColumnsRs.next());
     }
     
     private String getSystemCatalogEntriesForTable(Connection conn, String tableName, String message) throws Exception {
@@ -2207,7 +2384,13 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             conn.createStatement().execute(dropColumn);
             
             String alterBaseTable = "ALTER TABLE " + baseTable + " ADD V3 VARCHAR";
-            conn.createStatement().execute(alterBaseTable);
+            try {
+            	conn.createStatement().execute(alterBaseTable);
+	            fail();
+	        }
+	        catch (SQLException e) {
+	        	assertEquals("Unexpected exception", CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
+	        }
             
             // Column V3 shouldn't have propagated to the divorced view.
             String sql = "SELECT V3 FROM " + viewName;
