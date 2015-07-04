@@ -26,6 +26,8 @@ import org.apache.phoenix.util.SchemaUtil;
 
 
 public class TableRef {
+    public static final TableRef EMPTY_TABLE_REF = new TableRef(new PTableImpl());
+    
     private PTable table;
     private final String alias;
     private final long upperBoundTimeStamp;

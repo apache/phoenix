@@ -629,7 +629,7 @@ single_select returns [SelectStatement ret]
 @init{ contextStack.push(new ParseContext()); }
     :   SELECT (h=hintClause)? 
         (d=DISTINCT | ALL)? sel=select_list
-        FROM from=parseFrom
+        (FROM from=parseFrom)?
         (WHERE where=expression)?
         (GROUP BY group=group_by)?
         (HAVING having=expression)?

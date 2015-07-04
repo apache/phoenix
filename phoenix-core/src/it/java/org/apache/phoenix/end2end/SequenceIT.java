@@ -1242,5 +1242,32 @@ public class SequenceIT extends BaseClientManagedTimeIT {
         assertEquals(4, rs.getLong(1));
         assertFalse(rs.next());
     }
+    
+    @Test
+    public void testNoFromClause() throws Exception {
+        ResultSet rs;
+        nextConnection();
+        conn.createStatement().execute("CREATE SEQUENCE myseq START WITH 1 INCREMENT BY 1");
+        conn.createStatement().execute("CREATE SEQUENCE anotherseq START WITH 2 INCREMENT BY 3");
+        nextConnection();
+        rs = conn.createStatement().executeQuery("EXPLAIN SELECT NEXT VALUE FOR myseq");
+        assertEquals("CLIENT RESERVE VALUES FROM 1 SEQUENCE", QueryUtil.getExplainPlan(rs));
+        rs = conn.createStatement().executeQuery("SELECT NEXT VALUE FOR myseq");
+        assertTrue(rs.next());
+        assertEquals(1, rs.getInt(1));
+        rs = conn.createStatement().executeQuery("EXPLAIN SELECT CURRENT VALUE FOR myseq");
+        assertEquals("CLIENT RESERVE VALUES FROM 1 SEQUENCE", QueryUtil.getExplainPlan(rs));
+        rs = conn.createStatement().executeQuery("SELECT CURRENT VALUE FOR myseq");
+        assertTrue(rs.next());
+        assertEquals(1, rs.getInt(1));
+        rs = conn.createStatement().executeQuery("SELECT NEXT VALUE FOR myseq, NEXT VALUE FOR anotherseq");
+        assertTrue(rs.next());
+        assertEquals(2, rs.getInt(1));
+        assertEquals(2, rs.getInt(2));
+        rs = conn.createStatement().executeQuery("SELECT CURRENT VALUE FOR myseq, NEXT VALUE FOR anotherseq");
+        assertTrue(rs.next());
+        assertEquals(2, rs.getInt(1));
+        assertEquals(5, rs.getInt(2));        
+    }
 
 }
