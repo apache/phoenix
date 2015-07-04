@@ -17,6 +17,11 @@
  */
 package org.apache.phoenix.util;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
 import java.sql.Types;
 import java.util.Properties;
 
@@ -25,8 +30,6 @@ import org.apache.hadoop.hbase.HConstants;
 import org.junit.Test;
 
 import com.google.common.collect.ImmutableList;
-
-import static org.junit.Assert.*;
 
 public class QueryUtilTest {
 
@@ -61,10 +64,37 @@ public class QueryUtilTest {
     @Test
     public void testConstructSelectStatement() {
         assertEquals(
-                "SELECT \"ID\",\"NAME\" FROM \"MYTAB\"",
+                "SELECT \"ID\",\"NAME\" FROM MYTAB",
                 QueryUtil.constructSelectStatement("MYTAB", ImmutableList.of(ID_COLUMN,NAME_COLUMN),null));
     }
 
+    @Test
+    public void testConstructSelectStatementWithSchema() {
+        assertEquals(
+                "SELECT \"ID\",\"NAME\" FROM A.MYTAB",
+                QueryUtil.constructSelectStatement("A.MYTAB", ImmutableList.of(ID_COLUMN,NAME_COLUMN),null));
+    }
+    
+    @Test
+    public void testConstructSelectStatementWithCaseSensitiveSchema() {
+        final String tableName = "MYTAB";
+        final String schemaName = SchemaUtil.getEscapedArgument("a");
+        final String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+        assertEquals(
+                "SELECT \"ID\",\"NAME\" FROM \"a\".MYTAB",
+                QueryUtil.constructSelectStatement(fullTableName, ImmutableList.of(ID_COLUMN,NAME_COLUMN),null));
+    }
+    
+    @Test
+    public void testConstructSelectStatementWithCaseSensitiveTable() {
+        final String tableName = SchemaUtil.getEscapedArgument("mytab");
+        final String schemaName = SchemaUtil.getEscapedArgument("a");
+        final String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+        assertEquals(
+                "SELECT \"ID\",\"NAME\" FROM \"a\".\"mytab\"",
+                QueryUtil.constructSelectStatement(fullTableName, ImmutableList.of(ID_COLUMN,NAME_COLUMN),null));
+    }
+    
     /**
      * Test that we create connection strings from the HBase Configuration that match the
      * expected syntax. Expected to log exceptions as it uses ZK host names that don't exist
