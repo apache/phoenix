@@ -201,8 +201,6 @@ public final class QueryUtil {
         if(columnInfos == null || columnInfos.isEmpty()) {
              throw new IllegalArgumentException("At least one column must be provided");
         }
-        // escape the table name to ensure it is case sensitive.
-        final String escapedFullTableName = SchemaUtil.getEscapedFullTableName(fullTableName);
         StringBuilder query = new StringBuilder();
         query.append("SELECT ");
         for (ColumnInfo cinfo : columnInfos) {
@@ -215,7 +213,7 @@ public final class QueryUtil {
         // Remove the trailing comma
         query.setLength(query.length() - 1);
         query.append(" FROM ");
-        query.append(escapedFullTableName);
+        query.append(fullTableName);
         if(conditions != null && conditions.length() > 0) {
             query.append(" WHERE (").append(conditions).append(")");
         }

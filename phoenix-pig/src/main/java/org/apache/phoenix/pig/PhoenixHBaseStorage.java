@@ -18,8 +18,6 @@
 package org.apache.phoenix.pig;
 
 import java.io.IOException;
-import java.net.URI;
-import java.net.URISyntaxException;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Properties;
@@ -33,12 +31,14 @@ import org.apache.commons.cli.ParseException;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.OutputFormat;
 import org.apache.hadoop.mapreduce.RecordWriter;
 import org.apache.phoenix.mapreduce.PhoenixOutputFormat;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
+import org.apache.phoenix.pig.util.TableSchemaParserFunction;
 import org.apache.phoenix.pig.writable.PhoenixPigDBWritable;
 import org.apache.phoenix.util.ColumnInfo;
 import org.apache.pig.ResourceSchema;
@@ -88,12 +88,12 @@ public class PhoenixHBaseStorage implements StoreFuncInterface {
     private ResourceSchema schema;  
     private long batchSize;
     private final PhoenixOutputFormat outputFormat = new PhoenixOutputFormat();
-
     // Set of options permitted
     private final static Options validOptions = new Options();
     private final static CommandLineParser parser = new GnuParser();
     private final static String SCHEMA = "_schema";
-
+    private final static String PHOENIX_TABLE_NAME_SCHEME = "hbase://";
+    
     private final CommandLine configuredOptions;
     private final String server;
 
@@ -134,33 +134,24 @@ public class PhoenixHBaseStorage implements StoreFuncInterface {
      */
     @Override
     public void setStoreLocation(String location, Job job) throws IOException {
-        URI locationURI;
-        try {
-            locationURI = new URI(location);
-            if (!"hbase".equals(locationURI.getScheme())) {
-                throw new IOException(String.format("Location must use the hbase protocol, hbase://tableName[/columnList]. Supplied location=%s",location));
-            }
-
-            PhoenixConfigurationUtil.loadHBaseConfiguration(job);
-            config = job.getConfiguration();
-            config.set(HConstants.ZOOKEEPER_QUORUM, server);
-            String tableName = locationURI.getAuthority();
-            // strip off the leading path token '/'
-            String columns = null;
-            if(!locationURI.getPath().isEmpty()) {
-                columns = locationURI.getPath().substring(1);
-                PhoenixConfigurationUtil.setUpsertColumnNames(config, columns);
-            }
-            PhoenixConfigurationUtil.setOutputTableName(config,tableName);
-            PhoenixConfigurationUtil.setBatchSize(config,batchSize);
-            String serializedSchema = getUDFProperties().getProperty(contextSignature + SCHEMA);
-            if (serializedSchema != null) {
-                schema = (ResourceSchema) ObjectSerializer.deserialize(serializedSchema);
-            }
-        } catch (URISyntaxException e) {
-            throw new IOException(String.format("Location must use the hbase protocol, hbase://tableName[/columnList]. Supplied location=%s",location),e);
+        String tableSchema = location.substring(PHOENIX_TABLE_NAME_SCHEME.length());
+        final TableSchemaParserFunction parseFunction = new TableSchemaParserFunction();
+        Pair<String,String> pair =  parseFunction.apply(tableSchema);
+        PhoenixConfigurationUtil.loadHBaseConfiguration(job);
+        config = job.getConfiguration();
+        config.set(HConstants.ZOOKEEPER_QUORUM, server);
+        String tableName = pair.getFirst();
+        String columns = pair.getSecond(); 
+        if(columns != null && columns.length() > 0) {
+            PhoenixConfigurationUtil.setUpsertColumnNames(config, columns);
         }
-    }
+        PhoenixConfigurationUtil.setOutputTableName(config,tableName);
+        PhoenixConfigurationUtil.setBatchSize(config,batchSize);
+        String serializedSchema = getUDFProperties().getProperty(contextSignature + SCHEMA);
+        if (serializedSchema != null) {
+            schema = (ResourceSchema) ObjectSerializer.deserialize(serializedSchema);
+        }
+     }
 
     @SuppressWarnings("unchecked")
     @Override
