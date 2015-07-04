@@ -21,9 +21,8 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Strings.isNullOrEmpty;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_FUNCTION_NAME_BYTES;
-
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES;
 
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -173,6 +172,21 @@ public class SchemaUtil {
             return name.substring(1, name.length()-1);
         }
         return name.toUpperCase();
+    }
+    
+    /**
+     * Normalizes the fulltableName . Uses {@linkplain normalizeIdentifier}
+     * @param fullTableName
+     * @return
+     */
+    public static String normalizeFullTableName(String fullTableName) {
+        String schemaName = SchemaUtil.getSchemaNameFromFullName(fullTableName);
+        String tableName = SchemaUtil.getTableNameFromFullName(fullTableName);
+        String normalizedTableName = StringUtil.EMPTY_STRING;
+        if(!schemaName.isEmpty()) {
+            normalizedTableName =  normalizeIdentifier(schemaName) + QueryConstants.NAME_SEPARATOR;
+        }
+        return normalizedTableName + normalizeIdentifier(tableName);
     }
 
     public static boolean isCaseSensitive(String name) {
