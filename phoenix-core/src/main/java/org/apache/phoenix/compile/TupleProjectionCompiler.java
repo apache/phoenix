@@ -61,6 +61,7 @@ public class TupleProjectionCompiler {
         Preconditions.checkArgument(!select.isJoin());
         // Non-group-by or group-by aggregations will create its own projected result.
         if (select.getInnerSelectStatement() != null 
+                || select.getFrom() == null
                 || select.isAggregate() 
                 || select.isDistinct()
                 || (context.getResolver().getTables().get(0).getTable().getType() != PTableType.TABLE

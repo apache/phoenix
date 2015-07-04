@@ -212,7 +212,7 @@ public class QueryParserTest {
             parseQuery(sql);
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.MISMATCHED_TOKEN.getErrorCode(), e.getErrorCode());
+            assertEquals(SQLExceptionCode.MISSING_TOKEN.getErrorCode(), e.getErrorCode());
         }
     }
 
@@ -348,7 +348,7 @@ public class QueryParserTest {
             parseQuery(sql);
             fail("Should have caught exception.");
         } catch (SQLException e) {
-            assertTrue(e.getMessage(), e.getMessage().contains("ERROR 602 (42P00): Syntax error. Missing \"FROM\" at line 1, column 16."));
+            assertTrue(e.getMessage(), e.getMessage().contains("ERROR 602 (42P00): Syntax error. Missing \"EOF\" at line 1, column 16."));
         }
     }
 
@@ -371,19 +371,6 @@ public class QueryParserTest {
             fail("Should have caught exception.");
         } catch (SQLException e) {
             assertTrue(e.getMessage(), e.getMessage().contains("ERROR 601 (42P00): Syntax error. Encountered \"from\" at line 1, column 15."));
-        }
-    }
-
-    @Test
-    public void testParsingStatementWithMissingToken() throws Exception {
-        try {
-            String sql = ((
-                    "select a b\n" +
-                    "where e = d\n"));
-            parseQuery(sql);
-            fail("Should have caught exception.");
-        } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.MISMATCHED_TOKEN.getErrorCode(), e.getErrorCode());
         }
     }
 
@@ -612,7 +599,7 @@ public class QueryParserTest {
             parseQuery(sql);
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.MISMATCHED_TOKEN.getErrorCode(), e.getErrorCode());
+            assertEquals(SQLExceptionCode.MISSING_TOKEN.getErrorCode(), e.getErrorCode());
         }
     }
 
