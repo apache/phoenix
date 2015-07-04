@@ -124,8 +124,10 @@ public class SelectStatement implements FilterableStatement {
             buf.append(',');
         }
         buf.setLength(buf.length()-1);
-        buf.append(" FROM ");
-        fromTable.toSQL(resolver, buf);
+        if (fromTable != null) {
+            buf.append(" FROM ");
+            fromTable.toSQL(resolver, buf);
+        }
         if (where != null) {
             buf.append(" WHERE ");
             where.toSQL(resolver, buf);
