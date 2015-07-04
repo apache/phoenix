@@ -74,6 +74,8 @@ public class PhoenixHBaseLoaderIT {
     private static final String TABLE_NAME = "A";
     private static final String INDEX_NAME = "I";
     private static final String TABLE_FULL_NAME = SchemaUtil.getTableName(SCHEMA_NAME, TABLE_NAME);
+    private static final String CASE_SENSITIVE_TABLE_NAME = SchemaUtil.getEscapedArgument("a");
+    private static final String CASE_SENSITIVE_TABLE_FULL_NAME = SchemaUtil.getTableName(SCHEMA_NAME,CASE_SENSITIVE_TABLE_NAME);
     private static HBaseTestingUtility hbaseTestUtil;
     private static String zkQuorum;
     private static Connection conn;
@@ -234,13 +236,13 @@ public class PhoenixHBaseLoaderIT {
     public void testDataForTable() throws Exception {
         
          //create the table
-         String ddl = "CREATE TABLE  " + TABLE_FULL_NAME 
+         String ddl = "CREATE TABLE  " + CASE_SENSITIVE_TABLE_FULL_NAME 
                 + "  (ID  INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, AGE INTEGER) ";
                 
         conn.createStatement().execute(ddl);
         
         //prepare data with 10 rows having age 25 and the other 30.
-        final String dml = "UPSERT INTO " + TABLE_FULL_NAME + " VALUES(?,?,?)";
+        final String dml = "UPSERT INTO " + CASE_SENSITIVE_TABLE_FULL_NAME + " VALUES(?,?,?)";
         PreparedStatement stmt = conn.prepareStatement(dml);
         int rows = 20;
         for(int i = 0 ; i < rows; i++) {
@@ -253,7 +255,7 @@ public class PhoenixHBaseLoaderIT {
          
         //load data and filter rows whose age is > 25
         pigServer.registerQuery(String.format(
-                "A = load 'hbase://table/%s' using "  + PhoenixHBaseLoader.class.getName() + "('%s');", TABLE_FULL_NAME,
+                "A = load 'hbase://table/%s' using "  + PhoenixHBaseLoader.class.getName() + "('%s');", CASE_SENSITIVE_TABLE_FULL_NAME,
                 zkQuorum));
         pigServer.registerQuery("B = FILTER A BY AGE > 25;");
         
@@ -603,6 +605,7 @@ public class PhoenixHBaseLoaderIT {
     @After
     public void tearDown() throws Exception {
         dropTable(TABLE_FULL_NAME);
+        dropTable(CASE_SENSITIVE_TABLE_FULL_NAME);
         pigServer.shutdown();
     }
 
