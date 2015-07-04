@@ -346,8 +346,7 @@ public class PhoenixRuntime {
     public static List<ColumnInfo> generateColumnInfo(Connection conn,
             String tableName, List<String> columns)
             throws SQLException {
-
-        PTable table = PhoenixRuntime.getTable(conn, tableName);
+        PTable table = PhoenixRuntime.getTable(conn, SchemaUtil.normalizeFullTableName(tableName));
         List<ColumnInfo> columnInfoList = Lists.newArrayList();
         Set<String> unresolvedColumnNames = new TreeSet<String>();
         if (columns == null) {
