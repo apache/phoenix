@@ -20,9 +20,9 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hbase.{HBaseConfiguration, HConstants, HBaseTestingUtility}
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT
 import org.apache.phoenix.query.BaseTest
-import org.apache.phoenix.schema.ColumnNotFoundException
+import org.apache.phoenix.schema.{TableNotFoundException, ColumnNotFoundException}
 import org.apache.phoenix.schema.types.PVarchar
-import org.apache.phoenix.util.ColumnInfo
+import org.apache.phoenix.util.{SchemaUtil, ColumnInfo}
 import org.apache.spark.sql.{SaveMode, execution, SQLContext}
 import org.apache.spark.sql.types.{LongType, DataType, StringType, StructField}
 import org.apache.spark.{SparkConf, SparkContext}
@@ -96,23 +96,6 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
     PhoenixSparkITHelper.doTeardown
   }
 
-  def buildSql(table: String, columns: Seq[String], predicate: Option[String]): String = {
-    val query = "SELECT %s FROM \"%s\"" format(columns.map(f => "\"" + f + "\"").mkString(", "), table)
-
-    query + (predicate match {
-      case Some(p: String) => " WHERE " + p
-      case _ => ""
-    })
-  }
-
-  test("Can create valid SQL") {
-    val rdd = new PhoenixRDD(sc, "MyTable", Array("Foo", "Bar"),
-      conf = hbaseConfiguration)
-
-    rdd.buildSql("MyTable", Array("Foo", "Bar"), None) should
-      equal("SELECT \"Foo\", \"Bar\" FROM \"MyTable\"")
-  }
-
   test("Can convert Phoenix schema") {
     val phoenixSchema = List(
       new ColumnInfo("varcharColumn", PVarchar.INSTANCE.getSqlType)
@@ -154,7 +137,9 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
     val sqlContext = new SQLContext(sc)
 
 
-    val df1 = sqlContext.phoenixTableAsDataFrame("table3", Array("id", "col1"),
+    val df1 = sqlContext.phoenixTableAsDataFrame(
+      SchemaUtil.getEscapedArgument("table3"),
+      Array("id", "col1"),
       zkUrl = Some(quorumAddress))
 
     df1.registerTempTable("table3")
@@ -191,10 +176,12 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
   }
 
   test("Using a predicate referring to a non-existent column should fail") {
-    intercept[RuntimeException] {
+    intercept[Exception] {
       val sqlContext = new SQLContext(sc)
 
-      val df1 = sqlContext.phoenixTableAsDataFrame("table3", Array("id", "col1"),
+      val df1 = sqlContext.phoenixTableAsDataFrame(
+        SchemaUtil.getEscapedArgument("table3"),
+        Array("id", "col1"),
         predicate = Some("foo = bar"),
         conf = hbaseConfiguration)
 
@@ -210,7 +197,9 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
   test("Can create schema RDD with predicate that will never match") {
     val sqlContext = new SQLContext(sc)
 
-    val df1 = sqlContext.phoenixTableAsDataFrame("table3", Array("id", "col1"),
+    val df1 = sqlContext.phoenixTableAsDataFrame(
+      SchemaUtil.getEscapedArgument("table3"),
+      Array("id", "col1"),
       predicate = Some("\"id\" = -1"),
       conf = hbaseConfiguration)
 
@@ -435,5 +424,28 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
 
     // Verify the arrays are equal
     sqlArray shouldEqual dataSet(0)._2
+  }
+
+  test("Can read from table with schema and escaped table name") {
+    // Manually escape
+    val rdd1 = sc.phoenixTableAsRDD(
+      "CUSTOM_ENTITY.\"z02\"",
+      Seq("ID"),
+      conf = hbaseConfiguration)
+
+    var count = rdd1.count()
+
+    count shouldEqual 1L
+
+    // Use SchemaUtil
+    val rdd2 = sc.phoenixTableAsRDD(
+      SchemaUtil.getEscapedFullTableName("CUSTOM_ENTITY.z02"),
+      Seq("ID"),
+      conf = hbaseConfiguration)
+
+    count = rdd2.count()
+
+    count shouldEqual 1L
+
   }
 }
