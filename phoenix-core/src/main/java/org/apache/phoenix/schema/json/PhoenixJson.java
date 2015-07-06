@@ -21,6 +21,7 @@ package org.apache.phoenix.schema.json;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.Map;
 
 import org.apache.hadoop.hbase.util.Bytes;
@@ -352,5 +353,41 @@ public class PhoenixJson implements Comparable<PhoenixJson> {
 	public boolean hasKey(String index) 
 	{
 		return rootNode.has(index);
+	}
+	
+	public boolean isSuperset(PhoenixJson rhs)
+	{
+		if(!rhs.rootNode.isArray()&&!rhs.rootNode.isValueNode()&&!this.rootNode.isArray()&&!this.rootNode.isValueNode())
+		{
+			if(rhs.rootNode.size()>=this.rootNode.size())
+			{
+				Iterator<String> lhsKeys=this.rootNode.getFieldNames();
+				while(lhsKeys.hasNext())
+				{
+					String lhsKey=lhsKeys.next();
+					if(!this.rootNode.get(lhsKey).equals(rhs.rootNode.get(lhsKey)))return false;
+				}
+				return true;
+			}
+		}
+		return false;
+	}
+	
+	public boolean isSubset(PhoenixJson rhs)
+	{
+		if(!rhs.rootNode.isArray()&&!rhs.rootNode.isValueNode()&&!this.rootNode.isArray()&&!this.rootNode.isValueNode())
+		{
+			if(rhs.rootNode.size()<=this.rootNode.size())
+			{
+				Iterator<String> rhsKeys=rhs.rootNode.getFieldNames();
+				while(rhsKeys.hasNext())
+				{
+					String rhsKey=rhsKeys.next();
+					if(!this.rootNode.get(rhsKey).equals(rhs.rootNode.get(rhsKey)))return false;
+				}
+				return true;
+			}
+		}
+		return false;
 	}
 }

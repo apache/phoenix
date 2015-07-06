@@ -8,11 +8,12 @@ import java.util.Set;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
+import org.apache.phoenix.schema.json.PhoenixJson;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PJson;
 import org.apache.phoenix.schema.types.PVarchar;
-import org.apache.phoenix.util.JSONutil;
 
 public class JsonSupersetExpression extends BaseJSONExpression{
 	public JsonSupersetExpression(List<Expression> children) {
@@ -26,41 +27,20 @@ public class JsonSupersetExpression extends BaseJSONExpression{
 		if (!children.get(1).evaluate(tuple, ptr)) {
             return false;
         }
-		String pattern = (String) PVarchar.INSTANCE.toObject(ptr);
+		PhoenixJson pattern = (PhoenixJson) PJson.INSTANCE.toObject(ptr, children.get(1).getSortOrder());
 		if (!children.get(0).evaluate(tuple, ptr)) {
 	        return false;
 	    }
-		String value = (String) PVarchar.INSTANCE.toObject(ptr);
-		//null col
-		if(value.equals("")){
-			ptr.set(PDataType.FALSE_BYTES);
-			return true;
-		}
-		JSONutil util=new JSONutil();
-		try{
-		Map<String, Object> patternmap=util.getStringMap(pattern);
-		Map<String, Object> valuemap=util.getStringMap(value);
-		//empty set
-		if(valuemap.size()==0){
+		PhoenixJson value = (PhoenixJson) PJson.INSTANCE.toObject(ptr, children.get(0).getSortOrder());
+		if(pattern.isSuperset(value))
+		{
 			ptr.set(PDataType.TRUE_BYTES);
-			return true;
+    		return true;
 		}
-		Set<String> key = valuemap.keySet();
-		Iterator<String> iter = key.iterator();
-		Object o=null;
-	    while (iter.hasNext()) {
-	    	String s=iter.next();
-	    	if((o=patternmap.get(s))==null||!(o.equals(valuemap.get(s)))){
-	    		ptr.set(PDataType.FALSE_BYTES);
-	    		return true;
-	    	}
-	    }
-	    	ptr.set(PDataType.TRUE_BYTES);
+		else
+		{
+			return false;
 		}
-		catch(IOException e){
-			
-		}
-		return true;
 	}
 	@Override
 	public <T> T accept(ExpressionVisitor<T> visitor) {
