@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.iterate;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
@@ -30,6 +31,7 @@ import java.sql.Statement;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -43,6 +45,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -300,6 +303,83 @@ public class RoundRobinResultIteratorIT extends BaseHBaseManagedTimeIT {
         assertEquals("Number of rows retrieved didn't match for tableA", insertedRowsA, rowsA);
         assertEquals("Number of rows retrieved didnt match for tableB", insertedRowsB, rowsB);
         assertEquals("Number of rows retrieved didn't match for tableC", insertedRowsC, rowsC);
+    }
+    
+    @Test
+    public void testBug2074() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            conn.createStatement().execute("CREATE TABLE EVENTS" 
+                    + "   (id VARCHAR(10) PRIMARY KEY, " 
+                    + "    article VARCHAR(10), " 
+                    + "    misc VARCHAR(10))");
+            
+            PreparedStatement upsertStmt = conn.prepareStatement(
+                    "upsert into EVENTS(id, article, misc) " + "values (?, ?, ?)");
+            upsertStmt.setString(1, "001");
+            upsertStmt.setString(2, "A");
+            upsertStmt.setString(3, "W");
+            upsertStmt.execute();
+            upsertStmt.setString(1, "002");
+            upsertStmt.setString(2, "B");
+            upsertStmt.setString(3, "X");
+            upsertStmt.execute();
+            upsertStmt.setString(1, "003");
+            upsertStmt.setString(2, "C");
+            upsertStmt.setString(3, "Y");
+            upsertStmt.execute();
+            upsertStmt.setString(1, "004");
+            upsertStmt.setString(2, "D");
+            upsertStmt.setString(3, "Z");
+            upsertStmt.execute();
+            conn.commit();
+
+            conn.createStatement().execute("CREATE TABLE MAPPING" 
+                    + "   (id VARCHAR(10) PRIMARY KEY, " 
+                    + "    article VARCHAR(10), " 
+                    + "    category VARCHAR(10))");
+            
+            upsertStmt = conn.prepareStatement(
+                    "upsert into MAPPING(id, article, category) " + "values (?, ?, ?)");
+            upsertStmt.setString(1, "002");
+            upsertStmt.setString(2, "A");
+            upsertStmt.setString(3, "X");
+            upsertStmt.execute();
+            upsertStmt.setString(1, "003");
+            upsertStmt.setString(2, "B");
+            upsertStmt.setString(3, "Y");
+            upsertStmt.execute();
+            upsertStmt.setString(1, "004");
+            upsertStmt.setString(2, "C");
+            upsertStmt.setString(3, "Z");
+            upsertStmt.execute();
+            upsertStmt.setString(1, "005");
+            upsertStmt.setString(2, "E");
+            upsertStmt.setString(3, "Z");
+            upsertStmt.execute();
+            upsertStmt.setString(1, "006");
+            upsertStmt.setString(2, "C");
+            upsertStmt.setString(3, "Z");
+            upsertStmt.execute();
+            upsertStmt.setString(1, "007");
+            upsertStmt.setString(2, "C");
+            upsertStmt.setString(3, "Z");
+            upsertStmt.execute();
+            conn.commit();
+
+            // No leading part of PK
+            String query = "select count(MAPPING.article) as cnt,MAPPING.category from EVENTS"
+                    + " join MAPPING on MAPPING.article = EVENTS.article"
+                    + " group by category order by cnt";
+            PreparedStatement statement = conn.prepareStatement(query);
+            statement.setFetchSize(3);
+            ResultSet rs = statement.executeQuery();
+            while(rs.next());
+            
+        } finally {
+            conn.close();
+        }
     }
 
 
