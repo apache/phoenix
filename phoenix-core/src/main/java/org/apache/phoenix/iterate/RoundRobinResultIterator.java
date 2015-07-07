@@ -240,7 +240,7 @@ public class RoundRobinResultIterator implements ResultIterator {
             for (Future<Tuple> future : futures) {
                 Tuple tuple = future.get();
                 if (tuple != null) {
-                    results.add(new RoundRobinIterator(openIterators.get(i), tuple));
+                    results.add(new RoundRobinIterator(openIterators.get(i).delegate, tuple));
                 } else {
                     // Underlying scanner is exhausted. So close it.
                     openIterators.get(i).close();
