@@ -2204,7 +2204,7 @@ public class MetaDataClient {
             String familyName = null;
             String msg = null;
             // TODO: better to return error code
-            if (result.getColumnName() != null && result.getColumnName() != null) {
+            if (result.getColumnName() != null) {
                 familyName = result.getFamilyName() == null ? null : Bytes.toString(result.getFamilyName());
                 columnName = Bytes.toString(result.getColumnName());
                 msg = "Cannot add/drop column referenced by VIEW";
