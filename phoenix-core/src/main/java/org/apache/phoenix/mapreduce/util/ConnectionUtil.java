@@ -88,9 +88,9 @@ public class ConnectionUtil {
      * @param clientPort a ZooKeeper client port
      * @return a Phoenix connection to the given connection string
      */
-    private static Connection getConnection(final String quorum, final int clientPort, Properties props) throws SQLException {
+    private static Connection getConnection(final String quorum, final Integer clientPort, Properties props) throws SQLException {
         Preconditions.checkNotNull(quorum);
-        return DriverManager.getConnection(QueryUtil.getUrl(quorum, clientPort), props);
+        return DriverManager.getConnection(clientPort!=null? QueryUtil.getUrl(quorum, clientPort) :  QueryUtil.getUrl(quorum), props);
     }
 
 }
