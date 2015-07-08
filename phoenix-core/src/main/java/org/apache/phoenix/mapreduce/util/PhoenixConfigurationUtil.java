@@ -27,6 +27,7 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
 import com.google.common.collect.Lists;
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -371,9 +372,10 @@ public final class PhoenixConfigurationUtil {
      * @param configuration
      * @return
      */
-    public static int getClientPort(final Configuration configuration) {
+    public static Integer getClientPort(final Configuration configuration) {
         Preconditions.checkNotNull(configuration);
-        return Integer.parseInt(configuration.get(HBASE_ZOOKEEPER_CLIENT_PORT));
+        String clientPortString = configuration.get(HBASE_ZOOKEEPER_CLIENT_PORT);
+        return clientPortString==null ? null : Integer.parseInt(clientPortString);
     }
 
     public static void loadHBaseConfiguration(Job job) throws IOException {
