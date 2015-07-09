@@ -46,6 +46,7 @@ public class PFunction implements PMetaDataEntity {
     private long timeStamp;
     private int estimatedSize;
     private boolean temporary;
+    private boolean replace;
 
     public PFunction(long timeStamp) { // For index delete marker
         this.timeStamp = timeStamp;
@@ -71,11 +72,23 @@ public class PFunction implements PMetaDataEntity {
     public PFunction(PFunction function, boolean temporary) {
         this(function.getTenantId(), function.getFunctionName(), function.getFunctionArguments(),
                 function.getReturnType(), function.getClassName(), function.getJarPath(), function
-                        .getTimeStamp(), temporary);
+                        .getTimeStamp(), temporary, function.isReplace());
+    }
+
+    public PFunction(PFunction function, boolean temporary, boolean isReplace) {
+        this(function.getTenantId(), function.getFunctionName(), function.getFunctionArguments(),
+                function.getReturnType(), function.getClassName(), function.getJarPath(), function
+                        .getTimeStamp(), temporary, isReplace);
+    }
+
+    public PFunction(PName tenantId, String functionName, List<FunctionArgument> args,
+            String returnType, String className, String jarPath, long timeStamp, boolean temporary) {
+        this(tenantId, functionName, args, returnType, className, jarPath, timeStamp, temporary,
+                false);
     }
 
     public PFunction(PName tenantId, String functionName, List<FunctionArgument> args, String returnType,
-            String className, String jarPath, long timeStamp, boolean temporary) {
+            String className, String jarPath, long timeStamp, boolean temporary, boolean replace) {
         this.tenantId = tenantId;
         this.functionName = PNameFactory.newName(functionName);
         if (args == null){ 
@@ -94,6 +107,7 @@ public class PFunction implements PMetaDataEntity {
                 PNameFactory.getEstimatedSize(this.className) +
                  (jarPath==null?0:PNameFactory.getEstimatedSize(this.jarPath));
         this.temporary = temporary;
+        this.replace = replace;
     }
 
     public PFunction(PFunction function) {
@@ -217,6 +231,9 @@ public class PFunction implements PMetaDataEntity {
             }
             builder.addArguments(argBuilder.build());
         }
+        if(builder.hasIsReplace()) {
+            builder.setIsReplace(function.isReplace());
+        }
         return builder.build();
       }
 
@@ -248,11 +265,16 @@ public class PFunction implements PMetaDataEntity {
                     minValue == null ? null : LiteralExpression.newConstant((new LiteralParseNode(dataType.toObject(minValue))).getValue()),
                     maxValue == null ? null : LiteralExpression.newConstant((new LiteralParseNode(dataType.toObject(maxValue))).getValue())));
         }
-        return new PFunction(tenantId,functionName, args, returnType, className, jarPath, timeStamp);
+        return new PFunction(tenantId, functionName, args, returnType, className, jarPath,
+                timeStamp, false, function.hasIsReplace() ? true : false);
     }
 
     public int getEstimatedSize() {
         return estimatedSize;
+    }
+
+    public boolean isReplace() {
+        return this.replace;
     }
 }
 

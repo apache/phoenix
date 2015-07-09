@@ -42,4 +42,5 @@ message PFunction {
   optional bytes tenantId = 6;
   optional string returnType = 7;
   optional bool isArrayReturnType = 8;
+  optional bool isReplace = 9;
 }
