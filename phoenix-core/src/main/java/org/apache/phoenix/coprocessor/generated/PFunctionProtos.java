@@ -1317,6 +1317,16 @@ public final class PFunctionProtos {
      * <code>optional bool isArrayReturnType = 8;</code>
      */
     boolean getIsArrayReturnType();
+
+    // optional bool isReplace = 9;
+    /**
+     * <code>optional bool isReplace = 9;</code>
+     */
+    boolean hasIsReplace();
+    /**
+     * <code>optional bool isReplace = 9;</code>
+     */
+    boolean getIsReplace();
   }
   /**
    * Protobuf type {@code PFunction}
@@ -1410,6 +1420,11 @@ public final class PFunctionProtos {
             case 64: {
               bitField0_ |= 0x00000040;
               isArrayReturnType_ = input.readBool();
+              break;
+            }
+            case 72: {
+              bitField0_ |= 0x00000080;
+              isReplace_ = input.readBool();
               break;
             }
           }
@@ -1711,6 +1726,22 @@ public final class PFunctionProtos {
       return isArrayReturnType_;
     }
 
+    // optional bool isReplace = 9;
+    public static final int ISREPLACE_FIELD_NUMBER = 9;
+    private boolean isReplace_;
+    /**
+     * <code>optional bool isReplace = 9;</code>
+     */
+    public boolean hasIsReplace() {
+      return ((bitField0_ & 0x00000080) == 0x00000080);
+    }
+    /**
+     * <code>optional bool isReplace = 9;</code>
+     */
+    public boolean getIsReplace() {
+      return isReplace_;
+    }
+
     private void initFields() {
       functionName_ = "";
       arguments_ = java.util.Collections.emptyList();
@@ -1720,6 +1751,7 @@ public final class PFunctionProtos {
       tenantId_ = com.google.protobuf.ByteString.EMPTY;
       returnType_ = "";
       isArrayReturnType_ = false;
+      isReplace_ = false;
     }
     private byte memoizedIsInitialized = -1;
     public final boolean isInitialized() {
@@ -1775,6 +1807,9 @@ public final class PFunctionProtos {
       if (((bitField0_ & 0x00000040) == 0x00000040)) {
         output.writeBool(8, isArrayReturnType_);
       }
+      if (((bitField0_ & 0x00000080) == 0x00000080)) {
+        output.writeBool(9, isReplace_);
+      }
       getUnknownFields().writeTo(output);
     }
 
@@ -1815,6 +1850,10 @@ public final class PFunctionProtos {
       if (((bitField0_ & 0x00000040) == 0x00000040)) {
         size += com.google.protobuf.CodedOutputStream
           .computeBoolSize(8, isArrayReturnType_);
+      }
+      if (((bitField0_ & 0x00000080) == 0x00000080)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeBoolSize(9, isReplace_);
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSerializedSize = size;
@@ -1876,6 +1915,11 @@ public final class PFunctionProtos {
         result = result && (getIsArrayReturnType()
             == other.getIsArrayReturnType());
       }
+      result = result && (hasIsReplace() == other.hasIsReplace());
+      if (hasIsReplace()) {
+        result = result && (getIsReplace()
+            == other.getIsReplace());
+      }
       result = result &&
           getUnknownFields().equals(other.getUnknownFields());
       return result;
@@ -1920,6 +1964,10 @@ public final class PFunctionProtos {
       if (hasIsArrayReturnType()) {
         hash = (37 * hash) + ISARRAYRETURNTYPE_FIELD_NUMBER;
         hash = (53 * hash) + hashBoolean(getIsArrayReturnType());
+      }
+      if (hasIsReplace()) {
+        hash = (37 * hash) + ISREPLACE_FIELD_NUMBER;
+        hash = (53 * hash) + hashBoolean(getIsReplace());
       }
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
@@ -2051,6 +2099,8 @@ public final class PFunctionProtos {
         bitField0_ = (bitField0_ & ~0x00000040);
         isArrayReturnType_ = false;
         bitField0_ = (bitField0_ & ~0x00000080);
+        isReplace_ = false;
+        bitField0_ = (bitField0_ & ~0x00000100);
         return this;
       }
 
@@ -2116,6 +2166,10 @@ public final class PFunctionProtos {
           to_bitField0_ |= 0x00000040;
         }
         result.isArrayReturnType_ = isArrayReturnType_;
+        if (((from_bitField0_ & 0x00000100) == 0x00000100)) {
+          to_bitField0_ |= 0x00000080;
+        }
+        result.isReplace_ = isReplace_;
         result.bitField0_ = to_bitField0_;
         onBuilt();
         return result;
@@ -2186,6 +2240,9 @@ public final class PFunctionProtos {
         }
         if (other.hasIsArrayReturnType()) {
           setIsArrayReturnType(other.getIsArrayReturnType());
+        }
+        if (other.hasIsReplace()) {
+          setIsReplace(other.getIsReplace());
         }
         this.mergeUnknownFields(other.getUnknownFields());
         return this;
@@ -2870,6 +2927,39 @@ public final class PFunctionProtos {
         return this;
       }
 
+      // optional bool isReplace = 9;
+      private boolean isReplace_ ;
+      /**
+       * <code>optional bool isReplace = 9;</code>
+       */
+      public boolean hasIsReplace() {
+        return ((bitField0_ & 0x00000100) == 0x00000100);
+      }
+      /**
+       * <code>optional bool isReplace = 9;</code>
+       */
+      public boolean getIsReplace() {
+        return isReplace_;
+      }
+      /**
+       * <code>optional bool isReplace = 9;</code>
+       */
+      public Builder setIsReplace(boolean value) {
+        bitField0_ |= 0x00000100;
+        isReplace_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>optional bool isReplace = 9;</code>
+       */
+      public Builder clearIsReplace() {
+        bitField0_ = (bitField0_ & ~0x00000100);
+        isReplace_ = false;
+        onChanged();
+        return this;
+      }
+
       // @@protoc_insertion_point(builder_scope:PFunction)
     }
 
@@ -2903,14 +2993,14 @@ public final class PFunctionProtos {
       "\n\017PFunction.proto\"\207\001\n\014PFunctionArg\022\024\n\014ar" +
       "gumentType\030\001 \002(\t\022\023\n\013isArrayType\030\002 \001(\010\022\022\n" +
       "\nisConstant\030\003 \001(\010\022\024\n\014defaultValue\030\004 \001(\t\022" +
-      "\020\n\010minValue\030\005 \001(\t\022\020\n\010maxValue\030\006 \001(\t\"\273\001\n\t" +
+      "\020\n\010minValue\030\005 \001(\t\022\020\n\010maxValue\030\006 \001(\t\"\316\001\n\t" +
       "PFunction\022\024\n\014functionName\030\001 \002(\t\022 \n\targum" +
       "ents\030\002 \003(\0132\r.PFunctionArg\022\021\n\tclassname\030\003" +
       " \002(\t\022\021\n\ttimeStamp\030\004 \002(\003\022\017\n\007jarPath\030\005 \001(\t" +
       "\022\020\n\010tenantId\030\006 \001(\014\022\022\n\nreturnType\030\007 \001(\t\022\031" +
-      "\n\021isArrayReturnType\030\010 \001(\010BC\n(org.apache." +
-      "phoenix.coprocessor.generatedB\017PFunction",
-      "ProtosH\001\210\001\001\240\001\001"
+      "\n\021isArrayReturnType\030\010 \001(\010\022\021\n\tisReplace\030\t" +
+      " \001(\010BC\n(org.apache.phoenix.coprocessor.g",
+      "eneratedB\017PFunctionProtosH\001\210\001\001\240\001\001"
     };
     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
       new com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner() {
@@ -2928,7 +3018,7 @@ public final class PFunctionProtos {
           internal_static_PFunction_fieldAccessorTable = new
             com.google.protobuf.GeneratedMessage.FieldAccessorTable(
               internal_static_PFunction_descriptor,
-              new java.lang.String[] { "FunctionName", "Arguments", "Classname", "TimeStamp", "JarPath", "TenantId", "ReturnType", "IsArrayReturnType", });
+              new java.lang.String[] { "FunctionName", "Arguments", "Classname", "TimeStamp", "JarPath", "TenantId", "ReturnType", "IsArrayReturnType", "IsReplace", });
           return null;
         }
       };

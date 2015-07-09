@@ -466,7 +466,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
     }
 
     private List<PFunction> buildFunctions(List<byte[]> keys, HRegion region,
-            long clientTimeStamp) throws IOException, SQLException {
+            long clientTimeStamp, boolean isReplace, List<Mutation> deleteMutationsForReplace) throws IOException, SQLException {
         List<KeyRange> keyRanges = Lists.newArrayListWithExpectedSize(keys.size());
         for (byte[] key : keys) {
             byte[] stopKey = ByteUtil.concat(key, QueryConstants.SEPARATOR_BYTE_ARRAY);
@@ -489,7 +489,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         try {
             for(int i = 0; i< keys.size(); i++) {
                 function = null;
-                function = getFunction(scanner);
+                function =
+                        getFunction(scanner, isReplace, clientTimeStamp, deleteMutationsForReplace);
                 if (function == null) {
                     return null;
                 }
@@ -815,7 +816,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             disableWAL, multiTenant, storeNulls, viewType, viewIndexId, indexType, stats);
     }
 
-    private PFunction getFunction(RegionScanner scanner)
+    private PFunction getFunction(RegionScanner scanner, final boolean isReplace, long clientTimeStamp, List<Mutation> deleteMutationsForReplace)
             throws IOException, SQLException {
         List<Cell> results = Lists.newArrayList();
         scanner.next(results);
@@ -824,12 +825,19 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         }
         Cell[] functionKeyValues = new Cell[FUNCTION_KV_COLUMNS.size()];
         Cell[] functionArgKeyValues = new Cell[FUNCTION_ARG_KV_COLUMNS.size()];
-
         // Create PFunction based on KeyValues from scan
         Cell keyValue = results.get(0);
         byte[] keyBuffer = keyValue.getRowArray();
         int keyLength = keyValue.getRowLength();
         int keyOffset = keyValue.getRowOffset();
+        long currentTimeMillis = EnvironmentEdgeManager.currentTimeMillis();
+        if(isReplace) {
+            long deleteTimeStamp =
+                    clientTimeStamp == HConstants.LATEST_TIMESTAMP ? currentTimeMillis - 1
+                            : (keyValue.getTimestamp() < clientTimeStamp ? clientTimeStamp - 1
+                                    : keyValue.getTimestamp());
+            deleteMutationsForReplace.add(new Delete(keyBuffer, keyOffset, keyLength, deleteTimeStamp));
+        }
         PName tenantId = newPName(keyBuffer, keyOffset, keyLength);
         int tenantIdLength = (tenantId == null) ? 0 : tenantId.getBytes().length;
         if (tenantIdLength == 0) {
@@ -895,6 +903,14 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 break;
             }
             Cell typeKv = results.get(0);
+            if(isReplace) {
+                long deleteTimeStamp =
+                        clientTimeStamp == HConstants.LATEST_TIMESTAMP ? currentTimeMillis - 1
+                                : (typeKv.getTimestamp() < clientTimeStamp ? clientTimeStamp - 1
+                                        : typeKv.getTimestamp());
+                deleteMutationsForReplace.add(new Delete(typeKv.getRowArray(), typeKv
+                        .getRowOffset(), typeKv.getRowLength(), deleteTimeStamp));
+            }
             int typeKeyLength = typeKv.getRowLength();
             PName typeName =
                     newPName(typeKv.getRowArray(), typeKv.getRowOffset() + offset, typeKeyLength
@@ -1007,18 +1023,18 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
     }
 
     private PFunction loadFunction(RegionCoprocessorEnvironment env, byte[] key,
-            ImmutableBytesPtr cacheKey, long clientTimeStamp, long asOfTimeStamp)
+            ImmutableBytesPtr cacheKey, long clientTimeStamp, long asOfTimeStamp, boolean isReplace, List<Mutation> deleteMutationsForReplace)
             throws IOException, SQLException {
             HRegion region = env.getRegion();
             Cache<ImmutableBytesPtr,PMetaDataEntity> metaDataCache = GlobalCache.getInstance(this.env).getMetaDataCache();
             PFunction function = (PFunction)metaDataCache.getIfPresent(cacheKey);
             // We always cache the latest version - fault in if not in cache
-            if (function != null) {
+            if (function != null && !isReplace) {
                 return function;
             }
             ArrayList<byte[]> arrayList = new ArrayList<byte[]>(1);
             arrayList.add(key);
-            List<PFunction> functions = buildFunctions(arrayList, region, asOfTimeStamp);
+            List<PFunction> functions = buildFunctions(arrayList, region, asOfTimeStamp, isReplace, deleteMutationsForReplace);
             if(functions != null) return functions.get(0);
             // if not found then check if newer table already exists and add delete marker for timestamp
             // found
@@ -1730,7 +1746,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             if(functionsAvailable.size() == numFunctions) return functionsAvailable;
 
             // Query for the latest table first, since it's not cached
-            List<PFunction> buildFunctions = buildFunctions(keys, region, clientTimeStamp);
+            List<PFunction> buildFunctions =
+                    buildFunctions(keys, region, clientTimeStamp, false,
+                        Collections.<Mutation> emptyList());
             if(buildFunctions == null || buildFunctions.isEmpty()) {
                 return null;
             }
@@ -2202,7 +2220,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 // exists without making an additional query
                 ImmutableBytesPtr cacheKey = new FunctionBytesPtr(lockKey);
                 PFunction function =
-                        loadFunction(env, lockKey, cacheKey, clientTimeStamp, clientTimeStamp);
+                        loadFunction(env, lockKey, cacheKey, clientTimeStamp, clientTimeStamp, request.getReplace(), functionMetaData);
                 if (function != null) {
                     if (function.getTimeStamp() < clientTimeStamp) {
                         // If the function is older than the client time stamp and it's deleted,
@@ -2212,7 +2230,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                             builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
                             builder.addFunction(PFunction.toProto(function));
                             done.run(builder.build());
-                            return;
+                            if(!request.getReplace()) {
+                                return;
+                            }
                         }
                     } else {
                         builder.setReturnCode(MetaDataProtos.MutationCode.NEWER_FUNCTION_FOUND);
