@@ -20,10 +20,12 @@ package org.apache.phoenix.parse;
 public class CreateFunctionStatement extends MutableStatement {
     private final PFunction functionInfo;
     private final boolean temporary;
+    private final boolean isReplace;
 
-    public CreateFunctionStatement(PFunction functionInfo, boolean temporary) {
+    public CreateFunctionStatement(PFunction functionInfo, boolean temporary, boolean isReplace) {
         this.functionInfo = functionInfo;
         this.temporary = temporary;
+        this.isReplace = isReplace;
     }
 
     @Override
@@ -39,4 +41,7 @@ public class CreateFunctionStatement extends MutableStatement {
         return temporary;
     }
 
+    public boolean isReplace() {
+        return isReplace;
+    }
 }

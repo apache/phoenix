@@ -2682,6 +2682,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             builder.addTableMetadataMutations(mp.toByteString());
                         }
                         builder.setTemporary(temporary);
+                        builder.setReplace(function.isReplace());
                         instance.createFunction(controller, builder.build(), rpcCallback);
                         if(controller.getFailedOn() != null) {
                             throw controller.getFailedOn();
