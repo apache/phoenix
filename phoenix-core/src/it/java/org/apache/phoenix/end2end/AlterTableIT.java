@@ -64,7 +64,6 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import com.google.common.base.Objects;
@@ -2132,15 +2131,13 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
     }
     
     @Test
-    @Ignore
-    // enable this test after https://issues.apache.org/jira/browse/PHOENIX-978 is fixed 
     public void testAddExistingViewPkColumnToBaseTableWithViews() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         try {       
             conn.createStatement().execute("CREATE TABLE IF NOT EXISTS TABLEWITHVIEW ("
                     + " ID char(10) NOT NULL,"
                     + " COL1 integer NOT NULL,"
-                    + " COL2 bigint NOT NULL,"
+                    + " COL2 integer NOT NULL,"
                     + " CONSTRAINT NAME_PK PRIMARY KEY (ID, COL1, COL2)"
                     + " )");
             assertTableDefinition(conn, "TABLEWITHVIEW", PTableType.TABLE, null, 0, 3, -1, "ID", "COL1", "COL2");
@@ -2169,7 +2166,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             }
             
             // add the pk column of the view to the base table
-            conn.createStatement().execute("ALTER TABLE TABLEWITHVIEW ADD VIEW_COL1 DECIMAL PRIMARY KEY");
+            conn.createStatement().execute("ALTER TABLE TABLEWITHVIEW ADD VIEW_COL1 DECIMAL(10,2) PRIMARY KEY");
             assertTableDefinition(conn, "TABLEWITHVIEW", PTableType.TABLE, null, 1, 4, -1, "ID", "COL1", "COL2", "VIEW_COL1");
             assertTableDefinition(conn, "VIEWOFTABLE", PTableType.VIEW, "TABLEWITHVIEW", 1, 5, 4, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
             
@@ -2179,7 +2176,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             assertEquals(rs.getString(1), "view1");
             assertEquals(rs.getInt(2), 12);
             assertEquals(rs.getInt(3), 13);
-            assertEquals(rs.getInt(4), 14);
+            assertEquals(rs.getBigDecimal(4).intValue(), 14);
             assertFalse(rs.next());
 
             // query view
