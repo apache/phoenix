@@ -1438,7 +1438,7 @@ public class MetaDataClient {
             String tableName = tableNameNode.getTableName();
             String parentTableName = null;
             PName tenantId = connection.getTenantId();
-            String tenantIdStr = tenantId == null ? null : connection.getTenantId().getString();
+            String tenantIdStr = tenantId == null ? null : tenantId.getString();
             Long scn = connection.getSCN();
             long clientTimeStamp = scn == null ? HConstants.LATEST_TIMESTAMP : scn;
             boolean multiTenant = false;
@@ -2032,7 +2032,7 @@ public class MetaDataClient {
         // NOT NULL is a requirement, since otherwise the table key would conflict
         // potentially with the global table definition.
         PColumn tenantIdCol = iterator.next();
-        if (!tenantIdCol.getDataType().isCoercibleTo(PVarchar.INSTANCE) || tenantIdCol.isNullable()) {
+        if ( tenantIdCol.isNullable()) {
             throw new SQLExceptionInfo.Builder(INSUFFICIENT_MULTI_TENANT_COLUMNS).setSchemaName(schemaName).setTableName(tableName).build().buildException();
         }
     }
