@@ -1352,7 +1352,7 @@ public class MetaDataClient {
         boolean wasAutoCommit = connection.getAutoCommit();
         connection.rollback();
         try {
-            PFunction function = new PFunction(stmt.getFunctionInfo(), stmt.isTemporary());
+            PFunction function = new PFunction(stmt.getFunctionInfo(), stmt.isTemporary(), stmt.isReplace());
             connection.setAutoCommit(false);
             String tenantIdStr = connection.getTenantId() == null ? null : connection.getTenantId().getString();
             List<Mutation> functionData = Lists.newArrayListWithExpectedSize(function.getFunctionArguments().size() + 1);
@@ -1381,16 +1381,26 @@ public class MetaDataClient {
             MutationCode code = result.getMutationCode();
             switch(code) {
             case FUNCTION_ALREADY_EXISTS:
-                throw new FunctionAlreadyExistsException(function.getFunctionName(), result
+                if (!function.isReplace()) {
+                    throw new FunctionAlreadyExistsException(function.getFunctionName(), result
                         .getFunctions().get(0));
+                } else {
+                    connection.removeFunction(function.getTenantId(), function.getFunctionName(),
+                        result.getMutationTime());
+                    addFunctionToCache(result);
+                }
             case NEWER_FUNCTION_FOUND:
-                // Add function to ConnectionQueryServices so it's cached, but don't add
-                // it to this connection as we can't see it.
-                throw new NewerFunctionAlreadyExistsException(function.getFunctionName(), result.getFunctions().get(0));
+                    // Add function to ConnectionQueryServices so it's cached, but don't add
+                    // it to this connection as we can't see it.
+                    throw new NewerFunctionAlreadyExistsException(function.getFunctionName(), result.getFunctions().get(0));
             default:
                 List<PFunction> functions = new ArrayList<PFunction>(1);
                 functions.add(function);
                 result = new MetaDataMutationResult(code, result.getMutationTime(), functions, true);
+                if(function.isReplace()) {
+                    connection.removeFunction(function.getTenantId(), function.getFunctionName(),
+                        result.getMutationTime());
+                }
                 addFunctionToCache(result);
             }
         } finally {
