@@ -722,8 +722,7 @@ public class UpsertCompiler {
         final byte[][] values = new byte[nValuesToSet][];
         if (isTenantSpecific) {
             PName tenantId = connection.getTenantId();
-            tenantId = ScanUtil.padTenantIdIfNecessary(table.getRowKeySchema(), table.getBucketNum() != null, tenantId);
-            values[nodeIndex++] = connection.getTenantId().getBytes();
+            values[nodeIndex++] = ScanUtil.getTenantIdBytes(table.getRowKeySchema(), table.getBucketNum() != null, tenantId);
         }
         if (isSharedViewIndex) {
             values[nodeIndex++] = MetaDataUtil.getViewIndexIdDataType().toBytes(table.getViewIndexId());
