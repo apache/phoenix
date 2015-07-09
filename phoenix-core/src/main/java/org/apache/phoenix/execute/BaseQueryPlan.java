@@ -199,8 +199,18 @@ public abstract class BaseQueryPlan implements QueryPlan {
         } else {
             ScanUtil.setTimeRange(scan, context.getScanTimeRange());
         }
-        
-        ScanUtil.setTenantId(scan, connection.getTenantId() == null ? null : connection.getTenantId().getBytes());
+        byte[] tenantIdBytes;
+        if( table.isMultiTenant() == true ) {
+            tenantIdBytes = connection.getTenantId() == null ? null :
+                    ScanUtil.getTenantIdBytes(
+                            table.getRowKeySchema(),
+                            table.getBucketNum()!=null,
+                            connection.getTenantId());
+        } else {
+            tenantIdBytes = connection.getTenantId() == null ? null : connection.getTenantId().getBytes();
+        }
+
+        ScanUtil.setTenantId(scan, tenantIdBytes);
         String customAnnotations = LogUtil.customAnnotationsToString(connection);
         ScanUtil.setCustomAnnotations(scan, customAnnotations == null ? null : customAnnotations.getBytes());
         // Set local index related scan attributes. 
