@@ -62,7 +62,7 @@ import com.google.common.math.LongMath;
 public class Sequence {
     public static final int SUCCESS = 0;
     
-    public enum ValueOp {VALIDATE_SEQUENCE, RESERVE_SEQUENCE, INCREMENT_SEQUENCE};
+    public enum ValueOp {VALIDATE_SEQUENCE, INCREMENT_SEQUENCE};
     public enum MetaOp {CREATE_SEQUENCE, DROP_SEQUENCE, RETURN_SEQUENCE};
     
     // create empty Sequence key values used while created a sequence row
@@ -144,7 +144,7 @@ public class Sequence {
         return value.isDeleted ? null : value;
     }
     
-    private long increment(SequenceValue value, ValueOp op) throws SQLException {       
+    private long increment(SequenceValue value, ValueOp op, long numToAllocate) throws SQLException {       
         boolean increasingSeq = value.incrementBy > 0 && op != ValueOp.VALIDATE_SEQUENCE;
         // check if the the sequence has already reached the min/max limit
         if (value.limitReached && op != ValueOp.VALIDATE_SEQUENCE) {           
@@ -165,7 +165,8 @@ public class Sequence {
             boolean overflowOrUnderflow=false;
             // advance currentValue while checking for overflow
             try {
-                value.currentValue = LongMath.checkedAdd(value.currentValue, value.incrementBy);
+                // advance by numToAllocate * the increment amount
+                value.currentValue = LongMath.checkedAdd(value.currentValue, numToAllocate * value.incrementBy);
             } catch (ArithmeticException e) {
                 overflowOrUnderflow = true;
             }
@@ -180,18 +181,92 @@ public class Sequence {
         return returnValue;
     }
 
-    public long incrementValue(long timestamp, ValueOp op) throws SQLException {
+    public long incrementValue(long timestamp, ValueOp op, long numToAllocate) throws SQLException {
         SequenceValue value = findSequenceValue(timestamp);
         if (value == null) {
             throw EMPTY_SEQUENCE_CACHE_EXCEPTION;
         }
-        if (value.currentValue == value.nextValue) {
+         
+        if (isSequenceCacheExhausted(numToAllocate, value)) {
             if (op == ValueOp.VALIDATE_SEQUENCE) {
                 return value.currentValue;
             }
             throw EMPTY_SEQUENCE_CACHE_EXCEPTION;
-        }    
-        return increment(value, op);
+        }
+        return increment(value, op, numToAllocate);
+    }
+    
+    /**
+     * This method first checks whether value.currentValue = value.nextValue, this check is what 
+     * determines whether we need to refresh the cache when evaluating NEXT VALUE FOR. Once 
+     * current value reaches the next value we know the cache is exhausted as we give sequence
+     * values out one at time. 
+     * 
+     * However for bulk allocations, evaluated by NEXT <n> VALUE FOR, we need a different check
+     * @see isSequenceCacheExhaustedForBulkAllocation
+     * 
+     * Using the bulk allocation method for determining if the cache is exhausted for both cases
+     * works in most of the cases, however when dealing with CYCLEs and overflow and underflow, things
+     * break down due to things like sign changes that can happen if we overflow from a positive to
+     * a negative number and vice versa. Therefore, leaving both checks in place. 
+     * 
+     */
+    private boolean isSequenceCacheExhausted(final long numToAllocate, final SequenceValue value) throws SQLException {
+        return value.currentValue == value.nextValue || (SequenceUtil.isBulkAllocation(numToAllocate) && isSequenceCacheExhaustedForBulkAllocation(numToAllocate, value));
+    }
+
+    /**
+     * This method checks whether there are sufficient values in the SequenceValue
+     * cached on the client to allocate the requested number of slots. It handles
+     * decreasing and increasing sequences as well as any overflows or underflows
+     * encountered.
+     */
+    private boolean isSequenceCacheExhaustedForBulkAllocation(final long numToAllocate, final SequenceValue value) throws SQLException {
+        long targetSequenceValue;
+        
+        performValidationForBulkAllocation(numToAllocate, value);
+        
+        try {
+            targetSequenceValue = LongMath.checkedAdd(value.currentValue, numToAllocate * value.incrementBy);
+        } catch (ArithmeticException e) {
+            // Perform a CheckedAdd to make sure if over/underflow 
+            // We don't treat this as the cache being exhausted as the current value may be valid in the case
+            // of no cycle, logic in increment() will take care of detecting we've hit the limit of the sequence
+            return false;
+        }
+
+        if (value.incrementBy > 0) {
+            return targetSequenceValue > value.nextValue;
+        } else {
+            return  targetSequenceValue < value.nextValue;    
+        }
+    }
+    
+    /**
+     * @throws SQLException with the correct error code if sequence limit is reached with
+     * this request for allocation or we attempt to perform a bulk allocation on a sequence
+     * with cycles.
+     */
+    private void performValidationForBulkAllocation(final long numToAllocate, final SequenceValue value)
+            throws SQLException {
+        boolean increasingSeq = value.incrementBy > 0 ? true : false;
+        
+        // We don't support Bulk Allocations on sequences that have the CYCLE flag set to true
+        // Check for this here so we fail on expression evaluation and don't allow corner case
+        // whereby a client requests less than cached number of slots on sequence with cycle to succeed
+        if (value.cycle && !SequenceUtil.isCycleAllowed(numToAllocate)) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.NUM_SEQ_TO_ALLOCATE_NOT_SUPPORTED)
+            .setSchemaName(key.getSchemaName())
+            .setTableName(key.getSequenceName())
+            .build().buildException();
+        }
+        
+        if (SequenceUtil.checkIfLimitReached(value.currentValue, value.minValue, value.maxValue, value.incrementBy, value.cacheSize, numToAllocate)) {
+            throw new SQLExceptionInfo.Builder(SequenceUtil.getLimitReachedErrorCode(increasingSeq))
+            .setSchemaName(key.getSchemaName())
+            .setTableName(key.getSequenceName())
+            .build().buildException();
+        }
     }
 
     public List<Append> newReturns() {
@@ -249,7 +324,7 @@ public class Sequence {
         return key;
     }
 
-    public long incrementValue(Result result, ValueOp op) throws SQLException {
+    public long incrementValue(Result result, ValueOp op, long numToAllocate) throws SQLException {
         // In this case, we don't definitely know the timestamp of the deleted sequence,
         // but we know anything older is likely deleted. Worse case, we remove a sequence
         // from the cache that we shouldn't have which will cause a gap in sequence values.
@@ -270,19 +345,21 @@ public class Sequence {
                 .build().buildException();
         }
         // If we found the sequence, we update our cache with the new value
-        SequenceValue value = new SequenceValue(result, op);
+        SequenceValue value = new SequenceValue(result, op, numToAllocate);
         insertSequenceValue(value);
-        return increment(value, op);
+        return increment(value, op, numToAllocate);
     }
 
+
     @SuppressWarnings("deprecation")
-    public Increment newIncrement(long timestamp, Sequence.ValueOp action) {
+    public Increment newIncrement(long timestamp, Sequence.ValueOp action, long numToAllocate) {
         Increment inc = new Increment(key.getKey());
         // It doesn't matter what we set the amount too - we always use the values we get
         // from the Get we do to prevent any race conditions. All columns that get added
         // are returned with their current value
         try {
             inc.setTimeRange(MetaDataProtocol.MIN_TABLE_TIMESTAMP, timestamp);
+            inc.setAttribute(SequenceRegionObserver.NUM_TO_ALLOCATE, Bytes.toBytes(numToAllocate));
         } catch (IOException e) {
             throw new RuntimeException(e); // Impossible
         }
@@ -413,7 +490,7 @@ public class Sequence {
             return this.incrementBy == 0;
         }
         
-        public SequenceValue(Result r, ValueOp op) {
+        public SequenceValue(Result r, ValueOp op, long numToAllocate) {
             KeyValue currentValueKV = getCurrentValueKV(r);
             KeyValue incrementByKV = getIncrementByKV(r);
             KeyValue cacheSizeKV = getCacheSizeKV(r);
@@ -429,8 +506,12 @@ public class Sequence {
             this.cycle = (Boolean) PBoolean.INSTANCE.toObject(cycleKV.getValueArray(), cycleKV.getValueOffset(), cycleKV.getValueLength());
             this.limitReached = false;
             currentValue = nextValue;
+            
             if (op != ValueOp.VALIDATE_SEQUENCE) {
-                currentValue -= incrementBy * cacheSize;
+                // We can't just take the max of numToAllocate and cacheSize
+                // We need to handle a valid edgecase where a client requests bulk allocation of 
+                // a number of slots that are less than cache size of the sequence
+                currentValue -= incrementBy * (SequenceUtil.isBulkAllocation(numToAllocate) ? numToAllocate : cacheSize);
             }
         }
     }

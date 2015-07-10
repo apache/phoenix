@@ -62,4 +62,58 @@ public class SequenceUtilTest {
     public void testDescendingOverflowCycle() throws SQLException {
     	assertTrue(SequenceUtil.checkIfLimitReached(Long.MIN_VALUE, Long.MIN_VALUE, 0, -1/* incrementBy */, CACHE_SIZE));
     }
+    
+    @Test
+    public void testBulkAllocationAscendingNextValueGreaterThanMax() throws SQLException {
+        assertTrue(SequenceUtil.checkIfLimitReached(MAX_VALUE, MIN_VALUE, MAX_VALUE, 2/* incrementBy */, CACHE_SIZE, 1));
+    }
+    
+    @Test
+    public void testBulkAllocationAscendingNextValueReachLimit() throws SQLException {
+        assertFalse(SequenceUtil.checkIfLimitReached(6, MIN_VALUE, MAX_VALUE, 2/* incrementBy */,  CACHE_SIZE, 2));
+    }
+
+    @Test
+    public void testBulkAllocationAscendingNextValueWithinLimit() throws SQLException {
+        assertFalse(SequenceUtil.checkIfLimitReached(5, MIN_VALUE, MAX_VALUE, 2/* incrementBy */, CACHE_SIZE, 2));
+
+    }
+    
+    @Test
+    public void testBulkAllocationAscendingOverflow() throws SQLException {
+        assertTrue(SequenceUtil.checkIfLimitReached(Long.MAX_VALUE, 0, Long.MAX_VALUE, 1/* incrementBy */, CACHE_SIZE, 100));
+    }
+    
+    
+    @Test
+    public void testBulkAllocationDescendingNextValueLessThanMax() throws SQLException {
+        assertTrue(SequenceUtil.checkIfLimitReached(10, MIN_VALUE, MAX_VALUE, -2/* incrementBy */, CACHE_SIZE, 5));
+    }
+    
+    @Test
+    public void testBulkAllocationDescendingNextValueReachLimit() throws SQLException {
+        assertFalse(SequenceUtil.checkIfLimitReached(7, MIN_VALUE, MAX_VALUE, -2/* incrementBy */,  CACHE_SIZE, 3));
+    }
+
+    @Test
+    public void testBulkAllocationDescendingNextValueWithinLimit() throws SQLException {
+        assertFalse(SequenceUtil.checkIfLimitReached(8, MIN_VALUE, MAX_VALUE, -2/* incrementBy */, CACHE_SIZE, 2));
+
+    }
+
+    @Test
+    public void testBulkAllocationDescendingOverflowCycle() throws SQLException {
+        assertTrue(SequenceUtil.checkIfLimitReached(Long.MIN_VALUE, Long.MIN_VALUE, 0, -1/* incrementBy */, CACHE_SIZE, 100));
+    }
+    
+    @Test
+    public void testIsCycleAllowedForBulkAllocation() {
+        assertFalse(SequenceUtil.isCycleAllowed(2));
+    }
+
+    @Test
+    public void testIsCycleAllowedForStandardAllocation() {
+        assertTrue(SequenceUtil.isCycleAllowed(1));
+    }
+    
 }

@@ -310,11 +310,11 @@ public class ParseNodeFactory {
     }
 
     public SequenceValueParseNode currentValueFor(TableName tableName) {
-        return new SequenceValueParseNode(tableName, SequenceValueParseNode.Op.CURRENT_VALUE);
+        return new SequenceValueParseNode(tableName, SequenceValueParseNode.Op.CURRENT_VALUE, null);
     }
 
-    public SequenceValueParseNode nextValueFor(TableName tableName) {
-        return new SequenceValueParseNode(tableName, SequenceValueParseNode.Op.NEXT_VALUE);
+    public SequenceValueParseNode nextValueFor(TableName tableName, ParseNode numToAllocateNode) {
+        return new SequenceValueParseNode(tableName, SequenceValueParseNode.Op.NEXT_VALUE, numToAllocateNode);
     }
 
     public AddColumnStatement addColumn(NamedTableNode table,  PTableType tableType, List<ColumnDef> columnDefs, boolean ifNotExists, ListMultimap<String,Pair<String,Object>> props) {
