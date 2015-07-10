@@ -1,10 +1,7 @@
 package org.apache.phoenix.expression;
 
-import java.io.IOException;
-import java.util.Iterator;
+
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
@@ -13,7 +10,7 @@ import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PJson;
-import org.apache.phoenix.schema.types.PVarchar;
+
 
 public class JsonSupersetExpression extends BaseJSONExpression{
 	public JsonSupersetExpression(List<Expression> children) {
@@ -32,14 +29,15 @@ public class JsonSupersetExpression extends BaseJSONExpression{
 	        return false;
 	    }
 		PhoenixJson value = (PhoenixJson) PJson.INSTANCE.toObject(ptr, children.get(0).getSortOrder());
-		if(pattern.isSuperset(value))
+		if(value.isSuperset(pattern))
 		{
 			ptr.set(PDataType.TRUE_BYTES);
     		return true;
 		}
 		else
 		{
-			return false;
+			ptr.set(PDataType.FALSE_BYTES);
+			return true;
 		}
 	}
 	@Override

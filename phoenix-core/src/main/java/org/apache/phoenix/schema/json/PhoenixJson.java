@@ -357,7 +357,7 @@ public class PhoenixJson implements Comparable<PhoenixJson> {
 	
 	public boolean isSuperset(PhoenixJson rhs)
 	{
-		if(!rhs.rootNode.isArray()&&!rhs.rootNode.isValueNode()&&!this.rootNode.isArray()&&!this.rootNode.isValueNode())
+		if(!rhs.rootNode.isArray()&&!this.rootNode.isArray())
 		{
 			if(rhs.rootNode.size()>=this.rootNode.size())
 			{
@@ -365,6 +365,7 @@ public class PhoenixJson implements Comparable<PhoenixJson> {
 				while(lhsKeys.hasNext())
 				{
 					String lhsKey=lhsKeys.next();
+					System.out.println(lhsKey); // debug
 					if(!this.rootNode.get(lhsKey).equals(rhs.rootNode.get(lhsKey)))return false;
 				}
 				return true;
@@ -375,7 +376,7 @@ public class PhoenixJson implements Comparable<PhoenixJson> {
 	
 	public boolean isSubset(PhoenixJson rhs)
 	{
-		if(!rhs.rootNode.isArray()&&!rhs.rootNode.isValueNode()&&!this.rootNode.isArray()&&!this.rootNode.isValueNode())
+		if(!rhs.rootNode.isArray()&&!this.rootNode.isArray())
 		{
 			if(rhs.rootNode.size()<=this.rootNode.size())
 			{
