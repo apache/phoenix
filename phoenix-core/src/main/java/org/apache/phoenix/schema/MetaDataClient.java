@@ -2505,7 +2505,7 @@ public class MetaDataClient {
                 }
                 long seqNum = table.getSequenceNumber();
                 if (changingPhoenixTableProperty || columnDefs.size() > 0) { 
-                    seqNum = incrementTableSeqNum(table, statement.getTableType(), 1, isImmutableRows, disableWAL, multiTenant, storeNulls);
+                    seqNum = incrementTableSeqNum(table, statement.getTableType(), columnDefs.size(), isImmutableRows, disableWAL, multiTenant, storeNulls);
                     tableMetaData.addAll(connection.getMutationState().toMutations().next().getSecond());
                     connection.rollback();
                 }
@@ -2977,14 +2977,11 @@ public class MetaDataClient {
     
     private boolean isLastPKVariableLength(PTable table) {
         List<PColumn> pkColumns = table.getPKColumns();
-        if (pkColumns.size() < 1) {
-            return false;
-        } else {
-            return !pkColumns.get(pkColumns.size()-1).getDataType().isFixedWidth();
-        }
+        return !pkColumns.get(pkColumns.size()-1).getDataType().isFixedWidth();
     }
     
     private PTable getParentOfView(PTable view) throws SQLException {
+    	//TODO just use view.getParentName().getString() after implementing https://issues.apache.org/jira/browse/PHOENIX-2114 
         SelectStatement select = new SQLParser(view.getViewStatement()).parseQuery();
         String parentName = SchemaUtil.normalizeFullTableName(select.getFrom().toString().trim());
         return connection.getMetaDataCache().getTable(new PTableKey(view.getTenantId(), parentName));
