@@ -895,7 +895,10 @@ term returns [ParseNode ret]
         }
     |   (n=NEXT | CURRENT) VALUE FOR s=from_table_name 
         { contextStack.peek().hasSequences(true);
-          $ret = n==null ? factory.currentValueFor(s) : factory.nextValueFor(s); }    
+          $ret = n==null ? factory.currentValueFor(s) : factory.nextValueFor(s, null); }    
+    |   (n=NEXT) lorb=literal_or_bind VALUES FOR s=from_table_name 
+        { contextStack.peek().hasSequences(true);
+          $ret = factory.nextValueFor(s, lorb); }    
     ;
 
 one_or_more_expressions returns [List<ParseNode> ret]

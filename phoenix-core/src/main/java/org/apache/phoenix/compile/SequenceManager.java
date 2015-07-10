@@ -24,16 +24,23 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.SequenceValueParseNode;
 import org.apache.phoenix.parse.SequenceValueParseNode.Op;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.Sequence;
+import org.apache.phoenix.schema.SequenceAllocation;
 import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.tuple.DelegateTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.util.SequenceUtil;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -41,7 +48,7 @@ import com.google.common.collect.Maps;
 public class SequenceManager {
     private final PhoenixStatement statement;
     private int[] sequencePosition;
-    private List<SequenceKey> nextSequences;
+    private List<SequenceAllocation> nextSequences;
     private List<SequenceKey> currentSequences;
     private final Map<SequenceKey,SequenceValueExpression> sequenceMap = Maps.newHashMap();
     private final BitSet isNextSequence = new BitSet();
@@ -113,26 +120,68 @@ public class SequenceManager {
         }
     }
 
-    public SequenceValueExpression newSequenceReference(SequenceValueParseNode node) {
+    public SequenceValueExpression newSequenceReference(SequenceValueParseNode node) throws SQLException {
         PName tenantName = statement.getConnection().getTenantId();
         String tenantId = tenantName == null ? null : tenantName.getString();
         TableName tableName = node.getTableName();
         int nSaltBuckets = statement.getConnection().getQueryServices().getSequenceSaltBuckets();
+        ParseNode numToAllocateNode = node.getNumToAllocateNode();
+        
+        long numToAllocate = determineNumToAllocate(tableName, numToAllocateNode);
         SequenceKey key = new SequenceKey(tenantId, tableName.getSchemaName(), tableName.getTableName(), nSaltBuckets);
         SequenceValueExpression expression = sequenceMap.get(key);
         if (expression == null) {
             int index = sequenceMap.size();
-            expression = new SequenceValueExpression(key, node.getOp(), index);
+            expression = new SequenceValueExpression(key, node.getOp(), index, numToAllocate);
             sequenceMap.put(key, expression);
-        } else if (expression.op != node.getOp()){
-            expression = new SequenceValueExpression(key, node.getOp(), expression.getIndex());
-        }
+        } else if (expression.op != node.getOp() || expression.getNumToAllocate() < numToAllocate) {
+            // Keep the maximum allocation size we see in a statement
+            SequenceValueExpression oldExpression = expression;
+            expression = new SequenceValueExpression(key, node.getOp(), expression.getIndex(), Math.max(expression.getNumToAllocate(), numToAllocate));
+            if (oldExpression.getNumToAllocate() < numToAllocate) {
+                // If we found a NEXT VALUE expression with a higher number to allocate
+                // We override the original expression
+                sequenceMap.put(key, expression);
+            }
+        } 
         // If we see a NEXT and a CURRENT, treat the CURRENT just like a NEXT
         if (node.getOp() == Op.NEXT_VALUE) {
             isNextSequence.set(expression.getIndex());
         }
            
         return expression;
+    }
+
+    /**
+     * If caller specified used NEXT <n> VALUES FOR <seq> expression then we have set the numToAllocate.
+     * If numToAllocate is > 1 we treat this as a bulk reservation of a block of sequence slots.
+     * 
+     * @throws a SQLException if we can't compile the expression
+     */
+    private long determineNumToAllocate(TableName sequenceName, ParseNode numToAllocateNode)
+            throws SQLException {
+
+        if (numToAllocateNode != null) {
+            final StatementContext context = new StatementContext(statement);
+            ExpressionCompiler expressionCompiler = new ExpressionCompiler(context);
+            Expression expression = numToAllocateNode.accept(expressionCompiler);
+            ImmutableBytesWritable ptr = context.getTempPtr();
+            expression.evaluate(null, ptr);
+            if (ptr.getLength() == 0 || !expression.getDataType().isCoercibleTo(PLong.INSTANCE)) {
+                throw SequenceUtil.getException(sequenceName.getSchemaName(), sequenceName.getTableName(), SQLExceptionCode.NUM_SEQ_TO_ALLOCATE_MUST_BE_CONSTANT);
+            }
+            
+            // Parse <n> and make sure it is greater than 0. We don't support allocating 0 or negative values!
+            long numToAllocate = (long) PLong.INSTANCE.toObject(ptr, expression.getDataType());
+            if (numToAllocate < 1) {
+                throw SequenceUtil.getException(sequenceName.getSchemaName(), sequenceName.getTableName(), SQLExceptionCode.NUM_SEQ_TO_ALLOCATE_MUST_BE_CONSTANT);
+            }
+            return numToAllocate;
+            
+        } else {
+            // Standard Sequence Allocation Behavior
+            return SequenceUtil.DEFAULT_NUM_SLOTS_TO_ALLOCATE;
+        }
     }
     
     public void validateSequences(Sequence.ValueOp action) throws SQLException {
@@ -146,14 +195,17 @@ public class SequenceManager {
         currentSequences = Lists.newArrayListWithExpectedSize(maxSize);
         for (Map.Entry<SequenceKey, SequenceValueExpression> entry : sequenceMap.entrySet()) {
             if (isNextSequence.get(entry.getValue().getIndex())) {
-                nextSequences.add(entry.getKey());
+                nextSequences.add(new SequenceAllocation(entry.getKey(), entry.getValue().getNumToAllocate()));
             } else {
                 currentSequences.add(entry.getKey());
             }
         }
         long[] srcSequenceValues = new long[nextSequences.size()];
         SQLException[] sqlExceptions = new SQLException[nextSequences.size()];
+        
+        // Sort the next sequences to prevent deadlocks
         Collections.sort(nextSequences);
+
         // Create reverse indexes
         for (int i = 0; i < nextSequences.size(); i++) {
             sequencePosition[i] = sequenceMap.get(nextSequences.get(i)).getIndex();
@@ -168,4 +220,6 @@ public class SequenceManager {
         services.validateSequences(nextSequences, timestamp, srcSequenceValues, sqlExceptions, action);
         setSequenceValues(srcSequenceValues, dstSequenceValues, sqlExceptions);
     }
-}
+    
+}    
+ 
