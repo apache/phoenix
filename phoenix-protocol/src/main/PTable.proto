@@ -83,4 +83,5 @@ message PTable {
   optional bytes indexType = 22;
   optional int64 statsTimeStamp = 23;
   optional bool storeNulls = 24;
+  optional int32 baseColumnCount = 25;
 }

@@ -39,7 +39,6 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_ARRAY_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_CONSTANT_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_VIEW_REFERENCED_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.JAR_PATH_BYTES;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.KEY_SEQ_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MAX_VALUE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MIN_VALUE_BYTES;
@@ -1567,12 +1566,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     // We said to drop a table, but found a view or visa versa
                     if (type != expectedType) { return new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND,
                             EnvironmentEdgeManager.currentTimeMillis(), null); }
-                    if (table.getBaseColumnCount() == 0) {
-                        // If the base column count hasn't been set, then it means that the upgrade
-                        // to 4.5.0 is in progress. Have the client retry the mutation operation.
-                        return new MetaDataMutationResult(MutationCode.CONCURRENT_TABLE_MUTATION,
-                                EnvironmentEdgeManager.currentTimeMillis(), table);
-                    }
                 }
                 result = mutator.updateMutation(table, rowKeyMetaData, tableMetadata, region,
                             invalidateList, locks, clientTimeStamp);
@@ -1658,7 +1651,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     }
                     
                     // if there is already a view column with the same name as the base table column we are trying to add
-                	if (existingViewColumn!=null) {
+                	if (existingViewColumn != null) {
                 		List<Cell> dataTypes = viewColumnDefinitionPut
                                 .get(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                                         PhoenixDatabaseMetaData.DATA_TYPE_BYTES);
@@ -1684,7 +1677,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
 	                        }
                         }
                 		// if there is an existing view column that matches the column being added to the base table and if the column being added has a null
-                    	// scale or maxLength, we need to explicity do a put to set the scale or maxLength to null (in case the view column has the scale or 
+                    	// scale or maxLength, we need to explicitly do a put to set the scale or maxLength to null (in case the view column has the scale or 
                     	// max length set)
                 		List<Cell> columnSizes = viewColumnDefinitionPut.get(
                                 PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
@@ -1714,7 +1707,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         }
                 	}
                 	else {
-                    	// if we are adding a column that already exists in the view, no need to updates the base table or view table column count
+                    	// if we are adding a column that already exists in the view, no need to update the base table or view table column count
                     	numColsAddedToView++;
                     } 
                     	
@@ -1914,9 +1907,14 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     if (type == PTableType.TABLE || type == PTableType.SYSTEM) {
                         TableViewFinderResult childViewsResult = findChildViews(region, tenantId, table, PHYSICAL_TABLE_BYTES);
                         if (childViewsResult.hasViews()) {
-                            // Adding a column is not allowed if the meta-data for child view/s spans over
-                            // more than one region (since the changes cannot be done in a transactional fashion)
-                            if (!childViewsResult.allViewsInSingleRegion()) {
+                           /* 
+                            * Adding a column is not allowed if the meta-data for child view/s spans over
+                            * more than one region (since the changes cannot be made in a transactional fashion)
+                            * A base column count of 0 means that the metadata hasn't been upgraded yet or
+                            * the upgrade is currently in progress. If that is the case, disallow adding columns
+                            *  for tables with views.
+                            */
+                            if (!childViewsResult.allViewsInSingleRegion() || table.getBaseColumnCount() == 0) {
                                 return new MetaDataMutationResult(MutationCode.UNALLOWED_TABLE_MUTATION,
                                         EnvironmentEdgeManager.currentTimeMillis(), null);
                             } else {

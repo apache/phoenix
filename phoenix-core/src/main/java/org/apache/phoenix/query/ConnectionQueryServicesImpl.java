@@ -1826,7 +1826,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return result;
 
     }
-
+    
+    /**
+     * This closes the passed connection.
+     */
     private PhoenixConnection addColumn(PhoenixConnection oldMetaConnection, String tableName, long timestamp, String columns, boolean addIfNotExists) throws SQLException {
         Properties props = new Properties(oldMetaConnection.getClientInfo());
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(timestamp));
@@ -1956,7 +1959,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                     columnsToAdd = PhoenixDatabaseMetaData.BASE_COLUMN_COUNT + " "
                                             + PInteger.INSTANCE.getSqlTypeName();
                                     try {
-                                        addColumn(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
+                                        metaConnection = addColumn(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
                                                 MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP, columnsToAdd, false);
                                         upgradeTo4_5_0(metaConnection);
                                     } catch (ColumnAlreadyExistsException ignored) {
@@ -1965,6 +1968,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                          * BASE_COLUMN_COUNT is already part of the meta-data schema as the signal that
                                          * the server side upgrade has finished or is in progress.
                                          */
+                                        logger.debug("No need to run 4.5 upgrade");
                                     }
                                 }
                             }
