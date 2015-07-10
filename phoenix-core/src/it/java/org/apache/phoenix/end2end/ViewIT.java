@@ -537,6 +537,12 @@ public class ViewIT extends BaseViewIT {
         } catch (SQLException e) {
             assertEquals(CANNOT_MODIFY_VIEW_PK.getErrorCode(), e.getErrorCode());
         }
+        ddl = "CREATE VIEW v2 (k3 VARCHAR PRIMARY KEY)  AS SELECT * FROM tp WHERE v1 = 1.0";
+        try {
+        	conn.createStatement().execute(ddl);
+        } catch (SQLException e) {
+            assertEquals(CANNOT_MODIFY_VIEW_PK.getErrorCode(), e.getErrorCode());
+        }
     }
     
     @Test(expected=ColumnAlreadyExistsException.class)
