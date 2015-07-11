@@ -41,7 +41,6 @@ import org.apache.phoenix.calcite.rel.PhoenixClientProject;
 import org.apache.phoenix.calcite.rel.PhoenixClientSort;
 import org.apache.phoenix.calcite.rel.PhoenixFilter;
 import org.apache.phoenix.calcite.rel.PhoenixLimit;
-import org.apache.phoenix.calcite.rel.PhoenixPostJoinProject;
 import org.apache.phoenix.calcite.rel.PhoenixRel;
 import org.apache.phoenix.calcite.rel.PhoenixServerAggregate;
 import org.apache.phoenix.calcite.rel.PhoenixServerJoin;
@@ -76,7 +75,6 @@ public class PhoenixConverterRules {
         PhoenixFilterRule.INSTANCE,
         PhoenixClientProjectRule.INSTANCE,
         PhoenixServerProjectRule.INSTANCE,
-        PhoenixPostJoinProjectRule.INSTANCE,
         PhoenixClientAggregateRule.INSTANCE,
         PhoenixServerAggregateRule.SERVER,
         PhoenixServerAggregateRule.PROJECTABLE,
@@ -325,37 +323,6 @@ public class PhoenixConverterRules {
                 convert(
                         project.getInput(), 
                         project.getInput().getTraitSet().replace(PhoenixRel.SERVER_CONVENTION)), 
-                project.getProjects(),
-                project.getRowType());
-        }
-    }
-
-    /**
-     * Rule to convert a {@link org.apache.calcite.rel.logical.LogicalProject}
-     * to a {@link PhoenixPostJoinProject}.
-     */
-    private static class PhoenixPostJoinProjectRule extends PhoenixConverterRule {
-        
-        private static Predicate<LogicalProject> IS_CONVERTIBLE = new Predicate<LogicalProject>() {
-            @Override
-            public boolean apply(LogicalProject input) {
-                return isConvertible(input);
-            }            
-        };
-        
-        private static final PhoenixPostJoinProjectRule INSTANCE = new PhoenixPostJoinProjectRule();
-
-        private PhoenixPostJoinProjectRule() {
-            super(LogicalProject.class, IS_CONVERTIBLE, Convention.NONE, 
-                    PhoenixRel.PROJECTABLE_CONVENTION, "PhoenixPostJoinProjectRule");
-        }
-
-        public RelNode convert(RelNode rel) {
-            final LogicalProject project = (LogicalProject) rel;
-            return PhoenixPostJoinProject.create(
-                convert(
-                        project.getInput(), 
-                        project.getInput().getTraitSet().replace(PhoenixRel.PROJECTABLE_CONVENTION)), 
                 project.getProjects(),
                 project.getRowType());
         }

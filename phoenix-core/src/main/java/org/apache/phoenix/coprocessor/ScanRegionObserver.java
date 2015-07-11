@@ -210,8 +210,7 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
 
         final ImmutableBytesWritable tenantId = ScanUtil.getTenantId(scan);
         if (j != null) {
-            TupleProjector postJoinProjector = TupleProjector.deserializeProjectorFromScan(scan, false);
-            innerScanner = new HashJoinRegionScanner(innerScanner, p, postJoinProjector, j, tenantId, c.getEnvironment());
+            innerScanner = new HashJoinRegionScanner(innerScanner, p, j, tenantId, c.getEnvironment());
         }
 
         final OrderedResultIterator iterator = deserializeFromScan(scan,innerScanner);

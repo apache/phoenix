@@ -60,11 +60,10 @@ public class PhoenixServerProject extends PhoenixAbstractProject {
         implementor.pushContext(new ImplementorContext(implementor.getCurrentContext().isRetainPKColumns(), false));
         QueryPlan plan = implementor.visitInput(0, (PhoenixRel) getInput());
         implementor.popContext();
-        assert (plan instanceof ScanPlan
-                && !TupleProjector.hasProjector(plan.getContext().getScan(), true));
+        assert (plan instanceof ScanPlan);
         
         TupleProjector tupleProjector = super.project(implementor);
-        TupleProjector.serializeProjectorIntoScan(plan.getContext().getScan(), tupleProjector, true);
+        TupleProjector.serializeProjectorIntoScan(plan.getContext().getScan(), tupleProjector);
         return plan;
     }
 }

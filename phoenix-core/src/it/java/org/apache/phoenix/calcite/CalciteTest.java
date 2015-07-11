@@ -327,8 +327,8 @@ public class CalciteTest extends BaseClientManagedTimeIT {
     @Test public void testJoin() throws Exception {
         start().sql("select t1.entity_id, t2.a_string, t1.organization_id from aTable t1 join aTable t2 on t1.entity_id = t2.entity_id and t1.organization_id = t2.organization_id where t1.a_string = 'a'") 
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixToClientConverter\n" +
-                           "    PhoenixPostJoinProject(ENTITY_ID=[$4], A_STRING=[$2], ORGANIZATION_ID=[$3])\n" +
+                           "  PhoenixClientProject(ENTITY_ID=[$4], A_STRING=[$2], ORGANIZATION_ID=[$3])\n" +
+                           "    PhoenixToClientConverter\n" +
                            "      PhoenixServerJoin(condition=[AND(=($4, $1), =($3, $0))], joinType=[inner])\n" +
                            "        PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1], A_STRING=[$2])\n" +
                            "          PhoenixTableScan(table=[[phoenix, ATABLE]])\n" +
@@ -344,8 +344,8 @@ public class CalciteTest extends BaseClientManagedTimeIT {
         
         start().sql("SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\"")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixToClientConverter\n" +
-                           "    PhoenixPostJoinProject(item_id=[$0], NAME=[$1], supplier_id=[$3], NAME0=[$4])\n" +
+                           "  PhoenixClientProject(item_id=[$0], NAME=[$1], supplier_id=[$3], NAME0=[$4])\n" +
+                           "    PhoenixToClientConverter\n" +
                            "      PhoenixServerJoin(condition=[=($2, $3)], joinType=[inner])\n" +
                            "        PhoenixServerProject(item_id=[$0], NAME=[$1], supplier_id=[$5])\n" +
                            "          PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
@@ -363,8 +363,8 @@ public class CalciteTest extends BaseClientManagedTimeIT {
         
         start().sql("SELECT * FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" AND supp.name = 'S5'")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixToClientConverter\n" +
-                           "    PhoenixPostJoinProject(item_id=[$0], NAME=[$1], PRICE=[$2], DISCOUNT1=[$3], DISCOUNT2=[$4], supplier_id=[$5], DESCRIPTION=[$6], supplier_id0=[$7], NAME0=[$8], PHONE=[$9], ADDRESS=[$10], LOC_ID=[$11])\n" +
+                           "  PhoenixClientProject(item_id=[$0], NAME=[$1], PRICE=[$2], DISCOUNT1=[$3], DISCOUNT2=[$4], supplier_id=[$5], DESCRIPTION=[$6], supplier_id0=[$7], NAME0=[$8], PHONE=[$9], ADDRESS=[$10], LOC_ID=[$11])\n" +
+                           "    PhoenixToClientConverter\n" +
                            "      PhoenixServerJoin(condition=[=($5, $7)], joinType=[inner])\n" +
                            "        PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
                            "        PhoenixToClientConverter\n" +
@@ -377,8 +377,8 @@ public class CalciteTest extends BaseClientManagedTimeIT {
         start().sql("SELECT \"order_id\", i.name, i.price, discount2, quantity FROM " + JOIN_ORDER_TABLE_FULL_NAME + " o INNER JOIN " 
                 + JOIN_ITEM_TABLE_FULL_NAME + " i ON o.\"item_id\" = i.\"item_id\" AND o.price = (i.price * (100 - discount2)) / 100.0 WHERE quantity < 5000")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixToClientConverter\n" +
-                           "    PhoenixPostJoinProject(order_id=[$5], NAME=[$1], PRICE=[$2], DISCOUNT2=[$3], QUANTITY=[$7])\n" +
+                           "  PhoenixClientProject(order_id=[$5], NAME=[$1], PRICE=[$2], DISCOUNT2=[$3], QUANTITY=[$7])\n" +
+                           "    PhoenixToClientConverter\n" +
                            "      PhoenixServerJoin(condition=[AND(=($6, $0), =($8, $4))], joinType=[inner])\n" +
                            "        PhoenixServerProject(item_id=[$0], NAME=[$1], PRICE=[$2], DISCOUNT2=[$4], $f7=[/(*($2, -(100, $4)), 100.0)])\n" +
                            "          PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
@@ -393,8 +393,8 @@ public class CalciteTest extends BaseClientManagedTimeIT {
     @Test public void testRightOuterJoin() throws Exception {
         start().sql("SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item RIGHT OUTER JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\"")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixToClientConverter\n" +
-                           "    PhoenixPostJoinProject(item_id=[$2], NAME=[$3], supplier_id=[$0], NAME0=[$1])\n" +
+                           "  PhoenixClientProject(item_id=[$2], NAME=[$3], supplier_id=[$0], NAME0=[$1])\n" +
+                           "    PhoenixToClientConverter\n" +
                            "      PhoenixServerJoin(condition=[=($4, $0)], joinType=[left])\n" +
                            "        PhoenixServerProject(supplier_id=[$0], NAME=[$1])\n" +
                            "          PhoenixTableScan(table=[[phoenix, Join, SupplierTable]])\n" +
@@ -464,8 +464,8 @@ public class CalciteTest extends BaseClientManagedTimeIT {
         // Server-join with LHS sorted on order-by fields
         start().sql("SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" order by supp.\"supplier_id\"")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixToClientConverter\n" +
-                           "    PhoenixPostJoinProject(item_id=[$2], NAME=[$3], supplier_id=[$0], NAME0=[$1])\n" +
+                           "  PhoenixClientProject(item_id=[$2], NAME=[$3], supplier_id=[$0], NAME0=[$1])\n" +
+                           "    PhoenixToClientConverter\n" +
                            "      PhoenixServerJoin(condition=[=($4, $0)], joinType=[inner])\n" +
                            "        PhoenixServerProject(supplier_id=[$0], NAME=[$1])\n" +
                            "          PhoenixTableScan(table=[[phoenix, Join, SupplierTable]])\n" +
@@ -491,12 +491,12 @@ public class CalciteTest extends BaseClientManagedTimeIT {
     @Test public void testMultiJoin() throws Exception {
         start().sql("select t1.entity_id, t2.a_string, t3.organization_id from aTable t1 join aTable t2 on t1.entity_id = t2.entity_id and t1.organization_id = t2.organization_id join atable t3 on t1.entity_id = t3.entity_id and t1.organization_id = t3.organization_id where t1.a_string = 'a'") 
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixToClientConverter\n" +
-                           "    PhoenixPostJoinProject(ENTITY_ID=[$19], A_STRING=[$38], ORGANIZATION_ID=[$0])\n" +
+                           "  PhoenixClientProject(ENTITY_ID=[$19], A_STRING=[$38], ORGANIZATION_ID=[$0])\n" +
+                           "    PhoenixToClientConverter\n" +
                            "      PhoenixServerJoin(condition=[AND(=($19, $1), =($18, $0))], joinType=[inner])\n" +
                            "        PhoenixTableScan(table=[[phoenix, ATABLE]])\n" +
-                           "        PhoenixToClientConverter\n" +
-                           "          PhoenixPostJoinProject(ORGANIZATION_ID=[$18], ENTITY_ID=[$19], A_STRING=[$20], B_STRING=[$21], A_INTEGER=[$22], A_DATE=[$23], A_TIME=[$24], A_TIMESTAMP=[$25], X_DECIMAL=[$26], X_LONG=[$27], X_INTEGER=[$28], Y_INTEGER=[$29], A_BYTE=[$30], A_SHORT=[$31], A_FLOAT=[$32], A_DOUBLE=[$33], A_UNSIGNED_FLOAT=[$34], A_UNSIGNED_DOUBLE=[$35], ORGANIZATION_ID0=[$0], ENTITY_ID0=[$1], A_STRING0=[$2], B_STRING0=[$3], A_INTEGER0=[$4], A_DATE0=[$5], A_TIME0=[$6], A_TIMESTAMP0=[$7], X_DECIMAL0=[$8], X_LONG0=[$9], X_INTEGER0=[$10], Y_INTEGER0=[$11], A_BYTE0=[$12], A_SHORT0=[$13], A_FLOAT0=[$14], A_DOUBLE0=[$15], A_UNSIGNED_FLOAT0=[$16], A_UNSIGNED_DOUBLE0=[$17])\n" +
+                           "        PhoenixClientProject(ORGANIZATION_ID=[$18], ENTITY_ID=[$19], A_STRING=[$20], B_STRING=[$21], A_INTEGER=[$22], A_DATE=[$23], A_TIME=[$24], A_TIMESTAMP=[$25], X_DECIMAL=[$26], X_LONG=[$27], X_INTEGER=[$28], Y_INTEGER=[$29], A_BYTE=[$30], A_SHORT=[$31], A_FLOAT=[$32], A_DOUBLE=[$33], A_UNSIGNED_FLOAT=[$34], A_UNSIGNED_DOUBLE=[$35], ORGANIZATION_ID0=[$0], ENTITY_ID0=[$1], A_STRING0=[$2], B_STRING0=[$3], A_INTEGER0=[$4], A_DATE0=[$5], A_TIME0=[$6], A_TIMESTAMP0=[$7], X_DECIMAL0=[$8], X_LONG0=[$9], X_INTEGER0=[$10], Y_INTEGER0=[$11], A_BYTE0=[$12], A_SHORT0=[$13], A_FLOAT0=[$14], A_DOUBLE0=[$15], A_UNSIGNED_FLOAT0=[$16], A_UNSIGNED_DOUBLE0=[$17])\n" +
+                           "          PhoenixToClientConverter\n" +
                            "            PhoenixServerJoin(condition=[AND(=($19, $1), =($18, $0))], joinType=[inner])\n" +
                            "              PhoenixTableScan(table=[[phoenix, ATABLE]])\n" +
                            "              PhoenixToClientConverter\n" +
@@ -510,8 +510,8 @@ public class CalciteTest extends BaseClientManagedTimeIT {
         
         start().sql("select t1.entity_id, t2.a_string, t3.organization_id from aTable t1 join aTable t2 on t1.entity_id = t2.entity_id and t1.organization_id = t2.organization_id join atable t3 on t1.entity_id = t3.entity_id and t1.organization_id = t3.organization_id") 
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixToClientConverter\n" +
-                           "    PhoenixPostJoinProject(ENTITY_ID=[$19], A_STRING=[$2], ORGANIZATION_ID=[$36])\n" +
+                           "  PhoenixClientProject(ENTITY_ID=[$19], A_STRING=[$2], ORGANIZATION_ID=[$36])\n" +
+                           "    PhoenixToClientConverter\n" +
                            "      PhoenixServerJoin(condition=[AND(=($19, $1), =($18, $0))], joinType=[inner])\n" +
                            "        PhoenixTableScan(table=[[phoenix, ATABLE]])\n" +
                            "        PhoenixToClientConverter\n" +
@@ -649,8 +649,8 @@ public class CalciteTest extends BaseClientManagedTimeIT {
         
         start().sql("SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" order by item.name desc")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixServerSort(sort0=[$1], dir0=[DESC])\n" +
-                           "    PhoenixPostJoinProject(item_id=[$0], NAME=[$1], supplier_id=[$3], NAME0=[$4])\n" +
+                           "  PhoenixClientProject(item_id=[$0], NAME=[$1], supplier_id=[$3], NAME0=[$4])\n" +
+                           "    PhoenixServerSort(sort0=[$1], dir0=[DESC])\n" +
                            "      PhoenixServerJoin(condition=[=($2, $3)], joinType=[inner])\n" +
                            "        PhoenixServerProject(item_id=[$0], NAME=[$1], supplier_id=[$5])\n" +
                            "          PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
@@ -727,9 +727,9 @@ public class CalciteTest extends BaseClientManagedTimeIT {
         
         start().sql("SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" order by item.name desc limit 3")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixLimit(fetch=[3])\n" +
-                           "    PhoenixServerSort(sort0=[$1], dir0=[DESC])\n" +
-                           "      PhoenixPostJoinProject(item_id=[$0], NAME=[$1], supplier_id=[$3], NAME0=[$4])\n" +
+                           "  PhoenixClientProject(item_id=[$0], NAME=[$1], supplier_id=[$3], NAME0=[$4])\n" +
+                           "    PhoenixLimit(fetch=[3])\n" +
+                           "      PhoenixServerSort(sort0=[$1], dir0=[DESC])\n" +
                            "        PhoenixServerJoin(condition=[=($2, $3)], joinType=[inner])\n" +
                            "          PhoenixServerProject(item_id=[$0], NAME=[$1], supplier_id=[$5])\n" +
                            "            PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
@@ -787,9 +787,9 @@ public class CalciteTest extends BaseClientManagedTimeIT {
         
         start().sql("SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" limit 3")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixLimit(fetch=[3])\n" +
-                           "    PhoenixToClientConverter\n" +
-                           "      PhoenixPostJoinProject(item_id=[$0], NAME=[$1], supplier_id=[$3], NAME0=[$4])\n" +
+                           "  PhoenixClientProject(item_id=[$0], NAME=[$1], supplier_id=[$3], NAME0=[$4])\n" +
+                           "    PhoenixLimit(fetch=[3])\n" +
+                           "      PhoenixToClientConverter\n" +
                            "        PhoenixServerJoin(condition=[=($2, $3)], joinType=[inner])\n" +
                            "          PhoenixServerProject(item_id=[$0], NAME=[$1], supplier_id=[$5])\n" +
                            "            PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
@@ -806,8 +806,8 @@ public class CalciteTest extends BaseClientManagedTimeIT {
     @Test public void testSubquery() {
         start().sql("SELECT \"order_id\", quantity FROM " + JOIN_ORDER_TABLE_FULL_NAME + " o WHERE quantity = (SELECT max(quantity) FROM " + JOIN_ORDER_TABLE_FULL_NAME + " q WHERE o.\"item_id\" = q.\"item_id\")")
                .explainIs("PhoenixToEnumerableConverter\n" +
-                          "  PhoenixToClientConverter\n" +
-                          "    PhoenixPostJoinProject(order_id=[$0], QUANTITY=[$4])\n" +
+                          "  PhoenixClientProject(order_id=[$0], QUANTITY=[$4])\n" +
+                          "    PhoenixToClientConverter\n" +
                           "      PhoenixServerJoin(condition=[AND(=($2, $7), =($4, $8))], joinType=[inner])\n" +
                           "        PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n" +
                           "        PhoenixServerAggregate(group=[{7}], EXPR$0=[MAX($4)])\n" +
@@ -828,8 +828,8 @@ public class CalciteTest extends BaseClientManagedTimeIT {
             + "from " + JOIN_ORDER_TABLE_FULL_NAME + " o where o.\"item_id\" = i.\"item_id\")\n"
             + "from " + JOIN_ITEM_TABLE_FULL_NAME + " i")
             .explainIs("PhoenixToEnumerableConverter\n" +
-                       "  PhoenixToClientConverter\n" +
-                       "    PhoenixPostJoinProject(item_id=[$0], NAME=[$1], EXPR$2=[$8])\n" +
+                       "  PhoenixClientProject(item_id=[$0], NAME=[$1], EXPR$2=[$8])\n" +
+                       "    PhoenixToClientConverter\n" +
                        "      PhoenixServerJoin(condition=[=($0, $7)], joinType=[left], isSingleValueRhs=[true])\n" +
                        "        PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
                        "        PhoenixServerAggregate(group=[{7}], SQ=[MAX($4)])\n" +
@@ -852,12 +852,12 @@ public class CalciteTest extends BaseClientManagedTimeIT {
                     + "from " + JOIN_ORDER_TABLE_FULL_NAME + " o where o.\"item_id\" = i.\"item_id\")\n"
                     + "from " + JOIN_ITEM_TABLE_FULL_NAME + " i where \"item_id\" < '0000000006'")
                .explainIs("PhoenixToEnumerableConverter\n" +
-                          "  PhoenixToClientConverter\n" +
-                          "    PhoenixPostJoinProject(item_id=[$0], NAME=[$1], EXPR$2=[$8])\n" +
+                          "  PhoenixClientProject(item_id=[$0], NAME=[$1], EXPR$2=[$8])\n" +
+                          "    PhoenixToClientConverter\n" +
                           "      PhoenixServerJoin(condition=[=($0, $7)], joinType=[left], isSingleValueRhs=[true])\n" +
                           "        PhoenixTableScan(table=[[phoenix, Join, ItemTable]], filter=[<($0, '0000000006')])\n" +
-                          "        PhoenixToClientConverter\n" +
-                          "          PhoenixPostJoinProject(item_id0=[$7], SQ=[$4])\n" +
+                          "        PhoenixClientProject(item_id0=[$7], SQ=[$4])\n" +
+                          "          PhoenixToClientConverter\n" +
                           "            PhoenixServerJoin(condition=[=($2, $7)], joinType=[inner])\n" +
                           "              PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n" +
                           "              PhoenixServerAggregate(group=[{0}])\n" +

@@ -61,13 +61,11 @@ public class HashJoinRegionScanner implements RegionScanner {
     private List<Tuple>[] tempTuples;
     private ValueBitSet tempDestBitSet;
     private ValueBitSet[] tempSrcBitSet;
-    private final TupleProjector postJoinProjector;
-    
+
     @SuppressWarnings("unchecked")
-    public HashJoinRegionScanner(RegionScanner scanner, TupleProjector projector, TupleProjector postJoinProjector, HashJoinInfo joinInfo, ImmutableBytesWritable tenantId, RegionCoprocessorEnvironment env) throws IOException {
+    public HashJoinRegionScanner(RegionScanner scanner, TupleProjector projector, HashJoinInfo joinInfo, ImmutableBytesWritable tenantId, RegionCoprocessorEnvironment env) throws IOException {
         this.scanner = scanner;
         this.projector = projector;
-        this.postJoinProjector = postJoinProjector;
         this.joinInfo = joinInfo;
         this.resultQueue = new LinkedList<Tuple>();
         this.hasMore = true;
@@ -229,10 +227,6 @@ public class HashJoinRegionScanner implements RegionScanner {
         }
 
         Tuple tuple = resultQueue.poll();
-        // post-join projection
-        if (postJoinProjector != null) {
-            tuple = postJoinProjector.projectResults(tuple);
-        }
         for (int i = 0; i < tuple.size(); i++) {
             results.add(tuple.getValue(i));
         }
