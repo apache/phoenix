@@ -27,6 +27,13 @@ public class JsonSingleKeySearchExpression extends BaseCompoundExpression {
             return false;
         }
 		String pattern = (String) PVarchar.INSTANCE.toObject(ptr);
+		if(children.get(0) instanceof BaseJSONExpression){
+			if(((BaseJSONExpression)children.get(0)).getRealDataType()!=PJson.INSTANCE)
+			{
+				ptr.set(PDataType.FALSE_BYTES);
+				return true;
+			}
+		}
 		if (!children.get(0).evaluate(tuple, ptr)) {
 	        return false;
 	    }

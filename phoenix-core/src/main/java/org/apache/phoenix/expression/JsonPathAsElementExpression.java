@@ -24,14 +24,15 @@ public class JsonPathAsElementExpression extends BaseJSONExpression{
 		if (!children.get(1).evaluate(tuple, ptr)) {
             return false;
         }
-		String[] pattern =decodePath((String) PVarchar.INSTANCE.toObject(ptr));
+		String[] pattern =decodePath((String)PVarchar.INSTANCE.toObject(ptr));
 		if (!children.get(0).evaluate(tuple, ptr)) {
 	        return false;
 	    }
-		PhoenixJson value = (PhoenixJson) PJson.INSTANCE.toObject(ptr, children.get(0).getSortOrder());
+		PhoenixJson value = (PhoenixJson) PJson.INSTANCE.toObject(ptr);
 		try{
 				PhoenixJson jsonValue=value.getPhoenixJson(pattern);
 				ptr.set(jsonValue.valueWrapToBytes());
+				datatype=jsonValue.getValueAsPDataType();
 				return true;
 		}catch(SQLException e)
 		{

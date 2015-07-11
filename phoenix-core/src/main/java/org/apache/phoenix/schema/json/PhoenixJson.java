@@ -325,7 +325,7 @@ public class PhoenixJson implements Comparable<PhoenixJson> {
      	}
      	return this.toBytes(); //JSONarray/subJSON will cast as string
      }
-
+     
 	private PhoenixJson getPhoenixJsonInternal(String[] paths) {
         JsonNode node = this.rootNode;
         for (String path : paths) {
@@ -354,41 +354,30 @@ public class PhoenixJson implements Comparable<PhoenixJson> {
 	{
 		return rootNode.has(index);
 	}
-	
-	public boolean isSuperset(PhoenixJson rhs)
+	/***
+	 * this is method for getting all FieldName in a node
+	 * 
+	 * @return all FieldName in a node
+	 */
+	public Iterator<String> getFieldNames()
 	{
-		if(!rhs.rootNode.isArray()&&!this.rootNode.isArray())
-		{
-			if(rhs.rootNode.size()>=this.rootNode.size())
-			{
-				Iterator<String> lhsKeys=this.rootNode.getFieldNames();
-				while(lhsKeys.hasNext())
-				{
-					String lhsKey=lhsKeys.next();
-					System.out.println(lhsKey); // debug
-					if(!this.rootNode.get(lhsKey).equals(rhs.rootNode.get(lhsKey)))return false;
-				}
-				return true;
-			}
-		}
-		return false;
+		return rootNode.getFieldNames();
+	}
+	/***
+	 * this is method for getting size of Json pair in a node
+	 * 
+	 * @return all FieldName in a node
+	 */
+	public int getNodeSize()
+	{
+		return rootNode.size();
 	}
 	
-	public boolean isSubset(PhoenixJson rhs)
+	public String getValueAsString()
 	{
-		if(!rhs.rootNode.isArray()&&!this.rootNode.isArray())
-		{
-			if(rhs.rootNode.size()<=this.rootNode.size())
-			{
-				Iterator<String> rhsKeys=rhs.rootNode.getFieldNames();
-				while(rhsKeys.hasNext())
-				{
-					String rhsKey=rhsKeys.next();
-					if(!this.rootNode.get(rhsKey).equals(rhs.rootNode.get(rhsKey)))return false;
-				}
-				return true;
-			}
+		if(rootNode.isTextual()){
+			return rootNode.getValueAsText();
 		}
-		return false;
+		return null;
 	}
 }

@@ -16,7 +16,7 @@ import org.apache.phoenix.schema.types.PVarcharArray;
 import org.apache.phoenix.schema.types.PhoenixArray;
 
 
-public class JsonMultiKeySearchAndExpression extends BaseJSONExpression{
+public class JsonMultiKeySearchAndExpression extends BaseCompoundExpression{
 	public JsonMultiKeySearchAndExpression(List<Expression> children) {
         super(children);
     }
@@ -28,6 +28,13 @@ public class JsonMultiKeySearchAndExpression extends BaseJSONExpression{
             return false;
         }
 		PhoenixArray pattern =(PhoenixArray)PVarcharArray.INSTANCE.toObject(ptr);
+		if(children.get(0) instanceof BaseJSONExpression){
+			if(((BaseJSONExpression)children.get(0)).getRealDataType()!=PJson.INSTANCE)
+			{
+				ptr.set(PDataType.FALSE_BYTES);
+				return true;
+			}
+		}
 		if (!children.get(0).evaluate(tuple, ptr)) {
 	        return false;
 	    }
