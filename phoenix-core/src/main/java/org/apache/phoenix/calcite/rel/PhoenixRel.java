@@ -23,7 +23,7 @@ import org.apache.phoenix.schema.TableRef;
 public interface PhoenixRel extends RelNode {
   /** Calling conventions for relational operations that occur in Phoenix. */
   Convention SERVER_CONVENTION = new Convention.Impl("PHOENIX_SERVER", PhoenixRel.class);
-  Convention PROJECTABLE_CONVENTION = new Convention.Impl("PHOENIX_PROJECTABLE", PhoenixRel.class);
+  Convention SERVERJOIN_CONVENTION = new Convention.Impl("PHOENIX_SERVERJOIN", PhoenixRel.class);
   Convention CLIENT_CONVENTION = new Convention.Impl("PHOENIX_CLIENT", PhoenixRel.class);
   
   /** Metadata Provider for PhoenixRel */

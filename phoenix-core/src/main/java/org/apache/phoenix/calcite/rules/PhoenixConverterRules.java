@@ -170,7 +170,7 @@ public class PhoenixConverterRules {
         };
         
         public static final PhoenixServerSortRule SERVER = new PhoenixServerSortRule(PhoenixRel.SERVER_CONVENTION);
-        public static final PhoenixServerSortRule PROJECTABLE = new PhoenixServerSortRule(PhoenixRel.PROJECTABLE_CONVENTION);
+        public static final PhoenixServerSortRule PROJECTABLE = new PhoenixServerSortRule(PhoenixRel.SERVERJOIN_CONVENTION);
 
         private final Convention inputConvention;
 
@@ -375,7 +375,7 @@ public class PhoenixConverterRules {
         };
         
         public static final RelOptRule SERVER = new PhoenixServerAggregateRule(PhoenixRel.SERVER_CONVENTION);
-        public static final RelOptRule PROJECTABLE = new PhoenixServerAggregateRule(PhoenixRel.PROJECTABLE_CONVENTION);
+        public static final RelOptRule PROJECTABLE = new PhoenixServerAggregateRule(PhoenixRel.SERVERJOIN_CONVENTION);
         
         private final Convention inputConvention;
 
@@ -512,7 +512,7 @@ public class PhoenixConverterRules {
 
         private PhoenixServerJoinRule() {
             super(LogicalJoin.class, Predicates.and(Arrays.asList(IS_CONVERTIBLE, NO_RIGHT_OR_FULL_JOIN)), Convention.NONE, 
-                    PhoenixRel.PROJECTABLE_CONVENTION, "PhoenixServerJoinRule");
+                    PhoenixRel.SERVERJOIN_CONVENTION, "PhoenixServerJoinRule");
         }
 
         public RelNode convert(RelNode rel) {
@@ -695,7 +695,7 @@ public class PhoenixConverterRules {
 
     /**
      * Rule to convert a relational expression from
-     * {@link org.apache.phoenix.calcite.rel.PhoenixRel#PROJECTABLE_CONVENTION} to
+     * {@link org.apache.phoenix.calcite.rel.PhoenixRel#SERVERJOIN_CONVENTION} to
      * {@link org.apache.phoenix.calcite.rel.PhoenixRel#CLIENT_CONVENTION}.
      */
     public static class PhoenixProjectableToClientConverterRule extends ConverterRule {
@@ -703,7 +703,7 @@ public class PhoenixConverterRules {
             new PhoenixProjectableToClientConverterRule();
 
         private PhoenixProjectableToClientConverterRule() {
-            super(RelNode.class, PhoenixRel.PROJECTABLE_CONVENTION, PhoenixRel.CLIENT_CONVENTION,
+            super(RelNode.class, PhoenixRel.SERVERJOIN_CONVENTION, PhoenixRel.CLIENT_CONVENTION,
                 "PhoenixProjectableToClientConverterRule");
         }
 

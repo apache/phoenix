@@ -39,7 +39,7 @@ public class PhoenixServerSort extends PhoenixAbstractSort {
     @Override
     public RelOptCost computeSelfCost(RelOptPlanner planner) {
         if (getInput().getConvention() != PhoenixRel.SERVER_CONVENTION
-                && getInput().getConvention() != PhoenixRel.PROJECTABLE_CONVENTION)
+                && getInput().getConvention() != PhoenixRel.SERVERJOIN_CONVENTION)
             return planner.getCostFactory().makeInfiniteCost();
         
         return super.computeSelfCost(planner)

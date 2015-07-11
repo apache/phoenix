@@ -38,7 +38,7 @@ public class PhoenixServerJoin extends PhoenixAbstractJoin {
             Set<String> variablesStopped, boolean isSingleValueRhs) {
         RelOptCluster cluster = left.getCluster();
         final RelTraitSet traits =
-                cluster.traitSet().replace(PhoenixRel.PROJECTABLE_CONVENTION)
+                cluster.traitSet().replace(PhoenixRel.SERVERJOIN_CONVENTION)
                 .replaceIfs(RelCollationTraitDef.INSTANCE,
                         new Supplier<List<RelCollation>>() {
                     public List<RelCollation> get() {
