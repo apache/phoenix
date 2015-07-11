@@ -47,6 +47,10 @@ public class JsonSupersetExpression extends BaseCompoundExpression{
 			ptr.set(PDataType.TRUE_BYTES);
 			return true;
 		}
+		if(pattern.getNodeSize()<value.getNodeSize()){
+			ptr.set(PDataType.FALSE_BYTES);
+			return true;
+		}
 		Iterator<String> fildnames=value.getFieldNames();
 		while(fildnames.hasNext())
 		{

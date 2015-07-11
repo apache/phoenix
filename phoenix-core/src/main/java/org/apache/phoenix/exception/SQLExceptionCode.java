@@ -87,6 +87,7 @@ public enum SQLExceptionCode {
     AMBIGUOUS_JOIN_CONDITION(217, "22017", "Amibiguous or non-equi join condition specified. Consider using table list with where clause."),
     CONSTRAINT_VIOLATION(218, "22018", "Constraint violatioin."),
     INVALID_JSON_DATA(219, "22000", "Invalid json data."),
+    JSON_PATH_ERROR(220, "22000", "JSON path format error."),
     
     /**
      * Constraint Violation (errorcode 03, sqlstate 23)
@@ -286,7 +287,7 @@ public enum SQLExceptionCode {
     UNWANTED_TOKEN(603, "42P00", "Syntax error.", Factory.SYTAX_ERROR),
     MISMATCHED_TOKEN(604, "42P00", "Syntax error.", Factory.SYTAX_ERROR),
     UNKNOWN_FUNCTION(605, "42P00", "Syntax error.", Factory.SYTAX_ERROR),
-    JSON_PATH_ERROR(606, "42P00", "JSON path format error."),
+   
     
     /**
      * Implementation defined class. Execution exceptions (errorcode 11, sqlstate XCL). 

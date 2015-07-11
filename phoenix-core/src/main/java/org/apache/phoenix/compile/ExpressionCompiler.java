@@ -33,6 +33,7 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.AndExpression;
 import org.apache.phoenix.expression.ArrayConstructorExpression;
+import org.apache.phoenix.expression.BaseJSONExpression;
 import org.apache.phoenix.expression.ByteBasedLikeExpression;
 import org.apache.phoenix.expression.CaseExpression;
 import org.apache.phoenix.expression.CoerceExpression;
@@ -223,12 +224,12 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         Expression lhsExpr = children.get(0);
         Expression rhsExpr = children.get(1);
         PDataType dataTypeOfLHSExpr = lhsExpr.getDataType();
-        if (dataTypeOfLHSExpr != null && !dataTypeOfLHSExpr.isEqualitySupported()) {
+        if (!(lhsExpr instanceof BaseJSONExpression)&& dataTypeOfLHSExpr != null && !dataTypeOfLHSExpr.isEqualitySupported()) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.NON_EQUALITY_COMPARISON)
                     .setMessage(" for type " + dataTypeOfLHSExpr).build().buildException();
         }
         PDataType dataTypeOfRHSExpr = rhsExpr.getDataType();
-        if (dataTypeOfRHSExpr != null && !dataTypeOfRHSExpr.isEqualitySupported()) {
+        if (!(rhsExpr instanceof BaseJSONExpression)&&dataTypeOfRHSExpr != null && !dataTypeOfRHSExpr.isEqualitySupported()) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.NON_EQUALITY_COMPARISON)
                     .setMessage(" for type " + dataTypeOfRHSExpr).build().buildException();
         }
@@ -512,11 +513,11 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                 !rhs.getDataType().isCoercibleTo(lhs.getDataType())) {
             throw TypeMismatchException.newException(lhs.getDataType(), rhs.getDataType(), node.toString());
         }
-        if (!lhs.getDataType().isEqualitySupported()) {
+        if (!(lhs instanceof BaseJSONExpression)&&!lhs.getDataType().isEqualitySupported()) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.NON_EQUALITY_COMPARISON)
                     .setMessage(" for type " + lhs.getDataType()).build().buildException();
         }
-        if (!rhs.getDataType().isEqualitySupported()) {
+        if (!(rhs instanceof BaseJSONExpression)&&!rhs.getDataType().isEqualitySupported()) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.NON_EQUALITY_COMPARISON)
                     .setMessage(" for type " + rhs.getDataType()).build().buildException();
         }
