@@ -27,6 +27,7 @@ import org.apache.phoenix.pherf.configuration.Scenario;
 import org.apache.phoenix.pherf.rules.DataValue;
 import org.apache.phoenix.pherf.rules.RulesApplier;
 import org.apache.phoenix.pherf.workload.QueryExecutor;
+import org.apache.phoenix.pherf.workload.Workload;
 import org.apache.phoenix.pherf.workload.WorkloadExecutor;
 import org.apache.phoenix.pherf.workload.WriteWorkload;
 import org.junit.Before;
@@ -68,6 +69,7 @@ public class DataIngestIT extends ResultBaseTestIT {
             WriteWorkload loader = new WriteWorkload(util, parser, scenario);
             WorkloadExecutor executor = new WorkloadExecutor();
             executor.add(loader);
+            executor.get();
 
             RulesApplier rulesApplier = loader.getRulesApplier();
             List<Map> modelList = rulesApplier.getModelList();
@@ -90,6 +92,12 @@ public class DataIngestIT extends ResultBaseTestIT {
                             data.getDistribution() == Integer.MIN_VALUE);
                 }
             }
+
+            // Run some queries
+            Workload query = new QueryExecutor(parser, util, executor.getPool());
+            executor.add(query);
+            executor.get();
+
         } catch (Exception e) {
             fail("We had an exception: " + e.getMessage());
         }
