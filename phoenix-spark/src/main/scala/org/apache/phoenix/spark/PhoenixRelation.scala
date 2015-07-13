@@ -92,6 +92,7 @@ case class PhoenixRelation(tableName: String, zkUrl: String)(@transient val sqlC
   // Helper function to escape string values in SQL queries
   private def compileValue(value: Any): Any = value match {
     case stringValue: String => s"'${escapeSql(stringValue)}'"
+    case stringValue: UTF8String => s"'${escapeSql(stringValue.toString)}'"
     case _ => value
   }
 }
