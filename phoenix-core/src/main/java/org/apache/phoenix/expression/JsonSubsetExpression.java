@@ -37,6 +37,13 @@ public class JsonSubsetExpression extends BaseCompoundExpression{
     }
 	@Override
 	public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
+		if(children.get(1) instanceof BaseJSONExpression){
+			if(((BaseJSONExpression)children.get(1)).getRealDataType()!=PJson.INSTANCE)
+			{
+				ptr.set(PDataType.FALSE_BYTES);
+				return true;
+			}
+		}
 		if (!children.get(1).evaluate(tuple, ptr)) {
             return false;
         }
