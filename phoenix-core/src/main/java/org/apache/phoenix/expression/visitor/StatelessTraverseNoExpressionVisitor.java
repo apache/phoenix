@@ -29,6 +29,17 @@ import org.apache.phoenix.expression.ComparisonExpression;
 import org.apache.phoenix.expression.DivideExpression;
 import org.apache.phoenix.expression.InListExpression;
 import org.apache.phoenix.expression.IsNullExpression;
+import org.apache.phoenix.expression.JsonMultiKeySearchAndExpression;
+import org.apache.phoenix.expression.JsonMultiKeySearchOrExpression;
+import org.apache.phoenix.expression.JsonPathAsElementExpression;
+import org.apache.phoenix.expression.JsonPathAsTextExpression;
+import org.apache.phoenix.expression.JsonPointAsElementExpression;
+import org.apache.phoenix.expression.JsonPointAsTextExpression;
+import org.apache.phoenix.expression.JsonPointForArrayAsElementExpression;
+import org.apache.phoenix.expression.JsonPointForArrayAsTextExpression;
+import org.apache.phoenix.expression.JsonSingleKeySearchExpression;
+import org.apache.phoenix.expression.JsonSubsetExpression;
+import org.apache.phoenix.expression.JsonSupersetExpression;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.LikeExpression;
 import org.apache.phoenix.expression.LiteralExpression;
@@ -177,5 +188,62 @@ public class StatelessTraverseNoExpressionVisitor<E> extends TraverseNoExpressio
     public E visit(SequenceValueExpression node) {
         return null;
     }
+
+    
+// for JSON node
+	@Override
+	public E visitLeave(JsonPointForArrayAsElementExpression node, List<E> l) {
+		return null;
+	}
+
+	@Override
+	public E visitLeave(JsonMultiKeySearchAndExpression node, List<E> l) {
+		return null;
+	}
+
+	@Override
+	public E visitLeave(JsonPathAsElementExpression node, List<E> l) {
+		return null;
+	}
+
+	@Override
+	public E visitLeave(JsonPathAsTextExpression node, List<E> l) {
+		return null;
+	}
+
+	@Override
+	public E visitLeave(JsonMultiKeySearchOrExpression node, List<E> l) {
+		return null;
+	}
+
+	@Override
+	public E visitLeave(JsonPointAsElementExpression node, List<E> l) {
+		return null;
+	}
+
+	@Override
+	public E visitLeave(JsonPointAsTextExpression node, List<E> l) {
+		return null;
+	}
+
+	@Override
+	public E visitLeave(JsonPointForArrayAsTextExpression node, List<E> l) {
+		return null;
+	}
+
+	@Override
+	public E visitLeave(JsonSingleKeySearchExpression node, List<E> l) {
+		return null;
+	}
+
+	@Override
+	public E visitLeave(JsonSubsetExpression node, List<E> l) {
+		return null;
+	}
+
+	@Override
+	public E visitLeave(JsonSupersetExpression node, List<E> l) {
+		return null;
+	}
 
 }
