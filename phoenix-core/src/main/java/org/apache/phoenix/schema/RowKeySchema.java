@@ -17,13 +17,12 @@
  */
 package org.apache.phoenix.schema;
 
-import static org.apache.phoenix.query.QueryConstants.SEPARATOR_BYTE;
-
 import java.util.Collections;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.util.SchemaUtil;
 
 
 /**
@@ -37,17 +36,19 @@ import org.apache.phoenix.query.QueryConstants;
  * @since 0.1
  */
 public class RowKeySchema extends ValueSchema {
-    public static final RowKeySchema EMPTY_SCHEMA = new RowKeySchema(0,Collections.<Field>emptyList())
+    public static final RowKeySchema EMPTY_SCHEMA = new RowKeySchema(0,Collections.<Field>emptyList(), true)
     ;
     
     public RowKeySchema() {
     }
     
-    protected RowKeySchema(int minNullable, List<Field> fields) {
-        super(minNullable, fields);
+    protected RowKeySchema(int minNullable, List<Field> fields, boolean rowKeyOrderOptimizable) {
+        super(minNullable, fields, rowKeyOrderOptimizable);
     }
 
     public static class RowKeySchemaBuilder extends ValueSchemaBuilder {
+        private boolean rowKeyOrderOptimizable = false;
+        
         public RowKeySchemaBuilder(int maxFields) {
             super(maxFields);
             setMaxFields(maxFields);
@@ -59,11 +60,20 @@ public class RowKeySchema extends ValueSchema {
             return this;
         }
 
+        public RowKeySchemaBuilder rowKeyOrderOptimizable(boolean rowKeyOrderOptimizable) {
+            this.rowKeyOrderOptimizable = rowKeyOrderOptimizable;
+            return this;
+        }
+
         @Override
         public RowKeySchema build() {
             List<Field> condensedFields = buildFields();
-            return new RowKeySchema(this.minNullable, condensedFields);
+            return new RowKeySchema(this.minNullable, condensedFields, rowKeyOrderOptimizable);
         }
+    }
+
+    public boolean rowKeyOrderOptimizable() {
+        return rowKeyOrderOptimizable;
     }
 
     public int getMaxFields() {
@@ -148,13 +158,19 @@ public class RowKeySchema extends ValueSchema {
         if (field.getDataType().isFixedWidth()) {
             ptr.set(ptr.get(),ptr.getOffset(), field.getByteSize());
         } else {
-            if (position+1 == getFieldCount() ) { // Last field has no terminator
-                ptr.set(ptr.get(), ptr.getOffset(), maxOffset - ptr.getOffset());
+            if (position+1 == getFieldCount() ) {
+                // Last field has no terminator unless it's descending sort order
+                int len = maxOffset - ptr.getOffset();
+                ptr.set(ptr.get(), ptr.getOffset(), maxOffset - ptr.getOffset() - (SchemaUtil.getSeparatorByte(rowKeyOrderOptimizable, len == 0, field) == QueryConstants.DESC_SEPARATOR_BYTE ? 1 : 0));
             } else {
                 byte[] buf = ptr.get();
                 int offset = ptr.getOffset();
-                while (offset < maxOffset && buf[offset] != SEPARATOR_BYTE) {
-                    offset++;
+                // First byte 
+                if (offset < maxOffset && buf[offset] != QueryConstants.SEPARATOR_BYTE) {
+                    byte sepByte = SchemaUtil.getSeparatorByte(rowKeyOrderOptimizable, false, field);
+                    do {
+                        offset++;
+                    } while (offset < maxOffset && buf[offset] != sepByte);
                 }
                 ptr.set(buf, ptr.getOffset(), offset - ptr.getOffset());
             }
@@ -204,8 +220,12 @@ public class RowKeySchema extends ValueSchema {
         if (!field.getDataType().isFixedWidth()) {
             byte[] buf = ptr.get();
             int offset = ptr.getOffset()-1-offsetAdjustment;
-            while (offset > minOffset /* sanity check*/ && buf[offset] != QueryConstants.SEPARATOR_BYTE) {
-                offset--;
+            // Separator always zero byte if zero length
+            if (offset > minOffset && buf[offset] != QueryConstants.SEPARATOR_BYTE) {
+                byte sepByte = SchemaUtil.getSeparatorByte(rowKeyOrderOptimizable, false, field);
+                do {
+                    offset--;
+                } while (offset > minOffset && buf[offset] != sepByte);
             }
             if (offset == minOffset) { // shouldn't happen
                 ptr.set(buf, minOffset, ptr.getOffset()-minOffset-1);

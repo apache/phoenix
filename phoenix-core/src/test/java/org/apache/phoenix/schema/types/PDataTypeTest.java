@@ -38,6 +38,7 @@ import java.util.List;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.ConstraintViolationException;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.TestUtil;
@@ -1753,5 +1754,16 @@ public class PDataTypeTest {
         int i = -1;
         assertTrue(PLong.INSTANCE.compareTo(l, i, PInteger.INSTANCE)==0);
         assertTrue(PInteger.INSTANCE.compareTo(i, l, PLong.INSTANCE)==0);
+    }
+    
+    @Test
+    public void testSeparatorBytes() {
+        byte biggest = (byte) 0xFF;
+        assertEquals(biggest, QueryConstants.DESC_SEPARATOR_BYTE);
+        byte[] array = new byte[1];
+        for (int i = Byte.MIN_VALUE; i <= Byte.MAX_VALUE; i++) {
+            array[0] = (byte) i;
+            assertTrue(Bytes.compareTo(array, QueryConstants.DESC_SEPARATOR_BYTE_ARRAY) <= 0);
+        }
     }
 }

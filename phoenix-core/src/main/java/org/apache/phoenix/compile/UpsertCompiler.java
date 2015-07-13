@@ -150,8 +150,10 @@ public class UpsertCompiler {
                             SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY).setColumnName(column.getName().getString())
                             .setMessage("value=" + column.getDataType().toStringLiteral(ptr, null)).build()
                             .buildException(); }
-                    column.getDataType().coerceBytes(ptr, value, column.getDataType(), precision, scale,
-                            SortOrder.getDefault(), column.getMaxLength(), column.getScale(), column.getSortOrder());
+                    column.getDataType().coerceBytes(ptr, value, column.getDataType(), 
+                            precision, scale, SortOrder.getDefault(), 
+                            column.getMaxLength(), column.getScale(), column.getSortOrder(),
+                            table.rowKeyOrderOptimizable());
                     values[i] = ByteUtil.copyKeyBytesIfNecessary(ptr);
                 }
                 setValues(values, pkSlotIndexes, columnIndexes, table, mutation, statement);
@@ -772,6 +774,7 @@ public class UpsertCompiler {
                 final SequenceManager sequenceManager = context.getSequenceManager();
                 // Next evaluate all the expressions
                 int nodeIndex = nodeIndexOffset;
+                PTable table = tableRef.getTable();
                 Tuple tuple = sequenceManager.getSequenceCount() == 0 ? null :
                     sequenceManager.newSequenceTuple(null);
                 for (Expression constantExpression : constantExpressions) {
@@ -793,9 +796,10 @@ public class UpsertCompiler {
                                 .setMessage("value=" + constantExpression.toString()).build().buildException();
                         }
                     }
-                    column.getDataType().coerceBytes(ptr, value,
-                            constantExpression.getDataType(), constantExpression.getMaxLength(), constantExpression.getScale(), constantExpression.getSortOrder(),
-                            column.getMaxLength(), column.getScale(),column.getSortOrder());
+                    column.getDataType().coerceBytes(ptr, value, constantExpression.getDataType(), 
+                            constantExpression.getMaxLength(), constantExpression.getScale(), constantExpression.getSortOrder(),
+                            column.getMaxLength(), column.getScale(),column.getSortOrder(),
+                            table.rowKeyOrderOptimizable());
                     if (overlapViewColumns.contains(column) && Bytes.compareTo(ptr.get(), ptr.getOffset(), ptr.getLength(), column.getViewConstant(), 0, column.getViewConstant().length-1) != 0) {
                         throw new SQLExceptionInfo.Builder(
                                 SQLExceptionCode.CANNOT_UPDATE_VIEW_COLUMN)
@@ -814,7 +818,7 @@ public class UpsertCompiler {
                     }
                 }
                 Map<ImmutableBytesPtr, RowMutationState> mutation = Maps.newHashMapWithExpectedSize(1);
-                setValues(values, pkSlotIndexes, columnIndexes, tableRef.getTable(), mutation, statement);
+                setValues(values, pkSlotIndexes, columnIndexes, table, mutation, statement);
                 return new MutationState(tableRef, mutation, 0, maxSize, connection);
             }
 

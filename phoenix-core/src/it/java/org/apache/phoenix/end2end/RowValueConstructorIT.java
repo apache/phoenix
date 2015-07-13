@@ -1232,8 +1232,7 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
     @Test
     public void testForceSkipScan() throws Exception {
         String tempTableWithCompositePK = "TEMP_TABLE_COMPOSITE_PK";
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
+        Connection conn = nextConnection(getUrl());
         try {
             conn.createStatement().execute("CREATE TABLE " + tempTableWithCompositePK
                     + "   (col0 INTEGER NOT NULL, "
@@ -1242,7 +1241,9 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
                     + "    col3 INTEGER "
                     + "   CONSTRAINT pk PRIMARY KEY (col0, col1, col2)) "
                     + "   SALT_BUCKETS=4");
+            conn.close();
 
+            conn = nextConnection(getUrl());
             PreparedStatement upsertStmt = conn.prepareStatement(
                     "upsert into " + tempTableWithCompositePK + "(col0, col1, col2, col3) " + "values (?, ?, ?, ?)");
             for (int i = 0; i < 3; i++) {
@@ -1253,7 +1254,9 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
                 upsertStmt.execute();
             }
             conn.commit();
+            conn.close();
 
+            conn = nextConnection(getUrl());
             String query = "SELECT * FROM " + tempTableWithCompositePK + " WHERE (col0, col1) in ((2, 3), (3, 4), (4, 5))";
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();

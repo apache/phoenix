@@ -123,7 +123,7 @@ public class ArrayConstructorExpression extends BaseCompoundExpression {
             if (position >= 0) position = elements.length;
             if (!baseType.isFixedWidth()) {
                 // Double seperator byte to show end of the non null array
-                PArrayDataType.writeEndSeperatorForVarLengthArray(oStream);
+                PArrayDataType.writeEndSeperatorForVarLengthArray(oStream, getSortOrder());
                 noOfElements = PArrayDataType.serailizeOffsetArrayIntoStream(oStream, byteStream, noOfElements,
                         offsetPos[offsetPos.length - 1], offsetPos);
                 PArrayDataType.serializeHeaderInfoIntoStream(oStream, noOfElements);

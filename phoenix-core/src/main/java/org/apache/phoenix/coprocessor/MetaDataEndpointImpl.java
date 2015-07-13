@@ -182,6 +182,7 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
+import org.apache.phoenix.util.UpgradeUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -212,6 +213,10 @@ import com.google.protobuf.Service;
 public class MetaDataEndpointImpl extends MetaDataProtocol implements CoprocessorService, Coprocessor {
     private static final Logger logger = LoggerFactory.getLogger(MetaDataEndpointImpl.class);
 
+    // Column to track tables that have been upgraded based on PHOENIX-2067
+    public static final String ROW_KEY_ORDER_OPTIMIZABLE = "ROW_KEY_ORDER_OPTIMIZABLE";
+    public static final byte[] ROW_KEY_ORDER_OPTIMIZABLE_BYTES = Bytes.toBytes(ROW_KEY_ORDER_OPTIMIZABLE);
+
     // KeyValues for Table
     private static final KeyValue TABLE_TYPE_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, TABLE_TYPE_BYTES);
     private static final KeyValue TABLE_SEQ_NUM_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
@@ -232,6 +237,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
     private static final KeyValue STORE_NULLS_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, STORE_NULLS_BYTES);
     private static final KeyValue EMPTY_KEYVALUE_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES);
     private static final KeyValue BASE_COLUMN_COUNT_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.BASE_COLUMN_COUNT_BYTES);
+    private static final KeyValue ROW_KEY_ORDER_OPTIMIZABLE_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, ROW_KEY_ORDER_OPTIMIZABLE_BYTES);
     
     private static final List<KeyValue> TABLE_KV_COLUMNS = Arrays.<KeyValue>asList(
             EMPTY_KEYVALUE_KV,
@@ -252,7 +258,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             INDEX_TYPE_KV,
             INDEX_DISABLE_TIMESTAMP_KV,
             STORE_NULLS_KV,
-            BASE_COLUMN_COUNT_KV
+            BASE_COLUMN_COUNT_KV,
+            ROW_KEY_ORDER_OPTIMIZABLE_KV
             );
     static {
         Collections.sort(TABLE_KV_COLUMNS, KeyValue.COMPARATOR);
@@ -275,6 +282,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
     private static final int INDEX_TYPE_INDEX = TABLE_KV_COLUMNS.indexOf(INDEX_TYPE_KV);
     private static final int STORE_NULLS_INDEX = TABLE_KV_COLUMNS.indexOf(STORE_NULLS_KV);
     private static final int BASE_COLUMN_COUNT_INDEX = TABLE_KV_COLUMNS.indexOf(BASE_COLUMN_COUNT_KV);
+    private static final int ROW_KEY_ORDER_OPTIMIZABLE_INDEX = TABLE_KV_COLUMNS.indexOf(ROW_KEY_ORDER_OPTIMIZABLE_KV);
 
     // KeyValues for Column
     private static final KeyValue DECIMAL_DIGITS_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, DECIMAL_DIGITS_BYTES);
@@ -781,6 +789,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         Cell baseColumnCountKv = tableKeyValues[BASE_COLUMN_COUNT_INDEX];
         int baseColumnCount = baseColumnCountKv == null ? 0 : PInteger.INSTANCE.getCodec().decodeInt(baseColumnCountKv.getValueArray(),
             baseColumnCountKv.getValueOffset(), SortOrder.getDefault());
+        Cell rowKeyOrderOptimizableKv = tableKeyValues[ROW_KEY_ORDER_OPTIMIZABLE_INDEX];
+        boolean rowKeyOrderOptimizable = rowKeyOrderOptimizableKv == null ? false : Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(rowKeyOrderOptimizableKv.getValueArray(), rowKeyOrderOptimizableKv.getValueOffset(), rowKeyOrderOptimizableKv.getValueLength()));
 
         List<PColumn> columns = Lists.newArrayListWithExpectedSize(columnCount);
         List<PTable> indexes = new ArrayList<PTable>();
@@ -825,7 +835,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         return PTableImpl.makePTable(tenantId, schemaName, tableName, tableType, indexState, timeStamp,
             tableSeqNum, pkName, saltBucketNum, columns, tableType == INDEX ? schemaName : null,
             tableType == INDEX ? dataTableName : null, indexes, isImmutableRows, physicalTables, defaultFamilyName, viewStatement,
-            disableWAL, multiTenant, storeNulls, viewType, viewIndexId, indexType, stats, baseColumnCount);
+            disableWAL, multiTenant, storeNulls, viewType, viewIndexId, indexType, stats, baseColumnCount, rowKeyOrderOptimizable);
     }
 
     private PFunction getFunction(RegionScanner scanner, final boolean isReplace, long clientTimeStamp, List<Mutation> deleteMutationsForReplace)
@@ -1057,7 +1067,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             return null;
         }
 
-
     @Override
     public void createTable(RpcController controller, CreateTableRequest request,
             RpcCallback<MetaDataResponse> done) {
@@ -1144,7 +1153,15 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         return;
                     }
                 }
-                // TODO: Switch this to HRegion#batchMutate when we want to support indexes on the
+                PTableType tableType = MetaDataUtil.getTableType(tableMetadata, GenericKeyValueBuilder.INSTANCE,
+                        new ImmutableBytesWritable());
+                // Add cell for ROW_KEY_ORDER_OPTIMIZABLE = true, as we know that new tables
+                // conform the correct row key. The exception is for a VIEW, which the client
+                // sends over depending on its base physical table.
+                if (tableType != PTableType.VIEW) {
+                    UpgradeUtil.addRowKeyOrderOptimizableCell(tableMetadata, key, clientTimeStamp);
+                }
+                // TODO: Switch this to Region#batchMutate when we want to support indexes on the
                 // system
                 // table. Basically, we get all the locks that we don't already hold for all the
                 // tableMetadata rows. This ensures we don't have deadlock situations (ensuring
@@ -1560,7 +1577,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 } else {
                     // server-side, except for indexing, we always expect the keyvalues to be standard KeyValues
                     PTableType expectedType = MetaDataUtil.getTableType(tableMetadata, GenericKeyValueBuilder.INSTANCE,
-                            new ImmutableBytesPtr());
+                            new ImmutableBytesWritable());
                     // We said to drop a table, but found a view or visa versa
                     if (type != expectedType) { return new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND,
                             EnvironmentEdgeManager.currentTimeMillis(), null); }
@@ -1610,6 +1627,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             if (view.getBaseColumnCount() == QueryConstants.DIVERGED_VIEW_BASE_COLUMN_COUNT) {
                 // if a view has divorced itself from the base table, we don't allow schema changes
                 // to be propagated to it.
+                // FIXME: we should allow the update, but just not propagate it to this view
+                // The one exception is PK changes which need to be propagated to diverged views as well
             	return new MetaDataMutationResult(MutationCode.UNALLOWED_TABLE_MUTATION, EnvironmentEdgeManager.currentTimeMillis(), null);
             }
             int numColsAddedToBaseTable = 0;
@@ -1844,6 +1863,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     
                     // add index row header key to the invalidate list to force clients to fetch the latest meta-data
                     invalidateList.add(new ImmutableBytesPtr(indexHeaderRowKey));
+                    if (index.rowKeyOrderOptimizable()) {
+                        UpgradeUtil.addRowKeyOrderOptimizableCell(mutationsForAddingColumnsToViews, indexHeaderRowKey, clientTimeStamp);
+                    }
                     mutationsForAddingColumnsToViews.add(indexHeaderRowMutation);
                 }
             }
@@ -1864,6 +1886,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             viewHeaderRowPut.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                     PhoenixDatabaseMetaData.TABLE_SEQ_NUM_BYTES, clientTimeStamp, viewSequencePtr);
             mutationsForAddingColumnsToViews.add(viewHeaderRowPut);
+            if (view.rowKeyOrderOptimizable()) {
+                UpgradeUtil.addRowKeyOrderOptimizableCell(mutationsForAddingColumnsToViews, viewKey, clientTimeStamp);
+            }
 
             // Update positions of view columns
             for (PColumn column : view.getColumns()) {
@@ -1910,7 +1935,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     byte[] schemaName = rowKeyMetaData[SCHEMA_NAME_INDEX];
                     byte[] tableName = rowKeyMetaData[TABLE_NAME_INDEX];
                     PTableType type = table.getType();
-                    List<Mutation> mutationsForAddingColumnsToViews = Collections.emptyList();
+                    byte[] tableHeaderRowKey = SchemaUtil.getTableKey(tenantId,
+                            schemaName, tableName);
+                    // Size for worst case - all new columns are PK column
+                    List<Mutation> mutationsForAddingColumnsToViews = Lists.newArrayListWithExpectedSize(tableMetaData.size() * ( 1 + table.getIndexes().size()));
                     /*
                      * If adding a column to a view, we don't want to propagate those meta-data changes to the child
                      * view hierarchy. This is because our check of finding child views is expensive and we want making
@@ -1971,6 +1999,17 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                                 continue;
                             } catch (ColumnNotFoundException e) {
                                 if (addingPKColumn) {
+                                    // We may be adding a DESC column, so if table is already
+                                    // able to be rowKeyOptimized, it should continue to be so.
+                                    if (table.rowKeyOrderOptimizable()) {
+                                        UpgradeUtil.addRowKeyOrderOptimizableCell(mutationsForAddingColumnsToViews, tableHeaderRowKey, clientTimeStamp);
+                                    } else if (table.getType() == PTableType.VIEW){
+                                        // Don't allow view PK to diverge from table PK as our upgrade code
+                                        // does not handle this.
+                                        return new MetaDataMutationResult(
+                                                MutationCode.UNALLOWED_TABLE_MUTATION, EnvironmentEdgeManager
+                                                        .currentTimeMillis(), null);
+                                    }
                                     // Add all indexes to invalidate list, as they will all be
                                     // adding the same PK column. No need to lock them, as we
                                     // have the parent table lock at this point.
@@ -1979,6 +2018,13 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                                                 .getTableKey(tenantId, index.getSchemaName()
                                                         .getBytes(), index.getTableName()
                                                         .getBytes())));
+                                        // We may be adding a DESC column, so if index is already
+                                        // able to be rowKeyOptimized, it should continue to be so.
+                                        if (index.rowKeyOrderOptimizable()) {
+                                            byte[] indexHeaderRowKey = SchemaUtil.getTableKey(index.getTenantId() == null ? ByteUtil.EMPTY_BYTE_ARRAY : index.getTenantId().getBytes(),
+                                                    index.getSchemaName().getBytes(), index.getTableName().getBytes());
+                                            UpgradeUtil.addRowKeyOrderOptimizableCell(mutationsForAddingColumnsToViews, indexHeaderRowKey, clientTimeStamp);
+                                        }
                                     }
                                 }
                                 continue;
@@ -2348,6 +2394,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 get.addColumn(TABLE_FAMILY_BYTES, DATA_TABLE_NAME_BYTES);
                 get.addColumn(TABLE_FAMILY_BYTES, INDEX_STATE_BYTES);
                 get.addColumn(TABLE_FAMILY_BYTES, INDEX_DISABLE_TIMESTAMP_BYTES);
+                get.addColumn(TABLE_FAMILY_BYTES, ROW_KEY_ORDER_OPTIMIZABLE_BYTES);
                 Result currentResult = region.get(get);
                 if (currentResult.rawCells().length == 0) {
                     builder.setReturnCode(MetaDataProtos.MutationCode.TABLE_NOT_FOUND);
@@ -2358,6 +2405,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 Cell dataTableKV = currentResult.getColumnLatestCell(TABLE_FAMILY_BYTES, DATA_TABLE_NAME_BYTES);
                 Cell currentStateKV = currentResult.getColumnLatestCell(TABLE_FAMILY_BYTES, INDEX_STATE_BYTES);
                 Cell currentDisableTimeStamp = currentResult.getColumnLatestCell(TABLE_FAMILY_BYTES, INDEX_DISABLE_TIMESTAMP_BYTES);
+                boolean rowKeyOrderOptimizable = currentResult.getColumnLatestCell(TABLE_FAMILY_BYTES, ROW_KEY_ORDER_OPTIMIZABLE_BYTES) != null;
 
                 PIndexState currentState =
                         PIndexState.fromSerializedValue(currentStateKV.getValueArray()[currentStateKV
@@ -2416,6 +2464,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         INDEX_STATE_BYTES, timeStamp, Bytes.toBytes(newState.getSerializedValue())));
                 }
 
+                PTable returnTable = null;
                 if (currentState != newState) {
                     byte[] dataTableKey = null;
                     if(dataTableKV != null) {
@@ -2429,6 +2478,12 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         p.add(TABLE_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES, timeStamp, ByteUtil.EMPTY_BYTE_ARRAY);
                         tableMetadata.add(p);
                     }
+                    boolean setRowKeyOrderOptimizableCell = newState == PIndexState.BUILDING && !rowKeyOrderOptimizable;
+                    // We're starting a rebuild of the index, so add our rowKeyOrderOptimizable cell
+                    // so that the row keys get generated using the new row key format
+                    if (setRowKeyOrderOptimizableCell) {
+                        UpgradeUtil.addRowKeyOrderOptimizableCell(tableMetadata, key, timeStamp);
+                    }
                     region.mutateRowsWithLocks(tableMetadata, Collections.<byte[]> emptySet());
                     // Invalidate from cache
                     Cache<ImmutableBytesPtr,PMetaDataEntity> metaDataCache = GlobalCache.getInstance(this.env).getMetaDataCache();
@@ -2436,12 +2491,18 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     if(dataTableKey != null) {
                         metaDataCache.invalidate(new ImmutableBytesPtr(dataTableKey));
                     }
+                    if (setRowKeyOrderOptimizableCell) {
+                        returnTable = doGetTable(key, HConstants.LATEST_TIMESTAMP, rowLock);
+                    }
                 }
                 // Get client timeStamp from mutations, since it may get updated by the
                 // mutateRowsWithLocks call
                 long currentTime = MetaDataUtil.getClientTimeStamp(tableMetadata);
                 builder.setReturnCode(MetaDataProtos.MutationCode.TABLE_ALREADY_EXISTS);
                 builder.setMutationTime(currentTime);
+                if (returnTable != null) {
+                    builder.setTable(PTableImpl.toProto(returnTable));
+                }
                 done.run(builder.build());
                 return;
             } finally {

@@ -32,8 +32,8 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.query.KeyRange;
-import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.types.PDataType;
 
 import com.google.common.base.Preconditions;
 
@@ -285,14 +285,16 @@ public class ByteUtil {
             totalLength += writable.getLength();
         }
         byte[] result = new byte[totalLength];
-        int offset = 0;
+        int totalOffset = 0;
         for (ImmutableBytesWritable array : writables) {
             byte[] bytes = array.get();
+            int offset = array.getOffset();
             if (sortOrder == SortOrder.DESC) {
-                bytes = SortOrder.invert(bytes, array.getOffset(), new byte[array.getLength()], 0, array.getLength());
+                bytes = SortOrder.invert(bytes, offset, new byte[array.getLength()], 0, array.getLength());
+                offset = 0;
             }
-            System.arraycopy(bytes, array.getOffset(), result, offset, array.getLength());
-            offset += array.getLength();
+            System.arraycopy(bytes, offset, result, totalOffset, array.getLength());
+            totalOffset += array.getLength();
         }
         return result;
     }

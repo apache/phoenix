@@ -39,6 +39,7 @@ import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -720,5 +721,27 @@ public class SchemaUtil {
         checkArgument(!isNullOrEmpty(fullColumnName), "Column name cannot be null or empty");
         fullColumnName = fullColumnName.replaceAll(ESCAPE_CHARACTER, "");
        	return fullColumnName.trim();
+    }
+    
+    /**
+     * Return the separator byte to use based on:
+     * @param rowKeyOrderOptimizable whether or not the table may optimize descending row keys. If the
+     *  table has no descending row keys, this will be true. Also, if the table has been upgraded (using
+     *  a new -u option for psql.py), then it'll be true
+     * @param isNullValue whether or not the value is null. We use a null byte still if the value is null
+     * regardless of sort order since nulls will always sort first this way.
+     * @param sortOrder whether the value sorts ascending or descending.
+     * @return the byte to use as the separator
+     */
+    public static byte getSeparatorByte(boolean rowKeyOrderOptimizable, boolean isNullValue, SortOrder sortOrder) {
+        return !rowKeyOrderOptimizable || isNullValue || sortOrder == SortOrder.ASC ? QueryConstants.SEPARATOR_BYTE : QueryConstants.DESC_SEPARATOR_BYTE;
+    }
+    
+    public static byte getSeparatorByte(boolean rowKeyOrderOptimizable, boolean isNullValue, Field f) {
+        return getSeparatorByte(rowKeyOrderOptimizable, isNullValue, f.getSortOrder());
+    }
+    
+    public static byte getSeparatorByte(boolean rowKeyOrderOptimizable, boolean isNullValue, Expression e) {
+        return getSeparatorByte(rowKeyOrderOptimizable, isNullValue, e.getSortOrder());
     }
 }

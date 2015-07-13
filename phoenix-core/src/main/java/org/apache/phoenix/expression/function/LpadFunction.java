@@ -22,12 +22,12 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
-import org.apache.phoenix.schema.types.PChar;
-import org.apache.phoenix.schema.types.PInteger;
-import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PChar;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.StringUtil;
 
 /**
@@ -146,7 +146,7 @@ public class LpadFunction extends ScalarFunction {
         int numFillCharsPrepended = padLen % fillLen;
 
         // byte length of the input string
-        int strByteLength = getSubstringByteLength(ptr, ptr.getLength(), strSortOrder, isStrCharType);
+        int strByteLength = ptr.getLength();
         // byte length of the fill string
         int fillByteLength = getSubstringByteLength(fillPtr, fillPtr.getLength(), fillSortOrder, isFillCharType);
         // byte length of the full fills to be prepended
