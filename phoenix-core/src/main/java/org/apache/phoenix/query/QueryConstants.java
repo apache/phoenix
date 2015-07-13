@@ -114,6 +114,7 @@ import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.schema.MetaDataSplitPolicy;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.ByteUtil;
 
 
@@ -163,6 +164,8 @@ public interface QueryConstants {
      */
     public static final byte SEPARATOR_BYTE = (byte) 0;
     public static final byte[] SEPARATOR_BYTE_ARRAY = new byte[] {SEPARATOR_BYTE};
+    public static final byte DESC_SEPARATOR_BYTE = SortOrder.invert(SEPARATOR_BYTE);
+    public static final byte[] DESC_SEPARATOR_BYTE_ARRAY = new byte[] {DESC_SEPARATOR_BYTE};
 
     public static final String DEFAULT_COPROCESS_PATH = "phoenix.jar";
     public final static int MILLIS_IN_DAY = 1000 * 60 * 60 * 24;

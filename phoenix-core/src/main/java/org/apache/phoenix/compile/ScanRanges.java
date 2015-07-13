@@ -32,6 +32,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.KeyRange.Bound;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.util.ByteUtil;
@@ -82,7 +83,9 @@ public class ScanRanges {
                 }
             }
             ranges = Collections.singletonList(keyRanges);
-            if (keys.size() > 1) {
+            // Treat as binary if descending because we've got a separator byte at the end
+            // which is not part of the value.
+            if (keys.size() > 1 || SchemaUtil.getSeparatorByte(schema.rowKeyOrderOptimizable(), false, schema.getField(0)) == QueryConstants.DESC_SEPARATOR_BYTE) {
                 schema = SchemaUtil.VAR_BINARY_SCHEMA;
                 slotSpan = ScanUtil.SINGLE_COLUMN_SLOT_SPAN;
             } else {

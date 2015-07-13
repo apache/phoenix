@@ -241,4 +241,9 @@ public class DelegateTable implements PTable {
     public int getBaseColumnCount() {
         return delegate.getBaseColumnCount();
     }
+
+    @Override
+    public boolean rowKeyOrderOptimizable() {
+        return delegate.rowKeyOrderOptimizable();
+    }
 }

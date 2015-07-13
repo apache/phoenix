@@ -158,8 +158,9 @@ public class JONIPattern extends AbstractBasePattern implements AbstractBaseSpli
 
     private boolean
             split(byte[] srcBytes, int srcOffset, int srcLen, ImmutableBytesWritable outPtr) {
+        SortOrder sortOrder = SortOrder.ASC;
         PArrayDataTypeBytesArrayBuilder builder =
-                new PArrayDataTypeBytesArrayBuilder(PVarchar.INSTANCE, SortOrder.ASC);
+                new PArrayDataTypeBytesArrayBuilder(PVarchar.INSTANCE, sortOrder);
         int srcRange = srcOffset + srcLen;
         Matcher matcher = pattern.matcher(srcBytes, 0, srcRange);
         int cur = srcOffset;
@@ -191,7 +192,7 @@ public class JONIPattern extends AbstractBasePattern implements AbstractBaseSpli
                 break;
             }
         }
-        byte[] bytes = builder.getBytesAndClose();
+        byte[] bytes = builder.getBytesAndClose(SortOrder.ASC);
         if (bytes == null) return false;
         outPtr.set(bytes);
         return true;

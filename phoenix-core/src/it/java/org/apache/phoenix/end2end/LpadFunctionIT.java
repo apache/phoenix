@@ -28,6 +28,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.phoenix.util.TestUtil;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import com.google.common.collect.Lists;
@@ -104,6 +105,29 @@ public class LpadFunctionIT extends BaseHBaseManagedTimeIT {
     private void testLpad(Connection conn, List<String> inputList, int length, List<String> fillStringList,
         List<String> expectedOutputList) throws Exception {
         testLpad(conn, inputList, length, fillStringList, "pk", expectedOutputList);
+    }
+
+    @Ignore
+    @Test
+    public void testCharPadding() throws Exception {
+        ResultSet rs;
+        Connection conn = DriverManager.getConnection(getUrl());
+
+        conn.createStatement().execute("CREATE TABLE tdesc (k CHAR(3) PRIMARY KEY DESC)");
+        conn.createStatement().execute("UPSERT INTO tdesc VALUES('a')");
+        conn.commit();
+        rs = conn.createStatement().executeQuery("SELECT * FROM tdesc");
+        assertTrue(rs.next());
+        assertEquals("a", rs.getString(1));
+        assertFalse(rs.next());
+        
+        conn.createStatement().execute("CREATE TABLE t (k CHAR(3) PRIMARY KEY)");
+        conn.createStatement().execute("UPSERT INTO t VALUES('a')");
+        conn.commit();
+        rs = conn.createStatement().executeQuery("SELECT * FROM t");
+        assertTrue(rs.next());
+        assertEquals("a", rs.getString(1));
+        assertFalse(rs.next());
     }
 
     @Test

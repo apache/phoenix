@@ -27,7 +27,8 @@ import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.tuple.Tuple;
-import org.apache.phoenix.schema.types.*;
+import org.apache.phoenix.schema.types.PArrayDataType;
+import org.apache.phoenix.schema.types.PDataType;
 
 public abstract class ArrayModifierFunction extends ScalarFunction {
 

@@ -43,7 +43,7 @@ import com.google.common.collect.Lists;
  */
 
 
-public class SortOrderFIT extends BaseHBaseManagedTimeIT {
+public class SortOrderIT extends BaseHBaseManagedTimeIT {
     
     private static final String TABLE = "DescColumnSortOrderTest";
 
@@ -287,6 +287,15 @@ public class SortOrderFIT extends BaseHBaseManagedTimeIT {
         Object[][] insertedRows = new Object[][]{{1, date(1, 1, 2002)}, {3, date(1, 1, 2003)}, {2, date(1, 1, 2001)}};
         Object[][] expectedRows = new Object[][]{{2, date(1, 1, 2001)}};
         runQueryTest(ddl, upsert("id", "date"), insertedRows, expectedRows, new WhereCondition("date", "<", "TO_DATE('02-02-2001','mm-dd-yyyy')"));
+    }
+    
+    @Test
+    public void descVarLengthPK() throws Exception {
+        String ddl = "CREATE TABLE " + TABLE + " (id VARCHAR PRIMARY KEY DESC)";
+        Object[][] insertedRows = new Object[][]{{"a"}, {"ab"}, {"abc"}};
+        Object[][] expectedRows = new Object[][]{{"abc"}, {"ab"}, {"a"}};
+        runQueryTest(ddl, upsert("id"), select("id"), insertedRows, expectedRows,
+                null, null, new OrderBy("id", OrderBy.Direction.DESC));
     }
     
     private void runQueryTest(String ddl, String columnName, Object[][] rows, Object[][] expectedRows) throws Exception {

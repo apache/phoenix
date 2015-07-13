@@ -122,8 +122,8 @@ public class OrderByCompiler {
                 boolean isAscending = node.isAscending();
                 boolean isNullsLast = node.isNullsLast();
                 tracker.track(expression, isAscending ? SortOrder.ASC : SortOrder.DESC, isNullsLast);
-                // FIXME: this isn't correct. If we have a schema where column A is DESC,
-                // An ORDER BY A should still be ASC.
+                // If we have a schema where column A is DESC, reverse the sort order and nulls last
+                // since this is the order they actually are in.
                 if (expression.getSortOrder() == SortOrder.DESC) {
                     isAscending = !isAscending;
                     isNullsLast = !isNullsLast;

@@ -32,6 +32,7 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
+import org.apache.htrace.TraceScope;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
@@ -68,7 +69,6 @@ import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.ScanUtil;
-import org.apache.htrace.TraceScope;
 
 import com.google.common.collect.Lists;
 
@@ -156,6 +156,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
         return iterator(Collections.<SQLCloseable>emptyList(), scanGrouper);
     }
     
+    @Override
     public final ResultIterator iterator() throws SQLException {
         return iterator(Collections.<SQLCloseable>emptyList(), DefaultParallelScanGrouper.getInstance());
     }
@@ -172,6 +173,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
         // Set miscellaneous scan attributes. This is the last chance to set them before we
         // clone the scan for each parallelized chunk.
         Scan scan = context.getScan();
+        PTable table = context.getCurrentTable().getTable();
         
         if (OrderBy.REV_ROW_KEY_ORDER_BY.equals(orderBy)) {
             ScanUtil.setReversed(scan);
@@ -190,8 +192,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
         PhoenixConnection connection = context.getConnection();
 
         // set read consistency
-        if (context.getCurrentTable() != null
-                && context.getCurrentTable().getTable().getType() != PTableType.SYSTEM) {
+        if (table.getType() != PTableType.SYSTEM) {
             scan.setConsistency(connection.getConsistency());
         }
         if (context.getScanTimeRange() == null) {
@@ -203,11 +204,12 @@ public abstract class BaseQueryPlan implements QueryPlan {
         } else {
             ScanUtil.setTimeRange(scan, context.getScanTimeRange());
         }
+        
         ScanUtil.setTenantId(scan, connection.getTenantId() == null ? null : connection.getTenantId().getBytes());
         String customAnnotations = LogUtil.customAnnotationsToString(connection);
         ScanUtil.setCustomAnnotations(scan, customAnnotations == null ? null : customAnnotations.getBytes());
         // Set local index related scan attributes. 
-        if (context.getCurrentTable().getTable().getIndexType() == IndexType.LOCAL) {
+        if (table.getIndexType() == IndexType.LOCAL) {
             ScanUtil.setLocalIndex(scan);
             Set<PColumn> dataColumns = context.getDataColumns();
             // If any data columns to join back from data table are present then we set following attributes
@@ -221,8 +223,8 @@ public abstract class BaseQueryPlan implements QueryPlan {
                 KeyValueSchema schema = ProjectedColumnExpression.buildSchema(dataColumns);
                 // Set key value schema of the data columns.
                 serializeSchemaIntoScan(scan, schema);
-                String parentSchema = context.getCurrentTable().getTable().getParentSchemaName().getString();
-                String parentTable = context.getCurrentTable().getTable().getParentTableName().getString();
+                String parentSchema = table.getParentSchemaName().getString();
+                String parentTable = table.getParentTableName().getString();
                 final ParseNodeFactory FACTORY = new ParseNodeFactory();
                 TableRef dataTableRef =
                         FromCompiler.getResolver(

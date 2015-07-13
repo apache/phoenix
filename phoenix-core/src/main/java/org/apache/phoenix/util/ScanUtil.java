@@ -326,13 +326,15 @@ public class ScanUtil {
         // but the index for the field it represents in the schema
         // should be incremented by 1 + value in the current slotSpan index
         // slotSpan stores the number of columns beyond one that the range spans
+        Field field = null;
         int i = slotStartIndex, fieldIndex = ScanUtil.getRowKeyPosition(slotSpan, slotStartIndex);
         for (i = slotStartIndex; i < slotEndIndex; i++) {
             // Build up the key by appending the bound of each key range
             // from the current position of each slot. 
             KeyRange range = slots.get(i).get(position[i]);
             // Use last slot in a multi-span column to determine if fixed width
-            boolean isFixedWidth = schema.getField(fieldIndex + slotSpan[i]).getDataType().isFixedWidth();
+            field = schema.getField(fieldIndex + slotSpan[i]);
+            boolean isFixedWidth = field.getDataType().isFixedWidth();
             fieldIndex += slotSpan[i] + 1;
             /*
              * If the current slot is unbound then stop if:
@@ -369,9 +371,11 @@ public class ScanUtil {
             // key slots would cause the flag to become true.
             lastInclusiveUpperSingleKey = range.isSingleKey() && inclusiveUpper;
             anyInclusiveUpperRangeKey |= !range.isSingleKey() && inclusiveUpper;
+            // A match for IS NULL or IS NOT NULL should not have a DESC_SEPARATOR_BYTE as nulls sort first
+            byte sepByte = SchemaUtil.getSeparatorByte(schema.rowKeyOrderOptimizable(), bytes.length == 0 || range == KeyRange.IS_NULL_RANGE || range == KeyRange.IS_NOT_NULL_RANGE, field);
             
-            if (!isFixedWidth && ( fieldIndex < schema.getMaxFields() || inclusiveUpper || exclusiveLower)) {
-                key[offset++] = QueryConstants.SEPARATOR_BYTE;
+            if (!isFixedWidth && ( fieldIndex < schema.getMaxFields() || inclusiveUpper || exclusiveLower || sepByte == QueryConstants.DESC_SEPARATOR_BYTE)) {
+                key[offset++] = sepByte;
                 // Set lastInclusiveUpperSingleKey back to false if this is the last pk column
                 // as we don't want to increment the null byte in this case
                 lastInclusiveUpperSingleKey &= i < schema.getMaxFields()-1;
@@ -484,10 +488,11 @@ public class ScanUtil {
         while (schema.next(ptr, pos, maxOffset) != null) {
             pos++;
         }
-        if (!schema.getField(pos-1).getDataType().isFixedWidth()) {
+        Field field = schema.getField(pos-1);
+        if (!field.getDataType().isFixedWidth()) {
             byte[] newLowerRange = new byte[key.length + 1];
             System.arraycopy(key, 0, newLowerRange, 0, key.length);
-            newLowerRange[key.length] = QueryConstants.SEPARATOR_BYTE;
+            newLowerRange[key.length] = SchemaUtil.getSeparatorByte(schema.rowKeyOrderOptimizable(), key.length==0, field);
             key = newLowerRange;
         } else {
             key = Arrays.copyOf(key, key.length);

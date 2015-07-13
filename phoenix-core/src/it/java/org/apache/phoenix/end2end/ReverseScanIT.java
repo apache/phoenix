@@ -53,6 +53,8 @@ import com.google.common.collect.Maps;
 
 
 public class ReverseScanIT extends BaseHBaseManagedTimeIT {
+    protected static final String ATABLE_INDEX_NAME = "ATABLE_IDX";
+
     @BeforeClass
     @Shadower(classBeingShadowed = BaseHBaseManagedTimeIT.class)
     public static void doSetup() throws Exception {
@@ -165,4 +167,32 @@ public class ReverseScanIT extends BaseHBaseManagedTimeIT {
         }
     }
 
+    @Test
+    public void testReverseScanIndex() throws Exception {
+        String tenantId = getOrganizationId();
+        initATableValues(tenantId, getSplitsAtRowKeys(tenantId), getUrl());
+        
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String ddl = "CREATE INDEX " + ATABLE_INDEX_NAME + " ON aTable (a_integer DESC) INCLUDE ("
+        + "    A_STRING, " + "    B_STRING, " + "    A_DATE)";
+        conn.createStatement().execute(ddl);
+        
+        String query = 
+                "SELECT a_integer FROM atable where a_integer is not null order by a_integer nulls last limit 1";
+
+        PreparedStatement statement = conn.prepareStatement(query);
+        ResultSet rs=statement.executeQuery();
+        assertTrue(rs.next());
+        assertEquals(1,rs.getInt(1));
+        assertFalse(rs.next());
+        
+        rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+        assertEquals(
+                "CLIENT SERIAL 1-WAY REVERSE RANGE SCAN OVER ATABLE_IDX [not null]\n" + 
+                "    SERVER FILTER BY FIRST KEY ONLY\n" + 
+                "    SERVER 1 ROW LIMIT\n" + 
+                "CLIENT 1 ROW LIMIT",QueryUtil.getExplainPlan(rs));
+    }
+    
 }

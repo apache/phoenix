@@ -67,6 +67,7 @@ import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.monitoring.GlobalMetric;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.KeyValueSchema;
@@ -78,12 +79,14 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.types.PDataType;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
@@ -96,6 +99,8 @@ import com.google.common.collect.Lists;
  * @since 0.1
  */
 public class PhoenixRuntime {
+    private static final Logger logger = LoggerFactory.getLogger(PhoenixRuntime.class);
+
     /**
      * Use this connection property to control HBase timestamps
      * by specifying your own long timestamp value at connection time. All
@@ -191,24 +196,39 @@ public class PhoenixRuntime {
             conn = DriverManager.getConnection(jdbcUrl, props)
                     .unwrap(PhoenixConnection.class);
 
-            for (String inputFile : execCmd.getInputFiles()) {
-                if (inputFile.endsWith(SQL_FILE_EXT)) {
-                    PhoenixRuntime.executeStatements(conn,
-                            new FileReader(inputFile), Collections.emptyList());
-                } else if (inputFile.endsWith(CSV_FILE_EXT)) {
-
-                    String tableName = execCmd.getTableName();
-                    if (tableName == null) {
-                        tableName = SchemaUtil.normalizeIdentifier(
-                                inputFile.substring(inputFile.lastIndexOf(File.separatorChar) + 1,
-                                        inputFile.length() - CSV_FILE_EXT.length()));
+            if (execCmd.isUpgrade()) {
+                if (execCmd.getInputFiles().isEmpty()) {
+                    Set<String> tablesNeedingUpgrade = UpgradeUtil.getPhysicalTablesWithDescVarLengthRowKey(conn);
+                    if (tablesNeedingUpgrade.isEmpty()) {
+                        String msg = "No tables are required to be upgraded due to incorrect row key order for descending, variable length columsn (PHOENIX-2067)";
+                        System.out.println(msg);
+                    } else {
+                        String msg = "The following tables require upgrade due to a bug causing the row key to be incorrect for descending columns (PHOENIX-2067):\n" + Joiner.on(' ').join(tablesNeedingUpgrade);
+                        System.out.println("WARNING: " + msg);
                     }
-                    CSVCommonsLoader csvLoader =
-                            new CSVCommonsLoader(conn, tableName, execCmd.getColumns(),
-                                    execCmd.isStrict(), execCmd.getFieldDelimiter(),
-                                    execCmd.getQuoteCharacter(), execCmd.getEscapeCharacter(),
-                                    execCmd.getArrayElementSeparator());
-                    csvLoader.upsert(inputFile);
+                } else {
+                    UpgradeUtil.upgradeDescVarLengthRowKeys(conn, execCmd.getInputFiles());
+                }
+            } else {
+                for (String inputFile : execCmd.getInputFiles()) {
+                    if (inputFile.endsWith(SQL_FILE_EXT)) {
+                        PhoenixRuntime.executeStatements(conn,
+                                new FileReader(inputFile), Collections.emptyList());
+                    } else if (inputFile.endsWith(CSV_FILE_EXT)) {
+    
+                        String tableName = execCmd.getTableName();
+                        if (tableName == null) {
+                            tableName = SchemaUtil.normalizeIdentifier(
+                                    inputFile.substring(inputFile.lastIndexOf(File.separatorChar) + 1,
+                                            inputFile.length() - CSV_FILE_EXT.length()));
+                        }
+                        CSVCommonsLoader csvLoader =
+                                new CSVCommonsLoader(conn, tableName, execCmd.getColumns(),
+                                        execCmd.isStrict(), execCmd.getFieldDelimiter(),
+                                        execCmd.getQuoteCharacter(), execCmd.getEscapeCharacter(),
+                                        execCmd.getArrayElementSeparator());
+                        csvLoader.upsert(inputFile);
+                    }
                 }
             }
         } catch (Throwable t) {
@@ -459,6 +479,7 @@ public class PhoenixRuntime {
         private String arrayElementSeparator;
         private boolean strict;
         private List<String> inputFiles;
+        private boolean isUpgrade;
 
         /**
          * Factory method to build up an {@code ExecutionCommand} based on supplied parameters.
@@ -483,6 +504,11 @@ public class PhoenixRuntime {
                             "character");
             Option arrayValueSeparatorOption = new Option("a", "array-separator", true,
                     "Define the array element separator, defaults to ':'");
+            Option upgradeOption = new Option("u", "upgrade", false, "Upgrades tables specified as arguments " +
+                    "by rewriting them with the correct row key for descending columns. If no arguments are " +
+                    "specified, then tables that need to be upgraded will be displayed. " +
+                    "Note that " + QueryServices.THREAD_TIMEOUT_MS_ATTRIB + " and hbase.regionserver.lease.period " +
+                    "parameters must be set very high to prevent timeouts when upgrading.");
             Options options = new Options();
             options.addOption(tableOption);
             options.addOption(headerOption);
@@ -491,6 +517,7 @@ public class PhoenixRuntime {
             options.addOption(quoteCharacterOption);
             options.addOption(escapeCharacterOption);
             options.addOption(arrayValueSeparatorOption);
+            options.addOption(upgradeOption);
 
             CommandLineParser parser = new PosixParser();
             CommandLine cmdLine = null;
@@ -530,6 +557,10 @@ public class PhoenixRuntime {
             execCmd.arrayElementSeparator = cmdLine.getOptionValue(
                     arrayValueSeparatorOption.getOpt(),
                     CSVCommonsLoader.DEFAULT_ARRAY_ELEMENT_SEPARATOR);
+            
+            if (cmdLine.hasOption(upgradeOption.getOpt())) {
+                execCmd.isUpgrade = true;
+            }
 
 
             List<String> argList = Lists.newArrayList(cmdLine.getArgList());
@@ -539,20 +570,18 @@ public class PhoenixRuntime {
             execCmd.connectionString = argList.remove(0);
             List<String> inputFiles = Lists.newArrayList();
             for (String arg : argList) {
-                if (arg.endsWith(CSV_FILE_EXT) || arg.endsWith(SQL_FILE_EXT)) {
+                if (execCmd.isUpgrade || arg.endsWith(CSV_FILE_EXT) || arg.endsWith(SQL_FILE_EXT)) {
                     inputFiles.add(arg);
                 } else {
                     usageError("Don't know how to interpret argument '" + arg + "'", options);
                 }
             }
 
-            if (inputFiles.isEmpty()) {
+            if (inputFiles.isEmpty() && !execCmd.isUpgrade) {
                 usageError("At least one input file must be supplied", options);
             }
 
             execCmd.inputFiles = inputFiles;
-
-
 
             return execCmd;
         }
@@ -620,87 +649,12 @@ public class PhoenixRuntime {
         public boolean isStrict() {
             return strict;
         }
+
+        public boolean isUpgrade() {
+            return isUpgrade;
+        }
     }
     
-    /**
-     * Encode the primary key values from the table as a byte array. The values must
-     * be in the same order as the primary key constraint. If the connection and
-     * table are both tenant-specific, the tenant ID column must not be present in
-     * the values.
-     * @param conn an open connection
-     * @param fullTableName the full table name
-     * @param values the values of the primary key columns ordered in the same order
-     *  as the primary key constraint
-     * @return the encoded byte array
-     * @throws SQLException if the table cannot be found or the incorrect number of
-     *  of values are provided
-     * @see #decodePK(Connection, String, byte[]) to decode the byte[] back to the
-     *  values
-     */
-    @Deprecated
-    public static byte[] encodePK(Connection conn, String fullTableName, Object[] values) throws SQLException {
-        PTable table = getTable(conn, fullTableName);
-        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        int offset = (table.getBucketNum() == null ? 0 : 1) + (table.isMultiTenant() && pconn.getTenantId() != null ? 1 : 0);
-        List<PColumn> pkColumns = table.getPKColumns();
-        if (pkColumns.size() - offset != values.length) {
-            throw new SQLException("Expected " + (pkColumns.size() - offset) + " but got " + values.length);
-        }
-        PDataType type = null;
-        TrustedByteArrayOutputStream output = new TrustedByteArrayOutputStream(table.getRowKeySchema().getEstimatedValueLength());
-        try {
-            for (int i = offset; i < pkColumns.size(); i++) {
-                if (type != null && !type.isFixedWidth()) {
-                    output.write(QueryConstants.SEPARATOR_BYTE);
-                }
-                type = pkColumns.get(i).getDataType();
-
-                //for fixed width data types like CHAR and BINARY, we need to pad values to be of max length.
-                Object paddedObj = type.pad(values[i - offset], pkColumns.get(i).getMaxLength());
-                byte[] value = type.toBytes(paddedObj);
-                output.write(value);
-            }
-            return output.toByteArray();
-        } finally {
-            try {
-                output.close();
-            } catch (IOException e) {
-                throw new RuntimeException(e); // Impossible
-            }
-        }
-    }
-
-    /**
-     * Decode a byte array value back into the Object values of the
-     * primary key constraint. If the connection and table are both
-     * tenant-specific, the tenant ID column is not expected to have
-     * been encoded and will not appear in the returned values.
-     * @param conn an open connection
-     * @param name the full table name
-     * @param encodedValue the value that was encoded with {@link #encodePK(Connection, String, Object[])}
-     * @return the Object values encoded in the byte array value
-     * @throws SQLException
-     */
-    @Deprecated
-    public static Object[] decodePK(Connection conn, String name, byte[] value) throws SQLException {
-        PTable table = getTable(conn, name);
-        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        int offset = (table.getBucketNum() == null ? 0 : 1) + (table.isMultiTenant() && pconn.getTenantId() != null ? 1 : 0);
-        int nValues = table.getPKColumns().size() - offset;
-        RowKeySchema schema = table.getRowKeySchema();
-        Object[] values = new Object[nValues];
-        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-        schema.iterator(value, ptr);
-        int i = 0;
-        int fieldIdx = offset;
-        while (i < nValues && schema.next(ptr, fieldIdx, value.length) != null) {
-            values[i] = schema.getField(fieldIdx).getDataType().toObject(ptr);
-            i++;
-            fieldIdx++;
-        }
-        return values;
-    }
-
     /**
      * Returns the opitmized query plan used by phoenix for executing the sql.
      * @param stmt to return the plan for

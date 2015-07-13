@@ -184,7 +184,7 @@ public class RowValueConstructorExpression extends BaseCompoundExpression {
                         } else {
                             output.write(tempPtr.get(), tempPtr.getOffset(), tempPtr.getLength());
                             if (!childType.isFixedWidth()) {
-                                output.write(QueryConstants.SEPARATOR_BYTE);
+                                output.write(SchemaUtil.getSeparatorByte(true, false, child));
                             }
                             if (previousCarryOver) {
                                 previousCarryOver = !ByteUtil.previousKey(output.getBuffer(), output.size());
@@ -193,8 +193,12 @@ public class RowValueConstructorExpression extends BaseCompoundExpression {
                     }
                     int outputSize = output.size();
                     byte[] outputBytes = output.getBuffer();
+                    // Don't remove trailing separator byte unless it's the one for ASC
+                    // as otherwise we need it to ensure sort order is correct
                     for (int k = expressionCount -1 ; 
-                            k >=0 &&  getChildren().get(k).getDataType() != null && !getChildren().get(k).getDataType().isFixedWidth() && outputBytes[outputSize-1] == QueryConstants.SEPARATOR_BYTE ; k--) {
+                            k >=0 &&  getChildren().get(k).getDataType() != null 
+                                  && !getChildren().get(k).getDataType().isFixedWidth() 
+                                  && outputBytes[outputSize-1] == QueryConstants.SEPARATOR_BYTE ; k--) {
                         outputSize--;
                     }
                     ptr.set(outputBytes, 0, outputSize);

@@ -162,6 +162,7 @@ import org.apache.phoenix.util.UpgradeUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Throwables;
 import com.google.common.cache.Cache;
@@ -1831,7 +1832,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
      * This closes the passed connection.
      */
     private PhoenixConnection addColumn(PhoenixConnection oldMetaConnection, String tableName, long timestamp, String columns, boolean addIfNotExists) throws SQLException {
-        Properties props = new Properties(oldMetaConnection.getClientInfo());
+        Properties props = PropertiesUtil.deepCopy(oldMetaConnection.getClientInfo());
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(timestamp));
         // Cannot go through DriverManager or you end up in an infinite loop because it'll call init again
         PhoenixConnection metaConnection = new PhoenixConnection(this, oldMetaConnection.getURL(), props, oldMetaConnection.getMetaDataCache());
@@ -1969,6 +1970,20 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                          * the server side upgrade has finished or is in progress.
                                          */
                                         logger.debug("No need to run 4.5 upgrade");
+                                    }
+                                    Properties props = PropertiesUtil.deepCopy(metaConnection.getClientInfo());
+                                    props.remove(PhoenixRuntime.CURRENT_SCN_ATTRIB);
+                                    props.remove(PhoenixRuntime.TENANT_ID_ATTRIB);
+                                    PhoenixConnection conn = new PhoenixConnection(ConnectionQueryServicesImpl.this, metaConnection.getURL(), props, metaConnection.getMetaDataCache());
+                                    try {
+                                        Set<String> tablesNeedingUpgrade = UpgradeUtil.getPhysicalTablesWithDescVarLengthRowKey(conn);
+                                        if (!tablesNeedingUpgrade.isEmpty()) {
+                                            logger.warn("The following tables require upgrade due to a bug causing the row key to be incorrect for descending columns (PHOENIX-2067):\n" + Joiner.on(' ').join(tablesNeedingUpgrade));
+                                        }
+                                    } catch (Exception ex) {
+                                        logger.error("Unable to determine tables requiring upgrade due to PHOENIX-2067", ex);
+                                    } finally {
+                                        conn.close();
                                     }
                                 }
                             }
