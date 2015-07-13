@@ -1558,6 +1558,31 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     }
     
     @Test 
+    public void testDescVarbinaryNotSupported() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        try {
+            conn.createStatement().execute("CREATE TABLE t (k VARBINARY PRIMARY KEY DESC)");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.DESC_VARBINARY_NOT_SUPPORTED.getErrorCode(), e.getErrorCode());
+        }
+        try {
+            conn.createStatement().execute("CREATE TABLE t (k1 VARCHAR NOT NULL, k2 VARBINARY, CONSTRAINT pk PRIMARY KEY (k1,k2 DESC))");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.DESC_VARBINARY_NOT_SUPPORTED.getErrorCode(), e.getErrorCode());
+        }
+        try {
+            conn.createStatement().execute("CREATE TABLE t (k1 VARCHAR PRIMARY KEY)");
+            conn.createStatement().execute("ALTER TABLE t ADD k2 VARBINARY PRIMARY KEY DESC");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.DESC_VARBINARY_NOT_SUPPORTED.getErrorCode(), e.getErrorCode());
+        }
+        conn.close();
+    }
+    
+    @Test 
     public void testDivideByZeroExpressionIndex() throws Exception {
         String ddl = "CREATE TABLE t (k1 INTEGER PRIMARY KEY)";
         Connection conn = DriverManager.getConnection(getUrl());
@@ -1705,9 +1730,10 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     @Test
     public void testOrderByOrderPreservingFwd() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        conn.createStatement().execute("CREATE TABLE t (k1 date not null, k2 date not null, k3 date not null, v varchar, constraint pk primary key(k1,k2,k3))");
+        conn.createStatement().execute("CREATE TABLE t (k1 date not null, k2 date not null, k3 varchar, v varchar, constraint pk primary key(k1,k2,k3))");
         String[] queries = {
                 "SELECT * FROM T ORDER BY (k1,k2), k3",
+                "SELECT * FROM T ORDER BY k1,k2,k3 NULLS FIRST",
                 "SELECT * FROM T ORDER BY k1,k2,k3",
                 "SELECT * FROM T ORDER BY k1,k2",
                 "SELECT * FROM T ORDER BY k1",
@@ -1727,8 +1753,9 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     @Test
     public void testOrderByOrderPreservingRev() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        conn.createStatement().execute("CREATE TABLE t (k1 date not null, k2 date not null, k3 date not null, v varchar, constraint pk primary key(k1,k2 DESC,k3))");
+        conn.createStatement().execute("CREATE TABLE t (k1 date not null, k2 date not null, k3 varchar, v varchar, constraint pk primary key(k1,k2 DESC,k3 DESC))");
         String[] queries = {
+                "SELECT * FROM T ORDER BY INVERT(k1),k2,k3 nulls last",
                 "SELECT * FROM T ORDER BY INVERT(k1),k2",
                 "SELECT * FROM T ORDER BY INVERT(k1)",
                  "SELECT * FROM T ORDER BY TRUNC(k1, 'DAY') DESC, CEIL(k2, 'HOUR') DESC",
@@ -1745,8 +1772,10 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     @Test
     public void testNotOrderByOrderPreserving() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        conn.createStatement().execute("CREATE TABLE t (k1 date not null, k2 date not null, k3 date not null, v varchar, constraint pk primary key(k1,k2,k3))");
+        conn.createStatement().execute("CREATE TABLE t (k1 date not null, k2 varchar, k3 varchar, v varchar, constraint pk primary key(k1,k2,k3 desc))");
         String[] queries = {
+                "SELECT * FROM T ORDER BY k1,k2 NULLS LAST",
+                "SELECT * FROM T ORDER BY k1,k2, k3 NULLS LAST",
                 "SELECT * FROM T ORDER BY k1,k3",
                 "SELECT * FROM T ORDER BY SUBSTR(TO_CHAR(k1),1,4)",
                 "SELECT * FROM T ORDER BY k2",

@@ -26,6 +26,7 @@ import java.io.IOException;
 
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableUtils;
+import org.apache.phoenix.schema.SortOrder;
 
 /**
  * A container for a column that appears in ORDER BY clause.
@@ -83,7 +84,17 @@ public class OrderByExpression implements Writable {
     
     @Override
     public String toString() {
-        return this.getExpression() + (isAscending ? "" : " DESC") + (isNullsLast ? " NULLS LAST" : "");
+        Expression e = this.getExpression();
+        boolean isNullsLast = this.isNullsLast;
+        boolean isAscending = this.isAscending;
+        // Flip back here based on sort order, as the compiler
+        // flips this, but we want to display the original back
+        // to the user.
+        if (e.getSortOrder() == SortOrder.DESC) {
+            isAscending = !isAscending;
+            isNullsLast = !isNullsLast;
+        }
+        return e + (isAscending ? "" : " DESC") + (isNullsLast ? " NULLS LAST" : "");
     }
     
     @Override

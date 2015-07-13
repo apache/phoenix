@@ -1980,4 +1980,63 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         assertEquals(arr, rs.getArray(1));
         rs.next();
     }
+    
+    @Test
+    public void testPKWithDescArray() throws Exception {
+        Connection conn;
+        PreparedStatement stmt;
+        ResultSet rs;
+        long ts = nextTimestamp();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement()
+                .execute(
+                        "CREATE TABLE t ( a VARCHAR ARRAY PRIMARY KEY DESC)\n");
+        conn.close();
+        
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
+        conn = DriverManager.getConnection(getUrl(), props);
+        stmt = conn.prepareStatement("UPSERT INTO t VALUES(?)");
+        Array a1 = conn.createArrayOf("VARCHAR", new String[] { "a", "ba" });
+        stmt.setArray(1, a1);
+        stmt.execute();
+        Array a2 = conn.createArrayOf("VARCHAR", new String[] { "a", "c" });
+        stmt.setArray(1, a2);
+        stmt.execute();
+        conn.commit();
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
+        conn = DriverManager.getConnection(getUrl(), props);
+        rs = conn.createStatement().executeQuery("SELECT a FROM t ORDER BY a DESC");
+        assertTrue(rs.next());
+        assertEquals(a2, rs.getArray(1));
+        assertTrue(rs.next());
+        assertEquals(a1, rs.getArray(1));
+        assertFalse(rs.next());
+        conn.close();
+        
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 50));
+        conn = DriverManager.getConnection(getUrl(), props);
+        stmt = conn.prepareStatement("UPSERT INTO t VALUES(?)");
+        Array a3 = conn.createArrayOf("VARCHAR", new String[] { "a", "b" });
+        stmt.setArray(1, a3);
+        stmt.execute();
+        conn.commit();
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 60));
+        conn = DriverManager.getConnection(getUrl(), props);
+        rs = conn.createStatement().executeQuery("SELECT a FROM t ORDER BY a DESC");
+        assertTrue(rs.next());
+        assertEquals(a2, rs.getArray(1));
+        assertTrue(rs.next());
+        assertEquals(a1, rs.getArray(1));
+        assertTrue(rs.next());
+        assertEquals(a3, rs.getArray(1));
+        assertFalse(rs.next());
+        conn.close();
+    }
+    
 }

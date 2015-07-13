@@ -185,7 +185,7 @@ public class MetaDataUtil {
     }
     
     public static PTableType getTableType(List<Mutation> tableMetaData, KeyValueBuilder builder,
-      ImmutableBytesPtr value) {
+      ImmutableBytesWritable value) {
         if (getMutationValue(getPutOnlyTableHeaderRow(tableMetaData),
             PhoenixDatabaseMetaData.TABLE_TYPE_BYTES, builder, value)) {
             return PTableType.fromSerializedValue(value.get()[value.getOffset()]);

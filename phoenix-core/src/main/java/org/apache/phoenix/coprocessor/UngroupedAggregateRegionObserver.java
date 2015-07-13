@@ -28,6 +28,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -79,9 +80,12 @@ import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PRow;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
+import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.stats.StatisticsCollector;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
+import org.apache.phoenix.schema.types.PArrayDataType;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
@@ -126,14 +130,15 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
     }
 
     private static void commitBatch(HRegion region, List<Mutation> mutations, byte[] indexUUID) throws IOException {
-      if (indexUUID != null) {
-          for (Mutation m : mutations) {
-              m.setAttribute(PhoenixIndexCodec.INDEX_UUID, indexUUID);
-          }
-      }
-      Mutation[] mutationArray = new Mutation[mutations.size()];
-      // TODO: should we use the one that is all or none?
-      region.batchMutate(mutations.toArray(mutationArray));
+        if (indexUUID != null) {
+            for (Mutation m : mutations) {
+                m.setAttribute(PhoenixIndexCodec.INDEX_UUID, indexUUID);
+            }
+        }
+        Mutation[] mutationArray = new Mutation[mutations.size()];
+        // TODO: should we use the one that is all or none?
+        logger.warn("Committing bactch of " + mutations.size() + " mutations for " + region.getRegionInfo().getTable().getNameAsString());
+        region.batchMutate(mutations.toArray(mutationArray));
     }
 
     public static void serializeIntoScan(Scan scan) {
@@ -157,7 +162,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
     
     @Override
     protected RegionScanner doPostScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c, final Scan scan, final RegionScanner s) throws IOException {
-        int offset = 0;
         HRegion region = c.getEnvironment().getRegion();
         long ts = scan.getTimeRange().getMax();
         StatisticsCollector stats = null;
@@ -167,15 +171,33 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
             // Let this throw, as this scan is being done for the sole purpose of collecting stats
             stats = new StatisticsCollector(c.getEnvironment(), region.getRegionInfo().getTable().getNameAsString(), ts, gp_width_bytes, gp_per_region_bytes);
         }
+        int offsetToBe = 0;
         if (ScanUtil.isLocalIndex(scan)) {
             /*
              * For local indexes, we need to set an offset on row key expressions to skip
              * the region start key.
              */
-            offset = region.getStartKey().length != 0 ? region.getStartKey().length:region.getEndKey().length;
-            ScanUtil.setRowKeyOffset(scan, offset);
+            offsetToBe = region.getRegionInfo().getStartKey().length != 0 ? region.getRegionInfo().getStartKey().length :
+                region.getRegionInfo().getEndKey().length;
+            ScanUtil.setRowKeyOffset(scan, offsetToBe);
         }
+        final int offset = offsetToBe;
 
+        PTable projectedTable = null;
+        PTable writeToTable = null;
+        byte[][] values = null;
+        byte[] descRowKeyTableBytes = scan.getAttribute(UPGRADE_DESC_ROW_KEY);
+        boolean isDescRowKeyOrderUpgrade = descRowKeyTableBytes != null;
+        if (isDescRowKeyOrderUpgrade) {
+            logger.warn("Upgrading row key for " + region.getRegionInfo().getTable().getNameAsString());
+            projectedTable = deserializeTable(descRowKeyTableBytes);
+            try {
+                writeToTable = PTableImpl.makePTable(projectedTable, true);
+            } catch (SQLException e) {
+                ServerUtil.throwIOException("Upgrade failed", e); // Impossible
+            }
+            values = new byte[projectedTable.getPKColumns().size()][];
+        }
         byte[] localIndexBytes = scan.getAttribute(LOCAL_INDEX_BUILD);
         List<IndexMaintainer> indexMaintainers = localIndexBytes == null ? null : IndexMaintainer.deserialize(localIndexBytes);
         List<Mutation> indexMutations = localIndexBytes == null ? Collections.<Mutation>emptyList() : Lists.<Mutation>newArrayListWithExpectedSize(1024);
@@ -183,22 +205,19 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
         RegionScanner theScanner = s;
         
         byte[] indexUUID = scan.getAttribute(PhoenixIndexCodec.INDEX_UUID);
-        PTable projectedTable = null;
         List<Expression> selectExpressions = null;
         byte[] upsertSelectTable = scan.getAttribute(BaseScannerRegionObserver.UPSERT_SELECT_TABLE);
         boolean isUpsert = false;
         boolean isDelete = false;
         byte[] deleteCQ = null;
         byte[] deleteCF = null;
-        byte[][] values = null;
         byte[] emptyCF = null;
-        ImmutableBytesWritable ptr = null;
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         if (upsertSelectTable != null) {
             isUpsert = true;
             projectedTable = deserializeTable(upsertSelectTable);
             selectExpressions = deserializeExpressions(scan.getAttribute(BaseScannerRegionObserver.UPSERT_SELECT_EXPRS));
             values = new byte[projectedTable.getPKColumns().size()][];
-            ptr = new ImmutableBytesWritable();
         } else {
             byte[] isDeleteAgg = scan.getAttribute(BaseScannerRegionObserver.DELETE_AGG);
             isDelete = isDeleteAgg != null && Bytes.compareTo(PDataType.TRUE_BYTES, isDeleteAgg) == 0;
@@ -208,9 +227,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
             }
             emptyCF = scan.getAttribute(BaseScannerRegionObserver.EMPTY_CF);
         }
-        if(localIndexBytes != null) {
-            ptr = new ImmutableBytesWritable();
-        }
         TupleProjector tupleProjector = null;
         HRegion dataRegion = null;
         byte[][] viewConstants = null;
@@ -218,7 +234,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
         boolean localIndexScan = ScanUtil.isLocalIndex(scan);
         final TupleProjector p = TupleProjector.deserializeProjectorFromScan(scan);
         final HashJoinInfo j = HashJoinInfo.deserializeHashJoinFromScan(scan);
-        if ((localIndexScan && !isDelete) || (j == null && p != null)) {
+        if ((localIndexScan && !isDelete && !isDescRowKeyOrderUpgrade) || (j == null && p != null)) {
             if (dataColumns != null) {
                 tupleProjector = IndexUtil.getTupleProjector(scan, dataColumns);
                 dataRegion = IndexUtil.getDataRegion(c.getEnvironment());
@@ -237,7 +253,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
         int batchSize = 0;
         List<Mutation> mutations = Collections.emptyList();
         boolean buildLocalIndex = indexMaintainers != null && dataColumns==null && !localIndexScan;
-        if (isDelete || isUpsert || (deleteCQ != null && deleteCF != null) || emptyCF != null || buildLocalIndex) {
+        if (isDescRowKeyOrderUpgrade || isDelete || isUpsert || (deleteCQ != null && deleteCF != null) || emptyCF != null || buildLocalIndex) {
             // TODO: size better
             mutations = Lists.newArrayListWithExpectedSize(1024);
             batchSize = c.getEnvironment().getConfiguration().getInt(MUTATE_BATCH_SIZE_ATTRIB, QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE);
@@ -269,7 +285,72 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
                         rowCount++;
                         result.setKeyValues(results);
                         try {
-                            if (buildLocalIndex) {
+                            if (isDescRowKeyOrderUpgrade) {
+                                Arrays.fill(values, null);
+                                Cell firstKV = results.get(0);
+                                RowKeySchema schema = projectedTable.getRowKeySchema();
+                                int maxOffset = schema.iterator(firstKV.getRowArray(), firstKV.getRowOffset() + offset, firstKV.getRowLength(), ptr);
+                                for (int i = 0; i < schema.getFieldCount(); i++) {
+                                    Boolean hasValue = schema.next(ptr, i, maxOffset);
+                                    if (hasValue == null) {
+                                        break;
+                                    }
+                                    Field field = schema.getField(i);
+                                    // Special case for re-writing DESC ARRAY, as the actual byte value needs to change in this case
+                                    if (field.getDataType().isArrayType() && field.getSortOrder() == SortOrder.DESC && !PArrayDataType.arrayBaseType(field.getDataType()).isFixedWidth()) {
+                                        field.getDataType().coerceBytes(ptr, null, field.getDataType(),
+                                                field.getMaxLength(), field.getScale(), field.getSortOrder(), 
+                                                field.getMaxLength(), field.getScale(), field.getSortOrder(), true); // force to use correct separator byte
+                                    }
+                                    values[i] = ptr.copyBytes();
+                                }
+                                writeToTable.newKey(ptr, values);
+                                if (Bytes.compareTo(
+                                        firstKV.getRowArray(), firstKV.getRowOffset() + offset, firstKV.getRowLength(), 
+                                        ptr.get(),ptr.getOffset() + offset,ptr.getLength()) == 0) {
+                                    continue;
+                                }
+                                byte[] newRow = ByteUtil.copyKeyBytesIfNecessary(ptr);
+                                if (offset > 0) { // for local indexes (prepend region start key)
+                                    byte[] newRowWithOffset = new byte[offset + newRow.length];
+                                    System.arraycopy(firstKV.getRowArray(), firstKV.getRowOffset(), newRowWithOffset, 0, offset);;
+                                    System.arraycopy(newRow, 0, newRowWithOffset, offset, newRow.length);
+                                    newRow = newRowWithOffset;
+                                }
+                                byte[] oldRow = Bytes.copy(firstKV.getRowArray(), firstKV.getRowOffset(), firstKV.getRowLength());
+                                for (Cell cell : results) {
+                                    // Copy existing cell but with new row key
+                                    Cell newCell = new KeyValue(newRow, 0, newRow.length,
+                                            cell.getFamilyArray(), cell.getFamilyOffset(), cell.getFamilyLength(),
+                                            cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength(),
+                                            cell.getTimestamp(), KeyValue.Type.codeToType(cell.getTypeByte()),
+                                            cell.getValueArray(), cell.getValueOffset(), cell.getValueLength());
+                                    switch (KeyValue.Type.codeToType(cell.getTypeByte())) {
+                                    case Put:
+                                        // If Put, point delete old Put
+                                        Delete del = new Delete(oldRow);
+                                        del.addDeleteMarker(new KeyValue(cell.getRowArray(), cell.getRowOffset(), cell.getRowLength(),
+                                                cell.getFamilyArray(), cell.getFamilyOffset(), cell.getFamilyLength(),
+                                                cell.getQualifierArray(), cell.getQualifierOffset(),
+                                                cell.getQualifierLength(), cell.getTimestamp(), KeyValue.Type.Delete,
+                                                ByteUtil.EMPTY_BYTE_ARRAY, 0, 0));
+                                        mutations.add(del);
+                                        
+                                        Put put = new Put(newRow);
+                                        put.add(newCell);
+                                        mutations.add(put);
+                                        break;
+                                    case Delete:
+                                    case DeleteColumn:
+                                    case DeleteFamily:
+                                    case DeleteFamilyVersion:
+                                        Delete delete = new Delete(newRow);
+                                        delete.addDeleteMarker(newCell);
+                                        mutations.add(delete);
+                                        break;
+                                    }
+                                }
+                            } else if (buildLocalIndex) {
                                 for (IndexMaintainer maintainer : indexMaintainers) {
                                     if (!results.isEmpty()) {
                                         result.getKey(ptr);
@@ -332,7 +413,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
                                             expression.getDataType(), expression.getMaxLength(),
                                             expression.getScale(), expression.getSortOrder(), 
                                             column.getMaxLength(), column.getScale(),
-                                            column.getSortOrder());
+                                            column.getSortOrder(), projectedTable.rowKeyOrderOptimizable());
                                         byte[] bytes = ByteUtil.copyKeyBytesIfNecessary(ptr);
                                         row.setValue(column, bytes);
                                     }

@@ -60,10 +60,10 @@ public class StatisticsUtil {
         int offset = 0;
         System.arraycopy(table, 0, rowKey, offset, table.length);
         offset += table.length;
-        rowKey[offset++] = QueryConstants.SEPARATOR_BYTE;
+        rowKey[offset++] = QueryConstants.SEPARATOR_BYTE; // assumes stats table columns not DESC
         System.arraycopy(fam.get(), fam.getOffset(), rowKey, offset, fam.getLength());
         offset += fam.getLength();
-        rowKey[offset++] = QueryConstants.SEPARATOR_BYTE;
+        rowKey[offset++] = QueryConstants.SEPARATOR_BYTE; // assumes stats table columns not DESC
         System.arraycopy(region, 0, rowKey, offset, region.length);
         return rowKey;
     }

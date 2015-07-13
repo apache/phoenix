@@ -50,6 +50,7 @@ public class ArrayConcatFunction extends ArrayModifierFunction {
         if (!getLHSExpr().evaluate(tuple, ptr)|| ptr.getLength() == 0){
             return false;
         }
+        boolean isLHSRowKeyOrderOptimized = PArrayDataType.isRowKeyOrderOptimized(getLHSExpr().getDataType(), getLHSExpr().getSortOrder(), ptr);
 
         int actualLengthOfArray1 = Math.abs(PArrayDataType.getArrayLength(ptr, getLHSBaseType(), getLHSExpr().getMaxLength()));
         int lengthArray1 = ptr.getLength();
@@ -62,8 +63,13 @@ public class ArrayConcatFunction extends ArrayModifierFunction {
 
         checkSizeCompatibility(ptr, getLHSExpr(), getLHSExpr().getDataType(), getRHSExpr(),getRHSExpr().getDataType());
 
-        // Coerce array2 to array1 type
-        coerceBytes(ptr, getLHSExpr(), getLHSExpr().getDataType(), getRHSExpr(),getRHSExpr().getDataType());
+        // FIXME: calling version of coerceBytes that takes into account the separator used by LHS
+        // If the RHS does not have the same separator, it'll be coerced to use it. It's unclear
+        // if we should do the same for all classes derived from the base class.
+        // Coerce RHS to LHS type
+        getLHSExpr().getDataType().coerceBytes(ptr, null, getRHSExpr().getDataType(), getRHSExpr().getMaxLength(),
+                getRHSExpr().getScale(), getRHSExpr().getSortOrder(), getLHSExpr().getMaxLength(),
+                getLHSExpr().getScale(), getLHSExpr().getSortOrder(), isLHSRowKeyOrderOptimized);
         return modifierFunction(ptr, lengthArray1, offsetArray1, array1Bytes, getLHSBaseType(), actualLengthOfArray1, getMaxLength(), getLHSExpr());
     }
 
@@ -72,6 +78,7 @@ public class ArrayConcatFunction extends ArrayModifierFunction {
                                        byte[] array1Bytes, PDataType baseDataType, int actualLengthOfArray1, Integer maxLength,
                                        Expression array1Exp) {
         int actualLengthOfArray2 = Math.abs(PArrayDataType.getArrayLength(ptr, baseDataType, array1Exp.getMaxLength()));
+        // FIXME: concatArrays will be fine if it's copying the separator bytes, including the terminating bytes.
         return PArrayDataType.concatArrays(ptr, len, offset, array1Bytes, baseDataType, actualLengthOfArray1, actualLengthOfArray2);
     }
 

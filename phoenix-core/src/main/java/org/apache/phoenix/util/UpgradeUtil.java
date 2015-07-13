@@ -35,19 +35,25 @@ import static org.apache.phoenix.query.QueryConstants.BASE_TABLE_BASE_COLUMN_COU
 import static org.apache.phoenix.query.QueryConstants.DIVERGED_VIEW_BASE_COLUMN_COUNT;
 
 import java.io.IOException;
+import java.sql.Connection;
+import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Properties;
+import java.util.Set;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 import org.apache.hadoop.hbase.HColumnDescriptor;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.TableName;
@@ -60,6 +66,7 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.coprocessor.MetaDataEndpointImpl;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -67,15 +74,24 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTable.LinkType;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SaltingUtil;
+import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.types.PBoolean;
+import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.schema.types.PDecimalArray;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.schema.types.PVarcharArray;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Objects;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 
 public class UpgradeUtil {
     private static final Logger logger = LoggerFactory.getLogger(UpgradeUtil.class);
@@ -808,4 +824,289 @@ public class UpgradeUtil {
         }
     }
 
+    private static String getTableRVC(List<String> tableNames) {
+        StringBuilder query = new StringBuilder("(");
+        for (int i = 0; i < tableNames.size(); i+=3) {
+            String tenantId = tableNames.get(i);
+            String schemaName = tableNames.get(i+1);
+            String tableName = tableNames.get(i+2);
+            query.append('(');
+            query.append(tenantId == null ? "null" : ("'" + tenantId + "'"));
+            query.append(',');
+            query.append(schemaName == null ? "null" : ("'" + schemaName + "'"));
+            query.append(',');
+            query.append("'" + tableName + "'");
+            query.append("),");
+        }
+        // Replace trailing , with ) to end IN expression
+        query.setCharAt(query.length()-1, ')');
+        return query.toString();
+    }
+    
+    private static List<String> addPhysicalTables(PhoenixConnection conn, ResultSet rs, PTableType otherType, Set<String> physicalTables) throws SQLException {
+        List<String> tableNames = Lists.newArrayListWithExpectedSize(1024);
+        while (rs.next()) {
+            tableNames.add(rs.getString(1));
+            tableNames.add(rs.getString(2));
+            tableNames.add(rs.getString(3));
+        }
+        if (tableNames.isEmpty()) {
+            return Collections.emptyList();
+        }
+        
+        List<String> otherTables = Lists.newArrayListWithExpectedSize(tableNames.size());
+        // Find the header rows for tables that have not been upgraded already.
+        // We don't care about views, as the row key cannot be different than the table.
+        // We need this query to find physical tables which won't have a link row.
+        String query = "SELECT TENANT_ID,TABLE_SCHEM,TABLE_NAME,TABLE_TYPE\n" + 
+                "FROM SYSTEM.CATALOG (ROW_KEY_ORDER_OPTIMIZABLE BOOLEAN)\n" + 
+                "WHERE COLUMN_NAME IS NULL\n" + 
+                "AND COLUMN_FAMILY IS NULL\n" + 
+                "AND ROW_KEY_ORDER_OPTIMIZABLE IS NULL\n" +
+                "AND TABLE_TYPE IN ('" + PTableType.TABLE.getSerializedValue() + "','" + otherType.getSerializedValue() + "')\n" +
+                "AND (TENANT_ID, TABLE_SCHEM, TABLE_NAME) IN " + getTableRVC(tableNames);
+        rs = conn.createStatement().executeQuery(query);
+        
+        while (rs.next()) {
+            if (PTableType.TABLE.getSerializedValue().equals(rs.getString(4))) {
+                physicalTables.add(SchemaUtil.getTableName(rs.getString(2), rs.getString(3)));
+            } else {
+                otherTables.add(rs.getString(1));
+                otherTables.add(rs.getString(2));
+                otherTables.add(rs.getString(3));
+            }
+        }
+        return otherTables;
+    }
+    /**
+     * Identify the tables that need to be upgraded due to PHOENIX-2067
+     */
+    public static Set<String> getPhysicalTablesWithDescVarLengthRowKey(PhoenixConnection conn) throws SQLException {
+        // First query finds column rows of tables that need to be upgraded.
+        // We cannot tell if the column is from a table, view, or index however.
+        ResultSet rs = conn.createStatement().executeQuery(
+                "SELECT TENANT_ID,TABLE_SCHEM,TABLE_NAME\n" + 
+                "FROM SYSTEM.CATALOG cat1\n" + 
+                "WHERE COLUMN_NAME IS NOT NULL\n" + 
+                "AND COLUMN_FAMILY IS NULL\n" + 
+                "AND SORT_ORDER = " + SortOrder.DESC.getSystemValue() + "\n" + 
+                "AND DATA_TYPE IN (" + PVarchar.INSTANCE.getSqlType() + "," + PDecimal.INSTANCE.getSqlType() + "," + PVarcharArray.INSTANCE.getSqlType() + "," + PDecimalArray.INSTANCE.getSqlType() + ")\n" +
+                "GROUP BY TENANT_ID,TABLE_SCHEM,TABLE_NAME");
+        Set<String> physicalTables = Sets.newHashSetWithExpectedSize(1024);
+        List<String> remainingTableNames = addPhysicalTables(conn, rs, PTableType.INDEX, physicalTables);
+        if (!remainingTableNames.isEmpty()) {
+            // Find tables/views for index
+            String indexLinkQuery = "SELECT TENANT_ID,TABLE_SCHEM,TABLE_NAME\n" + 
+                    "FROM SYSTEM.CATALOG\n" + 
+                    "WHERE COLUMN_NAME IS NULL\n" + 
+                    "AND (TENANT_ID, TABLE_SCHEM, COLUMN_FAMILY) IN " + getTableRVC(remainingTableNames) + "\n" +
+                    "AND LINK_TYPE = " + LinkType.INDEX_TABLE.getSerializedValue();
+             rs = conn.createStatement().executeQuery(indexLinkQuery);
+             remainingTableNames = addPhysicalTables(conn, rs, PTableType.VIEW, physicalTables);
+             if (!remainingTableNames.isEmpty()) {
+                 // Find physical table name from views, splitting on '.' to get schema name and table name
+                 String physicalLinkQuery = "SELECT null, " + 
+                 " CASE WHEN INSTR(COLUMN_FAMILY,'.') = 0 THEN NULL ELSE SUBSTR(COLUMN_FAMILY,1,INSTR(COLUMN_FAMILY,'.')) END,\n" + 
+                 " CASE WHEN INSTR(COLUMN_FAMILY,'.') = 0 THEN COLUMN_FAMILY ELSE SUBSTR(COLUMN_FAMILY,INSTR(COLUMN_FAMILY,'.')+1) END\n" + 
+                         "FROM SYSTEM.CATALOG\n" + 
+                         "WHERE COLUMN_NAME IS NULL\n" + 
+                         "AND COLUMN_FAMILY IS NOT NULL\n" + 
+                         "AND (TENANT_ID, TABLE_SCHEM, TABLE_NAME) IN " + getTableRVC(remainingTableNames) + "\n" +
+                         "AND LINK_TYPE = " + LinkType.PHYSICAL_TABLE.getSerializedValue();
+                 rs = conn.createStatement().executeQuery(physicalLinkQuery);
+                 // Add any tables (which will all be physical tables) which have not already been upgraded.
+                 addPhysicalTables(conn, rs, PTableType.TABLE, physicalTables);
+             }
+        }
+        return physicalTables;
+    }
+
+    private static void upgradeDescVarLengthRowKeys(PhoenixConnection upgradeConn, PhoenixConnection globalConn, String schemaName, String tableName, boolean isTable) throws SQLException {
+        String escapedTableName = SchemaUtil.getEscapedTableName(schemaName, tableName);
+        String tenantInfo = "";
+        PName tenantId = PName.EMPTY_NAME;
+        if (upgradeConn.getTenantId() != null) {
+            tenantId = upgradeConn.getTenantId();
+            tenantInfo = " for tenant " + tenantId.getString();
+        }
+        String msg = "Starting upgrade of " + escapedTableName + tenantInfo + "...";
+        System.out.println(msg);
+        logger.info(msg);
+        ResultSet rs = upgradeConn.createStatement().executeQuery("SELECT /*+ NO_INDEX */ count(*) FROM " + escapedTableName);
+        rs.next(); // Run query
+        List<String> tableNames = Lists.newArrayListWithExpectedSize(1024);
+        tableNames.add(tenantId == PName.EMPTY_NAME ? null : tenantId.getString());
+        tableNames.add(schemaName);
+        tableNames.add(tableName);
+        // Find views to mark as upgraded
+        if (isTable) {
+            String physicalName = SchemaUtil.getTableName(schemaName, tableName);
+            String query =
+                    "SELECT TENANT_ID,TABLE_SCHEM,TABLE_NAME\n" + 
+                    "FROM SYSTEM.CATALOG\n" + 
+                    "WHERE COLUMN_NAME IS NULL\n" + 
+                    "AND COLUMN_FAMILY = '" + physicalName + "'" +
+                    "AND LINK_TYPE = " + LinkType.PHYSICAL_TABLE.getSerializedValue();
+            rs = globalConn.createStatement().executeQuery(query);
+            while (rs.next()) {
+                tableNames.add(rs.getString(1));
+                tableNames.add(rs.getString(2));
+                tableNames.add(rs.getString(3));
+            }
+        }
+        // Mark the table and views as upgraded now
+        for (int i = 0; i < tableNames.size(); i += 3) {
+            String theTenantId = tableNames.get(i);
+            String theSchemaName = tableNames.get(i+1);
+            String theTableName = tableNames.get(i+2);
+            globalConn.createStatement().execute("UPSERT INTO " + PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME + 
+                " (" + PhoenixDatabaseMetaData.TENANT_ID + "," +
+                       PhoenixDatabaseMetaData.TABLE_SCHEM + "," +
+                       PhoenixDatabaseMetaData.TABLE_NAME + "," +
+                       MetaDataEndpointImpl.ROW_KEY_ORDER_OPTIMIZABLE + " BOOLEAN"
+               + ") VALUES (" +
+                       "'" + (theTenantId == null ? StringUtil.EMPTY_STRING : theTenantId) + "'," +
+                       "'" + (theSchemaName == null ? StringUtil.EMPTY_STRING : theSchemaName) + "'," +
+                       "'" + theTableName + "'," +
+                       "TRUE)");
+        }
+        globalConn.commit();
+        for (int i = 0; i < tableNames.size(); i += 3) {
+            String theTenantId = tableNames.get(i);
+            String theSchemaName = tableNames.get(i+1);
+            String theTableName = tableNames.get(i+2);
+            globalConn.getQueryServices().clearTableFromCache(
+                    theTenantId == null ? ByteUtil.EMPTY_BYTE_ARRAY : Bytes.toBytes(theTenantId),
+                    theSchemaName == null ? ByteUtil.EMPTY_BYTE_ARRAY : Bytes.toBytes(schemaName),
+                    Bytes.toBytes(theTableName), HConstants.LATEST_TIMESTAMP);
+        }
+        msg = "Completed upgrade of " + escapedTableName + tenantInfo;
+        System.out.println(msg);
+        logger.info(msg);
+    }
+    
+    private static boolean isInvalidTableToUpgrade(PTable table) throws SQLException {
+        return (table.getType() != PTableType.TABLE || // Must be a table
+            table.getTenantId() != null || // Must be global
+            !table.getPhysicalName().equals(table.getName())); // Must be the physical table
+    }
+    /**
+     * Upgrade tables and their indexes due to a bug causing descending row keys to have a row key that
+     * prevents them from being sorted correctly (PHOENIX-2067).
+     */
+    public static void upgradeDescVarLengthRowKeys(PhoenixConnection conn, List<String> tablesToUpgrade) throws SQLException {
+        if (tablesToUpgrade.isEmpty()) {
+            return;
+        }
+        if (conn.getClientInfo(PhoenixRuntime.CURRENT_SCN_ATTRIB) != null) {
+            throw new SQLException("May not specify the CURRENT_SCN property when upgrading");
+        }
+        if (conn.getClientInfo(PhoenixRuntime.TENANT_ID_ATTRIB) != null) {
+            throw new SQLException("May not specify the TENANT_ID_ATTRIB property when upgrading");
+        }
+        List<PTable> tablesNeedingUpgrading = Lists.newArrayListWithExpectedSize(tablesToUpgrade.size());
+        List<String> invalidTables = Lists.newArrayListWithExpectedSize(tablesToUpgrade.size());
+        for (String fullTableName : tablesToUpgrade) {
+            PTable table = PhoenixRuntime.getTable(conn, fullTableName);
+            if (isInvalidTableToUpgrade(table)) {
+                invalidTables.add(fullTableName);
+            } else {
+                tablesNeedingUpgrading.add(table);
+            }
+        }
+        if (!invalidTables.isEmpty()) {
+            StringBuilder buf = new StringBuilder("Only physical tables should be upgraded as their views and indexes will be updated with them: ");
+            for (String fullTableName : invalidTables) {
+                buf.append(fullTableName);
+                buf.append(' ');
+            }
+            throw new SQLException(buf.toString());
+        }
+        PhoenixConnection upgradeConn = new PhoenixConnection(conn, true);
+        try {
+            upgradeConn.setAutoCommit(true);
+            for (PTable table : tablesNeedingUpgrading) {
+                boolean wasUpgraded = false;
+                if (!table.rowKeyOrderOptimizable()) {
+                    wasUpgraded = true;
+                    upgradeDescVarLengthRowKeys(upgradeConn, conn, table.getSchemaName().getString(), table.getTableName().getString(), true);
+                }
+                
+                // Upgrade global indexes
+                for (PTable index : table.getIndexes()) {
+                    if (!index.rowKeyOrderOptimizable() && index.getIndexType() != IndexType.LOCAL) {
+                        wasUpgraded = true;
+                        upgradeDescVarLengthRowKeys(upgradeConn, conn, index.getSchemaName().getString(), index.getTableName().getString(), false);
+                    }
+                }
+                
+                String sharedViewIndexName = Bytes.toString(MetaDataUtil.getViewIndexPhysicalName(table.getName().getBytes()));
+                // Upgrade view indexes
+                wasUpgraded |= upgradeSharedIndex(upgradeConn, conn, sharedViewIndexName);
+                String sharedLocalIndexName = Bytes.toString(MetaDataUtil.getLocalIndexPhysicalName(table.getName().getBytes()));
+                // Upgrade view indexes
+                wasUpgraded |= upgradeSharedIndex(upgradeConn, conn, sharedLocalIndexName);
+                
+                if (!wasUpgraded) {
+                    System.out.println("Upgrade not required for this table or its indexes: " + table.getName().getString());
+                }
+            }
+        } finally {
+            upgradeConn.close();
+        }
+    }
+    
+    /**
+     * Upgrade shared indexes by querying for all that are associated with our
+     * physical table.
+     * @return true if any upgrades were performed and false otherwise.
+     */
+    private static boolean upgradeSharedIndex(PhoenixConnection upgradeConn, PhoenixConnection globalConn, String physicalName) throws SQLException {
+        String query =
+                "SELECT TENANT_ID,TABLE_SCHEM,TABLE_NAME\n" + 
+                "FROM SYSTEM.CATALOG cat1\n" + 
+                "WHERE COLUMN_NAME IS NULL\n" + 
+                "AND COLUMN_FAMILY = '" + physicalName + "'\n" + 
+                "AND LINK_TYPE = " + LinkType.PHYSICAL_TABLE.getSerializedValue() + "\n" +
+                "ORDER BY TENANT_ID";
+        ResultSet rs = globalConn.createStatement().executeQuery(query);
+        String lastTenantId = null;
+        Connection conn = globalConn;
+        String url = globalConn.getURL();
+        boolean wasUpgraded = false;
+        while (rs.next()) {
+            String fullTableName = SchemaUtil.getTableName(
+                    rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM),
+                    rs.getString(PhoenixDatabaseMetaData.TABLE_NAME));
+            String tenantId = rs.getString(1);
+            if (tenantId != null && !tenantId.equals(lastTenantId))  {
+                if (lastTenantId != null) {
+                    conn.close();
+                }
+                // Open tenant-specific connection when we find a new one
+                Properties props = new Properties(globalConn.getClientInfo());
+                props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+                conn = DriverManager.getConnection(url, props);
+                lastTenantId = tenantId;
+            }
+            PTable table = PhoenixRuntime.getTable(conn, fullTableName);
+            String tableTenantId = table.getTenantId() == null ? null : table.getTenantId().getString();
+            if (Objects.equal(lastTenantId, tableTenantId) && !table.rowKeyOrderOptimizable()) {
+                upgradeDescVarLengthRowKeys(upgradeConn, globalConn, table.getSchemaName().getString(), table.getTableName().getString(), false);
+                wasUpgraded = true;
+            }
+        }
+        rs.close();
+        if (lastTenantId != null) {
+            conn.close();
+        }
+        return wasUpgraded;
+    }
+
+    public static void addRowKeyOrderOptimizableCell(List<Mutation> tableMetadata, byte[] tableHeaderRowKey, long clientTimeStamp) {
+        Put put = new Put(tableHeaderRowKey);
+        put.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                MetaDataEndpointImpl.ROW_KEY_ORDER_OPTIMIZABLE_BYTES, clientTimeStamp, PBoolean.INSTANCE.toBytes(true));
+        tableMetadata.add(put);
+    }
 }

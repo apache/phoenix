@@ -189,6 +189,7 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
+import org.apache.phoenix.util.UpgradeUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -702,8 +703,13 @@ public class MetaDataClient {
                     sortOrder = pkSortOrder.getSecond();
                 }
             }
-
             String columnName = columnDefName.getColumnName();
+            if (isPK && sortOrder == SortOrder.DESC && def.getDataType() == PVarbinary.INSTANCE) {
+                throw new SQLExceptionInfo.Builder(SQLExceptionCode.DESC_VARBINARY_NOT_SUPPORTED)
+                    .setColumnName(columnName)
+                    .build().buildException();
+            }
+
             PName familyName = null;
             if (def.isPK() && !pkConstraint.getColumnNames().isEmpty() ) {
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.PRIMARY_KEY_ALREADY_EXISTS)
@@ -1432,6 +1438,8 @@ public class MetaDataClient {
             String parentTableName = null;
             PName tenantId = connection.getTenantId();
             String tenantIdStr = tenantId == null ? null : connection.getTenantId().getString();
+            Long scn = connection.getSCN();
+            long clientTimeStamp = scn == null ? HConstants.LATEST_TIMESTAMP : scn;
             boolean multiTenant = false;
             boolean storeNulls = false;
             Integer saltBucketNum = null;
@@ -1439,6 +1447,7 @@ public class MetaDataClient {
             boolean isImmutableRows = false;
             List<PName> physicalNames = Collections.emptyList();
             boolean addSaltColumn = false;
+            boolean rowKeyOrderOptimizable = true;
             if (parent != null && tableType == PTableType.INDEX) {
                 // Index on view
                 // TODO: Can we support a multi-tenant index directly on a multi-tenant
@@ -1464,7 +1473,7 @@ public class MetaDataClient {
                 parentTableName = parent.getTableName().getString();
                 // Pass through data table sequence number so we can check it hasn't changed
                 PreparedStatement incrementStatement = connection.prepareStatement(INCREMENT_SEQ_NUM);
-                incrementStatement.setString(1, connection.getTenantId() == null ? null : connection.getTenantId().getString());
+                incrementStatement.setString(1, tenantIdStr);
                 incrementStatement.setString(2, schemaName);
                 incrementStatement.setString(3, parentTableName);
                 incrementStatement.setLong(4, parent.getSequenceNumber());
@@ -1476,7 +1485,7 @@ public class MetaDataClient {
 
                 // Add row linking from data table row to index table row
                 PreparedStatement linkStatement = connection.prepareStatement(CREATE_LINK);
-                linkStatement.setString(1, connection.getTenantId() == null ? null : connection.getTenantId().getString());
+                linkStatement.setString(1, tenantIdStr);
                 linkStatement.setString(2, schemaName);
                 linkStatement.setString(3, parentTableName);
                 linkStatement.setString(4, tableName);
@@ -1589,6 +1598,12 @@ public class MetaDataClient {
                 } else {
                     // Propagate property values to VIEW.
                     // TODO: formalize the known set of these properties
+                    // Manually transfer the ROW_KEY_ORDER_OPTIMIZABLE_BYTES from parent as we don't
+                    // want to add this hacky flag to the schema (see PHOENIX-2067).
+                    rowKeyOrderOptimizable = parent.rowKeyOrderOptimizable();
+                    if (rowKeyOrderOptimizable) {
+                        UpgradeUtil.addRowKeyOrderOptimizableCell(tableMetaData, SchemaUtil.getTableKey(tenantIdStr, schemaName, tableName), clientTimeStamp);
+                    }
                     multiTenant = parent.isMultiTenant();
                     saltBucketNum = parent.getBucketNum();
                     isImmutableRows = parent.isImmutableRows();
@@ -1606,7 +1621,7 @@ public class MetaDataClient {
                     // FIXME: not currently used, but see PHOENIX-1367
                     // as fixing that will require it's usage.
                     PreparedStatement linkStatement = connection.prepareStatement(CREATE_VIEW_LINK);
-                    linkStatement.setString(1, connection.getTenantId() == null ? null : connection.getTenantId().getString());
+                    linkStatement.setString(1, tenantIdStr);
                     linkStatement.setString(2, schemaName);
                     linkStatement.setString(3, tableName);
                     linkStatement.setString(4, parent.getName().getString());
@@ -1629,7 +1644,7 @@ public class MetaDataClient {
                     // Add row linking from data table row to physical table row
                     PreparedStatement linkStatement = connection.prepareStatement(CREATE_LINK);
                     for (PName physicalName : physicalNames) {
-                        linkStatement.setString(1, connection.getTenantId() == null ? null : connection.getTenantId().getString());
+                        linkStatement.setString(1, tenantIdStr);
                         linkStatement.setString(2, schemaName);
                         linkStatement.setString(3, tableName);
                         linkStatement.setString(4, physicalName.getString());
@@ -1788,7 +1803,7 @@ public class MetaDataClient {
                         Collections.<PTable>emptyList(), isImmutableRows,
                         Collections.<PName>emptyList(), defaultFamilyName == null ? null :
                                 PNameFactory.newName(defaultFamilyName), null,
-                        Boolean.TRUE.equals(disableWAL), false, false, null, indexId, indexType);
+                        Boolean.TRUE.equals(disableWAL), false, false, null, indexId, indexType, true);
                 connection.addTable(table);
             } else if (tableType == PTableType.INDEX && indexId == null) {
                 if (tableProps.get(HTableDescriptor.MAX_FILESIZE) == null) {
@@ -1942,7 +1957,7 @@ public class MetaDataClient {
                         PTable.INITIAL_SEQ_NUM, pkName == null ? null : PNameFactory.newName(pkName), saltBucketNum, columns,
                         dataTableName == null ? null : newSchemaName, dataTableName == null ? null : PNameFactory.newName(dataTableName), Collections.<PTable>emptyList(), isImmutableRows,
                         physicalNames, defaultFamilyName == null ? null : PNameFactory.newName(defaultFamilyName), viewStatement, Boolean.TRUE.equals(disableWAL), multiTenant, storeNulls, viewType,
-                        indexId, indexType);
+                        indexId, indexType, rowKeyOrderOptimizable);
                 result = new MetaDataMutationResult(code, result.getMutationTime(), table, true);
                 addTableToCache(result);
                 return table;
@@ -2889,6 +2904,8 @@ public class MetaDataClient {
             if (code == MutationCode.TABLE_ALREADY_EXISTS) {
                 if (result.getTable() != null) { // To accommodate connection-less update of index state
                     addTableToCache(result);
+                    // Set so that we get the table below with the potentially modified rowKeyOrderOptimizable flag set
+                    indexRef.setTable(result.getTable());
                 }
             }
             if (newIndexState == PIndexState.BUILDING) {

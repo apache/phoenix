@@ -17,8 +17,6 @@
  */
 package org.apache.phoenix.query;
 
-import static org.apache.phoenix.query.QueryConstants.SEPARATOR_BYTE_ARRAY;
-
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
@@ -392,18 +390,6 @@ public class KeyRange implements Writable {
 
     public static boolean isDegenerate(byte[] lowerRange, byte[] upperRange) {
         return lowerRange == KeyRange.EMPTY_RANGE.getLowerRange() && upperRange == KeyRange.EMPTY_RANGE.getUpperRange();
-    }
-
-    public KeyRange appendSeparator() {
-        byte[] lowerBound = getLowerRange();
-        byte[] upperBound = getUpperRange();
-        if (lowerBound != UNBOUND) {
-            lowerBound = ByteUtil.concat(lowerBound, SEPARATOR_BYTE_ARRAY);
-        }
-        if (upperBound != UNBOUND) {
-            upperBound = ByteUtil.concat(upperBound, SEPARATOR_BYTE_ARRAY);
-        }
-        return getKeyRange(lowerBound, lowerInclusive, upperBound, upperInclusive);
     }
 
     /**

@@ -49,12 +49,20 @@ public abstract class ValueSchema implements Writable {
     private boolean isFixedLength;
     private boolean isMaxLength;
     private int minNullable;
+    // Only applicable for RowKeySchema (and only due to PHOENIX-2067), but
+    // added here as this is where serialization is done (and we need to
+    // maintain the same serialization shape for b/w compat).
+    protected boolean rowKeyOrderOptimizable;
     
     public ValueSchema() {
     }
     
     protected ValueSchema(int minNullable, List<Field> fields) {
-        init(minNullable, fields);
+        this(minNullable, fields, true);
+    }
+    
+    protected ValueSchema(int minNullable, List<Field> fields, boolean rowKeyOrderOptimizable) {
+        init(minNullable, fields, rowKeyOrderOptimizable);
     }
     
     @Override
@@ -68,7 +76,8 @@ public abstract class ValueSchema implements Writable {
                 SizedUtil.ARRAY_SIZE + count * Field.ESTIMATED_SIZE + SizedUtil.sizeOfArrayList(count);
     }
 
-    private void init(int minNullable, List<Field> fields) {
+    private void init(int minNullable, List<Field> fields, boolean rowKeyOrderOptimizable) {
+        this.rowKeyOrderOptimizable = rowKeyOrderOptimizable;
         this.minNullable = minNullable;
         this.fields = ImmutableList.copyOf(fields);
         int estimatedLength = 0;
@@ -324,14 +333,6 @@ public abstract class ValueSchema implements Writable {
         return size;
     }
     
-    public void serialize(DataOutput output) throws IOException {
-        WritableUtils.writeVInt(output, minNullable);
-        WritableUtils.writeVInt(output, fields.size());
-        for (int i = 0; i < fields.size(); i++) {
-            fields.get(i).write(output);
-        }
-    }
-    
     public Field getField(int position) {
         return fields.get(fieldIndexByPosition[position]);
     }
@@ -366,19 +367,24 @@ public abstract class ValueSchema implements Writable {
     public void readFields(DataInput in) throws IOException {
         int minNullable = WritableUtils.readVInt(in);
         int nFields = WritableUtils.readVInt(in);
+        boolean rowKeyOrderOptimizable = false;
+        if (nFields < 0) {
+            rowKeyOrderOptimizable = true;
+            nFields *= -1;
+        }
         List<Field> fields = Lists.newArrayListWithExpectedSize(nFields);
         for (int i = 0; i < nFields; i++) {
             Field field = new Field();
             field.readFields(in);
             fields.add(field);
         }
-        init(minNullable, fields);
+        init(minNullable, fields, rowKeyOrderOptimizable);
     }
          
     @Override
     public void write(DataOutput out) throws IOException {
         WritableUtils.writeVInt(out, minNullable);
-        WritableUtils.writeVInt(out, fields.size());
+        WritableUtils.writeVInt(out, fields.size() * (rowKeyOrderOptimizable ? -1 : 1));
         for (int i = 0; i < fields.size(); i++) {
             fields.get(i).write(out);
         }

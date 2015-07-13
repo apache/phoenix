@@ -79,8 +79,9 @@ public class OrderPreservingTracker {
     
     public OrderPreservingTracker(StatementContext context, GroupBy groupBy, Ordering ordering, int nNodes, TupleProjector projector) {
         int pkPositionOffset = 0;
+        PTable table = context.getResolver().getTables().get(0).getTable();
+        isOrderPreserving = table.rowKeyOrderOptimizable();
         if (groupBy.isEmpty()) { // FIXME: would the below table have any of these set in the case of a GROUP BY?
-            PTable table = context.getResolver().getTables().get(0).getTable();
             boolean isSalted = table.getBucketNum() != null;
             boolean isMultiTenant = context.getConnection().getTenantId() != null && table.isMultiTenant();
             boolean isSharedViewIndex = table.getViewIndexId() != null;
@@ -117,10 +118,12 @@ public class OrderPreservingTracker {
                          */
                         if (!groupBy.isEmpty() && !groupBy.isOrderPreserving()) {
                             isOrderPreserving = false;
+                            isReverse = false;
                             return;
                         }
                     } else if (!isReverse){
                         isOrderPreserving = false;
+                        isReverse = false;
                         return;
                     }
                 } else {
@@ -128,12 +131,14 @@ public class OrderPreservingTracker {
                         isReverse = false;
                     } else if (isReverse){
                         isOrderPreserving = false;
+                        isReverse = false;
                         return;
                     }
                 }
                 if (node.isNullable()) {
                     if (!Boolean.valueOf(isNullsLast).equals(isReverse)) {
                         isOrderPreserving = false;
+                        isReverse = false;
                         return;
                     }
                 }
