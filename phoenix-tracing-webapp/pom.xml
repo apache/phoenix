@@ -1,5 +1,5 @@
 <?xml version='1.0'?>
-<!--
+  <!--
 
  Licensed to the Apache Software Foundation (ASF) under one
  or more contributor license agreements.  See the NOTICE file
@@ -20,73 +20,71 @@
 
 -->
 
-<project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-  <modelVersion>4.0.0</modelVersion>
+  <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
 
-  <parent>
-    <groupId>org.apache.phoenix</groupId>
-    <artifactId>phoenix</artifactId>
-    <version>4.5.0-SNAPSHOT</version>
-  </parent>
+    <parent>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix</artifactId>
+      <version>4.5.0-SNAPSHOT</version>
+    </parent>
 
-  <artifactId>phoenix-tracing-webapp</artifactId>
-  <name>Phoenix - Tracing Web Application</name>
-  <description>Tracing web application will visualize the phoenix traces</description>
+    <artifactId>phoenix-tracing-webapp</artifactId>
+    <name>Phoenix - Tracing Web Application</name>
+    <description>Tracing web application will visualize the phoenix traces</description>
 
-  <properties>
-    <jettyVersion>8.1.7.v20120910</jettyVersion>
-  </properties>
+    <properties>
+      <jettyVersion>8.1.7.v20120910</jettyVersion>
+    </properties>
 
-  <dependencies>
-    <dependency>
-      <groupId>org.eclipse.jetty</groupId>
-      <artifactId>jetty-server</artifactId>
-      <version>${jettyVersion}</version>
-      <scope>provided</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.eclipse.jetty</groupId>
-      <artifactId>jetty-webapp</artifactId>
-      <version>${jettyVersion}</version>
-      <scope>provided</scope>
-    </dependency>
-  </dependencies>
+    <dependencies>
+      <dependency>
+        <groupId>org.eclipse.jetty</groupId>
+        <artifactId>jetty-server</artifactId>
+        <version>${jettyVersion}</version>
+        <scope>provided</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.eclipse.jetty</groupId>
+        <artifactId>jetty-webapp</artifactId>
+        <version>${jettyVersion}</version>
+        <scope>provided</scope>
+      </dependency>
+    </dependencies>
 
-  <build>
-    <plugins>
-      <plugin>
-        <groupId>org.codehaus.mojo</groupId>
-        <artifactId>build-helper-maven-plugin</artifactId>
-      </plugin>
-      <plugin>
-        <artifactId>maven-assembly-plugin</artifactId>
-        <executions>
-          <execution>
-            <id>runnable</id>
-            <phase>package</phase>
-            <goals>
-              <goal>single</goal>
-            </goals>
-            <configuration>
-              <attach>true</attach>
-			  <archive>
-				<manifest>
-				  <addClasspath>true</addClasspath>
-				  <mainClass>org.apache.phoenix.tracingwebapp.http.Main</mainClass>
-				</manifest>
-			  </archive>
-              <finalName>${project.artifactId}-${project.version}</finalName>
-              <descriptors>
-                <descriptor>src/build/trace-server-runnable.xml</descriptor>
-              </descriptors>
-            </configuration>
-          </execution>
-        </executions>
-      </plugin>
-    </plugins>
-  </build>
-  
-</project>
+    <build>
+      <plugins>
+        <plugin>
+          <groupId>org.codehaus.mojo</groupId>
+          <artifactId>build-helper-maven-plugin</artifactId>
+        </plugin>
+        <plugin>
+          <artifactId>maven-assembly-plugin</artifactId>
+          <executions>
+            <execution>
+              <id>runnable</id>
+              <phase>package</phase>
+              <goals>
+                <goal>single</goal>
+              </goals>
+              <configuration>
+                <attach>true</attach>
+                <archive>
+                  <manifest>
+                    <addClasspath>true</addClasspath>
+                    <mainClass>org.apache.phoenix.tracingwebapp.http.Main</mainClass>
+                  </manifest>
+                </archive>
+                <finalName>${project.artifactId}-${project.version}</finalName>
+                <descriptors>
+                  <descriptor>src/build/trace-server-runnable.xml</descriptor>
+                </descriptors>
+              </configuration>
+            </execution>
+          </executions>
+        </plugin>
+      </plugins>
+    </build>
 
+  </project>

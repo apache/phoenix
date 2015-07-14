@@ -48,7 +48,7 @@
   <fileSets>
     <fileSet>
       <directory>src/main/webapp</directory>
-	  </fileSet>
+    </fileSet>
   </fileSets>
   <files>
     <file>
@@ -56,10 +56,5 @@
       <outputDirectory>/</outputDirectory>
       <filtered>true</filtered>
     </file>
-    <!--file>
-      <source>NOTICE.txt</source>
-      <outputDirectory>/</outputDirectory>
-      <filtered>true</filtered>
-    </file-->
   </files>
 </assembly>

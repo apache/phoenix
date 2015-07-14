@@ -107,9 +107,7 @@ else:
 
 #    " -Xdebug -Xrunjdwp:transport=dt_socket,address=5005,server=y,suspend=n " + \
 #    " -XX:+UnlockCommercialFeatures -XX:+FlightRecorder -XX:FlightRecorderOptions=defaultrecording=true,dumponexit=true" + \
-java_cmd = '%(java)s -jar ' + hbase_config_path + os.pathsep + phoenix_utils.phoenix_traceserver_jar + \
-    " " + args
-    
+java_cmd = '%(java)s -jar ' + hbase_config_path + os.pathsep + phoenix_utils.phoenix_traceserver_jar
 
 if command == 'start':
     if not daemon_supported:

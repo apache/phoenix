@@ -35,7 +35,7 @@ public final class Main {
     }
 
     public static void main(String[] args) throws Exception {
-        final int port = Integer.parseInt(System.getProperty("port", "8080"));
+        final int port = Integer.parseInt(System.getProperty("port", "8865"));
         final String home = System.getProperty("home", "");
         Server server = new Server(port);
         ProtectionDomain domain = Main.class.getProtectionDomain();
