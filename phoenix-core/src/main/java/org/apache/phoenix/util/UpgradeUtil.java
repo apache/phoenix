@@ -80,12 +80,11 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PBoolean;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDecimal;
-import org.apache.phoenix.schema.types.PDecimalArray;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PVarchar;
-import org.apache.phoenix.schema.types.PVarcharArray;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -878,6 +877,20 @@ public class UpgradeUtil {
         }
         return otherTables;
     }
+    
+    // Return all types that are not fixed width that may need upgrading due to PHOENIX-2067
+    // We exclude VARBINARY as we no longer support DESC for it.
+    private static String getAffectedDataTypes() {
+        StringBuilder buf = new StringBuilder("(" + PVarchar.INSTANCE.getSqlType() + "," + PDecimal.INSTANCE.getSqlType() + ",");
+        for (PDataType type : PDataType.values()) {
+            if (type.isArrayType()) {
+                buf.append(type.getSqlType());
+                buf.append(',');
+            }
+        }
+        buf.setCharAt(buf.length()-1, ')');
+        return buf.toString();
+    }
     /**
      * Identify the tables that need to be upgraded due to PHOENIX-2067
      */
@@ -890,7 +903,7 @@ public class UpgradeUtil {
                 "WHERE COLUMN_NAME IS NOT NULL\n" + 
                 "AND COLUMN_FAMILY IS NULL\n" + 
                 "AND SORT_ORDER = " + SortOrder.DESC.getSystemValue() + "\n" + 
-                "AND DATA_TYPE IN (" + PVarchar.INSTANCE.getSqlType() + "," + PDecimal.INSTANCE.getSqlType() + "," + PVarcharArray.INSTANCE.getSqlType() + "," + PDecimalArray.INSTANCE.getSqlType() + ")\n" +
+                "AND DATA_TYPE IN " + getAffectedDataTypes() + "\n" +
                 "GROUP BY TENANT_ID,TABLE_SCHEM,TABLE_NAME");
         Set<String> physicalTables = Sets.newHashSetWithExpectedSize(1024);
         List<String> remainingTableNames = addPhysicalTables(conn, rs, PTableType.INDEX, physicalTables);
