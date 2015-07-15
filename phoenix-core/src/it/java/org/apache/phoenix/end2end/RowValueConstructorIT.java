@@ -1430,21 +1430,22 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
     @Test
     public void testCountDistinct1() throws Exception {
         Connection conn = nextConnection(getUrl());
-        String ddl = "CREATE TABLE regions1 (region_name VARCHAR PRIMARY KEY, a INTEGER, b INTEGER)";
+        String tableName = "testCountDistinct1rvc";
+        String ddl = "CREATE TABLE " + tableName + " (region_name VARCHAR PRIMARY KEY, a INTEGER, b INTEGER)";
         conn.createStatement().execute(ddl);
         
         conn = nextConnection(getUrl());
-        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO regions1(region_name, a, b) VALUES('a', 6,3)");
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " (region_name, a, b) VALUES('a', 6,3)");
         stmt.execute();
-        stmt = conn.prepareStatement("UPSERT INTO regions1(region_name, a, b) VALUES('b', 2,4)");
+        stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " (region_name, a, b) VALUES('b', 2,4)");
         stmt.execute();
-        stmt = conn.prepareStatement("UPSERT INTO regions1(region_name, a, b) VALUES('c', 6,3)");
+        stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " (region_name, a, b) VALUES('c', 6,3)");
         stmt.execute();
         conn.commit();
 
         conn = nextConnection(getUrl());
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT COUNT(DISTINCT (a,b)) from regions1");
+        rs = conn.createStatement().executeQuery("SELECT COUNT(DISTINCT (a,b)) from " + tableName);
         assertTrue(rs.next());
         assertEquals(2, rs.getInt(1));
         conn.close();
@@ -1453,22 +1454,23 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
     @Test
     public void testCountDistinct2() throws Exception {
         Connection conn = nextConnection(getUrl());
-        String ddl = "CREATE TABLE regions2 (region_name VARCHAR PRIMARY KEY, a VARCHAR, b VARCHAR)";
+        String tableName = "testCountDistinct2rvc";
+        String ddl = "CREATE TABLE  " + tableName + "  (region_name VARCHAR PRIMARY KEY, a VARCHAR, b VARCHAR)";
         conn.createStatement().execute(ddl);
         conn.commit();
         
         conn = nextConnection(getUrl());
-        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO regions2(region_name, a, b) VALUES('a', 'fooo','abc')");
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " (region_name, a, b) VALUES('a', 'fooo','abc')");
         stmt.execute();
-        stmt = conn.prepareStatement("UPSERT INTO regions2(region_name, a, b) VALUES('b', 'off','bac')");
+        stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " (region_name, a, b) VALUES('b', 'off','bac')");
         stmt.execute();
-        stmt = conn.prepareStatement("UPSERT INTO regions2(region_name, a, b) VALUES('c', 'fooo', 'abc')");
+        stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " (region_name, a, b) VALUES('c', 'fooo', 'abc')");
         stmt.execute();
         conn.commit();
 
         conn = nextConnection(getUrl());
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT COUNT(DISTINCT (a,b)) from regions2");
+        rs = conn.createStatement().executeQuery("SELECT COUNT(DISTINCT (a,b)) from  " + tableName);
         assertTrue(rs.next());
         assertEquals(2, rs.getInt(1));
     }
@@ -1476,23 +1478,24 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
     @Test
     public void testCountDistinct3() throws Exception {
         Connection conn = nextConnection(getUrl());
-        String ddl = "CREATE TABLE regions3 (region_name VARCHAR PRIMARY KEY, a Boolean, b Boolean)";
+        String tableName = "testCountDistinct3rvc";
+        String ddl = "CREATE TABLE  " + tableName + "  (region_name VARCHAR PRIMARY KEY, a Boolean, b Boolean)";
         conn.createStatement().execute(ddl);
         
         conn = nextConnection(getUrl());
-        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO regions3(region_name, a, b) VALUES('a', true, true)");
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " (region_name, a, b) VALUES('a', true, true)");
         stmt.execute();
-        stmt = conn.prepareStatement("UPSERT INTO regions3(region_name, a, b) VALUES('b', true, False)");
+        stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " (region_name, a, b) VALUES('b', true, False)");
         stmt.execute();
-        stmt = conn.prepareStatement("UPSERT INTO regions3(region_name, a, b) VALUES('c', true, true)");
+        stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " (region_name, a, b) VALUES('c', true, true)");
         stmt.execute();
-        stmt = conn.prepareStatement("UPSERT INTO regions3(region_name, a, b) VALUES('d', true, false)");
+        stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " (region_name, a, b) VALUES('d', true, false)");
         stmt.execute();
         conn.commit();
 
         conn = nextConnection(getUrl());
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT COUNT(DISTINCT (a,b)) from regions3");
+        rs = conn.createStatement().executeQuery("SELECT COUNT(DISTINCT (a,b)) from  " + tableName);
         assertTrue(rs.next());
         assertEquals(2, rs.getInt(1));
     }
@@ -1500,21 +1503,22 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
     @Test
     public void testCountDistinct4() throws Exception {
         Connection conn = nextConnection(getUrl());
-        String ddl = "CREATE TABLE regions4 (region_name VARCHAR PRIMARY KEY, a VARCHAR, b VARCHAR)";
+        String tableName = "testCountDistinct4rvc";
+        String ddl = "CREATE TABLE  " + tableName + "  (region_name VARCHAR PRIMARY KEY, a VARCHAR, b VARCHAR)";
         conn.createStatement().execute(ddl);
         
         conn = nextConnection(getUrl());
-        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO regions4(region_name, a, b) VALUES('a', 'fooo','abc')");
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " (region_name, a, b) VALUES('a', 'fooo','abc')");
         stmt.execute();
-        stmt = conn.prepareStatement("UPSERT INTO regions4(region_name, a, b) VALUES('b', 'off','bac')");
+        stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " (region_name, a, b) VALUES('b', 'off','bac')");
         stmt.execute();
-        stmt = conn.prepareStatement("UPSERT INTO regions4(region_name, a, b) VALUES('c', 'foo', 'abc')");
+        stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " (region_name, a, b) VALUES('c', 'foo', 'abc')");
         stmt.execute();
         conn.commit();
         
         conn = nextConnection(getUrl());
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT COUNT(DISTINCT (a,b)) from regions4");
+        rs = conn.createStatement().executeQuery("SELECT COUNT(DISTINCT (a,b)) from  " + tableName);
         assertTrue(rs.next());
         assertEquals(3, rs.getInt(1));
     }
