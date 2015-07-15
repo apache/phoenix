@@ -1110,20 +1110,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         return physicalTableRow;
     }
     
-    private long getSequenceNumberForTable(byte[] headerRowKey) throws IOException {
-        Get get = new Get(headerRowKey);
-        get.addColumn(TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
-        byte[] b;
-        try (HTableInterface hTable = ServerUtil.getHTableForCoprocessorScan(env, PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES)) {
-            Result result = hTable.get(get);
-            b = result.getValue(TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
-        }
-        if (b == null) {
-            throw new IllegalArgumentException("No rows returned for the row key: " + Bytes.toString(headerRowKey));
-        }
-        return PLong.INSTANCE.getCodec().decodeLong(new ImmutableBytesWritable(b), SortOrder.getDefault());
-    }
-    
     @Override
     public void createTable(RpcController controller, CreateTableRequest request,
             RpcCallback<MetaDataResponse> done) {
@@ -1203,10 +1189,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         if (tableType == PTableType.VIEW && viewPhysicalTableRow != null && request.hasClientVersion()) {
                             // Starting 4.5, the client passes the sequence number of the physical table in the table metadata.
                             parentTableSeqNumber = MetaDataUtil.getSequenceNumber(viewPhysicalTableRow);
-                        } else if (tableType == PTableType.VIEW) {
-                            // Before 4.5, due to a bug, the parent table key wasn't available. Using get to 
-                            // figure out the parent table sequence number.
-                            parentTableSeqNumber = getSequenceNumberForTable(parentTableKey);
+                        } else if (tableType == PTableType.VIEW && !request.hasClientVersion()) {
+                            // Before 4.5, due to a bug, the parent table key wasn't available.
+                            // So don't do anything and prevent the exception from being thrown.
+                            parentTableSeqNumber = parentTable.getSequenceNumber();
                         } else {
                             parentTableSeqNumber = MetaDataUtil.getParentSequenceNumber(tableMetadata);
                         }
