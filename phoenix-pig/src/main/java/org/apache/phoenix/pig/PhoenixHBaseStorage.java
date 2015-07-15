@@ -143,8 +143,9 @@ public class PhoenixHBaseStorage implements StoreFuncInterface {
         String tableName = pair.getFirst();
         String columns = pair.getSecond(); 
         if(columns != null && columns.length() > 0) {
-            PhoenixConfigurationUtil.setUpsertColumnNames(config, columns);
+            PhoenixConfigurationUtil.setUpsertColumnNames(config, columns.split(","));
         }
+        PhoenixConfigurationUtil.setPhysicalTableName(config,tableName);
         PhoenixConfigurationUtil.setOutputTableName(config,tableName);
         PhoenixConfigurationUtil.setBatchSize(config,batchSize);
         String serializedSchema = getUDFProperties().getProperty(contextSignature + SCHEMA);
