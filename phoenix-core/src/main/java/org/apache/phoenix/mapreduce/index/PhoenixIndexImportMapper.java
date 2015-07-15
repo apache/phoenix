@@ -70,7 +70,7 @@ public class PhoenixIndexImportMapper extends Mapper<NullWritable, PhoenixIndexD
             indxWritable.setColumnMetadata(indxTblColumnMetadata);
             
             preUpdateProcessor = PhoenixConfigurationUtil.loadPreUpsertProcessor(configuration);
-            indexTableName = PhoenixConfigurationUtil.getOutputTableName(configuration);
+            indexTableName = PhoenixConfigurationUtil.getPhysicalTableName(configuration);
             final Properties overrideProps = new Properties ();
             overrideProps.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, configuration.get(PhoenixConfigurationUtil.CURRENT_SCN_VALUE));
             connection = ConnectionUtil.getOutputConnection(configuration,overrideProps);

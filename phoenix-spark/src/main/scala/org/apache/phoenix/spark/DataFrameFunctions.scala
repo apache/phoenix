@@ -14,29 +14,38 @@
 package org.apache.phoenix.spark
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.hbase.HConstants
 import org.apache.hadoop.io.NullWritable
 import org.apache.phoenix.mapreduce.PhoenixOutputFormat
 import org.apache.phoenix.mapreduce.util.{ColumnInfoToStringEncoderDecoder, PhoenixConfigurationUtil}
 import org.apache.spark.Logging
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
+import scala.collection.JavaConversions._
 
 class DataFrameFunctions(data: DataFrame) extends Logging with Serializable {
 
   def saveToPhoenix(tableName: String, conf: Configuration = new Configuration,
                     zkUrl: Option[String] = None): Unit = {
 
-    val config = ConfigurationUtil.getOutputConfiguration(tableName, data.schema.fieldNames, zkUrl, Some(conf))
+    // Create a configuration object to use for saving
+    @transient val outConfig = ConfigurationUtil.getOutputConfiguration(tableName, data.schema.fieldNames, zkUrl, Some(conf))
 
-    // Encode the column info to a serializable type
-    val encodedColumns = ConfigurationUtil.encodeColumns(config)
+    // Retrieve the zookeeper URL
+    val zkUrlFinal = ConfigurationUtil.getZookeeperURL(outConfig)
 
-    // Map the row object into a PhoenixRecordWritable
-    val phxRDD: RDD[(NullWritable, PhoenixRecordWritable)] = data.map { row =>
-      val rec = new PhoenixRecordWritable(encodedColumns)
-      row.toSeq.foreach { e => rec.add(e) }
-      (null, rec)
+     // Retrieve the schema field names, need to do this outside of mapPartitions
+     val fieldArray = data.schema.fieldNames
+     // Map the row objects into PhoenixRecordWritable
+     val phxRDD = data.mapPartitions{ rows =>
+ 
+       // Create a within-partition config to retrieve the ColumnInfo list
+       @transient val partitionConfig = ConfigurationUtil.getOutputConfiguration(tableName, fieldArray, zkUrlFinal)
+       @transient val columns = PhoenixConfigurationUtil.getUpsertColumnMetadataList(partitionConfig).toList
+ 
+       rows.map { row =>
+         val rec = new PhoenixRecordWritable(columns)
+         row.toSeq.foreach { e => rec.add(e) }
+         (null, rec)
+       }
     }
 
     // Save it
@@ -45,7 +54,7 @@ class DataFrameFunctions(data: DataFrame) extends Logging with Serializable {
       classOf[NullWritable],
       classOf[PhoenixRecordWritable],
       classOf[PhoenixOutputFormat[PhoenixRecordWritable]],
-      config
+      outConfig
     )
   }
 }
