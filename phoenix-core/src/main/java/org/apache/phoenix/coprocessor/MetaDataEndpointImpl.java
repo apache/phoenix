@@ -1693,11 +1693,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             RowLock viewRowLock = acquireLock(region, viewKey, locks);
             PTable view = doGetTable(viewKey, clientTimeStamp, viewRowLock);
             if (view.getBaseColumnCount() == QueryConstants.DIVERGED_VIEW_BASE_COLUMN_COUNT) {
-                // if a view has divorced itself from the base table, we don't allow schema changes
+                // if a view has diverged from the base table, we don't allow schema changes
                 // to be propagated to it.
-                // FIXME: we should allow the update, but just not propagate it to this view
-                // The one exception is PK changes which need to be propagated to diverged views as well
-            	return new MetaDataMutationResult(MutationCode.UNALLOWED_TABLE_MUTATION, EnvironmentEdgeManager.currentTimeMillis(), null);
+                // FIXME: We should allow PK changes to be propagated to a diverged view See PHOENIX-2110
+                continue;
             }
             int numColsAddedToBaseTable = 0;
             int numColsAddedToView = 0;
