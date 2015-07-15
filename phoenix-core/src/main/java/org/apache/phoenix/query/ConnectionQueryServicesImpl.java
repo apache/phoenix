@@ -158,6 +158,7 @@ import org.apache.phoenix.util.JDBCUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixContextExecutor;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PhoenixStopWatch;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
@@ -167,7 +168,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Joiner;
-import com.google.common.base.Stopwatch;
 import com.google.common.base.Throwables;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
@@ -757,7 +757,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         QueryServicesOptions.DEFAULT_DELAY_FOR_SCHEMA_UPDATE_CHECK);
         boolean success = false;
         int numTries = 1;
-        Stopwatch watch = new Stopwatch();
+        PhoenixStopWatch watch = new PhoenixStopWatch();
         watch.start();
         do {
             try {
