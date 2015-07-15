@@ -35,7 +35,7 @@
     <description>Tracing web application will visualize the phoenix traces</description>
 
     <properties>
-      <jettyVersion>8.1.7.v20120910</jettyVersion>
+       <top.dir>${project.basedir}/..</top.dir>
     </properties>
 
     <dependencies>
@@ -51,6 +51,17 @@
         <version>${jettyVersion}</version>
         <scope>provided</scope>
       </dependency>
+	  <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-tools</artifactId>
+        <version>1.2.1</version>
+        <scope>provided</scope>
+      </dependency>      
+	  <dependency>
+        <groupId>commons-logging</groupId>
+        <artifactId>commons-logging</artifactId>
+        <scope>provided</scope>
+    </dependency>
     </dependencies>
 
     <build>
