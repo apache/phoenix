@@ -19,13 +19,10 @@ package org.apache.phoenix.mapreduce.util;
 
 import java.util.List;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.util.ColumnInfo;
 
-import com.google.common.base.Function;
-import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
-import com.google.common.base.Splitter;
-import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 
 /**
@@ -33,32 +30,34 @@ import com.google.common.collect.Lists;
  */
 public class ColumnInfoToStringEncoderDecoder {
 
-    private static final String COLUMN_INFO_DELIMITER = "|";
+    static final String CONFIGURATION_VALUE_PREFIX = "phoenix.colinfo.encoder.decoeder.value";
+    static final String CONFIGURATION_COUNT = "phoenix.colinfo.encoder.decoder.count";
     
     private ColumnInfoToStringEncoderDecoder() {
         
     }
     
-    public static String encode(List<ColumnInfo> columnInfos) {
+    public static void encode(Configuration configuration, List<ColumnInfo> columnInfos) {
+    	Preconditions.checkNotNull(configuration);
         Preconditions.checkNotNull(columnInfos);
-        return Joiner.on(COLUMN_INFO_DELIMITER)
-                     .skipNulls()
-                     .join(columnInfos);
+        int count=0;
+        for (int i=0; i<columnInfos.size(); ++i) {
+        	if (columnInfos.get(i)!=null) {
+        		configuration.set(String.format("%s_%d", CONFIGURATION_VALUE_PREFIX, i), columnInfos.get(i).toString());
+        		++count;
+        	}
+        }
+        configuration.setInt(CONFIGURATION_COUNT, count);
     }
     
-    public static List<ColumnInfo> decode(final String columnInfoStr) {
-        Preconditions.checkNotNull(columnInfoStr);
-        List<ColumnInfo> columnInfos = Lists.newArrayList(
-                                Iterables.transform(
-                                        Splitter.on(COLUMN_INFO_DELIMITER).omitEmptyStrings().split(columnInfoStr),
-                                        new Function<String, ColumnInfo>() {
-                                            @Override
-                                            public ColumnInfo apply(String colInfo) {
-                                               return ColumnInfo.fromString(colInfo);
-                                            }
-                                        }));
+    public static List<ColumnInfo> decode(Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        int numCols = configuration.getInt(CONFIGURATION_COUNT, 0);
+        List<ColumnInfo> columnInfos = Lists.newArrayListWithExpectedSize(numCols);
+        for (int i=0; i<numCols; ++i) {
+        	columnInfos.add(ColumnInfo.fromString(configuration.get(String.format("%s_%d", CONFIGURATION_VALUE_PREFIX, i))));
+        }
         return columnInfos;
-        
     }
 
     
