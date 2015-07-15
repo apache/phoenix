@@ -87,7 +87,7 @@ public final class PhoenixMapReduceUtil {
         job.setOutputFormatClass(PhoenixOutputFormat.class);
         final Configuration configuration = job.getConfiguration();
         PhoenixConfigurationUtil.setOutputTableName(configuration, tableName);
-        PhoenixConfigurationUtil.setUpsertColumnNames(configuration,columns);
+        PhoenixConfigurationUtil.setUpsertColumnNames(configuration,columns.split(","));
     }
     
     
