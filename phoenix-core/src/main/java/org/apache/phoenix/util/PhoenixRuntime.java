@@ -349,7 +349,7 @@ public class PhoenixRuntime {
         PTable table = PhoenixRuntime.getTable(conn, SchemaUtil.normalizeFullTableName(tableName));
         List<ColumnInfo> columnInfoList = Lists.newArrayList();
         Set<String> unresolvedColumnNames = new TreeSet<String>();
-        if (columns == null) {
+        if (columns == null || columns.isEmpty()) {
             // use all columns in the table
             for(PColumn pColumn : table.getColumns()) {
                int sqlType = pColumn.getDataType().getSqlType();

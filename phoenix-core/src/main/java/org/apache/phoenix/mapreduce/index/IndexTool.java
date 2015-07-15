@@ -191,11 +191,11 @@ public class IndexTool extends Configured implements Tool {
             final String upsertQuery = QueryUtil.constructUpsertStatement(qIndexTable, indexColumns, Hint.NO_INDEX);
        
             configuration.set(PhoenixConfigurationUtil.UPSERT_STATEMENT, upsertQuery);
-            PhoenixConfigurationUtil.setOutputTableName(configuration, logicalIndexTable);
+            PhoenixConfigurationUtil.setPhysicalTableName(configuration, logicalIndexTable);
+            PhoenixConfigurationUtil.setOutputTableName(configuration, qIndexTable);
             PhoenixConfigurationUtil.setUpsertColumnNames(configuration,indexColumns.toArray(new String[indexColumns.size()]));
             final List<ColumnInfo> columnMetadataList = PhoenixRuntime.generateColumnInfo(connection, qIndexTable, indexColumns);
-            final String encodedColumnInfos = ColumnInfoToStringEncoderDecoder.encode(columnMetadataList);
-            configuration.set(PhoenixConfigurationUtil.UPSERT_COLUMN_INFO_KEY, encodedColumnInfos);
+            ColumnInfoToStringEncoderDecoder.encode(configuration, columnMetadataList);
             
             final Path outputPath =  new Path(cmdLine.getOptionValue(OUTPUT_PATH_OPTION.getOpt()),logicalIndexTable);
             

@@ -47,7 +47,13 @@ public final class PhoenixPigSchemaUtil {
     private PhoenixPigSchemaUtil() {
     }
     
-public static ResourceSchema getResourceSchema(final Configuration configuration) throws IOException {
+    static class Dependencies {
+    	List<ColumnInfo> getSelectColumnMetadataList(Configuration configuration) throws SQLException {
+    		return PhoenixConfigurationUtil.getSelectColumnMetadataList(configuration);
+    	}
+    }
+    
+    public static ResourceSchema getResourceSchema(final Configuration configuration, Dependencies dependencies) throws IOException {
         
         final ResourceSchema schema = new ResourceSchema();
         try {
@@ -59,7 +65,7 @@ public static ResourceSchema getResourceSchema(final Configuration configuration
                 final SqlQueryToColumnInfoFunction function = new SqlQueryToColumnInfoFunction(configuration);
                 columns = function.apply(sqlQuery);
             } else {
-                columns = PhoenixConfigurationUtil.getSelectColumnMetadataList(configuration);
+                columns = dependencies.getSelectColumnMetadataList(configuration);
             }
             ResourceFieldSchema fields[] = new ResourceFieldSchema[columns.size()];
             int i = 0;
@@ -78,5 +84,9 @@ public static ResourceSchema getResourceSchema(final Configuration configuration
         }
         
         return schema;
+    }
+    
+    public static ResourceSchema getResourceSchema(final Configuration configuration) throws IOException {
+        return getResourceSchema(configuration, new Dependencies());
     }
 }

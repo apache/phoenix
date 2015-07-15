@@ -52,6 +52,7 @@ public class PhoenixConfigurationUtilTest extends BaseConnectionlessQueryTest {
             final Configuration configuration = new Configuration ();
             configuration.set(HConstants.ZOOKEEPER_QUORUM, getUrl());
             PhoenixConfigurationUtil.setOutputTableName(configuration, tableName);
+            PhoenixConfigurationUtil.setPhysicalTableName(configuration, tableName);
             final String upserStatement = PhoenixConfigurationUtil.getUpsertStatement(configuration);
             final String expectedUpsertStatement = "UPSERT INTO " + tableName + " VALUES (?, ?, ?)"; 
             assertEquals(expectedUpsertStatement, upserStatement);
@@ -114,7 +115,7 @@ public class PhoenixConfigurationUtilTest extends BaseConnectionlessQueryTest {
             final Configuration configuration = new Configuration ();
             configuration.set(HConstants.ZOOKEEPER_QUORUM, getUrl());
             PhoenixConfigurationUtil.setInputTableName(configuration, tableName);
-            PhoenixConfigurationUtil.setSelectColumnNames(configuration, "A_BINARY");
+            PhoenixConfigurationUtil.setSelectColumnNames(configuration, new String[]{"A_BINARY"});
             final String selectStatement = PhoenixConfigurationUtil.getSelectStatement(configuration);
             final String expectedSelectStatement = "SELECT \"A_BINARY\" FROM " + tableName ; 
             assertEquals(expectedSelectStatement, selectStatement);
@@ -133,7 +134,7 @@ public class PhoenixConfigurationUtilTest extends BaseConnectionlessQueryTest {
             conn.createStatement().execute(ddl);
             final Configuration configuration = new Configuration ();
             configuration.set(HConstants.ZOOKEEPER_QUORUM, getUrl());
-            PhoenixConfigurationUtil.setSelectColumnNames(configuration,"ID,VCARRAY");
+            PhoenixConfigurationUtil.setSelectColumnNames(configuration,new String[]{"ID","VCARRAY"});
             PhoenixConfigurationUtil.setSchemaType(configuration, SchemaType.QUERY);
             PhoenixConfigurationUtil.setInputTableName(configuration, tableName);
             final String selectStatement = PhoenixConfigurationUtil.getSelectStatement(configuration);
