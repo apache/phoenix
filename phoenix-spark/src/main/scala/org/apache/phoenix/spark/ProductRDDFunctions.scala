@@ -14,12 +14,12 @@
 package org.apache.phoenix.spark
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.hbase.HConstants
 import org.apache.hadoop.io.NullWritable
 import org.apache.phoenix.mapreduce.PhoenixOutputFormat
 import org.apache.phoenix.mapreduce.util.{ColumnInfoToStringEncoderDecoder, PhoenixConfigurationUtil}
 import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
+import scala.collection.JavaConversions._
 
 class ProductRDDFunctions[A <: Product](data: RDD[A]) extends Logging with Serializable {
 
@@ -27,16 +27,24 @@ class ProductRDDFunctions[A <: Product](data: RDD[A]) extends Logging with Seria
                     conf: Configuration = new Configuration, zkUrl: Option[String] = None)
                     : Unit = {
 
-    val config = ConfigurationUtil.getOutputConfiguration(tableName, cols, zkUrl, Some(conf))
+    // Create a configuration object to use for saving
+    @transient val outConfig = ConfigurationUtil.getOutputConfiguration(tableName, cols, zkUrl, Some(conf))
 
-    // Encode the column info to a serializable type
-    val encodedColumns = ConfigurationUtil.encodeColumns(config)
+    // Retrieve the zookeeper URL
+    val zkUrlFinal = ConfigurationUtil.getZookeeperURL(outConfig)
 
-    // Map each element of the product to a new (NullWritable, PhoenixRecordWritable)
-    val phxRDD: RDD[(NullWritable, PhoenixRecordWritable)] = data.map { e =>
-      val rec = new PhoenixRecordWritable(encodedColumns)
-      e.productIterator.foreach { rec.add(_) }
-      (null, rec)
+    // Map the row objects into PhoenixRecordWritable
+    val phxRDD = data.mapPartitions{ rows =>
+
+      // Create a within-partition config to retrieve the ColumnInfo list
+      @transient val partitionConfig = ConfigurationUtil.getOutputConfiguration(tableName, cols, zkUrlFinal)
+      @transient val columns = PhoenixConfigurationUtil.getUpsertColumnMetadataList(partitionConfig).toList
+
+      rows.map { row =>
+        val rec = new PhoenixRecordWritable(columns)
+        row.productIterator.foreach { e => rec.add(e) }
+        (null, rec)
+      }
     }
 
     // Save it
@@ -45,7 +53,7 @@ class ProductRDDFunctions[A <: Product](data: RDD[A]) extends Logging with Seria
       classOf[NullWritable],
       classOf[PhoenixRecordWritable],
       classOf[PhoenixOutputFormat[PhoenixRecordWritable]],
-      config
+      outConfig
     )
   }
 }
