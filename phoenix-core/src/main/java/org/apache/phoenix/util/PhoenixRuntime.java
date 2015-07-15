@@ -83,8 +83,6 @@ import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.types.PDataType;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Splitter;
@@ -99,8 +97,6 @@ import com.google.common.collect.Lists;
  * @since 0.1
  */
 public class PhoenixRuntime {
-    private static final Logger logger = LoggerFactory.getLogger(PhoenixRuntime.class);
-
     /**
      * Use this connection property to control HBase timestamps
      * by specifying your own long timestamp value at connection time. All

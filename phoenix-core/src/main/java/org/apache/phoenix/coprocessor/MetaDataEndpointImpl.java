@@ -1068,6 +1068,50 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             return null;
         }
 
+    /**
+     * 
+     * @return null if the physical table row information is not present.
+     * 
+     */
+    private static Mutation getPhysicalTableForView(List<Mutation> tableMetadata, byte[][] parentSchemaTableNames) {
+        int size = tableMetadata.size();
+        byte[][] rowKeyMetaData = new byte[3][];
+        MetaDataUtil.getTenantIdAndSchemaAndTableName(tableMetadata, rowKeyMetaData);
+        Mutation physicalTableRow = null;
+        boolean physicalTableLinkFound = false;
+        if (size >= 2) {
+            int i = size - 1;
+            while (i >= 1) {
+                Mutation m = tableMetadata.get(i);
+                if (m instanceof Put) {
+                    LinkType linkType = MetaDataUtil.getLinkType(m);
+                    if (linkType == LinkType.PHYSICAL_TABLE) {
+                        physicalTableRow = m;
+                        physicalTableLinkFound = true;
+                        break;
+                    }
+                }
+                i--;
+            }
+        }
+        if (!physicalTableLinkFound) {
+            parentSchemaTableNames[0] = null;
+            parentSchemaTableNames[1] = null;
+            return null;
+        }
+        rowKeyMetaData = new byte[5][];
+        getVarChars(physicalTableRow.getRow(), 5, rowKeyMetaData);
+        byte[] colBytes = rowKeyMetaData[PhoenixDatabaseMetaData.COLUMN_NAME_INDEX];
+        byte[] famBytes = rowKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX];
+        if ((colBytes == null || colBytes.length == 0) && (famBytes != null && famBytes.length > 0)) {
+            byte[] sName = SchemaUtil.getSchemaNameFromFullName(famBytes).getBytes();
+            byte[] tName = SchemaUtil.getTableNameFromFullName(famBytes).getBytes();
+            parentSchemaTableNames[0] = sName;
+            parentSchemaTableNames[1] = tName;
+        }
+        return physicalTableRow;
+    }
+    
     @Override
     public void createTable(RpcController controller, CreateTableRequest request,
             RpcCallback<MetaDataResponse> done) {
@@ -1075,66 +1119,101 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         byte[][] rowKeyMetaData = new byte[3][];
         byte[] schemaName = null;
         byte[] tableName = null;
-
         try {
             List<Mutation> tableMetadata = ProtobufUtil.getMutations(request);
             MetaDataUtil.getTenantIdAndSchemaAndTableName(tableMetadata, rowKeyMetaData);
             byte[] tenantIdBytes = rowKeyMetaData[PhoenixDatabaseMetaData.TENANT_ID_INDEX];
             schemaName = rowKeyMetaData[PhoenixDatabaseMetaData.SCHEMA_NAME_INDEX];
             tableName = rowKeyMetaData[PhoenixDatabaseMetaData.TABLE_NAME_INDEX];
-            byte[] parentTableName = MetaDataUtil.getParentTableName(tableMetadata);
-            byte[] lockTableName = parentTableName == null ? tableName : parentTableName;
-            byte[] lockKey = SchemaUtil.getTableKey(tenantIdBytes, schemaName, lockTableName);
-            byte[] key =
-                    parentTableName == null ? lockKey : SchemaUtil.getTableKey(tenantIdBytes,
-                        schemaName, tableName);
-            byte[] parentKey = parentTableName == null ? null : lockKey;
+
+            byte[] parentSchemaName = null;
+            byte[] parentTableName = null;
+            PTableType tableType = MetaDataUtil.getTableType(tableMetadata, GenericKeyValueBuilder.INSTANCE, new ImmutableBytesWritable());
+            byte[] parentTableKey = null;
+            Mutation viewPhysicalTableRow = null;
+            if (tableType == PTableType.VIEW) {
+                byte[][] parentSchemaTableNames = new byte[2][];
+                /*
+                 * For a view, we lock the base physical table row. For a mapped view, there is 
+                 * no link present to the physical table. So the viewPhysicalTableRow is null
+                 * in that case.
+                 */
+                viewPhysicalTableRow = getPhysicalTableForView(tableMetadata, parentSchemaTableNames);
+                parentSchemaName = parentSchemaTableNames[0];
+                parentTableName = parentSchemaTableNames[1];
+                if (parentTableName != null) {
+                    parentTableKey = SchemaUtil.getTableKey(ByteUtil.EMPTY_BYTE_ARRAY, parentSchemaName, parentTableName);
+                }
+            } else if (tableType == PTableType.INDEX) {
+                parentSchemaName = schemaName;
+                /* 
+                 * For an index we lock the parent table's row which could be a physical table or a view.
+                 * If the parent table is a physical table, then the tenantIdBytes is empty because
+                 * we allow creating an index with a tenant connection only if the parent table is a view.
+                 */ 
+                parentTableName = MetaDataUtil.getParentTableName(tableMetadata);
+                parentTableKey = SchemaUtil.getTableKey(tenantIdBytes, parentSchemaName, parentTableName);
+            }
 
             HRegion region = env.getRegion();
-            MetaDataMutationResult result = checkTableKeyInRegion(lockKey, region);
-            if (result != null) {
-                done.run(MetaDataMutationResult.toProto(result));
-                return;
-            }
             List<RowLock> locks = Lists.newArrayList();
-            long clientTimeStamp = MetaDataUtil.getClientTimeStamp(tableMetadata);
+            // Place a lock using key for the table to be created
+            byte[] tableKey = SchemaUtil.getTableKey(tenantIdBytes, schemaName, tableName);
             try {
-                acquireLock(region, lockKey, locks);
-                if (key != lockKey) {
-                    acquireLock(region, key, locks);
+                acquireLock(region, tableKey, locks);
+
+                // If the table key resides outside the region, return without doing anything
+                MetaDataMutationResult result = checkTableKeyInRegion(tableKey, region);
+                if (result != null) {
+                    done.run(MetaDataMutationResult.toProto(result));
+                    return;
                 }
-                // Load parent table first
-                PTable parentTable = null;
+
+                long clientTimeStamp = MetaDataUtil.getClientTimeStamp(tableMetadata);
                 ImmutableBytesPtr parentCacheKey = null;
-                if (parentKey != null) {
-                    parentCacheKey = new ImmutableBytesPtr(parentKey);
-                    parentTable =
-                            loadTable(env, parentKey, parentCacheKey, clientTimeStamp,
+                if (parentTableName != null) {
+                    // Check if the parent table resides in the same region. If not, don't worry about locking the parent table row
+                    // or loading the parent table. For a view, the parent table that needs to be locked is the base physical table.
+                    // For an index on view, the view header row needs to be locked. 
+                    result = checkTableKeyInRegion(parentTableKey, region);
+                    if (result == null) {
+                        acquireLock(region, parentTableKey, locks);
+                        parentCacheKey = new ImmutableBytesPtr(parentTableKey);
+                        PTable parentTable = loadTable(env, parentTableKey, parentCacheKey, clientTimeStamp,
                                 clientTimeStamp);
-                    if (parentTable == null || isTableDeleted(parentTable)) {
-                        builder.setReturnCode(MetaDataProtos.MutationCode.PARENT_TABLE_NOT_FOUND);
-                        builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
-                        builder.setTable(PTableImpl.toProto(parentTable));
-                        done.run(builder.build());
-                        return;
-                    }
-                    // If parent table isn't at the expected sequence number, then return
-                    if (parentTable.getSequenceNumber() != MetaDataUtil
-                            .getParentSequenceNumber(tableMetadata)) {
-                        builder.setReturnCode(MetaDataProtos.MutationCode.CONCURRENT_TABLE_MUTATION);
-                        builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
-                        builder.setTable(PTableImpl.toProto(parentTable));
-                        done.run(builder.build());
-                        return;
+                        if (parentTable == null || isTableDeleted(parentTable)) {
+                            builder.setReturnCode(MetaDataProtos.MutationCode.PARENT_TABLE_NOT_FOUND);
+                            builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
+                            done.run(builder.build());
+                            return;
+                        }
+                        long parentTableSeqNumber;
+                        if (tableType == PTableType.VIEW && viewPhysicalTableRow != null && request.hasClientVersion()) {
+                            // Starting 4.5, the client passes the sequence number of the physical table in the table metadata.
+                            parentTableSeqNumber = MetaDataUtil.getSequenceNumber(viewPhysicalTableRow);
+                        } else if (tableType == PTableType.VIEW && !request.hasClientVersion()) {
+                            // Before 4.5, due to a bug, the parent table key wasn't available.
+                            // So don't do anything and prevent the exception from being thrown.
+                            parentTableSeqNumber = parentTable.getSequenceNumber();
+                        } else {
+                            parentTableSeqNumber = MetaDataUtil.getParentSequenceNumber(tableMetadata);
+                        }
+                        // If parent table isn't at the expected sequence number, then return
+                        if (parentTable.getSequenceNumber() != parentTableSeqNumber) {
+                            builder.setReturnCode(MetaDataProtos.MutationCode.CONCURRENT_TABLE_MUTATION);
+                            builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
+                            builder.setTable(PTableImpl.toProto(parentTable));
+                            done.run(builder.build());
+                            return;
+                        }
                     }
                 }
                 // Load child table next
-                ImmutableBytesPtr cacheKey = new ImmutableBytesPtr(key);
+                ImmutableBytesPtr cacheKey = new ImmutableBytesPtr(tableKey);
                 // Get as of latest timestamp so we can detect if we have a newer table that already
-                // exists
-                // without making an additional query
+                // exists without making an additional query
                 PTable table =
-                        loadTable(env, key, cacheKey, clientTimeStamp, HConstants.LATEST_TIMESTAMP);
+                        loadTable(env, tableKey, cacheKey, clientTimeStamp, HConstants.LATEST_TIMESTAMP);
                 if (table != null) {
                     if (table.getTimeStamp() < clientTimeStamp) {
                         // If the table is older than the client time stamp and it's deleted,
@@ -1154,24 +1233,18 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         return;
                     }
                 }
-                PTableType tableType = MetaDataUtil.getTableType(tableMetadata, GenericKeyValueBuilder.INSTANCE,
-                        new ImmutableBytesWritable());
                 // Add cell for ROW_KEY_ORDER_OPTIMIZABLE = true, as we know that new tables
                 // conform the correct row key. The exception is for a VIEW, which the client
                 // sends over depending on its base physical table.
                 if (tableType != PTableType.VIEW) {
-                    UpgradeUtil.addRowKeyOrderOptimizableCell(tableMetadata, key, clientTimeStamp);
+                    UpgradeUtil.addRowKeyOrderOptimizableCell(tableMetadata, tableKey, clientTimeStamp);
                 }
-                // TODO: Switch this to Region#batchMutate when we want to support indexes on the
-                // system
-                // table. Basically, we get all the locks that we don't already hold for all the
+                // TODO: Switch this to HRegion#batchMutate when we want to support indexes on the
+                // system table. Basically, we get all the locks that we don't already hold for all the
                 // tableMetadata rows. This ensures we don't have deadlock situations (ensuring
-                // primary and
-                // then index table locks are held, in that order). For now, we just don't support
-                // indexing
-                // on the system table. This is an issue because of the way we manage batch mutation
-                // in the
-                // Indexer.
+                // primary and then index table locks are held, in that order). For now, we just don't support
+                // indexing on the system table. This is an issue because of the way we manage batch mutation
+                // in the Indexer.
                 region.mutateRowsWithLocks(tableMetadata, Collections.<byte[]> emptySet());
 
                 // Invalidate the cache - the next getTable call will add it
@@ -1191,12 +1264,11 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 region.releaseRowLocks(locks);
             }
         } catch (Throwable t) {
-          logger.error("createTable failed", t);
+            logger.error("createTable failed", t);
             ProtobufUtil.setControllerException(controller,
-                ServerUtil.createIOException(SchemaUtil.getTableName(schemaName, tableName), t));
+                    ServerUtil.createIOException(SchemaUtil.getTableName(schemaName, tableName), t));
         }
     }
-
 
     private static RowLock acquireLock(HRegion region, byte[] key, List<RowLock> locks)
         throws IOException {
@@ -1606,10 +1678,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         }
     }
     
-    private boolean isvalidAttribute(Object obj1, Object obj2) {
-    	return (obj1!=null && obj1.equals(obj2)) || (obj1==null && obj2==null); 
-    }
-
     private MetaDataMutationResult addRowsToChildViews(PTable table, List<Mutation> tableMetadata, List<Mutation> mutationsForAddingColumnsToViews, byte[] schemaName, byte[] tableName,
             List<ImmutableBytesPtr> invalidateList, long clientTimeStamp, TableViewFinderResult childViewsResult,
             HRegion region, List<RowLock> locks) throws IOException, SQLException {
