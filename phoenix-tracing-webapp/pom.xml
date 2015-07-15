@@ -51,13 +51,13 @@
         <version>${jettyVersion}</version>
         <scope>provided</scope>
       </dependency>
-	  <dependency>
+    <dependency>
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-tools</artifactId>
         <version>1.2.1</version>
         <scope>provided</scope>
-      </dependency>      
-	  <dependency>
+      </dependency>
+    <dependency>
         <groupId>commons-logging</groupId>
         <artifactId>commons-logging</artifactId>
         <scope>provided</scope>
