@@ -61,6 +61,7 @@ message GetTableRequest {
   required bytes tableName = 3;
   required int64 tableTimestamp = 4;
   required int64 clientTimestamp = 5;
+  optional int32 clientVersion = 6;
 }
 
 message GetFunctionsRequest {
@@ -68,11 +69,13 @@ message GetFunctionsRequest {
   repeated bytes functionNames = 2;
   repeated int64 functionTimestamps = 3;
   required int64 clientTimestamp = 4;
+  optional int32 clientVersion = 5;
 }
 
 // each byte array represents a MutationProto instance
 message CreateTableRequest {
-  repeated bytes tableMetadataMutations = 1; 
+  repeated bytes tableMetadataMutations = 1;
+  optional int32 clientVersion = 2;
 }
 
 // each byte array represents a MutationProto instance
@@ -80,38 +83,46 @@ message CreateFunctionRequest {
   repeated bytes tableMetadataMutations = 1;
   required bool temporary = 2;
   optional bool replace = 3;
+  optional int32 clientVersion = 4;
 }
 
 message DropTableRequest {
   repeated bytes tableMetadataMutations = 1;
   required string tableType = 2;
   optional bool cascade = 3;
+  optional int32 clientVersion = 4;
 }
 
 message AddColumnRequest {
   repeated bytes tableMetadataMutations = 1;
+  optional int32 clientVersion = 2;
 }
 
 message DropColumnRequest {
   repeated bytes tableMetadataMutations = 1;
+  optional int32 clientVersion = 2;
 }
 
 message DropFunctionRequest {
   repeated bytes tableMetadataMutations = 1;
   optional bool ifExists = 2;
+  optional int32 clientVersion = 3;
 }
 
 message UpdateIndexStateRequest {
   repeated bytes tableMetadataMutations = 1;
+  optional int32 clientVersion = 2;
 }
 
 message ClearCacheRequest {
+  optional int32 clientVersion = 1;
 }
 
 message ClearCacheResponse {
 }
 
 message GetVersionRequest {
+  optional int32 clientVersion = 1;
 }
 
 message GetVersionResponse {
@@ -123,6 +134,7 @@ message ClearTableFromCacheRequest {
   required bytes schemaName  = 2;
   required bytes tableName = 3;
   required int64 clientTimestamp = 4;
+  optional int32 clientVersion = 5;
 }
 
 message ClearTableFromCacheResponse {

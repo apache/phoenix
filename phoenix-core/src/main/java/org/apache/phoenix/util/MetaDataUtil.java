@@ -51,6 +51,7 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTable.LinkType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.SortOrder;
@@ -59,6 +60,7 @@ import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PSmallint;
+import org.apache.phoenix.schema.types.PUnsignedTinyint;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -436,5 +438,17 @@ public class MetaDataUtil {
         ByteUtil.nextKey(stopKey, stopKey.length);
         scan.setStopRow(stopKey);
         return scan;
+    }
+    
+    public static LinkType getLinkType(Mutation tableMutation) {
+        List<Cell> kvs = tableMutation.getFamilyCellMap().get(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES);
+        if (kvs != null) {
+            for (Cell kv : kvs) {
+                if (Bytes.compareTo(kv.getQualifierArray(), kv.getQualifierOffset(), kv.getQualifierLength(), PhoenixDatabaseMetaData.LINK_TYPE_BYTES, 0, PhoenixDatabaseMetaData.LINK_TYPE_BYTES.length) == 0) {
+                    return LinkType.fromSerializedValue(PUnsignedTinyint.INSTANCE.getCodec().decodeByte(kv.getValueArray(), kv.getValueOffset(), SortOrder.getDefault()));
+                }
+            }
+        }
+        return null;
     }
 }

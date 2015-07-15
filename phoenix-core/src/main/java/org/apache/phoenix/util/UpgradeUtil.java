@@ -466,8 +466,8 @@ public class UpgradeUtil {
     public static void upgradeTo4_5_0(PhoenixConnection oldMetaConnection) throws SQLException {
         PhoenixConnection metaConnection = null;
         try {
-            // Need to use own connection without any SCN to be able to read all data from SYSTEM.CATALOG 
-            metaConnection = new PhoenixConnection(oldMetaConnection);
+            // Need to use own connection with max time stamp to be able to read all data from SYSTEM.CATALOG 
+            metaConnection = new PhoenixConnection(oldMetaConnection, HConstants.LATEST_TIMESTAMP);
             logger.info("Upgrading metadata to support adding columns to tables with views");
             String getBaseTableAndViews = "SELECT "
                     + COLUMN_FAMILY + " AS BASE_PHYSICAL_TABLE, "
