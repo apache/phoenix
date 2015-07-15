@@ -2575,36 +2575,38 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
     }
     
     @Test
-    public void testDivorcedViewsStayDivorced() throws Exception {
-        String baseTable = "testDivorcedViewsStayDivorced";
-        String viewName = baseTable + "_view";
+    public void testDivergedViewsStayDiverged() throws Exception {
+        String baseTable = "testDivergedViewsStayDiverged";
+        String view1 = baseTable + "_view1";
+        String view2 = baseTable + "_view2";
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String tableDDL = "CREATE TABLE " + baseTable + " (PK1 VARCHAR NOT NULL PRIMARY KEY, V1 VARCHAR, V2 VARCHAR)";
             conn.createStatement().execute(tableDDL);
             
-            String viewDDL = "CREATE VIEW " + viewName + " AS SELECT * FROM " + baseTable;
+            String viewDDL = "CREATE VIEW " + view1 + " AS SELECT * FROM " + baseTable;
             conn.createStatement().execute(viewDDL);
             
-            // Drop the column inherited from base table to divorce the view
-            String dropColumn = "ALTER VIEW " + viewName + " DROP COLUMN V2";
+            viewDDL = "CREATE VIEW " + view2 + " AS SELECT * FROM " + baseTable;
+            conn.createStatement().execute(viewDDL);
+            
+            // Drop the column inherited from base table to make it diverged
+            String dropColumn = "ALTER VIEW " + view1 + " DROP COLUMN V2";
             conn.createStatement().execute(dropColumn);
             
             String alterBaseTable = "ALTER TABLE " + baseTable + " ADD V3 VARCHAR";
-            try {
-            	conn.createStatement().execute(alterBaseTable);
-	            fail();
-	        }
-	        catch (SQLException e) {
-	        	assertEquals("Unexpected exception", CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
-	        }
-            
-            // Column V3 shouldn't have propagated to the divorced view.
-            String sql = "SELECT V3 FROM " + viewName;
+            conn.createStatement().execute(alterBaseTable);
+	        
+            // Column V3 shouldn't have propagated to the diverged view.
+            String sql = "SELECT V3 FROM " + view1;
             try {
                 conn.createStatement().execute(sql);
             } catch (SQLException e) {
                 assertEquals(SQLExceptionCode.COLUMN_NOT_FOUND.getErrorCode(), e.getErrorCode());
             }
+            
+            // However, column V3 should have propagated to the non-diverged view.
+            sql = "SELECT V3 FROM " + view2;
+            conn.createStatement().execute(sql);
         } 
     }
     

@@ -637,9 +637,9 @@ public class UpgradeUtil {
                              * two till one of the following happens: 
                              * 
                              * 1) We run into a view column which is different from column in the base physical table.
-                             * This means that the view has divorced itself from the base physical table. In such a case
+                             * This means that the view has diverged from the base physical table. In such a case
                              * we will set a special value for the base column count. That special value will also be used
-                             * on the server side to filter out the divorced view so that meta-data changes on the base 
+                             * on the server side to filter out the diverged view so that meta-data changes on the base 
                              * physical table are not propagated to it.
                              * 
                              * 2) Every physical table column is present in the view. In that case we set the base column count
@@ -667,7 +667,7 @@ public class UpgradeUtil {
                                     clearCache = true;
                                 }
                             } else {
-                                // special value to denote that the view has divorced itself from the base physical table.
+                                // special value to denote that the view has diverged from the base physical table.
                                 upsertBaseColumnCountInHeaderRow(metaConnection, viewTenantId, viewSchema, viewName, DIVERGED_VIEW_BASE_COLUMN_COUNT);
                                 baseColumnCountUpserted = true;
                                 clearCache = true;
