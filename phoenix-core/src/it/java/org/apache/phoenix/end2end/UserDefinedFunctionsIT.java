@@ -207,9 +207,6 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT{
         conf.set(DYNAMIC_JARS_DIR_KEY, string+"/hbase/tmpjars");
         util.startMiniHBaseCluster(1, 1);
         UDFExpression.setConfig(conf);
-        compileTestClass(MY_REVERSE_CLASS_NAME, MY_REVERSE_PROGRAM, 1);
-        compileTestClass(MY_SUM_CLASS_NAME, MY_SUM_PROGRAM, 2);
-        compileTestClass(MY_ARRAY_INDEX_CLASS_NAME, MY_ARRAY_INDEX_PROGRAM, 3);
 
         String clientPort = util.getConfiguration().get(QueryServices.ZOOKEEPER_PORT_ATTRIB);
         url =
@@ -217,9 +214,53 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT{
                         + clientPort + JDBC_PROTOCOL_TERMINATOR + PHOENIX_TEST_DRIVER_URL_PARAM;
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         props.put(QueryServices.ALLOW_USER_DEFINED_FUNCTIONS_ATTRIB, "true");
+        props.put(QueryServices.DYNAMIC_JARS_DIR_KEY,string+"/hbase/tmpjars/");
         driver = initAndRegisterDriver(url, new ReadOnlyProps(props.entrySet().iterator()));
+        compileTestClass(MY_REVERSE_CLASS_NAME, MY_REVERSE_PROGRAM, 1);
+        compileTestClass(MY_SUM_CLASS_NAME, MY_SUM_PROGRAM, 2);
+        compileTestClass(MY_ARRAY_INDEX_CLASS_NAME, MY_ARRAY_INDEX_PROGRAM, 3);
+        compileTestClass(MY_ARRAY_INDEX_CLASS_NAME, MY_ARRAY_INDEX_PROGRAM, 4);
     }
     
+    @Test
+    public void testListJars() throws Exception {
+        Connection conn = driver.connect(url, EMPTY_PROPS);
+        Statement stmt = conn.createStatement();
+        ResultSet rs = stmt.executeQuery("list jars");
+        assertTrue(rs.next());
+        assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar1.jar", rs.getString("jar_location"));
+        assertTrue(rs.next());
+        assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar2.jar", rs.getString("jar_location"));
+        assertTrue(rs.next());
+        assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar3.jar", rs.getString("jar_location"));
+        assertFalse(rs.next());
+    }
+
+    @Test
+    public void testDeleteJar() throws Exception {
+        Connection conn = driver.connect(url, EMPTY_PROPS);
+        Statement stmt = conn.createStatement();
+        ResultSet rs = stmt.executeQuery("list jars");
+        assertTrue(rs.next());
+        assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar1.jar", rs.getString("jar_location"));
+        assertTrue(rs.next());
+        assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar2.jar", rs.getString("jar_location"));
+        assertTrue(rs.next());
+        assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar3.jar", rs.getString("jar_location"));
+        assertTrue(rs.next());
+        assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar4.jar", rs.getString("jar_location"));
+        assertFalse(rs.next());
+        stmt.execute("delete jar '"+ util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar4.jar'");
+        rs = stmt.executeQuery("list jars");
+        assertTrue(rs.next());
+        assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar1.jar", rs.getString("jar_location"));
+        assertTrue(rs.next());
+        assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar2.jar", rs.getString("jar_location"));
+        assertTrue(rs.next());
+        assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar3.jar", rs.getString("jar_location"));
+        assertFalse(rs.next());
+    }
+
     @Test
     public void testCreateFunction() throws Exception {
         Connection conn = driver.connect(url, EMPTY_PROPS);
@@ -776,23 +817,9 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT{
             jarFos.close();
             
             assertTrue(jarFile.exists());
-            
-            InputStream inputStream = new BufferedInputStream(new FileInputStream(jarPath));
-            FileSystem fs = util.getDefaultRootDirPath().getFileSystem(util.getConfiguration());
-            Path jarsLocation = new Path(util.getConfiguration().get(DYNAMIC_JARS_DIR_KEY));
-            Path myJarPath;
-            if (jarsLocation.toString().endsWith("/")) {
-                myJarPath = new Path(jarsLocation.toString() + jarName);
-            } else {
-                myJarPath = new Path(jarsLocation.toString() + "/" + jarName);
-            }
-            OutputStream outputStream = fs.create(myJarPath);
-            try {
-                IOUtils.copyBytes(inputStream, outputStream, 4096, false);
-            } finally {
-                IOUtils.closeStream(inputStream);
-                IOUtils.closeStream(outputStream);
-            }
+            Connection conn = driver.connect(url, EMPTY_PROPS);
+            Statement stmt = conn.createStatement();
+            stmt.execute("add jars '"+jarFile.getAbsolutePath()+"'");
         } finally {
             if (javaFile != null) javaFile.delete();
             if (classFile != null) classFile.delete();

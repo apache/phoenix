@@ -123,6 +123,8 @@ tokens
     DEFAULTVALUE='defaultvalue';
     CONSTANT = 'constant';
     REPLACE = 'replace';
+    LIST = 'list';
+    JARS='jars';
 }
 
 
@@ -182,6 +184,7 @@ import org.apache.phoenix.schema.types.PUnsignedTimestamp;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.parse.LikeParseNode.LikeType;
 import org.apache.phoenix.trace.util.Tracing;
+import org.apache.phoenix.parse.AddJarsStatement;
 }
 
 @lexer::header {
@@ -398,6 +401,9 @@ oneStatement returns [BindableStatement ret]
     |   s=trace_node
     |   s=create_function_node
     |   s=drop_function_node
+    |   s=add_jars_node
+    |   s=list_jars_node
+    |   s=delete_jar_node
     |   s=alter_session_node
     |	s=create_sequence_node
     |	s=drop_sequence_node
@@ -556,6 +562,18 @@ jar_path returns [LiteralParseNode ret]
 
 drop_function_node returns [DropFunctionStatement ret]
     : DROP FUNCTION (IF ex=EXISTS)? function=identifier {$ret = factory.dropFunction(SchemaUtil.normalizeIdentifier(function), ex!=null);}
+    ;
+
+add_jars_node returns [AddJarsStatement ret]
+    : ADD JARS jarPaths = one_or_more_jarpaths { $ret = factory.addJars(jarPaths);}
+    ;
+
+list_jars_node returns [ListJarsStatement ret]
+    : LIST JARS { $ret = factory.listJars();}
+    ;
+
+delete_jar_node returns [DeleteJarStatement ret]
+    : DELETE JAR jarPath = jar_path { $ret = factory.deleteJar(jarPath);}
     ;
 
 // Parse an alter session statement.
@@ -913,6 +931,11 @@ one_or_more_expressions returns [List<ParseNode> ret]
 @init{ret = new ArrayList<ParseNode>(); }
     :  e = expression {$ret.add(e);}  (COMMA e = expression {$ret.add(e);} )*
 ;
+
+one_or_more_jarpaths returns [List<LiteralParseNode> ret]
+@init{ret = new ArrayList<LiteralParseNode>(); }
+    :  jarPath = jar_path {$ret.add(jarPath);}  (COMMA jarPath = jar_path {$ret.add(jarPath);} )*
+	;
 
 zero_or_more_expressions returns [List<ParseNode> ret]
 @init{ret = new ArrayList<ParseNode>(); }
