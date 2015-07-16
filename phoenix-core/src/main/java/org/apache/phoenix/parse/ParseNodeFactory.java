@@ -301,6 +301,18 @@ public class ParseNodeFactory {
         return new CreateFunctionStatement(functionInfo, temporary, isReplace);
     }
 
+    public AddJarsStatement addJars(List<LiteralParseNode> jarPaths) {
+        return new AddJarsStatement(jarPaths);
+    }
+
+    public ListJarsStatement listJars() {
+        return new ListJarsStatement();
+    }
+
+    public DeleteJarStatement deleteJar(LiteralParseNode jarPath) {
+        return new DeleteJarStatement(jarPath);
+    }
+
     public DropFunctionStatement dropFunction(String functionName, boolean ifExists) {
         return new DropFunctionStatement(functionName, ifExists);
     }
