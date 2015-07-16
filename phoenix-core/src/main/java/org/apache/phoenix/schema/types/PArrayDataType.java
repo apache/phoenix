@@ -957,6 +957,36 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
         return true;
     }
 
+    public static boolean arrayToString(ImmutableBytesWritable ptr, PhoenixArray array, String delimiter, String nullString, SortOrder sortOrder) {
+        StringBuilder result = new StringBuilder();
+        boolean delimiterPending = false;
+        for (int i = 0; i < array.getDimensions() - 1; i++) {
+            Object element = array.getElement(i);
+            if (element == null) {
+                if (nullString != null) {
+                    result.append(nullString);
+                }
+            } else {
+                result.append(element.toString());
+                delimiterPending = true;
+            }
+            if (nullString != null || (array.getElement(i + 1) != null && delimiterPending)) {
+                result.append(delimiter);
+                delimiterPending = false;
+            }
+        }
+        Object element = array.getElement(array.getDimensions() - 1);
+        if (element == null) {
+            if (nullString != null) {
+                result.append(nullString);
+            }
+        } else {
+            result.append(element.toString());
+        }
+        ptr.set(PVarchar.INSTANCE.toBytes(result.toString(), sortOrder));
+        return true;
+    }
+
     public static int serailizeOffsetArrayIntoStream(DataOutputStream oStream, TrustedByteArrayOutputStream byteStream,
             int noOfElements, int maxOffset, int[] offsetPos) throws IOException {
         int offsetPosition = (byteStream.size());
