@@ -18,6 +18,7 @@
 
 package org.apache.phoenix.expression;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 
 import java.math.BigDecimal;
@@ -485,6 +486,9 @@ public class ArrayConcatFunctionTest {
         PhoenixArray arr2 = new PhoenixArray(base, o2);
         PhoenixArray expected = new PhoenixArray(base, e);
         test(arr1, arr2, type, null, null, type, null, null, expected, SortOrder.ASC, SortOrder.ASC);
+        test(arr1, arr2, type, null, null, type, null, null, expected, SortOrder.ASC, SortOrder.DESC);
+        test(arr1, arr2, type, null, null, type, null, null, expected, SortOrder.DESC, SortOrder.DESC);
+        test(arr1, arr2, type, null, null, type, null, null, expected, SortOrder.DESC, SortOrder.ASC);
     }
 
     @Test
@@ -504,6 +508,9 @@ public class ArrayConcatFunctionTest {
         PhoenixArray arr2 = new PhoenixArray(base, o2);
         PhoenixArray expected = new PhoenixArray(base, e);
         test(arr1, arr2, type, null, null, type, null, null, expected, SortOrder.ASC, SortOrder.ASC);
+        test(arr1, arr2, type, null, null, type, null, null, expected, SortOrder.ASC, SortOrder.DESC);
+        test(arr1, arr2, type, null, null, type, null, null, expected, SortOrder.DESC, SortOrder.DESC);
+        test(arr1, arr2, type, null, null, type, null, null, expected, SortOrder.DESC, SortOrder.ASC);
     }
 
     @Test
@@ -523,6 +530,9 @@ public class ArrayConcatFunctionTest {
         PhoenixArray arr2 = new PhoenixArray(base, o2);
         PhoenixArray expected = new PhoenixArray(base, e);
         test(arr1, arr2, type, null, null, type, null, null, expected, SortOrder.ASC, SortOrder.ASC);
+        test(arr1, arr2, type, null, null, type, null, null, expected, SortOrder.ASC, SortOrder.DESC);
+        test(arr1, arr2, type, null, null, type, null, null, expected, SortOrder.DESC, SortOrder.DESC);
+        test(arr1, arr2, type, null, null, type, null, null, expected, SortOrder.DESC, SortOrder.ASC);
     }
 
     @Test
@@ -542,6 +552,9 @@ public class ArrayConcatFunctionTest {
         PhoenixArray arr2 = new PhoenixArray(base, o2);
         PhoenixArray expected = new PhoenixArray(base, e);
         test(arr1, arr2, type, null, null, type, null, null, expected, SortOrder.ASC, SortOrder.ASC);
+        test(arr1, arr2, type, null, null, type, null, null, expected, SortOrder.ASC, SortOrder.DESC);
+        test(arr1, arr2, type, null, null, type, null, null, expected, SortOrder.DESC, SortOrder.DESC);
+        test(arr1, arr2, type, null, null, type, null, null, expected, SortOrder.DESC, SortOrder.ASC);
     }
 
     @Test
@@ -561,6 +574,9 @@ public class ArrayConcatFunctionTest {
         PhoenixArray arr2 = new PhoenixArray(base, o2);
         PhoenixArray expected = new PhoenixArray(base, e);
         test(arr1, arr2, type, null, null, type, null, null, expected, SortOrder.ASC, SortOrder.ASC);
+        test(arr1, arr2, type, null, null, type, null, null, expected, SortOrder.ASC, SortOrder.DESC);
+        test(arr1, arr2, type, null, null, type, null, null, expected, SortOrder.DESC, SortOrder.DESC);
+        test(arr1, arr2, type, null, null, type, null, null, expected, SortOrder.DESC, SortOrder.ASC);
     }
 
     @Test
@@ -580,5 +596,118 @@ public class ArrayConcatFunctionTest {
         PhoenixArray arr2 = new PhoenixArray(base, o2);
         PhoenixArray expected = new PhoenixArray(base, e);
         test(arr1, arr2, type, null, null, type, null, null, expected, SortOrder.ASC, SortOrder.ASC);
+        test(arr1, arr2, type, null, null, type, null, null, expected, SortOrder.ASC, SortOrder.DESC);
+        test(arr1, arr2, type, null, null, type, null, null, expected, SortOrder.DESC, SortOrder.DESC);
+        test(arr1, arr2, type, null, null, type, null, null, expected, SortOrder.DESC, SortOrder.ASC);
+    }
+
+    @Test
+    public void testForCorrectSeparatorBytes1() throws Exception {
+        Object[] o1 = new Object[]{"a", "b"};
+        Object[] o2 = new Object[]{"c", "d", "e"};
+        PDataType type = PVarcharArray.INSTANCE;
+        PDataType base = PVarchar.INSTANCE;
+
+        PhoenixArray arr1 = new PhoenixArray(base, o1);
+        PhoenixArray arr2 = new PhoenixArray(base, o2);
+        LiteralExpression array1Literal, array2Literal;
+        array1Literal = LiteralExpression.newConstant(arr1, type, null, null, SortOrder.ASC, Determinism.ALWAYS);
+        array2Literal = LiteralExpression.newConstant(arr2, type, null, null, SortOrder.ASC, Determinism.ALWAYS);
+        List<Expression> expressions = Lists.newArrayList((Expression) array1Literal);
+        expressions.add(array2Literal);
+
+        Expression arrayConcatFunction = new ArrayConcatFunction(expressions);
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+        arrayConcatFunction.evaluate(null, ptr);
+        byte[] expected = new byte[]{97, 0, 98, 0, 99, 0, 100, 0, 101, 0, 0, 0, -128, 1, -128, 3, -128, 5, -128, 7, -128, 9, 0, 0, 0, 12, 0, 0, 0, 5, 1};
+        assertArrayEquals(expected, ptr.get());
+    }
+
+    @Test
+    public void testForCorrectSeparatorBytes2() throws Exception {
+        Object[] o1 = new Object[]{"a", "b"};
+        Object[] o2 = new Object[]{"c", "d", "e"};
+        PDataType type = PVarcharArray.INSTANCE;
+        PDataType base = PVarchar.INSTANCE;
+
+        PhoenixArray arr1 = new PhoenixArray(base, o1);
+        PhoenixArray arr2 = new PhoenixArray(base, o2);
+        LiteralExpression array1Literal, array2Literal;
+        array1Literal = LiteralExpression.newConstant(arr1, type, null, null, SortOrder.ASC, Determinism.ALWAYS);
+        array2Literal = LiteralExpression.newConstant(arr2, type, null, null, SortOrder.DESC, Determinism.ALWAYS);
+        List<Expression> expressions = Lists.newArrayList((Expression) array1Literal);
+        expressions.add(array2Literal);
+
+        Expression arrayConcatFunction = new ArrayConcatFunction(expressions);
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+        arrayConcatFunction.evaluate(null, ptr);
+        byte[] expected = new byte[]{97, 0, 98, 0, 99, 0, 100, 0, 101, 0, 0, 0, -128, 1, -128, 3, -128, 5, -128, 7, -128, 9, 0, 0, 0, 12, 0, 0, 0, 5, 1};
+        assertArrayEquals(expected, ptr.get());
+    }
+
+    @Test
+    public void testForCorrectSeparatorBytes3() throws Exception {
+        Object[] o1 = new Object[]{"a", "b"};
+        Object[] o2 = new Object[]{"c", "d", "e"};
+        PDataType type = PVarcharArray.INSTANCE;
+        PDataType base = PVarchar.INSTANCE;
+
+        PhoenixArray arr1 = new PhoenixArray(base, o1);
+        PhoenixArray arr2 = new PhoenixArray(base, o2);
+        LiteralExpression array1Literal, array2Literal;
+        array1Literal = LiteralExpression.newConstant(arr1, type, null, null, SortOrder.DESC, Determinism.ALWAYS);
+        array2Literal = LiteralExpression.newConstant(arr2, type, null, null, SortOrder.DESC, Determinism.ALWAYS);
+        List<Expression> expressions = Lists.newArrayList((Expression) array1Literal);
+        expressions.add(array2Literal);
+
+        Expression arrayConcatFunction = new ArrayConcatFunction(expressions);
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+        arrayConcatFunction.evaluate(null, ptr);
+        byte[] expected = new byte[]{-98, -1, -99, -1, -100, -1, -101, -1, -102, -1, -1, -1, -128, 1, -128, 3, -128, 5, -128, 7, -128, 9, 0, 0, 0, 12, 0, 0, 0, 5, 1};
+        assertArrayEquals(expected, ptr.get());
+    }
+
+    @Test
+    public void testForCorrectSeparatorBytes4() throws Exception {
+        Object[] o1 = new Object[]{"a", "b", null};
+        Object[] o2 = new Object[]{null, "c", "d", "e"};
+        PDataType type = PVarcharArray.INSTANCE;
+        PDataType base = PVarchar.INSTANCE;
+
+        PhoenixArray arr1 = new PhoenixArray(base, o1);
+        PhoenixArray arr2 = new PhoenixArray(base, o2);
+        LiteralExpression array1Literal, array2Literal;
+        array1Literal = LiteralExpression.newConstant(arr1, type, null, null, SortOrder.ASC, Determinism.ALWAYS);
+        array2Literal = LiteralExpression.newConstant(arr2, type, null, null, SortOrder.DESC, Determinism.ALWAYS);
+        List<Expression> expressions = Lists.newArrayList((Expression) array1Literal);
+        expressions.add(array2Literal);
+
+        Expression arrayConcatFunction = new ArrayConcatFunction(expressions);
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+        arrayConcatFunction.evaluate(null, ptr);
+        byte[] expected = new byte[]{97, 0, 98, 0, 0, -2, 99, 0, 100, 0, 101, 0, 0, 0, -128, 1, -128, 3, -128, 5, -128, 5, -128, 7, -128, 9, -128, 11, 0, 0, 0, 14, 0, 0, 0, 7, 1};
+        assertArrayEquals(expected, ptr.get());
+    }
+
+    @Test
+    public void testForCorrectSeparatorBytes5() throws Exception {
+        Object[] o1 = new Object[]{"a", "b", null, null};
+        Object[] o2 = new Object[]{null, "c", "d", "e"};
+        PDataType type = PVarcharArray.INSTANCE;
+        PDataType base = PVarchar.INSTANCE;
+
+        PhoenixArray arr1 = new PhoenixArray(base, o1);
+        PhoenixArray arr2 = new PhoenixArray(base, o2);
+        LiteralExpression array1Literal, array2Literal;
+        array1Literal = LiteralExpression.newConstant(arr1, type, null, null, SortOrder.DESC, Determinism.ALWAYS);
+        array2Literal = LiteralExpression.newConstant(arr2, type, null, null, SortOrder.DESC, Determinism.ALWAYS);
+        List<Expression> expressions = Lists.newArrayList((Expression) array1Literal);
+        expressions.add(array2Literal);
+
+        Expression arrayConcatFunction = new ArrayConcatFunction(expressions);
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+        arrayConcatFunction.evaluate(null, ptr);
+        byte[] expected = new byte[]{-98, -1, -99, -1, 0, -3, -100, -1, -101, -1, -102, -1, -1, -1, -128, 1, -128, 3, -128, 5, -128, 5, -128, 5, -128, 7, -128, 9, -128, 11, 0, 0, 0, 14, 0, 0, 0, 8, 1};
+        assertArrayEquals(expected, ptr.get());
     }
 }

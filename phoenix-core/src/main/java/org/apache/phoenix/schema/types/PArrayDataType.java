@@ -379,10 +379,10 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
                 int currOffset = getOffset(bytes, arrayIndex, useShort, indexOffset);
                 int elementLength = 0;
                 if (arrayIndex == (noOfElements - 1)) {
-                    elementLength = bytes[currOffset + initPos] == QueryConstants.SEPARATOR_BYTE ? 0 : indexOffset
+                    elementLength = (bytes[currOffset + initPos] == QueryConstants.SEPARATOR_BYTE || bytes[currOffset + initPos] == QueryConstants.DESC_SEPARATOR_BYTE) ? 0 : indexOffset
                             - (currOffset + initPos) - 3;
                 } else {
-                    elementLength = bytes[currOffset + initPos] == QueryConstants.SEPARATOR_BYTE ? 0 : getOffset(bytes,
+                    elementLength = (bytes[currOffset + initPos] == QueryConstants.SEPARATOR_BYTE || bytes[currOffset + initPos] == QueryConstants.DESC_SEPARATOR_BYTE) ? 0 : getOffset(bytes,
                             arrayIndex + 1, useShort, indexOffset) - currOffset - 1;
                 }
                 ptr.set(bytes, currOffset + initPos, elementLength);
@@ -426,10 +426,10 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
                 int currOffset = getOffset(bytes, arrayIndex, useShort, indexOffset);
                 int elementLength = 0;
                 if (arrayIndex == (noOfElements - 1)) {
-                    elementLength = bytes[currOffset + offset] == QueryConstants.SEPARATOR_BYTE ? 0 : indexOffset
+                    elementLength = (bytes[currOffset + offset] == QueryConstants.SEPARATOR_BYTE || bytes[currOffset + offset] == QueryConstants.DESC_SEPARATOR_BYTE) ? 0 : indexOffset
                             - (currOffset + offset) - 3;
                 } else {
-                    elementLength = bytes[currOffset + offset] == QueryConstants.SEPARATOR_BYTE ? 0 : getOffset(bytes,
+                    elementLength = (bytes[currOffset + offset] == QueryConstants.SEPARATOR_BYTE || bytes[currOffset + offset] == QueryConstants.DESC_SEPARATOR_BYTE) ? 0 : getOffset(bytes,
                             arrayIndex + 1, useShort, indexOffset) - currOffset - 1;
                 }
                 ptr.set(bytes, currOffset + offset, elementLength);
@@ -831,7 +831,7 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
             // count nulls at the end of array 1
             for (int index = actualLengthOfArray1 - 1; index > -1; index--) {
                 int offset = getOffset(array1Bytes, index, !useIntArray1, array1BytesOffset + offsetArrayPositionArray1);
-                if (array1Bytes[array1BytesOffset + offset] == QueryConstants.SEPARATOR_BYTE) {
+                if (array1Bytes[array1BytesOffset + offset] == QueryConstants.SEPARATOR_BYTE || array1Bytes[array1BytesOffset + offset] == QueryConstants.DESC_SEPARATOR_BYTE) {
                     nullsAtTheEndOfArray1++;
                 } else {
                     break;
@@ -1064,11 +1064,11 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
                         nextOff = getOffset(indexArr, countOfElementsRead + 1, useShort, indexOffset);
                     }
                     countOfElementsRead++;
-                    if ((bytes[currOffset + initPos] != QueryConstants.SEPARATOR_BYTE) && foundNull) {
+                    if ((bytes[currOffset + initPos] != QueryConstants.SEPARATOR_BYTE && bytes[currOffset + initPos] != QueryConstants.DESC_SEPARATOR_BYTE) && foundNull) {
                         // Found a non null element
                         foundNull = false;
                     }
-                    if (bytes[currOffset + initPos] == QueryConstants.SEPARATOR_BYTE) {
+                    if (bytes[currOffset + initPos] == QueryConstants.SEPARATOR_BYTE || bytes[currOffset + initPos] == QueryConstants.DESC_SEPARATOR_BYTE) {
                         // Null element
                         foundNull = true;
                         i++;
