@@ -1,10 +1,14 @@
 package org.apache.phoenix.calcite;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 
+import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.tree.Expression;
+import org.apache.calcite.materialize.MaterializationService;
 import org.apache.calcite.schema.*;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.FromCompiler;
@@ -14,14 +18,22 @@ import org.apache.phoenix.parse.ColumnDef;
 import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.schema.MetaDataClient;
+import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.util.IndexUtil;
 
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.*;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
 
 /**
  * Implementation of Calcite's {@link Schema} SPI for Phoenix.
@@ -29,21 +41,27 @@ import java.util.*;
 public class PhoenixSchema implements Schema {
     public static final Factory FACTORY = new Factory();
     
+    protected final String name;
     protected final String schemaName;
+    protected final SchemaPlus parentSchema;
     protected final PhoenixConnection pc;
     protected final MetaDataClient client;
+    protected final CalciteSchema calciteSchema;
     
     protected final Set<String> subSchemaNames;
-    protected final Set<String> tableNames;
+    protected final Map<String, PTable> tableMap;
     
-    private PhoenixSchema(String name, PhoenixConnection pc) {
-        this.schemaName = name;
+    private PhoenixSchema(String name, SchemaPlus parentSchema, String schemaName, PhoenixConnection pc) {
+        this.name = name;
+        this.schemaName = schemaName;
+        this.parentSchema = parentSchema;
         this.pc = pc;
         this.client = new MetaDataClient(pc);
-        this.subSchemaNames = name == null ? 
+        this.calciteSchema = new CalciteSchema(CalciteSchema.from(parentSchema), this, name);
+        this.tableMap = ImmutableMap.<String, PTable> copyOf(loadTables());
+        this.subSchemaNames = schemaName == null ? 
                   ImmutableSet.<String> copyOf(loadSubSchemaNames()) 
                 : Collections.<String> emptySet();
-        this.tableNames = ImmutableSet.<String> copyOf(loadTableNames());
     }
     
     private Set<String> loadSubSchemaNames() {
@@ -61,21 +79,29 @@ public class PhoenixSchema implements Schema {
         }
     }
     
-    private Set<String> loadTableNames() {
+    private Map<String, PTable> loadTables() {
         try {
             DatabaseMetaData md = pc.getMetaData();
             ResultSet rs = md.getTables(null, schemaName == null ? "" : schemaName, null, null);
-            Set<String> tableNames = Sets.newHashSet();
+            Map<String, PTable> tableMap = Maps.<String, PTable> newHashMap();
             while (rs.next()) {
-                tableNames.add(rs.getString(PhoenixDatabaseMetaData.TABLE_NAME));
+                String tableName = rs.getString(PhoenixDatabaseMetaData.TABLE_NAME);
+                ColumnResolver x = FromCompiler.getResolver(
+                        NamedTableNode.create(
+                                null,
+                                TableName.create(schemaName, tableName),
+                                ImmutableList.<ColumnDef>of()), pc);
+                final List<TableRef> tables = x.getTables();
+                assert tables.size() == 1;
+                tableMap.put(tableName, tables.get(0).getTable());
             }
-            return tableNames;
+            return tableMap;
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
     }
 
-    private static Schema create(SchemaPlus parentSchema, Map<String, Object> operand) {
+    private static Schema create(String name, SchemaPlus parentSchema, Map<String, Object> operand) {
         String url = (String) operand.get("url");
         final Properties properties = new Properties();
         for (Map.Entry<String, Object> entry : operand.entrySet()) {
@@ -87,7 +113,7 @@ public class PhoenixSchema implements Schema {
                 DriverManager.getConnection(url, properties);
             final PhoenixConnection phoenixConnection =
                 connection.unwrap(PhoenixConnection.class);
-            return new PhoenixSchema(null, phoenixConnection);
+            return new PhoenixSchema(name, parentSchema, null, phoenixConnection);
         } catch (ClassNotFoundException e) {
             throw new RuntimeException(e);
         } catch (SQLException e) {
@@ -97,23 +123,13 @@ public class PhoenixSchema implements Schema {
 
     @Override
     public Table getTable(String name) {
-        try {
-            ColumnResolver x = FromCompiler.getResolver(
-                NamedTableNode.create(
-                    null,
-                    TableName.create(schemaName, name),
-                    ImmutableList.<ColumnDef>of()), pc);
-            final List<TableRef> tables = x.getTables();
-            assert tables.size() == 1;
-            return new PhoenixTable(pc, tables.get(0).getTable());
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
+        PTable table = tableMap.get(name);
+        return table == null ? null : new PhoenixTable(pc, table);
     }
 
     @Override
     public Set<String> getTableNames() {
-        return tableNames;
+        return tableMap.keySet();
     }
 
     @Override
@@ -131,7 +147,7 @@ public class PhoenixSchema implements Schema {
         if (!subSchemaNames.contains(name))
             return null;
         
-        return new PhoenixSchema(name, pc);
+        return new PhoenixSchema(name, calciteSchema.plus(), name, pc);
     }
 
     @Override
@@ -152,6 +168,30 @@ public class PhoenixSchema implements Schema {
     @Override
     public boolean contentsHaveChangedSince(long lastCheck, long now) {
         return false;
+    }
+    
+    public void defineIndexesAsMaterializations() {
+        List<String> path = calciteSchema.path(null);
+        for (PTable table : tableMap.values()) {
+            for (PTable index : table.getIndexes()) {
+                addMaterialization(table, index, path);
+            }
+        }
+    }
+    
+    protected void addMaterialization(PTable table, PTable index, List<String> path) {
+        StringBuffer sb = new StringBuffer();
+        sb.append("SELECT");
+        for (PColumn column : index.getColumns()) {
+            String indexColumnName = column.getName().getString();
+            String dataColumnName = IndexUtil.getDataColumnName(indexColumnName);
+            sb.append(",").append("\"").append(dataColumnName).append("\"");
+            sb.append(" ").append("\"").append(indexColumnName).append("\"");
+        }
+        sb.setCharAt(6, ' '); // replace first comma with space.
+        sb.append(" FROM ").append("\"").append(table.getTableName().getString()).append("\"");
+        MaterializationService.instance().defineMaterialization(
+                calciteSchema, null, sb.toString(), path, index.getTableName().getString(), true);        
     }
 
     /** Schema factory that creates a
@@ -179,7 +219,7 @@ public class PhoenixSchema implements Schema {
      */
     public static class Factory implements SchemaFactory {
         public Schema create(SchemaPlus parentSchema, String name, Map<String, Object> operand) {
-            return PhoenixSchema.create(parentSchema, operand);
+            return PhoenixSchema.create(name, parentSchema, operand);
         }
     }
 }

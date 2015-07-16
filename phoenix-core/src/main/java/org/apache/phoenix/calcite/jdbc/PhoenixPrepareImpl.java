@@ -1,11 +1,15 @@
 package org.apache.phoenix.calcite.jdbc;
 
+import java.util.Map;
+
 import org.apache.calcite.jdbc.CalcitePrepare;
+import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.plan.RelOptCostFactory;
 import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.prepare.CalcitePrepareImpl;
 import org.apache.calcite.rel.rules.JoinCommuteRule;
+import org.apache.phoenix.calcite.PhoenixSchema;
 import org.apache.phoenix.calcite.rules.PhoenixAddScanLimitRule;
 import org.apache.phoenix.calcite.rules.PhoenixCompactClientSortRule;
 import org.apache.phoenix.calcite.rules.PhoenixConverterRules;
@@ -39,6 +43,15 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
         planner.addRule(PhoenixCompactClientSortRule.SORT_SERVERAGGREGATE);
         planner.addRule(PhoenixJoinSingleValueAggregateMergeRule.INSTANCE);
         planner.addRule(PhoenixInnerSortRemoveRule.INSTANCE);
+        
+        for (CalciteSchema subSchema : prepareContext.getRootSchema().getSubSchemaMap().values()) {
+            if (subSchema.schema instanceof PhoenixSchema) {
+                ((PhoenixSchema) subSchema.schema).defineIndexesAsMaterializations();
+                for (CalciteSchema phoenixSubSchema : subSchema.getSubSchemaMap().values()) {
+                    ((PhoenixSchema) phoenixSubSchema.schema).defineIndexesAsMaterializations();
+                }
+            }
+        }
 
         return planner;
     }

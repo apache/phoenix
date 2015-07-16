@@ -6,7 +6,6 @@ import com.google.common.collect.Maps;
 import org.apache.calcite.config.CalciteConnectionProperty;
 import org.apache.calcite.jdbc.CalciteConnection;
 import org.apache.calcite.schema.SchemaPlus;
-import org.apache.calcite.util.JsonBuilder;
 import org.apache.phoenix.end2end.BaseClientManagedTimeIT;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -35,14 +34,27 @@ public class CalciteTest extends BaseClientManagedTimeIT {
     public static final String ATABLE_NAME = "ATABLE";
 
     public static Start start() {
-        return new Start();
+        return new Start(new Properties(), false);
+    }
+    
+    public static Start start(Properties props, boolean connectUsingModel) {
+        return new Start(props, connectUsingModel);
     }
 
     public static class Start {
+        protected final Properties props;
+        protected final boolean connectUsingModel;
         private Connection connection;
+        
+        Start(Properties props, boolean connectUsingModel) {
+            this.props = props;
+            this.connectUsingModel = connectUsingModel;
+        }
 
         Connection createConnection() throws Exception {
-            return CalciteTest.createConnection();
+            return connectUsingModel ? 
+                    CalciteTest.connectUsingModel(props) 
+                  : CalciteTest.createConnection(props);
         }
 
         public Sql sql(String sql) {
@@ -146,21 +158,6 @@ public class CalciteTest extends BaseClientManagedTimeIT {
         }
     }
 
-    private static Connection createConnection() throws SQLException {
-        final Connection connection = DriverManager.getConnection(
-            "jdbc:phoenixcalcite:");
-        final CalciteConnection calciteConnection =
-            connection.unwrap(CalciteConnection.class);
-        final String url = getUrl();
-        Map<String, Object> operand = Maps.newHashMap();
-        operand.put("url", url);
-        SchemaPlus rootSchema = calciteConnection.getRootSchema();
-        rootSchema.add("phoenix",
-            PhoenixSchema.FACTORY.create(rootSchema, null, operand));
-        calciteConnection.setSchema("phoenix");
-        return connection;
-    }
-
     private static final String FOODMART_SCHEMA = "     {\n"
             + "       type: 'jdbc',\n"
             + "       name: 'foodmart',\n"
@@ -181,25 +178,7 @@ public class CalciteTest extends BaseClientManagedTimeIT {
             + "      }\n"
             + "    }";
 
-    private static Connection connectWithHsqldbUsingModel() throws Exception {
-        final File file = File.createTempFile("model", ".json");
-        final PrintWriter pw = new PrintWriter(new FileWriter(file));
-        pw.print(
-            "{\n"
-                + "  version: '1.0',\n"
-                + "  defaultSchema: 'phoenix',\n"
-                + "  schemas: [\n"
-                + PHOENIX_SCHEMA + ",\n"
-                + FOODMART_SCHEMA + "\n"
-                + "  ]\n"
-                + "}\n");
-        pw.close();
-        final Connection connection =
-            DriverManager.getConnection("jdbc:phoenixcalcite:model=" + file.getAbsolutePath());
-        return connection;
-    }
-
-    private static Connection connectUsingModel() throws Exception {
+    private static Connection connectUsingModel(Properties props) throws Exception {
         final File file = File.createTempFile("model", ".json");
         final String url = getUrl();
         final PrintWriter pw = new PrintWriter(new FileWriter(file));
@@ -222,31 +201,26 @@ public class CalciteTest extends BaseClientManagedTimeIT {
                 + "}\n");
         pw.close();
         final Connection connection =
-            DriverManager.getConnection("jdbc:phoenixcalcite:model=" + file.getAbsolutePath());
+            DriverManager.getConnection("jdbc:phoenixcalcite:model=" + file.getAbsolutePath(), props == null ? new Properties() : props);
         return connection;
     }
 
-    private static Connection connectWithMaterialization(String... materializations) throws Exception {
-        assert materializations.length % 2 == 0;
-        final JsonBuilder builder = new JsonBuilder();
-        final List<Object> list = builder.list();
-        for (int i = 0; i < materializations.length; i++) {
-          String table = materializations[i++];
-          final Map<String, Object> map = builder.map();
-          map.put("table", table);
-          map.put("view", table + "v");
-          String sql = materializations[i];
-          final String sql2 = sql
-              .replaceAll("`", "\"");
-          map.put("sql", sql2);
-          list.add(map);
-        }
-        final String buf =
-            "materializations: " + builder.toJsonString(list);
-        final String schema = PHOENIX_SCHEMA.replace("type: ",
-                buf + ",\n"
-                + "type: ");
+    private static Connection createConnection(Properties props) throws SQLException {
+        final Connection connection = DriverManager.getConnection(
+            "jdbc:phoenixcalcite:", props);
+        final CalciteConnection calciteConnection =
+            connection.unwrap(CalciteConnection.class);
+        final String url = getUrl();
+        Map<String, Object> operand = Maps.newHashMap();
+        operand.put("url", url);
+        SchemaPlus rootSchema = calciteConnection.getRootSchema();
+        rootSchema.add("phoenix",
+            PhoenixSchema.FACTORY.create(rootSchema, "phoenix", operand));
+        calciteConnection.setSchema("phoenix");
+        return connection;
+    }
 
+    private static Connection connectWithHsqldbUsingModel() throws Exception {
         final File file = File.createTempFile("model", ".json");
         final PrintWriter pw = new PrintWriter(new FileWriter(file));
         pw.print(
@@ -254,10 +228,17 @@ public class CalciteTest extends BaseClientManagedTimeIT {
                 + "  version: '1.0',\n"
                 + "  defaultSchema: 'phoenix',\n"
                 + "  schemas: [\n"
-                + schema + "\n"
+                + PHOENIX_SCHEMA + ",\n"
+                + FOODMART_SCHEMA + "\n"
                 + "  ]\n"
                 + "}\n");
         pw.close();
+        final Connection connection =
+            DriverManager.getConnection("jdbc:phoenixcalcite:model=" + file.getAbsolutePath());
+        return connection;
+    }
+
+    private static Properties getMaterializationEnabledProps() {
         Properties props = new Properties();
         props.setProperty(
                 CalciteConnectionProperty.MATERIALIZATIONS_ENABLED.camelName(),
@@ -265,9 +246,7 @@ public class CalciteTest extends BaseClientManagedTimeIT {
         props.setProperty(
                 CalciteConnectionProperty.CREATE_MATERIALIZATIONS.camelName(),
                 Boolean.toString(false));
-        final Connection connection =
-            DriverManager.getConnection("jdbc:phoenixcalcite:model=" + file.getAbsolutePath(), props);
-        return connection;
+        return props;
     }
     
     @Before
@@ -880,15 +859,7 @@ public class CalciteTest extends BaseClientManagedTimeIT {
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
-        final Start start = new Start() {
-            @Override
-            Connection createConnection() throws Exception {
-                return connectWithMaterialization(
-                        "IDX1", "select a_string as \"0:A_STRING\", organization_id as \":ORGANIZATION_ID\", entity_id as \":ENTITY_ID\", b_string as \"0:B_STRING\", x_integer as \"0:X_INTEGER\" from aTable",
-                        "IDX2", "select b_string as \"0:B_STRING\", organization_id as \":ORGANIZATION_ID\", entity_id as \":ENTITY_ID\", a_string as \"0:A_STRING\", y_integer as \"0:Y_INTEGER\" from aTable",
-                        "IDX_FULL", "select b_string as \"0:B_STRING\", organization_id as \":ORGANIZATION_ID\", entity_id as \":ENTITY_ID\", a_string as \"0:A_STRING\", a_integer as \"0:A_INTEGER\", a_date as \"0:A_DATE\", a_time as \"0:A_TIME\", a_timestamp as \"0:A_TIMESTAMP\", x_decimal as \"0:X_DECIMAL\", x_long as \"0:X_LONG\", x_integer as \"0:X_INTEGER\", y_integer as \"0:Y_INTEGER\", a_byte as \"0:A_BYTE\", a_short as \"0:A_SHORT\", a_float as \"0:A_FLOAT\", a_double as \"0:A_DOUBLE\", a_unsigned_float as \"0:A_UNSIGNED_FLOAT\", a_unsigned_double as \"0:A_UNSIGNED_DOUBLE\" from aTable");
-            }
-        };
+        final Start start = start(getMaterializationEnabledProps(), false);
         start.sql("select x_integer from aTable")
             .explainIs("PhoenixToEnumerableConverter\n" +
                        "  PhoenixToClientConverter\n" +
@@ -935,7 +906,7 @@ public class CalciteTest extends BaseClientManagedTimeIT {
     }
     
     @Test public void testConnectJoinHsqldb() {
-        final Start start = new Start() {
+        final Start start = new Start(new Properties(), false) {
             @Override
             Connection createConnection() throws Exception {
                 return connectWithHsqldbUsingModel();
@@ -968,12 +939,7 @@ public class CalciteTest extends BaseClientManagedTimeIT {
     }
 
     @Test public void testConnectUsingModel() throws Exception {
-        final Start start = new Start() {
-            @Override
-            Connection createConnection() throws Exception {
-                return connectUsingModel();
-            }
-        };
+        final Start start = start(new Properties(), true);
         start.sql("select * from aTable")
             .explainIs("PhoenixToEnumerableConverter\n" +
                        "  PhoenixToClientConverter\n" +
