@@ -21,6 +21,7 @@ import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_QUERY_TIME;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_SELECT_SQL_COUNTER;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.Reader;
 import java.sql.ParameterMetaData;
@@ -36,6 +37,9 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.call.CallRunner;
@@ -51,6 +55,7 @@ import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExpressionProjector;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
+import org.apache.phoenix.compile.ListJarsQueryPlan;
 import org.apache.phoenix.compile.MutationPlan;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.QueryCompiler;
@@ -73,6 +78,7 @@ import org.apache.phoenix.iterate.MaterializedResultIterator;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.parse.AddColumnStatement;
+import org.apache.phoenix.parse.AddJarsStatement;
 import org.apache.phoenix.parse.AliasedNode;
 import org.apache.phoenix.parse.AlterIndexStatement;
 import org.apache.phoenix.parse.BindableStatement;
@@ -82,6 +88,7 @@ import org.apache.phoenix.parse.CreateFunctionStatement;
 import org.apache.phoenix.parse.CreateIndexStatement;
 import org.apache.phoenix.parse.CreateSequenceStatement;
 import org.apache.phoenix.parse.CreateTableStatement;
+import org.apache.phoenix.parse.DeleteJarStatement;
 import org.apache.phoenix.parse.DeleteStatement;
 import org.apache.phoenix.parse.DropColumnStatement;
 import org.apache.phoenix.parse.DropFunctionStatement;
@@ -93,6 +100,8 @@ import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.IndexKeyConstraint;
 import org.apache.phoenix.parse.LimitNode;
+import org.apache.phoenix.parse.ListJarsStatement;
+import org.apache.phoenix.parse.LiteralParseNode;
 import org.apache.phoenix.parse.NamedNode;
 import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.OrderByNode;
@@ -108,6 +117,7 @@ import org.apache.phoenix.parse.TraceStatement;
 import org.apache.phoenix.parse.UDFParseNode;
 import org.apache.phoenix.parse.UpdateStatisticsStatement;
 import org.apache.phoenix.parse.UpsertStatement;
+import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
@@ -628,6 +638,152 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         }
     }
     
+    private static class ExecutableAddJarsStatement extends AddJarsStatement implements CompilableStatement {
+
+        public ExecutableAddJarsStatement(List<LiteralParseNode> jarPaths) {
+            super(jarPaths);
+        }
+
+
+        @SuppressWarnings("unchecked")
+        @Override
+        public MutationPlan compilePlan(final PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
+            final StatementContext context = new StatementContext(stmt);
+            return new MutationPlan() {
+
+                @Override
+                public StatementContext getContext() {
+                    return context;
+                }
+
+                @Override
+                public ParameterMetaData getParameterMetaData() {
+                    return PhoenixParameterMetaData.EMPTY_PARAMETER_META_DATA;
+                }
+
+                @Override
+                public ExplainPlan getExplainPlan() throws SQLException {
+                    return new ExplainPlan(Collections.singletonList("ADD JARS"));
+                }
+
+                @Override
+                public PhoenixConnection getConnection() {
+                    return stmt.getConnection();
+                }
+
+                @Override
+                public MutationState execute() throws SQLException {
+                    String dynamicJarsDir = stmt.getConnection().getQueryServices().getProps().get(QueryServices.DYNAMIC_JARS_DIR_KEY);
+                    if(dynamicJarsDir == null) {
+                        throw new SQLException(QueryServices.DYNAMIC_JARS_DIR_KEY+" is not configured for placing the jars.");
+                    }
+                    dynamicJarsDir =
+                            dynamicJarsDir.endsWith("/") ? dynamicJarsDir : dynamicJarsDir + '/';
+                    Configuration conf = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
+                    Path dynamicJarsDirPath = new Path(dynamicJarsDir);
+                    for (LiteralParseNode jarPath : getJarPaths()) {
+                        String jarPathStr = (String)jarPath.getValue();
+                        if(!jarPathStr.endsWith(".jar")) {
+                            throw new SQLException(jarPathStr + " is not a valid jar file path.");
+                        }
+                    }
+
+                    try {
+                        FileSystem fs = dynamicJarsDirPath.getFileSystem(conf);
+                        List<LiteralParseNode> jarPaths = getJarPaths();
+                        for (LiteralParseNode jarPath : jarPaths) {
+                            File f = new File((String) jarPath.getValue());
+                            fs.copyFromLocalFile(new Path(f.getAbsolutePath()), new Path(
+                                    dynamicJarsDir + f.getName()));
+                        }
+                    } catch(IOException e) {
+                        throw new SQLException(e);
+                    }
+                    return new MutationState(0, context.getConnection());
+                }
+            };
+            
+        }
+    }
+
+    private static class ExecutableDeleteJarStatement extends DeleteJarStatement implements CompilableStatement {
+
+        public ExecutableDeleteJarStatement(LiteralParseNode jarPath) {
+            super(jarPath);
+        }
+
+
+        @SuppressWarnings("unchecked")
+        @Override
+        public MutationPlan compilePlan(final PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
+            final StatementContext context = new StatementContext(stmt);
+            return new MutationPlan() {
+
+                @Override
+                public StatementContext getContext() {
+                    return context;
+                }
+
+                @Override
+                public ParameterMetaData getParameterMetaData() {
+                    return PhoenixParameterMetaData.EMPTY_PARAMETER_META_DATA;
+                }
+
+                @Override
+                public ExplainPlan getExplainPlan() throws SQLException {
+                    return new ExplainPlan(Collections.singletonList("DELETE JAR"));
+                }
+
+                @Override
+                public PhoenixConnection getConnection() {
+                    return stmt.getConnection();
+                }
+
+                @Override
+                public MutationState execute() throws SQLException {
+                    String dynamicJarsDir = stmt.getConnection().getQueryServices().getProps().get(QueryServices.DYNAMIC_JARS_DIR_KEY);
+                    if (dynamicJarsDir == null) {
+                        throw new SQLException(QueryServices.DYNAMIC_JARS_DIR_KEY
+                                + " is not configured.");
+                    }
+                    dynamicJarsDir =
+                            dynamicJarsDir.endsWith("/") ? dynamicJarsDir : dynamicJarsDir + '/';
+                    Configuration conf = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
+                    Path dynamicJarsDirPath = new Path(dynamicJarsDir);
+                    try {
+                        FileSystem fs = dynamicJarsDirPath.getFileSystem(conf);
+                        String jarPathStr = (String)getJarPath().getValue();
+                        if(!jarPathStr.endsWith(".jar")) {
+                            throw new SQLException(jarPathStr + " is not a valid jar file path.");
+                        }
+                        Path p = new Path(jarPathStr);
+                        if(fs.exists(p)) {
+                            fs.delete(p, false);
+                        }
+                    } catch(IOException e) {
+                        throw new SQLException(e);
+                    }
+                    return new MutationState(0, context.getConnection());
+                }
+            };
+            
+        }
+    }
+
+    private static class ExecutableListJarsStatement extends ListJarsStatement implements CompilableStatement {
+
+        public ExecutableListJarsStatement() {
+            super();
+        }
+
+
+        @SuppressWarnings("unchecked")
+        @Override
+        public QueryPlan compilePlan(final PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
+            return new ListJarsQueryPlan(stmt);
+        }
+    }
+
     private static class ExecutableCreateIndexStatement extends CreateIndexStatement implements CompilableStatement {
 
         public ExecutableCreateIndexStatement(NamedNode indexName, NamedTableNode dataTable, IndexKeyConstraint ikConstraint, List<ColumnName> includeColumns, List<ParseNode> splits,
@@ -975,6 +1131,23 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         public CreateFunctionStatement createFunction(PFunction functionInfo, boolean temporary, boolean isReplace) {
             return new ExecutableCreateFunctionStatement(functionInfo, temporary, isReplace);
         }
+
+        @Override
+        public AddJarsStatement addJars(List<LiteralParseNode> jarPaths) {
+            return new ExecutableAddJarsStatement(jarPaths);
+        }
+
+        @Override
+        public DeleteJarStatement deleteJar(LiteralParseNode jarPath)  {
+            return new ExecutableDeleteJarStatement(jarPath);
+        }
+
+        @Override
+        public ListJarsStatement listJars() {
+            return new ExecutableListJarsStatement();
+        }
+
+
         @Override
         public DropSequenceStatement dropSequence(TableName tableName, boolean ifExists, int bindCount){
             return new ExecutableDropSequenceStatement(tableName, ifExists, bindCount);
