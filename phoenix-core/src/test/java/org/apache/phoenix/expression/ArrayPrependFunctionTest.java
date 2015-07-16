@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.expression;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 
 import java.math.BigDecimal;
@@ -548,5 +549,65 @@ public class ArrayPrependFunctionTest {
         PhoenixArray arr = new PhoenixArray(baseType, o);
         PhoenixArray expected = new PhoenixArray(baseType, o2);
         test(arr, element, PDataType.fromTypeId(baseType.getSqlType() + PDataType.ARRAY_TYPE_BASE), null, null, baseType, 1, null, expected, SortOrder.ASC, SortOrder.DESC);
+    }
+
+    @Test
+    public void testForCorrectSeparatorBytes1() throws Exception {
+        Object[] o = new Object[]{"a", "b", "c"};
+        Object element = "d";
+        PDataType baseType = PVarchar.INSTANCE;
+
+        PhoenixArray arr = new PhoenixArray(baseType, o);
+        LiteralExpression arrayLiteral, elementLiteral;
+        arrayLiteral = LiteralExpression.newConstant(arr, PVarcharArray.INSTANCE, null, null, SortOrder.ASC, Determinism.ALWAYS);
+        elementLiteral = LiteralExpression.newConstant(element, baseType, null, null, SortOrder.ASC, Determinism.ALWAYS);
+        List<Expression> expressions = Lists.newArrayList((Expression) elementLiteral);
+        expressions.add(arrayLiteral);
+
+        Expression arrayPrependFunction = new ArrayPrependFunction(expressions);
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+        arrayPrependFunction.evaluate(null, ptr);
+        byte[] expected = new byte[]{100, 0, 97, 0, 98, 0, 99, 0, 0, 0, -128, 1, -128, 3, -128, 5, -128, 7, 0, 0, 0, 10, 0, 0, 0, 4, 1};
+        assertArrayEquals(expected, ptr.get());
+    }
+
+    @Test
+    public void testForCorrectSeparatorBytes2() throws Exception {
+        Object[] o = new Object[]{"a", "b", "c"};
+        Object element = "d";
+        PDataType baseType = PVarchar.INSTANCE;
+
+        PhoenixArray arr = new PhoenixArray(baseType, o);
+        LiteralExpression arrayLiteral, elementLiteral;
+        arrayLiteral = LiteralExpression.newConstant(arr, PVarcharArray.INSTANCE, null, null, SortOrder.DESC, Determinism.ALWAYS);
+        elementLiteral = LiteralExpression.newConstant(element, baseType, null, null, SortOrder.ASC, Determinism.ALWAYS);
+        List<Expression> expressions = Lists.newArrayList((Expression) elementLiteral);
+        expressions.add(arrayLiteral);
+
+        Expression arrayPrependFunction = new ArrayPrependFunction(expressions);
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+        arrayPrependFunction.evaluate(null, ptr);
+        byte[] expected = new byte[]{-101, -1, -98, -1, -99, -1, -100, -1, -1, -1, -128, 1, -128, 3, -128, 5, -128, 7, 0, 0, 0, 10, 0, 0, 0, 4, 1};
+        assertArrayEquals(expected, ptr.get());
+    }
+
+    @Test
+    public void testForCorrectSeparatorBytes3() throws Exception {
+        Object[] o = new Object[]{"a", null, null, "c"};
+        Object element = "d";
+        PDataType baseType = PVarchar.INSTANCE;
+
+        PhoenixArray arr = new PhoenixArray(baseType, o);
+        LiteralExpression arrayLiteral, elementLiteral;
+        arrayLiteral = LiteralExpression.newConstant(arr, PVarcharArray.INSTANCE, null, null, SortOrder.DESC, Determinism.ALWAYS);
+        elementLiteral = LiteralExpression.newConstant(element, baseType, null, null, SortOrder.ASC, Determinism.ALWAYS);
+        List<Expression> expressions = Lists.newArrayList((Expression) elementLiteral);
+        expressions.add(arrayLiteral);
+
+        Expression arrayPrependFunction = new ArrayPrependFunction(expressions);
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+        arrayPrependFunction.evaluate(null, ptr);
+        byte[] expected = new byte[]{-101, -1, -98, -1, 0, -2, -100, -1, -1, -1, -128, 1, -128, 3, -128, 5, -128, 5, -128, 7, 0, 0, 0, 10, 0, 0, 0, 5, 1};
+        assertArrayEquals(expected, ptr.get());
     }
 }
