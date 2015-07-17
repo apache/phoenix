@@ -17,12 +17,8 @@
 package org.apache.phoenix.tracingwebapp.http;
 
 import java.io.File;
-import java.lang.management.ManagementFactory;
-import java.lang.management.RuntimeMXBean;
 import java.net.URL;
 import java.security.ProtectionDomain;
-import java.util.HashSet;
-import java.util.Set;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -36,7 +32,7 @@ import org.eclipse.jetty.webapp.WebAppContext;
 
 /**
  * tracing web app runner
- *
+ * 
  * @since 4.5.5
  */
 public final class Main extends Configured implements Tool {
@@ -46,33 +42,8 @@ public final class Main extends Configured implements Tool {
             "phoenix.traceserver.http.port";
     public static final int DEFAULT_HTTP_PORT = 8865;
     public static final String TRACE_SERVER_HTTP_JETTY_HOME_KEY =
-            "phoenix.traceserver.http.homr";
-    public static final String DEFAULT_HTTP_HOME = "home";
-    public static final String TRACE_SERVER_ENV_LOGGING_KEY =
-            "phoenix.traceserver.envvars.logging.disabled";
-    public static final String TRACE_SERVER_ENV_LOGGING_SKIPWORDS_KEY =
-            "phoenix.traceserver.envvars.logging.skipwords";
-
-    @SuppressWarnings("serial")
-    private static final Set<String> DEFAULT_SKIP_WORDS = new HashSet<String>() {
-        {
-            add("secret");
-            add("passwd");
-            add("password");
-            add("credential");
-        }
-    };
-
-    public static void logJVMInfo() {
-        // Print out vm stats before starting up.
-        RuntimeMXBean runtime = ManagementFactory.getRuntimeMXBean();
-        if (runtime != null) {
-            LOG.info("vmName=" + runtime.getVmName() + ", vmVendor="
-                    + runtime.getVmVendor() + ", vmVersion="
-                    + runtime.getVmVersion());
-            LOG.info("vmInputArguments=" + runtime.getInputArguments());
-        }
-    }
+            "phoenix.traceserver.http.home";
+    public static final String DEFAULT_HTTP_HOME = "";
 
     public static void main(String[] args) throws Exception {
         int ret = ToolRunner.run(HBaseConfiguration.create(), new Main(), args);
