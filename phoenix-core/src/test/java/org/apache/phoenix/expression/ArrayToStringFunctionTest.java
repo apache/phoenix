@@ -30,6 +30,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.function.ArrayToStringFunction;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.*;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import com.google.common.collect.Lists;
@@ -132,8 +133,9 @@ public class ArrayToStringFunctionTest {
         String expected = "1.1, 2.2, 3.3, 4.4, 5.5";
         test(arr, type, null, null, delimiter, nullString, expected, SortOrder.ASC, SortOrder.ASC, SortOrder.ASC);
     }
-
+    
     @Test
+    @Ignore
     public void testDate() throws SQLException {
         PDataType type = PDateArray.INSTANCE;
         PDataType base = PDate.INSTANCE;

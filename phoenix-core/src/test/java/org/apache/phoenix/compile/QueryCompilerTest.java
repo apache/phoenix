@@ -1855,11 +1855,17 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         Properties props = new Properties();
         props.setProperty(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.toString(true));
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        conn.createStatement().execute("CREATE TABLE t (k1 char(2) not null, k2 varchar not null, k3 integer not null, v varchar, constraint pk primary key(k1,k2,k3))");
+        testForceRowKeyOrder(conn, false);
+        testForceRowKeyOrder(conn, true);
+    }
+
+    private void testForceRowKeyOrder(Connection conn, boolean isSalted) throws SQLException {
+        String tableName = "tablename" + (isSalted ? "_salt" : "");
+        conn.createStatement().execute("CREATE TABLE " + tableName + " (k1 char(2) not null, k2 varchar not null, k3 integer not null, v varchar, constraint pk primary key(k1,k2,k3))");
         String[] queries = {
-                "SELECT 1 FROM T ",
-                "SELECT 1 FROM T WHERE V = 'c'",
-                "SELECT 1 FROM T WHERE (k1, k2, k3) > ('a', 'ab', 1)",
+                "SELECT 1 FROM  " + tableName ,
+                "SELECT 1 FROM  " + tableName + "  WHERE V = 'c'",
+                "SELECT 1 FROM  " + tableName + "  WHERE (k1, k2, k3) > ('a', 'ab', 1)",
                 };
         String query;
         for (int i = 0; i < queries.length; i++) {
@@ -1874,13 +1880,21 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         Properties props = new Properties();
         props.setProperty(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.toString(false));
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        conn.createStatement().execute("CREATE TABLE t (k1 char(2) not null, k2 varchar not null, k3 integer not null, v varchar, constraint pk primary key(k1,k2,k3))");
+        testOrderByOrGroupByDoesntUseRoundRobin(conn, true);
+        testOrderByOrGroupByDoesntUseRoundRobin(conn, false);
+    }
+
+    private void testOrderByOrGroupByDoesntUseRoundRobin(Connection conn, boolean salted) throws SQLException {
+        String tableName = "orderbygroupbytable" + (salted ? "_salt" : ""); 
+        conn.createStatement().execute("CREATE TABLE " + tableName + " (k1 char(2) not null, k2 varchar not null, k3 integer not null, v varchar, constraint pk primary key(k1,k2,k3))");
         String[] queries = {
-                "SELECT 1 FROM T ORDER BY K1",
-                "SELECT 1 FROM T WHERE V = 'c' ORDER BY K1, K2",
-                "SELECT 1 FROM T WHERE (k1,k2, k3) > ('a', 'ab', 1) ORDER BY V",
-                "SELECT 1 FROM T GROUP BY V",
-                "SELECT 1 FROM T GROUP BY K1, V, K2 ORDER BY V",
+                "SELECT 1 FROM  " + tableName + "  ORDER BY K1",
+                "SELECT 1 FROM  " + tableName + "  WHERE V = 'c' ORDER BY K1, K2",
+                "SELECT 1 FROM  " + tableName + "  WHERE V = 'c' ORDER BY K1, K2, K3",
+                "SELECT 1 FROM  " + tableName + "  WHERE V = 'c' ORDER BY K3",
+                "SELECT 1 FROM  " + tableName + "  WHERE (k1,k2, k3) > ('a', 'ab', 1) ORDER BY V",
+                "SELECT 1 FROM  " + tableName + "  GROUP BY V",
+                "SELECT 1 FROM  " + tableName + "  GROUP BY K1, V, K2 ORDER BY V",
                 };
         String query;
         for (int i = 0; i < queries.length; i++) {
@@ -1889,7 +1903,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             assertFalse("Expected plan to not use round robin iterator " + query, plan.useRoundRobinIterator());
         }
     }
-
+    
     @Test
     public void testSelectColumnsInOneFamily() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
