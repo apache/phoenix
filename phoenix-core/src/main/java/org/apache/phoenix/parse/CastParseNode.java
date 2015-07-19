@@ -133,7 +133,7 @@ public class CastParseNode extends UnaryParseNode {
         if (isArray) {
             buf.append(' ');
             buf.append(PDataType.ARRAY_TYPE_SUFFIX);
-            buf.append(' ');
         }
+        buf.append(")");
     }
 }
