@@ -34,7 +34,7 @@ public class CalciteTest extends BaseClientManagedTimeIT {
     public static final String ATABLE_NAME = "ATABLE";
 
     public static Start start() {
-        return new Start(new Properties(), false);
+        return new Start(getConnectionProps(false), false);
     }
     
     public static Start start(Properties props, boolean connectUsingModel) {
@@ -238,11 +238,11 @@ public class CalciteTest extends BaseClientManagedTimeIT {
         return connection;
     }
 
-    private static Properties getMaterializationEnabledProps() {
+    private static Properties getConnectionProps(boolean enableMaterialization) {
         Properties props = new Properties();
         props.setProperty(
                 CalciteConnectionProperty.MATERIALIZATIONS_ENABLED.camelName(),
-                Boolean.toString(true));
+                Boolean.toString(enableMaterialization));
         props.setProperty(
                 CalciteConnectionProperty.CREATE_MATERIALIZATIONS.camelName(),
                 Boolean.toString(false));
@@ -859,7 +859,7 @@ public class CalciteTest extends BaseClientManagedTimeIT {
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
-        final Start start = start(getMaterializationEnabledProps(), false);
+        final Start start = start(getConnectionProps(true), false);
         start.sql("select x_integer from aTable")
             .explainIs("PhoenixToEnumerableConverter\n" +
                        "  PhoenixToClientConverter\n" +
@@ -888,7 +888,7 @@ public class CalciteTest extends BaseClientManagedTimeIT {
         start.sql("select a_string, b_string from aTable where a_string = 'a'")
             .explainIs("PhoenixToEnumerableConverter\n" +
                        "  PhoenixToClientConverter\n" +
-                       "    PhoenixServerProject(0:A_STRING=[$0], 0:B_STRING=[$3])\n" +
+                       "    PhoenixServerProject(A_STRING=[$0], B_STRING=[$3])\n" +
                        "      PhoenixTableScan(table=[[phoenix, IDX1]], filter=[=($0, 'a')])\n")
             .close();
         start.sql("select a_string, b_string from aTable where b_string = 'b'")
@@ -902,7 +902,7 @@ public class CalciteTest extends BaseClientManagedTimeIT {
                        "  PhoenixToClientConverter\n" +
                        "    PhoenixServerProject(A_STRING=[$3], B_STRING=[$0], X_INTEGER=[$10], Y_INTEGER=[$11])\n" +
                        "      PhoenixTableScan(table=[[phoenix, IDX_FULL]], filter=[=($0, 'b')])\n")
-        .close();
+            .close();
     }
     
     @Test public void testConnectJoinHsqldb() {
