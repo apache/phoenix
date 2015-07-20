@@ -25,6 +25,7 @@ import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rel.core.Project;
 import org.apache.calcite.rel.core.Sort;
 import org.apache.calcite.rel.core.Union;
+import org.apache.calcite.rel.core.Values;
 import org.apache.calcite.rel.logical.LogicalAggregate;
 import org.apache.calcite.rel.logical.LogicalFilter;
 import org.apache.calcite.rel.logical.LogicalJoin;
@@ -49,6 +50,7 @@ import org.apache.phoenix.calcite.rel.PhoenixServerSort;
 import org.apache.phoenix.calcite.rel.PhoenixToClientConverter;
 import org.apache.phoenix.calcite.rel.PhoenixToEnumerableConverter;
 import org.apache.phoenix.calcite.rel.PhoenixUnion;
+import org.apache.phoenix.calcite.rel.PhoenixValues;
 
 import com.google.common.base.Predicate;
 import com.google.common.base.Predicates;
@@ -81,6 +83,7 @@ public class PhoenixConverterRules {
         PhoenixUnionRule.INSTANCE,
         PhoenixClientJoinRule.INSTANCE,
         PhoenixServerJoinRule.INSTANCE,
+        PhoenixValuesRule.INSTANCE,
     };
 
     /** Base class for planner rules that convert a relational expression to
@@ -531,6 +534,22 @@ public class PhoenixConverterRules {
         }
     }
 
+    public static class PhoenixValuesRule extends PhoenixConverterRule {
+        public static PhoenixValuesRule INSTANCE = new PhoenixValuesRule();
+        
+        private PhoenixValuesRule() {
+            super(Values.class, Convention.NONE, PhoenixRel.CLIENT_CONVENTION, "PhoenixValuesRule");
+        }
+
+        @Override public RelNode convert(RelNode rel) {
+            Values valuesRel = (Values) rel;
+            return PhoenixValues.create(
+                    valuesRel.getCluster(),
+                    valuesRel.getRowType(),
+                    valuesRel.getTuples());
+        }
+    }
+
     /**
      * Rule to convert an {@link org.apache.calcite.rel.logical.LogicalIntersect}
      * to an {@link PhoenixIntersectRel}.
@@ -633,46 +652,6 @@ public class PhoenixConverterRules {
      }
      }
      */
-
-  /*
-  public static class PhoenixValuesRule extends PhoenixConverterRule {
-    private PhoenixValuesRule() {
-      super(Values.class, Convention.NONE, PhoenixRel.CONVENTION, "PhoenixValuesRule");
-    }
-
-    @Override public RelNode convert(RelNode rel) {
-      Values valuesRel = (Values) rel;
-      return new PhoenixValuesRel(
-          valuesRel.getCluster(),
-          valuesRel.getRowType(),
-          valuesRel.getTuples(),
-          valuesRel.getTraitSet().plus(out));
-    }
-  }
-
-  public static class PhoenixValuesRel
-      extends Values
-      implements PhoenixRel {
-    PhoenixValuesRel(
-        RelOptCluster cluster,
-        RelDataType rowType,
-        List<List<RexLiteral>> tuples,
-        RelTraitSet traitSet) {
-      super(cluster, rowType, tuples, traitSet);
-    }
-
-    @Override public RelNode copy(
-        RelTraitSet traitSet, List<RelNode> inputs) {
-      assert inputs.isEmpty();
-      return new PhoenixValuesRel(
-          getCluster(), rowType, tuples, traitSet);
-    }
-
-    public SqlString implement(PhoenixImplementor implementor) {
-      throw new AssertionError(); // TODO:
-    }
-  }
-*/
 
     /**
      * Rule to convert a relational expression from

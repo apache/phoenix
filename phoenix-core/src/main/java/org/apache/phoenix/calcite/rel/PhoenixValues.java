@@ -3,6 +3,8 @@ package org.apache.phoenix.calcite.rel;
 import java.util.List;
 
 import org.apache.calcite.plan.RelOptCluster;
+import org.apache.calcite.plan.RelOptCost;
+import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Values;
@@ -31,6 +33,11 @@ public class PhoenixValues extends Values implements PhoenixRel {
     public PhoenixValues copy(RelTraitSet traitSet, List<RelNode> inputs) {
         assert inputs.isEmpty();
         return create(getCluster(), rowType, tuples);
+    }
+
+    @Override
+    public RelOptCost computeSelfCost(RelOptPlanner planner) {
+        return super.computeSelfCost(planner).multiplyBy(PHOENIX_FACTOR);
     }
 
     @Override

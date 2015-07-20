@@ -1,7 +1,5 @@
 package org.apache.phoenix.calcite.jdbc;
 
-import java.util.Map;
-
 import org.apache.calcite.jdbc.CalcitePrepare;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.plan.RelOptCostFactory;
