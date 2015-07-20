@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.expression;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertTrue;
 
 import java.math.BigDecimal;
@@ -27,21 +28,7 @@ import java.util.List;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.function.ArrayAppendFunction;
 import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.schema.types.PBoolean;
-import org.apache.phoenix.schema.types.PChar;
-import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PDate;
-import org.apache.phoenix.schema.types.PDecimal;
-import org.apache.phoenix.schema.types.PDouble;
-import org.apache.phoenix.schema.types.PFloat;
-import org.apache.phoenix.schema.types.PInteger;
-import org.apache.phoenix.schema.types.PLong;
-import org.apache.phoenix.schema.types.PSmallint;
-import org.apache.phoenix.schema.types.PTime;
-import org.apache.phoenix.schema.types.PTimestamp;
-import org.apache.phoenix.schema.types.PTinyint;
-import org.apache.phoenix.schema.types.PVarchar;
-import org.apache.phoenix.schema.types.PhoenixArray;
+import org.apache.phoenix.schema.types.*;
 import org.junit.Test;
 
 import com.google.common.collect.Lists;
@@ -357,4 +344,63 @@ public class ArrayAppendFunctionTest {
         test(arr, element, PDataType.fromTypeId(baseType.getSqlType() + PDataType.ARRAY_TYPE_BASE), 4, null, baseType, 1, null, expected, SortOrder.ASC, SortOrder.DESC);
     }
 
+    @Test
+    public void testForCorrectSeparatorBytes1() throws Exception {
+        Object[] o = new Object[]{"a", "b", "c"};
+        Object element = "d";
+        PDataType baseType = PVarchar.INSTANCE;
+
+        PhoenixArray arr = new PhoenixArray(baseType, o);
+        LiteralExpression arrayLiteral, elementLiteral;
+        arrayLiteral = LiteralExpression.newConstant(arr, PVarcharArray.INSTANCE, null, null, SortOrder.ASC, Determinism.ALWAYS);
+        elementLiteral = LiteralExpression.newConstant(element, baseType, null, null, SortOrder.ASC, Determinism.ALWAYS);
+        List<Expression> expressions = Lists.newArrayList((Expression) arrayLiteral);
+        expressions.add(elementLiteral);
+
+        Expression arrayAppendFunction = new ArrayAppendFunction(expressions);
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+        arrayAppendFunction.evaluate(null, ptr);
+        byte[] expected = new byte[]{97, 0, 98, 0, 99, 0, 100, 0, 0, 0, -128, 1, -128, 3, -128, 5, -128, 7, 0, 0, 0, 10, 0, 0, 0, 4, 1};
+        assertArrayEquals(expected, ptr.get());
+    }
+
+    @Test
+    public void testForCorrectSeparatorBytes2() throws Exception {
+        Object[] o = new Object[]{"a", "b", "c"};
+        Object element = "d";
+        PDataType baseType = PVarchar.INSTANCE;
+
+        PhoenixArray arr = new PhoenixArray(baseType, o);
+        LiteralExpression arrayLiteral, elementLiteral;
+        arrayLiteral = LiteralExpression.newConstant(arr, PVarcharArray.INSTANCE, null, null, SortOrder.DESC, Determinism.ALWAYS);
+        elementLiteral = LiteralExpression.newConstant(element, baseType, null, null, SortOrder.ASC, Determinism.ALWAYS);
+        List<Expression> expressions = Lists.newArrayList((Expression) arrayLiteral);
+        expressions.add(elementLiteral);
+
+        Expression arrayAppendFunction = new ArrayAppendFunction(expressions);
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+        arrayAppendFunction.evaluate(null, ptr);
+        byte[] expected = new byte[]{-98, -1, -99, -1, -100, -1, -101, -1, -1, -1, -128, 1, -128, 3, -128, 5, -128, 7, 0, 0, 0, 10, 0, 0, 0, 4, 1};
+        assertArrayEquals(expected, ptr.get());
+    }
+
+    @Test
+    public void testForCorrectSeparatorBytes3() throws Exception {
+        Object[] o = new Object[]{"a", null, null, "c"};
+        Object element = "d";
+        PDataType baseType = PVarchar.INSTANCE;
+
+        PhoenixArray arr = new PhoenixArray(baseType, o);
+        LiteralExpression arrayLiteral, elementLiteral;
+        arrayLiteral = LiteralExpression.newConstant(arr, PVarcharArray.INSTANCE, null, null, SortOrder.DESC, Determinism.ALWAYS);
+        elementLiteral = LiteralExpression.newConstant(element, baseType, null, null, SortOrder.ASC, Determinism.ALWAYS);
+        List<Expression> expressions = Lists.newArrayList((Expression) arrayLiteral);
+        expressions.add(elementLiteral);
+
+        Expression arrayAppendFunction = new ArrayAppendFunction(expressions);
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+        arrayAppendFunction.evaluate(null, ptr);
+        byte[] expected = new byte[]{-98, -1, 0, -2, -100, -1, -101, -1, -1, -1, -128, 1, -128, 3, -128, 3, -128, 5, -128, 7, 0, 0, 0, 10, 0, 0, 0, 5, 1};
+        assertArrayEquals(expected, ptr.get());
+    }
 }

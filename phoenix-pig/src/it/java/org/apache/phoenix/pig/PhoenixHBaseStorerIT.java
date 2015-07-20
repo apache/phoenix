@@ -33,6 +33,7 @@ import java.util.Collection;
 
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
+import org.apache.phoenix.util.SchemaUtil;
 import org.apache.pig.ExecType;
 import org.apache.pig.PigServer;
 import org.apache.pig.backend.executionengine.ExecJob.JOB_STATUS;
@@ -140,12 +141,11 @@ public class PhoenixHBaseStorerIT extends BaseHBaseManagedTimeIT {
      */
     @Test
     public void testStorerForSpecificColumns() throws Exception {
-        final String tableName = "TABLE2";
+        final String tableName = SchemaUtil.getTableName("TABLE2", SchemaUtil.getEscapedArgument("zo2"));
         final Statement stmt = conn.createStatement();
 
         stmt.execute("CREATE TABLE " + tableName +
                  " (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, AGE INTEGER)");
-
         final Data data = Storage.resetData(pigServer);
         final Collection<Tuple> list = Lists.newArrayList();
 

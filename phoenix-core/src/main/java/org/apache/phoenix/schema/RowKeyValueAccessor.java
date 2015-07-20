@@ -17,8 +17,6 @@
  */
 package org.apache.phoenix.schema;
 
-import static org.apache.phoenix.query.QueryConstants.SEPARATOR_BYTE;
-
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
@@ -28,6 +26,7 @@ import java.util.List;
 
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableUtils;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.util.ByteUtil;
 
 
@@ -150,6 +149,9 @@ public class RowKeyValueAccessor implements Writable   {
         ByteUtil.serializeVIntArray(output, offsets, length);
     }
     
+    private static boolean isSeparatorByte(byte b) {
+        return b == QueryConstants.SEPARATOR_BYTE || b == QueryConstants.DESC_SEPARATOR_BYTE;
+    }
     /**
      * Calculate the byte offset in the row key to the start of the PK column value
      * @param keyBuffer the byte array of the row key
@@ -164,7 +166,7 @@ public class RowKeyValueAccessor implements Writable   {
             } else { // Else, a negative offset is the number of variable length values to skip
                 while (offset++ < 0) {
                     // FIXME: keyOffset < keyBuffer.length required because HBase passes bogus keys to filter to position scan (HBASE-6562)
-                    while (keyOffset < keyBuffer.length && keyBuffer[keyOffset++] != SEPARATOR_BYTE) {
+                    while (keyOffset < keyBuffer.length && !isSeparatorByte(keyBuffer[keyOffset++])) {
                     }
                 }
             }
@@ -181,11 +183,11 @@ public class RowKeyValueAccessor implements Writable   {
      */
     public int getLength(byte[] keyBuffer, int keyOffset, int maxOffset) {
         if (!hasSeparator) {
-            return maxOffset - keyOffset;
+            return maxOffset - keyOffset - (keyBuffer[maxOffset-1] == QueryConstants.DESC_SEPARATOR_BYTE ? 1 : 0);
         }
         int offset = keyOffset;
         // FIXME: offset < maxOffset required because HBase passes bogus keys to filter to position scan (HBASE-6562)
-        while (offset < maxOffset && keyBuffer[offset] != SEPARATOR_BYTE) {
+        while (offset < maxOffset && !isSeparatorByte(keyBuffer[offset])) {
             offset++;
         }
         return offset - keyOffset;

@@ -61,6 +61,7 @@ public class TupleProjectionCompiler {
         Preconditions.checkArgument(!select.isJoin());
         // Non-group-by or group-by aggregations will create its own projected result.
         if (select.getInnerSelectStatement() != null 
+                || select.getFrom() == null
                 || select.isAggregate() 
                 || select.isDistinct()
                 || (context.getResolver().getTables().get(0).getTable().getType() != PTableType.TABLE
@@ -151,7 +152,7 @@ public class TupleProjectionCompiler {
                 table.getBucketNum(), projectedColumns, table.getParentSchemaName(),
                 table.getParentName(), table.getIndexes(), table.isImmutableRows(), Collections.<PName>emptyList(), null, null,
                 table.isWALDisabled(), table.isMultiTenant(), table.getStoreNulls(), table.getViewType(), table.getViewIndexId(),
-                table.getIndexType());
+                table.getIndexType(), table.rowKeyOrderOptimizable());
     }
 
     public static PTable createProjectedTable(TableRef tableRef, List<ColumnRef> sourceColumnRefs, boolean retainPKColumns) throws SQLException {
@@ -178,7 +179,7 @@ public class TupleProjectionCompiler {
                     retainPKColumns ? table.getBucketNum() : null, projectedColumns, null,
                     null, Collections.<PTable>emptyList(), table.isImmutableRows(), Collections.<PName>emptyList(), null, null,
                     table.isWALDisabled(), table.isMultiTenant(), table.getStoreNulls(), table.getViewType(), table.getViewIndexId(),
-                    null);
+                    null, table.rowKeyOrderOptimizable());
     }
 
     // For extracting column references from single select statement

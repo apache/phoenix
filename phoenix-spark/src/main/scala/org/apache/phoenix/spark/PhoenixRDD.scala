@@ -63,30 +63,22 @@ class PhoenixRDD(sc: SparkContext, table: String, columns: Seq[String],
     }
   }
 
-  def buildSql(table: String, columns: Seq[String], predicate: Option[String]): String = {
-    val query = "SELECT %s FROM \"%s\"".format(
-      if (columns.isEmpty) "*" else columns.map(f => "\"" + f + "\"").mkString(", "),
-      table
-    )
-
-    query + (predicate match {
-      case Some(p: String) if p.length > 0 => " WHERE " + p
-      case _ => ""
-    })
-  }
-
   def getPhoenixConfiguration: Configuration = {
 
     // This is just simply not serializable, so don't try, but clone it because
     // PhoenixConfigurationUtil mutates it.
     val config = HBaseConfiguration.create(conf)
 
-    PhoenixConfigurationUtil.setInputQuery(config, buildSql(table, columns, predicate))
-    if(!columns.isEmpty) {
-      PhoenixConfigurationUtil.setSelectColumnNames(config, columns.mkString(","))
-    }
-    PhoenixConfigurationUtil.setInputTableName(config, table)
     PhoenixConfigurationUtil.setInputClass(config, classOf[PhoenixRecordWritable])
+    PhoenixConfigurationUtil.setInputTableName(config, table)
+
+    if(!columns.isEmpty) {
+      PhoenixConfigurationUtil.setSelectColumnNames(config, columns.toArray)
+    }
+
+    if(predicate.isDefined) {
+      PhoenixConfigurationUtil.setInputTableConditions(config, predicate.get)
+    }
 
     // Override the Zookeeper URL if present. Throw exception if no address given.
     zkUrl match {

@@ -37,7 +37,6 @@ import org.apache.hadoop.hbase.util.Writables;
 import org.apache.hadoop.io.Writable;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.KeyRange.Bound;
-import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ScanUtil;
@@ -517,7 +516,7 @@ public class SkipScanFilter extends FilterBase implements Writable {
         startKeyLength = length;
         // Add separator byte if we're at the end of the buffer, since trailing separator bytes are stripped
         if (ptr.getOffset() + ptr.getLength() == offset + length && i-1 > 0 && !schema.getField(i-1).getDataType().isFixedWidth()) {
-            startKey[startKeyLength++] = QueryConstants.SEPARATOR_BYTE;
+            startKey[startKeyLength++] = SchemaUtil.getSeparatorByte(schema.rowKeyOrderOptimizable(), ptr.getLength()==0, schema.getField(i-1));
         }
         startKeyLength += setKey(Bound.LOWER, startKey, startKeyLength, i);
         return length;

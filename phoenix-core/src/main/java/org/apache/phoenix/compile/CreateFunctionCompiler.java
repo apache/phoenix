@@ -63,7 +63,9 @@ public class CreateFunctionCompiler {
 
             @Override
             public ExplainPlan getExplainPlan() throws SQLException {
-                return new ExplainPlan(Collections.singletonList("CREATE FUNCTION"));
+                return new ExplainPlan(Collections.singletonList("CREATE"
+                        + (create.getFunctionInfo().isReplace() ? " OR REPLACE" : "")
+                        + " FUNCTION"));
             }
 
             @Override

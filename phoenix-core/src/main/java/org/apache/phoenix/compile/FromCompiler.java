@@ -22,11 +22,9 @@ import java.sql.SQLFeatureNotSupportedException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.HTableInterface;
@@ -37,13 +35,11 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.parse.AliasedNode;
 import org.apache.phoenix.parse.BindTableNode;
 import org.apache.phoenix.parse.ColumnDef;
-import org.apache.phoenix.parse.CreateFunctionStatement;
 import org.apache.phoenix.parse.CreateTableStatement;
 import org.apache.phoenix.parse.DMLStatement;
 import org.apache.phoenix.parse.DerivedTableNode;
 import org.apache.phoenix.parse.FamilyWildcardParseNode;
 import org.apache.phoenix.parse.JoinTableNode;
-import org.apache.phoenix.parse.NamedNode;
 import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.ParseNode;
@@ -106,7 +102,7 @@ public class FromCompiler {
 
         @Override
         public List<TableRef> getTables() {
-            return Collections.emptyList();
+            return Collections.singletonList(TableRef.EMPTY_TABLE_REF);
         }
 
         @Override
@@ -117,16 +113,16 @@ public class FromCompiler {
         @Override
         public TableRef resolveTable(String schemaName, String tableName)
                 throws SQLException {
-            throw new UnsupportedOperationException();
+            throw new TableNotFoundException(schemaName, tableName);
         }
 
         @Override
         public ColumnRef resolveColumn(String schemaName, String tableName, String colName) throws SQLException {
-            throw new UnsupportedOperationException();
+            throw new ColumnNotFoundException(schemaName, tableName, null, colName);
         }
         
         public PFunction resolveFunction(String functionName) throws SQLException {
-            throw new UnsupportedOperationException();
+            throw new FunctionNotFoundException(functionName);
         };
 
         public boolean hasUDFs() {
@@ -655,7 +651,7 @@ public class FromCompiler {
                     PTableType.SUBQUERY, null, MetaDataProtocol.MIN_TABLE_TIMESTAMP, PTable.INITIAL_SEQ_NUM,
                     null, null, columns, null, null, Collections.<PTable>emptyList(),
                     false, Collections.<PName>emptyList(), null, null, false, false, false, null,
-                    null, null);
+                    null, null, false);
 
             String alias = subselectNode.getAlias();
             TableRef tableRef = new TableRef(alias, t, MetaDataProtocol.MIN_TABLE_TIMESTAMP, false);
@@ -710,7 +706,12 @@ public class FromCompiler {
                 if (theColumnFamilyRef != null) { return theColumnFamilyRef; }
                 throw new TableNotFoundException(cfName);
             } else {
-                TableRef tableRef = resolveTable(null, tableName);
+                TableRef tableRef = null;
+                try {
+                    tableRef = resolveTable(null, tableName);
+                } catch (TableNotFoundException e) {
+                    return resolveColumnFamily(null, cfName);
+                }
                 PColumnFamily columnFamily = tableRef.getTable().getColumnFamily(cfName);
                 return new ColumnFamilyRef(tableRef, columnFamily);
             }

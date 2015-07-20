@@ -113,10 +113,9 @@ public class TupleUtil {
                 }
                 for (int i = 1; i < expressions.size(); i++) {
                     if (!expression.getDataType().isFixedWidth()) {
-                        output.write(QueryConstants.SEPARATOR_BYTE);
+                        output.write(SchemaUtil.getSeparatorByte(true, value.getLength()==0, expression));
                     }
                     expression = expressions.get(i);
-                    // TODO: should we track trailing null values and omit the separator bytes?
                     if (expression.evaluate(result, value)) {
                         output.write(value.get(), value.getOffset(), value.getLength());
                     } else if (i < expressions.size()-1 && expression.getDataType().isFixedWidth()) {
@@ -124,6 +123,10 @@ public class TupleUtil {
                         // converted to a variable length type (i.e. DECIMAL) to allow an empty byte array to represent null.
                         throw new DoNotRetryIOException("Non terminating null value found for fixed width expression (" + expression + ") in row: " + result);
                     }
+                }
+                // Write trailing separator if last expression was variable length and descending
+                if (!expression.getDataType().isFixedWidth() && SchemaUtil.getSeparatorByte(true, value.getLength()==0, expression) == QueryConstants.DESC_SEPARATOR_BYTE) {
+                    output.write(QueryConstants.DESC_SEPARATOR_BYTE);
                 }
                 byte[] outputBytes = output.getBuffer();
                 value.set(outputBytes, 0, output.size());

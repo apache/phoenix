@@ -32,6 +32,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
@@ -1557,6 +1558,31 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     }
     
     @Test 
+    public void testDescVarbinaryNotSupported() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        try {
+            conn.createStatement().execute("CREATE TABLE t (k VARBINARY PRIMARY KEY DESC)");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.DESC_VARBINARY_NOT_SUPPORTED.getErrorCode(), e.getErrorCode());
+        }
+        try {
+            conn.createStatement().execute("CREATE TABLE t (k1 VARCHAR NOT NULL, k2 VARBINARY, CONSTRAINT pk PRIMARY KEY (k1,k2 DESC))");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.DESC_VARBINARY_NOT_SUPPORTED.getErrorCode(), e.getErrorCode());
+        }
+        try {
+            conn.createStatement().execute("CREATE TABLE t (k1 VARCHAR PRIMARY KEY)");
+            conn.createStatement().execute("ALTER TABLE t ADD k2 VARBINARY PRIMARY KEY DESC");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.DESC_VARBINARY_NOT_SUPPORTED.getErrorCode(), e.getErrorCode());
+        }
+        conn.close();
+    }
+    
+    @Test 
     public void testDivideByZeroExpressionIndex() throws Exception {
         String ddl = "CREATE TABLE t (k1 INTEGER PRIMARY KEY)";
         Connection conn = DriverManager.getConnection(getUrl());
@@ -1704,9 +1730,10 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     @Test
     public void testOrderByOrderPreservingFwd() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        conn.createStatement().execute("CREATE TABLE t (k1 date not null, k2 date not null, k3 date not null, v varchar, constraint pk primary key(k1,k2,k3))");
+        conn.createStatement().execute("CREATE TABLE t (k1 date not null, k2 date not null, k3 varchar, v varchar, constraint pk primary key(k1,k2,k3))");
         String[] queries = {
                 "SELECT * FROM T ORDER BY (k1,k2), k3",
+                "SELECT * FROM T ORDER BY k1,k2,k3 NULLS FIRST",
                 "SELECT * FROM T ORDER BY k1,k2,k3",
                 "SELECT * FROM T ORDER BY k1,k2",
                 "SELECT * FROM T ORDER BY k1",
@@ -1726,8 +1753,9 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     @Test
     public void testOrderByOrderPreservingRev() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        conn.createStatement().execute("CREATE TABLE t (k1 date not null, k2 date not null, k3 date not null, v varchar, constraint pk primary key(k1,k2 DESC,k3))");
+        conn.createStatement().execute("CREATE TABLE t (k1 date not null, k2 date not null, k3 varchar, v varchar, constraint pk primary key(k1,k2 DESC,k3 DESC))");
         String[] queries = {
+                "SELECT * FROM T ORDER BY INVERT(k1),k2,k3 nulls last",
                 "SELECT * FROM T ORDER BY INVERT(k1),k2",
                 "SELECT * FROM T ORDER BY INVERT(k1)",
                  "SELECT * FROM T ORDER BY TRUNC(k1, 'DAY') DESC, CEIL(k2, 'HOUR') DESC",
@@ -1744,8 +1772,10 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     @Test
     public void testNotOrderByOrderPreserving() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        conn.createStatement().execute("CREATE TABLE t (k1 date not null, k2 date not null, k3 date not null, v varchar, constraint pk primary key(k1,k2,k3))");
+        conn.createStatement().execute("CREATE TABLE t (k1 date not null, k2 varchar, k3 varchar, v varchar, constraint pk primary key(k1,k2,k3 desc))");
         String[] queries = {
+                "SELECT * FROM T ORDER BY k1,k2 NULLS LAST",
+                "SELECT * FROM T ORDER BY k1,k2, k3 NULLS LAST",
                 "SELECT * FROM T ORDER BY k1,k3",
                 "SELECT * FROM T ORDER BY SUBSTR(TO_CHAR(k1),1,4)",
                 "SELECT * FROM T ORDER BY k2",
@@ -1825,11 +1855,17 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         Properties props = new Properties();
         props.setProperty(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.toString(true));
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        conn.createStatement().execute("CREATE TABLE t (k1 char(2) not null, k2 varchar not null, k3 integer not null, v varchar, constraint pk primary key(k1,k2,k3))");
+        testForceRowKeyOrder(conn, false);
+        testForceRowKeyOrder(conn, true);
+    }
+
+    private void testForceRowKeyOrder(Connection conn, boolean isSalted) throws SQLException {
+        String tableName = "tablename" + (isSalted ? "_salt" : "");
+        conn.createStatement().execute("CREATE TABLE " + tableName + " (k1 char(2) not null, k2 varchar not null, k3 integer not null, v varchar, constraint pk primary key(k1,k2,k3))");
         String[] queries = {
-                "SELECT 1 FROM T ",
-                "SELECT 1 FROM T WHERE V = 'c'",
-                "SELECT 1 FROM T WHERE (k1, k2, k3) > ('a', 'ab', 1)",
+                "SELECT 1 FROM  " + tableName ,
+                "SELECT 1 FROM  " + tableName + "  WHERE V = 'c'",
+                "SELECT 1 FROM  " + tableName + "  WHERE (k1, k2, k3) > ('a', 'ab', 1)",
                 };
         String query;
         for (int i = 0; i < queries.length; i++) {
@@ -1844,13 +1880,21 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         Properties props = new Properties();
         props.setProperty(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.toString(false));
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        conn.createStatement().execute("CREATE TABLE t (k1 char(2) not null, k2 varchar not null, k3 integer not null, v varchar, constraint pk primary key(k1,k2,k3))");
+        testOrderByOrGroupByDoesntUseRoundRobin(conn, true);
+        testOrderByOrGroupByDoesntUseRoundRobin(conn, false);
+    }
+
+    private void testOrderByOrGroupByDoesntUseRoundRobin(Connection conn, boolean salted) throws SQLException {
+        String tableName = "orderbygroupbytable" + (salted ? "_salt" : ""); 
+        conn.createStatement().execute("CREATE TABLE " + tableName + " (k1 char(2) not null, k2 varchar not null, k3 integer not null, v varchar, constraint pk primary key(k1,k2,k3))");
         String[] queries = {
-                "SELECT 1 FROM T ORDER BY K1",
-                "SELECT 1 FROM T WHERE V = 'c' ORDER BY K1, K2",
-                "SELECT 1 FROM T WHERE (k1,k2, k3) > ('a', 'ab', 1) ORDER BY V",
-                "SELECT 1 FROM T GROUP BY V",
-                "SELECT 1 FROM T GROUP BY K1, V, K2 ORDER BY V",
+                "SELECT 1 FROM  " + tableName + "  ORDER BY K1",
+                "SELECT 1 FROM  " + tableName + "  WHERE V = 'c' ORDER BY K1, K2",
+                "SELECT 1 FROM  " + tableName + "  WHERE V = 'c' ORDER BY K1, K2, K3",
+                "SELECT 1 FROM  " + tableName + "  WHERE V = 'c' ORDER BY K3",
+                "SELECT 1 FROM  " + tableName + "  WHERE (k1,k2, k3) > ('a', 'ab', 1) ORDER BY V",
+                "SELECT 1 FROM  " + tableName + "  GROUP BY V",
+                "SELECT 1 FROM  " + tableName + "  GROUP BY K1, V, K2 ORDER BY V",
                 };
         String query;
         for (int i = 0; i < queries.length; i++) {
@@ -1859,4 +1903,90 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             assertFalse("Expected plan to not use round robin iterator " + query, plan.useRoundRobinIterator());
         }
     }
+    
+    @Test
+    public void testSelectColumnsInOneFamily() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        Statement statement = conn.createStatement();
+        try {
+            // create table with specified column family.
+            String create = "CREATE TABLE t (k integer not null primary key, f1.v1 varchar, f1.v2 varchar, f2.v3 varchar, v4 varchar)";
+            statement.execute(create);
+            // select columns in one family.
+            String query = "SELECT f1.*, v4 FROM t";
+            ResultSetMetaData rsMeta = statement.executeQuery(query).getMetaData();
+            assertEquals("V1", rsMeta.getColumnName(1));
+            assertEquals("V2", rsMeta.getColumnName(2));
+            assertEquals("V4", rsMeta.getColumnName(3));
+        } finally {
+            statement.execute("DROP TABLE IF EXISTS t");
+            conn.close();
+        }
+    }
+
+    @Test
+    public void testSelectColumnsInOneFamilyWithSchema() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        Statement statement = conn.createStatement();
+        try {
+            // create table with specified column family.
+            String create = "CREATE TABLE s.t (k integer not null primary key, f1.v1 varchar, f1.v2 varchar, f2.v3 varchar, v4 varchar)";
+            statement.execute(create);
+            // select columns in one family.
+            String query = "SELECT f1.*, v4 FROM s.t";
+            ResultSetMetaData rsMeta = statement.executeQuery(query).getMetaData();
+            assertEquals("V1", rsMeta.getColumnName(1));
+            assertEquals("V2", rsMeta.getColumnName(2));
+            assertEquals("V4", rsMeta.getColumnName(3));
+        } finally {
+            statement.execute("DROP TABLE IF EXISTS s.t");
+            conn.close();
+        }
+    }
+     
+     @Test
+     public void testNoFromClauseSelect() throws Exception {
+         Connection conn = DriverManager.getConnection(getUrl());
+         ResultSet rs = conn.createStatement().executeQuery("SELECT 2 * 3 * 4, 5 + 1");
+         assertTrue(rs.next());
+         assertEquals(24, rs.getInt(1));
+         assertEquals(6, rs.getInt(2));
+         assertFalse(rs.next());
+         
+         String query = 
+                 "SELECT 'a' AS col\n" +
+                 "UNION ALL\n" +
+                 "SELECT 'b' AS col\n" +
+                 "UNION ALL\n" +
+                 "SELECT 'c' AS col";
+         rs = conn.createStatement().executeQuery(query);
+         assertTrue(rs.next());
+         assertEquals("a", rs.getString(1));
+         assertTrue(rs.next());
+         assertEquals("b", rs.getString(1));
+         assertTrue(rs.next());
+         assertEquals("c", rs.getString(1));
+         assertFalse(rs.next());
+ 
+         rs = conn.createStatement().executeQuery("SELECT * FROM (" + query + ")");
+         assertTrue(rs.next());
+         assertEquals("a", rs.getString(1));
+         assertTrue(rs.next());
+         assertEquals("b", rs.getString(1));
+         assertTrue(rs.next());
+         assertEquals("c", rs.getString(1));
+         assertFalse(rs.next());
+     }
+     
+     
+     @Test
+     public void testFailNoFromClauseSelect() throws Exception {
+         Connection conn = DriverManager.getConnection(getUrl());
+         try {
+             conn.createStatement().executeQuery("SELECT foo, bar");
+             fail("Should have got ColumnNotFoundException");
+         } catch (ColumnNotFoundException e) {            
+         }
+     }
+
 }

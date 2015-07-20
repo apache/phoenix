@@ -174,7 +174,7 @@ public class QueryServicesOptions {
     /**
      * Use only first time SYSTEM.SEQUENCE table is created.
      */
-    public static final int DEFAULT_SEQUENCE_TABLE_SALT_BUCKETS = SaltingUtil.MAX_BUCKET_NUM;
+    public static final int DEFAULT_SEQUENCE_TABLE_SALT_BUCKETS = 0;
     /**
      * Default value for coprocessor priority is between SYSTEM and USER priority.
      */

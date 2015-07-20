@@ -1861,4 +1861,182 @@ public class ArrayIT extends BaseClientManagedTimeIT {
             conn.close();
         }
    }
+
+    @Test
+    public void testArrayConstructorWithMultipleRows1() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String ddl = "CREATE TABLE regions1 (region_name VARCHAR PRIMARY KEY, a INTEGER, b INTEGER)";
+        conn.createStatement().execute(ddl);
+        conn.commit();
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO regions1(region_name, a, b) VALUES('a', 6,3)");
+        stmt.execute();
+        stmt = conn.prepareStatement("UPSERT INTO regions1(region_name, a, b) VALUES('b', 2,4)");
+        stmt.execute();
+        stmt = conn.prepareStatement("UPSERT INTO regions1(region_name, a, b) VALUES('c', 6,3)");
+        stmt.execute();
+        conn.commit();
+        ResultSet rs;
+        rs = conn.createStatement().executeQuery("SELECT COUNT(DISTINCT ARRAY[a,b]) from regions1");
+        assertTrue(rs.next());
+        assertEquals(2, rs.getInt(1));
+    }
+
+    @Test
+    public void testArrayConstructorWithMultipleRows2() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String ddl = "CREATE TABLE regions2 (region_name VARCHAR PRIMARY KEY, a INTEGER, b INTEGER)";
+        conn.createStatement().execute(ddl);
+        conn.commit();
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO regions2(region_name, a, b) VALUES('a', 6,3)");
+        stmt.execute();
+        stmt = conn.prepareStatement("UPSERT INTO regions2(region_name, a, b) VALUES('b', 2,4)");
+        stmt.execute();
+        stmt = conn.prepareStatement("UPSERT INTO regions2(region_name, a, b) VALUES('c', 6,3)");
+        stmt.execute();
+        conn.commit();
+        ResultSet rs;
+        rs = conn.createStatement().executeQuery("SELECT ARRAY[a,b] from regions2");
+        assertTrue(rs.next());
+        Array arr = conn.createArrayOf("INTEGER", new Object[]{6, 3});
+        assertEquals(arr, rs.getArray(1));
+        rs.next();
+        arr = conn.createArrayOf("INTEGER", new Object[]{2, 4});
+        assertEquals(arr, rs.getArray(1));
+        rs.next();
+        arr = conn.createArrayOf("INTEGER", new Object[]{6, 3});
+        assertEquals(arr, rs.getArray(1));
+        rs.next();
+    }
+
+    @Test
+    public void testArrayConstructorWithMultipleRows3() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String ddl = "CREATE TABLE regions3 (region_name VARCHAR PRIMARY KEY, a VARCHAR, b VARCHAR)";
+        conn.createStatement().execute(ddl);
+        conn.commit();
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO regions3(region_name, a, b) VALUES('a', 'foo', 'abc')");
+        stmt.execute();
+        stmt = conn.prepareStatement("UPSERT INTO regions3(region_name, a, b) VALUES('b', 'abc', 'dfg')");
+        stmt.execute();
+        stmt = conn.prepareStatement("UPSERT INTO regions3(region_name, a, b) VALUES('c', 'foo', 'abc')");
+        stmt.execute();
+        conn.commit();
+        ResultSet rs;
+        rs = conn.createStatement().executeQuery("SELECT ARRAY[a,b] from regions3");
+        assertTrue(rs.next());
+        Array arr = conn.createArrayOf("VARCHAR", new Object[]{"foo", "abc"});
+        assertEquals(arr, rs.getArray(1));
+        rs.next();
+        arr = conn.createArrayOf("VARCHAR", new Object[]{"abc", "dfg"});
+        assertEquals(arr, rs.getArray(1));
+        rs.next();
+        arr = conn.createArrayOf("VARCHAR", new Object[]{"foo", "abc"});
+        assertEquals(arr, rs.getArray(1));
+        rs.next();
+    }
+
+    @Test
+    public void testArrayConstructorWithMultipleRows4() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String ddl = "CREATE TABLE regions4 (region_name VARCHAR PRIMARY KEY, a VARCHAR, b VARCHAR)";
+        conn.createStatement().execute(ddl);
+        conn.commit();
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO regions4(region_name, a, b) VALUES('a', 'foo', 'abc')");
+        stmt.execute();
+        stmt = conn.prepareStatement("UPSERT INTO regions4(region_name, a, b) VALUES('b', 'abc', 'dfg')");
+        stmt.execute();
+        stmt = conn.prepareStatement("UPSERT INTO regions4(region_name, a, b) VALUES('c', 'foo', 'abc')");
+        stmt.execute();
+        conn.commit();
+        ResultSet rs;
+        rs = conn.createStatement().executeQuery("SELECT COUNT(DISTINCT ARRAY[a,b]) from regions4");
+        assertTrue(rs.next());
+        assertEquals(2, rs.getInt(1));
+    }
+
+    @Test
+    public void testArrayConstructorWithMultipleRows5() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String ddl = "CREATE TABLE regions5 (region_name VARCHAR PRIMARY KEY, a VARCHAR, b VARCHAR)";
+        conn.createStatement().execute(ddl);
+        conn.commit();
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO regions5(region_name, a, b) VALUES('a', 'foo', 'abc')");
+        stmt.execute();
+        stmt = conn.prepareStatement("UPSERT INTO regions5(region_name, a, b) VALUES('b', 'abc', 'dfg')");
+        stmt.execute();
+        stmt = conn.prepareStatement("UPSERT INTO regions5(region_name, a, b) VALUES('c', 'foo', 'abc')");
+        stmt.execute();
+        conn.commit();
+        ResultSet rs;
+        rs = conn.createStatement().executeQuery("SELECT ARRAY_APPEND(ARRAY[a,b], 'oo') from regions5");
+        assertTrue(rs.next());
+        Array arr = conn.createArrayOf("VARCHAR", new Object[]{"foo", "abc", "oo"});
+        assertEquals(arr, rs.getArray(1));
+        rs.next();
+        arr = conn.createArrayOf("VARCHAR", new Object[]{"abc", "dfg", "oo"});
+        assertEquals(arr, rs.getArray(1));
+        rs.next();
+        arr = conn.createArrayOf("VARCHAR", new Object[]{"foo", "abc", "oo"});
+        assertEquals(arr, rs.getArray(1));
+        rs.next();
+    }
+    
+    @Test
+    public void testPKWithDescArray() throws Exception {
+        Connection conn;
+        PreparedStatement stmt;
+        ResultSet rs;
+        long ts = nextTimestamp();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement()
+                .execute(
+                        "CREATE TABLE t ( a VARCHAR ARRAY PRIMARY KEY DESC)\n");
+        conn.close();
+        
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
+        conn = DriverManager.getConnection(getUrl(), props);
+        stmt = conn.prepareStatement("UPSERT INTO t VALUES(?)");
+        Array a1 = conn.createArrayOf("VARCHAR", new String[] { "a", "ba" });
+        stmt.setArray(1, a1);
+        stmt.execute();
+        Array a2 = conn.createArrayOf("VARCHAR", new String[] { "a", "c" });
+        stmt.setArray(1, a2);
+        stmt.execute();
+        conn.commit();
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
+        conn = DriverManager.getConnection(getUrl(), props);
+        rs = conn.createStatement().executeQuery("SELECT a FROM t ORDER BY a DESC");
+        assertTrue(rs.next());
+        assertEquals(a2, rs.getArray(1));
+        assertTrue(rs.next());
+        assertEquals(a1, rs.getArray(1));
+        assertFalse(rs.next());
+        conn.close();
+        
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 50));
+        conn = DriverManager.getConnection(getUrl(), props);
+        stmt = conn.prepareStatement("UPSERT INTO t VALUES(?)");
+        Array a3 = conn.createArrayOf("VARCHAR", new String[] { "a", "b" });
+        stmt.setArray(1, a3);
+        stmt.execute();
+        conn.commit();
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 60));
+        conn = DriverManager.getConnection(getUrl(), props);
+        rs = conn.createStatement().executeQuery("SELECT a FROM t ORDER BY a DESC");
+        assertTrue(rs.next());
+        assertEquals(a2, rs.getArray(1));
+        assertTrue(rs.next());
+        assertEquals(a1, rs.getArray(1));
+        assertTrue(rs.next());
+        assertEquals(a3, rs.getArray(1));
+        assertFalse(rs.next());
+        conn.close();
+    }
+    
 }

@@ -66,6 +66,7 @@ import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.Sequence;
+import org.apache.phoenix.schema.SequenceAllocation;
 import org.apache.phoenix.schema.SequenceAlreadyExistsException;
 import org.apache.phoenix.schema.SequenceInfo;
 import org.apache.phoenix.schema.SequenceKey;
@@ -385,13 +386,13 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
 
     @Override
-    public void validateSequences(List<SequenceKey> sequenceKeys, long timestamp, long[] values,
-            SQLException[] exceptions, Sequence.ValueOp action) throws SQLException {
+    public void validateSequences(List<SequenceAllocation> sequenceAllocations, long timestamp,
+            long[] values, SQLException[] exceptions, Sequence.ValueOp action) throws SQLException {
         int i = 0;
-        for (SequenceKey key : sequenceKeys) {
-            SequenceInfo info = sequenceMap.get(key);
+        for (SequenceAllocation sequenceAllocation : sequenceAllocations) {
+            SequenceInfo info = sequenceMap.get(sequenceAllocation.getSequenceKey());
             if (info == null) {
-                exceptions[i] = new SequenceNotFoundException(key.getSchemaName(), key.getSequenceName());
+                exceptions[i] = new SequenceNotFoundException(sequenceAllocation.getSequenceKey().getSchemaName(), sequenceAllocation.getSequenceKey().getSequenceName());
             } else {
                 values[i] = info.sequenceValue;          
             }
@@ -400,10 +401,11 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
 
     @Override
-    public void incrementSequences(List<SequenceKey> sequenceKeys, long timestamp, long[] values,
-            SQLException[] exceptions) throws SQLException {
+    public void incrementSequences(List<SequenceAllocation> sequenceAllocations, long timestamp,
+            long[] values, SQLException[] exceptions) throws SQLException {
         int i = 0;
-		for (SequenceKey key : sequenceKeys) {
+		for (SequenceAllocation sequenceAllocation : sequenceAllocations) {
+		    SequenceKey key = sequenceAllocation.getSequenceKey();
 			SequenceInfo info = sequenceMap.get(key);
 			if (info == null) {
 				exceptions[i] = new SequenceNotFoundException(
@@ -429,7 +431,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
         i = 0;
         for (SQLException e : exceptions) {
             if (e != null) {
-                sequenceMap.remove(sequenceKeys.get(i));
+                sequenceMap.remove(sequenceAllocations.get(i).getSequenceKey());
             }
             i++;
         }

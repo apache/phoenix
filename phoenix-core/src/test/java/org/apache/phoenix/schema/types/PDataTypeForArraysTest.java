@@ -17,9 +17,6 @@
  */
 package org.apache.phoenix.schema.types;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-
 import java.math.BigDecimal;
 import java.sql.Date;
 import java.sql.Time;
@@ -27,6 +24,8 @@ import java.sql.Timestamp;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PArrayDataType;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PBooleanArray;
@@ -75,6 +74,8 @@ import org.apache.phoenix.schema.types.PVarcharArray;
 import org.apache.phoenix.schema.types.PhoenixArray;
 import org.junit.Ignore;
 import org.junit.Test;
+
+import static org.junit.Assert.*;
 
 public class PDataTypeForArraysTest {
 	@Test
@@ -1137,5 +1138,66 @@ public class PDataTypeForArraysTest {
         byte[] bytes2 = PVarcharArray.INSTANCE.toBytes(arr);
         assertTrue(Bytes.compareTo(bytes1, bytes2) == 0);
     }
-    
+
+    @Test
+    public void testIsRowKeyOrderOptimized1() {
+        Object[] objects = new Object[]{"a", "b", "c"};
+        PhoenixArray arr = new PhoenixArray(PVarchar.INSTANCE, objects);
+        byte[] bytes = PVarcharArray.INSTANCE.toBytes(arr, PVarchar.INSTANCE, SortOrder.ASC);
+        assertTrue(PArrayDataType.isRowKeyOrderOptimized(PVarcharArray.INSTANCE, SortOrder.ASC, bytes, 0, bytes.length));
+    }
+
+    @Test
+    public void testIsRowKeyOrderOptimized2() {
+        Object[] objects = new Object[]{"a", "b", "c"};
+        PhoenixArray arr = new PhoenixArray(PVarchar.INSTANCE, objects);
+        byte[] bytes = PVarcharArray.INSTANCE.toBytes(arr, SortOrder.DESC);
+        assertTrue(PArrayDataType.isRowKeyOrderOptimized(PVarcharArray.INSTANCE, SortOrder.DESC, bytes, 0, bytes.length));
+    }
+
+    @Test
+    public void testIsRowKeyOrderOptimized3() {
+        Object[] objects = new Object[]{"a", "b", "c"};
+        PhoenixArray arr = new PhoenixArray(PVarchar.INSTANCE, objects);
+        byte[] bytes = PVarcharArray.INSTANCE.toBytes(arr, SortOrder.DESC);
+        for (int i = 0; i < bytes.length; i++) {
+            if (bytes[i] == QueryConstants.DESC_SEPARATOR_BYTE) {
+                bytes[i] = QueryConstants.SEPARATOR_BYTE;
+            }
+        }
+        assertFalse(PArrayDataType.isRowKeyOrderOptimized(PVarcharArray.INSTANCE, SortOrder.DESC, bytes, 0, bytes.length));
+    }
+
+    @Test
+    public void testIsRowKeyOrderOptimized4() {
+        assertTrue(PArrayDataType.isRowKeyOrderOptimized(PVarcharArray.INSTANCE, SortOrder.DESC, null, 0, 0));
+    }
+
+    @Test
+    public void testIsRowKeyOrderOptimized5() {
+        Object[] objects = new Object[]{1, 2, 3};
+        PhoenixArray arr = new PhoenixArray.PrimitiveIntPhoenixArray(PInteger.INSTANCE, objects);
+        byte[] bytes = PIntegerArray.INSTANCE.toBytes(arr, PInteger.INSTANCE, SortOrder.ASC);
+        assertTrue(PArrayDataType.isRowKeyOrderOptimized(PIntegerArray.INSTANCE, SortOrder.ASC, bytes, 0, bytes.length));
+    }
+
+    @Test
+    public void testVarcharArrayDesc(){
+        Object[] objects = new Object[]{"a", "b", null};
+        PhoenixArray arr = new PhoenixArray(PVarchar.INSTANCE, objects);
+        byte[] bytes = PVarcharArray.INSTANCE.toBytes(arr, PVarchar.INSTANCE, SortOrder.DESC);
+        PhoenixArray arr2 = (PhoenixArray)PVarcharArray.INSTANCE.toObject(bytes, SortOrder.DESC);
+        assertEquals(arr, arr2);
+    }
+
+    @Test
+    public void testPositionAtArrayElementWithDescArray(){
+        Object[] objects = new Object[]{"a", "b", null};
+        PhoenixArray arr = new PhoenixArray(PVarchar.INSTANCE, objects);
+        byte[] bytes = PVarcharArray.INSTANCE.toBytes(arr, PVarchar.INSTANCE, SortOrder.DESC);
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable(bytes);
+        PArrayDataType.positionAtArrayElement(ptr, 2, PVarchar.INSTANCE, null);
+        String value = (String)PVarchar.INSTANCE.toObject(ptr, SortOrder.DESC);
+        assertEquals(null, value);
+    }
 }

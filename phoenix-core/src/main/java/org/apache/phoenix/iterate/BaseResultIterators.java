@@ -51,6 +51,8 @@ import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.filter.ColumnProjectionFilter;
@@ -67,7 +69,6 @@ import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTable.ViewType;
-import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
@@ -134,6 +135,68 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         return true;
     }
     
+    private static void initializeScan(QueryPlan plan, Integer perScanLimit) {
+        StatementContext context = plan.getContext();
+        TableRef tableRef = plan.getTableRef();
+        PTable table = tableRef.getTable();
+        Scan scan = context.getScan();
+
+        Map<byte [], NavigableSet<byte []>> familyMap = scan.getFamilyMap();
+        // Hack for PHOENIX-2067 to force raw scan over all KeyValues to fix their row keys
+        if (context.getConnection().isDescVarLengthRowKeyUpgrade()) {
+            // We project *all* KeyValues across all column families as we make a pass over
+            // a physical table and we want to make sure we catch all KeyValues that may be
+            // dynamic or part of an updatable view.
+            familyMap.clear();
+            scan.setMaxVersions();
+            scan.setFilter(null); // Remove any filter
+            scan.setRaw(true); // Traverse (and subsequently clone) all KeyValues
+            // Pass over PTable so we can re-write rows according to the row key schema
+            scan.setAttribute(BaseScannerRegionObserver.UPGRADE_DESC_ROW_KEY, UngroupedAggregateRegionObserver.serialize(table));
+        } else {
+            FilterableStatement statement = plan.getStatement();
+            RowProjector projector = plan.getProjector();
+            boolean keyOnlyFilter = familyMap.isEmpty() && context.getWhereCoditionColumns().isEmpty();
+            if (projector.isProjectEmptyKeyValue()) {
+                // If nothing projected into scan and we only have one column family, just allow everything
+                // to be projected and use a FirstKeyOnlyFilter to skip from row to row. This turns out to
+                // be quite a bit faster.
+                // Where condition columns also will get added into familyMap
+                // When where conditions are present, we can not add FirstKeyOnlyFilter at beginning.
+                if (familyMap.isEmpty() && context.getWhereCoditionColumns().isEmpty()
+                        && table.getColumnFamilies().size() == 1) {
+                    // Project the one column family. We must project a column family since it's possible
+                    // that there are other non declared column families that we need to ignore.
+                    scan.addFamily(table.getColumnFamilies().get(0).getName().getBytes());
+                } else {
+                    byte[] ecf = SchemaUtil.getEmptyColumnFamily(table);
+                    // Project empty key value unless the column family containing it has
+                    // been projected in its entirety.
+                    if (!familyMap.containsKey(ecf) || familyMap.get(ecf) != null) {
+                        scan.addColumn(ecf, QueryConstants.EMPTY_COLUMN_BYTES);
+                    }
+                }
+            } else if (table.getViewType() == ViewType.MAPPED) {
+                // Since we don't have the empty key value in MAPPED tables, we must select all CFs in HRS. But only the
+                // selected column values are returned back to client
+                for (PColumnFamily family : table.getColumnFamilies()) {
+                    scan.addFamily(family.getName().getBytes());
+                }
+            }
+            // Add FirstKeyOnlyFilter if there are no references to key value columns
+            if (keyOnlyFilter) {
+                ScanUtil.andFilterAtBeginning(scan, new FirstKeyOnlyFilter());
+            }
+            
+            // TODO adding all CFs here is not correct. It should be done only after ColumnProjectionOptimization.
+            if (perScanLimit != null) {
+                ScanUtil.andFilterAtEnd(scan, new PageFilter(perScanLimit));
+            }
+    
+            doColumnProjectionOptimization(context, scan, table, statement);
+        }
+    }
+    
     public BaseResultIterators(QueryPlan plan, Integer perScanLimit, ParallelScanGrouper scanGrouper) throws SQLException {
         super(plan.getContext(), plan.getTableRef(), plan.getGroupBy(), plan.getOrderBy(), plan.getStatement().getHint(), plan.getLimit());
         this.plan = plan;
@@ -141,52 +204,12 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         StatementContext context = plan.getContext();
         TableRef tableRef = plan.getTableRef();
         PTable table = tableRef.getTable();
-        FilterableStatement statement = plan.getStatement();
-        RowProjector projector = plan.getProjector();
         physicalTableName = table.getPhysicalName().getBytes();
         tableStats = useStats() ? new MetaDataClient(context.getConnection()).getTableStats(table) : PTableStats.EMPTY_STATS;
-        Scan scan = context.getScan();
         // Used to tie all the scans together during logging
         scanId = UUID.randomUUID().toString();
-        Map<byte [], NavigableSet<byte []>> familyMap = scan.getFamilyMap();
-        boolean keyOnlyFilter = familyMap.isEmpty() && context.getWhereCoditionColumns().isEmpty();
-        if (projector.isProjectEmptyKeyValue()) {
-            // If nothing projected into scan and we only have one column family, just allow everything
-            // to be projected and use a FirstKeyOnlyFilter to skip from row to row. This turns out to
-            // be quite a bit faster.
-            // Where condition columns also will get added into familyMap
-            // When where conditions are present, we can not add FirstKeyOnlyFilter at beginning.
-            if (familyMap.isEmpty() && context.getWhereCoditionColumns().isEmpty()
-                    && table.getColumnFamilies().size() == 1) {
-                // Project the one column family. We must project a column family since it's possible
-                // that there are other non declared column families that we need to ignore.
-                scan.addFamily(table.getColumnFamilies().get(0).getName().getBytes());
-            } else {
-                byte[] ecf = SchemaUtil.getEmptyColumnFamily(table);
-                // Project empty key value unless the column family containing it has
-                // been projected in its entirety.
-                if (!familyMap.containsKey(ecf) || familyMap.get(ecf) != null) {
-                    scan.addColumn(ecf, QueryConstants.EMPTY_COLUMN_BYTES);
-                }
-            }
-        } else if (table.getViewType() == ViewType.MAPPED) {
-            // Since we don't have the empty key value in MAPPED tables, we must select all CFs in HRS. But only the
-            // selected column values are returned back to client
-            for (PColumnFamily family : table.getColumnFamilies()) {
-                scan.addFamily(family.getName().getBytes());
-            }
-        }
-        // Add FirstKeyOnlyFilter if there are no references to key value columns
-        if (keyOnlyFilter) {
-            ScanUtil.andFilterAtBeginning(scan, new FirstKeyOnlyFilter());
-        }
         
-        // TODO adding all CFs here is not correct. It should be done only after ColumnProjectionOptimization.
-        if (perScanLimit != null) {
-            ScanUtil.andFilterAtEnd(scan, new PageFilter(perScanLimit));
-        }
-
-        doColumnProjectionOptimization(context, scan, table, statement);
+        initializeScan(plan, perScanLimit);
         
         this.scans = getParallelScans();
         List<KeyRange> splitRanges = Lists.newArrayListWithExpectedSize(scans.size() * ESTIMATED_GUIDEPOSTS_PER_REGION);
@@ -200,7 +223,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         this.allFutures = Lists.newArrayListWithExpectedSize(1);
     }
 
-    private void doColumnProjectionOptimization(StatementContext context, Scan scan, PTable table, FilterableStatement statement) {
+    private static void doColumnProjectionOptimization(StatementContext context, Scan scan, PTable table, FilterableStatement statement) {
         Map<byte[], NavigableSet<byte[]>> familyMap = scan.getFamilyMap();
         if (familyMap != null && !familyMap.isEmpty()) {
             // columnsTracker contain cf -> qualifiers which should get returned.

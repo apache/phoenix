@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import static com.google.common.collect.Lists.newArrayListWithExpectedSize;
+import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_MODIFY_VIEW_PK;
 import static org.apache.phoenix.exception.SQLExceptionCode.NOT_NULLABLE_COLUMN_IN_ROW_KEY;
 import static org.apache.phoenix.util.TestUtil.analyzeTable;
 import static org.apache.phoenix.util.TestUtil.getAllSplits;
@@ -520,6 +521,28 @@ public class ViewIT extends BaseViewIT {
         // assert PK metadata
         ResultSet rs = conn.getMetaData().getPrimaryKeys(null, null, "V1");
         assertPKs(rs, new String[] {"K1", "K2", "K3", "K4"});
+    }
+    
+    @Test
+    public void testViewAddsPKColumnWhoseParentsLastPKIsVarLength() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String ddl = "CREATE TABLE tp (k1 INTEGER NOT NULL, k2 VARCHAR NOT NULL, v1 DECIMAL, CONSTRAINT pk PRIMARY KEY (k1, k2))";
+        conn.createStatement().execute(ddl);
+        ddl = "CREATE VIEW v1  AS SELECT * FROM tp WHERE v1 = 1.0";
+        conn.createStatement().execute(ddl);
+        ddl = "ALTER VIEW V1 ADD k3 VARCHAR PRIMARY KEY, k4 VARCHAR PRIMARY KEY, v2 INTEGER";
+        try {
+            conn.createStatement().execute(ddl);
+            fail("View cannot extend PK if parent's last PK is variable length. See https://issues.apache.org/jira/browse/PHOENIX-978.");
+        } catch (SQLException e) {
+            assertEquals(CANNOT_MODIFY_VIEW_PK.getErrorCode(), e.getErrorCode());
+        }
+        ddl = "CREATE VIEW v2 (k3 VARCHAR PRIMARY KEY)  AS SELECT * FROM tp WHERE v1 = 1.0";
+        try {
+        	conn.createStatement().execute(ddl);
+        } catch (SQLException e) {
+            assertEquals(CANNOT_MODIFY_VIEW_PK.getErrorCode(), e.getErrorCode());
+        }
     }
     
     @Test(expected=ColumnAlreadyExistsException.class)

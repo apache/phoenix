@@ -297,8 +297,20 @@ public class ParseNodeFactory {
                 maxValue, cycle, ifNotExits, bindCount);
     }
 
-    public CreateFunctionStatement createFunction(PFunction functionInfo, boolean temporary) {
-        return new CreateFunctionStatement(functionInfo, temporary);
+    public CreateFunctionStatement createFunction(PFunction functionInfo, boolean temporary, boolean isReplace) {
+        return new CreateFunctionStatement(functionInfo, temporary, isReplace);
+    }
+
+    public AddJarsStatement addJars(List<LiteralParseNode> jarPaths) {
+        return new AddJarsStatement(jarPaths);
+    }
+
+    public ListJarsStatement listJars() {
+        return new ListJarsStatement();
+    }
+
+    public DeleteJarStatement deleteJar(LiteralParseNode jarPath) {
+        return new DeleteJarStatement(jarPath);
     }
 
     public DropFunctionStatement dropFunction(String functionName, boolean ifExists) {
@@ -310,11 +322,11 @@ public class ParseNodeFactory {
     }
 
     public SequenceValueParseNode currentValueFor(TableName tableName) {
-        return new SequenceValueParseNode(tableName, SequenceValueParseNode.Op.CURRENT_VALUE);
+        return new SequenceValueParseNode(tableName, SequenceValueParseNode.Op.CURRENT_VALUE, null);
     }
 
-    public SequenceValueParseNode nextValueFor(TableName tableName) {
-        return new SequenceValueParseNode(tableName, SequenceValueParseNode.Op.NEXT_VALUE);
+    public SequenceValueParseNode nextValueFor(TableName tableName, ParseNode numToAllocateNode) {
+        return new SequenceValueParseNode(tableName, SequenceValueParseNode.Op.NEXT_VALUE, numToAllocateNode);
     }
 
     public AddColumnStatement addColumn(NamedTableNode table,  PTableType tableType, List<ColumnDef> columnDefs, boolean ifNotExists, ListMultimap<String,Pair<String,Object>> props) {

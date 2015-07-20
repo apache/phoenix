@@ -17,15 +17,18 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_FUNCTION_TABLE;
+import static org.apache.phoenix.query.QueryServices.DYNAMIC_JARS_DIR_KEY;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
 import static org.apache.phoenix.util.PhoenixRuntime.PHOENIX_TEST_DRIVER_URL_PARAM;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_FUNCTION_TABLE;
-import static org.apache.phoenix.query.QueryServices.DYNAMIC_JARS_DIR_KEY;
 import static org.apache.phoenix.util.TestUtil.LOCALHOST;
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.io.BufferedInputStream;
 import java.io.File;
@@ -34,6 +37,7 @@ import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.sql.Connection;
+import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.HashSet;
@@ -60,8 +64,6 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.FunctionAlreadyExistsException;
 import org.apache.phoenix.schema.FunctionNotFoundException;
 import org.apache.phoenix.schema.ValueRangeExcpetion;
-import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PArrayDataType;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -205,9 +207,6 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT{
         conf.set(DYNAMIC_JARS_DIR_KEY, string+"/hbase/tmpjars");
         util.startMiniHBaseCluster(1, 1);
         UDFExpression.setConfig(conf);
-        compileTestClass(MY_REVERSE_CLASS_NAME, MY_REVERSE_PROGRAM, 1);
-        compileTestClass(MY_SUM_CLASS_NAME, MY_SUM_PROGRAM, 2);
-        compileTestClass(MY_ARRAY_INDEX_CLASS_NAME, MY_ARRAY_INDEX_PROGRAM, 3);
 
         String clientPort = util.getConfiguration().get(QueryServices.ZOOKEEPER_PORT_ATTRIB);
         url =
@@ -215,9 +214,53 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT{
                         + clientPort + JDBC_PROTOCOL_TERMINATOR + PHOENIX_TEST_DRIVER_URL_PARAM;
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         props.put(QueryServices.ALLOW_USER_DEFINED_FUNCTIONS_ATTRIB, "true");
+        props.put(QueryServices.DYNAMIC_JARS_DIR_KEY,string+"/hbase/tmpjars/");
         driver = initAndRegisterDriver(url, new ReadOnlyProps(props.entrySet().iterator()));
+        compileTestClass(MY_REVERSE_CLASS_NAME, MY_REVERSE_PROGRAM, 1);
+        compileTestClass(MY_SUM_CLASS_NAME, MY_SUM_PROGRAM, 2);
+        compileTestClass(MY_ARRAY_INDEX_CLASS_NAME, MY_ARRAY_INDEX_PROGRAM, 3);
+        compileTestClass(MY_ARRAY_INDEX_CLASS_NAME, MY_ARRAY_INDEX_PROGRAM, 4);
     }
     
+    @Test
+    public void testListJars() throws Exception {
+        Connection conn = driver.connect(url, EMPTY_PROPS);
+        Statement stmt = conn.createStatement();
+        ResultSet rs = stmt.executeQuery("list jars");
+        assertTrue(rs.next());
+        assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar1.jar", rs.getString("jar_location"));
+        assertTrue(rs.next());
+        assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar2.jar", rs.getString("jar_location"));
+        assertTrue(rs.next());
+        assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar3.jar", rs.getString("jar_location"));
+        assertFalse(rs.next());
+    }
+
+    @Test
+    public void testDeleteJar() throws Exception {
+        Connection conn = driver.connect(url, EMPTY_PROPS);
+        Statement stmt = conn.createStatement();
+        ResultSet rs = stmt.executeQuery("list jars");
+        assertTrue(rs.next());
+        assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar1.jar", rs.getString("jar_location"));
+        assertTrue(rs.next());
+        assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar2.jar", rs.getString("jar_location"));
+        assertTrue(rs.next());
+        assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar3.jar", rs.getString("jar_location"));
+        assertTrue(rs.next());
+        assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar4.jar", rs.getString("jar_location"));
+        assertFalse(rs.next());
+        stmt.execute("delete jar '"+ util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar4.jar'");
+        rs = stmt.executeQuery("list jars");
+        assertTrue(rs.next());
+        assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar1.jar", rs.getString("jar_location"));
+        assertTrue(rs.next());
+        assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar2.jar", rs.getString("jar_location"));
+        assertTrue(rs.next());
+        assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar3.jar", rs.getString("jar_location"));
+        assertFalse(rs.next());
+    }
+
     @Test
     public void testCreateFunction() throws Exception {
         Connection conn = driver.connect(url, EMPTY_PROPS);
@@ -561,6 +604,104 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT{
     }
 
     @Test
+    public void testUDFsWhenTimestampManagedAtClient() throws Exception {
+        long ts = 100;
+        Properties props = new Properties();
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        Connection conn = DriverManager.getConnection(url, props);
+        Statement stmt = conn.createStatement();
+        String query = "select count(*) from "+ SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_FUNCTION_TABLE + "\"";
+        ResultSet rs = stmt.executeQuery(query);
+        rs.next();
+        int numRowsBefore = rs.getInt(1);
+        stmt.execute("create function mysum61(INTEGER, INTEGER CONSTANT defaultValue=10 minvalue=1 maxvalue=15 ) returns INTEGER as 'org.apache.phoenix.end2end."+MY_SUM_CLASS_NAME+"' using jar "
+                + "'"+util.getConfiguration().get(DYNAMIC_JARS_DIR_KEY) + "/myjar2.jar"+"'");
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        conn = DriverManager.getConnection(url, props);
+        stmt = conn.createStatement();
+        rs = stmt.executeQuery(query);
+        rs.next();
+        int numRowsAfter= rs.getInt(1);
+        assertEquals(3, numRowsAfter - numRowsBefore);
+        stmt.execute("drop function mysum61");
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
+        conn = DriverManager.getConnection(url, props);
+        stmt = conn.createStatement();
+        rs = stmt.executeQuery(query);
+        rs.next();
+        assertEquals(numRowsBefore, rs.getInt(1));
+        conn.createStatement().execute("create table t62(k integer primary key, k1 integer, lastname varchar)");
+        try {
+            rs = stmt.executeQuery("select mysum61(k1) from t62");
+            fail("FunctionNotFoundException should be thrown");
+        } catch(FunctionNotFoundException e) {
+            
+        }
+        try {
+            stmt.execute("drop function mysum61");
+            fail("FunctionNotFoundException should be thrown");
+        } catch(FunctionNotFoundException e) {
+            
+        }
+        try {
+            stmt.execute("drop function if exists mysum61");
+        } catch(FunctionNotFoundException e) {
+            fail("FunctionNotFoundException should not be thrown");
+        }
+        stmt.execute("create function mysum61(INTEGER, INTEGER CONSTANT defaultValue=10 minvalue=1 maxvalue=15 ) returns INTEGER as 'org.apache.phoenix.end2end."+MY_SUM_CLASS_NAME+"' using jar "
+                + "'"+util.getConfiguration().get(DYNAMIC_JARS_DIR_KEY) + "/myjar2.jar"+"'");
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
+        conn = DriverManager.getConnection(url, props);
+        stmt = conn.createStatement();
+        try {
+            rs = stmt.executeQuery("select mysum61(k1) from t62");
+        } catch(FunctionNotFoundException e) {
+            fail("FunctionNotFoundException should not be thrown");
+        }
+        conn.createStatement().execute("create table t61(k integer primary key, k1 integer, lastname varchar)");
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
+        conn = DriverManager.getConnection(url, props);
+        stmt = conn.createStatement();
+        stmt.execute("upsert into t61 values(1,1,'jock')");
+        conn.commit();
+        stmt.execute("create function myfunction6(VARCHAR) returns VARCHAR as 'org.apache.phoenix.end2end."+MY_REVERSE_CLASS_NAME+"' using jar "
+                + "'"+util.getConfiguration().get(DYNAMIC_JARS_DIR_KEY) + "/myjar1.jar"+"'");
+        stmt.execute("create or replace function myfunction6(INTEGER, INTEGER CONSTANT defaultValue=10 minvalue=1 maxvalue=15 ) returns INTEGER as 'org.apache.phoenix.end2end."+MY_SUM_CLASS_NAME+"' using jar "
+                + "'"+util.getConfiguration().get(DYNAMIC_JARS_DIR_KEY) + "/myjar2.jar"+"'");
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 50));
+        conn = DriverManager.getConnection(url, props);
+        stmt = conn.createStatement();
+        rs = stmt.executeQuery("select myfunction6(k,12) from t61");
+        assertTrue(rs.next());
+        assertEquals(13, rs.getInt(1));
+        rs = stmt.executeQuery("select myfunction6(k) from t61");
+        assertTrue(rs.next());
+        assertEquals(11, rs.getInt(1));
+        rs = stmt.executeQuery("select k from t61 where myfunction6(k)=11");
+        assertTrue(rs.next());
+        assertEquals(1, rs.getInt(1));
+        stmt.execute("create or replace function myfunction6(VARCHAR) returns VARCHAR as 'org.apache.phoenix.end2end."+MY_REVERSE_CLASS_NAME+"' using jar "
+                + "'"+util.getConfiguration().get(DYNAMIC_JARS_DIR_KEY) + "/myjar1.jar"+"'");
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 60));
+        conn = DriverManager.getConnection(url, props);
+        stmt = conn.createStatement();
+        rs = stmt.executeQuery("select k from t61 where myfunction6(lastname)='kcoj'");
+        assertTrue(rs.next());
+        assertEquals(1, rs.getInt(1));
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 60));
+        props.setProperty(QueryServices.ALLOW_USER_DEFINED_FUNCTIONS_ATTRIB, "false");
+        conn = DriverManager.getConnection(url, props);
+        stmt = conn.createStatement();
+        try {
+            rs = stmt.executeQuery("select k from t61 where reverse(lastname,11)='kcoj'");
+            fail("FunctionNotFoundException should be thrown.");
+        } catch(FunctionNotFoundException e) {
+            
+        }
+
+    }
+
+    @Test
     public void testFunctionalIndexesWithUDFFunction() throws Exception {
         Connection conn = driver.connect(url, EMPTY_PROPS);
         Statement stmt = conn.createStatement();
@@ -589,6 +730,39 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT{
         assertEquals(1, rs.getInt(2));
         assertEquals("kcoj", rs.getString(3));
         assertFalse(rs.next());
+    }
+
+    @Test
+    public void testReplaceFunction() throws Exception {
+        Connection conn = driver.connect(url, EMPTY_PROPS);
+        Statement stmt = conn.createStatement();
+        conn.createStatement().execute("create table t10(k integer primary key, k1 integer, lastname varchar)");
+        stmt.execute("upsert into t10 values(1,1,'jock')");
+        conn.commit();
+        stmt.execute("create function myfunction63(VARCHAR) returns VARCHAR as 'org.apache.phoenix.end2end."+MY_REVERSE_CLASS_NAME+"' using jar "
+                + "'"+util.getConfiguration().get(DYNAMIC_JARS_DIR_KEY) + "/myjar1.jar"+"'");
+        stmt.execute("create or replace function myfunction63(INTEGER, INTEGER CONSTANT defaultValue=10 minvalue=1 maxvalue=15 ) returns INTEGER as 'org.apache.phoenix.end2end."+MY_SUM_CLASS_NAME+"' using jar "
+                + "'"+util.getConfiguration().get(DYNAMIC_JARS_DIR_KEY) + "/myjar2.jar"+"'");
+        ResultSet rs = stmt.executeQuery("select myfunction63(k,12) from t10");
+        assertTrue(rs.next());
+        assertEquals(13, rs.getInt(1));
+        rs = stmt.executeQuery("select myfunction63(k) from t10");
+        assertTrue(rs.next());
+        assertEquals(11, rs.getInt(1));
+        rs = stmt.executeQuery("select k from t10 where myfunction63(k)=11");
+        assertTrue(rs.next());
+        assertEquals(1, rs.getInt(1));
+        Connection conn2 = driver.connect(url, EMPTY_PROPS);
+        stmt = conn2.createStatement();
+        rs = stmt.executeQuery("select myfunction63(k,12) from t10");
+        assertTrue(rs.next());
+        assertEquals(13, rs.getInt(1));
+        rs = stmt.executeQuery("select myfunction63(k) from t10");
+        assertTrue(rs.next());
+        assertEquals(11, rs.getInt(1));
+        rs = stmt.executeQuery("select k from t10 where myfunction63(k)=11");
+        assertTrue(rs.next());
+        assertEquals(1, rs.getInt(1));
     }
 
     /**
@@ -643,23 +817,9 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT{
             jarFos.close();
             
             assertTrue(jarFile.exists());
-            
-            InputStream inputStream = new BufferedInputStream(new FileInputStream(jarPath));
-            FileSystem fs = util.getDefaultRootDirPath().getFileSystem(util.getConfiguration());
-            Path jarsLocation = new Path(util.getConfiguration().get(DYNAMIC_JARS_DIR_KEY));
-            Path myJarPath;
-            if (jarsLocation.toString().endsWith("/")) {
-                myJarPath = new Path(jarsLocation.toString() + jarName);
-            } else {
-                myJarPath = new Path(jarsLocation.toString() + "/" + jarName);
-            }
-            OutputStream outputStream = fs.create(myJarPath);
-            try {
-                IOUtils.copyBytes(inputStream, outputStream, 4096, false);
-            } finally {
-                IOUtils.closeStream(inputStream);
-                IOUtils.closeStream(outputStream);
-            }
+            Connection conn = driver.connect(url, EMPTY_PROPS);
+            Statement stmt = conn.createStatement();
+            stmt.execute("add jars '"+jarFile.getAbsolutePath()+"'");
         } finally {
             if (javaFile != null) javaFile.delete();
             if (classFile != null) classFile.delete();

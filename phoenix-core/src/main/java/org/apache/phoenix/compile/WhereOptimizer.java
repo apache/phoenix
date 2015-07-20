@@ -61,7 +61,9 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PArrayDataType;
 import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
@@ -194,8 +196,9 @@ public class WhereOptimizer {
             if (hasMinMaxRange) {
                 System.arraycopy(tenantIdBytes, 0, minMaxRangePrefix, minMaxRangeOffset, tenantIdBytes.length);
                 minMaxRangeOffset += tenantIdBytes.length;
-                if (!schema.getField(pkPos).getDataType().isFixedWidth()) {
-                    minMaxRangePrefix[minMaxRangeOffset] = QueryConstants.SEPARATOR_BYTE;
+                Field f = schema.getField(pkPos);
+                if (!f.getDataType().isFixedWidth()) {
+                    minMaxRangePrefix[minMaxRangeOffset] = SchemaUtil.getSeparatorByte(schema.rowKeyOrderOptimizable(), tenantIdBytes.length==0, f);
                     minMaxRangeOffset++;
                 }
             }
@@ -259,6 +262,8 @@ public class WhereOptimizer {
                     hasNonPointKey = true;
                 }
             }
+            keyRanges = transformKeyRangesIfNecessary(slot, context);
+            
             hasMultiRanges |= keyRanges.size() > 1;
             // Force a range scan if we've encountered a multi-span slot (i.e. RVC)
             // and a non point key, as our skip scan only handles fully qualified
@@ -315,6 +320,45 @@ public class WhereOptimizer {
         } else {
             return whereClause.accept(new RemoveExtractedNodesVisitor(extractNodes));
         }
+    }
+    
+    // Special hack for PHOENIX-2067 to change the constant array to match
+    // the separators used for descending, variable length arrays.
+    // Note that there'd already be a coerce expression around the constant
+    // to convert it to the right type, so we shouldn't do that here.
+    private static List<KeyRange> transformKeyRangesIfNecessary(KeyExpressionVisitor.KeySlot slot, StatementContext context) {
+        KeyPart keyPart = slot.getKeyPart();
+        List<KeyRange> keyRanges = slot.getKeyRanges();
+        PColumn column = keyPart.getColumn();
+        if (column != null) {
+            PDataType type = column.getDataType();
+            PTable table = context.getCurrentTable().getTable();
+            // Constants are always build with rowKeyOptimizable as true, using the correct separators
+            // We only need to do this conversion if we have a table that has not yet been converted.
+            if (type != null && type.isArrayType() && column.getSortOrder() == SortOrder.DESC && !PArrayDataType.arrayBaseType(type).isFixedWidth() && !table.rowKeyOrderOptimizable()) {
+                ImmutableBytesWritable ptr = context.getTempPtr();
+                List<KeyRange> newKeyRanges = Lists.newArrayListWithExpectedSize(keyRanges.size());
+                for (KeyRange keyRange : keyRanges) {
+                    byte[] lower = keyRange.getLowerRange();
+                    if (!keyRange.lowerUnbound()) {
+                        ptr.set(lower);;
+                        type.coerceBytes(ptr, null, type, null, null, SortOrder.DESC, null, null, SortOrder.DESC, false);
+                        lower = ByteUtil.copyKeyBytesIfNecessary(ptr);
+                    }
+                    byte[] upper = keyRange.getUpperRange();
+                    if (!keyRange.upperUnbound()) {
+                        ptr.set(upper);;
+                        type.coerceBytes(ptr, null, type, null, null, SortOrder.DESC, null, null, SortOrder.DESC, false);
+                        upper = ByteUtil.copyKeyBytesIfNecessary(ptr);
+                    }
+                    keyRange = KeyRange.getKeyRange(lower, keyRange.isLowerInclusive(), upper, keyRange.isUpperInclusive());
+                    newKeyRanges.add(keyRange);
+                }
+                
+                return newKeyRanges;
+            }
+        }
+        return keyRanges;
     }
     
     /**
@@ -996,6 +1040,9 @@ public class WhereOptimizer {
             // Handles cases like WHERE substr(foo,1,3) IN ('aaa','bbb')
             for (Expression key : keyExpressions) {
                 KeyRange range = childPart.getKeyRange(CompareOp.EQUAL, key);
+                if (range == null) {
+                    return null;
+                }
                 if (range != KeyRange.EMPTY_RANGE) { // null means it can't possibly be in range
                     ranges.add(range);
                 }
@@ -1393,7 +1440,7 @@ public class WhereOptimizer {
                     return null; // Shouldn't happen
                 }
                 ImmutableBytesWritable ptr = context.getTempPtr();
-                if (!rhs.evaluate(null, ptr) || ptr.getLength()==0) {
+                if (!rhs.evaluate(null, ptr)) { // Don't return if evaluated to null
                     return null; 
                 }
                 byte[] key = ByteUtil.copyKeyBytesIfNecessary(ptr);

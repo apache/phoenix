@@ -32,13 +32,23 @@ public class SequenceValueExpression extends BaseTerminalExpression {
     private final SequenceKey key;
     final Op op;
     private final int index;
+    private final long numToAllocate;
 
-    public SequenceValueExpression(SequenceKey key, Op op, int index) {
+    public SequenceValueExpression(SequenceKey key, Op op, int index, long numToAllocate) {
         this.key = key;
         this.op = op;
         this.index = index;
+        this.numToAllocate = numToAllocate;
     }
 
+    public long getNumToAllocate() {
+        return numToAllocate;
+    }
+    
+    public SequenceKey getKey() {
+        return key;
+    }
+    
     public int getIndex() {
         return index;
     }
@@ -73,7 +83,7 @@ public class SequenceValueExpression extends BaseTerminalExpression {
 
     @Override
     public String toString() {
-        return op.getName() + " VALUE FOR " + SchemaUtil.getTableName(key.getSchemaName(),key.getSequenceName());
+        return op.getName() + (numToAllocate == 1 ? " VALUE " : (" " + numToAllocate + " VALUES " )) + "FOR " + SchemaUtil.getTableName(key.getSchemaName(),key.getSequenceName());
     }
 
     @Override

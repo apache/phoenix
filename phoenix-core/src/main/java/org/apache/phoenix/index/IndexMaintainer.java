@@ -59,14 +59,10 @@ import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
-import org.apache.phoenix.parse.AndParseNode;
-import org.apache.phoenix.parse.BaseParseNodeVisitor;
-import org.apache.phoenix.parse.BooleanParseNodeVisitor;
 import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.StatelessTraverseAllParseNodeVisitor;
-import org.apache.phoenix.parse.TraverseAllParseNodeVisitor;
 import org.apache.phoenix.parse.UDFParseNode;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.ColumnNotFoundException;
@@ -265,6 +261,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     private int[] dataPkPosition;
     private int maxTrailingNulls;
     private ColumnReference dataEmptyKeyValueRef;
+    private boolean rowKeyOrderOptimizable;
     
     private IndexMaintainer(RowKeySchema dataRowKeySchema, boolean isDataTableSalted) {
         this.dataRowKeySchema = dataRowKeySchema;
@@ -273,6 +270,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
 
     private IndexMaintainer(PTable dataTable, PTable index, PhoenixConnection connection) {
         this(dataTable.getRowKeySchema(), dataTable.getBucketNum() != null);
+        this.rowKeyOrderOptimizable = index.rowKeyOrderOptimizable();
         this.isMultiTenant = dataTable.isMultiTenant();
         this.viewIndexId = index.getViewIndexId() == null ? null : MetaDataUtil.getViewIndexIdDataType().toBytes(index.getViewIndexId());
         this.isLocalIndex = index.getIndexType() == IndexType.LOCAL;
@@ -434,7 +432,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 dataRowKeySchema.next(ptr, dataPosOffset, maxRowKeyOffset);
                 output.write(ptr.get(), ptr.getOffset(), ptr.getLength());
                 if (!dataRowKeySchema.getField(dataPosOffset).getDataType().isFixedWidth()) {
-                    output.writeByte(QueryConstants.SEPARATOR_BYTE);
+                    output.writeByte(SchemaUtil.getSeparatorByte(rowKeyOrderOptimizable, ptr.getLength()==0, dataRowKeySchema.getField(dataPosOffset)));
                 }
                 dataPosOffset++;
             }
@@ -481,21 +479,22 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 }
                 boolean isDataColumnInverted = dataSortOrder != SortOrder.ASC;
                 PDataType indexColumnType = IndexUtil.getIndexColumnDataType(isNullable, dataColumnType);
-                boolean isBytesComparable = dataColumnType.isBytesComparableWith(indexColumnType) ;
-                if (isBytesComparable && isDataColumnInverted == descIndexColumnBitSet.get(i)) {
+                boolean isBytesComparable = dataColumnType.isBytesComparableWith(indexColumnType);
+                boolean isIndexColumnDesc = descIndexColumnBitSet.get(i);
+                if (isBytesComparable && isDataColumnInverted == isIndexColumnDesc) {
                     output.write(ptr.get(), ptr.getOffset(), ptr.getLength());
                 } else {
                     if (!isBytesComparable)  {
                         indexColumnType.coerceBytes(ptr, dataColumnType, dataSortOrder, SortOrder.getDefault());
                     }
-                    if (descIndexColumnBitSet.get(i) != isDataColumnInverted) {
+                    if (isDataColumnInverted != isIndexColumnDesc) {
                         writeInverted(ptr.get(), ptr.getOffset(), ptr.getLength(), output);
                     } else {
                         output.write(ptr.get(), ptr.getOffset(), ptr.getLength());
                     }
                 }
                 if (!indexColumnType.isFixedWidth()) {
-                    output.writeByte(QueryConstants.SEPARATOR_BYTE);
+                    output.writeByte(SchemaUtil.getSeparatorByte(rowKeyOrderOptimizable, ptr.getLength() == 0, isIndexColumnDesc ? SortOrder.DESC : SortOrder.ASC));
                 }
             }
             int length = stream.size();
@@ -545,7 +544,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 indexRowKeySchema.next(ptr, indexPosOffset, maxRowKeyOffset);
                 output.write(ptr.get(), ptr.getOffset(), ptr.getLength());
                 if (!dataRowKeySchema.getField(dataPosOffset).getDataType().isFixedWidth()) {
-                    output.writeByte(QueryConstants.SEPARATOR_BYTE);
+                    output.writeByte(SchemaUtil.getSeparatorByte(rowKeyOrderOptimizable, ptr.getLength() == 0, dataRowKeySchema.getField(dataPosOffset)));
                 }
                 indexPosOffset++;
                 dataPosOffset++;
@@ -587,8 +586,11 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                         }
                     }
                 }
-                if (!dataRowKeySchema.getField(i).getDataType().isFixedWidth() && ((i+1) !=  dataRowKeySchema.getFieldCount())) {
-                    output.writeByte(QueryConstants.SEPARATOR_BYTE);
+                // Write separator byte if variable length unless it's the last field in the schema
+                // (but we still need to write it if it's DESC to ensure sort order is correct).
+                byte sepByte = SchemaUtil.getSeparatorByte(rowKeyOrderOptimizable, ptr.getLength() == 0, dataRowKeySchema.getField(i));
+                if (!dataRowKeySchema.getField(i).getDataType().isFixedWidth() && (((i+1) !=  dataRowKeySchema.getFieldCount()) || sepByte == QueryConstants.DESC_SEPARATOR_BYTE)) {
+                    output.writeByte(sepByte);
                 }
             }
             int length = stream.size();
@@ -658,6 +660,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     private RowKeySchema generateIndexRowKeySchema() {
         int nIndexedColumns = getIndexPkColumnCount() + (isMultiTenant ? 1 : 0) + (!isLocalIndex && nIndexSaltBuckets > 0 ? 1 : 0) + (viewIndexId != null ? 1 : 0) - getNumViewConstants();
         RowKeySchema.RowKeySchemaBuilder builder = new RowKeySchema.RowKeySchemaBuilder(nIndexedColumns);
+        builder.rowKeyOrderOptimizable(rowKeyOrderOptimizable);
         if (!isLocalIndex && nIndexSaltBuckets > 0) {
             builder.addField(SaltingUtil.SALTING_COLUMN, false, SortOrder.ASC);
             nIndexedColumns--;
@@ -708,44 +711,67 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             // same for all rows in this index)
             if (!viewConstantColumnBitSet.get(i)) {
                 int pos = rowKeyMetaData.getIndexPkPosition(i-dataPosOffset);
-                indexFields[pos] = dataRowKeySchema.getField(i);
+                Field dataField = dataRowKeySchema.getField(i);
+                indexFields[pos] = 
+                        dataRowKeySchema.getField(i);
             } 
         }
+        BitSet descIndexColumnBitSet = rowKeyMetaData.getDescIndexColumnBitSet();
         Iterator<Expression> expressionItr = indexedExpressions.iterator();
-        for (Field indexField : indexFields) {
-            if (indexField == null) { // Add field for kv column in index
-                final PDataType dataType = expressionItr.next().getDataType();
-                builder.addField(new PDatum() {
-
-                    @Override
-                    public boolean isNullable() {
-                        return true;
-                    }
-
-                    @Override
-                    public PDataType getDataType() {
-                        return IndexUtil.getIndexColumnDataType(true, dataType);
-                    }
-
-                    @Override
-                    public Integer getMaxLength() {
-                        return null;
-                    }
-
-                    @Override
-                    public Integer getScale() {
-                        return null;
-                    }
-
-                    @Override
-                    public SortOrder getSortOrder() {
-                        return SortOrder.getDefault();
-                    }
-                    
-                }, true, SortOrder.getDefault());
-            } else { // add field from data row key
-                builder.addField(indexField);
+        for (int i = 0; i < indexFields.length; i++) {
+            Field indexField = indexFields[i];
+            PDataType dataTypeToBe;
+            SortOrder sortOrderToBe;
+            boolean isNullableToBe;
+            Integer maxLengthToBe;
+            Integer scaleToBe;
+            if (indexField == null) {
+                Expression e = expressionItr.next();
+                isNullableToBe = true;
+                dataTypeToBe = IndexUtil.getIndexColumnDataType(isNullableToBe, e.getDataType());
+                sortOrderToBe = descIndexColumnBitSet.get(i) ? SortOrder.DESC : SortOrder.ASC;
+                maxLengthToBe = e.getMaxLength();
+                scaleToBe = e.getScale();
+            } else {
+                isNullableToBe = indexField.isNullable();
+                dataTypeToBe = IndexUtil.getIndexColumnDataType(isNullableToBe, indexField.getDataType());
+                sortOrderToBe = descIndexColumnBitSet.get(i) ? SortOrder.DESC : SortOrder.ASC;
+                maxLengthToBe = indexField.getMaxLength();
+                scaleToBe = indexField.getScale();
             }
+            final PDataType dataType = dataTypeToBe;
+            final SortOrder sortOrder = sortOrderToBe;
+            final boolean isNullable = isNullableToBe;
+            final Integer maxLength = maxLengthToBe;
+            final Integer scale = scaleToBe;
+            builder.addField(new PDatum() {
+
+                @Override
+                public boolean isNullable() {
+                    return isNullable;
+                }
+
+                @Override
+                public PDataType getDataType() {
+                    return dataType;
+                }
+
+                @Override
+                public Integer getMaxLength() {
+                    return maxLength;
+                }
+
+                @Override
+                public Integer getScale() {
+                    return scale;
+                }
+
+                @Override
+                public SortOrder getSortOrder() {
+                    return sortOrder;
+                }
+                
+            }, true, sortOrder);
         }
         return builder.build();
     }
@@ -928,9 +954,18 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             byte[] cq = Bytes.readByteArray(input);
             coveredColumns.add(new ColumnReference(cf,cq));
         }
-        indexTableName = Bytes.readByteArray(input);
-        dataEmptyKeyValueCF = Bytes.readByteArray(input);
+        // Hack to serialize whether the index row key is optimizable
         int len = WritableUtils.readVInt(input);
+        if (len < 0) {
+            rowKeyOrderOptimizable = false;
+            len *= -1;
+        } else {
+            rowKeyOrderOptimizable = true;
+        }
+        indexTableName = new byte[len];
+        input.readFully(indexTableName, 0, len);
+        dataEmptyKeyValueCF = Bytes.readByteArray(input);
+        len = WritableUtils.readVInt(input);
         //TODO remove this in the next major release
         boolean isNewClient = false;
         if (len < 0) {
@@ -1023,7 +1058,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             Bytes.writeByteArray(output, ref.getFamily());
             Bytes.writeByteArray(output, ref.getQualifier());
         }
-        Bytes.writeByteArray(output, indexTableName);
+        // TODO: remove when rowKeyOrderOptimizable hack no longer needed
+        WritableUtils.writeVInt(output,indexTableName.length * (rowKeyOrderOptimizable ? 1 : -1));
+        output.write(indexTableName, 0, indexTableName.length);
         Bytes.writeByteArray(output, dataEmptyKeyValueCF);
         // TODO in order to maintain b/w compatibility encode emptyKeyValueCFPtr.getLength() as a negative value (so we can distinguish between new and old clients)
         // when indexedColumnTypes is removed, remove this 
