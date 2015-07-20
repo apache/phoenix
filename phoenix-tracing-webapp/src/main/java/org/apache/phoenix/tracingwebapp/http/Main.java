@@ -68,7 +68,7 @@ public final class Main extends Configured implements Tool {
             webapp.setTempDirectory(new File(home));
         }
         
-	    String warPath = location.toString().split("target")[0]+"build/trace-webapp-demo.war";
+	    String warPath = location.toString().split("target")[0] + "build/trace-webapp-demo.war";
 	    webapp.setWar(warPath);
         server.setHandler(webapp);
         server.start();
