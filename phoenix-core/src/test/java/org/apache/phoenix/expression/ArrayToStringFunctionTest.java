@@ -141,7 +141,11 @@ public class ArrayToStringFunctionTest {
         PhoenixArray arr = new PhoenixArray(base, o1);
         String delimiter = ", ";
         String nullString = "*";
-        String expected = "1970-01-01, 1970-01-01, 1970-01-01";
+        String expected = "";
+        for (int i = 0; i < o1.length - 1; i++) {
+            expected += o1[i].toString() + ", ";
+        }
+        expected += o1[o1.length - 1];
         test(arr, type, null, null, delimiter, nullString, expected, SortOrder.ASC, SortOrder.ASC, SortOrder.ASC);
         test(arr, type, null, null, delimiter, nullString, expected, SortOrder.DESC, SortOrder.ASC, SortOrder.ASC);
     }
