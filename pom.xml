@@ -111,6 +111,7 @@
     <jodatime.version>2.7</jodatime.version>
     <joni.version>2.1.2</joni.version>
     <calcite.version>1.2.0-incubating</calcite.version>
+    <jettyVersion>8.1.7.v20120910</jettyVersion>
 
     <!-- Test Dependencies -->
     <mockito-all.version>1.8.5</mockito-all.version>

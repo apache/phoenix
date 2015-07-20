@@ -20,23 +20,45 @@ import java.io.File;
 import java.net.URL;
 import java.security.ProtectionDomain;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.conf.Configured;
+import org.apache.hadoop.hbase.HBaseConfiguration;
+import org.apache.hadoop.util.Tool;
+import org.apache.hadoop.util.ToolRunner;
+import org.apache.log4j.BasicConfigurator;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.webapp.WebAppContext;
 
 /**
- *
  * tracing web app runner
- *
+ * 
  * @since 4.5.5
  */
-public final class Main {
+public final class Main extends Configured implements Tool {
 
-    private Main() {
-    }
+    protected static final Log LOG = LogFactory.getLog(Main.class);
+    public static final String TRACE_SERVER_HTTP_PORT_KEY =
+            "phoenix.traceserver.http.port";
+    public static final int DEFAULT_HTTP_PORT = 8864;
+    public static final String TRACE_SERVER_HTTP_JETTY_HOME_KEY =
+            "phoenix.traceserver.http.home";
+    public static final String DEFAULT_HTTP_HOME = "";
 
     public static void main(String[] args) throws Exception {
-        final int port = Integer.parseInt(System.getProperty("port", "8865"));
-        final String home = System.getProperty("home", "");
+        int ret = ToolRunner.run(HBaseConfiguration.create(), new Main(), args);
+        System.exit(ret);
+
+    }
+
+    @Override
+    public int run(String[] arg0) throws Exception {
+        // logProcessInfo(getConf());
+        final int port = getConf().getInt(TRACE_SERVER_HTTP_PORT_KEY,
+                DEFAULT_HTTP_PORT);
+        BasicConfigurator.configure();
+        final String home = getConf().get(TRACE_SERVER_HTTP_JETTY_HOME_KEY,
+                DEFAULT_HTTP_HOME);
         Server server = new Server(port);
         ProtectionDomain domain = Main.class.getProtectionDomain();
         URL location = domain.getCodeSource().getLocation();
@@ -45,10 +67,12 @@ public final class Main {
         if (home.length() != 0) {
             webapp.setTempDirectory(new File(home));
         }
-        //To-DO build war file and added in here
-        webapp.setWar(location.toExternalForm());
+        
+	    String warPath = location.toString().split("target")[0] + "build/trace-webapp-demo.war";
+	    webapp.setWar(warPath);
         server.setHandler(webapp);
         server.start();
         server.join();
+        return 0;
     }
 }

@@ -35,22 +35,39 @@
     <description>Tracing web application will visualize the phoenix traces</description>
 
     <properties>
-      <jettyVersion>8.1.7.v20120910</jettyVersion>
+       <top.dir>${project.basedir}/..</top.dir>
     </properties>
 
     <dependencies>
       <dependency>
         <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-server</artifactId>
+        <!-- TODO : pick the same jetty version throughout the project -->
         <version>${jettyVersion}</version>
         <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-webapp</artifactId>
+        <!-- TODO : pick the same jetty version throughout the project -->
         <version>${jettyVersion}</version>
         <scope>provided</scope>
       </dependency>
+    <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-common</artifactId>
+        <scope>provided</scope>
+      </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-common</artifactId>
+      <scope>provided</scope>
+    </dependency>
+  <dependency>
+        <groupId>commons-logging</groupId>
+        <artifactId>commons-logging</artifactId>
+        <scope>provided</scope>
+    </dependency>
     </dependencies>
 
     <build>
@@ -59,6 +76,29 @@
           <groupId>org.codehaus.mojo</groupId>
           <artifactId>build-helper-maven-plugin</artifactId>
         </plugin>
+      <plugin>
+        <artifactId>maven-antrun-plugin</artifactId>
+        <version>1.7</version>
+        <executions>
+          <execution>
+            <phase>generate-sources</phase>
+            <configuration>
+              <tasks>
+                <ant antfile="src/build/build.xml"/>
+                <!--
+                  Place any ant task here. You can add anything
+                  you can add between <target> and </target> in a
+                  build.xml.
+                -->
+ 
+              </tasks>
+            </configuration>
+            <goals>
+              <goal>run</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
         <plugin>
           <artifactId>maven-assembly-plugin</artifactId>
           <executions>

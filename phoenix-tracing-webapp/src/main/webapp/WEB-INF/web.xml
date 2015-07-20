@@ -6,7 +6,7 @@
    version="2.5">
   <servlet>
     <servlet-name>Trace</servlet-name>
-    <servlet-class>org.example.TraceServlet</servlet-class>
+    <servlet-class>org.apache.phoenix.tracingwebapp.http.TraceServlet</servlet-class>
   </servlet>
   <servlet-mapping>
     <servlet-name>Trace</servlet-name>
