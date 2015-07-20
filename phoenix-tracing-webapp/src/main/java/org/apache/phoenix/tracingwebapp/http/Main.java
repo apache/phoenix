@@ -40,7 +40,7 @@ public final class Main extends Configured implements Tool {
     protected static final Log LOG = LogFactory.getLog(Main.class);
     public static final String TRACE_SERVER_HTTP_PORT_KEY =
             "phoenix.traceserver.http.port";
-    public static final int DEFAULT_HTTP_PORT = 8865;
+    public static final int DEFAULT_HTTP_PORT = 8864;
     public static final String TRACE_SERVER_HTTP_JETTY_HOME_KEY =
             "phoenix.traceserver.http.home";
     public static final String DEFAULT_HTTP_HOME = "";
@@ -67,8 +67,9 @@ public final class Main extends Configured implements Tool {
         if (home.length() != 0) {
             webapp.setTempDirectory(new File(home));
         }
-        // To-DO build war file and added in here
-        webapp.setWar(location.toExternalForm());
+        
+	    String warPath = location.toString().split("target")[0]+"build/trace-webapp-demo.war";
+	    webapp.setWar(warPath);
         server.setHandler(webapp);
         server.start();
         server.join();

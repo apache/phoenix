@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+  <project name="trace-webapp-demo" default="war" basedir=".">
+
+    <property name="project-name" value="${ant.project.name}" />
+    <property name="builder" value="ayola" />
+    <property name="war-file-name" value="${project-name}.war" />
+    <property name="source-directory" value="src" />
+    <property name="classes-directory" value="src/main/webapp" />
+    <property name="web-directory" value="webapp" />
+    <property name="build-directory" value="build" />
+    <property name="web-xml-file" value="src/main/webapp/WEB-INF/web.xml" />
+    <tstamp prefix="build-info">
+      <format property="current-date" pattern="d-MMMM-yyyy" locale="en" />
+      <format property="current-time" pattern="hh:mm:ss a z" locale="en" />
+    </tstamp>
+
+    <target name="war" depends="">
+
+      <mkdir dir="${build-directory}" />
+      <copydir src="src/main/webapp" dest="${web-directory}" />
+      <delete file="${build-directory}/${war-file-name}" />
+      <war warfile="${build-directory}/${war-file-name}" webxml="${web-xml-file}">
+        <manifest>
+          <attribute name="Built-By" value="${builder}" />
+          <attribute name="Built-On" value="${build-info.current-date}" />
+          <attribute name="Built-At" value="${build-info.current-time}" />
+        </manifest>
+        <zipfileset dir="${build-directory}" includes="**/*.*" prefix="${web-directory}" />
+      </war>
+    </target>
+
+  </project>
