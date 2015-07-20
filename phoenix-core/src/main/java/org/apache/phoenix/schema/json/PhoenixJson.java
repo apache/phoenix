@@ -238,9 +238,9 @@ public class PhoenixJson implements Comparable<PhoenixJson> {
     }
 
     /**
-     * If the current {@link PhoenixJson} is a JsonArray,then it returns the length of the JsonArray
-     * For example:[1,2,3] ,it will return 3
-     * Its required for json_array_length().
+     * If the current {@link PhoenixJson} is a JsonArray,then it returns the length of the JsonArray.
+     * <p>For example:[1,2,3] ,it will return 3
+     * <p>Its required for json_array_length().
      * @throws SQLException
      */
     public int getJsonArrayLength() throws SQLException {
@@ -252,11 +252,11 @@ public class PhoenixJson implements Comparable<PhoenixJson> {
     }
 
     /**
-     * If the current {@link PhoenixJson} is a JsonArray,then it returns the set of array elements
-     * For example:[1,false,[2,"string"]]
+     * If the current {@link PhoenixJson} is a JsonArray,then it returns the set of array elements.
+     * <p>For example:[1,false,[2,"string"]]
      * it will return (new Object[]{"1","false","[2,\"string\"]"})
-     * Its required for json_array_elements().
-     * @return {@link String[]} as the set of JSON elements
+     * <p>Its required for json_array_elements().
+     * @return {@link String []} as the set of JSON elements
      * @throws SQLException
      */
     public Object[] getJsonArrayElements() throws SQLException {
@@ -274,10 +274,10 @@ public class PhoenixJson implements Comparable<PhoenixJson> {
     }
     /**
      * It returns the set of JSON keys for the current {@link PhoenixJson}.Only the outermost keys will be generated
-     * For example:{"f1":"abc","f2":{"f3":"a", "f4":"b"}}
+     * <p>For example:{"f1":"abc","f2":{"f3":"a", "f4":"b"}}
      * it will return (new Object[]{"f1","f2"})
-     * Its required for json_object_keys().
-     * @return {@link String[]} as the set of JSON keys
+     * <p>Its required for json_object_keys().
+     * @return {@link String []} as the set of JSON keys
      */
     public Object[] getJsonObjectKeys() {
         List<String> elementlist = new ArrayList();
@@ -294,11 +294,11 @@ public class PhoenixJson implements Comparable<PhoenixJson> {
      * but we use the {@link org.apache.phoenix.schema.types.PVarcharArray} as an alternative of SET TYPE
      * when implementing the build-in function ,so we use {@link String} directly to store the pair
      * and in this case we use "," to separate key and value
-     * For example:{"f1":"abc","f2":"edf"}
+     * <p>For example:{"f1":"abc","f2":"edf"}
      * it will return (new Object[]{"f1,abc","f2,edf"})
      *
-     * Its required for json_each().
-     * @return {@link String[]} as the SET of JSON key/value pairs
+     * <p>Its required for json_each().
+     * @return {@link String []} as the SET of JSON key/value pairs
      */
     public Object[] getJsonFields() {
         List<String> elementlist = new ArrayList();
@@ -318,10 +318,10 @@ public class PhoenixJson implements Comparable<PhoenixJson> {
      * Conversion will be best effort; columns in base with no corresponding key will be left null.
      * If a column is specified more than once, the last value is used.
      * Also use "," to separate each columns
-     * For example:types :{"a","b"} json: {"a":"1","b":"2"}
+     * <p>For example:types :{"a","b"} json: {"a":"1","b":"2"}
      * it will return new String("1,2")
      *
-     * Its required for json_populate_record().
+     * <p>Its required for json_populate_record().
      * @param types {@link String} the record type
      * @return {@link String} as the result record
      */
@@ -345,12 +345,12 @@ public class PhoenixJson implements Comparable<PhoenixJson> {
      * Conversion will be best effort; columns in base with no corresponding key will be left null.
      * If a column is specified more than once, the last value is used.
      * Also use "," to separate each columns
-     * For example:types :{"a","b"} json: {[{"a":"1","b":"2"},{"a":"3","b":"4"}]}
+     * <p>For example:types :{"a","b"} json: {[{"a":"1","b":"2"},{"a":"3","b":"4"}]}
      * it will return (new Object[]{"1,2","3,4"})
      *
-     * Its required for json_populate_recordset().
+     * <p>Its required for json_populate_recordset().
      * @param types {@link String} the record type
-     * @return {@link String[]} as the SET of records
+     * @return {@link String []} as the SET of records
      */
     public Object[] jsonPopulateRecordSet(String[] types) {
         List<String> recordsList = new ArrayList();
@@ -377,13 +377,13 @@ public class PhoenixJson implements Comparable<PhoenixJson> {
 
     /**
      * Returns the value as JSON.
-     * If the data type is not built in, and there is a cast from the type to json,
+     * <p>If the data type is not built in, and there is a cast from the type to json,
      * the cast function will be used to perform the conversion.
      * Otherwise, for any value other than a number, a Boolean, or a null value,
      * the text representation will be used, escaped and quoted so that it is legal JSON.
      * If the formatter is given ,perform the conversion based on it.
      *
-     * Its required for to_json(),array_to_json().
+     * <p>Its required for to_json(),array_to_json().
      * @param targetType {@link PDataType} type of the value
      * @param obj {@link Object} the value object
      * @param formatter {@link Format}  format of the value
