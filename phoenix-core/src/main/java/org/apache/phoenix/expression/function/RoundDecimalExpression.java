@@ -23,26 +23,27 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.sql.SQLException;
+import java.util.Collections;
 import java.util.List;
 
+import org.apache.hadoop.hbase.filter.CompareFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
+import org.apache.phoenix.compile.KeyPart;
 import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
-import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.IllegalDataException;
-import org.apache.phoenix.schema.types.PInteger;
-import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PLong;
 
 import com.google.common.collect.Lists;
-import java.util.Collections;
-import org.apache.hadoop.hbase.filter.CompareFilter;
-import org.apache.phoenix.compile.KeyPart;
-import org.apache.phoenix.query.KeyRange;
-import org.apache.phoenix.schema.PColumn;
 
 /**
  *
@@ -273,6 +274,11 @@ public class RoundDecimalExpression extends ScalarFunction {
                 
                 // otherwise, rounding has not affected the operator, so return normally
                 return rounded;
+            }
+
+            @Override
+            public PTable getTable() {
+                return childPart.getTable();
             }
         };
     }

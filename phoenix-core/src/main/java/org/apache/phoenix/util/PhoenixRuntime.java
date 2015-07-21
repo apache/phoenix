@@ -188,17 +188,28 @@ public class PhoenixRuntime {
                     .unwrap(PhoenixConnection.class);
 
             if (execCmd.isUpgrade()) {
+                if (conn.getClientInfo(PhoenixRuntime.CURRENT_SCN_ATTRIB) != null) {
+                    throw new SQLException("May not specify the CURRENT_SCN property when upgrading");
+                }
+                if (conn.getClientInfo(PhoenixRuntime.TENANT_ID_ATTRIB) != null) {
+                    throw new SQLException("May not specify the TENANT_ID_ATTRIB property when upgrading");
+                }
                 if (execCmd.getInputFiles().isEmpty()) {
-                    Set<String> tablesNeedingUpgrade = UpgradeUtil.getPhysicalTablesWithDescVarLengthRowKey(conn);
+                    List<String> tablesNeedingUpgrade = UpgradeUtil.getPhysicalTablesWithDescRowKey(conn);
                     if (tablesNeedingUpgrade.isEmpty()) {
-                        String msg = "No tables are required to be upgraded due to incorrect row key order for descending, variable length columsn (PHOENIX-2067)";
+                        String msg = "No tables are required to be upgraded due to incorrect row key order (PHOENIX-2067 and PHOENIX-2120)";
                         System.out.println(msg);
                     } else {
-                        String msg = "The following tables require upgrade due to a bug causing the row key to be incorrect for descending columns (PHOENIX-2067):\n" + Joiner.on(' ').join(tablesNeedingUpgrade);
+                        String msg = "The following tables require upgrade due to a bug causing the row key to be incorrectly ordered (PHOENIX-2067 and PHOENIX-2120):\n" + Joiner.on(' ').join(tablesNeedingUpgrade);
+                        System.out.println("WARNING: " + msg);
+                    }
+                    List<String> unsupportedTables = UpgradeUtil.getPhysicalTablesWithDescVarbinaryRowKey(conn);
+                    if (!unsupportedTables.isEmpty()) {
+                        String msg = "The following tables use an unsupported VARBINARY DESC construct and need to be changed:\n" + Joiner.on(' ').join(unsupportedTables);
                         System.out.println("WARNING: " + msg);
                     }
                 } else {
-                    UpgradeUtil.upgradeDescVarLengthRowKeys(conn, execCmd.getInputFiles());
+                    UpgradeUtil.upgradeDescVarLengthRowKeys(conn, execCmd.getInputFiles(), execCmd.isBypassUpgrade());
                 }
             } else {
                 for (String inputFile : execCmd.getInputFiles()) {
@@ -471,6 +482,7 @@ public class PhoenixRuntime {
         private boolean strict;
         private List<String> inputFiles;
         private boolean isUpgrade;
+        private boolean isBypassUpgrade;
 
         /**
          * Factory method to build up an {@code ExecutionCommand} based on supplied parameters.
@@ -497,9 +509,18 @@ public class PhoenixRuntime {
                     "Define the array element separator, defaults to ':'");
             Option upgradeOption = new Option("u", "upgrade", false, "Upgrades tables specified as arguments " +
                     "by rewriting them with the correct row key for descending columns. If no arguments are " +
-                    "specified, then tables that need to be upgraded will be displayed. " +
+                    "specified, then tables that need to be upgraded will be displayed without being upgraded. " +
+                    "Use the -b option to bypass the rewrite if you know that your data does not need to be upgrade. " +
+                    "This would only be the case if you have not relied on auto padding for BINARY and CHAR data, " +
+                    "but instead have always provided data up to the full max length of the column. See PHOENIX-2067 " +
+                    "and PHOENIX-2120 for more information. " +
                     "Note that " + QueryServices.THREAD_TIMEOUT_MS_ATTRIB + " and hbase.regionserver.lease.period " +
                     "parameters must be set very high to prevent timeouts when upgrading.");
+            Option bypassUpgradeOption = new Option("b", "bypass-upgrade", false,
+                    "Used in conjunction with the -u option to bypass the rewrite during upgrade if you know that your data does not need to be upgrade. " +
+                    "This would only be the case if you have not relied on auto padding for BINARY and CHAR data, " +
+                    "but instead have always provided data up to the full max length of the column. See PHOENIX-2067 " +
+                    "and PHOENIX-2120 for more information. ");
             Options options = new Options();
             options.addOption(tableOption);
             options.addOption(headerOption);
@@ -509,6 +530,7 @@ public class PhoenixRuntime {
             options.addOption(escapeCharacterOption);
             options.addOption(arrayValueSeparatorOption);
             options.addOption(upgradeOption);
+            options.addOption(bypassUpgradeOption);
 
             CommandLineParser parser = new PosixParser();
             CommandLine cmdLine = null;
@@ -551,6 +573,13 @@ public class PhoenixRuntime {
             
             if (cmdLine.hasOption(upgradeOption.getOpt())) {
                 execCmd.isUpgrade = true;
+            }
+
+            if (cmdLine.hasOption(bypassUpgradeOption.getOpt())) {
+                if (!execCmd.isUpgrade()) {
+                    usageError("The bypass-upgrade option may only be used in conjunction with the -u option", options);
+                }
+                execCmd.isBypassUpgrade = true;
             }
 
 
@@ -643,6 +672,10 @@ public class PhoenixRuntime {
 
         public boolean isUpgrade() {
             return isUpgrade;
+        }
+
+        public boolean isBypassUpgrade() {
+            return isBypassUpgrade;
         }
     }
     

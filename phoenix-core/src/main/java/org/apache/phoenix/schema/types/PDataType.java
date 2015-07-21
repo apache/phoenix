@@ -1147,6 +1147,7 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
     }
 
     public void pad(ImmutableBytesWritable ptr, Integer maxLength, SortOrder sortOrder) {}
+    public byte[] pad(byte[] b, Integer maxLength, SortOrder sortOrder) { return b; }
 
     public static PDataType arrayBaseType(PDataType arrayType) {
         Preconditions.checkArgument(arrayType.isArrayType(), "Not a phoenix array type");

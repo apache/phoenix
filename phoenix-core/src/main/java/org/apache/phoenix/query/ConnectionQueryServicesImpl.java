@@ -1983,9 +1983,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                     props.remove(PhoenixRuntime.TENANT_ID_ATTRIB);
                                     PhoenixConnection conn = new PhoenixConnection(ConnectionQueryServicesImpl.this, metaConnection.getURL(), props, metaConnection.getMetaDataCache());
                                     try {
-                                        Set<String> tablesNeedingUpgrade = UpgradeUtil.getPhysicalTablesWithDescVarLengthRowKey(conn);
+                                        List<String> tablesNeedingUpgrade = UpgradeUtil.getPhysicalTablesWithDescRowKey(conn);
                                         if (!tablesNeedingUpgrade.isEmpty()) {
-                                            logger.warn("The following tables require upgrade due to a bug causing the row key to be incorrect for descending columns (PHOENIX-2067):\n" + Joiner.on(' ').join(tablesNeedingUpgrade));
+                                            logger.warn("The following tables require upgrade due to a bug causing the row key to be incorrect for descending columns and ascending BINARY columns (PHOENIX-2067 and PHOENIX-2120):\n" + Joiner.on(' ').join(tablesNeedingUpgrade) + "\nTo upgrade issue the \"bin/psql.py -u\" command.");
+                                        }
+                                        List<String> unsupportedTables = UpgradeUtil.getPhysicalTablesWithDescVarbinaryRowKey(conn);
+                                        if (!unsupportedTables.isEmpty()) {
+                                            logger.warn("The following tables use an unsupported VARBINARY DESC construct and need to be changed:\n" + Joiner.on(' ').join(unsupportedTables));
                                         }
                                     } catch (Exception ex) {
                                         logger.error("Unable to determine tables requiring upgrade due to PHOENIX-2067", ex);

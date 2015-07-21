@@ -268,13 +268,6 @@ public class StringUtil {
         return getFirstNonBlankCharIdxFromEnd(b, offset, length, sortOrder) - offset + 1;
     }
 
-    public static byte[] padChar(byte[] value, int offset, int length, int paddedLength) {
-        byte[] key = new byte[paddedLength];
-        System.arraycopy(value,offset, key, 0, length);
-        Arrays.fill(key, length, paddedLength, SPACE_UTF8);
-        return key;
-    }
-
     public static byte[] padChar(byte[] value, Integer byteSize) {
         byte[] newValue = Arrays.copyOf(value, byteSize);
         if (newValue.length > value.length) {
