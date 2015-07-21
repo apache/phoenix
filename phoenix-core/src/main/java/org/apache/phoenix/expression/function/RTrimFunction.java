@@ -29,10 +29,11 @@ import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.PColumn;
-import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.StringUtil;
 
@@ -123,12 +124,13 @@ public class RTrimFunction extends ScalarFunction {
                     return childPart.getKeyRange(op, rhs);
                 }
                 Integer length = getColumn().getMaxLength();
+                SortOrder sortOrder = getColumn().getSortOrder();
                 if (type.isFixedWidth() && length != null) {
                     if (lowerRange != KeyRange.UNBOUND) {
-                        lowerRange = StringUtil.padChar(lowerRange, length);
+                        lowerRange = type.pad(lowerRange, length, sortOrder);
                     }
                     if (upperRange != KeyRange.UNBOUND) {
-                        upperRange = StringUtil.padChar(upperRange, length);
+                        upperRange = type.pad(upperRange, length, sortOrder);
                     }
                 }
                 return KeyRange.getKeyRange(lowerRange, lowerInclusive, upperRange, false);
@@ -142,6 +144,11 @@ public class RTrimFunction extends ScalarFunction {
             @Override
             public PColumn getColumn() {
                 return childPart.getColumn();
+            }
+
+            @Override
+            public PTable getTable() {
+                return childPart.getTable();
             }
         };
     }

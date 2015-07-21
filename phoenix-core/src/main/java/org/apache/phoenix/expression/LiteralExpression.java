@@ -37,7 +37,6 @@ import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.schema.types.PhoenixArray;
 import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.StringUtil;
 
 import com.google.common.base.Preconditions;
 
@@ -174,7 +173,7 @@ public class LiteralExpression extends BaseTerminalExpression {
         byte[] b = type.toBytes(value, sortOrder);
         if (type == PVarchar.INSTANCE || type == PChar.INSTANCE) {
             if (type == PChar.INSTANCE && maxLength != null  && b.length < maxLength) {
-                b = StringUtil.padChar(b, maxLength);
+                b = type.pad(b, maxLength, sortOrder);
             } else if (value != null) {
                 maxLength = ((String)value).length();
             }

@@ -26,9 +26,10 @@ import org.apache.phoenix.compile.KeyPart;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.StringUtil;
 
 abstract public class PrefixFunction extends ScalarFunction {
     public PrefixFunction() {
@@ -84,15 +85,21 @@ abstract public class PrefixFunction extends ScalarFunction {
                     return childPart.getKeyRange(op, rhs);
                 }
                 Integer length = getColumn().getMaxLength();
+                SortOrder sortOrder = getColumn().getSortOrder();
                 if (type.isFixedWidth() && length != null) {
                     if (lowerRange != KeyRange.UNBOUND) {
-                        lowerRange = StringUtil.padChar(lowerRange, length);
+                        lowerRange = type.pad(lowerRange, length, sortOrder);
                     }
                     if (upperRange != KeyRange.UNBOUND) {
-                        upperRange = StringUtil.padChar(upperRange, length);
+                        upperRange = type.pad(upperRange, length, sortOrder);
                     }
                 }
                 return KeyRange.getKeyRange(lowerRange, lowerInclusive, upperRange, false);
+            }
+
+            @Override
+            public PTable getTable() {
+                return childPart.getTable();
             }
         };
     }
