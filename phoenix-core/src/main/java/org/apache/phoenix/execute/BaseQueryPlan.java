@@ -162,12 +162,12 @@ public abstract class BaseQueryPlan implements QueryPlan {
     }
 
     public final ResultIterator iterator(final List<? extends SQLCloseable> dependencies, ParallelScanGrouper scanGrouper) throws SQLException {
-        if (context.getScanRanges() == ScanRanges.NOTHING) {
-            return ResultIterator.EMPTY_ITERATOR;
-        }
-        
         if (tableRef == TableRef.EMPTY_TABLE_REF) {
             return newIterator(scanGrouper);
+        }
+        
+        if (context.getScanRanges() == ScanRanges.NOTHING) {
+            return ResultIterator.EMPTY_ITERATOR;
         }
         
         // Set miscellaneous scan attributes. This is the last chance to set them before we

@@ -462,14 +462,20 @@ public class CalciteUtils {
         });
 		EXPRESSION_MAP.put(SqlKind.LITERAL, new ExpressionFactory() {
 
-			@Override
+			@SuppressWarnings("rawtypes")
+            @Override
 			public Expression newExpression(RexNode node, Implementor implementor) {
 				RexLiteral lit = (RexLiteral) node;
+                PDataType targetType = sqlTypeNameToPDataType(node.getType().getSqlTypeName());
 				Object o = lit.getValue();
 				if (o instanceof NlsString) {
 				    o = ((NlsString) o).getValue();
 				}
-				return LiteralExpression.newConstant(o);
+				try {
+                    return LiteralExpression.newConstant(o, targetType);
+                } catch (SQLException e) {
+                    throw new RuntimeException(e);
+                }
 			}
 			
 		});

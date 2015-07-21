@@ -19,6 +19,7 @@ package org.apache.phoenix.execute;
 
 import java.sql.SQLException;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 
 import org.apache.hadoop.hbase.KeyValue;
@@ -37,12 +38,21 @@ import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.SingleKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 
-public class EmptyTableQueryPlan extends BaseQueryPlan {
+public class LiteralResultIterationQueryPlan extends BaseQueryPlan {
+    protected final Iterator<Tuple> tupleIterator;
 
-    public EmptyTableQueryPlan(StatementContext context, FilterableStatement statement, 
-            TableRef tableRef, RowProjector projection, Integer limit, OrderBy orderBy,
-            ParallelIteratorFactory parallelIteratorFactory) {
-        super(context, statement, tableRef, projection, context.getBindManager().getParameterMetaData(), limit, orderBy, GroupBy.EMPTY_GROUP_BY, parallelIteratorFactory);
+    public LiteralResultIterationQueryPlan(StatementContext context, 
+            FilterableStatement statement, TableRef tableRef, RowProjector projection, 
+            Integer limit, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory) {
+        this(Collections.<Tuple> singletonList(new SingleKeyValueTuple(KeyValue.LOWESTKEY)).iterator(), 
+                context, statement, tableRef, projection, limit, orderBy, parallelIteratorFactory);
+    }
+
+    public LiteralResultIterationQueryPlan(Iterator<Tuple> tupleIterator, StatementContext context, 
+            FilterableStatement statement, TableRef tableRef, RowProjector projection, 
+            Integer limit, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory) {
+        super(context, statement, tableRef, projection, context == null ? null : context.getBindManager().getParameterMetaData(), limit, orderBy, GroupBy.EMPTY_GROUP_BY, parallelIteratorFactory);
+        this.tupleIterator = tupleIterator;
     }
 
     @Override
@@ -64,18 +74,17 @@ public class EmptyTableQueryPlan extends BaseQueryPlan {
     protected ResultIterator newIterator(ParallelScanGrouper scanGrouper)
             throws SQLException {
         ResultIterator scanner = new ResultIterator() {
-            private boolean hasNext = true;
+            private boolean closed = false;
 
             @Override
             public void close() throws SQLException {
-                this.hasNext = false;
+                this.closed = true;;
             }
 
             @Override
             public Tuple next() throws SQLException {
-                if (hasNext) {
-                    hasNext = false;
-                    return new SingleKeyValueTuple(KeyValue.LOWESTKEY);
+                if (!this.closed && tupleIterator.hasNext()) {
+                    return tupleIterator.next();
                 }
                 return null;
             }
@@ -86,7 +95,7 @@ public class EmptyTableQueryPlan extends BaseQueryPlan {
             
         };
         
-        if (context.getSequenceManager().getSequenceCount() > 0) {
+        if (context != null && context.getSequenceManager().getSequenceCount() > 0) {
             scanner = new SequenceResultIterator(scanner, context.getSequenceManager());
         }
         
