@@ -17,7 +17,7 @@
 #  limitations under the License.
 
 source config/env.sh
-HBASE_CLASSPATH=`$HBASE_ROOT/hbase/hbase/bin/hbase classpath`
+HBASE_CLASSPATH=`$HBASE_PATH/bin/hbase classpath`
 
 
 PHERF_HOME=$(cd "`dirname $0`" && pwd)

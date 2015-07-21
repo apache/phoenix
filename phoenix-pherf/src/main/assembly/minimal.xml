@@ -19,33 +19,13 @@
 <assembly xmlns="http://maven.apache.org/plugins/maven-assembly-plugin/assembly/1.1.2"
           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
           xsi:schemaLocation="http://maven.apache.org/plugins/maven-assembly-plugin/assembly/1.1.2 http://maven.apache.org/xsd/assembly-1.1.2.xsd">
-    <id>cluster</id>
+    <id>minimal</id>
     <baseDirectory>/</baseDirectory>
     <formats>
-        <format>zip</format>
+        <format>jar</format>
     </formats>
-    <fileSets>
-        <fileSet>
-            <directory>${project.basedir}/config</directory>
-            <outputDirectory>pherf-${project.version}-cluster/config</outputDirectory>
-            <includes>
-                <include>*/*</include>
-                <include>*</include>
-            </includes>
-        </fileSet>
-        <fileSet>
-            <directory>${project.basedir}/cluster</directory>
-            <outputDirectory>pherf-${project.version}-cluster/</outputDirectory>
-            <includes>
-                <include>*sh</include>
-            </includes>
-        </fileSet>
-        <fileSet>
-            <directory>${project.build.directory}</directory>
-            <outputDirectory>pherf-${project.version}-cluster/lib</outputDirectory>
-            <includes>
-                <include>*minimal.jar</include>
-            </includes>
-        </fileSet>
-    </fileSets>
+  <includeBaseDirectory>false</includeBaseDirectory>
+  <componentDescriptors>
+    <componentDescriptor>src/main/assembly/components-minimal.xml</componentDescriptor>
+  </componentDescriptors>
 </assembly>

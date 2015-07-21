@@ -40,13 +40,12 @@
                 <include>*sh</include>
             </includes>
         </fileSet>
-    </fileSets>
-    <dependencySets>
-        <dependencySet>
-            <unpack>false</unpack>
+        <fileSet>
+            <directory>${project.build.directory}</directory>
             <outputDirectory>pherf-${project.version}-standalone/lib</outputDirectory>
             <includes>
+                <include>*dependencies.jar</include>
             </includes>
-        </dependencySet>
-    </dependencySets>
+        </fileSet>
+    </fileSets>
 </assembly>
