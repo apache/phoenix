@@ -53,6 +53,17 @@ public class PChar extends PDataType<String> {
     }
 
     @Override
+    public byte[] pad(byte[] b, Integer maxLength, SortOrder sortOrder) {
+      if (b == null || b.length >= maxLength) {
+        return b;
+      }
+      byte[] newBytes = new byte[maxLength];
+      System.arraycopy(b, 0, newBytes, 0, b.length);
+      Arrays.fill(newBytes, b.length, maxLength, sortOrder == SortOrder.ASC ? StringUtil.SPACE_UTF8 : StringUtil.INVERTED_SPACE_UTF8);
+      return newBytes;
+    }
+
+    @Override
     public Object pad(Object object, Integer maxLength) {
       String s = (String) object;
       if (s == null) {

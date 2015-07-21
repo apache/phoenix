@@ -54,6 +54,8 @@ import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.PTableStats;
 import org.apache.phoenix.schema.stats.PTableStatsImpl;
+import org.apache.phoenix.schema.types.PBinary;
+import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
@@ -125,8 +127,8 @@ public class PTableImpl implements PTable {
     private IndexType indexType;
     private PTableStats tableStats = PTableStats.EMPTY_STATS;
     private int baseColumnCount;
-    private boolean hasDescVarLengthColumns;
-    private boolean rowKeyOrderOptimizable;
+    private boolean rowKeyOrderOptimizable; // TODO: remove when required that tables have been upgrade for PHOENIX-2067
+    private boolean hasColumnsRequiringUpgrade; // TODO: remove when required that tables have been upgrade for PHOENIX-2067
 
     public PTableImpl() {
         this.indexes = Collections.emptyList();
@@ -405,7 +407,8 @@ public class PTableImpl implements PTable {
         for (PColumn column : allColumns) {
             PName familyName = column.getFamilyName();
             if (familyName == null) {
-                hasDescVarLengthColumns |= (column.getSortOrder() == SortOrder.DESC && !column.getDataType().isFixedWidth());
+                hasColumnsRequiringUpgrade |= (column.getSortOrder() == SortOrder.DESC && (!column.getDataType().isFixedWidth() || column.getDataType() == PChar.INSTANCE || column.getDataType() == PBinary.INSTANCE))
+                        || (column.getSortOrder() == SortOrder.ASC && column.getDataType() == PBinary.INSTANCE && column.getMaxLength() != null && column.getMaxLength() > 1);
             	pkColumns.add(column);
             }
             if (familyName == null) {
@@ -547,8 +550,16 @@ public class PTableImpl implements PTable {
                     throw new ConstraintViolationException(name.getString() + "." + column.getName().getString() + " may not be null");
                 }
                 Integer	maxLength = column.getMaxLength();
-                if (maxLength != null && type.isFixedWidth() && byteValue.length <= maxLength) {
-                    byteValue = StringUtil.padChar(byteValue, maxLength);
+                if (maxLength != null && type.isFixedWidth() && byteValue.length < maxLength) {
+                    if (rowKeyOrderOptimizable()) {
+                        key.set(byteValue);
+                        type.pad(key, maxLength, sortOrder);
+                        byteValue = ByteUtil.copyKeyBytesIfNecessary(key);
+                    } else {
+                        // TODO: remove this incorrect code and move StringUtil.padChar() to TestUtil
+                        // once we require tables to have been upgraded
+                        byteValue = StringUtil.padChar(byteValue, maxLength);
+                    }
                 } else if (maxLength != null && byteValue.length > maxLength) {
                     throw new DataExceedsCapacityException(name.getString() + "." + column.getName().getString() + " may not exceed " + maxLength + " bytes (" + SchemaUtil.toString(type, byteValue) + ")");
                 }
@@ -733,7 +744,7 @@ public class PTableImpl implements PTable {
                         HConstants.EMPTY_BYTE_ARRAY : byteValue);
                 Integer	maxLength = column.getMaxLength();
             	if (!isNull && type.isFixedWidth() && maxLength != null) {
-    				if (ptr.getLength() <= maxLength) {
+    				if (ptr.getLength() < maxLength) {
                         type.pad(ptr, maxLength, column.getSortOrder());
                     } else if (ptr.getLength() > maxLength) {
                         throw new DataExceedsCapacityException(name.getString() + "." + column.getName().getString() + " may not exceed " + maxLength + " bytes (" + type.toObject(byteValue) + ")");
@@ -1131,6 +1142,6 @@ public class PTableImpl implements PTable {
 
     @Override
     public boolean rowKeyOrderOptimizable() {
-        return rowKeyOrderOptimizable || !hasDescVarLengthColumns;
+        return rowKeyOrderOptimizable || !hasColumnsRequiringUpgrade;
     }
 }

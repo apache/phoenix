@@ -63,7 +63,7 @@ import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.tuple.Tuple;
-import org.apache.phoenix.schema.types.PArrayDataType;
+import org.apache.phoenix.schema.types.PBinary;
 import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
@@ -322,6 +322,14 @@ public class WhereOptimizer {
         }
     }
     
+    private static int computeUnpaddedLength(byte[] b, byte padByte) {
+        int len = b.length;
+        while (len > 0 && b[len - 1] == padByte) {
+            len--;
+        }
+        return len;                                       
+    }
+    
     // Special hack for PHOENIX-2067 to change the constant array to match
     // the separators used for descending, variable length arrays.
     // Note that there'd already be a coerce expression around the constant
@@ -335,27 +343,60 @@ public class WhereOptimizer {
             PTable table = context.getCurrentTable().getTable();
             // Constants are always build with rowKeyOptimizable as true, using the correct separators
             // We only need to do this conversion if we have a table that has not yet been converted.
-            if (type != null && type.isArrayType() && column.getSortOrder() == SortOrder.DESC && !PArrayDataType.arrayBaseType(type).isFixedWidth() && !table.rowKeyOrderOptimizable()) {
-                ImmutableBytesWritable ptr = context.getTempPtr();
-                List<KeyRange> newKeyRanges = Lists.newArrayListWithExpectedSize(keyRanges.size());
-                for (KeyRange keyRange : keyRanges) {
-                    byte[] lower = keyRange.getLowerRange();
-                    if (!keyRange.lowerUnbound()) {
-                        ptr.set(lower);;
-                        type.coerceBytes(ptr, null, type, null, null, SortOrder.DESC, null, null, SortOrder.DESC, false);
-                        lower = ByteUtil.copyKeyBytesIfNecessary(ptr);
+            if (type != null && !table.rowKeyOrderOptimizable()) {
+                if (type.isArrayType() && column.getSortOrder() == SortOrder.DESC) {
+                    ImmutableBytesWritable ptr = context.getTempPtr();
+                    List<KeyRange> newKeyRanges = Lists.newArrayListWithExpectedSize(keyRanges.size());
+                    for (KeyRange keyRange : keyRanges) {
+                        byte[] lower = keyRange.getLowerRange();
+                        if (!keyRange.lowerUnbound()) {
+                            ptr.set(lower);
+                            type.coerceBytes(ptr, null, type, null, null, SortOrder.DESC, null, null, SortOrder.DESC, false);
+                            lower = ByteUtil.copyKeyBytesIfNecessary(ptr);
+                        }
+                        byte[] upper = keyRange.getUpperRange();
+                        if (!keyRange.upperUnbound()) {
+                            ptr.set(upper);
+                            type.coerceBytes(ptr, null, type, null, null, SortOrder.DESC, null, null, SortOrder.DESC, false);
+                            upper = ByteUtil.copyKeyBytesIfNecessary(ptr);
+                        }
+                        keyRange = KeyRange.getKeyRange(lower, keyRange.isLowerInclusive(), upper, keyRange.isUpperInclusive());
+                        newKeyRanges.add(keyRange);
                     }
-                    byte[] upper = keyRange.getUpperRange();
-                    if (!keyRange.upperUnbound()) {
-                        ptr.set(upper);;
-                        type.coerceBytes(ptr, null, type, null, null, SortOrder.DESC, null, null, SortOrder.DESC, false);
-                        upper = ByteUtil.copyKeyBytesIfNecessary(ptr);
+                    return newKeyRanges;
+                } else if (type == PBinary.INSTANCE || (column.getSortOrder() == SortOrder.DESC && type == PChar.INSTANCE)) {
+                    // Since the table has not been upgraded, we need to replace the correct trailing byte back to the incorrect
+                    // trailing byte so that we form the correct start/stop key
+                    List<KeyRange> newKeyRanges = Lists.newArrayListWithExpectedSize(keyRanges.size());
+                    byte byteToReplace;
+                    if (type == PBinary.INSTANCE) {
+                        byteToReplace = column.getSortOrder() == SortOrder.ASC ? QueryConstants.SEPARATOR_BYTE : QueryConstants.DESC_SEPARATOR_BYTE;
+                    } else {
+                        byteToReplace = StringUtil.INVERTED_SPACE_UTF8;
                     }
-                    keyRange = KeyRange.getKeyRange(lower, keyRange.isLowerInclusive(), upper, keyRange.isUpperInclusive());
-                    newKeyRanges.add(keyRange);
+                    for (KeyRange keyRange : keyRanges) {
+                        byte[] lower = keyRange.getLowerRange();
+                        if (!keyRange.lowerUnbound()) {
+                            int len = computeUnpaddedLength(lower, byteToReplace);
+                            if (len != lower.length) {
+                                lower = Arrays.copyOf(lower, len);
+                                lower = StringUtil.padChar(lower, lower.length);
+                            }
+                        }
+                        byte[] upper = keyRange.getUpperRange();
+                        if (!keyRange.upperUnbound()) {
+                            int len = computeUnpaddedLength(upper, byteToReplace);
+                            if (len != upper.length) {
+                                upper = Arrays.copyOf(upper, len);
+                                upper = StringUtil.padChar(upper, upper.length);
+                            }
+                        }
+                        keyRange = KeyRange.getKeyRange(lower, keyRange.isLowerInclusive(), upper, keyRange.isUpperInclusive());
+                        newKeyRanges.add(keyRange);
+                    }
+                    return newKeyRanges;
                 }
                 
-                return newKeyRanges;
             }
         }
         return keyRanges;
@@ -532,7 +573,7 @@ public class WhereOptimizer {
             List<Expression> extractNodes = extractNode == null || slot.getKeyPart().getExtractNodes().isEmpty()
                   ? Collections.<Expression>emptyList()
                   : Collections.<Expression>singletonList(extractNode);
-            return new SingleKeySlot(new BaseKeyPart(slot.getKeyPart().getColumn(), extractNodes), slot.getPKPosition(), slot.getPKSpan(), keyRanges, minMaxRange, slot.getOrderPreserving());
+            return new SingleKeySlot(new BaseKeyPart(table, slot.getKeyPart().getColumn(), extractNodes), slot.getPKPosition(), slot.getPKSpan(), keyRanges, minMaxRange, slot.getOrderPreserving());
         }
 
         private KeySlots newKeyParts(KeySlot slot, List<Expression> extractNodes, List<KeyRange> keyRanges, KeyRange minMaxRange) {
@@ -540,7 +581,7 @@ public class WhereOptimizer {
                 return EMPTY_KEY_SLOTS;
             }
             
-            return new SingleKeySlot(new BaseKeyPart(slot.getKeyPart().getColumn(), extractNodes), slot.getPKPosition(), slot.getPKSpan(), keyRanges, minMaxRange, slot.getOrderPreserving());
+            return new SingleKeySlot(new BaseKeyPart(table, slot.getKeyPart().getColumn(), extractNodes), slot.getPKPosition(), slot.getPKSpan(), keyRanges, minMaxRange, slot.getOrderPreserving());
         }
 
         private KeySlots newRowValueConstructorKeyParts(RowValueConstructorExpression rvc, List<KeySlots> childSlots) {
@@ -648,6 +689,11 @@ public class WhereOptimizer {
                 public PColumn getColumn() {
                     return childPart.getColumn();
                 }
+
+                @Override
+                public PTable getTable() {
+                    return childPart.getTable();
+                }
             }, slot.getPKPosition(), slot.getKeyRanges());
         }
 
@@ -724,7 +770,7 @@ public class WhereOptimizer {
 
             if (!minMaxExtractNodes.isEmpty()) {
                 if (keySlot[initPosition] == null) {
-                    keySlot[initPosition] = new KeySlot(new BaseKeyPart(table.getPKColumns().get(initPosition), minMaxExtractNodes), initPosition, 1, EVERYTHING_RANGES, null);
+                    keySlot[initPosition] = new KeySlot(new BaseKeyPart(table, table.getPKColumns().get(initPosition), minMaxExtractNodes), initPosition, 1, EVERYTHING_RANGES, null);
                 } else {
                     keySlot[initPosition] = keySlot[initPosition].concatExtractNodes(minMaxExtractNodes);
                 }
@@ -841,7 +887,7 @@ public class WhereOptimizer {
                 slotRanges = Collections.emptyList();
             }
             if (theSlot == null) {
-                theSlot = new KeySlot(new BaseKeyPart(table.getPKColumns().get(initialPos), slotExtractNodes), initialPos, 1, EVERYTHING_RANGES, null);
+                theSlot = new KeySlot(new BaseKeyPart(table, table.getPKColumns().get(initialPos), slotExtractNodes), initialPos, 1, EVERYTHING_RANGES, null);
             } else if (minMaxRange != KeyRange.EMPTY_RANGE && !slotExtractNodes.isEmpty()) {
                 theSlot = theSlot.concatExtractNodes(slotExtractNodes);
             }
@@ -926,7 +972,7 @@ public class WhereOptimizer {
         @Override
         public KeySlots visit(RowKeyColumnExpression node) {
             PColumn column = table.getPKColumns().get(node.getPosition());
-            return new SingleKeySlot(new BaseKeyPart(column, Collections.<Expression>singletonList(node)), node.getPosition(), 1, EVERYTHING_RANGES);
+            return new SingleKeySlot(new BaseKeyPart(table, column, Collections.<Expression>singletonList(node)), node.getPosition(), 1, EVERYTHING_RANGES);
         }
 
         @Override
@@ -997,7 +1043,8 @@ public class WhereOptimizer {
             KeySlots childSlots = childParts.get(0);
             KeySlot childSlot = childSlots.iterator().next();
             final String startsWith = node.getLiteralPrefix();
-            byte[] key = PVarchar.INSTANCE.toBytes(startsWith, node.getChildren().get(0).getSortOrder());
+            SortOrder sortOrder = node.getChildren().get(0).getSortOrder();
+            byte[] key = PVarchar.INSTANCE.toBytes(startsWith, sortOrder);
             // If the expression is an equality expression against a fixed length column
             // and the key length doesn't match the column length, the expression can
             // never be true.
@@ -1014,8 +1061,15 @@ public class WhereOptimizer {
             byte[] upperRange = ByteUtil.nextKey(key);
             Integer columnFixedLength = column.getMaxLength();
             if (type.isFixedWidth() && columnFixedLength != null) {
-                lowerRange = StringUtil.padChar(lowerRange, columnFixedLength);
-                upperRange = StringUtil.padChar(upperRange, columnFixedLength);
+                if (table.rowKeyOrderOptimizable()) {
+                    // Always use minimum byte to fill as otherwise our key is bigger
+                    // that it should be when the sort order is descending.
+                    lowerRange = type.pad(lowerRange, columnFixedLength, SortOrder.ASC);
+                    upperRange = type.pad(upperRange, columnFixedLength, SortOrder.ASC);
+                } else { // TODO: remove broken logic once tables are required to have been upgraded for PHOENIX-2067 and PHOENIX-2120
+                    lowerRange = StringUtil.padChar(lowerRange, columnFixedLength);
+                    upperRange = StringUtil.padChar(upperRange, columnFixedLength);
+                }
             }
             KeyRange keyRange = type.getKeyRange(lowerRange, true, upperRange, false);
             // Only extract LIKE expression if pattern ends with a wildcard and everything else was extracted
@@ -1117,7 +1171,7 @@ public class WhereOptimizer {
 
             public final KeySlot concatExtractNodes(List<Expression> extractNodes) {
                 return new KeySlot(
-                        new BaseKeyPart(this.getKeyPart().getColumn(),
+                        new BaseKeyPart(this.getKeyPart().getTable(), this.getKeyPart().getColumn(),
                                     SchemaUtil.concat(this.getKeyPart().getExtractNodes(),extractNodes)),
                         this.getPKPosition(),
                         this.getPKSpan(),
@@ -1135,7 +1189,7 @@ public class WhereOptimizer {
                         return null;
                     }
                     return new KeySlot(
-                            new BaseKeyPart(this.getKeyPart().getColumn(),
+                            new BaseKeyPart(this.getKeyPart().getTable(), this.getKeyPart().getColumn(),
                                         SchemaUtil.concat(this.getKeyPart().getExtractNodes(),
                                                           that.getKeyPart().getExtractNodes())),
                             this.getPKPosition(),
@@ -1181,7 +1235,7 @@ public class WhereOptimizer {
                             return null;
                         }
                         return new KeySlot(
-                                new BaseKeyPart(this.getKeyPart().getColumn(),
+                                new BaseKeyPart(this.getKeyPart().getTable(), this.getKeyPart().getColumn(),
                                             SchemaUtil.concat(this.getKeyPart().getExtractNodes(),
                                                               that.getKeyPart().getExtractNodes())),
                                 this.getPKPosition(),
@@ -1272,10 +1326,12 @@ public class WhereOptimizer {
                 return ByteUtil.getKeyRange(key, op, type);
             }
 
+            private final PTable table;
             private final PColumn column;
             private final List<Expression> nodes;
 
-            private BaseKeyPart(PColumn column, List<Expression> nodes) {
+            private BaseKeyPart(PTable table, PColumn column, List<Expression> nodes) {
+                this.table = table;
                 this.column = column;
                 this.nodes = nodes;
             }
@@ -1289,9 +1345,14 @@ public class WhereOptimizer {
             public PColumn getColumn() {
                 return column;
             }
+
+            @Override
+            public PTable getTable() {
+                return table;
+            }
         }
         
-        private  class RowValueConstructorKeyPart implements KeyPart {
+        private class RowValueConstructorKeyPart implements KeyPart {
             private final RowValueConstructorExpression rvc;
             private final PColumn column;
             private final List<Expression> nodes;
@@ -1319,7 +1380,13 @@ public class WhereOptimizer {
             public PColumn getColumn() {
                 return column;
             }
-           @Override
+
+            @Override
+            public PTable getTable() {
+                return table;
+            }
+
+            @Override
             public KeyRange getKeyRange(CompareOp op, Expression rhs) {
                // With row value constructors, we need to convert the operator for any transformation we do on individual values
                // to prevent keys from being increased to the next key as would be done for fixed width values. The next key is
@@ -1446,7 +1513,6 @@ public class WhereOptimizer {
                 byte[] key = ByteUtil.copyKeyBytesIfNecessary(ptr);
                 return ByteUtil.getKeyRange(key, op, PVarbinary.INSTANCE);
             }
-
         }
     }
 }
