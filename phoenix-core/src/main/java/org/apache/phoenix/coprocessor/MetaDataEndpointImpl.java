@@ -1791,7 +1791,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         return columnKey;
     }
     
-    MetaDataMutationResult addRowsToChildViews(PTable basePhysicalTable, List<Mutation> tableMetadata, List<Mutation> mutationsForAddingColumnsToViews, byte[] schemaName, byte[] tableName,
+    private MetaDataMutationResult addRowsToChildViews(PTable basePhysicalTable, List<Mutation> tableMetadata, List<Mutation> mutationsForAddingColumnsToViews, byte[] schemaName, byte[] tableName,
             List<ImmutableBytesPtr> invalidateList, long clientTimeStamp, TableViewFinderResult childViewsResult,
             HRegion region, List<RowLock> locks) throws IOException, SQLException {
         List<PutWithOrdinalPosition> columnPutsForBaseTable = new ArrayList<>(tableMetadata.size());
@@ -2237,7 +2237,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         TableViewFinderResult childViewsResult = findChildViews(region, tenantId, table, PHYSICAL_TABLE_BYTES);
                         if (childViewsResult.hasViews()) {
                            /* 
-                            * Adding a column is not allowed if
+                            * Dis-allow if:
                             * 1) The meta-data for child view/s spans over
                             * more than one region (since the changes cannot be made in a transactional fashion)
                             * 
@@ -2247,8 +2247,13 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                             * 3) If the request is from a client that is older than 4.5 version of phoenix. 
                             * Starting from 4.5, metadata requests have the client version included in them. 
                             * We don't want to allow clients before 4.5 to add a column to the base table if it has views.
+                            * 
+                            * 4) Trying to switch a table that has views from multi-tenant to global.
                             */
-                            if (!childViewsResult.allViewsInSingleRegion() || table.getBaseColumnCount() == 0 || !request.hasClientVersion()) {
+                            if (!childViewsResult.allViewsInSingleRegion() 
+                                    || table.getBaseColumnCount() == 0 
+                                    || !request.hasClientVersion()
+                                    || switchTenancy(table, tableMetaData)) {
                                 return new MetaDataMutationResult(MutationCode.UNALLOWED_TABLE_MUTATION,
                                         EnvironmentEdgeManager.currentTimeMillis(), null);
                             } else {
@@ -2323,6 +2328,21 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     }
                     tableMetaData.addAll(mutationsForAddingColumnsToViews);
                     return null;
+                }
+
+                private boolean switchTenancy(PTable table, List<Mutation> tableMetaData) {
+                    for (Mutation m : tableMetaData) {
+                        if (m instanceof Put) {
+                            Put p = (Put)m;
+                            List<Cell> cells = p.get(TABLE_FAMILY_BYTES, MULTI_TENANT_BYTES);
+                            if (cells != null && cells.size() > 0) {
+                                Cell cell = cells.get(0);
+                                boolean isMutlitenantProp = (boolean)PBoolean.INSTANCE.toObject(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength()); 
+                                return table.isMultiTenant() != isMutlitenantProp;
+                            }
+                        }
+                    }
+                    return false;
                 }
             });
             if (result != null) {

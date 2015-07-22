@@ -88,14 +88,49 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
     }
 
     @Test
-    public void testAlterMultiTenantWithViewsToGlobal() throws Exception {
+    public void testAlteringMultiTenancyForTableWithViewsNotAllowed() throws Exception {
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(nextTimestamp()));
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        try {
-            conn.createStatement().execute("alter table " + PARENT_TABLE_NAME + " set MULTI_TENANT=false");
-        } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
+        String multiTenantTable = "BASE_MULTI_TENANT_SWITCH";
+        String globalTable = "GLOBAL_TABLE_SWITCH";
+        // create the two base tables
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String ddl = "CREATE TABLE " + multiTenantTable + " (TENANT_ID VARCHAR NOT NULL, PK1 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR, V3 VARCHAR CONSTRAINT NAME_PK PRIMARY KEY(TENANT_ID, PK1)) MULTI_TENANT = true "; 
+            conn.createStatement().execute(ddl);
+            ddl = "CREATE TABLE " + globalTable + " (TENANT_ID VARCHAR NOT NULL, PK1 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR, V3 VARCHAR CONSTRAINT NAME_PK PRIMARY KEY(TENANT_ID, PK1)) ";
+            conn.createStatement().execute(ddl);
+        }
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(nextTimestamp()));
+        props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, "tenant1");
+        // create view on multi-tenant table
+        try (Connection tenantConn = DriverManager.getConnection(getUrl(), props)) {
+            String viewName = "tenantview";
+            String viewDDL = "CREATE VIEW " + viewName + " AS SELECT * FROM " + multiTenantTable;
+            tenantConn.createStatement().execute(viewDDL);
+        }
+        props = new Properties();
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(nextTimestamp()));
+        // create view on global table
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String viewName = "globalView";
+            conn.createStatement().execute("CREATE VIEW " + viewName + " AS SELECT * FROM " + globalTable);
+        }
+        props = new Properties();
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(nextTimestamp()));
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            try {
+                conn.createStatement().execute("ALTER TABLE " + globalTable + " SET MULTI_TENANT = " + true);
+                fail();
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
+            }
+            
+            try {
+                conn.createStatement().execute("ALTER TABLE " + multiTenantTable + " SET MULTI_TENANT = " + false);
+                fail();
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
+            }
         }
     }
     
