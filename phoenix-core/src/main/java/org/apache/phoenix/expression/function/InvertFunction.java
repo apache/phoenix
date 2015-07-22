@@ -47,9 +47,9 @@ public class InvertFunction extends ScalarFunction {
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
         if (!getChildExpression().evaluate(tuple, ptr)) { return false; }
         if (ptr.getLength() == 0) { return true; }
-        byte[] buf = new byte[ptr.getLength()];
-        SortOrder.invert(ptr.get(), ptr.getOffset(), buf, 0, ptr.getLength());
-        ptr.set(buf);
+        PDataType type = getDataType();
+        // FIXME: losing rowKeyOrderOptimizable here
+        type.coerceBytes(ptr, type, getChildExpression().getSortOrder(), getSortOrder());
         return true;
     }
 

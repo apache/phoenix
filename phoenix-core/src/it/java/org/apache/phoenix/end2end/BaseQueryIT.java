@@ -23,9 +23,7 @@ import java.io.IOException;
 import java.sql.Connection;
 import java.sql.Date;
 import java.sql.DriverManager;
-import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -120,14 +118,6 @@ public abstract class BaseQueryIT extends BaseClientManagedTimeIT {
         return testCases;
     }
     
-    protected void assertValueEqualsResultSet(ResultSet rs, List<Object> expectedResults) throws SQLException {
-        List<List<Object>> nestedExpectedResults = Lists.newArrayListWithExpectedSize(expectedResults.size());
-        for (Object expectedResult : expectedResults) {
-            nestedExpectedResults.add(Arrays.asList(expectedResult));
-        }
-        assertValuesEqualsResultSet(rs, nestedExpectedResults); 
-    }
-
     protected static boolean compare(CompareOp op, ImmutableBytesWritable lhsOutPtr, ImmutableBytesWritable rhsOutPtr) {
         int compareResult = Bytes.compareTo(lhsOutPtr.get(), lhsOutPtr.getOffset(), lhsOutPtr.getLength(), rhsOutPtr.get(), rhsOutPtr.getOffset(), rhsOutPtr.getLength());
         return ByteUtil.compare(op, compareResult);

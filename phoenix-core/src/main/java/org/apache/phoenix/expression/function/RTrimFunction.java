@@ -18,6 +18,7 @@
 package org.apache.phoenix.expression.function;
 
 import java.sql.SQLException;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
@@ -28,6 +29,7 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.SortOrder;
@@ -109,35 +111,70 @@ public class RTrimFunction extends ScalarFunction {
                 byte[] lowerRange = KeyRange.UNBOUND;
                 byte[] upperRange = KeyRange.UNBOUND;
                 boolean lowerInclusive = true;
+                boolean upperInclusive = false;
                 
                 PDataType type = getColumn().getDataType();
+                SortOrder sortOrder = getColumn().getSortOrder();
                 switch (op) {
-                case EQUAL:
-                    lowerRange = evaluateExpression(rhs);
-                    upperRange = ByteUtil.nextKey(ByteUtil.concat(lowerRange, new byte[] {StringUtil.SPACE_UTF8}));
-                    break;
                 case LESS_OR_EQUAL:
                     lowerInclusive = false;
-                    upperRange = ByteUtil.nextKey(ByteUtil.concat(evaluateExpression(rhs), new byte[] {StringUtil.SPACE_UTF8}));
+                case EQUAL:
+                    upperRange = evaluateExpression(rhs);
+                    if (op == CompareOp.EQUAL) {
+                        lowerRange = upperRange;
+                    }
+                    if (sortOrder == SortOrder.ASC || !getTable().rowKeyOrderOptimizable()) {
+                        upperRange = Arrays.copyOf(upperRange, upperRange.length + 1);
+                        upperRange[upperRange.length-1] = StringUtil.SPACE_UTF8;
+                        ByteUtil.nextKey(upperRange, upperRange.length);
+                    } else {
+                        upperInclusive = true;
+                        if (op == CompareOp.LESS_OR_EQUAL) {
+                            // Nothing more to do here, as the biggest value for DESC
+                            // will be the RHS value.
+                            break;
+                        }
+                        /*
+                         * Somewhat tricky to get the range correct for the DESC equality case.
+                         * The lower range is the RHS value followed by any number of inverted spaces.
+                         * We need to add a zero byte as the lower range will have an \xFF byte
+                         * appended to it and otherwise we'd skip past any rows where there is more
+                         * than one space following the RHS.
+                         * The upper range should span up to and including the RHS value. We need
+                         * to add our own \xFF as otherwise this will look like a degenerate query
+                         * since the lower would be bigger than the upper range.
+                         */
+                        lowerRange = Arrays.copyOf(lowerRange, lowerRange.length + 2);
+                        lowerRange[lowerRange.length-2] = StringUtil.INVERTED_SPACE_UTF8;
+                        lowerRange[lowerRange.length-1] = QueryConstants.SEPARATOR_BYTE;
+                        upperRange = Arrays.copyOf(upperRange, upperRange.length + 1);
+                        upperRange[upperRange.length-1] = QueryConstants.DESC_SEPARATOR_BYTE;
+                    }
                     break;
                 default:
+                    // TOOD: Is this ok for DESC?
                     return childPart.getKeyRange(op, rhs);
                 }
                 Integer length = getColumn().getMaxLength();
-                SortOrder sortOrder = getColumn().getSortOrder();
                 if (type.isFixedWidth() && length != null) {
+                    // Don't pad based on current sort order, but instead use our
+                    // minimum byte as otherwise we'll end up skipping rows in
+                    // the case of descending, since rows with more padding appear
+                    // *after* rows with no padding.
                     if (lowerRange != KeyRange.UNBOUND) {
-                        lowerRange = type.pad(lowerRange, length, sortOrder);
+                        lowerRange = type.pad(lowerRange, length, SortOrder.ASC);
                     }
                     if (upperRange != KeyRange.UNBOUND) {
-                        upperRange = type.pad(upperRange, length, sortOrder);
+                        upperRange = type.pad(upperRange, length, SortOrder.ASC);
                     }
                 }
-                return KeyRange.getKeyRange(lowerRange, lowerInclusive, upperRange, false);
+                return KeyRange.getKeyRange(lowerRange, lowerInclusive, upperRange, upperInclusive);
             }
 
             @Override
             public List<Expression> getExtractNodes() {
+                // We cannot extract the node, as we may have false positives with trailing
+                // non blank characters such as 'foo  bar' where the RHS constant is 'foo'.
                 return Collections.<Expression>emptyList();
             }
 
