@@ -85,4 +85,42 @@ public class LikeExpressionIT extends BaseHBaseManagedTimeIT {
         testLikeExpression(conn, "%A%", 3, 42);
         conn.close();
     }
+
+    @Test
+    public void testLikeEverythingExpression() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String ddl = "CREATE TABLE t (k1 VARCHAR, k2 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1,k2))";
+        conn.createStatement().execute(ddl);
+        conn.createStatement().execute("UPSERT INTO t VALUES('aa','bb')");
+        conn.createStatement().execute("UPSERT INTO t VALUES('ab','bc')");
+        conn.createStatement().execute("UPSERT INTO t VALUES(null,'cc')");
+        conn.createStatement().execute("UPSERT INTO t VALUES('dd',null)");
+        conn.commit();
+        
+        ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM t WHERE k1 LIKE '%'");
+        assertTrue(rs.next());
+        assertEquals("aa", rs.getString(1));
+        assertEquals("bb", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("ab", rs.getString(1));
+        assertEquals("bc", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("dd", rs.getString(1));
+        assertEquals(null, rs.getString(2));
+        assertFalse(rs.next());
+        
+        rs = conn.createStatement().executeQuery("SELECT * FROM t WHERE k2 LIKE '%'");
+        assertTrue(rs.next());
+        assertEquals(null, rs.getString(1));
+        assertEquals("cc", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("aa", rs.getString(1));
+        assertEquals("bb", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("ab", rs.getString(1));
+        assertEquals("bc", rs.getString(2));
+        assertFalse(rs.next());
+        
+        conn.close();
+    }
 }
