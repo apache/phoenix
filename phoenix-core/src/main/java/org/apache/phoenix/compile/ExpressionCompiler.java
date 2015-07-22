@@ -225,7 +225,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         } else {
             addBindParamMetaData(lhsNode, rhsNode, lhsExpr, rhsExpr);
         }
-        return wrapGroupByExpression(ComparisonExpression.create(op, children, context.getTempPtr()));
+        return wrapGroupByExpression(ComparisonExpression.create(op, children, context.getTempPtr(), context.getCurrentTable().getTable().rowKeyOrderOptimizable()));
     }
 
     @Override
@@ -603,7 +603,8 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                 expr =  convertToRoundExpressionIfNeeded(fromDataType, targetDataType, children);
             }
         }
-        return wrapGroupByExpression(CoerceExpression.create(expr, targetDataType, SortOrder.getDefault(), expr.getMaxLength()));  
+        boolean rowKeyOrderOptimizable = context.getCurrentTable().getTable().rowKeyOrderOptimizable();
+        return wrapGroupByExpression(CoerceExpression.create(expr, targetDataType, SortOrder.getDefault(), expr.getMaxLength(), rowKeyOrderOptimizable));  
     }
     
    @Override
@@ -632,7 +633,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                 context.getBindManager().addParamMetaData((BindParseNode)childNode, firstChild);
             }
         }
-        return wrapGroupByExpression(InListExpression.create(inChildren, node.isNegate(), ptr));
+        return wrapGroupByExpression(InListExpression.create(inChildren, node.isNegate(), ptr, context.getCurrentTable().getTable().rowKeyOrderOptimizable()));
     }
 
     private static final PDatum DECIMAL_DATUM = new PDatum() {
@@ -1266,7 +1267,8 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         // the value object array type should match the java known type
         Object[] elements = (Object[]) java.lang.reflect.Array.newInstance(theArrayElemDataType.getJavaClass(), children.size());
 
-        ArrayConstructorExpression arrayExpression = new ArrayConstructorExpression(children, arrayElemDataType);
+        boolean rowKeyOrderOptimizable = context.getCurrentTable().getTable().rowKeyOrderOptimizable();
+        ArrayConstructorExpression arrayExpression = new ArrayConstructorExpression(children, arrayElemDataType, rowKeyOrderOptimizable);
         if (ExpressionUtil.isConstant(arrayExpression)) {
             for (int i = 0; i < children.size(); i++) {
                 Expression child = children.get(i);
@@ -1281,7 +1283,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
             }
             Object value = PArrayDataType.instantiatePhoenixArray(arrayElemDataType, elements);
             return LiteralExpression.newConstant(value,
-                    PDataType.fromTypeId(arrayElemDataType.getSqlType() + PDataType.ARRAY_TYPE_BASE), Determinism.ALWAYS);
+                    PDataType.fromTypeId(arrayElemDataType.getSqlType() + PDataType.ARRAY_TYPE_BASE), null, null, arrayExpression.getSortOrder(), Determinism.ALWAYS, rowKeyOrderOptimizable);
         }
         
         return wrapGroupByExpression(arrayExpression);

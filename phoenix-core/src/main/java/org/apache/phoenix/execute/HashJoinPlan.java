@@ -208,13 +208,13 @@ public class HashJoinPlan extends DelegateQueryPlan {
 
     private Expression createKeyRangeExpression(Expression lhsExpression,
             Expression rhsExpression, List<Expression> rhsValues, 
-            ImmutableBytesWritable ptr) throws SQLException {
+            ImmutableBytesWritable ptr, boolean rowKeyOrderOptimizable) throws SQLException {
         if (rhsValues.isEmpty())
             return LiteralExpression.newConstant(false, PBoolean.INSTANCE, Determinism.ALWAYS);        
         
         rhsValues.add(0, lhsExpression);
         
-        return InListExpression.create(rhsValues, false, ptr);
+        return InListExpression.create(rhsValues, false, ptr, rowKeyOrderOptimizable);
     }
 
     @Override
@@ -366,7 +366,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
                 }
             }
             if (keyRangeRhsValues != null) {
-                parent.keyRangeExpressions.add(parent.createKeyRangeExpression(keyRangeLhsExpression, keyRangeRhsExpression, keyRangeRhsValues, plan.getContext().getTempPtr()));
+                parent.keyRangeExpressions.add(parent.createKeyRangeExpression(keyRangeLhsExpression, keyRangeRhsExpression, keyRangeRhsValues, plan.getContext().getTempPtr(), plan.getContext().getCurrentTable().getTable().rowKeyOrderOptimizable()));
             }
             return cache;
         }

@@ -1669,6 +1669,14 @@ public abstract class BaseTest {
         fail("Unable to find " + results + " in " + Arrays.asList(expectedResultsArray));
     }
 
+    protected void assertValueEqualsResultSet(ResultSet rs, List<Object> expectedResults) throws SQLException {
+        List<List<Object>> nestedExpectedResults = Lists.newArrayListWithExpectedSize(expectedResults.size());
+        for (Object expectedResult : expectedResults) {
+            nestedExpectedResults.add(Arrays.asList(expectedResult));
+        }
+        assertValuesEqualsResultSet(rs, nestedExpectedResults); 
+    }
+
     /**
      * Asserts that we find the expected values in the result set. We don't know the order, since we don't always
      * have an order by and we're going through indexes, but we assert that each expected result occurs once as
