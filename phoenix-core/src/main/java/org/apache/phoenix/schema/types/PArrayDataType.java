@@ -79,7 +79,7 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
         super(sqlTypeName, sqlType, clazz, codec, ordinal);
     }
 
-    private static byte getSeparatorByte(boolean rowKeyOrderOptimizable, SortOrder sortOrder) {
+    public static byte getSeparatorByte(boolean rowKeyOrderOptimizable, SortOrder sortOrder) {
         return SchemaUtil.getSeparatorByte(rowKeyOrderOptimizable, false, sortOrder);
     }
 
@@ -177,7 +177,7 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
         writeEndSeperatorForVarLengthArray(oStream, sortOrder, true);
     }
     
-    private static void writeEndSeperatorForVarLengthArray(DataOutputStream oStream, SortOrder sortOrder, boolean rowKeyOrderOptimizable)
+    public static void writeEndSeperatorForVarLengthArray(DataOutputStream oStream, SortOrder sortOrder, boolean rowKeyOrderOptimizable)
             throws IOException {
         byte sepByte = getSeparatorByte(rowKeyOrderOptimizable, sortOrder);
         oStream.write(sepByte);

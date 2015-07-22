@@ -136,7 +136,7 @@ public class CloneExpressionVisitor extends TraverseAllExpressionVisitor<Express
 
     @Override
     public Expression visitLeave(InListExpression node, List<Expression> l) {
-        return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node :  new InListExpression(l);
+        return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node :  node.clone(l);
     }
 
     @Override

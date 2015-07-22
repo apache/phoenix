@@ -63,7 +63,6 @@ import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.tuple.Tuple;
-import org.apache.phoenix.schema.types.PBinary;
 import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
@@ -72,7 +71,6 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.StringUtil;
 
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
@@ -262,7 +260,6 @@ public class WhereOptimizer {
                     hasNonPointKey = true;
                 }
             }
-            keyRanges = transformKeyRangesIfNecessary(slot, context);
             
             hasMultiRanges |= keyRanges.size() > 1;
             // Force a range scan if we've encountered a multi-span slot (i.e. RVC)
@@ -320,86 +317,6 @@ public class WhereOptimizer {
         } else {
             return whereClause.accept(new RemoveExtractedNodesVisitor(extractNodes));
         }
-    }
-    
-    private static int computeUnpaddedLength(byte[] b, byte padByte) {
-        int len = b.length;
-        while (len > 0 && b[len - 1] == padByte) {
-            len--;
-        }
-        return len;                                       
-    }
-    
-    // Special hack for PHOENIX-2067 to change the constant array to match
-    // the separators used for descending, variable length arrays.
-    // Note that there'd already be a coerce expression around the constant
-    // to convert it to the right type, so we shouldn't do that here.
-    private static List<KeyRange> transformKeyRangesIfNecessary(KeyExpressionVisitor.KeySlot slot, StatementContext context) {
-        KeyPart keyPart = slot.getKeyPart();
-        List<KeyRange> keyRanges = slot.getKeyRanges();
-        PColumn column = keyPart.getColumn();
-        if (column != null) {
-            PDataType type = column.getDataType();
-            PTable table = context.getCurrentTable().getTable();
-            // Constants are always build with rowKeyOptimizable as true, using the correct separators
-            // We only need to do this conversion if we have a table that has not yet been converted.
-            if (type != null && !table.rowKeyOrderOptimizable()) {
-                if (type.isArrayType() && column.getSortOrder() == SortOrder.DESC) {
-                    ImmutableBytesWritable ptr = context.getTempPtr();
-                    List<KeyRange> newKeyRanges = Lists.newArrayListWithExpectedSize(keyRanges.size());
-                    for (KeyRange keyRange : keyRanges) {
-                        byte[] lower = keyRange.getLowerRange();
-                        if (!keyRange.lowerUnbound()) {
-                            ptr.set(lower);
-                            type.coerceBytes(ptr, null, type, null, null, SortOrder.DESC, null, null, SortOrder.DESC, false);
-                            lower = ByteUtil.copyKeyBytesIfNecessary(ptr);
-                        }
-                        byte[] upper = keyRange.getUpperRange();
-                        if (!keyRange.upperUnbound()) {
-                            ptr.set(upper);
-                            type.coerceBytes(ptr, null, type, null, null, SortOrder.DESC, null, null, SortOrder.DESC, false);
-                            upper = ByteUtil.copyKeyBytesIfNecessary(ptr);
-                        }
-                        keyRange = KeyRange.getKeyRange(lower, keyRange.isLowerInclusive(), upper, keyRange.isUpperInclusive());
-                        newKeyRanges.add(keyRange);
-                    }
-                    return newKeyRanges;
-                } else if (type == PBinary.INSTANCE || (column.getSortOrder() == SortOrder.DESC && type == PChar.INSTANCE)) {
-                    // Since the table has not been upgraded, we need to replace the correct trailing byte back to the incorrect
-                    // trailing byte so that we form the correct start/stop key
-                    List<KeyRange> newKeyRanges = Lists.newArrayListWithExpectedSize(keyRanges.size());
-                    byte byteToReplace;
-                    if (type == PBinary.INSTANCE) {
-                        byteToReplace = column.getSortOrder() == SortOrder.ASC ? QueryConstants.SEPARATOR_BYTE : QueryConstants.DESC_SEPARATOR_BYTE;
-                    } else {
-                        byteToReplace = StringUtil.INVERTED_SPACE_UTF8;
-                    }
-                    for (KeyRange keyRange : keyRanges) {
-                        byte[] lower = keyRange.getLowerRange();
-                        if (!keyRange.lowerUnbound()) {
-                            int len = computeUnpaddedLength(lower, byteToReplace);
-                            if (len != lower.length) {
-                                lower = Arrays.copyOf(lower, len);
-                                lower = StringUtil.padChar(lower, lower.length);
-                            }
-                        }
-                        byte[] upper = keyRange.getUpperRange();
-                        if (!keyRange.upperUnbound()) {
-                            int len = computeUnpaddedLength(upper, byteToReplace);
-                            if (len != upper.length) {
-                                upper = Arrays.copyOf(upper, len);
-                                upper = StringUtil.padChar(upper, upper.length);
-                            }
-                        }
-                        keyRange = KeyRange.getKeyRange(lower, keyRange.isLowerInclusive(), upper, keyRange.isUpperInclusive());
-                        newKeyRanges.add(keyRange);
-                    }
-                    return newKeyRanges;
-                }
-                
-            }
-        }
-        return keyRanges;
     }
     
     /**
@@ -464,7 +381,7 @@ public class WhereOptimizer {
             Expression lhs = count == 0 ? candidates.get(0) : new RowValueConstructorExpression(candidates.subList(0, count + 1), false);
             Expression firstRhs = count == 0 ? sampleValues.get(0).get(0) : new RowValueConstructorExpression(sampleValues.get(0).subList(0, count + 1), true);
             Expression secondRhs = count == 0 ? sampleValues.get(1).get(0) : new RowValueConstructorExpression(sampleValues.get(1).subList(0, count + 1), true);
-            Expression testExpression = InListExpression.create(Lists.newArrayList(lhs, firstRhs, secondRhs), false, context.getTempPtr());
+            Expression testExpression = InListExpression.create(Lists.newArrayList(lhs, firstRhs, secondRhs), false, context.getTempPtr(), context.getCurrentTable().getTable().rowKeyOrderOptimizable());
             remaining = pushKeyExpressionsToScan(context, statement, testExpression);
             if (context.getScanRanges().isPointLookup()) {
                 count++;
@@ -1060,16 +977,19 @@ public class WhereOptimizer {
             byte[] lowerRange = key;
             byte[] upperRange = ByteUtil.nextKey(key);
             Integer columnFixedLength = column.getMaxLength();
-            if (type.isFixedWidth() && columnFixedLength != null) {
-                if (table.rowKeyOrderOptimizable()) {
+            if (type.isFixedWidth()) {
+                if (columnFixedLength != null) { // Sanity check - should always be non null
                     // Always use minimum byte to fill as otherwise our key is bigger
                     // that it should be when the sort order is descending.
                     lowerRange = type.pad(lowerRange, columnFixedLength, SortOrder.ASC);
                     upperRange = type.pad(upperRange, columnFixedLength, SortOrder.ASC);
-                } else { // TODO: remove broken logic once tables are required to have been upgraded for PHOENIX-2067 and PHOENIX-2120
-                    lowerRange = StringUtil.padChar(lowerRange, columnFixedLength);
-                    upperRange = StringUtil.padChar(upperRange, columnFixedLength);
                 }
+            } else if (column.getSortOrder() == SortOrder.DESC && table.rowKeyOrderOptimizable()) {
+                // Append a zero byte if descending since a \xFF byte will be appended to the lowerRange
+                // causing rows to be skipped that should be included. For example, with rows 'ab', 'a',
+                // a lowerRange of 'a\xFF' would skip 'ab', while 'a\x00\xFF' would not.
+                lowerRange = Arrays.copyOf(lowerRange, lowerRange.length+1);
+                lowerRange[lowerRange.length-1] = QueryConstants.SEPARATOR_BYTE;
             }
             KeyRange keyRange = type.getKeyRange(lowerRange, true, upperRange, false);
             // Only extract LIKE expression if pattern ends with a wildcard and everything else was extracted
@@ -1430,7 +1350,7 @@ public class WhereOptimizer {
                     rhs = BaseExpression.coerce(rvc, rhs, new ExpressionComparabilityWrapper() {
 
                         @Override
-                        public Expression wrap(final Expression lhs, final Expression rhs) throws SQLException {
+                        public Expression wrap(final Expression lhs, final Expression rhs, boolean rowKeyOrderOptimizable) throws SQLException {
                             final KeyPart childPart = keySlotsIterator.next().iterator().next().getKeyPart();
                             // TODO: DelegateExpression
                             return new BaseTerminalExpression() {
@@ -1502,7 +1422,7 @@ public class WhereOptimizer {
                             };
                         }
                         
-                    });
+                    }, table.rowKeyOrderOptimizable());
                 } catch (SQLException e) {
                     return null; // Shouldn't happen
                 }

@@ -39,6 +39,7 @@ import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ExpressionUtil;
+import org.apache.phoenix.util.StringUtil;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
@@ -56,15 +57,17 @@ public class InListExpression extends BaseSingleExpression {
     private int valuesByteLength;
     private int fixedWidth = -1;
     private List<Expression> keyExpressions; // client side only
+    private boolean rowKeyOrderOptimizable; // client side only
 
-    public static Expression create (List<Expression> children, boolean isNegate, ImmutableBytesWritable ptr) throws SQLException {
+
+    public static Expression create (List<Expression> children, boolean isNegate, ImmutableBytesWritable ptr, boolean rowKeyOrderOptimizable) throws SQLException {
         Expression firstChild = children.get(0);
         
         if (firstChild.isStateless() && (!firstChild.evaluate(null, ptr) || ptr.getLength() == 0)) {
             return LiteralExpression.newConstant(null, PBoolean.INSTANCE, firstChild.getDeterminism());
         }
         if (children.size() == 2) {
-            return ComparisonExpression.create(isNegate ? CompareOp.NOT_EQUAL : CompareOp.EQUAL, children, ptr);
+            return ComparisonExpression.create(isNegate ? CompareOp.NOT_EQUAL : CompareOp.EQUAL, children, ptr, rowKeyOrderOptimizable);
         }
         
         boolean addedNull = false;
@@ -73,7 +76,7 @@ public class InListExpression extends BaseSingleExpression {
         coercedKeyExpressions.add(firstChild);
         for (int i = 1; i < children.size(); i++) {
             try {
-                Expression rhs = BaseExpression.coerce(firstChild, children.get(i), CompareOp.EQUAL);
+                Expression rhs = BaseExpression.coerce(firstChild, children.get(i), CompareOp.EQUAL, rowKeyOrderOptimizable);
                 coercedKeyExpressions.add(rhs);
             } catch (SQLException e) {
                 // Type mismatch exception or invalid data exception.
@@ -89,7 +92,7 @@ public class InListExpression extends BaseSingleExpression {
         if (coercedKeyExpressions.size() == 2 && addedNull) {
             return LiteralExpression.newConstant(null, PBoolean.INSTANCE, Determinism.ALWAYS);
         }
-        Expression expression = new InListExpression(coercedKeyExpressions);
+        Expression expression = new InListExpression(coercedKeyExpressions, rowKeyOrderOptimizable);
         if (isNegate) { 
             expression = NotExpression.create(expression, ptr);
         }
@@ -102,10 +105,13 @@ public class InListExpression extends BaseSingleExpression {
     public InListExpression() {
     }
 
-    public InListExpression(List<Expression> keyExpressions) {
+    public InListExpression(List<Expression> keyExpressions, boolean rowKeyOrderOptimizable) {
         super(keyExpressions.get(0));
+        this.rowKeyOrderOptimizable = rowKeyOrderOptimizable;
+        Expression firstChild = keyExpressions.get(0);
         this.keyExpressions = keyExpressions.subList(1, keyExpressions.size());
         Set<ImmutableBytesPtr> values = Sets.newHashSetWithExpectedSize(keyExpressions.size()-1);
+        Integer maxLength = firstChild.getDataType().isFixedWidth() ? firstChild.getMaxLength() : null;
         int fixedWidth = -1;
         boolean isFixedLength = true;
         for (int i = 1; i < keyExpressions.size(); i++) {
@@ -113,6 +119,12 @@ public class InListExpression extends BaseSingleExpression {
             Expression child = keyExpressions.get(i);
             child.evaluate(null, ptr);
             if (ptr.getLength() > 0) { // filter null as it has no impact
+                if (rowKeyOrderOptimizable) {
+                    firstChild.getDataType().pad(ptr, maxLength, firstChild.getSortOrder());
+                } else if (maxLength != null) {
+                    byte[] paddedBytes = StringUtil.padChar(ByteUtil.copyKeyBytesIfNecessary(ptr), maxLength);
+                    ptr.set(paddedBytes);
+                }
                 if (values.add(ptr)) {
                     int length = ptr.getLength();
                     if (fixedWidth == -1) {
@@ -273,5 +285,9 @@ public class InListExpression extends BaseSingleExpression {
         }
         buf.setCharAt(buf.length()-1,')');
         return buf.toString();
+    }
+
+    public InListExpression clone(List<Expression> l) {
+        return new InListExpression(l, this.rowKeyOrderOptimizable);
     }
 }

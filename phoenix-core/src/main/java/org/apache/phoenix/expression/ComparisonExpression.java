@@ -59,7 +59,7 @@ import com.google.common.collect.Lists;
 public class ComparisonExpression extends BaseCompoundExpression {
     private CompareOp op;
     
-    private static void addEqualityExpression(Expression lhs, Expression rhs, List<Expression> andNodes, ImmutableBytesWritable ptr) throws SQLException {
+    private static void addEqualityExpression(Expression lhs, Expression rhs, List<Expression> andNodes, ImmutableBytesWritable ptr, boolean rowKeyOrderOptimizable) throws SQLException {
         boolean isLHSNull = ExpressionUtil.isNull(lhs, ptr);
         boolean isRHSNull = ExpressionUtil.isNull(rhs, ptr);
         if (isLHSNull && isRHSNull) { // null == null will end up making the query degenerate
@@ -69,7 +69,7 @@ public class ComparisonExpression extends BaseCompoundExpression {
         } else if (isRHSNull) { // AND lhs IS NULL
             andNodes.add(IsNullExpression.create(lhs, false, ptr));
         } else { // AND lhs = rhs
-            andNodes.add(ComparisonExpression.create(CompareOp.EQUAL, Arrays.asList(lhs, rhs), ptr));
+            andNodes.add(ComparisonExpression.create(CompareOp.EQUAL, Arrays.asList(lhs, rhs), ptr, rowKeyOrderOptimizable));
         }
     }
     
@@ -81,32 +81,32 @@ public class ComparisonExpression extends BaseCompoundExpression {
      * @param andNodes
      * @throws SQLException 
      */
-    private static void rewriteRVCAsEqualityExpression(Expression lhs, Expression rhs, List<Expression> andNodes, ImmutableBytesWritable ptr) throws SQLException {
+    private static void rewriteRVCAsEqualityExpression(Expression lhs, Expression rhs, List<Expression> andNodes, ImmutableBytesWritable ptr, boolean rowKeyOrderOptimizable) throws SQLException {
         if (lhs instanceof RowValueConstructorExpression && rhs instanceof RowValueConstructorExpression) {
             int i = 0;
             for (; i < Math.min(lhs.getChildren().size(),rhs.getChildren().size()); i++) {
-                addEqualityExpression(lhs.getChildren().get(i), rhs.getChildren().get(i), andNodes, ptr);
+                addEqualityExpression(lhs.getChildren().get(i), rhs.getChildren().get(i), andNodes, ptr, rowKeyOrderOptimizable);
             }
             for (; i < lhs.getChildren().size(); i++) {
-                addEqualityExpression(lhs.getChildren().get(i), LiteralExpression.newConstant(null, lhs.getChildren().get(i).getDataType()), andNodes, ptr);
+                addEqualityExpression(lhs.getChildren().get(i), LiteralExpression.newConstant(null, lhs.getChildren().get(i).getDataType()), andNodes, ptr, rowKeyOrderOptimizable);
             }
             for (; i < rhs.getChildren().size(); i++) {
-                addEqualityExpression(LiteralExpression.newConstant(null, rhs.getChildren().get(i).getDataType()), rhs.getChildren().get(i), andNodes, ptr);
+                addEqualityExpression(LiteralExpression.newConstant(null, rhs.getChildren().get(i).getDataType()), rhs.getChildren().get(i), andNodes, ptr, rowKeyOrderOptimizable);
             }
         } else if (lhs instanceof RowValueConstructorExpression) {
-            addEqualityExpression(lhs.getChildren().get(0), rhs, andNodes, ptr);
+            addEqualityExpression(lhs.getChildren().get(0), rhs, andNodes, ptr, rowKeyOrderOptimizable);
             for (int i = 1; i < lhs.getChildren().size(); i++) {
-                addEqualityExpression(lhs.getChildren().get(i), LiteralExpression.newConstant(null, lhs.getChildren().get(i).getDataType()), andNodes, ptr);
+                addEqualityExpression(lhs.getChildren().get(i), LiteralExpression.newConstant(null, lhs.getChildren().get(i).getDataType()), andNodes, ptr, rowKeyOrderOptimizable);
             }
         } else if (rhs instanceof RowValueConstructorExpression) {
-            addEqualityExpression(lhs, rhs.getChildren().get(0), andNodes, ptr);
+            addEqualityExpression(lhs, rhs.getChildren().get(0), andNodes, ptr, rowKeyOrderOptimizable);
             for (int i = 1; i < rhs.getChildren().size(); i++) {
-                addEqualityExpression(LiteralExpression.newConstant(null, rhs.getChildren().get(i).getDataType()), rhs.getChildren().get(i), andNodes, ptr);
+                addEqualityExpression(LiteralExpression.newConstant(null, rhs.getChildren().get(i).getDataType()), rhs.getChildren().get(i), andNodes, ptr, rowKeyOrderOptimizable);
             }
         }
     }
     
-    public static Expression create(CompareOp op, List<Expression> children, ImmutableBytesWritable ptr) throws SQLException {
+    public static Expression create(CompareOp op, List<Expression> children, ImmutableBytesWritable ptr, boolean rowKeyOrderOptimizable) throws SQLException {
         Expression lhsExpr = children.get(0);
         Expression rhsExpr = children.get(1);
         PDataType lhsExprDataType = lhsExpr.getDataType();
@@ -115,14 +115,14 @@ public class ComparisonExpression extends BaseCompoundExpression {
         if ((lhsExpr instanceof RowValueConstructorExpression || rhsExpr instanceof RowValueConstructorExpression) && !(lhsExpr instanceof ArrayElemRefExpression) && !(rhsExpr instanceof ArrayElemRefExpression)) {
             if (op == CompareOp.EQUAL || op == CompareOp.NOT_EQUAL) {
                 List<Expression> andNodes = Lists.<Expression>newArrayListWithExpectedSize(Math.max(lhsExpr.getChildren().size(), rhsExpr.getChildren().size()));
-                rewriteRVCAsEqualityExpression(lhsExpr, rhsExpr, andNodes, ptr);
+                rewriteRVCAsEqualityExpression(lhsExpr, rhsExpr, andNodes, ptr, rowKeyOrderOptimizable);
                 Expression expr = AndExpression.create(andNodes);
                 if (op == CompareOp.NOT_EQUAL) {
                     expr = NotExpression.create(expr, ptr);
                 }
                 return expr;
             }
-            rhsExpr = RowValueConstructorExpression.coerce(lhsExpr, rhsExpr, op);
+            rhsExpr = RowValueConstructorExpression.coerce(lhsExpr, rhsExpr, op, rowKeyOrderOptimizable);
             // Always wrap both sides in row value constructor, so we don't have to consider comparing
             // a non rvc with a rvc.
             if ( ! ( lhsExpr instanceof RowValueConstructorExpression ) ) {
@@ -164,11 +164,13 @@ public class ComparisonExpression extends BaseCompoundExpression {
             // into account the comparison operator.
             if (rhsExprDataType != lhsExprDataType 
                     || rhsExpr.getSortOrder() != lhsExpr.getSortOrder()
-                    || (rhsExprDataType.isFixedWidth() && rhsExpr.getMaxLength() != null && lhsExprDataType.isFixedWidth() && lhsExpr.getMaxLength() != null && rhsExpr.getMaxLength() < lhsExpr.getMaxLength())) {
+                    || (rhsExprDataType.isFixedWidth() && rhsExpr.getMaxLength() != null && 
+                        lhsExprDataType.isFixedWidth() && lhsExpr.getMaxLength() != null && 
+                        rhsExpr.getMaxLength() < lhsExpr.getMaxLength())) {
                 // TODO: if lengths are unequal and fixed width?
                 if (rhsExprDataType.isCoercibleTo(lhsExprDataType, rhsValue)) { // will convert 2.0 -> 2
                     children = Arrays.asList(children.get(0), LiteralExpression.newConstant(rhsValue, lhsExprDataType, 
-                            lhsExpr.getMaxLength(), null, lhsExpr.getSortOrder(), determinism));
+                            lhsExpr.getMaxLength(), null, lhsExpr.getSortOrder(), determinism, rowKeyOrderOptimizable));
                 } else if (op == CompareOp.EQUAL) {
                     return LiteralExpression.newConstant(false, PBoolean.INSTANCE, Determinism.ALWAYS);
                 } else if (op == CompareOp.NOT_EQUAL) {

@@ -18,6 +18,8 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -170,6 +172,63 @@ public class SortOrderIT extends BaseHBaseManagedTimeIT {
         runQueryTest(ddl, upsert("oid", "code"), insertedRows, expectedRows, new WhereCondition("SUBSTR(oid, 4, 1)", "=", "'d'"));
     }    
     
+    @Test
+    public void substrFixedLengthDescPK1() throws Exception {
+        String ddl = "CREATE TABLE " + TABLE + " (oid CHAR(3) PRIMARY KEY DESC)";
+        Object[][] insertedRows = new Object[][]{{"a"}, {"ab"}};
+        Object[][] expectedRows = new Object[][]{{"ab"}, {"a"} };
+        runQueryTest(ddl, upsert("oid"), insertedRows, expectedRows, new WhereCondition("SUBSTR(oid, 1, 1)", "=", "'a'"));
+    }
+        
+    @Test
+    public void substrVarLengthDescPK1() throws Exception {
+        String ddl = "CREATE TABLE " + TABLE + " (oid VARCHAR PRIMARY KEY DESC)";
+        Object[][] insertedRows = new Object[][]{{"a"}, {"ab"}};
+        Object[][] expectedRows = new Object[][]{{"ab"}, {"a"} };
+        runQueryTest(ddl, upsert("oid"), insertedRows, expectedRows, new WhereCondition("SUBSTR(oid, 1, 1)", "=", "'a'"));
+    }
+        
+    @Test
+    public void likeVarLengthDescPK1() throws Exception {
+        String ddl = "CREATE TABLE " + TABLE + " (oid VARCHAR PRIMARY KEY DESC)";
+        Object[][] insertedRows = new Object[][]{{"a"}, {"ab"}};
+        Object[][] expectedRows = new Object[][]{{"ab"}, {"a"} };
+        runQueryTest(ddl, upsert("oid"), insertedRows, expectedRows, new WhereCondition("oid", "like", "'a%'"));
+    }
+        
+    @Test
+    public void likeFixedLengthDescPK1() throws Exception {
+        String ddl = "CREATE TABLE " + TABLE + " (oid CHAR(3) PRIMARY KEY DESC)";
+        Object[][] insertedRows = new Object[][]{{"a"}, {"ab"}};
+        Object[][] expectedRows = new Object[][]{{"ab"}, {"a"} };
+        runQueryTest(ddl, upsert("oid"), insertedRows, expectedRows, new WhereCondition("oid", "like", "'a%'"));
+    }
+        
+    @Test
+    public void decimalRangeDescPK1() throws Exception {
+        String ddl = "CREATE TABLE " + TABLE + " (oid DECIMAL PRIMARY KEY DESC)";
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute(ddl);
+        conn.createStatement().execute("UPSERT INTO " + TABLE + " VALUES(4.99)");
+        conn.createStatement().execute("UPSERT INTO " + TABLE + " VALUES(4.0)");
+        conn.createStatement().execute("UPSERT INTO " + TABLE + " VALUES(5.0)");
+        conn.createStatement().execute("UPSERT INTO " + TABLE + " VALUES(5.001)");
+        conn.createStatement().execute("UPSERT INTO " + TABLE + " VALUES(5.999)");
+        conn.createStatement().execute("UPSERT INTO " + TABLE + " VALUES(6.0)");
+        conn.createStatement().execute("UPSERT INTO " + TABLE + " VALUES(6.001)");
+        conn.commit();
+        
+        String query = "SELECT * FROM " + TABLE + " WHERE oid >= 5.0 AND oid < 6.0";
+        ResultSet rs = conn.createStatement().executeQuery(query);
+        assertTrue(rs.next());
+        assertTrue(new BigDecimal("5.999").compareTo(rs.getBigDecimal(1)) == 0);
+        assertTrue(rs.next());
+        assertTrue(new BigDecimal("5.001").compareTo(rs.getBigDecimal(1)) == 0);
+        assertTrue(rs.next());
+        assertTrue(new BigDecimal("5.0").compareTo(rs.getBigDecimal(1)) == 0);
+        assertFalse(rs.next());
+    }
+        
     @Test
     public void lTrimDescCompositePK() throws Exception {
         String ddl = "CREATE TABLE " + TABLE + " (oid VARCHAR NOT NULL, code INTEGER NOT NULL constraint pk primary key (oid DESC, code DESC))";
