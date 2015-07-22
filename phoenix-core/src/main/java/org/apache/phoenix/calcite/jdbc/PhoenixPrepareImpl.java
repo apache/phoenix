@@ -10,15 +10,16 @@ import org.apache.calcite.rel.rules.JoinCommuteRule;
 import org.apache.phoenix.calcite.PhoenixSchema;
 import org.apache.phoenix.calcite.rules.PhoenixAddScanLimitRule;
 import org.apache.phoenix.calcite.rules.PhoenixCompactClientSortRule;
-import org.apache.phoenix.calcite.rules.PhoenixConverterRules;
 import org.apache.phoenix.calcite.rules.PhoenixFilterScanMergeRule;
 import org.apache.phoenix.calcite.rules.PhoenixInnerSortRemoveRule;
 import org.apache.phoenix.calcite.rules.PhoenixJoinSingleValueAggregateMergeRule;
 
 public class PhoenixPrepareImpl extends CalcitePrepareImpl {
+    protected final RelOptRule[] defaultConverterRules;
 
-    public PhoenixPrepareImpl() {
+    public PhoenixPrepareImpl(RelOptRule[] defaultConverterRules) {
         super();
+        this.defaultConverterRules = defaultConverterRules;
     }
     
     @Override
@@ -31,8 +32,7 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
         planner.removeRule(JoinCommuteRule.INSTANCE);
         planner.addRule(JoinCommuteRule.SWAP_OUTER);
         
-        RelOptRule[] rules = PhoenixConverterRules.RULES;
-        for (RelOptRule rule : rules) {
+        for (RelOptRule rule : this.defaultConverterRules) {
             planner.addRule(rule);
         }
         planner.addRule(PhoenixFilterScanMergeRule.INSTANCE);

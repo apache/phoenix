@@ -25,13 +25,13 @@ import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rel.core.Project;
 import org.apache.calcite.rel.core.Sort;
 import org.apache.calcite.rel.core.Union;
-import org.apache.calcite.rel.core.Values;
 import org.apache.calcite.rel.logical.LogicalAggregate;
 import org.apache.calcite.rel.logical.LogicalFilter;
 import org.apache.calcite.rel.logical.LogicalJoin;
 import org.apache.calcite.rel.logical.LogicalProject;
 import org.apache.calcite.rel.logical.LogicalSort;
 import org.apache.calcite.rel.logical.LogicalUnion;
+import org.apache.calcite.rel.logical.LogicalValues;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.util.trace.CalciteTrace;
 import org.apache.phoenix.calcite.CalciteUtils;
@@ -72,17 +72,37 @@ public class PhoenixConverterRules {
         PhoenixProjectableToClientConverterRule.INSTANCE,
         PhoenixClientSortRule.INSTANCE,
         PhoenixServerSortRule.SERVER,
-        PhoenixServerSortRule.PROJECTABLE,
+        PhoenixServerSortRule.SERVERJOIN,
         PhoenixLimitRule.INSTANCE,
         PhoenixFilterRule.INSTANCE,
         PhoenixClientProjectRule.INSTANCE,
         PhoenixServerProjectRule.INSTANCE,
         PhoenixClientAggregateRule.INSTANCE,
         PhoenixServerAggregateRule.SERVER,
-        PhoenixServerAggregateRule.PROJECTABLE,
+        PhoenixServerAggregateRule.SERVERJOIN,
         PhoenixUnionRule.INSTANCE,
         PhoenixClientJoinRule.INSTANCE,
         PhoenixServerJoinRule.INSTANCE,
+        PhoenixValuesRule.INSTANCE,
+    };
+
+    public static final RelOptRule[] CONVERTIBLE_RULES = {
+        PhoenixToEnumerableConverterRule.INSTANCE,
+        PhoenixServerToClientConverterRule.INSTANCE,
+        PhoenixProjectableToClientConverterRule.INSTANCE,
+        PhoenixClientSortRule.CONVERTIBLE,
+        PhoenixServerSortRule.CONVERTIBLE_SERVER,
+        PhoenixServerSortRule.CONVERTIBLE_SERVERJOIN,
+        PhoenixLimitRule.CONVERTIBLE,
+        PhoenixFilterRule.CONVERTIBLE,
+        PhoenixClientProjectRule.CONVERTIBLE,
+        PhoenixServerProjectRule.CONVERTIBLE,
+        PhoenixClientAggregateRule.CONVERTIBLE,
+        PhoenixServerAggregateRule.CONVERTIBLE_SERVER,
+        PhoenixServerAggregateRule.CONVERTIBLE_SERVERJOIN,
+        PhoenixUnionRule.CONVERTIBLE,
+        PhoenixClientJoinRule.CONVERTIBLE,
+        PhoenixServerJoinRule.CONVERTIBLE,
         PhoenixValuesRule.INSTANCE,
     };
 
@@ -114,34 +134,35 @@ public class PhoenixConverterRules {
      * Rule to convert a {@link org.apache.calcite.rel.core.Sort} to a
      * {@link PhoenixClientSort}.
      */
-    private static class PhoenixClientSortRule extends PhoenixConverterRule {
+    public static class PhoenixClientSortRule extends PhoenixConverterRule {
         
-        private static Predicate<Sort> IS_CONVERTIBLE = new Predicate<Sort>() {
+        private static Predicate<LogicalSort> IS_CONVERTIBLE = new Predicate<LogicalSort>() {
             @Override
-            public boolean apply(Sort input) {
+            public boolean apply(LogicalSort input) {
                 return isConvertible(input);
             }            
         };
         
-        private static Predicate<Sort> SORT_ONLY = new Predicate<Sort>() {
+        private static Predicate<LogicalSort> SORT_ONLY = new Predicate<LogicalSort>() {
             @Override
-            public boolean apply(Sort input) {
+            public boolean apply(LogicalSort input) {
                 return !input.getCollation().getFieldCollations().isEmpty()
                         && input.offset == null
                         && input.fetch == null;
             }            
         };
         
-        public static final PhoenixClientSortRule INSTANCE = new PhoenixClientSortRule();
+        public static final PhoenixClientSortRule INSTANCE = new PhoenixClientSortRule(SORT_ONLY);
+        public static final PhoenixClientSortRule CONVERTIBLE = new PhoenixClientSortRule(Predicates.and(Arrays.asList(SORT_ONLY, IS_CONVERTIBLE)));
 
-        private PhoenixClientSortRule() {
-            super(Sort.class, 
-                    Predicates.and(Arrays.asList(SORT_ONLY, IS_CONVERTIBLE)), 
+        private PhoenixClientSortRule(Predicate<LogicalSort> predicate) {
+            super(LogicalSort.class, 
+                    predicate, 
                     Convention.NONE, PhoenixRel.CLIENT_CONVENTION, "PhoenixClientSortRule");
         }
 
         public RelNode convert(RelNode rel) {
-            final Sort sort = (Sort) rel;
+            final LogicalSort sort = (LogicalSort) rel;
             return PhoenixClientSort.create(
                 convert(
                         sort.getInput(), 
@@ -154,38 +175,41 @@ public class PhoenixConverterRules {
      * Rule to convert a {@link org.apache.calcite.rel.core.Sort} to a
      * {@link PhoenixServerSort}.
      */
-    private static class PhoenixServerSortRule extends PhoenixConverterRule {
+    public static class PhoenixServerSortRule extends PhoenixConverterRule {
         
-        private static Predicate<Sort> IS_CONVERTIBLE = new Predicate<Sort>() {
+        private static Predicate<LogicalSort> IS_CONVERTIBLE = new Predicate<LogicalSort>() {
             @Override
-            public boolean apply(Sort input) {
+            public boolean apply(LogicalSort input) {
                 return isConvertible(input);
             }            
         };
         
-        private static Predicate<Sort> SORT_ONLY = new Predicate<Sort>() {
+        private static Predicate<LogicalSort> SORT_ONLY = new Predicate<LogicalSort>() {
             @Override
-            public boolean apply(Sort input) {
+            public boolean apply(LogicalSort input) {
                 return !input.getCollation().getFieldCollations().isEmpty()
                         && input.offset == null
                         && input.fetch == null;
             }            
         };
         
-        public static final PhoenixServerSortRule SERVER = new PhoenixServerSortRule(PhoenixRel.SERVER_CONVENTION);
-        public static final PhoenixServerSortRule PROJECTABLE = new PhoenixServerSortRule(PhoenixRel.SERVERJOIN_CONVENTION);
+        public static final PhoenixServerSortRule SERVER = new PhoenixServerSortRule(SORT_ONLY, PhoenixRel.SERVER_CONVENTION);
+        public static final PhoenixServerSortRule SERVERJOIN = new PhoenixServerSortRule(SORT_ONLY, PhoenixRel.SERVERJOIN_CONVENTION);
+
+        public static final PhoenixServerSortRule CONVERTIBLE_SERVER = new PhoenixServerSortRule(Predicates.and(Arrays.asList(SORT_ONLY, IS_CONVERTIBLE)), PhoenixRel.SERVER_CONVENTION);
+        public static final PhoenixServerSortRule CONVERTIBLE_SERVERJOIN = new PhoenixServerSortRule(Predicates.and(Arrays.asList(SORT_ONLY, IS_CONVERTIBLE)), PhoenixRel.SERVERJOIN_CONVENTION);
 
         private final Convention inputConvention;
 
-        private PhoenixServerSortRule(Convention inputConvention) {
-            super(Sort.class, 
-                    Predicates.and(Arrays.asList(SORT_ONLY, IS_CONVERTIBLE)), 
+        private PhoenixServerSortRule(Predicate<LogicalSort> predicate, Convention inputConvention) {
+            super(LogicalSort.class, 
+                    predicate, 
                     Convention.NONE, PhoenixRel.CLIENT_CONVENTION, "PhoenixServerSortRule:" + inputConvention.getName());
             this.inputConvention = inputConvention;
         }
 
         public RelNode convert(RelNode rel) {
-            final Sort sort = (Sort) rel;
+            final LogicalSort sort = (LogicalSort) rel;
             return PhoenixServerSort.create(
                 convert(
                         sort.getInput(), 
@@ -198,31 +222,33 @@ public class PhoenixConverterRules {
      * Rule to convert a {@link org.apache.calcite.rel.core.Sort} to a
      * {@link PhoenixLimit}.
      */
-    private static class PhoenixLimitRule extends PhoenixConverterRule {
-        private static Predicate<Sort> IS_CONVERTIBLE = new Predicate<Sort>() {
+    public static class PhoenixLimitRule extends PhoenixConverterRule {
+        private static Predicate<LogicalSort> IS_CONVERTIBLE = new Predicate<LogicalSort>() {
             @Override
-            public boolean apply(Sort input) {
+            public boolean apply(LogicalSort input) {
                 return isConvertible(input);
             }            
         };
-        private static Predicate<Sort> OFFSET_OR_FETCH = new Predicate<Sort>() {
+        private static Predicate<LogicalSort> OFFSET_OR_FETCH = new Predicate<LogicalSort>() {
             @Override
-            public boolean apply(Sort input) {
+            public boolean apply(LogicalSort input) {
                 return input.offset != null 
                         || input.fetch != null;
             }            
         };
         
-        public static final PhoenixLimitRule INSTANCE = new PhoenixLimitRule();
+        public static final PhoenixLimitRule INSTANCE = new PhoenixLimitRule(OFFSET_OR_FETCH);
 
-        private PhoenixLimitRule() {
-            super(Sort.class, 
-                    Predicates.and(Arrays.asList(OFFSET_OR_FETCH, IS_CONVERTIBLE)), 
+        public static final PhoenixLimitRule CONVERTIBLE = new PhoenixLimitRule(Predicates.and(Arrays.asList(OFFSET_OR_FETCH, IS_CONVERTIBLE)));
+
+        private PhoenixLimitRule(Predicate<LogicalSort> predicate) {
+            super(LogicalSort.class, 
+                    predicate, 
                     Convention.NONE, PhoenixRel.CLIENT_CONVENTION, "PhoenixLimitRule");
         }
 
         public RelNode convert(RelNode rel) {
-            final Sort sort = (Sort) rel;
+            final LogicalSort sort = (LogicalSort) rel;
             RelNode input = sort.getInput();
             if (!sort.getCollation().getFieldCollations().isEmpty()) {
                 input = sort.copy(
@@ -244,7 +270,7 @@ public class PhoenixConverterRules {
      * Rule to convert a {@link org.apache.calcite.rel.logical.LogicalFilter} to a
      * {@link PhoenixFilter}.
      */
-    private static class PhoenixFilterRule extends PhoenixConverterRule {
+    public static class PhoenixFilterRule extends PhoenixConverterRule {
         private static Predicate<LogicalFilter> IS_CONVERTIBLE = new Predicate<LogicalFilter>() {
             @Override
             public boolean apply(LogicalFilter input) {
@@ -252,10 +278,12 @@ public class PhoenixConverterRules {
             }            
         };
         
-        private static final PhoenixFilterRule INSTANCE = new PhoenixFilterRule();
+        private static final PhoenixFilterRule INSTANCE = new PhoenixFilterRule(Predicates.<LogicalFilter>alwaysTrue());
 
-        private PhoenixFilterRule() {
-            super(LogicalFilter.class, IS_CONVERTIBLE, Convention.NONE, 
+        private static final PhoenixFilterRule CONVERTIBLE = new PhoenixFilterRule(IS_CONVERTIBLE);
+
+        private PhoenixFilterRule(Predicate<LogicalFilter> predicate) {
+            super(LogicalFilter.class, predicate, Convention.NONE, 
                     PhoenixRel.CLIENT_CONVENTION, "PhoenixFilterRule");
         }
 
@@ -273,7 +301,7 @@ public class PhoenixConverterRules {
      * Rule to convert a {@link org.apache.calcite.rel.logical.LogicalProject}
      * to a {@link PhoenixClientProject}.
      */
-    private static class PhoenixClientProjectRule extends PhoenixConverterRule {
+    public static class PhoenixClientProjectRule extends PhoenixConverterRule {
         
         private static Predicate<LogicalProject> IS_CONVERTIBLE = new Predicate<LogicalProject>() {
             @Override
@@ -282,10 +310,12 @@ public class PhoenixConverterRules {
             }            
         };
         
-        private static final PhoenixClientProjectRule INSTANCE = new PhoenixClientProjectRule();
+        private static final PhoenixClientProjectRule INSTANCE = new PhoenixClientProjectRule(Predicates.<LogicalProject>alwaysTrue());
 
-        private PhoenixClientProjectRule() {
-            super(LogicalProject.class, IS_CONVERTIBLE, Convention.NONE, 
+        private static final PhoenixClientProjectRule CONVERTIBLE = new PhoenixClientProjectRule(IS_CONVERTIBLE);
+
+        private PhoenixClientProjectRule(Predicate<LogicalProject> predicate) {
+            super(LogicalProject.class, predicate, Convention.NONE, 
                     PhoenixRel.CLIENT_CONVENTION, "PhoenixClientProjectRule");
         }
 
@@ -304,7 +334,7 @@ public class PhoenixConverterRules {
      * Rule to convert a {@link org.apache.calcite.rel.logical.LogicalProject}
      * to a {@link PhoenixServerProject}.
      */
-    private static class PhoenixServerProjectRule extends PhoenixConverterRule {
+    public static class PhoenixServerProjectRule extends PhoenixConverterRule {
         
         private static Predicate<LogicalProject> IS_CONVERTIBLE = new Predicate<LogicalProject>() {
             @Override
@@ -313,10 +343,12 @@ public class PhoenixConverterRules {
             }            
         };
         
-        private static final PhoenixServerProjectRule INSTANCE = new PhoenixServerProjectRule();
+        private static final PhoenixServerProjectRule INSTANCE = new PhoenixServerProjectRule(Predicates.<LogicalProject>alwaysTrue());
 
-        private PhoenixServerProjectRule() {
-            super(LogicalProject.class, IS_CONVERTIBLE, Convention.NONE, 
+        private static final PhoenixServerProjectRule CONVERTIBLE = new PhoenixServerProjectRule(IS_CONVERTIBLE);
+
+        private PhoenixServerProjectRule(Predicate<LogicalProject> predicate) {
+            super(LogicalProject.class, predicate, Convention.NONE, 
                     PhoenixRel.SERVER_CONVENTION, "PhoenixServerProjectRule");
         }
 
@@ -335,7 +367,7 @@ public class PhoenixConverterRules {
      * Rule to convert a {@link org.apache.calcite.rel.logical.LogicalAggregate}
      * to an {@link PhoenixClientAggregate}.
      */
-    private static class PhoenixClientAggregateRule extends PhoenixConverterRule {
+    public static class PhoenixClientAggregateRule extends PhoenixConverterRule {
         
         private static Predicate<LogicalAggregate> IS_CONVERTIBLE = new Predicate<LogicalAggregate>() {
             @Override
@@ -344,10 +376,12 @@ public class PhoenixConverterRules {
             }            
         };
         
-        public static final RelOptRule INSTANCE = new PhoenixClientAggregateRule();
+        public static final RelOptRule INSTANCE = new PhoenixClientAggregateRule(Predicates.<LogicalAggregate>alwaysTrue());
 
-        private PhoenixClientAggregateRule() {
-            super(LogicalAggregate.class, IS_CONVERTIBLE, Convention.NONE, 
+        public static final RelOptRule CONVERTIBLE = new PhoenixClientAggregateRule(IS_CONVERTIBLE);
+
+        private PhoenixClientAggregateRule(Predicate<LogicalAggregate> predicate) {
+            super(LogicalAggregate.class, predicate, Convention.NONE, 
                     PhoenixRel.CLIENT_CONVENTION, "PhoenixClientAggregateRule");
         }
 
@@ -368,7 +402,7 @@ public class PhoenixConverterRules {
      * Rule to convert a {@link org.apache.calcite.rel.logical.LogicalAggregate}
      * to an {@link PhoenixServerAggregate}.
      */
-    private static class PhoenixServerAggregateRule extends PhoenixConverterRule {
+    public static class PhoenixServerAggregateRule extends PhoenixConverterRule {
         
         private static Predicate<LogicalAggregate> IS_CONVERTIBLE = new Predicate<LogicalAggregate>() {
             @Override
@@ -377,13 +411,16 @@ public class PhoenixConverterRules {
             }            
         };
         
-        public static final RelOptRule SERVER = new PhoenixServerAggregateRule(PhoenixRel.SERVER_CONVENTION);
-        public static final RelOptRule PROJECTABLE = new PhoenixServerAggregateRule(PhoenixRel.SERVERJOIN_CONVENTION);
+        public static final RelOptRule SERVER = new PhoenixServerAggregateRule(Predicates.<LogicalAggregate>alwaysTrue(), PhoenixRel.SERVER_CONVENTION);
+        public static final RelOptRule SERVERJOIN = new PhoenixServerAggregateRule(Predicates.<LogicalAggregate>alwaysTrue(), PhoenixRel.SERVERJOIN_CONVENTION);
+
+        public static final RelOptRule CONVERTIBLE_SERVER = new PhoenixServerAggregateRule(IS_CONVERTIBLE, PhoenixRel.SERVER_CONVENTION);
+        public static final RelOptRule CONVERTIBLE_SERVERJOIN = new PhoenixServerAggregateRule(IS_CONVERTIBLE, PhoenixRel.SERVERJOIN_CONVENTION);
         
         private final Convention inputConvention;
 
-        private PhoenixServerAggregateRule(Convention inputConvention) {
-            super(LogicalAggregate.class, IS_CONVERTIBLE, Convention.NONE, 
+        private PhoenixServerAggregateRule(Predicate<LogicalAggregate> predicate, Convention inputConvention) {
+            super(LogicalAggregate.class, predicate, Convention.NONE, 
                     PhoenixRel.CLIENT_CONVENTION, "PhoenixServerAggregateRule:" + inputConvention.getName());
             this.inputConvention = inputConvention;
         }
@@ -405,7 +442,7 @@ public class PhoenixConverterRules {
      * Rule to convert a {@link org.apache.calcite.rel.core.Union} to a
      * {@link PhoenixUnion}.
      */
-    private static class PhoenixUnionRule extends PhoenixConverterRule {
+    public static class PhoenixUnionRule extends PhoenixConverterRule {
         private static Predicate<LogicalUnion> IS_CONVERTIBLE = new Predicate<LogicalUnion>() {
             @Override
             public boolean apply(LogicalUnion input) {
@@ -413,10 +450,12 @@ public class PhoenixConverterRules {
             }            
         };
         
-        public static final PhoenixUnionRule INSTANCE = new PhoenixUnionRule();
+        public static final PhoenixUnionRule INSTANCE = new PhoenixUnionRule(Predicates.<LogicalUnion>alwaysTrue());
+        
+        public static final PhoenixUnionRule CONVERTIBLE = new PhoenixUnionRule(IS_CONVERTIBLE);
 
-        private PhoenixUnionRule() {
-            super(LogicalUnion.class, IS_CONVERTIBLE, Convention.NONE, 
+        private PhoenixUnionRule(Predicate<LogicalUnion> predicate) {
+            super(LogicalUnion.class, predicate, Convention.NONE, 
                     PhoenixRel.CLIENT_CONVENTION, "PhoenixUnionRule");
         }
 
@@ -432,7 +471,7 @@ public class PhoenixConverterRules {
      * Rule to convert a {@link org.apache.calcite.rel.core.Join} to a
      * {@link PhoenixClientJoin}.
      */
-    private static class PhoenixClientJoinRule extends PhoenixConverterRule {
+    public static class PhoenixClientJoinRule extends PhoenixConverterRule {
         
         private static Predicate<LogicalJoin> IS_CONVERTIBLE = new Predicate<LogicalJoin>() {
             @Override
@@ -448,10 +487,12 @@ public class PhoenixConverterRules {
             }
         };
         
-        public static final PhoenixClientJoinRule INSTANCE = new PhoenixClientJoinRule();
+        public static final PhoenixClientJoinRule INSTANCE = new PhoenixClientJoinRule(NO_RIGHT_JOIN);
 
-        private PhoenixClientJoinRule() {
-            super(LogicalJoin.class, Predicates.and(Arrays.asList(IS_CONVERTIBLE, NO_RIGHT_JOIN)), Convention.NONE, 
+        public static final PhoenixClientJoinRule CONVERTIBLE = new PhoenixClientJoinRule(Predicates.and(Arrays.asList(IS_CONVERTIBLE, NO_RIGHT_JOIN)));
+
+        private PhoenixClientJoinRule(Predicate<LogicalJoin> predicate) {
+            super(LogicalJoin.class, predicate, Convention.NONE, 
                     PhoenixRel.CLIENT_CONVENTION, "PhoenixClientJoinRule");
         }
 
@@ -495,7 +536,7 @@ public class PhoenixConverterRules {
      * Rule to convert a {@link org.apache.calcite.rel.core.Join} to a
      * {@link PhoenixServerJoin}.
      */
-    private static class PhoenixServerJoinRule extends PhoenixConverterRule {
+    public static class PhoenixServerJoinRule extends PhoenixConverterRule {
         
         private static Predicate<LogicalJoin> IS_CONVERTIBLE = new Predicate<LogicalJoin>() {
             @Override
@@ -511,10 +552,12 @@ public class PhoenixConverterRules {
             }
         };
         
-        public static final PhoenixServerJoinRule INSTANCE = new PhoenixServerJoinRule();
+        public static final PhoenixServerJoinRule INSTANCE = new PhoenixServerJoinRule(NO_RIGHT_OR_FULL_JOIN);
 
-        private PhoenixServerJoinRule() {
-            super(LogicalJoin.class, Predicates.and(Arrays.asList(IS_CONVERTIBLE, NO_RIGHT_OR_FULL_JOIN)), Convention.NONE, 
+        public static final PhoenixServerJoinRule CONVERTIBLE = new PhoenixServerJoinRule(Predicates.and(Arrays.asList(IS_CONVERTIBLE, NO_RIGHT_OR_FULL_JOIN)));
+
+        private PhoenixServerJoinRule(Predicate<LogicalJoin> predicate) {
+            super(LogicalJoin.class, predicate, Convention.NONE, 
                     PhoenixRel.SERVERJOIN_CONVENTION, "PhoenixServerJoinRule");
         }
 
@@ -534,15 +577,19 @@ public class PhoenixConverterRules {
         }
     }
 
+    /**
+     * Rule to convert a {@link org.apache.calcite.rel.core.Values} to a
+     * {@link PhoenixValues}.
+     */
     public static class PhoenixValuesRule extends PhoenixConverterRule {
         public static PhoenixValuesRule INSTANCE = new PhoenixValuesRule();
         
         private PhoenixValuesRule() {
-            super(Values.class, Convention.NONE, PhoenixRel.CLIENT_CONVENTION, "PhoenixValuesRule");
+            super(LogicalValues.class, Convention.NONE, PhoenixRel.CLIENT_CONVENTION, "PhoenixValuesRule");
         }
 
         @Override public RelNode convert(RelNode rel) {
-            Values valuesRel = (Values) rel;
+            LogicalValues valuesRel = (LogicalValues) rel;
             return PhoenixValues.create(
                     valuesRel.getCluster(),
                     valuesRel.getRowType(),

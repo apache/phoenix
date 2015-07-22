@@ -3,6 +3,7 @@ package org.apache.phoenix.calcite.jdbc;
 import org.apache.calcite.jdbc.CalcitePrepare;
 import org.apache.calcite.jdbc.Driver;
 import org.apache.calcite.linq4j.function.Function0;
+import org.apache.phoenix.calcite.rules.PhoenixConverterRules;
 
 public class PhoenixCalciteDriver extends Driver {
     public static final String CONNECT_STRING_PREFIX = "jdbc:phoenixcalcite:";
@@ -19,7 +20,7 @@ public class PhoenixCalciteDriver extends Driver {
         return new Function0<CalcitePrepare>() {
             @Override
             public CalcitePrepare apply() {
-                return new PhoenixPrepareImpl();
+                return new PhoenixPrepareImpl(PhoenixConverterRules.CONVERTIBLE_RULES);
             }          
         };
     }

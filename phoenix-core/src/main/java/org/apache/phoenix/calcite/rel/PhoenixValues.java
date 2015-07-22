@@ -7,8 +7,14 @@ import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptCost;
 import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelTraitSet;
+import org.apache.calcite.rel.RelCollation;
+import org.apache.calcite.rel.RelCollationTraitDef;
+import org.apache.calcite.rel.RelDistribution;
+import org.apache.calcite.rel.RelDistributionTraitDef;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Values;
+import org.apache.calcite.rel.metadata.RelMdCollation;
+import org.apache.calcite.rel.metadata.RelMdDistribution;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.hadoop.hbase.KeyValue;
@@ -24,6 +30,7 @@ import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.SingleKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 
+import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 
@@ -33,8 +40,21 @@ import com.google.common.collect.Lists;
  */
 public class PhoenixValues extends Values implements PhoenixRel {
     
-    public static PhoenixValues create(RelOptCluster cluster, RelDataType rowType, ImmutableList<ImmutableList<RexLiteral>> tuples) {
-        RelTraitSet traits = cluster.traitSetOf(PhoenixRel.CLIENT_CONVENTION);
+    public static PhoenixValues create(RelOptCluster cluster, final RelDataType rowType, final ImmutableList<ImmutableList<RexLiteral>> tuples) {
+        final RelTraitSet traits =
+                cluster.traitSetOf(PhoenixRel.CLIENT_CONVENTION)
+                .replaceIfs(RelCollationTraitDef.INSTANCE,
+                        new Supplier<List<RelCollation>>() {
+                    public List<RelCollation> get() {
+                        return RelMdCollation.values(rowType, tuples);
+                    }
+                })
+                .replaceIf(RelDistributionTraitDef.INSTANCE,
+                        new Supplier<RelDistribution>() {
+                    public RelDistribution get() {
+                        return RelMdDistribution.values(rowType, tuples);
+                    }
+                });
         return new PhoenixValues(cluster, rowType, tuples, traits);
     }
     
