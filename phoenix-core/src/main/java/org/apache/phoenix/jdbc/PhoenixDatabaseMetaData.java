@@ -491,7 +491,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
                 where.append(COLUMN_NAME + " like '" + StringUtil.escapeStringConstant(colPattern) + "'" );
             }
         }
-        if (colPattern == null) {
+        if (colPattern == null || colPattern.length() == 0) {
             appendConjunction(where);
             where.append(COLUMN_NAME + " is not null" );
         }
