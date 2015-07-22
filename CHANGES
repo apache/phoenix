@@ -1,3 +1,113 @@
+Release Notes - Phoenix - Version 4.5.0
+
+** Improvement
+    * [PHOENIX-1660] - Implement missing math built-in functions
+    * [PHOENIX-1763] - Support building with HBase-1.1.0 
+    * [PHOENIX-1934] - queryserver support for Windows service descriptor
+    * [PHOENIX-1965] - Upgrade Pig to version 0.13
+    * [PHOENIX-1968] - Phoenix-Spark: Should support saving arrays
+    * [PHOENIX-1975] - Detect and use HBASE_HOME when set
+    * [PHOENIX-1996] - Use BytesStringer instead of ZeroCopyByteString
+    * [PHOENIX-2012] - RowKeyComparisonFilter logs unencoded data at DEBUG level
+    * [PHOENIX-2033] - PQS log environment details on launch
+    * [PHOENIX-2095] - Lower the default for phoenix.sequence.saltBuckets
+    * [PHOENIX-2110] - Primary key changes should be pushed to diverged views
+    * [PHOENIX-2115] - Simplify Pherf generated dependency jar and pom.xml 
+    * [PHOENIX-2120] - Padding character is not inverted as required for DESC CHAR columns
+    * [PHOENIX-2126] - Improving performance of merge sort by multi-threaded and minheap implementation
+
+** New Feature
+    * [PHOENIX-922] - Support SELECT without a from clause
+    * [PHOENIX-1819] - Build a framework to capture and report phoenix client side request level metrics
+    * [PHOENIX-1920] - Pherf - Add support for mixed r/w workloads
+    * [PHOENIX-1954] - Reserve chunks of numbers for a sequence
+    * [PHOENIX-2098] - Pig Udf that given a count Reserve chunks of numbers for a sequence
+
+** Sub-task
+    * [PHOENIX-978] - Allow views to extend base table's PK (only if last PK column is fixed length)
+    * [PHOENIX-1504] - Support adding column to a table that has views
+    * [PHOENIX-1611] - Support ABS function 
+    * [PHOENIX-1687] - Implement missing math built-in POWER function
+    * [PHOENIX-1889] - Support alter/replace and drop functions
+    * [PHOENIX-1890] - Provide queries for adding/deleting jars to/from common place in hdfs which is used by dynamic class loader
+    * [PHOENIX-1984] - Return value of INSTR should be one-based instead of zero-based
+    * [PHOENIX-1987] - SIGN built-in function should be order preserving
+    * [PHOENIX-2015] - Implement Build-in math function CBRT
+    * [PHOENIX-2018] - Implement math build-in function SQRT
+    * [PHOENIX-2019] - Implement Build-in math function ln and log
+    * [PHOENIX-2020] - Implement build-in math function EXP
+    * [PHOENIX-2021] - Implement ARRAY_CAT built in function
+    * [PHOENIX-2049] - Change ArraysWithNullsIT to be derived from BaseHBaseManagedTimeIT
+    * [PHOENIX-2060] - Implement ARRAY_FILL built in function
+    * [PHOENIX-2101] - Implement ARRAY_TO_STRING built in function
+
+** Bug
+    * [PHOENIX-1277] - CSVCommonsLoader not allowing null CHAR values (non PK)
+    * [PHOENIX-1659] - PhoenixDatabaseMetaData.getColumns does not return REMARKS column
+    * [PHOENIX-1827] - TrackOrderPreservingExpressionCompiler may falsely say ORDER BY is order preserving
+    * [PHOENIX-1919] - Clean up more ASL headers
+    * [PHOENIX-1945] - Phoenix tarball from assembly does not contain phoenix-[version]-server.jar
+    * [PHOENIX-1976] - Improve PhoenixDriver registration when addShutdownHook fails
+    * [PHOENIX-1980] - CsvBulkLoad cannot load hbase-site.xml from classpath
+    * [PHOENIX-1990] - bin/queryserver makeWinServiceDesc doesn't actually work in Windows
+    * [PHOENIX-1995] - client uberjar doesn't support dfs
+    * [PHOENIX-2005] - Connection utilities omit zk client port, parent znode
+    * [PHOENIX-2007] - java.sql.SQLException: Encountered exception in sub plan [0] execution
+    * [PHOENIX-2010] - Properly validate number of arguments passed to the functions in FunctionParseNode#validate
+    * [PHOENIX-2011] - Default, min, and max values should not require quotes around it in create function
+    * [PHOENIX-2013] - Apply PHOENIX-1995 to runnable uberjar as well
+    * [PHOENIX-2014] - WHERE search condition ignored when also using row value constructor in view
+    * [PHOENIX-2022] - BaseRegionScanner.next should be abstract
+    * [PHOENIX-2027] - Subqueries with no data are raising IllegalStateException
+    * [PHOENIX-2029] - Queries are making two rpc calls for getTable 
+    * [PHOENIX-2030] - CsvBulkLoadTool should use logical name of the table for output directory suffix
+    * [PHOENIX-2032] - psql.py is broken after PHOENIX-2013
+    * [PHOENIX-2040] - Mark spark/scala dependencies as 'provided'
+    * [PHOENIX-2050] - Avoid checking for child views unless operating on table
+    * [PHOENIX-2057] - Acquire lock in MetaDataEndPointImpl.addRowsToChildViews() before calling doGetTable()
+    * [PHOENIX-2058] - Check for existence and compatibility of columns being added in view
+    * [PHOENIX-2059] - MR index build does not handle table with a schema name correctly
+    * [PHOENIX-2063] - Row value constructor doesn't work when used in COUNT DISTINCT
+    * [PHOENIX-2064] - ARRAY constructor doesn't work when used in COUNT DISTINCT
+    * [PHOENIX-2065] - Throw TableNotFoundException when select all columns of one column family from the table with schema
+    * [PHOENIX-2066] - Existing client fails initialization due to upgrade atttempting to create column with no name
+    * [PHOENIX-2067] - Sort order incorrect for variable length DESC columns
+    * [PHOENIX-2072] - Fix Eclipse compiler errors in pherf module
+    * [PHOENIX-2073] - Two bytes character in LIKE expression is not allowed
+    * [PHOENIX-2075] - MR integration uses single mapper unless table is salted
+    * [PHOENIX-2087] - Ensure predictable column position during alter table
+    * [PHOENIX-2088] - Prevent splitting and recombining select expressions for MR integration
+    * [PHOENIX-2096] - Tweak criteria for when round robin iterator is used
+    * [PHOENIX-2107] - Update JDBC version to 4.5.0
+    * [PHOENIX-2109] - Joda time version conflict between phoenix and pherf
+    * [PHOENIX-2111] - Race condition on creation of new view and adding of column to base table
+    * [PHOENIX-2112] - Phoenix-Spark need to support UTF8String for spark 1.4.0
+    * [PHOENIX-2118] - Remove/modfiy usages of Guava StopWatch and deprecated ComparisonChain methods
+    * [PHOENIX-2125] - ORDER BY on full PK on salted table does not work
+    * [PHOENIX-2131] - CastParseNode.toSQL omits closing parenthesis
+    * [PHOENIX-2139] - LIKE '%' is not filtering out null columns
+
+** Task
+    * [PHOENIX-1962] - Apply check style to the build
+    * [PHOENIX-2085] - Include joda-time in phoenix server jar
+
+** Test
+    * [PHOENIX-1915] - QueryServerBasicsIT should bind QS instance to random port
+    * [PHOENIX-1935] - org.apache.phoenix.end2end.ArithmeticQueryIT tests are failing
+    * [PHOENIX-1939] - Test are failing with DoNotRetryIOException: ATABLE: null
+    * [PHOENIX-1941] - Phoenix tests are failing in linux env with missing class: StaticMapping
+    * [PHOENIX-1963] - Irregular failures in ResultTest#testMonitorResult
+    * [PHOENIX-1964] - Pherf tests write output in module base directory
+    * [PHOENIX-2016] - Some Phoenix tests failed with NPE
+    * [PHOENIX-2025] - Phoenix-core's hbase-default.xml prevents HBaseTestingUtility from starting up in client apps
+    * [PHOENIX-2042] - Windows need hadoop native libraries to run tests
+    * [PHOENIX-2068] - UserDefinedFunctionsIT is failing in windows with InvocationTargetException
+    * [PHOENIX-2097] - Add new MD5 test for composite PK
+    * [PHOENIX-2117] - Fix flapping DataIngestIT
+    * [PHOENIX-2121] - Fix flapping RowValueConstructorIT
+    * [PHOENIX-2123] - Diverged view prevents schema propagation to the entire view hierarchy
+    * [PHOENIX-2129] - Fix ArrayToStringFunctionTest#testDate
+
 Release Notes - Phoenix - Version 4.3
 
 ** New Feature
