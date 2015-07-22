@@ -30,19 +30,16 @@ import java.sql.Types;
 import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.phoenix.mapreduce.util.ColumnInfoToStringEncoderDecoder;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.SchemaType;
 import org.apache.phoenix.pig.util.PhoenixPigSchemaUtil.Dependencies;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.util.ColumnInfo;
-import org.apache.phoenix.util.SchemaUtil;
 import org.apache.pig.ResourceSchema;
 import org.apache.pig.ResourceSchema.ResourceFieldSchema;
 import org.apache.pig.data.DataType;
 import org.junit.Test;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 
 /**
@@ -50,9 +47,6 @@ import com.google.common.collect.Lists;
  * Tests on PhoenixPigSchemaUtil
  */
 public class PhoenixPigSchemaUtilTest {
-
-	private static final String TABLE_NAME = "TABLE";
-	private static final String CLUSTER_QUORUM = "QUORUM";
     private static final ColumnInfo ID_COLUMN = new ColumnInfo("ID", Types.BIGINT);
     private static final ColumnInfo NAME_COLUMN = new ColumnInfo("NAME", Types.VARCHAR);
     private static final ColumnInfo LOCATION_COLUMN = new ColumnInfo("LOCATION", Types.ARRAY);
