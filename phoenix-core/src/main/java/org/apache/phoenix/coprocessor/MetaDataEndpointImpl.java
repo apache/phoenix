@@ -2240,7 +2240,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         TableViewFinderResult childViewsResult = findChildViews(region, tenantId, table, PHYSICAL_TABLE_BYTES);
                         if (childViewsResult.hasViews()) {
                             /* 
-                             * Adding a column is not allowed if
+                             * Dis-allow if:
                              * 1) The meta-data for child view/s spans over
                              * more than one region (since the changes cannot be made in a transactional fashion)
                              * 
@@ -2250,19 +2250,24 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                              * 3) If the request is from a client that is older than 4.5 version of phoenix. 
                              * Starting from 4.5, metadata requests have the client version included in them. 
                              * We don't want to allow clients before 4.5 to add a column to the base table if it has views.
+                             * 
+                             * 4) Trying to swtich tenancy of a table that has views
                              */
-                             if (!childViewsResult.allViewsInSingleRegion() || table.getBaseColumnCount() == 0 || !request.hasClientVersion()) {
-                                 return new MetaDataMutationResult(MutationCode.UNALLOWED_TABLE_MUTATION,
-                                         EnvironmentEdgeManager.currentTimeMillis(), null);
-                             } else {
-                                 mutationsForAddingColumnsToViews = new ArrayList<>(childViewsResult.getResults().size() * tableMetaData.size());
-                                 MetaDataMutationResult mutationResult = addRowsToChildViews(table, tableMetaData, mutationsForAddingColumnsToViews, schemaName, tableName, invalidateList, clientTimeStamp,
-                                         childViewsResult, region, locks);
-                                 // return if we were not able to add the column successfully
-                                 if (mutationResult!=null)
-                                     return mutationResult;
-                             } 
-                         }
+                            if (!childViewsResult.allViewsInSingleRegion() 
+                                    || table.getBaseColumnCount() == 0 
+                                    || !request.hasClientVersion()
+                                    || switchTenancy(table, tableMetaData)) {
+                                return new MetaDataMutationResult(MutationCode.UNALLOWED_TABLE_MUTATION,
+                                        EnvironmentEdgeManager.currentTimeMillis(), null);
+                            } else {
+                                mutationsForAddingColumnsToViews = new ArrayList<>(childViewsResult.getResults().size() * tableMetaData.size());
+                                MetaDataMutationResult mutationResult = addRowsToChildViews(table, tableMetaData, mutationsForAddingColumnsToViews, schemaName, tableName, invalidateList, clientTimeStamp,
+                                        childViewsResult, region, locks);
+                                // return if we were not able to add the column successfully
+                                if (mutationResult!=null)
+                                    return mutationResult;
+                            } 
+                        }
                     }
                     for (Mutation m : tableMetaData) {
                         byte[] key = m.getRow();
@@ -2287,7 +2292,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                                 }
                                 return new MetaDataMutationResult(
                                         MutationCode.COLUMN_ALREADY_EXISTS, EnvironmentEdgeManager
-                                                .currentTimeMillis(), table);
+                                        .currentTimeMillis(), table);
                             } catch (ColumnFamilyNotFoundException e) {
                                 continue;
                             } catch (ColumnNotFoundException e) {
@@ -2301,7 +2306,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                                         // does not handle this.
                                         return new MetaDataMutationResult(
                                                 MutationCode.UNALLOWED_TABLE_MUTATION, EnvironmentEdgeManager
-                                                        .currentTimeMillis(), null);
+                                                .currentTimeMillis(), null);
                                     }
                                     // Add all indexes to invalidate list, as they will all be
                                     // adding the same PK column. No need to lock them, as we
@@ -2326,6 +2331,21 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     }
                     tableMetaData.addAll(mutationsForAddingColumnsToViews);
                     return null;
+                }
+
+                private boolean switchTenancy(PTable table, List<Mutation> tableMetaData) {
+                    for (Mutation m : tableMetaData) {
+                        if (m instanceof Put) {
+                            Put p = (Put)m;
+                            List<Cell> cells = p.get(TABLE_FAMILY_BYTES, MULTI_TENANT_BYTES);
+                            if (cells != null && cells.size() > 0) {
+                                Cell cell = cells.get(0);
+                                boolean isMutlitenantProp = (boolean)PBoolean.INSTANCE.toObject(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength()); 
+                                return table.isMultiTenant() != isMutlitenantProp;
+                            }
+                        }
+                    }
+                    return false;
                 }
             });
             if (result != null) {
