@@ -255,12 +255,19 @@ public class CalciteTest extends BaseClientManagedTimeIT {
         ensureTableCreated(url, ATABLE_NAME);
         initATableValues(getOrganizationId(), null, url);
         initJoinTableValues(url, null, null);
+        createIndices(
+                "CREATE INDEX IDX1 ON aTable (a_string) INCLUDE (b_string, x_integer)",
+                "CREATE INDEX IDX2 ON aTable (b_string) INCLUDE (a_string, y_integer)",
+                "CREATE INDEX IDX_FULL ON aTable (b_string) INCLUDE (a_string, a_integer, a_date, a_time, a_timestamp, x_decimal, x_long, x_integer, y_integer, a_byte, a_short, a_float, a_double, a_unsigned_float, a_unsigned_double)");
         final Connection connection = DriverManager.getConnection(url);
         connection.createStatement().execute("UPDATE STATISTICS ATABLE");
         connection.createStatement().execute("UPDATE STATISTICS " + JOIN_CUSTOMER_TABLE_FULL_NAME);
         connection.createStatement().execute("UPDATE STATISTICS " + JOIN_ITEM_TABLE_FULL_NAME);
         connection.createStatement().execute("UPDATE STATISTICS " + JOIN_SUPPLIER_TABLE_FULL_NAME);
         connection.createStatement().execute("UPDATE STATISTICS " + JOIN_ORDER_TABLE_FULL_NAME);
+        connection.createStatement().execute("UPDATE STATISTICS IDX1");
+        connection.createStatement().execute("UPDATE STATISTICS IDX2");
+        connection.createStatement().execute("UPDATE STATISTICS IDX_FULL");
         connection.close();
     }
     
@@ -851,14 +858,6 @@ public class CalciteTest extends BaseClientManagedTimeIT {
     }
     
     @Test public void testIndex() {
-        try {
-            createIndices(
-                    "CREATE INDEX IDX1 ON aTable (a_string) INCLUDE (b_string, x_integer)",
-                    "CREATE INDEX IDX2 ON aTable (b_string) INCLUDE (a_string, y_integer)",
-                    "CREATE INDEX IDX_FULL ON aTable (b_string) INCLUDE (a_string, a_integer, a_date, a_time, a_timestamp, x_decimal, x_long, x_integer, y_integer, a_byte, a_short, a_float, a_double, a_unsigned_float, a_unsigned_double)");
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
         final Start start = start(getConnectionProps(true), false);
         start.sql("select x_integer from aTable")
             .explainIs("PhoenixToEnumerableConverter\n" +

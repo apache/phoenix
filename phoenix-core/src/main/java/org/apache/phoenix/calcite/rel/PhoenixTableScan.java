@@ -120,13 +120,19 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
     @Override
     public RelOptCost computeSelfCost(RelOptPlanner planner) {
         double rowCount = super.getRows();
+        Double filteredRowCount = null;
         if (scanRanges != null) {
             if (scanRanges.isPointLookup()) {
-                rowCount = 1;
+                filteredRowCount = 1.0;
             } else if (scanRanges.getPkColumnSpan() > 0) {
                 // TODO
-                rowCount = rowCount * RelMetadataQuery.getSelectivity(this, filter);
+                filteredRowCount = rowCount * RelMetadataQuery.getSelectivity(this, filter);
             }
+        }
+        if (filteredRowCount != null) {
+            rowCount = filteredRowCount;
+        } else if (table.unwrap(PhoenixTable.class).getTable().getParentName() != null){
+            rowCount = addEpsilon(rowCount);
         }
         int fieldCount = this.table.getRowType().getFieldCount();
         return planner.getCostFactory()
@@ -198,5 +204,26 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
         for (PColumnFamily family : table.getColumnFamilies()) {
             scan.addFamily(family.getName().getBytes());
         }
+    }
+
+    private double addEpsilon(double d) {
+      assert d >= 0d;
+      final double d0 = d;
+      if (d < 10) {
+        // For small d, adding 1 would change the value significantly.
+        d *= 1.001d;
+        if (d != d0) {
+          return d;
+        }
+      }
+      // For medium d, add 1. Keeps integral values integral.
+      ++d;
+      if (d != d0) {
+        return d;
+      }
+      // For large d, adding 1 might not change the value. Add .1%.
+      // If d is NaN, this still will probably not change the value. That's OK.
+      d *= 1.001d;
+      return d;
     }
 }
