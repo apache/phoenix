@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.apache.calcite.avatica.util.ByteString;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexLiteral;
@@ -470,6 +471,8 @@ public class CalciteUtils {
 				Object o = lit.getValue();
 				if (o instanceof NlsString) {
 				    o = ((NlsString) o).getValue();
+				} else if (o instanceof ByteString) {
+				    o = ((ByteString) o).getBytes();
 				}
 				try {
                     return LiteralExpression.newConstant(o, targetType);
