@@ -22,18 +22,16 @@ import org.apache.phoenix.pherf.PherfConstants;
 import org.apache.phoenix.pherf.configuration.Column;
 import org.apache.phoenix.pherf.configuration.DataTypeMapping;
 
-import java.io.File;
-import java.io.IOException;
-import java.io.OutputStream;
 import java.sql.*;
 import java.util.*;
 
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.phoenix.pherf.configuration.Query;
 import org.apache.phoenix.pherf.configuration.QuerySet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 
 // TODO This class needs to be cleanup up a bit. I just wanted to get an initial placeholder in.
 public class PhoenixUtil {
@@ -95,6 +93,26 @@ public class PhoenixUtil {
         }
         return result;
     }
+
+    /**
+     * Execute statement
+     * @param sql
+     * @param connection
+     * @return
+     * @throws SQLException
+     */
+    public boolean executeStatementThrowException(String sql, Connection connection) throws SQLException {
+    	boolean result = false;
+    	PreparedStatement preparedStatement = null;
+    	try {
+            preparedStatement = connection.prepareStatement(sql);
+            result = preparedStatement.execute();
+            connection.commit();
+        } finally {
+            preparedStatement.close();
+        }
+        return result;
+    }
     
     public boolean executeStatement(String sql, Connection connection) {
     	boolean result = false;
@@ -139,14 +157,25 @@ public class PhoenixUtil {
     	Connection conn = getConnection();
     	try {
         	ResultSet resultSet = getTableMetaData(PherfConstants.PHERF_SCHEMA_NAME, null, conn);
-	    	while (resultSet.next()) {
-	    		String tableName = resultSet.getString("TABLE_SCHEMA") == null ? resultSet.getString("TABLE_NAME") :
-	    						   resultSet.getString("TABLE_SCHEMA") + "." + resultSet.getString("TABLE_NAME");
-	    		if (tableName.matches(regexMatch)) {
-		    		logger.info("\nDropping " + tableName);
-		    		executeStatement("DROP TABLE " + tableName + " CASCADE", conn);
-	    		}
-	    	}
+			while (resultSet.next()) {
+				String tableName = resultSet.getString(TABLE_SCHEM) == null ? resultSet
+						.getString(TABLE_NAME) : resultSet
+						.getString(TABLE_SCHEM)
+						+ "."
+						+ resultSet.getString(TABLE_NAME);
+				if (tableName.matches(regexMatch)) {
+					logger.info("\nDropping " + tableName);
+					try {
+						executeStatementThrowException("DROP TABLE "
+								+ tableName + " CASCADE", conn);
+					} catch (org.apache.phoenix.schema.TableNotFoundException tnf) {
+						logger.error("Table might be already be deleted via cascade. Schema: "
+								+ tnf.getSchemaName()
+								+ " Table: "
+								+ tnf.getTableName());
+					}
+				}
+			}
     	} finally {
     		conn.close();
     	}
