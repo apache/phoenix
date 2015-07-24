@@ -195,7 +195,8 @@
 				<artifactId>apache-rat-plugin</artifactId>
 				<configuration>
 					<excludes>
-						<exclude>RESULTS/**</exclude>
+						<exclude>*/RESULTS/**</exclude>
+						<exclude>README.md</exclude>
 					</excludes>
 				</configuration>
 			</plugin>
