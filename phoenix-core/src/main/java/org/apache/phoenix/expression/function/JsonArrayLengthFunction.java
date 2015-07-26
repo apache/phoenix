@@ -51,9 +51,8 @@ public class JsonArrayLengthFunction extends ScalarFunction {
         Expression jsonExpression = this.children.get(0);
         if (!jsonExpression.evaluate(tuple, ptr)) {
             return false;
-        }
-        if (ptr.getLength() == 0) {
-            return false;
+        }else if (ptr.getLength() == 0) {
+            return true;
         }
         try{
             PhoenixJson phoenixJson =

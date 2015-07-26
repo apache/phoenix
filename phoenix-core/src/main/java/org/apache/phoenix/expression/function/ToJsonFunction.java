@@ -54,9 +54,8 @@ public class ToJsonFunction extends ScalarFunction {
         Expression expression = this.children.get(0);
         if (!expression.evaluate(tuple, ptr)) {
             return false;
-        }
-        if (ptr.getLength() == 0) {
-            return false;
+        }else if (ptr.getLength() == 0) {
+            return true;
         }
         PDataType baseType = expression.getDataType();
         Object re =baseType.toObject(ptr);

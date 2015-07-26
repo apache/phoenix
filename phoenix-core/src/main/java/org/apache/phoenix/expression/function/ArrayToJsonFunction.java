@@ -53,9 +53,8 @@ public class ArrayToJsonFunction extends ScalarFunction {
 
         if (!arrayExpr.evaluate(tuple, ptr)) {
             return false;
-        }
-        if (ptr.getLength() == 0) {
-            return false;
+        }else if (ptr.getLength() == 0) {
+            return true;
         }
         try {
             PDataType baseType = PDataType.fromTypeId(arrayExpr.getDataType()

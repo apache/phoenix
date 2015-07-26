@@ -53,10 +53,8 @@ public class JsonPopulateRecordSetFunction extends ScalarFunction {
         Expression typeArrayExpression = children.get(0);
         if (!typeArrayExpression.evaluate(tuple, ptr)) {
             return false;
-        }
-
-        if (ptr.getLength() == 0) {
-            return false;
+        }else if (ptr.getLength() == 0) {
+            return true;
         }
 
         PhoenixArray phoenixArray = (PhoenixArray) PVarcharArray.INSTANCE.toObject(ptr);
