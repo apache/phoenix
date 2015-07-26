@@ -111,8 +111,6 @@ public class PhoenixArray implements Array,SQLCloseable {
                         }
                     }
     		    }
-		    } else {
-		        maxLength = baseType.getByteSize();
 		    }
 		}
     this.array = convertObjectArrayToPrimitiveArray(elements);
@@ -126,8 +124,6 @@ public class PhoenixArray implements Array,SQLCloseable {
             if (baseType.getByteSize() == null) {
                 elements = coerceToNewLength(baseType, (Object[])pArr.array, desiredMaxLength);
                 maxLength = desiredMaxLength;
-            } else {
-                maxLength = baseType.getByteSize();
             }
         }
         this.array = convertObjectArrayToPrimitiveArray(elements);
