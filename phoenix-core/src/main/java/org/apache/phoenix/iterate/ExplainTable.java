@@ -176,7 +176,9 @@ public abstract class ExplainTable {
         SortOrder sortOrder = tableRef.getTable().getPKColumns().get(slotIndex).getSortOrder();
         if (sortOrder == SortOrder.DESC) {
             buf.append('~');
-            range = SortOrder.invert(range, 0, new byte[range.length], 0, range.length);
+            ImmutableBytesWritable ptr = new ImmutableBytesWritable(range);
+            type.coerceBytes(ptr, type, sortOrder, SortOrder.getDefault());
+            range = ptr.get();
         }
         Format formatter = context.getConnection().getFormatter(type);
         buf.append(type.toStringLiteral(range, formatter));
