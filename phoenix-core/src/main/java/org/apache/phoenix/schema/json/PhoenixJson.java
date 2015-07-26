@@ -247,9 +247,10 @@ public class PhoenixJson implements Comparable<PhoenixJson> {
        if(this.rootNode.isArray()){
            return this.rootNode.size();
        }else{
-           throw new SQLException("The JsonNode should be an Array");
+           throw new SQLExceptionInfo.Builder(SQLExceptionCode.JSON_NODE_MISMATCH)
+                   .build().buildException();
        }
-    }
+}
 
     /**
      * If the current {@link PhoenixJson} is a JsonArray,then it returns the set of array elements.
@@ -269,7 +270,8 @@ public class PhoenixJson implements Comparable<PhoenixJson> {
             }
             return elementlist.toArray();
         }else{
-            throw new SQLException("The JsonNode should be an Array");
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.JSON_NODE_MISMATCH)
+                    .build().buildException();
         }
     }
     /**
@@ -280,12 +282,17 @@ public class PhoenixJson implements Comparable<PhoenixJson> {
      * @return {@link String []} as the set of JSON keys
      */
     public Object[] getJsonObjectKeys() {
-        List<String> elementlist = new ArrayList();
-        Iterator<String> fieldnames = this.rootNode.getFieldNames();
-        while(fieldnames.hasNext()){
-            elementlist.add(fieldnames.next());
+        if(this.rootNode.isObject()){
+            List<String> elementlist = new ArrayList();
+            Iterator<String> fieldnames = this.rootNode.getFieldNames();
+            while(fieldnames.hasNext()){
+                elementlist.add(fieldnames.next());
+            }
+            return elementlist.toArray();
+        }else{
+            return null;
         }
-        return elementlist.toArray();
+
     }
 
     /**
@@ -301,17 +308,22 @@ public class PhoenixJson implements Comparable<PhoenixJson> {
      * @return {@link String []} as the SET of JSON key/value pairs
      */
     public Object[] getJsonFields() {
-        List<String> elementlist = new ArrayList();
-        Iterator<Map.Entry<String, JsonNode>> fields = this.rootNode.getFields();
-        while(fields.hasNext()){
-            Map.Entry<String, JsonNode> entry = fields.next();
-            StringBuilder fieldBuilder = new StringBuilder();
-            fieldBuilder.append(entry.getKey());
-            fieldBuilder.append(",");
-            fieldBuilder.append(entry.getValue().toString());
-            elementlist.add(fieldBuilder.toString());
+        if(this.rootNode.isObject()){
+            List<String> elementlist = new ArrayList();
+            Iterator<Map.Entry<String, JsonNode>> fields = this.rootNode.getFields();
+            while(fields.hasNext()){
+                Map.Entry<String, JsonNode> entry = fields.next();
+                StringBuilder fieldBuilder = new StringBuilder();
+                fieldBuilder.append(entry.getKey());
+                fieldBuilder.append(",");
+                fieldBuilder.append(entry.getValue().toString());
+                elementlist.add(fieldBuilder.toString());
+            }
+            return elementlist.toArray();
+        }else{
+            return null;
         }
-        return elementlist.toArray();
+
     }
     /**
      * Expands the object in current {@link PhoenixJson} to a record whose columns match the record type defined by base.
@@ -326,9 +338,13 @@ public class PhoenixJson implements Comparable<PhoenixJson> {
      * @return {@link String} as the result record
      */
     public String jsonPopulateRecord(String [] types) {
+        return jsonPopulateRecord(this.rootNode,types);
+    }
+
+    private String jsonPopulateRecord(JsonNode e,String [] types) {
         StringBuilder recordsBuilder = new StringBuilder();
         for(int i =0 ;i < types.length; i++){
-            List<JsonNode> nodelist =this.rootNode.findValues(types[i]);
+            List<JsonNode> nodelist =e.findValues(types[i]);
             if(nodelist.size()!=0){
                 recordsBuilder.append(nodelist.get(0).toString());
             }else{
@@ -352,26 +368,20 @@ public class PhoenixJson implements Comparable<PhoenixJson> {
      * @param types {@link String} the record type
      * @return {@link String []} as the SET of records
      */
-    public Object[] jsonPopulateRecordSet(String[] types) {
-        List<String> recordsList = new ArrayList();
-        Iterator<JsonNode> elements = this.rootNode.getElements();
-        while(elements.hasNext()){
-            JsonNode e = elements.next();
-            StringBuilder recordsBuilder = new StringBuilder();
-            for(int i =0 ;i < types.length; i++){
-                List<JsonNode> nodelist =e.findValues(types[i]);
-                if(nodelist.size()!=0){
-                    recordsBuilder.append(nodelist.get(0).toString());
-                }else{
-                    recordsBuilder.append("null");
-                }
-                if(i != types.length-1){
-                    recordsBuilder.append(",");
-                }
+    public Object[] jsonPopulateRecordSet(String[] types)throws SQLException  {
+        if(this.rootNode.isArray()) {
+            List<String> recordsList = new ArrayList();
+            Iterator<JsonNode> elements = this.rootNode.getElements();
+            while(elements.hasNext()){
+                JsonNode e = elements.next();
+                recordsList.add(jsonPopulateRecord(e,types));
             }
-            recordsList.add(recordsBuilder.toString());
+            return recordsList.toArray();
+        }else{
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.JSON_NODE_MISMATCH)
+                    .build().buildException();
         }
-        return recordsList.toArray();
+
     }
 
 
@@ -392,16 +402,7 @@ public class PhoenixJson implements Comparable<PhoenixJson> {
     public static String dataToJsonValue(PDataType targetType, Object obj,Format formatter) {
         StringBuilder  valueBuilder = new StringBuilder();
         if (obj != null) {
-            if (PDataType.equalsAny(targetType, PUnsignedDouble.INSTANCE, PUnsignedFloat.INSTANCE,
-                    PDouble.INSTANCE)) {
-                valueBuilder.append(PDouble.INSTANCE.toStringLiteral(obj, formatter));
-
-            } else if (PDataType.equalsAny(targetType, PInteger.INSTANCE, PUnsignedSmallint.INSTANCE,
-                    PUnsignedLong.INSTANCE, PUnsignedInt.INSTANCE,PUnsignedTinyint.INSTANCE)) {
-                valueBuilder.append(PLong.INSTANCE.toStringLiteral(obj, formatter));
-            }else if (PDataType.equalsAny(targetType, PBoolean.INSTANCE)) {
-                valueBuilder.append(PBoolean.INSTANCE.toStringLiteral(obj, formatter));
-            } else if (PDataType.equalsAny(targetType, PVarchar.INSTANCE,PChar.INSTANCE)) {
+            if (PDataType.equalsAny(targetType, PVarchar.INSTANCE,PChar.INSTANCE)) {
                 valueBuilder.append("\"");
                 String tmp = PVarchar.INSTANCE.toStringLiteral(obj,formatter);
                 valueBuilder.append(tmp.substring(1,tmp.length()-1));
@@ -411,12 +412,15 @@ public class PhoenixJson implements Comparable<PhoenixJson> {
                 String tmp = PVarchar.INSTANCE.toStringLiteral(obj,formatter);
                 valueBuilder.append(tmp.substring(1,tmp.length()-1));
                 valueBuilder.append("\"");
+            }else   if (targetType.isFixedWidth()) {
+                valueBuilder.append(targetType.toStringLiteral(obj, formatter));
             } else{
                 valueBuilder.append("\"");
                 String tmp = PVarchar.INSTANCE.toStringLiteral(obj,formatter);
                 valueBuilder.append(tmp.substring(1,tmp.length()-1));
                 valueBuilder.append("\"");
             }
+
         }else{
             valueBuilder.append("null");
         }

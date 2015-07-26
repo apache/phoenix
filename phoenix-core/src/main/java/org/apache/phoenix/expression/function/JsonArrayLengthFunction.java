@@ -63,8 +63,7 @@ public class JsonArrayLengthFunction extends ScalarFunction {
             byte[] array = PInteger.INSTANCE.toBytes(length);
             ptr.set(array);
         } catch (SQLException sqe) {
-            new IllegalDataException(new SQLExceptionInfo.Builder(SQLExceptionCode.ILLEGAL_DATA)
-                    .setRootCause(sqe).build().buildException());
+           throw new IllegalDataException(sqe);
         }
 
         return true;

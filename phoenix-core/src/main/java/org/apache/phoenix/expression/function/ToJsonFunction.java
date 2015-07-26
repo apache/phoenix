@@ -28,10 +28,7 @@ import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.json.PhoenixJson;
 import org.apache.phoenix.schema.tuple.Tuple;
-import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PJson;
-import org.apache.phoenix.schema.types.PVarcharArray;
-import org.apache.phoenix.schema.types.PhoenixArray;
+import org.apache.phoenix.schema.types.*;
 import org.apache.phoenix.util.ByteUtil;
 
 import java.io.IOException;
@@ -39,7 +36,7 @@ import java.sql.SQLException;
 import java.util.List;
 
 @BuiltInFunction(name = ToJsonFunction.NAME, args = {
-        @Argument(allowedTypes = { PDataType.class })})
+        @Argument(allowedTypes={PBinary.class, PVarbinary.class})})
 public class ToJsonFunction extends ScalarFunction {
     public static final String NAME = "TO_JSON";
 

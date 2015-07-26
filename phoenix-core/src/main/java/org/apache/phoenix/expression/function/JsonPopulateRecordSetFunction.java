@@ -76,13 +76,9 @@ public class JsonPopulateRecordSetFunction extends ScalarFunction {
             PhoenixArray pa = PArrayDataType.instantiatePhoenixArray(PVarchar.INSTANCE, records);
             byte[] array = PVarcharArray.INSTANCE.toBytes(pa);
             ptr.set(array);
-
-
         } catch (SQLException sqe) {
-            new IllegalDataException(new SQLExceptionInfo.Builder(SQLExceptionCode.ILLEGAL_DATA)
-                    .setRootCause(sqe).build().buildException());
+            throw new IllegalDataException(sqe);
         }
-
         return true;
     }
 

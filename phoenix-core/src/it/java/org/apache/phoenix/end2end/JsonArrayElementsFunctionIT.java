@@ -17,63 +17,105 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-import static org.junit.Assert.*;
-
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.util.Properties;
-
 import org.apache.phoenix.exception.SQLExceptionCode;
-import org.apache.phoenix.expression.function.JsonArrayLengthFunction;
-import org.apache.phoenix.schema.IllegalDataException;
+import org.apache.phoenix.schema.types.PhoenixArray;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 
+import java.sql.*;
+import java.util.Properties;
+
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.junit.Assert.*;
+
 /**
- * End to end test for {@link JsonArrayLengthFunction}.
+ * End to end test for {@link org.apache.phoenix.expression.function.JsonArrayElementsFunction}.
  *
  */
-public class JsonArrayLengthFunctionIT extends BaseHBaseManagedTimeIT {
-
-	@Test
-	public void testJsonArrayLengthWithIntTypeInWhereClause() throws Exception {
-		Connection conn = getConnection();
-		String json = "[1,2,3]";
-		String pk = "valueOne";
-		try {
-			populateJsonTable(conn, json, pk);
-
-			String selectQuery = "SELECT col1 FROM testJson WHERE json_array_length(col1) = 3";
-			PreparedStatement stmt = conn.prepareStatement(selectQuery);
-			ResultSet rs = stmt.executeQuery();
-			assertTrue(rs.next());
-			assertEquals("Json data is not as expected.", json,
-					rs.getString(1));
-			assertFalse(rs.next());
-
-		} finally {
-			conn.close();
-		}
-	}
+public class JsonArrayElementsFunctionIT extends BaseHBaseManagedTimeIT {
 
     @Test
-    public void testJsonArrayLengthWithDoubleType() throws Exception {
+    public void testJsonArrayElementsWithSameType() throws Exception {
         Connection conn = getConnection();
-        String json = "[1.23,2.34,3.56,54.3]";
-        String pk = "valueOne";
+
         try {
+            String json = "[25.343,36.763,37.56,386.63]";
+            String pk = "valueOne";
+
             populateJsonTable(conn, json, pk);
 
-            String selectQuery = "SELECT json_array_length(col1) FROM testJson WHERE pk = 'valueOne'";
+            String selectQuery = "SELECT json_array_elements(col1) FROM testJson WHERE pk = 'valueOne'";
             PreparedStatement stmt = conn.prepareStatement(selectQuery);
             ResultSet rs = stmt.executeQuery();
             assertTrue(rs.next());
-            assertEquals("Json array length is not as expected.", 4,
-                    rs.getInt(1));
+            String[] strArr = new String[4];
+            strArr[0] = "25.343";
+            strArr[1] = "36.763";
+            strArr[2] = "37.56";
+            strArr[3] = "386.63";
+            Array array = conn.createArrayOf("VARCHAR", strArr);
+            PhoenixArray resultArray = (PhoenixArray) rs.getArray(1);
+            assertEquals("Json array elements is not as expected.", resultArray,
+                    array);
+            assertFalse(rs.next());
+
+        } finally {
+            conn.close();
+        }
+    }
+    @Test
+    public void testJsonArrayElementsWithDifferentDataTypes() throws Exception {
+        Connection conn = getConnection();
+
+        try {
+            String json = "[1,36.763,false,\"string\"]";
+            String pk = "valueOne";
+
+            populateJsonTable(conn, json, pk);
+
+            String selectQuery = "SELECT json_array_elements(col1) FROM testJson WHERE pk = 'valueOne'";
+            PreparedStatement stmt = conn.prepareStatement(selectQuery);
+            ResultSet rs = stmt.executeQuery();
+            assertTrue(rs.next());
+            String[] strArr = new String[4];
+            strArr[0] = "1";
+            strArr[1] = "36.763";
+            strArr[2] = "false";
+            strArr[3] = "\"string\"";
+
+            Array array = conn.createArrayOf("VARCHAR", strArr);
+            PhoenixArray resultArray = (PhoenixArray) rs.getArray(1);
+
+            assertEquals("Json array elements is not as expected.", resultArray,
+                    array);
+            assertFalse(rs.next());
+
+        } finally {
+            conn.close();
+        }
+    }
+    @Test
+    public void testJsonArrayElementsWithNestJson() throws Exception {
+        Connection conn = getConnection();
+
+        try {
+            String json = "[1,[1,true,\"string\"]]";
+            String pk = "valueOne";
+
+            populateJsonTable(conn, json, pk);
+
+            String selectQuery = "SELECT json_array_elements(col1) FROM testJson WHERE pk = 'valueOne'";
+            PreparedStatement stmt = conn.prepareStatement(selectQuery);
+            ResultSet rs = stmt.executeQuery();
+            assertTrue(rs.next());
+            String[] strArr = new String[2];
+            strArr[0] = "1";
+            strArr[1] = "[1,true,\"string\"]";
+            Array array = conn.createArrayOf("VARCHAR", strArr);
+            PhoenixArray resultArray = (PhoenixArray) rs.getArray(1);
+            assertEquals("Json array elements is not as expected.", resultArray,
+                    array);
+
             assertFalse(rs.next());
 
         } finally {
@@ -82,69 +124,26 @@ public class JsonArrayLengthFunctionIT extends BaseHBaseManagedTimeIT {
     }
 
     @Test
-    public void testJsonArrayLengthWithDifferentDataTypes()
-            throws Exception {
-        Connection conn = getConnection();
-        String json = "[1,2.3,true,\"f1\",[\"string\",3]]";
-        String pk = "valueOne";
-        try {
-            populateJsonTable(conn, json, pk);
-
-            String selectQuery = "SELECT json_array_length(col1) FROM testJson WHERE pk = 'valueOne'";
-            PreparedStatement stmt = conn.prepareStatement(selectQuery);
-            ResultSet rs = stmt.executeQuery();
-            assertTrue(rs.next());
-            assertEquals("Json array length is not as expected.",
-                    5, rs.getInt(1));
-
-            assertFalse(rs.next());
-
-        } finally {
-            conn.close();
-        }
-    }
-    @Test
-    public void testJsonArrayLengthWithNestedJson() throws Exception {
-        Connection conn = getConnection();
-        String json = "[1,\"string\",false,[1.23,[true,\"ok\"]]]";
-        String pk = "valueOne";
-        try {
-            populateJsonTable(conn, json, pk);
-
-            String selectQuery = "SELECT col1 FROM testJson WHERE json_array_length(col1) = 4";
-            PreparedStatement stmt = conn.prepareStatement(selectQuery);
-            ResultSet rs = stmt.executeQuery();
-            assertTrue(rs.next());
-            assertEquals("Json data read from DB is not as expected.", json,
-                    rs.getString(1));
-            assertFalse(rs.next());
-
-        } finally {
-            conn.close();
-        }
-    }
-    @Test
-    public void testJsonArrayLengthWithInvalidJson() throws Exception {
+    public void testJsonArrayElementsWithInvalidJson() throws Exception {
         Connection conn = getConnection();
         String json = "{\"f1\":1,\"f2\":\"abc\"}";
         String pk = "valueOne";
         try {
             populateJsonTable(conn, json, pk);
 
-            String selectQuery = "SELECT json_array_length(col1) FROM testJson WHERE pk = 'valueOne'";
+            String selectQuery = "SELECT json_array_elements(col1) FROM testJson WHERE pk = 'valueOne'";
 
             try {
                 PreparedStatement stmt = conn.prepareStatement(selectQuery);
                 ResultSet rs = stmt.executeQuery();
                 assertTrue(rs.next());
-                assertEquals("Json array length is not as expected.",
-                        2, rs.getInt(1));
+                rs.getArray(1);
                 fail("The Json Node should be an array!");
             } catch (SQLException sqe) {
                 assertEquals("SQL error code is not as expected.",
                         SQLExceptionCode.JSON_NODE_MISMATCH.getErrorCode(), sqe.getErrorCode());
                 assertEquals("SQL state is not expected.", "22001",
-                         sqe.getSQLState());
+                        sqe.getSQLState());
             }
 
         } finally {
@@ -153,8 +152,7 @@ public class JsonArrayLengthFunctionIT extends BaseHBaseManagedTimeIT {
     }
 
 
-
-	private void populateJsonTable(Connection conn, String json, String pk)
+    private void populateJsonTable(Connection conn, String json, String pk)
 			throws SQLException {
 		String ddl = "CREATE TABLE testJson"
 				+ "  (pk VARCHAR NOT NULL PRIMARY KEY, " + "col1 json)";

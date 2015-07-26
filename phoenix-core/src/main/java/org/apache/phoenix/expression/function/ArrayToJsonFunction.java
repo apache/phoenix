@@ -36,7 +36,7 @@ import java.util.List;
 
 
 @FunctionParseNode.BuiltInFunction(name=ArrayToJsonFunction.NAME,  args={
-        @FunctionParseNode.Argument(allowedTypes={PVarchar.class})} )
+        @FunctionParseNode.Argument(allowedTypes={PBinaryArray.class, PVarbinaryArray.class})})
 public class ArrayToJsonFunction extends ScalarFunction {
     public static final String NAME = "ARRAY_TO_JSON";
 
@@ -57,32 +57,27 @@ public class ArrayToJsonFunction extends ScalarFunction {
         if (ptr.getLength() == 0) {
             return false;
         }
-
-
-        PDataType baseType = PDataType.fromTypeId(arrayExpr.getDataType()
-                .getSqlType()
-                - PDataType.ARRAY_TYPE_BASE);
-        int length = PArrayDataType.getArrayLength(ptr, baseType, arrayExpr.getMaxLength());
-        StringBuilder builder = new StringBuilder("[");
-        ImmutableBytesWritable tmp = new ImmutableBytesWritable();
-        for(int i=1;i<=length;i++){
-            tmp.set(ptr.get());
-            PArrayDataType.positionAtArrayElement(tmp, i - 1,baseType, arrayExpr.getMaxLength());
-            Object re =baseType.toObject(tmp);
-            builder.append(PhoenixJson.dataToJsonValue(baseType, re));
-            if(i != length)
-            builder.append(",");
-        }
-        builder.append("]");
-
         try {
+            PDataType baseType = PDataType.fromTypeId(arrayExpr.getDataType()
+                    .getSqlType()
+                    - PDataType.ARRAY_TYPE_BASE);
+            int length = PArrayDataType.getArrayLength(ptr, baseType, arrayExpr.getMaxLength());
+            StringBuilder builder = new StringBuilder("[");
+            for(int i=1;i<=length;i++){
+                ImmutableBytesWritable tmp = new ImmutableBytesWritable(ptr.get(),ptr.getOffset(),ptr.getLength());
+                PArrayDataType.positionAtArrayElement(tmp, i - 1,baseType, arrayExpr.getMaxLength());
+                Object re = baseType.toObject(tmp.get(),tmp.getOffset(),tmp.getLength());
+                builder.append(PhoenixJson.dataToJsonValue(baseType, re));
+                if(i != length)
+                    builder.append(",");
+            }
+            builder.append("]");
             String str = builder.toString();
             PhoenixJson phoenixJson = PhoenixJson.getInstance(str);
             byte[] json = PJson.INSTANCE.toBytes(phoenixJson);
             ptr.set(json);
         } catch (SQLException sqe) {
-            new IllegalDataException(new SQLExceptionInfo.Builder(SQLExceptionCode.ILLEGAL_DATA)
-                    .setRootCause(sqe).build().buildException());
+            new IllegalDataException(sqe);
         }
         return true;
     }

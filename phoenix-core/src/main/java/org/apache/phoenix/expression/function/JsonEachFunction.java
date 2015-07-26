@@ -25,6 +25,7 @@ import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.schema.json.PhoenixJson;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.*;
+import org.apache.phoenix.util.ByteUtil;
 
 import java.util.List;
 
@@ -55,9 +56,13 @@ public class JsonEachFunction extends ScalarFunction {
                 (PhoenixJson) PJson.INSTANCE.toObject(ptr.get(), ptr.getOffset(),
                         ptr.getLength());
         Object[] elements = phoenixJson.getJsonFields();
-        PhoenixArray pa = PArrayDataType.instantiatePhoenixArray(PVarchar.INSTANCE, elements);
-        byte[] array = PVarcharArray.INSTANCE.toBytes(pa);
-        ptr.set(array);
+        if(elements == null || elements.length == 0){
+            ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
+        }else{
+            PhoenixArray pa = PArrayDataType.instantiatePhoenixArray(PVarchar.INSTANCE, elements);
+            byte[] array = PVarcharArray.INSTANCE.toBytes(pa);
+            ptr.set(array);
+        }
 
         return true;
     }

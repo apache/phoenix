@@ -61,13 +61,16 @@ public class JsonArrayElementsFunction extends ScalarFunction {
                     (PhoenixJson) PJson.INSTANCE.toObject(ptr.get(), ptr.getOffset(),
                             ptr.getLength());
             Object[] elements = phoenixJson.getJsonArrayElements();
-            PhoenixArray pa = PArrayDataType.instantiatePhoenixArray(PVarchar.INSTANCE, elements);
-            byte[] array = PVarcharArray.INSTANCE.toBytes(pa);
-            ptr.set(array);
+            if(elements == null || elements.length == 0){
+                ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
+            }else{
+                PhoenixArray pa = PArrayDataType.instantiatePhoenixArray(PVarchar.INSTANCE, elements);
+                byte[] array = PVarcharArray.INSTANCE.toBytes(pa);
+                ptr.set(array);
+            }
         }
         catch (SQLException sqe) {
-            new IllegalDataException(new SQLExceptionInfo.Builder(SQLExceptionCode.ILLEGAL_DATA)
-                    .setRootCause(sqe).build().buildException());
+            throw new IllegalDataException(sqe);
         }
 
         return true;
