@@ -108,7 +108,8 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
             byteStream = new TrustedByteArrayOutputStream(size + capacity + Bytes.SIZEOF_INT + Bytes.SIZEOF_BYTE
                     + Bytes.SIZEOF_INT);
         } else {
-            int size = arr.getMaxLength() * noOfElements;
+            int elemLength = (arr.getMaxLength() == null ? baseType.getByteSize() : arr.getMaxLength());
+            int size = elemLength * noOfElements;
             // Here the int for noofelements, byte for the version
             byteStream = new TrustedByteArrayOutputStream(size);
         }
@@ -301,8 +302,10 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
             }
             baseType = desiredBaseType;
         } else {
-            pArr = (PhoenixArray)value;
-            pArr = new PhoenixArray(pArr, desiredMaxLength);
+            pArr = (PhoenixArray) value;
+            if (!Objects.equal(maxLength, desiredMaxLength)) {
+                pArr = new PhoenixArray(pArr, desiredMaxLength);
+            }
         }
         ptr.set(toBytes(pArr, baseType, desiredSortOrder, expectedRowKeyOrderOptimizable));
     }
