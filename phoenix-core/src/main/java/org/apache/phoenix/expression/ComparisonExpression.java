@@ -142,7 +142,7 @@ public class ComparisonExpression extends BaseCompoundExpression {
         if (lhsExpr instanceof LiteralExpression) {
             lhsValue = ((LiteralExpression)lhsExpr).getValue();
             if (lhsValue == null) {
-                return LiteralExpression.newConstant(false, PBoolean.INSTANCE, lhsExpr.getDeterminism());
+                return LiteralExpression.newConstant(null, PBoolean.INSTANCE, lhsExpr.getDeterminism());
             }
         }
         Object rhsValue = null;
@@ -150,7 +150,7 @@ public class ComparisonExpression extends BaseCompoundExpression {
         if (rhsExpr instanceof LiteralExpression) {
             rhsValue = ((LiteralExpression)rhsExpr).getValue();
             if (rhsValue == null) {
-                return LiteralExpression.newConstant(false, PBoolean.INSTANCE, rhsExpr.getDeterminism());
+                return LiteralExpression.newConstant(null, PBoolean.INSTANCE, rhsExpr.getDeterminism());
             }
         }
         if (lhsValue != null && rhsValue != null) {

@@ -89,10 +89,10 @@ public class LiteralExpression extends BaseTerminalExpression {
     }
 
     public static boolean isFalse(Expression child) {
-    	if (child!=null) {
-    		return child == BOOLEAN_EXPRESSIONS[child.getDeterminism().ordinal()];
-    	}
-    	return false;
+        if (child!=null) {
+            return child == BOOLEAN_EXPRESSIONS[child.getDeterminism().ordinal()];
+        }
+        return false;
     }
     
     public static boolean isTrue(Expression child) {
@@ -100,6 +100,21 @@ public class LiteralExpression extends BaseTerminalExpression {
     		return child == BOOLEAN_EXPRESSIONS[Determinism.values().length+child.getDeterminism().ordinal()];
     	}
     	return false;
+    }
+
+    public static boolean isBooleanNull(Expression child) {
+    	if (child!=null) {
+    		return child == TYPED_NULL_EXPRESSIONS[PBoolean.INSTANCE.ordinal()+PDataType.values().length*child.getDeterminism().ordinal()];
+    	}
+    	return false;
+    }
+
+    public static boolean isBooleanFalseOrNull(Expression child) {
+        if (child!=null) {
+            return child == BOOLEAN_EXPRESSIONS[child.getDeterminism().ordinal()]
+                    || child == TYPED_NULL_EXPRESSIONS[PBoolean.INSTANCE.ordinal()+PDataType.values().length*child.getDeterminism().ordinal()];
+        }
+        return false;
     }
     
     public static LiteralExpression newConstant(Object value) {

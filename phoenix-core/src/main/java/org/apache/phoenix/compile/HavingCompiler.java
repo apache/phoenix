@@ -54,7 +54,7 @@ public class HavingCompiler {
         if (expression.getDataType() != PBoolean.INSTANCE) {
             throw TypeMismatchException.newException(PBoolean.INSTANCE, expression.getDataType(), expression.toString());
         }
-        if (LiteralExpression.isFalse(expression)) {
+        if (LiteralExpression.isBooleanFalseOrNull(expression)) {
             context.setScanRanges(ScanRanges.NOTHING);
             return null;
         } else if (LiteralExpression.isTrue(expression)) {
