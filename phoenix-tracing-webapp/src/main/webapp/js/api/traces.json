@@ -1,0 +1,80 @@
+[{"trace_id": "477902",
+  "parent_id": "477902",
+  "span_id": "-6019561414720026212",
+  "description": "Creating basic query for [CLIENT 1-CHUNK PARALLEL 1-WAY FULL SCAN OVER SYSTEM.TRACING_STATS, SERVER FILTER BY DESCRIPTION LIKE ' % MY_TABLE1 % ']",
+  "start_time": "1434197442791",
+  "end_time": "1434197442897",
+  "hostname": "pc",
+  "tags.count": "0",
+  "annotations.count": "0"
+},{
+  "trace_id": "8900859193567449732",
+  "parent_id": "8900859193567449732",
+  "span_id": "-4375092793865347936",
+  "description": "Writing mutation batch for table: MY_TABLE1",
+  "start_time": "1434196101623",
+  "end_time": "1434196101784",
+  "hostname": "pc",
+  "tags.count": "0",
+  "annotations.count": "0"
+},{
+  "trace_id": "477902",
+  "parent_id": "477902",
+  "span_id": "3729955271538199350",
+  "description": "Creating basic query for [CLIENT 1-CHUNK PARALLEL 1-WAY POINT LOOKUP ON 1 KEY OVER MY_TABLE1]",
+  "start_time": "1434196184349",
+  "end_time": "1434196184389",
+  "hostname": "pc",
+  "tags.count": "0",
+  "annotations.count": "0"
+}, {
+  "trace_id": "3729955271538199350",
+  "parent_id": "3729955271538199350",
+  "span_id": "-4173841872111114474",
+  "description": "Creating basic query for [CLIENT 1-CHUNK PARALLEL 1-WAY RANGE SCAN OVER SYSTEM.CATALOG [null,null,'MY_TABLE1',not null],SERVER FILTER BY COLUMN_FAMILY IS NULL]",
+  "start_time": "1434196184362",
+  "end_time": "1434196184377",
+  "hostname": "pc",
+  "tags.count": "0",
+  "annotations.count": "0"
+}, {
+  "trace_id": "3729955271538199350",
+  "parent_id": "3729955271538199350",
+  "span_id": "-405452217644768848",
+  "description": "Parallel scanner for table: MY_TABLE1",
+  "start_time": "1434196184377",
+  "end_time": "1434196184388",
+  "hostname": "pc",
+  "tags.count": "0",
+  "annotations.count": "0"
+}, {
+  "trace_id": "-687299143574530739",
+  "parent_id": "-687299143574530739",
+  "span_id": "-4779746097893559478",
+  "description": "Creating basic query for [CLIENT 1-CHUNK PARALLEL 1-WAY RANGE SCAN OVER SYSTEM.CATALOG [null,null,'MY_TABLE1',not null], SERVER FILTER BY COLUMN_FAMILY IS NULL]",
+  "start_time": "1434196132619",
+  "end_time": "1434196132631",
+  "hostname": "pc",
+  "tags.count": "0",
+  "annotations.count": "0"
+}, {
+  "trace_id": "-687299143574530739",
+  "parent_id": "-687299143574530739",
+  "span_id": "-4525280459161844160",
+  "description": "Parallel scanner for table: MY_TABLE1",
+  "start_time": "1434196132632",
+  "end_time": "1434196132647",
+  "hostname": "pc",
+  "tags.count": "0",
+  "annotations.count": "0"
+}, {
+  "trace_id": "477902",
+  "parent_id": "477902",
+  "span_id": "-687299143574530739",
+  "description": "Creating basic query for [CLIENT 1-CHUNK PARALLEL 1-WAY POINT LOOKUP ON 1 KEY OVER MY_TABLE1]",
+  "start_time": "1434196132606",
+  "end_time": "1434196132648",
+  "hostname": "pc",
+  "tags.count": "0",
+  "annotations.count": "0"
+}]
