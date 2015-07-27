@@ -44,6 +44,9 @@ public class AndExpression extends AndOrExpression {
             if (child.getDataType() != PBoolean.INSTANCE) {
                 throw TypeMismatchException.newException(PBoolean.INSTANCE, child.getDataType(), child.toString());
             }
+            if (LiteralExpression.isBooleanNull(child)) {
+                return child;
+            }
             if (LiteralExpression.isFalse(child)) {
                 return child;
             }

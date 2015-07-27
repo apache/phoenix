@@ -235,7 +235,7 @@ public class WhereCompiler {
     private static void setScanFilter(StatementContext context, FilterableStatement statement, Expression whereClause, boolean disambiguateWithFamily, boolean hashJoinOptimization) {
         Scan scan = context.getScan();
 
-        if (LiteralExpression.isFalse(whereClause)) {
+        if (LiteralExpression.isBooleanFalseOrNull(whereClause)) {
             context.setScanRanges(ScanRanges.NOTHING);
         } else if (whereClause != null && !LiteralExpression.isTrue(whereClause) && !hashJoinOptimization) {
             Filter filter = null;
