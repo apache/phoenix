@@ -54,6 +54,7 @@ import com.google.common.collect.Lists;
 
 public class SequenceIT extends BaseClientManagedTimeIT {
     private static final String NEXT_VAL_SQL = "SELECT NEXT VALUE FOR foo.bar FROM SYSTEM.\"SEQUENCE\"";
+    private static final String SELECT_NEXT_VALUE_SQL = "SELECT NEXT VALUE FOR %s FROM SYSTEM.\"SEQUENCE\"";
     private static final long BATCH_SIZE = 3;
    
     private Connection conn;
@@ -1146,6 +1147,38 @@ public class SequenceIT extends BaseClientManagedTimeIT {
         assertEquals("user3", rs.getString("agg_id"));
         assertEquals(1, rs.getLong("metric_val"));
         assertFalse(rs.next());
+    }
+    
+    @Test
+    /**
+     * Test to validate that the bug discovered in PHOENIX-2149 has been fixed. There was an issue
+     * whereby, when closing connections and returning sequences we were not setting the limit
+     * reached flag correctly and this was causing the max value to be ignored as the LIMIT_REACHED_FLAG
+     * value was being unset from true to false.
+     */
+    public void testNextValuesForSequenceClosingConnections() throws Exception {
+
+        // Create Sequence
+        nextConnection();
+        conn.createStatement().execute("CREATE SEQUENCE seqtest.closeconn START WITH 4990 MINVALUE 4990 MAXVALUE 5000 CACHE 10");
+        nextConnection();
+        
+        // Call NEXT VALUE FOR 1 time more than available values in the Sequence. We expected the final time
+        // to throw an error as we will have reached the max value
+        try {
+            long val = 0L;
+            for (int i = 0; i <= 11; i++) {
+                ResultSet rs = conn.createStatement().executeQuery(String.format(SELECT_NEXT_VALUE_SQL, "seqtest.closeconn"));
+                rs.next();
+                val = rs.getLong(1);
+                nextConnection();
+            }
+            fail("Expect to fail as we have arrived at the max sequence value " + val);
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.SEQUENCE_VAL_REACHED_MAX_VALUE.getErrorCode(),
+                e.getErrorCode());
+            assertTrue(e.getNextException() == null);
+        }
     }
 
     private void insertEvent(long id, String userId, long val) throws SQLException {
