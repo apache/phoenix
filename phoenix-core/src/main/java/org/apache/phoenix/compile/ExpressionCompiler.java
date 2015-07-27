@@ -251,6 +251,9 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
             if (child.getDataType() != PBoolean.INSTANCE) {
                 throw TypeMismatchException.newException(PBoolean.INSTANCE, child.getDataType(), child.toString());
             }
+            if (LiteralExpression.isBooleanNull(child)) {
+                return child;
+            }
             if (LiteralExpression.isFalse(child)) {
                 iterator.remove();
             }
