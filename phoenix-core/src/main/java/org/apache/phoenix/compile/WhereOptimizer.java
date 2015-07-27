@@ -120,7 +120,7 @@ public class WhereOptimizer {
             context.setScanRanges(ScanRanges.EVERYTHING);
             return whereClause;
         }
-        if (LiteralExpression.isFalse(whereClause)) {
+        if (LiteralExpression.isBooleanFalseOrNull(whereClause)) {
             context.setScanRanges(ScanRanges.NOTHING);
             return null;
         }
