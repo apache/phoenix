@@ -96,6 +96,7 @@ import org.apache.phoenix.expression.function.StddevSampFunction;
 import org.apache.phoenix.expression.function.StringBasedRegexpReplaceFunction;
 import org.apache.phoenix.expression.function.StringBasedRegexpSplitFunction;
 import org.apache.phoenix.expression.function.StringBasedRegexpSubstrFunction;
+import org.apache.phoenix.expression.function.StringToArrayFunction;
 import org.apache.phoenix.expression.function.SubstrFunction;
 import org.apache.phoenix.expression.function.SumAggregateFunction;
 import org.apache.phoenix.expression.function.TimezoneOffsetFunction;
@@ -251,7 +252,8 @@ public enum ExpressionType {
     PowerFunction(PowerFunction.class),
     ArrayConcatFunction(ArrayConcatFunction.class),
     ArrayFillFunction(ArrayFillFunction.class),
-    ArrayToStringFunction(ArrayToStringFunction.class)
+    ArrayToStringFunction(ArrayToStringFunction.class),
+    StringToArrayFunction(StringToArrayFunction.class)
     ;
 
     ExpressionType(Class<? extends Expression> clazz) {

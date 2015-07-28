@@ -24,6 +24,7 @@ import java.sql.Types;
 import java.text.Format;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.regex.Pattern;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -987,6 +988,26 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
             result.append(element.toString());
         }
         ptr.set(PVarchar.INSTANCE.toBytes(result.toString(), sortOrder));
+        return true;
+    }
+
+    public static boolean stringToArray(ImmutableBytesWritable ptr, String string, String delimiter, String nullString, SortOrder sortOrder) {
+        Pattern pattern = Pattern.compile(Pattern.quote(delimiter));
+        String[] array;
+        if (delimiter.length() != 0) {
+            array = pattern.split(string);
+            if (nullString != null) {
+                for (int i = 0; i < array.length; i++) {
+                    if (array[i].equals(nullString)) {
+                        array[i] = null;
+                    }
+                }
+            }
+        } else {
+            array = string.split("(?!^)");
+        }
+        PhoenixArray phoenixArray = new PhoenixArray(PVarchar.INSTANCE, array);
+        ptr.set(PVarcharArray.INSTANCE.toBytes(phoenixArray, PVarchar.INSTANCE, sortOrder));
         return true;
     }
 
