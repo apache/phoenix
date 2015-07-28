@@ -46,13 +46,15 @@ import java.util.Map;
 public class TraceServlet extends HttpServlet {
 
   protected Connection con;
-
+  protected String DEFAULT_LIMIT = "25";
   protected void doGet(HttpServletRequest request, HttpServletResponse response)
       throws ServletException, IOException {
+    
     String action = request.getParameter("action");
+    String limit = request.getParameter("limit");
     String jsonObject = "{}";
     if ("getall".equals(action)) {
-      jsonObject = getAll();
+      jsonObject = getAll(limit);
     } else {
       jsonObject = "{ key1x: 'value1', key2x: 'value2' }";
     }
@@ -63,14 +65,17 @@ public class TraceServlet extends HttpServlet {
 
   }
 
-  protected String getAll() {
+  protected String getAll(String limit) {
     String json = null;
+    if(limit == null) {
+      limit = DEFAULT_LIMIT;
+    }
     try {
       Class.forName("org.apache.phoenix.jdbc.PhoenixDriver");
       // TO-DO Improve config jdbc:phoenix port and the host
       con = DriverManager.getConnection("jdbc:phoenix:localhost:2181");
       EntityFactory nutrientEntityFactory = new EntityFactory(con,
-          "select * from test");
+          "SELECT * FROM SYSTEM.TRACING_STATS LIMIT "+limit);
       List<Map<String, Object>> nutrients = nutrientEntityFactory
           .findMultiple(new Object[] {});
 
