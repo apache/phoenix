@@ -811,10 +811,10 @@ value_expression returns [ParseNode ret]
     :   i=pre_value_expression { $ret = i; }
     ;
 pre_value_expression returns [ParseNode ret]
-    :   i=add_expression { $ret = i; }  ( SUPERSET su=add_expression { $ret = factory.jsonSuperset(i,su); }
-					| SUBSET sub=add_expression { $ret = factory.jsonSubset(i,sub); }
+    :   i=add_expression { $ret = i; }  ( CONTAIN_WITHIN_LEFT cwl=add_expression { $ret = factory.jsonContainWithinLeft(i,cwl); }
+					| CONTAIN_WITHIN_RIGHT cwr=add_expression { $ret = factory.jsonContainWithinRight(i,cwr); }
 					| QUESTION ques=add_expression { $ret = factory.sSearch(i,ques); }
-					| M_SERRCH_OR mor=add_expression { $ret = factory.mOrSearch(i,mor); }
+					| M_SEARCH_OR mor=add_expression { $ret = factory.mOrSearch(i,mor); }
 					| M_SEARCH_AND mand=add_expression { $ret = factory.mAndSearch(i,mand); } )?
     ;
 
@@ -1188,13 +1188,13 @@ POINT_T
 PATH_T
     : '#''>''>'
     ;
-SUPERSET
+CONTAIN_WITHIN_LEFT
     : '<''@'
     ;
-SUBSET
+CONTAIN_WITHIN_RIGHT
     : '@''>'
     ;
-M_SERRCH_OR
+M_SEARCH_OR
     : '?''|'
     ;
 M_SEARCH_AND

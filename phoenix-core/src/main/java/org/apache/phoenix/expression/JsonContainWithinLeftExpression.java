@@ -31,11 +31,11 @@ import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PJson;
 
 
-public class JsonSupersetExpression extends BaseCompoundExpression{
-	public JsonSupersetExpression(List<Expression> children) {
+public class JsonContainWithinLeftExpression extends BaseCompoundExpression{
+	public JsonContainWithinLeftExpression(List<Expression> children) {
         super(children);
     }
-	public JsonSupersetExpression() {
+	public JsonContainWithinLeftExpression() {
         
     }
 	@Override

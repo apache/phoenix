@@ -29,11 +29,11 @@ import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PJson;
 
-public class JsonSubsetExpression extends BaseCompoundExpression{
-	public JsonSubsetExpression(List<Expression> children) {
+public class JsonContainWithinRightExpression extends BaseCompoundExpression{
+	public JsonContainWithinRightExpression(List<Expression> children) {
         super(children);
     }
-	public JsonSubsetExpression() {  
+	public JsonContainWithinRightExpression() {  
     }
 	@Override
 	public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
@@ -73,10 +73,10 @@ public class JsonSubsetExpression extends BaseCompoundExpression{
 			ptr.set(PDataType.FALSE_BYTES);
 			return true;
 		}
-		Iterator<String> fildnames=pattern.getFieldNames();
-		while(fildnames.hasNext())
+		Iterator<String> fieldnames=pattern.getFieldNames();
+		while(fieldnames.hasNext())
 		{
-			String rhsKey=fildnames.next();
+			String rhsKey=fieldnames.next();
 			if(!value.hasKey(rhsKey)||!value.getValue(rhsKey).getValueAsString().equals(pattern.getValue(rhsKey).getValueAsString())){
 				ptr.set(PDataType.FALSE_BYTES);
 				return true;

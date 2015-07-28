@@ -330,20 +330,20 @@ public abstract class BooleanParseNodeVisitor<T> extends BaseParseNodeVisitor<T>
     }
 
     @Override
-    public boolean visitEnter(JsonSupersetParseNode node) throws SQLException{
+    public boolean visitEnter(JsonContainWithinLeftParseNode node) throws SQLException{
         return enterBooleanNode(node);
     }
     @Override
-    public T visitLeave(JsonSupersetParseNode node, List<T> l) throws SQLException {
+    public T visitLeave(JsonContainWithinLeftParseNode node, List<T> l) throws SQLException {
         return leaveBooleanNode(node, l);
     }
     
     @Override
-    public boolean visitEnter(JsonSubsetParseNode node) throws SQLException{
+    public boolean visitEnter(JsonContainWithinRightParseNode node) throws SQLException{
         return enterBooleanNode(node);
     }
     @Override
-    public T visitLeave(JsonSubsetParseNode node, List<T> l) throws SQLException {
+    public T visitLeave(JsonContainWithinRightParseNode node, List<T> l) throws SQLException {
         return leaveBooleanNode(node, l);
     }
     
@@ -366,11 +366,11 @@ public abstract class BooleanParseNodeVisitor<T> extends BaseParseNodeVisitor<T>
     }
     
     @Override
-    public boolean visitEnter(JsonMultiKeySeatchAndParseNode node) throws SQLException{
+    public boolean visitEnter(JsonMultiKeySearchAndParseNode node) throws SQLException{
         return enterBooleanNode(node);
     }
     @Override
-    public T visitLeave(JsonMultiKeySeatchAndParseNode node, List<T> l) throws SQLException {
+    public T visitLeave(JsonMultiKeySearchAndParseNode node, List<T> l) throws SQLException {
         return leaveNonBooleanNode(node, l);
     }
     @Override

@@ -38,8 +38,8 @@ import org.apache.phoenix.expression.JsonPointAsTextExpression;
 import org.apache.phoenix.expression.JsonPointForArrayAsElementExpression;
 import org.apache.phoenix.expression.JsonPointForArrayAsTextExpression;
 import org.apache.phoenix.expression.JsonSingleKeySearchExpression;
-import org.apache.phoenix.expression.JsonSubsetExpression;
-import org.apache.phoenix.expression.JsonSupersetExpression;
+import org.apache.phoenix.expression.JsonContainWithinRightExpression;
+import org.apache.phoenix.expression.JsonContainWithinLeftExpression;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.LikeExpression;
 import org.apache.phoenix.expression.LiteralExpression;
@@ -237,12 +237,12 @@ public class StatelessTraverseNoExpressionVisitor<E> extends TraverseNoExpressio
 	}
 
 	@Override
-	public E visitLeave(JsonSubsetExpression node, List<E> l) {
+	public E visitLeave(JsonContainWithinRightExpression node, List<E> l) {
 		return null;
 	}
 
 	@Override
-	public E visitLeave(JsonSupersetExpression node, List<E> l) {
+	public E visitLeave(JsonContainWithinLeftExpression node, List<E> l) {
 		return null;
 	}
 

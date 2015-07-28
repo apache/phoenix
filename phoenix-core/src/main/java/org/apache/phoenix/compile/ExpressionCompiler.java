@@ -61,8 +61,8 @@ import org.apache.phoenix.expression.JsonPointAsTextExpression;
 import org.apache.phoenix.expression.JsonPointForArrayAsElementExpression;
 import org.apache.phoenix.expression.JsonPointForArrayAsTextExpression;
 import org.apache.phoenix.expression.JsonSingleKeySearchExpression;
-import org.apache.phoenix.expression.JsonSubsetExpression;
-import org.apache.phoenix.expression.JsonSupersetExpression;
+import org.apache.phoenix.expression.JsonContainWithinRightExpression;
+import org.apache.phoenix.expression.JsonContainWithinLeftExpression;
 import org.apache.phoenix.expression.LikeExpression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.LongAddExpression;
@@ -102,14 +102,14 @@ import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunctionInfo;
 import org.apache.phoenix.parse.InListParseNode;
 import org.apache.phoenix.parse.IsNullParseNode;
 import org.apache.phoenix.parse.JsonMultiKeySearchOrParseNode;
-import org.apache.phoenix.parse.JsonMultiKeySeatchAndParseNode;
+import org.apache.phoenix.parse.JsonMultiKeySearchAndParseNode;
 import org.apache.phoenix.parse.JsonPathAsElementParseNode;
 import org.apache.phoenix.parse.JsonPathAsTextParseNode;
 import org.apache.phoenix.parse.JsonPointAsElementParseNode;
 import org.apache.phoenix.parse.JsonPointAsTextParseNode;
 import org.apache.phoenix.parse.JsonSingleKeySearchParseNode;
-import org.apache.phoenix.parse.JsonSubsetParseNode;
-import org.apache.phoenix.parse.JsonSupersetParseNode;
+import org.apache.phoenix.parse.JsonContainWithinRightParseNode;
+import org.apache.phoenix.parse.JsonContainWithinLeftParseNode;
 import org.apache.phoenix.parse.LikeParseNode;
 import org.apache.phoenix.parse.LikeParseNode.LikeType;
 import org.apache.phoenix.parse.LiteralParseNode;
@@ -1370,12 +1370,12 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     }
     
     @Override
-    public boolean visitEnter(JsonSubsetParseNode node) {
+    public boolean visitEnter(JsonContainWithinRightParseNode node) {
         return true;
     }
     
     @Override
-    public boolean visitEnter(JsonSupersetParseNode node) {
+    public boolean visitEnter(JsonContainWithinLeftParseNode node) {
         return true;
     }
     
@@ -1385,7 +1385,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     }
     
     @Override
-    public boolean visitEnter(JsonMultiKeySeatchAndParseNode node) {
+    public boolean visitEnter(JsonMultiKeySearchAndParseNode node) {
         return true;
     }
     
@@ -1423,7 +1423,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     }
     
     @Override
-    public Expression visitLeave(JsonSubsetParseNode node, List<Expression> children) throws SQLException {
+    public Expression visitLeave(JsonContainWithinRightParseNode node, List<Expression> children) throws SQLException {
     	if(!(PJson.INSTANCE.isComparableTo(children.get(0).getDataType()))){
     		throw TypeMismatchException.newException(children.get(0).getDataType(), children.get(1).getDataType());
        	}
@@ -1431,12 +1431,12 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
       		 throw TypeMismatchException.newException(children.get(0).getDataType(), children.get(1).getDataType());
        	}
        	LiteralExpression rhs=(LiteralExpression)children.get(1);
-        Expression expression = new JsonSubsetExpression(children);
+        Expression expression = new JsonContainWithinRightExpression(children);
         return wrapGroupByExpression(expression);
     }
     
     @Override
-    public Expression visitLeave(JsonSupersetParseNode node, List<Expression> children) throws SQLException {
+    public Expression visitLeave(JsonContainWithinLeftParseNode node, List<Expression> children) throws SQLException {
     	if(!(PJson.INSTANCE.isComparableTo(children.get(0).getDataType()))){
     		throw TypeMismatchException.newException(children.get(0).getDataType(), children.get(1).getDataType());
        	}
@@ -1444,7 +1444,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
    		 throw TypeMismatchException.newException(children.get(0).getDataType(), children.get(1).getDataType());
     	}
     	LiteralExpression rhs=(LiteralExpression)children.get(1);
-        Expression expression = new JsonSupersetExpression(children);
+        Expression expression = new JsonContainWithinLeftExpression(children);
         return wrapGroupByExpression(expression);
     }
     
@@ -1461,7 +1461,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     }
     
     @Override
-    public Expression visitLeave(JsonMultiKeySeatchAndParseNode node, List<Expression> children) throws SQLException {
+    public Expression visitLeave(JsonMultiKeySearchAndParseNode node, List<Expression> children) throws SQLException {
     	if(!(PJson.INSTANCE.isComparableTo(children.get(0).getDataType()))){
     		throw TypeMismatchException.newException(children.get(0).getDataType(), children.get(1).getDataType());
        	}

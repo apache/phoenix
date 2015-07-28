@@ -39,8 +39,8 @@ import org.apache.phoenix.expression.JsonPointAsTextExpression;
 import org.apache.phoenix.expression.JsonPointForArrayAsElementExpression;
 import org.apache.phoenix.expression.JsonPointForArrayAsTextExpression;
 import org.apache.phoenix.expression.JsonSingleKeySearchExpression;
-import org.apache.phoenix.expression.JsonSubsetExpression;
-import org.apache.phoenix.expression.JsonSupersetExpression;
+import org.apache.phoenix.expression.JsonContainWithinRightExpression;
+import org.apache.phoenix.expression.JsonContainWithinLeftExpression;
 import org.apache.phoenix.expression.LikeExpression;
 import org.apache.phoenix.expression.ModulusExpression;
 import org.apache.phoenix.expression.MultiplyExpression;
@@ -215,12 +215,12 @@ public abstract class BaseExpressionVisitor<E> implements ExpressionVisitor<E> {
     }
 	
     @Override
-	public Iterator<Expression> visitEnter(JsonSubsetExpression jsonSubsetExpression){
+	public Iterator<Expression> visitEnter(JsonContainWithinRightExpression jsonContainWithinRightExpression){
     	return null;
     }
 	
     @Override
-	public Iterator<Expression> visitEnter(JsonSupersetExpression jsonSupersetExpression){
+	public Iterator<Expression> visitEnter(JsonContainWithinLeftExpression jsonContainWithinLeftExpression){
     	return null;
     }
 

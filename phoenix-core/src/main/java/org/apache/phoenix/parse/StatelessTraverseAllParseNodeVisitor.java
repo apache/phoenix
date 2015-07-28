@@ -168,13 +168,13 @@ public class StatelessTraverseAllParseNodeVisitor extends TraverseAllParseNodeVi
 	}
 
 	@Override
-	public Void visitLeave(JsonSupersetParseNode node, List<Void> l)
+	public Void visitLeave(JsonContainWithinLeftParseNode node, List<Void> l)
 			throws SQLException {
 		return null;
 	}
 
 	@Override
-	public Void visitLeave(JsonSubsetParseNode node, List<Void> l)
+	public Void visitLeave(JsonContainWithinRightParseNode node, List<Void> l)
 			throws SQLException {
 		return null;
 	}
@@ -192,7 +192,7 @@ public class StatelessTraverseAllParseNodeVisitor extends TraverseAllParseNodeVi
 	}
 
 	@Override
-	public Void visitLeave(JsonMultiKeySeatchAndParseNode node, List<Void> l)
+	public Void visitLeave(JsonMultiKeySearchAndParseNode node, List<Void> l)
 			throws SQLException {
 		return null;
 	}
