@@ -17,11 +17,14 @@
 package org.apache.phoenix.tracingwebapp.http;
 
 import java.io.IOException;
+import java.io.PrintWriter;
 
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+
+import org.codehaus.jackson.map.ObjectMapper;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -29,50 +32,64 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
+import java.util.List;
+import java.util.Map;
 
 /**
  *
  * Server to show trace information
  *
  *
- * @since 4.5.5
+ * @since 4.4.1
  */
 
 public class TraceServlet extends HttpServlet {
+
+  protected Connection con;
+
   protected void doGet(HttpServletRequest request, HttpServletResponse response)
       throws ServletException, IOException {
-    response.setContentType("text/html");
-    connectMe();
-    response.setStatus(HttpServletResponse.SC_OK);
-    response.getWriter().println("<h1>Trace Servlet</h1>");
-    response.getWriter().println("session=" + request.getSession(true).getId());
+    String action = request.getParameter("action");
+    String jsonObject = "{}";
+    if ("getall".equals(action)) {
+      jsonObject = getAll();
+    } else {
+      jsonObject = "{ key1x: 'value1', key2x: 'value2' }";
+    }
+    response.setContentType("application/json");
+    PrintWriter out = response.getWriter();
+    out.print(jsonObject);
+    out.flush();
 
   }
 
-  public void connectMe() {
-    Statement stmt = null;
-    ResultSet rset = null;
+  protected String getAll() {
+    String json = null;
     try {
       Class.forName("org.apache.phoenix.jdbc.PhoenixDriver");
-      //TO-DO Improve config jdbc:phoenix port and the host
-      Connection con = DriverManager
-          .getConnection("jdbc:phoenix:localhost:2181");
-      stmt = con.createStatement();
-      //TO-DO remove sample tabel test when reading trace
-      stmt.executeUpdate("CREATE TABLE IF NOT EXISTS test (mykey integer not null primary key, mycolumn varchar)");
-      stmt.executeUpdate("upsert into test values (1,'Sample Data')");
-      stmt.executeUpdate("upsert into test values (2,'Just sample')");
-      con.commit();
-      //TO-DO Here it will read select * from SYSTEM.TRACING_STATS;
-      PreparedStatement statement = con.prepareStatement("select * from test");
-      rset = statement.executeQuery();
-      while (rset.next()) {
-         System.out.println(rset.getString("mycolumn"));
+      // TO-DO Improve config jdbc:phoenix port and the host
+      con = DriverManager.getConnection("jdbc:phoenix:localhost:2181");
+      EntityFactory nutrientEntityFactory = new EntityFactory(con,
+          "select * from test");
+      List<Map<String, Object>> nutrients = nutrientEntityFactory
+          .findMultiple(new Object[] {});
+
+      ObjectMapper mapper = new ObjectMapper();
+
+      json = mapper.writeValueAsString(nutrients);
+    //TO-DO Exception handle needed with error msg
+    } catch (Exception e) {
+      // throw new ServletException(e);
+    } finally {
+      if (con != null) {
+        try {
+          con.close();
+        } catch (SQLException e) {
+          // throw new ServletException(e);
+        }
       }
-      statement.close();
-      con.close();
-    } catch (Exception ex) {
-      System.out.println(ex);
     }
+    return json;
   }
+
 }
