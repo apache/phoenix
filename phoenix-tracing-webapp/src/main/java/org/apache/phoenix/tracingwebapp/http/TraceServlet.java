@@ -53,22 +53,20 @@ public class TraceServlet extends HttpServlet {
     Statement stmt = null;
     ResultSet rset = null;
     try {
-      System.out.println("Testingxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx");
       Class.forName("org.apache.phoenix.jdbc.PhoenixDriver");
       Connection con = DriverManager
           .getConnection("jdbc:phoenix:localhost:2181");
       stmt = con.createStatement();
-
-      stmt.executeUpdate("create table test (mykey integer not null primary key, mycolumn varchar)");
-      stmt.executeUpdate("upsert into test values (1,'Hello')");
-      stmt.executeUpdate("upsert into test values (2,'World!')");
+      //TO-DO remove sample tabel test when reading trace
+      stmt.executeUpdate("CREATE TABLE IF NOT EXISTS test (mykey integer not null primary key, mycolumn varchar)");
+      stmt.executeUpdate("upsert into test values (1,'Sample Data')");
+      stmt.executeUpdate("upsert into test values (2,'Just sample')");
       con.commit();
-      System.out.println("ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc");
+      //TO-DO Here it will read select * from SYSTEM.TRACING_STATS;
       PreparedStatement statement = con.prepareStatement("select * from test");
       rset = statement.executeQuery();
       while (rset.next()) {
          System.out.println(rset.getString("mycolumn"));
-         System.out.println("iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii");
       }
       statement.close();
       con.close();
