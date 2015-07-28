@@ -54,6 +54,7 @@ public class TraceServlet extends HttpServlet {
     ResultSet rset = null;
     try {
       Class.forName("org.apache.phoenix.jdbc.PhoenixDriver");
+      //TO-DO Improve config jdbc:phoenix port and the host
       Connection con = DriverManager
           .getConnection("jdbc:phoenix:localhost:2181");
       stmt = con.createStatement();
