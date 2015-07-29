@@ -31,35 +31,25 @@ import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PJson;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
 
 
 public class JsonPointAsElementExpression extends BaseCompoundExpression{
 
-	private static final Logger logger = LoggerFactory.getLogger(JsonPointAsElementExpression.class);
 	
 	public JsonPointAsElementExpression(List<Expression> children)
 	{
 		super(children);
 	}
-	public JsonPointAsElementExpression()
-	{
-		
+	public JsonPointAsElementExpression(){
 	}
 	@Override
 	public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
 		if (!children.get(0).evaluate(tuple, ptr)) {
-            if (logger.isDebugEnabled()) {
-                logger.debug("-> left value is null");
-            }
             return false;
         }
 		PhoenixJson source =  (PhoenixJson)PJson.INSTANCE.toObject(ptr, children.get(0).getSortOrder());
 		if (!children.get(1).evaluate(tuple, ptr)) {
-            if (logger.isDebugEnabled()) {
-                logger.debug("-> right value is null");
-            }
             return false;
         }
 		String key = (String) PVarchar.INSTANCE.toObject(ptr, children.get(1).getSortOrder());

@@ -24,9 +24,9 @@ import java.util.List;
 
 import org.apache.phoenix.compile.ColumnResolver;
 
-public class JsonSubsetParseNode extends BinaryParseNode {
+public class JsonContainWithinRightParseNode extends BinaryParseNode {
 
-	JsonSubsetParseNode(ParseNode lhs, ParseNode rhs) {
+	JsonContainWithinRightParseNode(ParseNode lhs, ParseNode rhs) {
 		super(lhs, rhs);
 		// TODO Auto-generated constructor stub
 	}
@@ -44,7 +44,7 @@ public class JsonSubsetParseNode extends BinaryParseNode {
 	public void toSQL(ColumnResolver resolver, StringBuilder buf) {
 		List<ParseNode> children = getChildren();
         children.get(0).toSQL(resolver, buf);
-        buf.append(" <@ ");
+        buf.append(" @> ");
         children.get(1).toSQL(resolver, buf);
 	}
 

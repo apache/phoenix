@@ -634,20 +634,20 @@ public class ParseNodeRewriter extends TraverseAllParseNodeVisitor<ParseNode> {
 	        });
 	}
 	@Override
-	public ParseNode visitLeave(JsonSubsetParseNode node,List<ParseNode> nodes) throws SQLException {
+	public ParseNode visitLeave(JsonContainWithinRightParseNode node,List<ParseNode> nodes) throws SQLException {
 		 return leaveCompoundNode(node, nodes, new CompoundNodeFactory() {
 	            @Override
 	            public ParseNode createNode(List<ParseNode> children) {
-	                return NODE_FACTORY.jsonSubset(children.get(0),children.get(1));
+	                return NODE_FACTORY.jsonContainWithinRight(children.get(0),children.get(1));
 	            }
 	        });
 	}
 	@Override
-	public ParseNode visitLeave(JsonSupersetParseNode  node,List<ParseNode> nodes) throws SQLException {
+	public ParseNode visitLeave(JsonContainWithinLeftParseNode  node,List<ParseNode> nodes) throws SQLException {
 		 return leaveCompoundNode(node, nodes, new CompoundNodeFactory() {
 	            @Override
 	            public ParseNode createNode(List<ParseNode> children) {
-	                return NODE_FACTORY.jsonSuperset(children.get(0),children.get(1));
+	                return NODE_FACTORY.jsonContainWithinLeft(children.get(0),children.get(1));
 	            }
 	        });
 	}
@@ -661,7 +661,7 @@ public class ParseNodeRewriter extends TraverseAllParseNodeVisitor<ParseNode> {
 	        });
 	}
 	@Override
-	public ParseNode visitLeave(JsonMultiKeySeatchAndParseNode  node,List<ParseNode> nodes) throws SQLException {
+	public ParseNode visitLeave(JsonMultiKeySearchAndParseNode  node,List<ParseNode> nodes) throws SQLException {
 		 return leaveCompoundNode(node, nodes, new CompoundNodeFactory() {
 	            @Override
 	            public ParseNode createNode(List<ParseNode> children) {

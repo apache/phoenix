@@ -237,12 +237,12 @@ public class ParseNodeFactory {
         return new JsonPointAsTextParseNode(lhs,rhs);
     }
     
-    public JsonSupersetParseNode jsonSuperset(ParseNode lhs,ParseNode rhs) {
-        return new JsonSupersetParseNode(lhs,rhs);
+    public JsonContainWithinLeftParseNode jsonContainWithinLeft(ParseNode lhs,ParseNode rhs) {
+        return new JsonContainWithinLeftParseNode(lhs,rhs);
     }
     
-    public JsonSubsetParseNode jsonSubset(ParseNode lhs,ParseNode rhs) {
-        return new JsonSubsetParseNode(lhs,rhs);
+    public JsonContainWithinRightParseNode jsonContainWithinRight(ParseNode lhs,ParseNode rhs) {
+        return new JsonContainWithinRightParseNode(lhs,rhs);
     }
     
     public JsonSingleKeySearchParseNode sSearch(ParseNode lhs,ParseNode rhs) {
@@ -253,8 +253,8 @@ public class ParseNodeFactory {
         return new JsonMultiKeySearchOrParseNode(lhs,rhs);
     }
     
-    public JsonMultiKeySeatchAndParseNode mAndSearch(ParseNode lhs,ParseNode rhs) {
-        return new JsonMultiKeySeatchAndParseNode(lhs,rhs);
+    public JsonMultiKeySearchAndParseNode mAndSearch(ParseNode lhs,ParseNode rhs) {
+        return new JsonMultiKeySearchAndParseNode(lhs,rhs);
     }
     
     public FamilyWildcardParseNode family(String familyName){

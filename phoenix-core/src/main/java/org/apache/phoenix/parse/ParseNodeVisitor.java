@@ -133,11 +133,11 @@ public interface ParseNodeVisitor<E> {
     public boolean visitEnter(JsonPointAsTextParseNode node) throws SQLException;
     public E visitLeave(JsonPointAsTextParseNode node, List<E> l) throws SQLException;
 
-    public boolean visitEnter(JsonSupersetParseNode node) throws SQLException;
-    public E visitLeave(JsonSupersetParseNode node, List<E> l) throws SQLException;
+    public boolean visitEnter(JsonContainWithinLeftParseNode node) throws SQLException;
+    public E visitLeave(JsonContainWithinLeftParseNode node, List<E> l) throws SQLException;
     
-    public boolean visitEnter(JsonSubsetParseNode node) throws SQLException;
-    public E visitLeave( JsonSubsetParseNode node, List<E> l) throws SQLException;
+    public boolean visitEnter(JsonContainWithinRightParseNode node) throws SQLException;
+    public E visitLeave(JsonContainWithinRightParseNode node, List<E> l) throws SQLException;
     
     public boolean visitEnter(JsonSingleKeySearchParseNode node) throws SQLException;
     public E visitLeave( JsonSingleKeySearchParseNode node, List<E> l) throws SQLException;
@@ -145,8 +145,8 @@ public interface ParseNodeVisitor<E> {
     public boolean visitEnter(JsonMultiKeySearchOrParseNode node) throws SQLException;
     public E visitLeave( JsonMultiKeySearchOrParseNode node, List<E> l) throws SQLException;
     
-    public boolean visitEnter(JsonMultiKeySeatchAndParseNode node) throws SQLException;
-    public E visitLeave( JsonMultiKeySeatchAndParseNode node, List<E> l) throws SQLException;
+    public boolean visitEnter(JsonMultiKeySearchAndParseNode node) throws SQLException;
+    public E visitLeave( JsonMultiKeySearchAndParseNode node, List<E> l) throws SQLException;
    
     public boolean visitEnter(JsonPathAsTextParseNode node) throws SQLException;
     public E visitLeave(JsonPathAsTextParseNode node, List<E> l) throws SQLException;

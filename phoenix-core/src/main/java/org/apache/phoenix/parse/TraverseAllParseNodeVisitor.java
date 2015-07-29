@@ -243,12 +243,12 @@ public abstract class TraverseAllParseNodeVisitor<T> extends BaseParseNodeVisito
         return true;
     }
     @Override
-    public boolean visitEnter(JsonSupersetParseNode node) throws SQLException {
+    public boolean visitEnter(JsonContainWithinLeftParseNode node) throws SQLException {
         enterParseNode(node);
         return true;
     }
     @Override
-    public boolean visitEnter(JsonSubsetParseNode node) throws SQLException {
+    public boolean visitEnter(JsonContainWithinRightParseNode node) throws SQLException {
         enterParseNode(node);
         return true;
     }
@@ -258,7 +258,7 @@ public abstract class TraverseAllParseNodeVisitor<T> extends BaseParseNodeVisito
         return true;
     }
     @Override
-    public boolean visitEnter(JsonMultiKeySeatchAndParseNode node) throws SQLException {
+    public boolean visitEnter(JsonMultiKeySearchAndParseNode node) throws SQLException {
         enterParseNode(node);
         return true;
     }

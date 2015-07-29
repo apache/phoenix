@@ -18,7 +18,6 @@
 
 package org.apache.phoenix.expression;
 
-
 import java.util.Iterator;
 import java.util.List;
 
@@ -30,17 +29,15 @@ import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PJson;
 
-
-public class JsonSupersetExpression extends BaseCompoundExpression{
-	public JsonSupersetExpression(List<Expression> children) {
+public class JsonContainWithinRightExpression extends BaseCompoundExpression{
+	public JsonContainWithinRightExpression(List<Expression> children) {
         super(children);
     }
-	public JsonSupersetExpression() {
-        
+	public JsonContainWithinRightExpression() {  
     }
 	@Override
 	public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-		if(children.get(1).getDataType()!=PJson.INSTANCE)
+		if(!(PJson.INSTANCE.isComparableTo(children.get(1).getDataType())))
 		{
 			ptr.set(PDataType.FALSE_BYTES);
 			return true;
@@ -49,7 +46,7 @@ public class JsonSupersetExpression extends BaseCompoundExpression{
             return false;
         }
 		PhoenixJson pattern = (PhoenixJson) PJson.INSTANCE.toObject(ptr);
-		if(children.get(0).getDataType()!=PJson.INSTANCE)
+		if(!(PJson.INSTANCE.isComparableTo(children.get(0).getDataType())))
 		{
 			ptr.set(PDataType.FALSE_BYTES);
 			return true;
@@ -64,19 +61,19 @@ public class JsonSupersetExpression extends BaseCompoundExpression{
 			return true;
 		}
 		//empty set
-		if(value.getNodeSize()==0){
+		if(pattern.getNodeSize()==0){
 			ptr.set(PDataType.TRUE_BYTES);
 			return true;
 		}
-		if(pattern.getNodeSize()<value.getNodeSize()){
+		if(pattern.getNodeSize()>value.getNodeSize()){
 			ptr.set(PDataType.FALSE_BYTES);
 			return true;
 		}
-		Iterator<String> fildnames=value.getFieldNames();
+		Iterator<String> fildnames=pattern.getFieldNames();
 		while(fildnames.hasNext())
 		{
-			String lhsKey=fildnames.next();
-			if(!pattern.hasKey(lhsKey)||!pattern.getValue(lhsKey).getValueAsString().equals(value.getValue(lhsKey).getValueAsString())){
+			String rhsKey=fildnames.next();
+			if(!value.hasKey(rhsKey)||!value.getValue(rhsKey).getValueAsString().equals(pattern.getValue(rhsKey).getValueAsString())){
 				ptr.set(PDataType.FALSE_BYTES);
 				return true;
 			}
@@ -87,12 +84,12 @@ public class JsonSupersetExpression extends BaseCompoundExpression{
 	@Override
 	public <T> T accept(ExpressionVisitor<T> visitor) {
 		 
-		List<T> l = acceptChildren(visitor, visitor.visitEnter(this));
-        T t = visitor.visitLeave(this, l);
-        if (t == null) {
-            t = visitor.defaultReturn(this, l);
-        }
-        return t;
+		 List<T> l = acceptChildren(visitor, visitor.visitEnter(this));
+	        T t = visitor.visitLeave(this, l);
+	        if (t == null) {
+	            t = visitor.defaultReturn(this, l);
+	        }
+	        return t;
 	}
 	@Override
 	public PDataType getDataType() {

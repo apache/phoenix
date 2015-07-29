@@ -325,22 +325,22 @@ abstract public class UnsupportedAllParseNodeVisitor<E> extends BaseParseNodeVis
     }
     
     @Override
-    public boolean visitEnter(JsonSupersetParseNode node) throws SQLException {
+    public boolean visitEnter(JsonContainWithinLeftParseNode node) throws SQLException {
         throw new SQLFeatureNotSupportedException(node.toString());
     }
     
     @Override
-    public E visitLeave(JsonSupersetParseNode node, List<E> l) throws SQLException {
+    public E visitLeave(JsonContainWithinLeftParseNode node, List<E> l) throws SQLException {
         throw new SQLFeatureNotSupportedException(node.toString());
     }
     
     @Override
-    public boolean visitEnter(JsonSubsetParseNode node) throws SQLException {
+    public boolean visitEnter(JsonContainWithinRightParseNode node) throws SQLException {
         throw new SQLFeatureNotSupportedException(node.toString());
     }
     
     @Override
-    public E visitLeave(JsonSubsetParseNode node, List<E> l) throws SQLException {
+    public E visitLeave(JsonContainWithinRightParseNode node, List<E> l) throws SQLException {
         throw new SQLFeatureNotSupportedException(node.toString());
     }
     
@@ -365,12 +365,12 @@ abstract public class UnsupportedAllParseNodeVisitor<E> extends BaseParseNodeVis
     }
     
     @Override
-    public boolean visitEnter(JsonMultiKeySeatchAndParseNode node) throws SQLException {
+    public boolean visitEnter(JsonMultiKeySearchAndParseNode node) throws SQLException {
         throw new SQLFeatureNotSupportedException(node.toString());
     }
     
     @Override
-    public E visitLeave(JsonMultiKeySeatchAndParseNode node, List<E> l) throws SQLException {
+    public E visitLeave(JsonMultiKeySearchAndParseNode node, List<E> l) throws SQLException {
         throw new SQLFeatureNotSupportedException(node.toString());
     }
 }

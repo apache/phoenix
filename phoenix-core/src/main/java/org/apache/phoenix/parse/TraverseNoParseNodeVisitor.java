@@ -313,11 +313,11 @@ public abstract class TraverseNoParseNodeVisitor<T> extends BaseParseNodeVisitor
         return false;
     }
     @Override
-    public boolean visitEnter(JsonSubsetParseNode node) throws SQLException {
+    public boolean visitEnter(JsonContainWithinRightParseNode node) throws SQLException {
         return false;
     }
     @Override
-    public boolean visitEnter(JsonSupersetParseNode node) throws SQLException {
+    public boolean visitEnter(JsonContainWithinLeftParseNode node) throws SQLException {
         return false;
     }
     @Override
@@ -325,7 +325,7 @@ public abstract class TraverseNoParseNodeVisitor<T> extends BaseParseNodeVisitor
         return false;
     }
     @Override
-    public boolean visitEnter(JsonMultiKeySeatchAndParseNode node) throws SQLException {
+    public boolean visitEnter(JsonMultiKeySearchAndParseNode node) throws SQLException {
         return false;
     }
     @Override
@@ -337,11 +337,11 @@ public abstract class TraverseNoParseNodeVisitor<T> extends BaseParseNodeVisitor
         return null;
     }
     @Override
-    public T visitLeave(JsonSubsetParseNode node, List<T> l) throws SQLException {
+    public T visitLeave(JsonContainWithinRightParseNode node, List<T> l) throws SQLException {
         return null;
     }
     @Override
-    public T visitLeave(JsonSupersetParseNode node, List<T> l) throws SQLException {
+    public T visitLeave(JsonContainWithinLeftParseNode node, List<T> l) throws SQLException {
         return null;
     }
     @Override
@@ -349,7 +349,7 @@ public abstract class TraverseNoParseNodeVisitor<T> extends BaseParseNodeVisitor
         return null;
     }
     @Override
-    public T visitLeave(JsonMultiKeySeatchAndParseNode node, List<T> l) throws SQLException {
+    public T visitLeave(JsonMultiKeySearchAndParseNode node, List<T> l) throws SQLException {
         return null;
     }
     @Override
