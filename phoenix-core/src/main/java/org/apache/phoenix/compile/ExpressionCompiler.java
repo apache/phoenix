@@ -1411,6 +1411,11 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     
     @Override
     public Expression visitLeave(JsonSingleKeySearchParseNode node, List<Expression> children) throws SQLException {
+        ParseNode rhsNode = node.getChildren().get(1);
+        Expression lhs = children.get(0);
+        if (rhsNode instanceof BindParseNode) {
+              context.getBindManager().addParamMetaData((BindParseNode)rhsNode, lhs);
+        }
     	if(!(PJson.INSTANCE.isComparableTo(children.get(0).getDataType()))){
     		throw TypeMismatchException.newException(children.get(0).getDataType(), children.get(1).getDataType());
        	}
@@ -1423,6 +1428,16 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     
     @Override
     public Expression visitLeave(JsonContainWithinRightParseNode node, List<Expression> children) throws SQLException {
+    	ParseNode lhsNode = node.getChildren().get(0);
+    	ParseNode rhsNode = node.getChildren().get(1);
+    	Expression lhs = children.get(0);
+    	Expression rhs = children.get(1);
+    	if (lhsNode instanceof BindParseNode) {
+    		context.getBindManager().addParamMetaData((BindParseNode)lhsNode, rhs);
+    	}
+    	if (rhsNode instanceof BindParseNode) {
+    		context.getBindManager().addParamMetaData((BindParseNode)rhsNode, lhs);
+    	}
     	if(!(PJson.INSTANCE.isComparableTo(children.get(0).getDataType()))){
     		throw TypeMismatchException.newException(children.get(0).getDataType(), children.get(1).getDataType());
        	}
@@ -1435,6 +1450,16 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     
     @Override
     public Expression visitLeave(JsonContainWithinLeftParseNode node, List<Expression> children) throws SQLException {
+    	ParseNode lhsNode = node.getChildren().get(0);
+    	ParseNode rhsNode = node.getChildren().get(1);
+    	Expression lhs = children.get(0);
+    	Expression rhs = children.get(1);
+    	if (lhsNode instanceof BindParseNode) {
+    		context.getBindManager().addParamMetaData((BindParseNode)lhsNode, rhs);
+    	}
+    	if (rhsNode instanceof BindParseNode) {
+    		context.getBindManager().addParamMetaData((BindParseNode)rhsNode, lhs);
+    	}
     	if(!(PJson.INSTANCE.isComparableTo(children.get(0).getDataType()))){
     		throw TypeMismatchException.newException(children.get(0).getDataType(), children.get(1).getDataType());
        	}
@@ -1495,16 +1520,12 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     
     @Override
     public Expression visitLeave(JsonPointAsTextParseNode node,List <Expression> children)throws SQLException{
-    	 ParseNode lhsNode = node.getChildren().get(0);
          ParseNode rhsNode = node.getChildren().get(1);
          Expression lhs = children.get(0);
          Expression rhs = children.get(1);
          if ( !(rhs.getDataType().isCoercibleTo(PVarchar.INSTANCE)||rhs.getDataType().isCoercibleTo(PDecimal.INSTANCE))&&
                  !(lhs.getDataType()==PJson.INSTANCE)) {
              throw TypeMismatchException.newException(lhs.getDataType(), rhs.getDataType(), node.toString());
-         }
-         if (lhsNode instanceof BindParseNode) {
-             context.getBindManager().addParamMetaData((BindParseNode)lhsNode, rhs);
          }
          if (rhsNode instanceof BindParseNode) {
              context.getBindManager().addParamMetaData((BindParseNode)rhsNode, lhs);
@@ -1516,16 +1537,12 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     
     @Override
     public Expression visitLeave(JsonPointAsElementParseNode node, List <Expression> children) throws SQLException {
-    	ParseNode lhsNode = node.getChildren().get(0);
         ParseNode rhsNode = node.getChildren().get(1);
         Expression lhs = children.get(0);
         Expression rhs = children.get(1);
         if ( !(rhs.getDataType().isCoercibleTo(PVarchar.INSTANCE)||rhs.getDataType().isCoercibleTo(PDecimal.INSTANCE))&&
                 !(lhs.getDataType()==PJson.INSTANCE)) {
             throw TypeMismatchException.newException(lhs.getDataType(), rhs.getDataType(), node.toString());
-        }
-        if (lhsNode instanceof BindParseNode) {
-            context.getBindManager().addParamMetaData((BindParseNode)lhsNode, rhs);
         }
         if (rhsNode instanceof BindParseNode) {
             context.getBindManager().addParamMetaData((BindParseNode)rhsNode, lhs);

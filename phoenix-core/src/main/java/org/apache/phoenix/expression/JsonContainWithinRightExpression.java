@@ -37,20 +37,10 @@ public class JsonContainWithinRightExpression extends BaseCompoundExpression{
     }
 	@Override
 	public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-		if(!(PJson.INSTANCE.isComparableTo(children.get(1).getDataType())))
-		{
-			ptr.set(PDataType.FALSE_BYTES);
-			return true;
-		}
 		if (!children.get(1).evaluate(tuple, ptr)) {
             return false;
         }
 		PhoenixJson pattern = (PhoenixJson) PJson.INSTANCE.toObject(ptr);
-		if(!(PJson.INSTANCE.isComparableTo(children.get(0).getDataType())))
-		{
-			ptr.set(PDataType.FALSE_BYTES);
-			return true;
-		}
 		if (!children.get(0).evaluate(tuple, ptr)) {
 	        return false;
 	    }

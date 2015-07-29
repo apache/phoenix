@@ -28,7 +28,6 @@ import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PJson;
 import org.apache.phoenix.schema.types.PVarbinary;
-import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.schema.types.PVarcharArray;
 import org.apache.phoenix.schema.types.PhoenixArray;
 

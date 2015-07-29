@@ -18,9 +18,6 @@
 
 package org.apache.phoenix.expression;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -35,24 +32,25 @@ import org.apache.phoenix.schema.types.PVarchar;
 
 
 public class JsonPointAsElementExpression extends BaseCompoundExpression{
-
 	
 	public JsonPointAsElementExpression(List<Expression> children)
 	{
 		super(children);
 	}
+	
 	public JsonPointAsElementExpression(){
 	}
+
 	@Override
 	public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
 		if (!children.get(0).evaluate(tuple, ptr)) {
             return false;
         }
-		PhoenixJson source =  (PhoenixJson)PJson.INSTANCE.toObject(ptr, children.get(0).getSortOrder());
+		PhoenixJson source =  (PhoenixJson)PJson.INSTANCE.toObject(ptr);
 		if (!children.get(1).evaluate(tuple, ptr)) {
             return false;
         }
-		String key = (String) PVarchar.INSTANCE.toObject(ptr, children.get(1).getSortOrder());
+		String key = (String) PVarchar.INSTANCE.toObject(ptr);
 		PhoenixJson jsonValue=source.getValue(key);
 		if(jsonValue!=null)
 		{
@@ -63,27 +61,17 @@ public class JsonPointAsElementExpression extends BaseCompoundExpression{
 			
 	}
 
-	 @Override
-	    public final <T> T accept(ExpressionVisitor<T> visitor) {
-	        List<T> l = acceptChildren(visitor, visitor.visitEnter(this));
-	        T t = visitor.visitLeave(this, l);
-	        if (t == null) {
-	            t = visitor.defaultReturn(this, l);
-	        }
-	        return t;
-	    }
-	    @Override
-	    public void readFields(DataInput input) throws IOException {
-	        super.readFields(input);
-	    }
-
-	    @Override
-	    public void write(DataOutput output) throws IOException {
-	        super.write(output);
-	    }
-	    
-		@Override
-		public PDataType getDataType() {
-			return PVarbinary.INSTANCE;
+	@Override
+	public final <T> T accept(ExpressionVisitor<T> visitor) {
+		List<T> l = acceptChildren(visitor, visitor.visitEnter(this));
+		T t = visitor.visitLeave(this, l);
+		if (t == null) {
+			t = visitor.defaultReturn(this, l);
 		}
+		return t;
+	}
+	@Override
+	public PDataType getDataType() {
+		return PVarbinary.INSTANCE;
+	}
 }

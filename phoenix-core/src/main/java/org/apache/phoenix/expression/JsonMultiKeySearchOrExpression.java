@@ -18,7 +18,6 @@
 
 package org.apache.phoenix.expression;
 
-import java.io.IOException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -43,22 +42,22 @@ public class JsonMultiKeySearchOrExpression extends BaseCompoundExpression{
             return false;
         }
 		PhoenixArray pattern =(PhoenixArray)PVarcharArray.INSTANCE.toObject(ptr);
-		if(children.get(0).getDataType()!=PJson.INSTANCE)
-		{
-			ptr.set(PDataType.FALSE_BYTES);
-			return true;
-		}
 		if (!children.get(0).evaluate(tuple, ptr)) {
 	        return false;
 	    }
 		PhoenixJson value = (PhoenixJson) PJson.INSTANCE.toObject(ptr);
-			for(int i=0;i<pattern.getDimensions();i++){
-				if(value.hasKey((String)pattern.getElement(i)))
-						{
-							ptr.set(PDataType.TRUE_BYTES);
-							return true;
-						}
+		//null value
+		if(value==null){
+			ptr.set(PDataType.FALSE_BYTES);
+			return true;
+		}
+		for(int i=0;i<pattern.getDimensions();i++){
+			if(value.hasKey((String)pattern.getElement(i)))
+			{
+				ptr.set(PDataType.TRUE_BYTES);
+				return true;
 			}
+		}
 		ptr.set(PDataType.FALSE_BYTES);
         return true;
 	}
