@@ -29,12 +29,13 @@ import org.apache.phoenix.schema.json.PhoenixJson;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PJson;
+import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
-public class JsonPointAsElementExpression extends BaseJSONExpression{
+public class JsonPointAsElementExpression extends BaseCompoundExpression{
 
 	private static final Logger logger = LoggerFactory.getLogger(JsonPointAsElementExpression.class);
 	
@@ -46,7 +47,6 @@ public class JsonPointAsElementExpression extends BaseJSONExpression{
 	{
 		
 	}
-	private static PDataType defaultType=PJson.INSTANCE;
 	@Override
 	public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
 		if (!children.get(0).evaluate(tuple, ptr)) {
@@ -66,7 +66,6 @@ public class JsonPointAsElementExpression extends BaseJSONExpression{
 		PhoenixJson jsonValue=source.getValue(key);
 		if(jsonValue!=null)
 		{
-			defaultType=jsonValue.getValueAsPDataType();
 			ptr.set(jsonValue.valueWrapToBytes());
 			return true;
 		}
@@ -95,10 +94,6 @@ public class JsonPointAsElementExpression extends BaseJSONExpression{
 	    
 		@Override
 		public PDataType getDataType() {
-			return PJson.INSTANCE;
-		}
-		@Override
-		public PDataType getRealDataType(){
-			 return defaultType;
+			return PVarbinary.INSTANCE;
 		}
 }

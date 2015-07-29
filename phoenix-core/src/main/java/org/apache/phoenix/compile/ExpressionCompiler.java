@@ -33,7 +33,6 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.AndExpression;
 import org.apache.phoenix.expression.ArrayConstructorExpression;
-import org.apache.phoenix.expression.BaseJSONExpression;
 import org.apache.phoenix.expression.ByteBasedLikeExpression;
 import org.apache.phoenix.expression.CaseExpression;
 import org.apache.phoenix.expression.CoerceExpression;
@@ -224,12 +223,12 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         Expression lhsExpr = children.get(0);
         Expression rhsExpr = children.get(1);
         PDataType dataTypeOfLHSExpr = lhsExpr.getDataType();
-        if (!(lhsExpr instanceof BaseJSONExpression)&& dataTypeOfLHSExpr != null && !dataTypeOfLHSExpr.isEqualitySupported()) {
+        if (dataTypeOfLHSExpr != null && !dataTypeOfLHSExpr.isEqualitySupported()) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.NON_EQUALITY_COMPARISON)
                     .setMessage(" for type " + dataTypeOfLHSExpr).build().buildException();
         }
         PDataType dataTypeOfRHSExpr = rhsExpr.getDataType();
-        if (!(rhsExpr instanceof BaseJSONExpression)&&dataTypeOfRHSExpr != null && !dataTypeOfRHSExpr.isEqualitySupported()) {
+        if (dataTypeOfRHSExpr != null && !dataTypeOfRHSExpr.isEqualitySupported()) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.NON_EQUALITY_COMPARISON)
                     .setMessage(" for type " + dataTypeOfRHSExpr).build().buildException();
         }
@@ -513,11 +512,11 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                 !rhs.getDataType().isCoercibleTo(lhs.getDataType())) {
             throw TypeMismatchException.newException(lhs.getDataType(), rhs.getDataType(), node.toString());
         }
-        if (!(lhs instanceof BaseJSONExpression)&&!lhs.getDataType().isEqualitySupported()) {
+        if (!lhs.getDataType().isEqualitySupported()) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.NON_EQUALITY_COMPARISON)
                     .setMessage(" for type " + lhs.getDataType()).build().buildException();
         }
-        if (!(rhs instanceof BaseJSONExpression)&&!rhs.getDataType().isEqualitySupported()) {
+        if (!rhs.getDataType().isEqualitySupported()) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.NON_EQUALITY_COMPARISON)
                     .setMessage(" for type " + rhs.getDataType()).build().buildException();
         }
@@ -1477,14 +1476,9 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     	if(!(PJson.INSTANCE.isComparableTo(children.get(0).getDataType()))){
     		throw TypeMismatchException.newException(children.get(0).getDataType(), children.get(1).getDataType());
        	}
-    	if(!(PVarchar.INSTANCE.isComparableTo(children.get(1).getDataType()))){
-    		 throw TypeMismatchException.newException(children.get(0).getDataType(), children.get(1).getDataType());
-    	}
-    	LiteralExpression rhs=(LiteralExpression)children.get(1);
-    	String v=(String)rhs.getValue();
-    	if(!v.startsWith("{")||!v.endsWith("}")){
-    		throw new SQLExceptionInfo.Builder(SQLExceptionCode.JSON_PATH_ERROR).build().buildException();
-    	}
+    	if(children.get(1).getDataType()!=PVarcharArray.INSTANCE){
+      		 throw TypeMismatchException.newException(children.get(0).getDataType(), children.get(1).getDataType());
+       	}
         Expression expression = new JsonPathAsTextExpression(children);
         return wrapGroupByExpression(expression);
     }
@@ -1494,14 +1488,9 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     	if(!(PJson.INSTANCE.isComparableTo(children.get(0).getDataType()))){
     		throw TypeMismatchException.newException(children.get(0).getDataType(), children.get(1).getDataType());
        	}
-    	if(!(PVarchar.INSTANCE.isComparableTo(children.get(1).getDataType()))){
-    		 throw TypeMismatchException.newException(children.get(0).getDataType(), children.get(1).getDataType());
-    	}
-    	LiteralExpression rhs=(LiteralExpression)children.get(1);
-    	String v=(String)rhs.getValue();
-    	if(!v.startsWith("{")||!v.endsWith("}")){
-    		throw new SQLExceptionInfo.Builder(SQLExceptionCode.JSON_PATH_ERROR).build().buildException();
-    	}
+    	if(children.get(1).getDataType()!=PVarcharArray.INSTANCE){
+      		 throw TypeMismatchException.newException(children.get(0).getDataType(), children.get(1).getDataType());
+       	}
         Expression expression = new JsonPathAsElementExpression(children);
         return wrapGroupByExpression(expression);
     }

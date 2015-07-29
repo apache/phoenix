@@ -40,7 +40,7 @@ public class JSONOperationT extends BaseHBaseManagedTimeIT{
 				",\"k6\":{\"nestk1\":\"nestval\",\"nestk2\":77,\"nestk3\":2.1,\"nestk4\":[9,8.4,\"nestarrayval\"]}}";
 	@Test
     public void testJsonPointAsElementForTypeInteger() throws Exception {
-        String selectQuery = "SELECT col1 FROM testJson WHERE col1 -> 'k3' = 2";
+        String selectQuery = "SELECT col1 FROM testJson WHERE CAST (col1 -> 'k3' AS INTEGER) = 2";
         String pk = "valueOne";
         Connection conn = getConnection();
         try {
@@ -60,7 +60,7 @@ public class JSONOperationT extends BaseHBaseManagedTimeIT{
     }
 	@Test
     public void testJsonPointAsElementForTypeFloat() throws Exception {
-        String selectQuery = "SELECT col1 FROM testJson WHERE col1 -> 'k4' = 2.5";
+        String selectQuery = "SELECT col1 FROM testJson WHERE CAST (col1 -> 'k4' AS DOUBLE) = 2.5";
         String pk = "valueOne";
         Connection conn = getConnection();
         try {
@@ -80,7 +80,7 @@ public class JSONOperationT extends BaseHBaseManagedTimeIT{
     }
 	@Test
     public void testJsonPointAsElementForTypeVarchar() throws Exception {
-        String selectQuery = "SELECT col1 FROM testJson WHERE col1 -> 'k1' LIKE 'val'";
+        String selectQuery = "SELECT col1 FROM testJson WHERE CAST (col1 -> 'k1' AS VARCHAR) LIKE 'val'";
         String pk = "valueOne";
         Connection conn = getConnection();
         try {
@@ -120,7 +120,7 @@ public class JSONOperationT extends BaseHBaseManagedTimeIT{
     }
 	@Test
     public void testJsonPathAsElement() throws Exception {
-        String selectQuery = "SELECT col1 FROM testJson WHERE col1 #> '{k6,nestk4,1}' = 8.4";
+        String selectQuery = "SELECT col1 FROM testJson WHERE CAST( col1 #> ARRAY['k6','nestk4','1'] AS DOUBLE) = 8.4";
         String pk = "valueOne";
         Connection conn = getConnection();
         try {
@@ -140,7 +140,7 @@ public class JSONOperationT extends BaseHBaseManagedTimeIT{
     }
 	@Test
     public void testJsonPathAsText() throws Exception {
-        String selectQuery = "SELECT col1 FROM testJson WHERE col1 #>> '{k6,nestk4,0}' LIKE '9'";
+        String selectQuery = "SELECT col1 FROM testJson WHERE col1 #>> ARRAY['k6','nestk4','0'] LIKE '9'";
         String pk = "valueOne";
         Connection conn = getConnection();
         try {

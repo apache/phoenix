@@ -29,10 +29,11 @@ import org.apache.phoenix.schema.json.PhoenixJson;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PJson;
+import org.apache.phoenix.schema.types.PVarbinary;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class JsonPointForArrayAsElementExpression extends BaseJSONExpression{
+public class JsonPointForArrayAsElementExpression extends BaseCompoundExpression{
 
 	private static final Logger logger = LoggerFactory.getLogger(JsonPointForArrayAsElementExpression.class);
 	
@@ -92,11 +93,6 @@ public class JsonPointForArrayAsElementExpression extends BaseJSONExpression{
 	    
 		@Override
 		public PDataType getDataType() {
-			return PJson.INSTANCE;
-		}
-		
-		@Override
-		public PDataType getRealDataType(){
-			 return defaultType;
+			return PVarbinary.INSTANCE;
 		}
 }

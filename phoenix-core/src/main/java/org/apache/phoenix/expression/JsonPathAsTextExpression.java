@@ -28,9 +28,11 @@ import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PJson;
 import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.schema.types.PVarcharArray;
+import org.apache.phoenix.schema.types.PhoenixArray;
 
 
-public class JsonPathAsTextExpression  extends BaseJSONExpression{
+public class JsonPathAsTextExpression  extends BaseCompoundExpression{
 	public JsonPathAsTextExpression(List<Expression> children) {
         super(children);
     }
@@ -41,13 +43,17 @@ public class JsonPathAsTextExpression  extends BaseJSONExpression{
 		if (!children.get(1).evaluate(tuple, ptr)) {
             return false;
         }
-		String[] pattern =decodePath((String) PVarchar.INSTANCE.toObject(ptr));
+		PhoenixArray pattern =(PhoenixArray)PVarcharArray.INSTANCE.toObject(ptr);
 		if (!children.get(0).evaluate(tuple, ptr)) {
 	        return false;
 	    }
 		PhoenixJson value = (PhoenixJson) PJson.INSTANCE.toObject(ptr, children.get(0).getSortOrder());
+		if(value==null){
+			ptr.set(PDataType.FALSE_BYTES);
+			return true;
+		}
 		try{
-				PhoenixJson jsonValue=value.getPhoenixJson(pattern);
+				PhoenixJson jsonValue=value.getPhoenixJson((String[])pattern.getArray());
 				ptr.set(jsonValue.toBytes());
 				return true;
 		}catch(SQLException e)
@@ -55,11 +61,6 @@ public class JsonPathAsTextExpression  extends BaseJSONExpression{
 			return false;
 		}
 		
-	}
-	private String[] decodePath(String path)
-	{
-		String data=path.substring(1, path.length()-1);
-		return data.split(",");
 	}
 	@Override
 	public <T> T accept(ExpressionVisitor<T> visitor) 
@@ -73,10 +74,6 @@ public class JsonPathAsTextExpression  extends BaseJSONExpression{
 	}
 	@Override
 	public PDataType getDataType() {
-		 return PVarchar.INSTANCE;
-	}
-	@Override
-	public PDataType getRealDataType(){
 		 return PVarchar.INSTANCE;
 	}
 }

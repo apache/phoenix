@@ -45,17 +45,20 @@ public class JsonSingleKeySearchExpression extends BaseCompoundExpression {
             return false;
         }
 		String pattern = (String) PVarchar.INSTANCE.toObject(ptr);
-		if(children.get(0) instanceof BaseJSONExpression){
-			if(((BaseJSONExpression)children.get(0)).getRealDataType()!=PJson.INSTANCE)
-			{
-				ptr.set(PDataType.FALSE_BYTES);
-				return true;
-			}
+		if(children.get(0).getDataType()!=PJson.INSTANCE)
+		{
+			ptr.set(PDataType.FALSE_BYTES);
+			return true;
 		}
 		if (!children.get(0).evaluate(tuple, ptr)) {
 	        return false;
 	    }
-		PhoenixJson value = (PhoenixJson) PJson.INSTANCE.toObject(ptr, children.get(0).getSortOrder());
+		PhoenixJson value = (PhoenixJson) PJson.INSTANCE.toObject(ptr);
+		//null value
+		if(value==null){
+			ptr.set(PDataType.FALSE_BYTES);
+			return true;
+		}
 		ptr.set(value.getValue(pattern)!=null? PDataType.TRUE_BYTES : PDataType.FALSE_BYTES);
 		return true;
 	}

@@ -37,30 +37,26 @@ public class JsonSubsetExpression extends BaseCompoundExpression{
     }
 	@Override
 	public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-		if(children.get(1) instanceof BaseJSONExpression){
-			if(((BaseJSONExpression)children.get(1)).getRealDataType()!=PJson.INSTANCE)
-			{
-				ptr.set(PDataType.FALSE_BYTES);
-				return true;
-			}
+		if(children.get(1).getDataType()!=PJson.INSTANCE)
+		{
+			ptr.set(PDataType.FALSE_BYTES);
+			return true;
 		}
 		if (!children.get(1).evaluate(tuple, ptr)) {
             return false;
         }
-		PhoenixJson pattern = (PhoenixJson) PJson.INSTANCE.toObject(ptr, children.get(1).getSortOrder());
-		if(children.get(0) instanceof BaseJSONExpression){
-			if(((BaseJSONExpression)children.get(0)).getRealDataType()!=PJson.INSTANCE)
-			{
-				ptr.set(PDataType.FALSE_BYTES);
-				return true;
-			}
+		PhoenixJson pattern = (PhoenixJson) PJson.INSTANCE.toObject(ptr);
+		if(children.get(0).getDataType()!=PJson.INSTANCE)
+		{
+			ptr.set(PDataType.FALSE_BYTES);
+			return true;
 		}
 		if (!children.get(0).evaluate(tuple, ptr)) {
 	        return false;
 	    }
-		PhoenixJson value = (PhoenixJson) PJson.INSTANCE.toObject(ptr, children.get(0).getSortOrder());
+		PhoenixJson value = (PhoenixJson) PJson.INSTANCE.toObject(ptr);
 		//null value
-		if(value==null){
+		if(pattern==null||value==null){
 			ptr.set(PDataType.FALSE_BYTES);
 			return true;
 		}

@@ -46,12 +46,10 @@ public class JsonMultiKeySearchAndExpression extends BaseCompoundExpression{
             return false;
         }
 		PhoenixArray pattern =(PhoenixArray)PVarcharArray.INSTANCE.toObject(ptr);
-		if(children.get(0) instanceof BaseJSONExpression){
-			if(((BaseJSONExpression)children.get(0)).getRealDataType()!=PJson.INSTANCE)
-			{
-				ptr.set(PDataType.FALSE_BYTES);
-				return true;
-			}
+		if(children.get(0).getDataType()!=PJson.INSTANCE)
+		{
+			ptr.set(PDataType.FALSE_BYTES);
+			return true;
 		}
 		if (!children.get(0).evaluate(tuple, ptr)) {
 	        return false;

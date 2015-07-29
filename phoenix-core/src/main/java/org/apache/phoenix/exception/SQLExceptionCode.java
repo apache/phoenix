@@ -87,7 +87,6 @@ public enum SQLExceptionCode {
     AMBIGUOUS_JOIN_CONDITION(217, "22017", "Amibiguous or non-equi join condition specified. Consider using table list with where clause."),
     CONSTRAINT_VIOLATION(218, "22018", "Constraint violatioin."),
     INVALID_JSON_DATA(219, "22000", "Invalid json data."),
-    JSON_PATH_ERROR(220, "22000", "JSON path format error."),
     
     /**
      * Constraint Violation (errorcode 03, sqlstate 23)

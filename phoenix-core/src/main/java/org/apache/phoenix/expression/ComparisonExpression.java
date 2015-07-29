@@ -129,12 +129,9 @@ public class ComparisonExpression extends BaseCompoundExpression {
                 lhsExpr = new RowValueConstructorExpression(Collections.singletonList(lhsExpr), lhsExpr.isStateless());
             }
             children = Arrays.asList(lhsExpr, rhsExpr);
-        } else if(lhsExprDataType != null && rhsExprDataType != null  && !(lhsExpr instanceof BaseJSONExpression) && !lhsExprDataType.isComparableTo(rhsExprDataType)) {
+        } else if(lhsExprDataType != null && rhsExprDataType != null && !lhsExprDataType.isComparableTo(rhsExprDataType)) {
             throw TypeMismatchException.newException(lhsExprDataType, rhsExprDataType,
                 toString(op, children));
-        }
-        if(lhsExpr instanceof BaseJSONExpression){
-        	return new ComparisonExpression(children, op);
         }
         Determinism determinism =  lhsExpr.getDeterminism().combine(rhsExpr.getDeterminism());
         
@@ -324,13 +321,6 @@ public class ComparisonExpression extends BaseCompoundExpression {
         int rhsLength = ptr.getLength();
         PDataType rhsDataType = children.get(1).getDataType();
         SortOrder rhsSortOrder = children.get(1).getSortOrder();   
-        if(children.get(0) instanceof BaseJSONExpression && ((BaseJSONExpression)children.get(0)).getRealDataType() != null){
-        	lhsDataType=((BaseJSONExpression)children.get(0)).getRealDataType();
-        	if(!(lhsDataType.isComparableTo(rhsDataType))){
-        		ptr.set(PDataType.FALSE_BYTES);
-        		return true;
-        	}
-        }
         if (rhsDataType == PChar.INSTANCE) {
             rhsLength = StringUtil.getUnpaddedCharLength(rhsBytes, rhsOffset, rhsLength, rhsSortOrder);
         }

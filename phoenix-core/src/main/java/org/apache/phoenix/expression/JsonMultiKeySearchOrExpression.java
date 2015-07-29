@@ -43,17 +43,15 @@ public class JsonMultiKeySearchOrExpression extends BaseCompoundExpression{
             return false;
         }
 		PhoenixArray pattern =(PhoenixArray)PVarcharArray.INSTANCE.toObject(ptr);
-		if(children.get(0) instanceof BaseJSONExpression){
-			if(((BaseJSONExpression)children.get(0)).getRealDataType()!=PJson.INSTANCE)
-			{
-				ptr.set(PDataType.FALSE_BYTES);
-				return true;
-			}
+		if(children.get(0).getDataType()!=PJson.INSTANCE)
+		{
+			ptr.set(PDataType.FALSE_BYTES);
+			return true;
 		}
 		if (!children.get(0).evaluate(tuple, ptr)) {
 	        return false;
 	    }
-		PhoenixJson value = (PhoenixJson) PJson.INSTANCE.toObject(ptr, children.get(0).getSortOrder());
+		PhoenixJson value = (PhoenixJson) PJson.INSTANCE.toObject(ptr);
 			for(int i=0;i<pattern.getDimensions();i++){
 				if(value.hasKey((String)pattern.getElement(i)))
 						{

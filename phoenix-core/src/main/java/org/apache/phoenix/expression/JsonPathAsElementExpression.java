@@ -27,11 +27,13 @@ import org.apache.phoenix.schema.json.PhoenixJson;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PJson;
+import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.schema.types.PVarcharArray;
+import org.apache.phoenix.schema.types.PhoenixArray;
 
 
-public class JsonPathAsElementExpression extends BaseJSONExpression{
-	private PDataType datatype=null;
+public class JsonPathAsElementExpression extends BaseCompoundExpression{
 	public JsonPathAsElementExpression(List<Expression> children) {
         super(children);
     }
@@ -42,25 +44,23 @@ public class JsonPathAsElementExpression extends BaseJSONExpression{
 		if (!children.get(1).evaluate(tuple, ptr)) {
             return false;
         }
-		String[] pattern =decodePath((String)PVarchar.INSTANCE.toObject(ptr));
+		PhoenixArray pattern =(PhoenixArray)PVarcharArray.INSTANCE.toObject(ptr);
 		if (!children.get(0).evaluate(tuple, ptr)) {
 	        return false;
 	    }
 		PhoenixJson value = (PhoenixJson) PJson.INSTANCE.toObject(ptr);
+		if(value==null){
+			ptr.set(PDataType.FALSE_BYTES);
+			return true;
+		}
 		try{
-				PhoenixJson jsonValue=value.getPhoenixJson(pattern);
+				PhoenixJson jsonValue=value.getPhoenixJson((String[])pattern.getArray());
 				ptr.set(jsonValue.valueWrapToBytes());
-				datatype=jsonValue.getValueAsPDataType();
 				return true;
 		}catch(SQLException e)
 		{
 			return false;
 		}
-	}
-	private String[] decodePath(String path)
-	{
-		String data=path.substring(1, path.length()-1);
-		return data.split(",");
 	}
 	@Override
 	public <T> T accept(ExpressionVisitor<T> visitor) 
@@ -76,10 +76,6 @@ public class JsonPathAsElementExpression extends BaseJSONExpression{
 	
 	@Override
 	public PDataType getDataType() {
-		 return PJson.INSTANCE;
-	}
-	@Override
-	public PDataType getRealDataType(){
-		 return datatype;
+		 return PVarbinary.INSTANCE;
 	}
 }
