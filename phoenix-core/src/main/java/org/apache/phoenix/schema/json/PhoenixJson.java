@@ -255,44 +255,12 @@ public class PhoenixJson implements Comparable<PhoenixJson> {
     	// out of array index
     	return null; 
     }
-    
-    // this method is used to type check
-     public PDataType getValueAsPDataType()
-     {
-    	 PDataType valueDataType=PJson.INSTANCE;
-    	 if(rootNode.isValueNode())
-     	{
-     		if(rootNode.isBoolean())
-     		{
-     			valueDataType=PBoolean.INSTANCE;
-     		}
-     		else if(rootNode.isInt() || rootNode.isIntegralNumber())
-     		{
-     			valueDataType=PInteger.INSTANCE;
-     		}
-     		else if(rootNode.isLong())
-     		{
-     			valueDataType=PLong.INSTANCE;
-     		}
-     		//JSON didn't have float type
-     		else if(rootNode.isDouble() || rootNode.isFloatingPointNumber())
-     		{
-     			valueDataType=PDouble.INSTANCE;
-     		}
-     		else if(rootNode.isTextual())
-     		{
-     			valueDataType=PVarchar.INSTANCE;
-     		}
-     	}
-     	return valueDataType;
-     }
- 
-     /*
+  
+     /**
       * those methods are to get values from JSON key/value or JSON array
       *  Be used in expression method -- evaluate()
       *     Boolean Integer Long  Double String
-      */
-     
+     **/  
      public byte[] valueWrapToBytes()
      {
     	 if(rootNode.isValueNode())
@@ -367,7 +335,7 @@ public class PhoenixJson implements Comparable<PhoenixJson> {
 	 * this is method for getting size of Json pair in a node
 	 * 
 	 * @return all FieldName in a node
-	 */
+	*/
 	public int getNodeSize()
 	{
 		return rootNode.size();
