@@ -1,0 +1,58 @@
+<div class="jumbotron">
+  <h1>Search</h1>
+</div>
+
+<div class="page-header">
+
+  <!--To-Add for main.CSS-->
+  <div ng-controller="SearchTraceCtrl">
+    <pre>Start Date is: <em>{{dt | date:'fullDate' }}</em>
+End Date is: <em>{{edt | date:'fullDate' }}</em>
+SQL Statment is: <em>{{sqlQuery}}</em> <em><b>{{tracingStatement}}</b></em>
+    </pre>
+
+    <div class="row">
+      <div class="col-md-3">
+        <p>Start Date: </p>
+      </div>
+      <div class="col-md-3">
+        <p class="input-group">
+          <input type="date" class="form-control" datepicker-popup ng-model="dt" is-open="opened"
+          min-date="minDate" max-date="maxDate" datepicker-options="dateOptions"
+          date-disabled="disabled(date, mode)" ng-required="true" close-text="Close"
+          />
+          <span class="input-group-btn">
+                <button type="button" class="btn btn-default" ng-click="open($event)"><i class="fa fa-calendar"></i></button>
+              </span>
+        </p>
+      </div>
+
+    <div class="col-md-3">
+      <p>End Date: </p>
+    </div>
+    <div class="col-md-3">
+      <p class="input-group">
+        <input type="date" class="form-control" datepicker-popup ng-model="edt" is-open="opened"
+        min-date="minDate" max-date="maxDate" datepicker-options="dateOptions"
+        date-disabled="disabled(date, mode)" ng-required="true" close-text="Close"
+        />
+        <span class="input-group-btn">
+                <button type="button" class="btn btn-default" ng-click="open($event)"><i class="fa fa-calendar"></i></button>
+              </span>
+      </p>
+    </div>
+  </div>
+  <!--SQL uery mapping-->
+    <div class="row">
+      <div class="col-md-3">
+      <p>SQL Query: </p>
+        </div>
+         <div class="col-md-9">
+      <p><input type="text" class="form-control" ng-model="sqlQuery"/></p>
+        </div>
+      </div> <!-- /row -->
+    <button type="button" class="btn btn-default" ng-click="search(sqlQuery)"><i class="fa fa-search"></i> Search</button>
+  <hr />
+
+</div>
+</div>

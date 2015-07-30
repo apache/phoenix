@@ -1,0 +1,21 @@
+<div class="jumbotron">
+  <h1>{{page.title}}</h1>
+</div>
+
+<div class="panel panel-default">
+  <div class="panel-heading">Trace Picker</div>
+  <div class="panel-body">
+    <div class="col-xs-2">
+      <label class="btn btn-primary" ng-click="addItemToTimeLine('pieChart')">Add Trace</label>
+    </div>
+    <div class="col-xs-2">
+      <select class="form-control" ng-model="myItemID"
+      ng-options="line.c[0].v for line in chartObject.data.rows"></select>
+    </div>
+    <div class="col-xs-4">
+      <label class="btn btn-primary" ng-click="clearId()">Clear Trace</label>
+      <label class="btn btn-primary" ng-click="clear()">Clear Last Trace</label>
+    </div>
+  </div>
+</div>
+<div google-chart chart="chartObject" style="height: 400px;"></div>

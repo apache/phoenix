@@ -1,0 +1,28 @@
+<div class="jumbotron">
+  <h1>{{page.title}}</h1>
+</div>
+
+<div ng-controller="AccordionDemoCtrl">
+ <accordion close-others="oneAtATime">
+    <accordion-group is-open="status.isFirstOpen" is-disabled="status.isFirstDisabled" >
+     <accordion-heading>
+     Controller Panel
+     <i class="pull-right glyphicon" ng-class="{'glyphicon-chevron-down': status.open, 'glyphicon-chevron-right': !status.open}"></i>
+     </accordion-heading>
+      <div class="col-md-4">
+      	<label>Select the Trace Distribution Category</label>
+        <select class="form-control" ng-model="myDistributeType" ng-options="distributeType.name for distributeType in distributeTypes"></select>
+      </div>
+      <div class="col-md-4">
+        <label>Chart Type</label><br>
+        <div class="btn-group">
+          <label class="btn btn-primary" ng-model="checkModel.left" ng-click="setChartType('pieChart')">Pie</label>
+          <label class="btn btn-primary" ng-model="checkModel.middle" ng-click="setChartType('cumulativeLineChart')">Line</label>
+          <label class="btn btn-primary" ng-model="checkModel.right" ng-click="setChartType('discreteBarChart')">Bar</label>
+          <label class="btn btn-primary" ng-model="checkModel.left" ng-click="setChartType('stackedAreaChart')">Area</label>
+        </div>
+      </div>
+    </accordion-group>
+</accordion>
+</div>
+<nvd3 options="options" data="data"></nvd3>

@@ -1,0 +1,25 @@
+ <!-- Main jumbotron for a primary marketing message or call to action -->
+      <div class="jumbotron">
+        <h1>Phoenix Tracing List</h1>       
+      </div>
+
+
+      <div class="page-header">
+<table class="table table-striped">
+
+			<thead>
+			<tr>          
+			  <th>Parent ID</th>
+			  <th>Span ID</th>
+			  <th>Description</th>
+			</tr>
+		  </thead>
+		  <tbody>
+			<tr ng-repeat="trace in traces">			  
+			  <td>{{trace.parent_id}}</td>
+			  <td>{{trace.span_id}}</td>
+			  <td>{{trace.description}}</td>
+			</tr>        
+		  </tbody>
+		</table>
+</div>
