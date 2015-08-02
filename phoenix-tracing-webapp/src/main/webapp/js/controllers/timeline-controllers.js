@@ -5,8 +5,8 @@ TimeLineCtrl.controller('TraceTimeLineCtrl', function($scope, $http) {
   $scope.page = {
     title: 'Timeline for Trace'
   };
-  console.log(timeLine);
-  $scope.chartObject = timeLine;
+  
+  
   $scope.clear = function() {
     var nextid = $scope.chartObject.data.rows.length;
     $scope.chartObject.data.rows.splice(nextid - 1, 1);
@@ -25,7 +25,7 @@ TimeLineCtrl.controller('TraceTimeLineCtrl', function($scope, $http) {
 
   $scope.trace = {};
   $scope.addItemToTimeLine = function() {
-    $http.get('../trace?action=getall&limit=10').
+    $http.get('../trace?action=getall&limit=1').
     success(function(data, status, headers, config) {
       $scope.trace = data[0];
       var nextid = $scope.chartObject.data.rows.length;
@@ -33,7 +33,7 @@ TimeLineCtrl.controller('TraceTimeLineCtrl', function($scope, $http) {
       //adding to the time line
       $scope.chartObject.data.rows[nextid] = {
         "c": [{
-          "v": "Trace " + nextid
+          "v": "Trace " + (nextid)
         }, {
           "v": $scope.trace.description
         }, {
@@ -49,18 +49,13 @@ TimeLineCtrl.controller('TraceTimeLineCtrl', function($scope, $http) {
   };
 
   $scope.loadTimeLine = function() {
-    $http.get('../trace?action=getall&limit=5').
+    var limit = 7;
+    $http.get('../trace?action=getall&limit='+limit).
     success(function(data, status, headers, config) {
-
-      var nextid = $scope.chartObject.data.rows.length;me
-      //adding list of items for time line
-      for(var i = 0; i < data.length; i++) {
-        var nextid = $scope.chartObject.data.rows.length;
+      for(var i = 1; i < data.length+1; i++) {
         var datax = data[i];
-        console.log(datax);
-        $scope.chartObject.data.rows[nextid] = {
-          "c": [{
-            "v": "Trace " + nextid
+        var datamodel =[{
+            "v": "Trace " + i
           }, {
             "v": datax.description
           }, {
@@ -68,12 +63,14 @@ TimeLineCtrl.controller('TraceTimeLineCtrl', function($scope, $http) {
           }, {
             "v": new Date(parseFloat(datax.end_time))
           }]
+        timeLine.data.rows[i] = {"c": datamodel
         }
       }
     }).
     error(function(data, status, headers, config) {
       console.log('error of loading timeline in start');
     });
+    $scope.chartObject = timeLine;
   };
   $scope.loadTimeLine();
 });
