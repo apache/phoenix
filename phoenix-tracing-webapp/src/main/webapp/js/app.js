@@ -1,9 +1,9 @@
 var TraceApp = angular.module('TracingAppCtrl', [
-  'ngRoute',
-  'TracingCtrl',
-   'UICtrl',
-   'TimeLineCtrl',
-   'SearchCtrl'
+    'ngRoute',
+    'TracingCtrl',
+    'UICtrl',
+    'TimeLineCtrl',
+    'SearchCtrl'
 ]);
 
 TraceApp.config(['$routeProvider',
@@ -24,7 +24,7 @@ TraceApp.config(['$routeProvider',
         templateUrl: 'partials/chart.html',
         controller: 'TraceDistChartCtrl'
       }).
-	  when('/trace-timeline', {
+      when('/trace-timeline', {
         templateUrl: 'partials/google-chart.html',
         controller: 'TraceTimeLineCtrl'
       }).
