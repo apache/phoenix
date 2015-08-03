@@ -19,8 +19,8 @@
 package org.apache.phoenix.pherf.result;
 
 import org.apache.phoenix.pherf.PherfConstants;
-import org.apache.phoenix.pherf.PherfConstants.RunMode;
 import org.apache.phoenix.pherf.result.file.ResultFileDetails;
+import org.apache.phoenix.pherf.result.impl.CSVFileResultHandler;
 import org.apache.phoenix.pherf.result.impl.CSVResultHandler;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
 
@@ -50,7 +50,10 @@ public class ResultUtil {
         CSVResultHandler writer = null;
         try {
             if (!dataLoadThreadTime.getThreadTime().isEmpty()) {
-                writer = new CSVResultHandler("Data_Load_Details", ResultFileDetails.CSV);
+                writer = new CSVFileResultHandler();
+                writer.setResultFileName("Data_Load_Details");
+                writer.setResultFileDetails(ResultFileDetails.CSV);
+
                 for (WriteThreadTime writeThreadTime : dataLoadThreadTime.getThreadTime()) {
                     List<ResultValue> rowValues = new ArrayList<>();
                     rowValues.add(new ResultValue(PhoenixUtil.getZookeeper()));
@@ -82,7 +85,10 @@ public class ResultUtil {
         CSVResultHandler writer = null;
         ResultFileDetails resultFileDetails = ResultFileDetails.CSV_AGGREGATE_DATA_LOAD;
         try {
-            writer = new CSVResultHandler("Data_Load_Summary", ResultFileDetails.CSV);
+            writer = new CSVFileResultHandler();
+            writer.setResultFileName("Data_Load_Summary");
+            writer.setResultFileDetails(resultFileDetails);
+
             for (TableLoadTime loadTime : dataLoadTime.getTableLoadTime()) {
                 List<ResultValue> rowValues = new ArrayList<>();
                 rowValues.add(new ResultValue(PhoenixUtil.getZookeeper()));
@@ -101,8 +107,8 @@ public class ResultUtil {
         }
     }
 
-    public synchronized void write(ResultHandler resultHandler, DataModelResult dataModelResult,
-            RunMode runMode) throws Exception {
+    public synchronized void write(ResultHandler resultHandler, DataModelResult dataModelResult)
+            throws Exception {
         ResultFileDetails resultFileDetails = resultHandler.getResultFileDetails();
         switch (resultFileDetails) {
         case CSV_AGGREGATE_PERFORMANCE:
@@ -110,7 +116,7 @@ public class ResultUtil {
         case CSV_DETAILED_FUNCTIONAL:
             List<List<ResultValue>>
                     rowDetails =
-                    getCSVResults(dataModelResult, resultFileDetails, runMode);
+                    getCSVResults(dataModelResult, resultFileDetails);
             for (List<ResultValue> row : rowDetails) {
                 Result
                         result =
@@ -159,8 +165,20 @@ public class ResultUtil {
         return str;
     }
 
+    /**
+     * Used by custom ResultWriter out Pherf's normal code base
+     *
+     * @return Header field as a {@link Result}
+     */
+    @SuppressWarnings("unused")
+    public Result getCSVHeaderAsResult(String row) {
+        List<ResultValue> resultValues = new ArrayList<>();
+        resultValues.add(new ResultValue(row));
+        return new Result(ResultFileDetails.CSV, row, resultValues);
+    }
+
     private List<List<ResultValue>> getCSVResults(DataModelResult dataModelResult,
-            ResultFileDetails resultFileDetails, RunMode runMode) {
+            ResultFileDetails resultFileDetails) {
         List<List<ResultValue>> rowList = new ArrayList<>();
 
         for (ScenarioResult result : dataModelResult.getScenarioResult()) {
@@ -175,7 +193,7 @@ public class ResultUtil {
                     case CSV_DETAILED_FUNCTIONAL:
                         List<List<ResultValue>>
                                 detailedRows =
-                                queryResult.getCsvDetailedRepresentation(this, runMode);
+                                queryResult.getCsvDetailedRepresentation(this, resultFileDetails);
                         for (List<ResultValue> detailedRowList : detailedRows) {
                             List<ResultValue> valueList = new ArrayList<>();
                             valueList.add(new ResultValue(convertNull(result.getTableName())));

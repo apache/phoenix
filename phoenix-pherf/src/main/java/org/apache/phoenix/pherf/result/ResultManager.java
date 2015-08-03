@@ -19,33 +19,52 @@
 package org.apache.phoenix.pherf.result;
 
 import org.apache.phoenix.pherf.PherfConstants;
-import org.apache.phoenix.pherf.PherfConstants.RunMode;
 import org.apache.phoenix.pherf.result.file.ResultFileDetails;
-import org.apache.phoenix.pherf.result.impl.CSVResultHandler;
+import org.apache.phoenix.pherf.result.impl.CSVFileResultHandler;
 import org.apache.phoenix.pherf.result.impl.ImageResultHandler;
 import org.apache.phoenix.pherf.result.impl.XMLResultHandler;
+import org.apache.phoenix.util.InstanceResolver;
 
-import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.List;
 
 public class ResultManager {
     private final List<ResultHandler> resultHandlers;
     private final ResultUtil util;
-    private final PherfConstants.RunMode runMode;
+    private static final List<ResultHandler> defaultHandlers;
 
-    public ResultManager(String fileNameSeed, PherfConstants.RunMode runMode) {
-        this(runMode, Arrays.asList(new XMLResultHandler(fileNameSeed, ResultFileDetails.XML),
-                new ImageResultHandler(fileNameSeed, ResultFileDetails.IMAGE),
-                new CSVResultHandler(fileNameSeed, runMode == RunMode.PERFORMANCE ?
-                        ResultFileDetails.CSV_DETAILED_PERFORMANCE :
-                        ResultFileDetails.CSV_DETAILED_FUNCTIONAL),
-                new CSVResultHandler(fileNameSeed, ResultFileDetails.CSV_AGGREGATE_PERFORMANCE)));
+    static {
+        defaultHandlers = new ArrayList<>();
+        XMLResultHandler xmlResultHandler = new XMLResultHandler();
+        xmlResultHandler.setResultFileDetails(ResultFileDetails.XML);
+        defaultHandlers.add(xmlResultHandler);
+
+        ImageResultHandler imageResultHandler = new ImageResultHandler();
+        imageResultHandler.setResultFileDetails(ResultFileDetails.IMAGE);
+        defaultHandlers.add(imageResultHandler);
+
+        ResultHandler handlerAgg = new CSVFileResultHandler();
+        handlerAgg.setResultFileDetails(ResultFileDetails.CSV_AGGREGATE_PERFORMANCE);
+        defaultHandlers.add(handlerAgg);
+
+        ResultHandler handlerDet = new CSVFileResultHandler();
+        handlerDet.setResultFileDetails(ResultFileDetails.CSV_DETAILED_PERFORMANCE);
+        defaultHandlers.add(handlerDet);
     }
 
-    public ResultManager(PherfConstants.RunMode runMode, List<ResultHandler> resultHandlers) {
+    public ResultManager(String fileNameSeed) {
+        this(fileNameSeed, InstanceResolver.get(ResultHandler.class, defaultHandlers));
+    }
+
+    public ResultManager(String fileNameSeed, List<ResultHandler> resultHandlers) {
         this.resultHandlers = resultHandlers;
         util = new ResultUtil();
-        this.runMode = runMode;
+
+        for (ResultHandler resultHandler : resultHandlers) {
+            if (resultHandler.getResultFileName() == null) {
+                resultHandler.setResultFileName(fileNameSeed);
+            }
+        }
     }
 
     /**
@@ -59,7 +78,7 @@ public class ResultManager {
             util.ensureBaseResultDirExists();
             final DataModelResult dataModelResultCopy = new DataModelResult(result);
             for (ResultHandler handler : resultHandlers) {
-                util.write(handler, dataModelResultCopy, runMode);
+                util.write(handler, dataModelResultCopy);
             }
         } finally {
             for (ResultHandler handler : resultHandlers) {
@@ -84,13 +103,13 @@ public class ResultManager {
     public synchronized void write(List<DataModelResult> dataModelResults) throws Exception {
         util.ensureBaseResultDirExists();
 
-        CSVResultHandler detailsCSVWriter = null;
+        CSVFileResultHandler detailsCSVWriter = null;
         try {
-            detailsCSVWriter =
-                    new CSVResultHandler(PherfConstants.COMBINED_FILE_NAME,
-                            ResultFileDetails.CSV_DETAILED_PERFORMANCE);
+            detailsCSVWriter = new CSVFileResultHandler();
+            detailsCSVWriter.setResultFileDetails(ResultFileDetails.CSV_DETAILED_PERFORMANCE);
+            detailsCSVWriter.setResultFileName(PherfConstants.COMBINED_FILE_NAME);
             for (DataModelResult dataModelResult : dataModelResults) {
-                util.write(detailsCSVWriter, dataModelResult, runMode);
+                util.write(detailsCSVWriter, dataModelResult);
             }
         } finally {
             if (detailsCSVWriter != null) {
@@ -98,5 +117,9 @@ public class ResultManager {
                 detailsCSVWriter.close();
             }
         }
+    }
+
+    public List<ResultHandler> getResultHandlers() {
+        return resultHandlers;
     }
 }

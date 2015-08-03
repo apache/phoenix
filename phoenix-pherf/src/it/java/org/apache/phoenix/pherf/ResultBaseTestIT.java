@@ -43,7 +43,7 @@ public class ResultBaseTestIT extends BaseHBaseManagedTimeIT {
     @BeforeClass public static void setUp() throws Exception {
 
         PherfConstants constants = PherfConstants.create();
-        properties = constants.getProperties(PherfConstants.PHERF_PROPERTIES);
+        properties = constants.getProperties(PherfConstants.PHERF_PROPERTIES, false);
         String dir = properties.getProperty("pherf.default.results.dir");
         String targetDir = "target/" + dir;
         properties.setProperty("pherf.default.results.dir", targetDir);

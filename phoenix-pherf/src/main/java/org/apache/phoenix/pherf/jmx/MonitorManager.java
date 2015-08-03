@@ -24,7 +24,7 @@ import org.apache.phoenix.pherf.jmx.monitors.Monitor;
 import org.apache.phoenix.pherf.result.Result;
 import org.apache.phoenix.pherf.result.ResultHandler;
 import org.apache.phoenix.pherf.result.file.ResultFileDetails;
-import org.apache.phoenix.pherf.result.impl.CSVResultHandler;
+import org.apache.phoenix.pherf.result.impl.CSVFileResultHandler;
 import org.apache.phoenix.pherf.workload.Workload;
 import org.apache.phoenix.util.DateUtil;
 
@@ -42,7 +42,6 @@ import java.util.concurrent.atomic.AtomicLong;
  * This class starts JMX stats for the configured monitors.
  * Monitors should be configured in MonitorDetails Enum.
  * Each stat implements {@link org.apache.phoenix.pherf.jmx.monitors.Monitor}.
- *
  * For the duration of any Pherf run, when the configured
  * {@link org.apache.phoenix.pherf.PherfConstants#MONITOR_FREQUENCY} is reached a snapshot of
  * each monitor is taken and dumped out to a log file.
@@ -83,8 +82,9 @@ public class MonitorManager implements Workload {
             }
         }
         rowCount = new AtomicLong(0);
-        this.resultHandler =
-                new CSVResultHandler(PherfConstants.MONITOR_FILE_NAME, ResultFileDetails.CSV);
+        this.resultHandler = new CSVFileResultHandler();
+        this.resultHandler.setResultFileDetails(ResultFileDetails.CSV);
+        this.resultHandler.setResultFileName(PherfConstants.MONITOR_FILE_NAME);
     }
 
     @Override public synchronized void complete() {
@@ -176,9 +176,9 @@ public class MonitorManager implements Workload {
         ResultHandler handler = null;
         try {
             if (resultHandler.isClosed()) {
-                handler =
-                        new CSVResultHandler(PherfConstants.MONITOR_FILE_NAME,
-                                ResultFileDetails.CSV);
+                handler = new CSVFileResultHandler();
+                handler.setResultFileDetails(ResultFileDetails.CSV);
+                handler.setResultFileName(PherfConstants.MONITOR_FILE_NAME);
                 return handler.read();
             } else {
                 return resultHandler.read();

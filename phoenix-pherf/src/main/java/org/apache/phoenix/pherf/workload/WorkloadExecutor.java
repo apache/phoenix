@@ -31,6 +31,7 @@ import java.util.concurrent.*;
 public class WorkloadExecutor {
     private static final Logger logger = LoggerFactory.getLogger(WorkloadExecutor.class);
     private final int poolSize;
+    private final boolean isPerformance;
 
     // Jobs can be accessed by multiple threads
     private final Map<Workload, Future> jobs = new ConcurrentHashMap<>();
@@ -38,14 +39,15 @@ public class WorkloadExecutor {
     private final ExecutorService pool;
 
     public WorkloadExecutor() throws Exception {
-        this(PherfConstants.create().getProperties(PherfConstants.PHERF_PROPERTIES));
+        this(PherfConstants.create().getProperties(PherfConstants.PHERF_PROPERTIES, false));
     }
 
     public WorkloadExecutor(Properties properties) throws Exception {
-        this(properties, new ArrayList());
+        this(properties, new ArrayList(), true);
     }
 
-    public WorkloadExecutor(Properties properties, List<Workload> workloads) throws Exception {
+    public WorkloadExecutor(Properties properties, List<Workload> workloads, boolean isPerformance) throws Exception {
+        this.isPerformance = isPerformance;
         this.poolSize =
                 (properties.getProperty("pherf.default.threadpool") == null) ?
                         PherfConstants.DEFAULT_THREAD_POOL_SIZE :
@@ -102,8 +104,17 @@ public class WorkloadExecutor {
         pool.shutdownNow();
     }
 
+    /**
+     * TODO This should be removed, Access to the pool should be restriced and callers should Workflows
+     *
+     * @return {@link ExecutorService} Exposes the underlying thread pool
+     */
     public ExecutorService getPool() {
         return pool;
+    }
+
+    public boolean isPerformance() {
+        return isPerformance;
     }
 
     private void init(List<Workload> workloads) throws Exception {
