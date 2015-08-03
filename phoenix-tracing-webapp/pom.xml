@@ -145,7 +145,16 @@
             </execution>
           </executions>
           <configuration>
-          <!-- configuration properties will go here -->
+            <!--browserVersion>FIREFOX_16</browserVersion-->
+            <preloadSources combine.children="append">
+              <source>${project.basedir}/src/main/webapp/js/lib/jquery.min.js</source>
+              <source>${project.basedir}/src/main/webapp/js/lib/angular.js</source>
+              <source>${project.basedir}/src/main/webapp/js/lib/angular-route.js</source>
+              <source>${project.basedir}/src/main/webapp/js/lib/angular-mocks.js</source>
+              <source>${project.basedir}/src/main/webapp/js/app.js</source>
+          </preloadSources>
+            <!--jsSrcDir>${basedir}/src/main/webapp/js/controllers</jsSrcDir-->
+            <jsTestSrcDir>${basedir}/src/test/webapp/js/specs</jsTestSrcDir>
           </configuration>
         </plugin>
       </plugins>
