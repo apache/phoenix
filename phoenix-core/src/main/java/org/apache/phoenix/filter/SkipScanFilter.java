@@ -40,6 +40,7 @@ import org.apache.phoenix.query.KeyRange.Bound;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ScanUtil;
+import org.apache.phoenix.util.ScanUtil.BytesComparator;
 import org.apache.phoenix.util.SchemaUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -210,7 +211,7 @@ public class SkipScanFilter extends FilterBase implements Writable {
         if (!lowerUnbound) {
             // Find the position of the first slot of the lower range
             schema.next(ptr, 0, schema.iterator(lowerInclusiveKey,ptr), slotSpan[0]);
-            startPos = ScanUtil.searchClosestKeyRangeWithUpperHigherThanPtr(slots.get(0), ptr, 0);
+            startPos = ScanUtil.searchClosestKeyRangeWithUpperHigherThanPtr(slots.get(0), ptr, 0, schema.getField(0));
             // Lower range is past last upper range of first slot, so cannot possibly be in range
             if (startPos >= slots.get(0).size()) {
                 return false;
@@ -221,7 +222,7 @@ public class SkipScanFilter extends FilterBase implements Writable {
         if (!upperUnbound) {
             // Find the position of the first slot of the upper range
             schema.next(ptr, 0, schema.iterator(upperExclusiveKey,ptr), slotSpan[0]);
-            endPos = ScanUtil.searchClosestKeyRangeWithUpperHigherThanPtr(slots.get(0), ptr, startPos);
+            endPos = ScanUtil.searchClosestKeyRangeWithUpperHigherThanPtr(slots.get(0), ptr, startPos, schema.getField(0));
             // Upper range lower than first lower range of first slot, so cannot possibly be in range
 //            if (endPos == 0 && Bytes.compareTo(upperExclusiveKey, slots.get(0).get(0).getLowerRange()) <= 0) {
 //                return false;
@@ -230,7 +231,7 @@ public class SkipScanFilter extends FilterBase implements Writable {
             if (endPos >= slots.get(0).size()) {
                 upperUnbound = true;
                 endPos = slots.get(0).size()-1;
-            } else if (slots.get(0).get(endPos).compareLowerToUpperBound(upperExclusiveKey) >= 0) {
+            } else if (slots.get(0).get(endPos).compareLowerToUpperBound(upperExclusiveKey, ScanUtil.getComparator(schema.getField(0))) >= 0) {
                 // We know that the endPos range is higher than the previous range, but we need
                 // to test if it ends before the next range starts.
                 endPos--;
@@ -397,8 +398,10 @@ public class SkipScanFilter extends FilterBase implements Writable {
         int maxOffset = schema.iterator(currentKey, minOffset, length, ptr);
         schema.next(ptr, ScanUtil.getRowKeyPosition(slotSpan, i), maxOffset, slotSpan[i]);
         while (true) {
+            // Comparator depends on field in schema
+            BytesComparator comparator = ScanUtil.getComparator(schema.getField(ScanUtil.getRowKeyPosition(slotSpan, i)));
             // Increment to the next range while the upper bound of our current slot is less than our current key
-            while (position[i] < slots.get(i).size() && slots.get(i).get(position[i]).compareUpperToLowerBound(ptr) < 0) {
+            while (position[i] < slots.get(i).size() && slots.get(i).get(position[i]).compareUpperToLowerBound(ptr, comparator) < 0) {
                 position[i]++;
             }
             Arrays.fill(position, i+1, position.length, 0);
@@ -448,7 +451,7 @@ public class SkipScanFilter extends FilterBase implements Writable {
                     ByteUtil.nextKey(startKey, currentLength);
                 }
                 i = j;
-            } else if (slots.get(i).get(position[i]).compareLowerToUpperBound(ptr) > 0) {
+            } else if (slots.get(i).get(position[i]).compareLowerToUpperBound(ptr, comparator) > 0) {
                 // Our current key is less than the lower range of the current position in the current slot.
                 // Seek to the lower range, since it's bigger than the current key
                 setStartKey(ptr, minOffset, i, nSlots);

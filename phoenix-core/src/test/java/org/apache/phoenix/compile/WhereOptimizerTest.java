@@ -32,6 +32,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.Date;
 import java.sql.DriverManager;
@@ -56,9 +57,12 @@ import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.ColumnNotFoundException;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PUnsignedLong;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
@@ -143,6 +147,22 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         System.arraycopy(tmpBytes, 0, tmpBytes3, 0, tmpBytes.length);
         assertArrayEquals(tmpBytes2, scan.getStartRow());
         assertArrayEquals(tmpBytes3, scan.getStopRow());
+    }
+    
+    @Test
+    public void testDescDecimalRange() throws SQLException {
+        String ddl = "create table t (k1 bigint not null, k2 decimal, constraint pk primary key (k1,k2 desc))";
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+        conn.createStatement().execute(ddl);
+        String query = "select * from t where k1 in (1,2) and k2>1.0";
+        Scan scan = compileStatement(query).getScan();
+
+        byte[] startRow = ByteUtil.concat(PLong.INSTANCE.toBytes(1), ByteUtil.nextKey(QueryConstants.SEPARATOR_BYTE_ARRAY), QueryConstants.DESC_SEPARATOR_BYTE_ARRAY);
+        byte[] upperValue = PDecimal.INSTANCE.toBytes(BigDecimal.valueOf(1.0));
+        byte[] stopRow = ByteUtil.concat(PLong.INSTANCE.toBytes(2), SortOrder.invert(upperValue,0,upperValue.length), QueryConstants.DESC_SEPARATOR_BYTE_ARRAY);
+        assertTrue(scan.getFilter() instanceof SkipScanFilter);
+        assertArrayEquals(startRow, scan.getStartRow());
+        assertArrayEquals(stopRow, scan.getStopRow());
     }
 
     @Test
