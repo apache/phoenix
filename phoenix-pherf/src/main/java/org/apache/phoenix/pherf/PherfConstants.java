@@ -18,12 +18,18 @@
 
 package org.apache.phoenix.pherf;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.Properties;
 
 public class PherfConstants {
+    public enum GeneratePhoenixStats {
+        YES,
+        NO
+    }
+
     private static PherfConstants instance = null;
-    private Properties properties = null;
+    private static Properties instanceProperties = null;
 
     public static final int DEFAULT_THREAD_POOL_SIZE = 10;
     public static final int DEFAULT_BATCH_SIZE = 1000;
@@ -62,16 +68,6 @@ public class PherfConstants {
     public static final int MONITOR_FREQUENCY = 5000;
     public static final String MONITOR_FILE_NAME = "STATS_MONITOR";
 
-    public static enum GeneratePhoenixStats {
-        YES,
-        NO
-    }
-    
-    public static enum RunMode {
-        PERFORMANCE,
-        FUNCTIONAL
-    }
-
     private PherfConstants() {
     }
 
@@ -82,12 +78,19 @@ public class PherfConstants {
         return instance;
     }
 
-    public Properties getProperties(final String fileName) throws Exception {
-        if (properties != null) {
-            return properties;
+    public Properties getProperties(final String fileName, boolean getDefault) throws Exception {
+
+        if (instanceProperties == null) {
+            instanceProperties = loadProperties(fileName);
+        } else {
+            return getDefault ? loadProperties(fileName) : instanceProperties;
         }
 
-        properties = new Properties();
+        return instanceProperties;
+    }
+
+    private Properties loadProperties(String fileName) throws IOException{
+        Properties properties = new Properties();
         InputStream is = null;
         try {
             is = getClass().getClassLoader().getResourceAsStream(fileName);
@@ -109,7 +112,7 @@ public class PherfConstants {
     public String getProperty(final String fileName, String property) {
         String value = null;
         try {
-            value = getProperties(fileName).getProperty(property);
+            value = getProperties(fileName, false).getProperty(property);
         } catch (Exception e) {
             e.printStackTrace();
         }
