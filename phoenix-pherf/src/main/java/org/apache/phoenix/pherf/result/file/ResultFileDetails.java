@@ -43,4 +43,9 @@ public enum ResultFileDetails {
     public Header getHeader() {
         return header;
     }
+
+    public boolean isPerformance() {
+        return (this == ResultFileDetails.CSV_AGGREGATE_PERFORMANCE)
+                || (this == CSV_DETAILED_PERFORMANCE);
+    }
 }

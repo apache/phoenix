@@ -21,7 +21,6 @@ package org.apache.phoenix.pherf.workload;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.phoenix.pherf.PherfConstants.GeneratePhoenixStats;
-import org.apache.phoenix.pherf.PherfConstants.RunMode;
 import org.apache.phoenix.pherf.configuration.*;
 import org.apache.phoenix.pherf.result.*;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
@@ -32,43 +31,42 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 
 public class QueryExecutor implements Workload {
     private static final Logger logger = LoggerFactory.getLogger(QueryExecutor.class);
     private List<DataModel> dataModels;
     private String queryHint;
-    private final RunMode runMode;
     private final boolean exportCSV;
-    private final ExecutorService pool;
     private final XMLConfigParser parser;
     private final PhoenixUtil util;
+    private final WorkloadExecutor workloadExecutor;
 
-    public QueryExecutor(XMLConfigParser parser, PhoenixUtil util, ExecutorService pool) {
-        this(parser, util, pool, parser.getDataModels(), null, false, RunMode.PERFORMANCE);
+    public QueryExecutor(XMLConfigParser parser, PhoenixUtil util,
+            WorkloadExecutor workloadExecutor) {
+        this(parser, util, workloadExecutor, parser.getDataModels(), null, false);
     }
 
-    public QueryExecutor(XMLConfigParser parser, PhoenixUtil util, ExecutorService pool,
-            List<DataModel> dataModels, String queryHint, boolean exportCSV, RunMode runMode) {
+    public QueryExecutor(XMLConfigParser parser, PhoenixUtil util,
+            WorkloadExecutor workloadExecutor, List<DataModel> dataModels, String queryHint,
+            boolean exportCSV) {
         this.parser = parser;
         this.queryHint = queryHint;
         this.exportCSV = exportCSV;
-        this.runMode = runMode;
         this.dataModels = dataModels;
-        this.pool = pool;
         this.util = util;
+        this.workloadExecutor = workloadExecutor;
     }
 
-    @Override public void complete() {
-
-    }
+    @Override
+    public void complete() {}
 
     /**
      * Calls in Multithreaded Query Executor for all datamodels
      *
      * @throws Exception
      */
+    @Override
     public Runnable execute() throws Exception {
         Runnable runnable = null;
         for (DataModel dataModel : dataModels) {
@@ -89,7 +87,8 @@ public class QueryExecutor implements Workload {
      */
     protected Runnable exportAllScenarios(final DataModel dataModel) throws Exception {
         return new Runnable() {
-            @Override public void run() {
+            @Override
+            public void run() {
                 try {
 
                     List<Scenario> scenarios = dataModel.getScenarios();
@@ -124,7 +123,7 @@ public class QueryExecutor implements Workload {
                         new DataModelResult(dataModel, PhoenixUtil.getZookeeper());
                 ResultManager
                         resultManager =
-                        new ResultManager(dataModelResult.getName(), QueryExecutor.this.runMode);
+                        new ResultManager(dataModelResult.getName());
 
                 dataModelResults.add(dataModelResult);
                 List<Scenario> scenarios = dataModel.getScenarios();
@@ -144,7 +143,7 @@ public class QueryExecutor implements Workload {
                                 logger.debug("Inserting write workload ( " + i + " ) of ( "
                                         + writerThreadCount + " )");
                                 Workload writes = new WriteWorkload(PhoenixUtil.create(), parser, GeneratePhoenixStats.NO);
-                                pool.submit(writes.execute());
+                                workloadExecutor.add(writes);
                             }
                         }
 
@@ -193,7 +192,7 @@ public class QueryExecutor implements Workload {
                             thread =
                             executeRunner((i + 1) + "," + cr, dataModelResult, queryResult,
                                     querySetResult);
-                    threads.add(pool.submit(thread));
+                    threads.add(workloadExecutor.getPool().submit(thread));
                 }
 
                 for (Future thread : threads) {
@@ -228,7 +227,7 @@ public class QueryExecutor implements Workload {
                             thread =
                             executeRunner((i + 1) + "," + cr, dataModelResult, queryResult,
                                     querySetResult);
-                    threads.add(pool.submit(thread));
+                    threads.add(workloadExecutor.getPool().submit(thread));
                 }
 
                 for (Future thread : threads) {
@@ -259,7 +258,7 @@ public class QueryExecutor implements Workload {
         queryResult.setHint(this.queryHint);
         logger.info("\nExecuting query " + queryResult.getStatement());
         Runnable thread;
-        if (this.runMode == RunMode.FUNCTIONAL) {
+        if (workloadExecutor.isPerformance()) {
             thread =
                     new MultithreadedDiffer(threadTime.getThreadName(), queryResult, threadTime,
                             querySet.getNumberOfExecutions(), querySet.getExecutionDurationInMs());
