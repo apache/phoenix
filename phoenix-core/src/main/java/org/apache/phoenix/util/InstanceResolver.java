@@ -17,6 +17,10 @@
  */
 package org.apache.phoenix.util;
 
+import org.apache.commons.collections.IteratorUtils;
+
+import java.util.Iterator;
+import java.util.List;
 import java.util.ServiceLoader;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -52,7 +56,27 @@ public class InstanceResolver {
         }
         return (T)obj;
     }
-    
+
+    /**
+     * Resolves all instances of a specified class and add it to the list of default implementations
+     * @param clazz Type of the instance to resolve
+     * @param defaultInstances {@link List} of instances that match the type clazz
+     * @param <T> Type of class passed
+     * @return {@link List} of instance of the specified class. Newly found instances will be added
+     *          to the existing contents of defaultInstances
+     */
+    @SuppressWarnings("unchecked")
+    public static <T> List get(Class<T> clazz, List<T> defaultInstances) {
+        Iterator<T> iterator = ServiceLoader.load(clazz).iterator();
+        if (defaultInstances != null) {
+            defaultInstances.addAll(IteratorUtils.toList(iterator));
+        } else {
+            defaultInstances = IteratorUtils.toList(iterator);
+        }
+
+        return defaultInstances;
+    }
+
     private synchronized static <T> T resolveSingleton(Class<T> clazz, T defaultInstance) {
         ServiceLoader<T> loader = ServiceLoader.load(clazz);
         // returns the first registered instance found

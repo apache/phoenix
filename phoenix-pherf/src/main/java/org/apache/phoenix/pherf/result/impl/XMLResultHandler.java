@@ -18,7 +18,6 @@
 
 package org.apache.phoenix.pherf.result.impl;
 
-import org.apache.phoenix.pherf.PherfConstants;
 import org.apache.phoenix.pherf.result.*;
 import org.apache.phoenix.pherf.result.file.ResultFileDetails;
 
@@ -31,30 +30,14 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
-public class XMLResultHandler implements ResultHandler {
-    private final String resultFileName;
-    private final ResultFileDetails resultFileDetails;
+public class XMLResultHandler extends DefaultResultHandler{
 
-    public XMLResultHandler(String resultFileName, ResultFileDetails resultFileDetails) {
-        this(resultFileName, resultFileDetails, true);
+    public XMLResultHandler() {
+        super();
     }
 
-    public XMLResultHandler(String resultFileName, ResultFileDetails resultFileDetails,
-            boolean generateFullFileName) {
-        ResultUtil util = new ResultUtil();
-        PherfConstants constants = PherfConstants.create();
-        String resultDir = constants.getProperty("pherf.default.results.dir");
-
-        this.resultFileName =
-                generateFullFileName ?
-                        resultDir + PherfConstants.PATH_SEPARATOR + PherfConstants.RESULT_PREFIX
-                                + resultFileName + util.getSuffix() + resultFileDetails
-                                .getExtension().toString() :
-                        resultFileName;
-        this.resultFileDetails = resultFileDetails;
-    }
-
-    @Override public synchronized void write(Result result) throws Exception {
+    @Override
+    public synchronized void write(Result result) throws Exception {
         FileOutputStream os = null;
         JAXBContext jaxbContext = JAXBContext.newInstance(DataModelResult.class);
         Marshaller jaxbMarshaller = jaxbContext.createMarshaller();
@@ -71,15 +54,18 @@ public class XMLResultHandler implements ResultHandler {
         }
     }
 
-    @Override public synchronized void flush() throws IOException {
+    @Override
+    public synchronized void flush() throws IOException {
         return;
     }
 
-    @Override public synchronized void close() throws IOException {
+    @Override
+    public synchronized void close() throws IOException {
         return;
     }
 
-    @Override public synchronized List<Result> read() throws Exception {
+    @Override
+    public synchronized List<Result> read() throws Exception {
 
         JAXBContext jaxbContext = JAXBContext.newInstance(DataModelResult.class);
         Unmarshaller jaxbUnmarshaller = jaxbContext.createUnmarshaller();
@@ -91,11 +77,13 @@ public class XMLResultHandler implements ResultHandler {
         return results;
     }
 
-    @Override public boolean isClosed() {
+    @Override
+    public boolean isClosed() {
         return true;
     }
 
-    @Override public ResultFileDetails getResultFileDetails() {
-        return resultFileDetails;
+    @Override
+    public void setResultFileDetails(ResultFileDetails details) {
+        super.setResultFileDetails(ResultFileDetails.XML);
     }
 }
