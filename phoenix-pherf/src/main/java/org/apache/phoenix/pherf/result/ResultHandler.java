@@ -39,4 +39,10 @@ public interface ResultHandler {
     public boolean isClosed();
 
     public ResultFileDetails getResultFileDetails();
+
+    public String getResultFileName();
+
+    public void setResultFileDetails(ResultFileDetails details);
+
+    public void setResultFileName(String resultFileName);
 }

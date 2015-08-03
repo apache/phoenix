@@ -48,9 +48,6 @@ import org.apache.phoenix.pherf.workload.WriteWorkload;
 import org.junit.Before;
 import org.junit.Test;
 
-import com.jcabi.jdbc.JdbcSession;
-import com.jcabi.jdbc.Outcome;
-
 public class DataIngestIT extends ResultBaseTestIT {
 
     @Before
@@ -102,7 +99,7 @@ public class DataIngestIT extends ResultBaseTestIT {
             }
 
             // Run some queries
-            Workload query = new QueryExecutor(parser, util, executor.getPool());
+            Workload query = new QueryExecutor(parser, util, executor);
             executor.add(query);
             executor.get();
 
@@ -122,8 +119,7 @@ public class DataIngestIT extends ResultBaseTestIT {
         dataModels.add(dataModel);
         QueryExecutor
                 qe =
-                new QueryExecutor(parser, util, executor.getPool(), dataModels, null, false,
-                        PherfConstants.RunMode.PERFORMANCE);
+                new QueryExecutor(parser, util, executor, dataModels, null, false);
         executor.add(qe);
         Scenario scenario = parser.getScenarioByName("testScenarioRW");
 

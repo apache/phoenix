@@ -18,8 +18,8 @@
 
 package org.apache.phoenix.pherf.result;
 
-import org.apache.phoenix.pherf.PherfConstants.RunMode;
 import org.apache.phoenix.pherf.configuration.Query;
+import org.apache.phoenix.pherf.result.file.ResultFileDetails;
 import org.apache.phoenix.util.DateUtil;
 
 import java.util.ArrayList;
@@ -27,7 +27,11 @@ import java.util.Date;
 import java.util.List;
 
 public class QueryResult extends Query {
-    private List<ThreadTime> threadTimes = new ArrayList<ThreadTime>();
+    private List<ThreadTime> threadTimes = new ArrayList<>();
+
+    public QueryResult() {
+        super();
+    }
 
     public synchronized List<ThreadTime> getThreadTimes() {
         return this.threadTimes;
@@ -45,9 +49,6 @@ public class QueryResult extends Query {
         this.setDdl(query.getDdl());
         this.setQueryGroup(query.getQueryGroup());
         this.setId(query.getId());
-    }
-
-    @SuppressWarnings("unused") public QueryResult() {
     }
 
     public Date getStartTime() {
@@ -108,18 +109,10 @@ public class QueryResult extends Query {
         return rowValues;
     }
 
-    private int getRunCount() {
-        int totalRunCount = 0;
-        for (ThreadTime tt : getThreadTimes()) {
-            totalRunCount += tt.getRunCount();
-        }
-        return totalRunCount;
-    }
-
-    public List<List<ResultValue>> getCsvDetailedRepresentation(ResultUtil util, RunMode runMode) {
+    public List<List<ResultValue>> getCsvDetailedRepresentation(ResultUtil util, ResultFileDetails details) {
         List<List<ResultValue>> rows = new ArrayList<>();
         for (ThreadTime tt : getThreadTimes()) {
-            for (List<ResultValue> runTime : runMode == RunMode.PERFORMANCE ?
+            for (List<ResultValue> runTime : details.isPerformance() ?
                     tt.getCsvPerformanceRepresentation(util) :
                     tt.getCsvFunctionalRepresentation(util)) {
                 List<ResultValue> rowValues = new ArrayList<>();
@@ -132,6 +125,14 @@ public class QueryResult extends Query {
             }
         }
         return rows;
+    }
+
+    private int getRunCount() {
+        int totalRunCount = 0;
+        for (ThreadTime tt : getThreadTimes()) {
+            totalRunCount += tt.getRunCount();
+        }
+        return totalRunCount;
     }
 
     private String getStartTimeText() {
