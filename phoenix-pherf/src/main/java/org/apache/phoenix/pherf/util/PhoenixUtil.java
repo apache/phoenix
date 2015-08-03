@@ -18,34 +18,26 @@
 
 package org.apache.phoenix.pherf.util;
 
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
+import org.apache.phoenix.pherf.PherfConstants;
+import org.apache.phoenix.pherf.configuration.*;
+import org.apache.phoenix.pherf.jmx.MonitorManager;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import java.sql.Connection;
-import java.sql.DatabaseMetaData;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
+import java.sql.*;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 
-import org.apache.phoenix.pherf.PherfConstants;
-import org.apache.phoenix.pherf.configuration.Column;
-import org.apache.phoenix.pherf.configuration.DataTypeMapping;
-import org.apache.phoenix.pherf.configuration.Query;
-import org.apache.phoenix.pherf.configuration.QuerySet;
-import org.apache.phoenix.pherf.configuration.Scenario;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
 
 // TODO This class needs to be cleanup up a bit. I just wanted to get an initial placeholder in.
 public class PhoenixUtil {
-	private static final Logger logger = LoggerFactory.getLogger(PhoenixUtil.class);
-	private static String zookeeper;
-	private static int rowCountOverride = 0;
+    private static final Logger logger = LoggerFactory.getLogger(PhoenixUtil.class);
+    private static String zookeeper;
+    private static int rowCountOverride = 0;
     private boolean testEnabled;
     private static PhoenixUtil instance;
 
@@ -66,10 +58,10 @@ public class PhoenixUtil {
         return instance;
     }
 
-    public Connection getConnection() throws Exception{
-    	return getConnection(null);
+    public Connection getConnection() throws Exception {
+        return getConnection(null);
     }
-	
+
     public Connection getConnection(String tenantId) throws Exception {
         return getConnection(tenantId, testEnabled);
     }
@@ -104,15 +96,17 @@ public class PhoenixUtil {
 
     /**
      * Execute statement
+     *
      * @param sql
      * @param connection
      * @return
      * @throws SQLException
      */
-    public boolean executeStatementThrowException(String sql, Connection connection) throws SQLException {
-    	boolean result = false;
-    	PreparedStatement preparedStatement = null;
-    	try {
+    public boolean executeStatementThrowException(String sql, Connection connection)
+            throws SQLException {
+        boolean result = false;
+        PreparedStatement preparedStatement = null;
+        try {
             preparedStatement = connection.prepareStatement(sql);
             result = preparedStatement.execute();
             connection.commit();
@@ -121,9 +115,9 @@ public class PhoenixUtil {
         }
         return result;
     }
-    
+
     public boolean executeStatement(String sql, Connection connection) {
-    	boolean result = false;
+        boolean result = false;
         PreparedStatement preparedStatement = null;
         try {
             preparedStatement = connection.prepareStatement(sql);
@@ -143,7 +137,7 @@ public class PhoenixUtil {
 
     @SuppressWarnings("unused")
     public boolean executeStatement(PreparedStatement preparedStatement, Connection connection) {
-    	boolean result = false;
+        boolean result = false;
         try {
             result = preparedStatement.execute();
             connection.commit();
@@ -154,72 +148,75 @@ public class PhoenixUtil {
     }
 
     /**
-     * Delete existing tables with schema name set as {@link PherfConstants#PHERF_SCHEMA_NAME} with regex comparison 
-     * 
+     * Delete existing tables with schema name set as {@link PherfConstants#PHERF_SCHEMA_NAME} with regex comparison
+     *
      * @param regexMatch
      * @throws SQLException
      * @throws Exception
      */
     public void deleteTables(String regexMatch) throws Exception {
-    	regexMatch = regexMatch.toUpperCase().replace("ALL", ".*");
-    	Connection conn = getConnection();
-    	try {
-        	ResultSet resultSet = getTableMetaData(PherfConstants.PHERF_SCHEMA_NAME, null, conn);
-			while (resultSet.next()) {
-				String tableName = resultSet.getString(TABLE_SCHEM) == null ? resultSet
-						.getString(TABLE_NAME) : resultSet
-						.getString(TABLE_SCHEM)
-						+ "."
-						+ resultSet.getString(TABLE_NAME);
-				if (tableName.matches(regexMatch)) {
-					logger.info("\nDropping " + tableName);
-					try {
-						executeStatementThrowException("DROP TABLE "
-								+ tableName + " CASCADE", conn);
-					} catch (org.apache.phoenix.schema.TableNotFoundException tnf) {
-						logger.error("Table might be already be deleted via cascade. Schema: "
-								+ tnf.getSchemaName()
-								+ " Table: "
-								+ tnf.getTableName());
-					}
-				}
-			}
-    	} finally {
-    		conn.close();
-    	}
+        regexMatch = regexMatch.toUpperCase().replace("ALL", ".*");
+        Connection conn = getConnection();
+        try {
+            ResultSet resultSet = getTableMetaData(PherfConstants.PHERF_SCHEMA_NAME, null, conn);
+            while (resultSet.next()) {
+                String tableName = resultSet.getString(TABLE_SCHEM) == null ? resultSet
+                        .getString(TABLE_NAME) : resultSet
+                        .getString(TABLE_SCHEM)
+                        + "."
+                        + resultSet.getString(TABLE_NAME);
+                if (tableName.matches(regexMatch)) {
+                    logger.info("\nDropping " + tableName);
+                    try {
+                        executeStatementThrowException("DROP TABLE "
+                                + tableName + " CASCADE", conn);
+                    } catch (org.apache.phoenix.schema.TableNotFoundException tnf) {
+                        logger.error("Table might be already be deleted via cascade. Schema: "
+                                + tnf.getSchemaName()
+                                + " Table: "
+                                + tnf.getTableName());
+                    }
+                }
+            }
+        } finally {
+            conn.close();
+        }
     }
-    
-    public ResultSet getTableMetaData(String schemaName, String tableName, Connection connection) throws SQLException {
-    	DatabaseMetaData dbmd = connection.getMetaData();
-    	ResultSet resultSet = dbmd.getTables(null, schemaName, tableName, null);
-    	return resultSet;
+
+    public ResultSet getTableMetaData(String schemaName, String tableName, Connection connection)
+            throws SQLException {
+        DatabaseMetaData dbmd = connection.getMetaData();
+        ResultSet resultSet = dbmd.getTables(null, schemaName, tableName, null);
+        return resultSet;
     }
-    
-    public ResultSet getColumnsMetaData(String schemaName, String tableName, Connection connection) throws SQLException {
-    	DatabaseMetaData dbmd = connection.getMetaData();
-    	ResultSet resultSet = dbmd.getColumns(null, schemaName, tableName, null);
-    	return resultSet;
+
+    public ResultSet getColumnsMetaData(String schemaName, String tableName, Connection connection)
+            throws SQLException {
+        DatabaseMetaData dbmd = connection.getMetaData();
+        ResultSet resultSet = dbmd.getColumns(null, schemaName, tableName, null);
+        return resultSet;
     }
-    
-    public synchronized List<Column> getColumnsFromPhoenix(String schemaName, String tableName, Connection connection) throws SQLException {
-    	List<Column> columnList = new ArrayList<Column>();
-    	ResultSet resultSet = null;
-    	try {
-    		resultSet = getColumnsMetaData(schemaName, tableName, connection);
-    		while (resultSet.next()) {
-    			Column column = new Column();
-    	        column.setName(resultSet.getString("COLUMN_NAME"));
-    	        column.setType(DataTypeMapping.valueOf(resultSet.getString("TYPE_NAME")));
-    	        column.setLength(resultSet.getInt("COLUMN_SIZE"));
-    	        columnList.add(column);
-   	        }
-    	} finally {
-    		if (null != resultSet) { 
-    			resultSet.close();
-    		}
-    	}
-    	
-    	return Collections.unmodifiableList(columnList);
+
+    public synchronized List<Column> getColumnsFromPhoenix(String schemaName, String tableName,
+            Connection connection) throws SQLException {
+        List<Column> columnList = new ArrayList<Column>();
+        ResultSet resultSet = null;
+        try {
+            resultSet = getColumnsMetaData(schemaName, tableName, connection);
+            while (resultSet.next()) {
+                Column column = new Column();
+                column.setName(resultSet.getString("COLUMN_NAME"));
+                column.setType(DataTypeMapping.valueOf(resultSet.getString("TYPE_NAME")));
+                column.setLength(resultSet.getInt("COLUMN_SIZE"));
+                columnList.add(column);
+            }
+        } finally {
+            if (null != resultSet) {
+                resultSet.close();
+            }
+        }
+
+        return Collections.unmodifiableList(columnList);
     }
 
     /**
@@ -248,22 +245,22 @@ public class PhoenixUtil {
     }
 
     public static String getZookeeper() {
-		return zookeeper;
-	}
+        return zookeeper;
+    }
 
-	public static void setZookeeper(String zookeeper) {
-		logger.info("Setting zookeeper: " + zookeeper);
-		PhoenixUtil.zookeeper = zookeeper;
-	}
-	
-	public static int getRowCountOverride() {
-		return rowCountOverride;
-	}
-	
-	public static void setRowCountOverride(int rowCountOverride) {
-		PhoenixUtil.rowCountOverride = rowCountOverride;
-	}
-	
+    public static void setZookeeper(String zookeeper) {
+        logger.info("Setting zookeeper: " + zookeeper);
+        PhoenixUtil.zookeeper = zookeeper;
+    }
+
+    public static int getRowCountOverride() {
+        return rowCountOverride;
+    }
+
+    public static void setRowCountOverride(int rowCountOverride) {
+        PhoenixUtil.rowCountOverride = rowCountOverride;
+    }
+
     /**
      * Update Phoenix table stats
      *
@@ -273,5 +270,13 @@ public class PhoenixUtil {
     public void updatePhoenixStats(String tableName, Scenario scenario) throws Exception {
         logger.info("Updating stats for " + tableName);
         executeStatement("UPDATE STATISTICS " + tableName, scenario);
+    }
+
+    public MonitorManager loadCustomMonitors(MonitorManager manager) throws Exception {
+        Properties
+                properties =
+                PherfConstants.create().getProperties(PherfConstants.PHERF_PROPERTIES, false);
+
+        return manager;
     }
 }

@@ -18,7 +18,6 @@
 
 package org.apache.phoenix.pherf.result.impl;
 
-import org.apache.phoenix.pherf.PherfConstants;
 import org.apache.phoenix.pherf.result.*;
 import org.apache.phoenix.pherf.result.file.ResultFileDetails;
 import org.jfree.chart.ChartFactory;
@@ -34,30 +33,14 @@ import java.io.File;
 import java.io.IOException;
 import java.util.List;
 
-public class ImageResultHandler implements ResultHandler {
-    private final String resultFileName;
-    private final ResultFileDetails resultFileDetails;
+public class ImageResultHandler extends DefaultResultHandler{
 
-    public ImageResultHandler(String resultFileName, ResultFileDetails resultFileDetails) {
-        this(resultFileName, resultFileDetails, true);
+    public ImageResultHandler() {
+        super();
     }
 
-    public ImageResultHandler(String resultFileName, ResultFileDetails resultFileDetails,
-            boolean generateFullFileName) {
-        ResultUtil util = new ResultUtil();
-        PherfConstants constants = PherfConstants.create();
-        String resultDir = constants.getProperty("pherf.default.results.dir");
-
-        this.resultFileName =
-                generateFullFileName ?
-                        resultDir + PherfConstants.PATH_SEPARATOR + PherfConstants.RESULT_PREFIX
-                                + resultFileName + util.getSuffix() + resultFileDetails
-                                .getExtension().toString() :
-                        resultFileName;
-        this.resultFileDetails = resultFileDetails;
-    }
-
-    @Override public synchronized void write(Result result) throws Exception {
+    @Override
+    public synchronized void write(Result result) throws Exception {
         TimeSeriesCollection timeSeriesCollection = new TimeSeriesCollection();
         int rowCount = 0;
         int maxLegendCount = 20;
@@ -112,23 +95,32 @@ public class ImageResultHandler implements ResultHandler {
 
     }
 
-    @Override public synchronized void flush() throws Exception {
+    @Override
+    public synchronized void flush() throws Exception {
 
     }
 
-    @Override public synchronized void close() throws Exception {
+    @Override
+    public synchronized void close() throws Exception {
 
     }
 
-    @Override public List<Result> read() throws Exception {
+    @Override
+    public List<Result> read() throws Exception {
         return null;
     }
 
-    @Override public boolean isClosed() {
-        return false;
+    /**
+     * File is never left open. This impl always overwrites existing file.
+     * @return
+     */
+    @Override
+    public boolean isClosed() {
+        return true;
     }
 
-    @Override public ResultFileDetails getResultFileDetails() {
-        return resultFileDetails;
+    @Override
+    public void setResultFileDetails(ResultFileDetails details) {
+        super.setResultFileDetails(ResultFileDetails.IMAGE);
     }
 }

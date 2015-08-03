@@ -87,7 +87,7 @@ public class Pherf {
     private final String dropPherfTablesRegEx;
     private final boolean executeQuerySets;
     private final boolean exportCSV;
-    private final boolean diff;
+    private final boolean isFunctional;
     private final boolean monitor;
     private final int rowCountOverride;
     private final boolean listFiles;
@@ -106,7 +106,7 @@ public class Pherf {
             System.exit(1);
         }
 
-        properties = PherfConstants.create().getProperties(PherfConstants.PHERF_PROPERTIES);
+        properties = PherfConstants.create().getProperties(PherfConstants.PHERF_PROPERTIES, false);
         dropPherfTablesRegEx = command.getOptionValue("drop", null);
         monitor = command.hasOption("m");
         String
@@ -123,7 +123,7 @@ public class Pherf {
         zookeeper = command.getOptionValue("z", "localhost");
         queryHint = command.getOptionValue("hint", null);
         exportCSV = command.hasOption("export");
-        diff = command.hasOption("diff");
+        isFunctional = command.hasOption("diff");
         listFiles = command.hasOption("listFiles");
         applySchema = !command.hasOption("disableSchemaApply");
         scenarioFile =
@@ -158,7 +158,7 @@ public class Pherf {
     public void run() throws Exception {
         MonitorManager monitorManager = null;
         List<Workload> workloads = new ArrayList<>();
-        WorkloadExecutor workloadExecutor = new WorkloadExecutor(properties, workloads);
+        WorkloadExecutor workloadExecutor = new WorkloadExecutor(properties, workloads, !isFunctional);
         try {
             if (listFiles) {
                 ResourceList list = new ResourceList(PherfConstants.RESOURCE_DATAMODEL);
@@ -224,10 +224,8 @@ public class Pherf {
                 logger.info("\nStarting to apply Execute Queries...");
 
                 workloadExecutor
-                        .add(new QueryExecutor(parser, phoenixUtil, workloadExecutor.getPool(),
-                                parser.getDataModels(), queryHint, exportCSV, diff ?
-                                PherfConstants.RunMode.FUNCTIONAL :
-                                PherfConstants.RunMode.PERFORMANCE));
+                        .add(new QueryExecutor(parser, phoenixUtil, workloadExecutor, parser.getDataModels(), queryHint,
+                                isFunctional));
 
             } else {
                 logger.info(
