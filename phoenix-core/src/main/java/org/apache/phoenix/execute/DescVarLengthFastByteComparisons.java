@@ -90,6 +90,12 @@ public class DescVarLengthFastByteComparisons {
             public int compareTo(byte[] buffer1, int offset1, int length1, byte[] buffer2, int offset2, int length2) {
                 // Short circuit equal case
                 if (buffer1 == buffer2 && offset1 == offset2 && length1 == length2) { return 0; }
+                if (length1 == 0 && length2 != 0) { // nulls sort first, even for descending
+                    return -1; 
+                } 
+                if (length2 == 0 && length1 != 0) { // nulls sort first, even for descending
+                    return 1; 
+                }
                 // Bring WritableComparator code local
                 int end1 = offset1 + length1;
                 int end2 = offset2 + length2;
@@ -166,6 +172,12 @@ public class DescVarLengthFastByteComparisons {
             public int compareTo(byte[] buffer1, int offset1, int length1, byte[] buffer2, int offset2, int length2) {
                 // Short circuit equal case
                 if (buffer1 == buffer2 && offset1 == offset2 && length1 == length2) { return 0; }
+                if (length1 == 0 && length2 != 0) { // nulls sort first, even for descending
+                    return -1; 
+                }
+                if (length2 == 0 && length1 != 0) { // nulls sort first, even for descending
+                    return 1; 
+                }
                 int minLength = Math.min(length1, length2);
                 int minWords = minLength / Longs.BYTES;
                 int offset1Adj = offset1 + BYTE_ARRAY_BASE_OFFSET;
