@@ -625,7 +625,7 @@ public class SchemaUtil {
     }
 
     public static int getMaxKeyLength(RowKeySchema schema, List<List<KeyRange>> slots) {
-        int maxKeyLength = getTerminatorCount(schema);
+        int maxKeyLength = getTerminatorCount(schema) * 2;
         for (List<KeyRange> slot : slots) {
             int maxSlotLength = 0;
             for (KeyRange range : slot) {

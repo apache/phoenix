@@ -36,6 +36,7 @@ import org.apache.phoenix.schema.ConstraintViolationException;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.ScanUtil;
 
 import com.google.common.base.Preconditions;
 import com.google.common.math.LongMath;
@@ -762,7 +763,7 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
             }
             return (length1 - length2);
         }
-        return Bytes.compareTo(ba1, offset1, length1, ba2, offset2, length2) * (so1 == SortOrder.DESC ? -1 : 1);
+        return (so1 == SortOrder.DESC ? -1 : 1) * ScanUtil.getComparator(length1 == length2, so1).compare(ba1, offset1, length1, ba2, offset2, length2);
     }
 
     public final int compareTo(ImmutableBytesWritable ptr1, SortOrder ptr1SortOrder, ImmutableBytesWritable ptr2,

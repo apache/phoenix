@@ -32,6 +32,7 @@ import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.ScanUtil.BytesComparator;
 
 import com.google.common.base.Function;
 import com.google.common.collect.ComparisonChain;
@@ -183,28 +184,28 @@ public class KeyRange implements Writable {
         return isSingleKey;
     }
     
-    public int compareLowerToUpperBound(ImmutableBytesWritable ptr, boolean isInclusive) {
-        return compareLowerToUpperBound(ptr.get(), ptr.getOffset(), ptr.getLength(), isInclusive);
+    public int compareLowerToUpperBound(ImmutableBytesWritable ptr, boolean isInclusive, BytesComparator comparator) {
+        return compareLowerToUpperBound(ptr.get(), ptr.getOffset(), ptr.getLength(), isInclusive, comparator);
     }
     
-    public int compareLowerToUpperBound(ImmutableBytesWritable ptr) {
-        return compareLowerToUpperBound(ptr, true);
+    public int compareLowerToUpperBound(ImmutableBytesWritable ptr, BytesComparator comparator) {
+        return compareLowerToUpperBound(ptr, true, comparator);
     }
     
-    public int compareUpperToLowerBound(ImmutableBytesWritable ptr, boolean isInclusive) {
-        return compareUpperToLowerBound(ptr.get(), ptr.getOffset(), ptr.getLength(), isInclusive);
+    public int compareUpperToLowerBound(ImmutableBytesWritable ptr, boolean isInclusive, BytesComparator comparator) {
+        return compareUpperToLowerBound(ptr.get(), ptr.getOffset(), ptr.getLength(), isInclusive, comparator);
     }
     
-    public int compareUpperToLowerBound(ImmutableBytesWritable ptr) {
-        return compareUpperToLowerBound(ptr, true);
+    public int compareUpperToLowerBound(ImmutableBytesWritable ptr, BytesComparator comparator) {
+        return compareUpperToLowerBound(ptr, true, comparator);
     }
     
-    public int compareLowerToUpperBound( byte[] b, int o, int l) {
-        return compareLowerToUpperBound(b,o,l,true);
+    public int compareLowerToUpperBound( byte[] b, int o, int l, BytesComparator comparator) {
+        return compareLowerToUpperBound(b,o,l,true, comparator);
     }
 
-    public int compareLowerToUpperBound( byte[] b) {
-        return compareLowerToUpperBound(b,0,b.length);
+    public int compareLowerToUpperBound( byte[] b, BytesComparator comparator) {
+        return compareLowerToUpperBound(b,0,b.length, comparator);
     }
 
     /**
@@ -213,15 +214,16 @@ public class KeyRange implements Writable {
      * @param o upper bound offset
      * @param l upper bound length
      * @param isInclusive upper bound inclusive
+     * @param comparator comparator used to do compare the byte array using offset and length
      * @return -1 if the lower bound is less than the upper bound,
      *          1 if the lower bound is greater than the upper bound,
      *          and 0 if they are equal.
      */
-    public int compareLowerToUpperBound( byte[] b, int o, int l, boolean isInclusive) {
+    public int compareLowerToUpperBound( byte[] b, int o, int l, boolean isInclusive, BytesComparator comparator) {
         if (lowerUnbound() || b == KeyRange.UNBOUND) {
             return -1;
         }
-        int cmp = Bytes.compareTo(lowerRange, 0, lowerRange.length, b, o, l);
+        int cmp = comparator.compare(lowerRange, 0, lowerRange.length, b, o, l);
         if (cmp > 0) {
             return 1;
         }
@@ -234,19 +236,19 @@ public class KeyRange implements Writable {
         return 1;
     }
     
-    public int compareUpperToLowerBound(byte[] b) {
-        return compareUpperToLowerBound(b,0,b.length);
+    public int compareUpperToLowerBound(byte[] b, BytesComparator comparator) {
+        return compareUpperToLowerBound(b,0,b.length, comparator);
     }
     
-    public int compareUpperToLowerBound(byte[] b, int o, int l) {
-        return compareUpperToLowerBound(b,o,l, true);
+    public int compareUpperToLowerBound(byte[] b, int o, int l, BytesComparator comparator) {
+        return compareUpperToLowerBound(b,o,l, true, comparator);
     }
     
-    public int compareUpperToLowerBound(byte[] b, int o, int l, boolean isInclusive) {
+    public int compareUpperToLowerBound(byte[] b, int o, int l, boolean isInclusive, BytesComparator comparator) {
         if (upperUnbound() || b == KeyRange.UNBOUND) {
             return 1;
         }
-        int cmp = Bytes.compareTo(upperRange, 0, upperRange.length, b, o, l);
+        int cmp = comparator.compare(upperRange, 0, upperRange.length, b, o, l);
         if (cmp > 0) {
             return 1;
         }
