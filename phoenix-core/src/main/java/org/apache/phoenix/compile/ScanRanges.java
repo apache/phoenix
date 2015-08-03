@@ -37,6 +37,7 @@ import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ScanUtil;
+import org.apache.phoenix.util.ScanUtil.BytesComparator;
 import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.collect.ImmutableList;
@@ -81,10 +82,12 @@ public class ScanRanges {
                         stripPrefix(minMaxRange.getUpperRange(),offset), 
                         minMaxRange.upperUnbound());
             }
+            // We have full keys here, so use field from our varbinary schema
+            BytesComparator comparator = ScanUtil.getComparator(SchemaUtil.VAR_BINARY_SCHEMA.getField(0));
             for (byte[] key : keys) {
                 // Filter now based on unsalted minMaxRange and ignore the point key salt byte
-                if ( unsaltedMinMaxRange.compareLowerToUpperBound(key, offset, key.length-offset, true) <= 0 &&
-                     unsaltedMinMaxRange.compareUpperToLowerBound(key, offset, key.length-offset, true) >= 0) {
+                if ( unsaltedMinMaxRange.compareLowerToUpperBound(key, offset, key.length-offset, true, comparator) <= 0 &&
+                     unsaltedMinMaxRange.compareUpperToLowerBound(key, offset, key.length-offset, true, comparator) >= 0) {
                     keyRanges.add(KeyRange.getKeyRange(key));
                 }
             }

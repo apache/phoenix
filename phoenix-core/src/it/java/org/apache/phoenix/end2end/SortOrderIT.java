@@ -41,8 +41,6 @@ import org.apache.commons.lang.ArrayUtils;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDecimal;
-import org.apache.phoenix.schema.types.PDouble;
-import org.apache.phoenix.schema.types.PFloat;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Assert;
 import org.junit.Test;
@@ -433,7 +431,7 @@ public class SortOrderIT extends BaseHBaseManagedTimeIT {
     public void testNonPKCompare() throws Exception {
         List<Integer> expectedResults = Lists.newArrayList(2,3,4);
         Integer[] saltBuckets = new Integer[] {null,3};
-        PDataType[] dataTypes = new PDataType[] {PDecimal.INSTANCE, PDouble.INSTANCE, PFloat.INSTANCE};
+        PDataType[] dataTypes = new PDataType[] {PDecimal.INSTANCE};
         for (Integer saltBucket : saltBuckets) {
             for (PDataType dataType : dataTypes) {
                 for (SortOrder sortOrder : SortOrder.values()) {
@@ -449,7 +447,7 @@ public class SortOrderIT extends BaseHBaseManagedTimeIT {
         List<Integer> rExpectedResults = new ArrayList<>(expectedResults);
         Collections.reverse(rExpectedResults);
         Integer[] saltBuckets = new Integer[] {null,3};
-        PDataType[] dataTypes = new PDataType[] {PDecimal.INSTANCE, PDouble.INSTANCE, PFloat.INSTANCE};
+        PDataType[] dataTypes = new PDataType[] {PDecimal.INSTANCE};
         for (Integer saltBucket : saltBuckets) {
             for (PDataType dataType : dataTypes) {
                 for (SortOrder sortOrder : SortOrder.values()) {
@@ -678,8 +676,13 @@ public class SortOrderIT extends BaseHBaseManagedTimeIT {
                 return ">";
             } else if (operator.equals(">")) {
                 return "<";
+            } else if (operator.equals(">=")) {
+                return "<=";
+            } else if (operator.equals("<=")) {
+                return ">=";
+            } else {
+                return operator;
             }
-            return operator;
         }
     }
     
