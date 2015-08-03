@@ -17,11 +17,11 @@ TraceApp.config(['$routeProvider',
         controller: 'SearchTraceCtrl'
       }).
       when('/count-chart', {
-        templateUrl: 'partials/nvd3-chart.html',
+        templateUrl: 'partials/chart.html',
         controller: 'TraceCountChartCtrl'
       }).
       when('/trace-distribution', {
-        templateUrl: 'partials/nvd3-chart.html',
+        templateUrl: 'partials/chart.html',
         controller: 'TraceDistChartCtrl'
       }).
 	  when('/trace-timeline', {

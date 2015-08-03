@@ -151,7 +151,14 @@
               <source>${project.basedir}/src/main/webapp/js/lib/angular.js</source>
               <source>${project.basedir}/src/main/webapp/js/lib/angular-route.js</source>
               <source>${project.basedir}/src/main/webapp/js/lib/angular-mocks.js</source>
+              <source>${project.basedir}/src/main/webapp/js/lib/ng-google-chart.js</source>
+              <source>${project.basedir}/src/main/webapp/js/lib/bootstrap.js</source>
+              <source>${project.basedir}/src/main/webapp/js/lib/ui-bootstrap-tpls.js</source>
+              <source>${project.basedir}/src/main/webapp/js/controllers/accordion-controllers.js</source>
+              <source>${project.basedir}/src/main/webapp/js/controllers/timeline-controllers.js</source>
+              <source>${project.basedir}/src/main/webapp/js/controllers/search-controllers.js</source>
               <source>${project.basedir}/src/main/webapp/js/app.js</source>
+              <source>${project.basedir}/src/main/webapp/js/controllers.js</source>
           </preloadSources>
             <!--jsSrcDir>${basedir}/src/main/webapp/js/controllers</jsSrcDir-->
             <jsTestSrcDir>${basedir}/src/test/webapp/js/specs</jsTestSrcDir>

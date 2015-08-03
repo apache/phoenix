@@ -9,7 +9,6 @@
         "http-server": "^0.6.1"
     },
     "dependencies": {
-		"angular-google-chart": "~0.0.11"
     },
     "scripts": {
         "prestart": "npm install",
