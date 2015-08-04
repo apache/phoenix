@@ -20,6 +20,8 @@ package org.apache.phoenix.pherf;
 
 import com.jcabi.jdbc.JdbcSession;
 import com.jcabi.jdbc.Outcome;
+
+import org.apache.phoenix.pherf.PherfConstants.GeneratePhoenixStats;
 import org.apache.phoenix.pherf.configuration.Column;
 import org.apache.phoenix.pherf.configuration.DataModel;
 import org.apache.phoenix.pherf.configuration.DataTypeMapping;
@@ -66,7 +68,7 @@ public class DataIngestIT extends ResultBaseTestIT {
                             scenario.getTableNameWithoutSchemaName(), util.getConnection());
             assertTrue("Could not get phoenix columns.", columnListFromPhoenix.size() > 0);
 
-            WriteWorkload loader = new WriteWorkload(util, parser, scenario);
+            WriteWorkload loader = new WriteWorkload(util, parser, scenario, GeneratePhoenixStats.NO);
             WorkloadExecutor executor = new WorkloadExecutor();
             executor.add(loader);
             executor.get();

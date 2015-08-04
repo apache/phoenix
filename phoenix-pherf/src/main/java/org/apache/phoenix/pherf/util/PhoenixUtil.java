@@ -255,4 +255,15 @@ public class PhoenixUtil {
 	public static void setRowCountOverride(int rowCountOverride) {
 		PhoenixUtil.rowCountOverride = rowCountOverride;
 	}
+	
+    /**
+     * Update Phoenix table stats
+     *
+     * @param tableName
+     * @throws Exception
+     */
+    public void updatePhoenixStats(String tableName) throws Exception {
+        logger.info("Updating stats for " + tableName);
+        executeStatement("UPDATE STATISTICS " + tableName);
+    }
 }
