@@ -108,9 +108,6 @@
 			</resource>
 			<resource>
 				<directory>config</directory>
-				<includes>
-					<include>**/*.properties</include>
-				</includes>
 			</resource>
 		</resources>
 		<testResources>

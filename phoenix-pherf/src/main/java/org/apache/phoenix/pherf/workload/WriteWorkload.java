@@ -19,6 +19,7 @@
 package org.apache.phoenix.pherf.workload;
 
 import org.apache.phoenix.pherf.PherfConstants;
+import org.apache.phoenix.pherf.PherfConstants.GeneratePhoenixStats;
 import org.apache.phoenix.pherf.configuration.Column;
 import org.apache.phoenix.pherf.configuration.Scenario;
 import org.apache.phoenix.pherf.configuration.WriteParams;
@@ -58,19 +59,24 @@ public class WriteWorkload implements Workload {
 
     private final int threadPoolSize;
     private final int batchSize;
+    private final GeneratePhoenixStats generateStatistics;
 
     public WriteWorkload(XMLConfigParser parser) throws Exception {
-        this(PhoenixUtil.create(), parser);
+        this(PhoenixUtil.create(), parser, GeneratePhoenixStats.NO);
+    }
+    
+    public WriteWorkload(XMLConfigParser parser, GeneratePhoenixStats generateStatistics) throws Exception {
+        this(PhoenixUtil.create(), parser, generateStatistics);
     }
 
-    public WriteWorkload(PhoenixUtil util, XMLConfigParser parser) throws Exception {
-        this(util, parser, null);
+    public WriteWorkload(PhoenixUtil util, XMLConfigParser parser, GeneratePhoenixStats generateStatistics) throws Exception {
+        this(util, parser, null, generateStatistics);
     }
 
-    public WriteWorkload(PhoenixUtil phoenixUtil, XMLConfigParser parser, Scenario scenario)
+    public WriteWorkload(PhoenixUtil phoenixUtil, XMLConfigParser parser, Scenario scenario, GeneratePhoenixStats generateStatistics)
             throws Exception {
         this(phoenixUtil, PherfConstants.create().getProperties(PherfConstants.PHERF_PROPERTIES),
-                parser, scenario);
+                parser, scenario, generateStatistics);
     }
 
     /**
@@ -87,11 +93,12 @@ public class WriteWorkload implements Workload {
      * @throws Exception
      */
     public WriteWorkload(PhoenixUtil phoenixUtil, Properties properties, XMLConfigParser parser,
-            Scenario scenario) throws Exception {
+            Scenario scenario, GeneratePhoenixStats generateStatistics) throws Exception {
         this.pUtil = phoenixUtil;
         this.parser = parser;
         this.rulesApplier = new RulesApplier(parser);
         this.resultUtil = new ResultUtil();
+        this.generateStatistics = generateStatistics;
 
         // Overwrite defaults properties with those given in the configuration. This indicates the
         // scenario is a R/W mixed workload.
@@ -156,9 +163,15 @@ public class WriteWorkload implements Workload {
         List<Future> writeBatches = getBatches(dataLoadThreadTime, scenario);
 
         waitForBatches(dataLoadTimeSummary, scenario, start, writeBatches);
-
-        // always update stats for Phoenix base tables
-        updatePhoenixStats(scenario.getTableName());
+        
+        // Update Phoenix Statistics
+        if (this.generateStatistics == GeneratePhoenixStats.YES) {
+        	logger.info("Updating Phoenix table statistics...");
+        	pUtil.updatePhoenixStats(scenario.getTableName());
+        	logger.info("Stats update done!");
+        } else {
+        	logger.info("Phoenix table stats update not requested.");
+        }
     }
 
     private List<Future> getBatches(DataLoadThreadTime dataLoadThreadTime, Scenario scenario)
@@ -206,18 +219,6 @@ public class WriteWorkload implements Workload {
                 + sumDuration + ") Ms");
         dataLoadTimeSummary
                 .add(scenario.getTableName(), sumRows, (int) (System.currentTimeMillis() - start));
-    }
-
-    /**
-     * TODO Move this method to PhoenixUtil
-     * Update Phoenix table stats
-     *
-     * @param tableName
-     * @throws Exception
-     */
-    public void updatePhoenixStats(String tableName) throws Exception {
-        logger.info("Updating stats for " + tableName);
-        pUtil.executeStatement("UPDATE STATISTICS " + tableName);
     }
 
     public Future<Info> upsertData(final Scenario scenario, final List<Column> columns,

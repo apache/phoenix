@@ -20,6 +20,7 @@ package org.apache.phoenix.pherf.workload;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
+import org.apache.phoenix.pherf.PherfConstants.GeneratePhoenixStats;
 import org.apache.phoenix.pherf.PherfConstants.RunMode;
 import org.apache.phoenix.pherf.configuration.*;
 import org.apache.phoenix.pherf.result.*;
@@ -142,7 +143,7 @@ public class QueryExecutor implements Workload {
                             for (int i = 0; i < writerThreadCount; i++) {
                                 logger.debug("Inserting write workload ( " + i + " ) of ( "
                                         + writerThreadCount + " )");
-                                Workload writes = new WriteWorkload(PhoenixUtil.create(), parser);
+                                Workload writes = new WriteWorkload(PhoenixUtil.create(), parser, GeneratePhoenixStats.NO);
                                 pool.submit(writes.execute());
                             }
                         }
