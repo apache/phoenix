@@ -124,7 +124,7 @@ public class JsonArrayElementsFunctionIT extends BaseHBaseManagedTimeIT {
     }
 
     @Test
-    public void testJsonArrayElementsWithInvalidJson() throws Exception {
+    public void testJsonArrayElementsWithInvalidJsonInput() throws Exception {
         Connection conn = getConnection();
         String json = "{\"f1\":1,\"f2\":\"abc\"}";
         String pk = "valueOne";

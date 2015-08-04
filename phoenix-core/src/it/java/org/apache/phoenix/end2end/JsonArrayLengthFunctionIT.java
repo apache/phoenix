@@ -124,7 +124,7 @@ public class JsonArrayLengthFunctionIT extends BaseHBaseManagedTimeIT {
         }
     }
     @Test
-    public void testJsonArrayLengthWithInvalidJson() throws Exception {
+    public void testJsonArrayLengthWithInvalidJsonInput() throws Exception {
         Connection conn = getConnection();
         String json = "{\"f1\":1,\"f2\":\"abc\"}";
         String pk = "valueOne";
@@ -137,8 +137,7 @@ public class JsonArrayLengthFunctionIT extends BaseHBaseManagedTimeIT {
                 PreparedStatement stmt = conn.prepareStatement(selectQuery);
                 ResultSet rs = stmt.executeQuery();
                 assertTrue(rs.next());
-                assertEquals("Json array length is not as expected.",
-                        2, rs.getInt(1));
+                rs.getInt(1);
                 fail("The Json Node should be an array!");
             } catch (SQLException sqe) {
                 assertEquals("SQL error code is not as expected.",

@@ -89,7 +89,7 @@ public class JsonPopulateRecordSetFunctionIT extends BaseHBaseManagedTimeIT {
     }
 
     @Test
-    public void testJsonPopulateRecordSetWithInvalidJson() throws Exception {
+    public void testJsonPopulateRecordSetWithInvalidJsonInput() throws Exception {
         Connection conn = getConnection();
         String json = "{\"a\":1,\"b\":2}";
         String pk = "valueOne";

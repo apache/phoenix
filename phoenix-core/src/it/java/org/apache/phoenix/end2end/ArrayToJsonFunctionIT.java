@@ -60,36 +60,36 @@ public class ArrayToJsonFunctionIT extends BaseHBaseManagedTimeIT {
 
             // boolean array
             Array boolArray = conn.createArrayOf("BOOLEAN", new Boolean[] { true,false });
-            int boolIndex = 2;
-            stmt.setArray(boolIndex, boolArray);
+            int boolColumnIndex  = 2;
+            stmt.setArray(boolColumnIndex , boolArray);
             // byte array
             Array byteArray = conn.createArrayOf("TINYINT", new Byte[] { 11, 22 });
-            int byteIndex = 3;
-            stmt.setArray(byteIndex, byteArray);
+            int byteColumnIndex = 3;
+            stmt.setArray(byteColumnIndex, byteArray);
             // double array
             Array doubleArray = conn.createArrayOf("DOUBLE", new Double[] { 67.78, 78.89 });
-            int doubleIndex = 4;
-            stmt.setArray(doubleIndex, doubleArray);
+            int doubleColumnIndex = 4;
+            stmt.setArray(doubleColumnIndex, doubleArray);
             // float array
             Array floatArray = conn.createArrayOf("FLOAT", new Float[] { 12.23f, 45.56f });
-            int floatIndex = 5;
-            stmt.setArray(floatIndex, floatArray);
+            int floatColumnIndex = 5;
+            stmt.setArray(floatColumnIndex, floatArray);
             // int array
             Array intArray = conn.createArrayOf("INTEGER", new Integer[] { 5555, 6666 });
-            int intIndex = 6;
-            stmt.setArray(intIndex, intArray);
+            int intColumnIndex = 6;
+            stmt.setArray(intColumnIndex, intArray);
             // long array
             Array longArray = conn.createArrayOf("BIGINT", new Long[] { 7777777L, 8888888L });
-            int longIndex = 7;
-            stmt.setArray(longIndex, longArray);
+            int longColumnIndex = 7;
+            stmt.setArray(longColumnIndex, longArray);
             // short array
             Array shortArray = conn.createArrayOf("SMALLINT", new Short[] { 333, 444 });
-            int shortIndex = 8;
-            stmt.setArray(shortIndex, shortArray);
+            int shortColumnIndex = 8;
+            stmt.setArray(shortColumnIndex, shortArray);
             // create character array
             Array stringArray = conn.createArrayOf("VARCHAR", new String[] { "a", "b" });
-            int stringIndex = 9;
-            stmt.setArray(stringIndex, stringArray);
+            int stringColumnIndex = 9;
+            stmt.setArray(stringColumnIndex, stringArray);
             stmt.execute();
             conn.commit();
 
@@ -109,20 +109,68 @@ public class ArrayToJsonFunctionIT extends BaseHBaseManagedTimeIT {
             assertTrue(rs.next());
 
             assertEquals("valueOne", rs.getString(1));
-            assertArrayToJson(rs, boolIndex, "[true,false]");
-            assertArrayToJson(rs, byteIndex, "[11,22]");
-            assertArrayToJson(rs, doubleIndex, "[67.78,78.89]");
-            assertArrayToJson(rs, floatIndex, "[12.23,45.56]");
-            assertArrayToJson(rs, intIndex, "[5555,6666]");
-            assertArrayToJson(rs, longIndex, "[7777777,8888888]");
-            assertArrayToJson(rs, shortIndex, "[333,444]");
-            assertArrayToJson(rs, stringIndex, "[\"a\",\"b\"]");
+            assertArrayToJson(rs, boolColumnIndex , "[true,false]");
+            assertArrayToJson(rs, byteColumnIndex, "[11,22]");
+            assertArrayToJson(rs, doubleColumnIndex, "[67.78,78.89]");
+            assertArrayToJson(rs, floatColumnIndex, "[12.23,45.56]");
+            assertArrayToJson(rs, intColumnIndex, "[5555,6666]");
+            assertArrayToJson(rs, longColumnIndex, "[7777777,8888888]");
+            assertArrayToJson(rs, shortColumnIndex, "[333,444]");
+            assertArrayToJson(rs, stringColumnIndex, "[\"a\",\"b\"]");
 
         } finally {
             conn.close();
         }
 
     }
+
+    @Test
+    public void testArrayToJsonWithNullValueArray() throws Exception {
+        // create the table
+        String ddlStmt = "create table "
+                + "TABLE_NULL_VALUE_ARRAY"
+                + "   (PK VARCHAR NOT NULL PRIMARY KEY,\n"
+                + "    NULL_VALUE_ARRAY varchar(100) array[2]"
+                + ")";
+        createTestTable(getUrl(), ddlStmt);
+
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(false);
+
+        try{
+            // populate the table with data
+            PreparedStatement stmt =
+                    conn.prepareStatement("UPSERT INTO "
+                            + "TABLE_NULL_VALUE_ARRAY"
+                            + "(PK, NULL_VALUE_ARRAY)\n"
+                            + "VALUES (?, ?)");
+
+            stmt.setString(1, "valueOne");
+
+            Array nullValueArray = conn.createArrayOf("VARCHAR", new String[] { null, null });
+            int nullValueIndex = 2;
+            stmt.setArray(nullValueIndex, nullValueArray);
+            stmt.execute();
+            conn.commit();
+
+            stmt =
+                    conn.prepareStatement("SELECT PK, " +
+                            "ARRAY_TO_JSON(NULL_VALUE_ARRAY) FROM "
+                            + "TABLE_NULL_VALUE_ARRAY");
+
+            ResultSet rs = stmt.executeQuery();
+            assertTrue(rs.next());
+
+            assertEquals("valueOne", rs.getString(1));
+            assertArrayToJson(rs, nullValueIndex, "[null,null]");
+
+        } finally {
+            conn.close();
+        }
+
+    }
+
 
 
     private void assertArrayToJson(ResultSet rs, int arrayIndex, String expectedJson)
