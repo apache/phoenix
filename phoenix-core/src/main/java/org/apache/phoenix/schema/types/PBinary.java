@@ -28,7 +28,7 @@ import org.apache.phoenix.exception.DataExceedsCapacityException;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.SortOrder;
 
-public class PBinary extends PDataType<byte[]> {
+public class PBinary extends PBinaryBase {
 
   public static final PBinary INSTANCE = new PBinary();
 
