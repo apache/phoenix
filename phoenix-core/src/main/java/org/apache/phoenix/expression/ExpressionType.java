@@ -52,6 +52,8 @@ import org.apache.phoenix.expression.function.FirstValueFunction;
 import org.apache.phoenix.expression.function.FloorDateExpression;
 import org.apache.phoenix.expression.function.FloorDecimalExpression;
 import org.apache.phoenix.expression.function.FloorFunction;
+import org.apache.phoenix.expression.function.GetBitFunction;
+import org.apache.phoenix.expression.function.GetByteFunction;
 import org.apache.phoenix.expression.function.HourFunction;
 import org.apache.phoenix.expression.function.IndexStateNameFunction;
 import org.apache.phoenix.expression.function.InstrFunction;
@@ -88,6 +90,8 @@ import org.apache.phoenix.expression.function.SQLIndexTypeFunction;
 import org.apache.phoenix.expression.function.SQLTableTypeFunction;
 import org.apache.phoenix.expression.function.SQLViewTypeFunction;
 import org.apache.phoenix.expression.function.SecondFunction;
+import org.apache.phoenix.expression.function.SetBitFunction;
+import org.apache.phoenix.expression.function.SetByteFunction;
 import org.apache.phoenix.expression.function.SignFunction;
 import org.apache.phoenix.expression.function.SqlTypeNameFunction;
 import org.apache.phoenix.expression.function.SqrtFunction;
@@ -253,7 +257,11 @@ public enum ExpressionType {
     ArrayConcatFunction(ArrayConcatFunction.class),
     ArrayFillFunction(ArrayFillFunction.class),
     ArrayToStringFunction(ArrayToStringFunction.class),
-    StringToArrayFunction(StringToArrayFunction.class)
+    StringToArrayFunction(StringToArrayFunction.class),
+    GetByteFunction(GetByteFunction.class),
+    SetByteFunction(SetByteFunction.class),
+    GetBitFunction(GetBitFunction.class),
+    SetBitFunction(SetBitFunction.class)
     ;
 
     ExpressionType(Class<? extends Expression> clazz) {

@@ -23,6 +23,7 @@ import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
 import static org.apache.phoenix.util.PhoenixRuntime.PHOENIX_TEST_DRIVER_URL_PARAM;
 import static org.apache.phoenix.util.TestUtil.ATABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.A_VALUE;
+import static org.apache.phoenix.util.TestUtil.BINARY_NAME;
 import static org.apache.phoenix.util.TestUtil.BTABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.B_VALUE;
 import static org.apache.phoenix.util.TestUtil.CUSTOM_ENTITY_DATA_FULL_NAME;
@@ -458,6 +459,13 @@ public abstract class BaseTest {
                 "    co_item_name varchar " +
                 "   CONSTRAINT pk PRIMARY KEY (item_id, item_name)) " +
                 "   SALT_BUCKETS=4");
+        builder.put(BINARY_NAME,"create table " + BINARY_NAME +
+            "   (a_binary BINARY(16) not null, \n" +
+            "    b_binary BINARY(16), \n" +
+            "    a_varbinary VARBINARY, \n" +
+            "    b_varbinary VARBINARY, \n" +
+            "    CONSTRAINT pk PRIMARY KEY (a_binary)\n" +
+            ") ");
         tableDDLMap = builder.build();
     }
     
