@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.compile;
 
+import static org.apache.phoenix.util.TestUtil.BINARY_NAME;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.assertDegenerate;
 import static org.apache.phoenix.util.TestUtil.assertEmptyScanKey;
@@ -68,8 +69,6 @@ import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
-
-
 public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     
     private static StatementContext compileStatement(String query) throws SQLException {
@@ -103,6 +102,36 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         assertNull(scan.getFilter());
         assertArrayEquals(PVarchar.INSTANCE.toBytes(tenantId), scan.getStartRow());
         assertArrayEquals(ByteUtil.nextKey(PVarchar.INSTANCE.toBytes(tenantId)), scan.getStopRow());
+    }
+
+    @Test
+    public void testGetByteBitExpression() throws SQLException {
+        ensureTableCreated(getUrl(), TestUtil.BINARY_NAME);
+        int result = 1;
+        String query = "select * from " + BINARY_NAME + " where GET_BYTE(a_binary, 0)=" + result;
+        Scan scan = compileStatement(query).getScan();
+
+        byte[] tmpBytes, tmpBytes2, tmpBytes3;
+        tmpBytes = PInteger.INSTANCE.toBytes(result);
+        tmpBytes2 = new byte[16];
+        System.arraycopy(tmpBytes, 0, tmpBytes2, 0, tmpBytes.length);
+        tmpBytes = ByteUtil.nextKey(tmpBytes);
+        tmpBytes3 = new byte[16];
+        System.arraycopy(tmpBytes, 0, tmpBytes3, 0, tmpBytes.length);
+        assertArrayEquals(tmpBytes2, scan.getStartRow());
+        assertArrayEquals(tmpBytes3, scan.getStopRow());
+
+        query = "select * from " + BINARY_NAME + " where GET_BIT(a_binary, 0)=" + result;
+        scan = compileStatement(query).getScan();
+
+        tmpBytes = PInteger.INSTANCE.toBytes(result);
+        tmpBytes2 = new byte[16];
+        System.arraycopy(tmpBytes, 0, tmpBytes2, 0, tmpBytes.length);
+        tmpBytes = ByteUtil.nextKey(tmpBytes);
+        tmpBytes3 = new byte[16];
+        System.arraycopy(tmpBytes, 0, tmpBytes3, 0, tmpBytes.length);
+        assertArrayEquals(tmpBytes2, scan.getStartRow());
+        assertArrayEquals(tmpBytes3, scan.getStopRow());
     }
 
     @Test
