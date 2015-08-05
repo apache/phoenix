@@ -42,11 +42,12 @@ import java.util.Map;
  *
  * @since 4.4.1
  */
-
 public class TraceServlet extends HttpServlet {
 
   protected Connection con;
   protected String DEFAULT_LIMIT = "25";
+  protected String DEFAULT_COUNTBY = "hostname";
+  protected int PHOENIX_PORT = 2181;
   protected void doGet(HttpServletRequest request, HttpServletResponse response)
       throws ServletException, IOException {
     
@@ -55,8 +56,12 @@ public class TraceServlet extends HttpServlet {
     String jsonObject = "{}";
     if ("getall".equals(action)) {
       jsonObject = getAll(limit);
-    } else {
-      jsonObject = "{ key1x: 'value1', key2x: 'value2' }";
+    }else if ("getCount".equals(action)) {
+      jsonObject = getCount("description");
+    }else if ("getDistribution".equals(action)) {
+      jsonObject = getCount(DEFAULT_COUNTBY);
+    }else {
+      jsonObject = "{ Server: 'Phoenix Tracing Web App', API version: '0.1' }";
     }
     response.setContentType("application/json");
     PrintWriter out = response.getWriter();
@@ -97,4 +102,33 @@ public class TraceServlet extends HttpServlet {
     return json;
   }
 
+  protected String getCount(String countby) {
+    String json = null;
+    if(countby == null) {
+      countby = DEFAULT_COUNTBY;
+    }
+    try {
+      Class.forName("org.apache.phoenix.jdbc.PhoenixDriver");
+      // TO-DO Improve config jdbc:phoenix port and the host
+      con = DriverManager.getConnection("jdbc:phoenix:localhost:"+PHOENIX_PORT);
+      EntityFactory nutrientEntityFactory = new EntityFactory(con,
+          "SELECT "+countby+", COUNT(*) FROM SYSTEM.TRACING_STATS GROUP BY "+countby+" HAVING COUNT(*) > 1 ");
+      List<Map<String, Object>> nutrients = nutrientEntityFactory
+          .findMultiple(new Object[] {});
+
+      ObjectMapper mapper = new ObjectMapper();
+      json = mapper.writeValueAsString(nutrients);
+    } catch (Exception e) {
+      // throw new ServletException(e);
+    } finally {
+      if (con != null) {
+        try {
+          con.close();
+        } catch (SQLException e) {
+          // throw new ServletException(e);
+        }
+      }
+    }
+    return json;
+  }
 }
