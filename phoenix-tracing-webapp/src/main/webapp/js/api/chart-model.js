@@ -24,33 +24,15 @@ var chartObject = {
             "v": "Node1"
           },
           {
-            "v": 440,
-          }
-        ]
-      },
-      {
-        "c": [
-          {
-            "v": "Node2"
-          },
-          {
-            "v": 350
-          }
-        ]
-      },
-      {
-        "c": [
-          {
-            "v": "Node3"
-          },
-          {
-            "v": 546
+            "v": 0,
           }
         ]
       }
     ]
   },
   "options": {
+    "height": 400,
+    "width": 700,
     "fill": 20,
     "displayExactValues": true,
     "vAxis": {

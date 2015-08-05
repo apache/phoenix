@@ -112,7 +112,7 @@ public class TraceServlet extends HttpServlet {
       // TO-DO Improve config jdbc:phoenix port and the host
       con = DriverManager.getConnection("jdbc:phoenix:localhost:"+PHOENIX_PORT);
       EntityFactory nutrientEntityFactory = new EntityFactory(con,
-          "SELECT "+countby+", COUNT(*) FROM SYSTEM.TRACING_STATS GROUP BY "+countby+" HAVING COUNT(*) > 1 ");
+          "SELECT "+countby+", COUNT(*) AS count FROM SYSTEM.TRACING_STATS GROUP BY "+countby+" HAVING COUNT(*) > 1 ");
       List<Map<String, Object>> nutrients = nutrientEntityFactory
           .findMultiple(new Object[] {});
 

@@ -29,18 +29,68 @@ TraceCtrl.controller('TraceDepTreeCtrl', function($scope) {
   }
 });
 
-TraceCtrl.controller('TraceCountChartCtrl', function($scope) {
+TraceCtrl.controller('TraceCountChartCtrl', function($scope,$http) {
   $scope.page = {
     title: 'Trace Count Chart Graph'
   };
-  $scope.chartObject = chartObject;
+      $scope.loadData = function() {
+    console.log('data is loading for getCount');
+    $http.get('../trace/?action=getCount').
+    success(function(data, status, headers, config) {
+      console.log('recived the data');
+      console.log(data);
+      for(var i = 0; i < data.length; i++) {
+        var datax = data[i];
+        var datamodel =[{
+            "v": datax.description
+          }, {
+            "v": parseFloat(datax.count)
+          }]
+        chartObject.data.rows[i] = {"c": datamodel}
+        chartObject.options.width = '800';
+        chartObject.options.hAxis.title = 'Traces';
+      }
+    }).
+    error(function(data, status, headers, config) {
+      console.log('error of loading timeline in start');
+    });
+
+    $scope.chartObject = chartObject;
+  };
+  $scope.chartObject = {};
+  $scope.loadData();
   $scope.chartObject.type = "ColumnChart";
 
 });
-TraceCtrl.controller('TraceDistChartCtrl', function($scope) {
+TraceCtrl.controller('TraceDistChartCtrl', function($scope, $http) {
 
   $scope.page = {
     title: 'Trace Distribution'
   };
-  $scope.chartObject = chartObject
+    $scope.loadData = function() {
+    console.log('data is loading for getDistribution');
+    $http.get('../trace/?action=getDistribution').
+    success(function(data, status, headers, config) {
+      console.log('recived the data');
+      console.log(data);
+      for(var i = 0; i < data.length; i++) {
+        var datax = data[i];
+        var datamodel =[{
+            "v": datax.hostname
+          }, {
+            "v": parseFloat(datax.count)
+          }]
+        chartObject.data.rows[i] = {"c": datamodel
+        }
+      }
+    }).
+    error(function(data, status, headers, config) {
+      console.log('error of loading timeline in start');
+    });
+    
+    $scope.chartObject = chartObject;
+  };
+  $scope.chartObject = {};
+  $scope.loadData();
+  //$scope.chartObject = chartObject
 });

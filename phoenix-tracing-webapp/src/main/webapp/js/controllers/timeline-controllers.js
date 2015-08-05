@@ -70,7 +70,7 @@ TimeLineCtrl.controller('TraceTimeLineCtrl', function($scope, $http) {
     error(function(data, status, headers, config) {
       console.log('error of loading timeline in start');
     });
-    $scope.chartObject = timeLine.shift();
+    $scope.chartObject = timeLine;
   };
   $scope.loadTimeLine();
 });
