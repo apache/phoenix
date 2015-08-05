@@ -37,7 +37,7 @@ import org.apache.phoenix.schema.types.PVarbinary;
                 @Argument(allowedTypes = { PInteger.class }) })
 public class SetByteFunction extends ScalarFunction {
 
-    public static final String NAME = “SET_BYTE”;
+    public static final String NAME = "SET_BYTE";
 
     public SetByteFunction() {
     }

@@ -37,7 +37,7 @@ import org.apache.phoenix.schema.types.PVarbinary;
         @Argument(allowedTypes = { PInteger.class }) })
 public class GetBitFunction extends PrefixFunction {
 
-    public static final String NAME = “GET_BIT”;
+    public static final String NAME = "GET_BIT";
 
     private Integer offsetPreCompute;
 
