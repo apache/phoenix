@@ -18,20 +18,28 @@
 
 package org.apache.phoenix.pherf.util;
 
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
+
+import java.sql.Connection;
+import java.sql.DatabaseMetaData;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Properties;
+
 import org.apache.phoenix.pherf.PherfConstants;
 import org.apache.phoenix.pherf.configuration.Column;
 import org.apache.phoenix.pherf.configuration.DataTypeMapping;
-
-import java.sql.*;
-import java.util.*;
-
 import org.apache.phoenix.pherf.configuration.Query;
 import org.apache.phoenix.pherf.configuration.QuerySet;
+import org.apache.phoenix.pherf.configuration.Scenario;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 
 // TODO This class needs to be cleanup up a bit. I just wanted to get an initial placeholder in.
 public class PhoenixUtil {
@@ -80,11 +88,11 @@ public class PhoenixUtil {
         return DriverManager.getConnection(url, props);
     }
 
-    public boolean executeStatement(String sql) throws Exception {
+    public boolean executeStatement(String sql, Scenario scenario) throws Exception {
         Connection connection = null;
         boolean result = false;
         try {
-            connection = getConnection();
+            connection = getConnection(scenario.getTenantId());
             result = executeStatement(sql, connection);
         } finally {
             if (connection != null) {
