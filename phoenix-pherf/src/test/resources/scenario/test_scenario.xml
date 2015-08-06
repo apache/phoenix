@@ -127,6 +127,25 @@
             <name>NEWVAL_STRING</name>
             <prefix>TSTPRFX</prefix>
         </column>
+        <column>
+            <type>CHAR</type>
+            <length>3</length>
+            <userDefined>true</userDefined>
+            <dataSequence>LIST</dataSequence>
+            <name>IDENTIFIER</name>
+            <valuelist>
+                <!-- Distributes according to specified values. These must total 100 -->
+                <datavalue distribution="60">
+                    <value>ABC</value>
+                </datavalue>
+                <datavalue distribution="20">
+                    <value>XYZ</value>
+                </datavalue>
+                <datavalue distribution="20">
+                    <value>LMN</value>
+                </datavalue>
+            </valuelist>            
+        </column>        
     </datamapping>
     <scenarios>
         <scenario tableName="PHERF.TEST_TABLE" rowCount="100" name="testScenarioRW">
@@ -200,6 +219,9 @@
                 <query id="q3" statement="select count(*) from PHERF.TEST_TABLE"/>
                 <query id="q4" statement="select sum(SOME_INT) from PHERF.TEST_TABLE"/>
             </querySet>
+        </scenario>
+        <!-- Test writing to a Multi-tenant View -->
+        <scenario tableName="PHERF.TEST_VIEW" tenantId="abcdefghijklmno" rowCount="100" name="testMTWriteScenario">
         </scenario>
     </scenarios>
 </datamodel>
