@@ -18,22 +18,23 @@
 
 package org.apache.phoenix.pherf.configuration;
 
-import org.apache.phoenix.pherf.PherfConstants;
-import org.apache.phoenix.pherf.exception.FileLoaderException;
-import org.apache.phoenix.pherf.util.ResourceList;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import javax.xml.bind.JAXBContext;
-import javax.xml.bind.JAXBException;
-import javax.xml.bind.Marshaller;
-import javax.xml.bind.Unmarshaller;
 import java.io.OutputStream;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+
+import javax.xml.bind.JAXBContext;
+import javax.xml.bind.JAXBException;
+import javax.xml.bind.Marshaller;
+import javax.xml.bind.Unmarshaller;
+
+import org.apache.phoenix.pherf.PherfConstants;
+import org.apache.phoenix.pherf.exception.FileLoaderException;
+import org.apache.phoenix.pherf.util.ResourceList;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class XMLConfigParser {
 
@@ -134,6 +135,8 @@ public class XMLConfigParser {
         if (fullTableName.contains(".")) {
             ret = fullTableName.substring(fullTableName.indexOf(".") + 1, fullTableName.length());
         }
+        // Remove any quotes that may be needed for multi-tenant tables
+        ret = ret.replaceAll("\"", "");
         return ret;
     }
 
