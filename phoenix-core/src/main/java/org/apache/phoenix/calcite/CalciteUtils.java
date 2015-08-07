@@ -14,6 +14,8 @@ import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.SqlAggFunction;
 import org.apache.calcite.sql.SqlFunction;
 import org.apache.calcite.sql.SqlKind;
+import org.apache.calcite.sql.SqlOperator;
+import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.util.NlsString;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
@@ -48,8 +50,10 @@ import org.apache.phoenix.expression.function.CountAggregateFunction;
 import org.apache.phoenix.expression.function.FunctionExpression;
 import org.apache.phoenix.expression.function.MaxAggregateFunction;
 import org.apache.phoenix.expression.function.MinAggregateFunction;
+import org.apache.phoenix.expression.function.PowerFunction;
 import org.apache.phoenix.expression.function.RoundDecimalExpression;
 import org.apache.phoenix.expression.function.RoundTimestampExpression;
+import org.apache.phoenix.expression.function.SqrtFunction;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.types.PDataType;
@@ -506,8 +510,29 @@ public class CalciteUtils {
                     throw new RuntimeException(e);
                 }
             }
-		    
-		});
+
+        });
+        EXPRESSION_MAP.put(SqlKind.OTHER_FUNCTION, new ExpressionFactory() {
+            @Override
+            public Expression newExpression(RexNode node,
+                    Implementor implementor) {
+                RexCall call = (RexCall) node;
+                List<Expression> children = convertChildren(call, implementor);
+                SqlOperator op = call.getOperator();
+                try {
+                    if (op == SqlStdOperatorTable.SQRT) {
+                        return new SqrtFunction(children);
+                    } else if (op == SqlStdOperatorTable.POWER) {
+                        return new PowerFunction(children);
+                    }
+                } catch (SQLException e) {
+                    throw new RuntimeException(e);
+                }
+
+                throw new UnsupportedOperationException(
+                        "Unsupported SqlFunction: " + op.getName());
+            }
+        });
 	}
 	
     private static final Map<String, FunctionFactory> FUNCTION_MAP = Maps
