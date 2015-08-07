@@ -47,20 +47,29 @@ public class TraceServlet extends HttpServlet {
   protected Connection con;
   protected String DEFAULT_LIMIT = "25";
   protected String DEFAULT_COUNTBY = "hostname";
+  protected String LOGIC_AND = "AND";
+  protected String LOGIC_OR = "OR";
+  protected String PHOENIX_HOST = "localhost";
   protected int PHOENIX_PORT = 2181;
+  
+  
   protected void doGet(HttpServletRequest request, HttpServletResponse response)
       throws ServletException, IOException {
     
     String action = request.getParameter("action");
     String limit = request.getParameter("limit");
+    String traceid = request.getParameter("traceid");
+    String parentid = request.getParameter("parentid");
     String jsonObject = "{}";
     if ("getall".equals(action)) {
       jsonObject = getAll(limit);
-    }else if ("getCount".equals(action)) {
+    } else if ("getCount".equals(action)) {
       jsonObject = getCount("description");
-    }else if ("getDistribution".equals(action)) {
+    } else if ("getDistribution".equals(action)) {
       jsonObject = getCount(DEFAULT_COUNTBY);
-    }else {
+    } else if ("searchTrace".equals(action)) {
+      jsonObject = searchTrace(parentid, traceid, LOGIC_OR);
+    } else {
       jsonObject = "{ Server: 'Phoenix Tracing Web App', API version: '0.1' }";
     }
     response.setContentType("application/json");
@@ -75,30 +84,8 @@ public class TraceServlet extends HttpServlet {
     if(limit == null) {
       limit = DEFAULT_LIMIT;
     }
-    try {
-      Class.forName("org.apache.phoenix.jdbc.PhoenixDriver");
-      // TO-DO Improve config jdbc:phoenix port and the host
-      con = DriverManager.getConnection("jdbc:phoenix:localhost:2181");
-      EntityFactory nutrientEntityFactory = new EntityFactory(con,
-          "SELECT * FROM SYSTEM.TRACING_STATS LIMIT "+limit);
-      List<Map<String, Object>> nutrients = nutrientEntityFactory
-          .findMultiple(new Object[] {});
-
-      ObjectMapper mapper = new ObjectMapper();
-
-      json = mapper.writeValueAsString(nutrients);
-    //TO-DO Exception handle needed with error msg
-    } catch (Exception e) {
-      // throw new ServletException(e);
-    } finally {
-      if (con != null) {
-        try {
-          con.close();
-        } catch (SQLException e) {
-          // throw new ServletException(e);
-        }
-      }
-    }
+    String sqlQuery = "SELECT * FROM SYSTEM.TRACING_STATS LIMIT "+limit;
+    json = getResults(sqlQuery);
     return json;
   }
 
@@ -107,27 +94,49 @@ public class TraceServlet extends HttpServlet {
     if(countby == null) {
       countby = DEFAULT_COUNTBY;
     }
+    String sqlQuery = "SELECT "+countby+", COUNT(*) AS count FROM SYSTEM.TRACING_STATS GROUP BY "+countby+" HAVING COUNT(*) > 1 ";
+    json = getResults(sqlQuery);
+    return json;
+  }
+  
+  protected String searchTrace(String parentId, String traceId,String logic) {
+    String json = null;
+    String query = null;
+    if(parentId != null && traceId != null) {
+      query = "SELECT * FROM SYSTEM.TRACING_STATS WHERE parent_id="+parentId+" "+logic+" trace_id="+traceId;
+    }else if (parentId != null && traceId == null) {
+      query = "SELECT * FROM SYSTEM.TRACING_STATS WHERE parent_id="+parentId;
+    }else if(parentId == null && traceId != null) {
+      query = "SELECT * FROM SYSTEM.TRACING_STATS WHERE trace_id="+traceId;
+    }
+    json = getResults(query);
+    return json;
+  }
+  
+  protected String getResults(String sqlQuery) {
+    String json = null;
+    if(sqlQuery == null){
+    json = "{error:true,msg:'SQL was null'}";
+    }else{
     try {
       Class.forName("org.apache.phoenix.jdbc.PhoenixDriver");
-      // TO-DO Improve config jdbc:phoenix port and the host
-      con = DriverManager.getConnection("jdbc:phoenix:localhost:"+PHOENIX_PORT);
-      EntityFactory nutrientEntityFactory = new EntityFactory(con,
-          "SELECT "+countby+", COUNT(*) AS count FROM SYSTEM.TRACING_STATS GROUP BY "+countby+" HAVING COUNT(*) > 1 ");
+      con = DriverManager.getConnection("jdbc:phoenix:"+PHOENIX_HOST+":"+PHOENIX_PORT);
+      EntityFactory nutrientEntityFactory = new EntityFactory(con,sqlQuery);
       List<Map<String, Object>> nutrients = nutrientEntityFactory
           .findMultiple(new Object[] {});
-
       ObjectMapper mapper = new ObjectMapper();
       json = mapper.writeValueAsString(nutrients);
     } catch (Exception e) {
-      // throw new ServletException(e);
+      json = "{error:true,msg:'Serrver Error:"+e.getMessage()+"'}";
     } finally {
       if (con != null) {
         try {
           con.close();
         } catch (SQLException e) {
-          // throw new ServletException(e);
+          json = "{error:true,msg:'SQL Serrver Error:"+e.getMessage()+"'}";
         }
       }
+    }
     }
     return json;
   }
