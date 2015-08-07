@@ -24,35 +24,52 @@ TimeLineCtrl.controller('TraceTimeLineCtrl', function($scope, $http) {
   }
 
   $scope.trace = {};
-  $scope.addItemToTimeLine = function() {
-    $http.get('../trace?action=getall&limit=1').
+  $scope.addItemToTimeLine = function(clear) {
+    if(clear == true){
+      console.log('clear all');
+      console.log($scope.chartObject.data.rows);
+      $scope.chartObject.data.rows[0].c = [];
+    }
+    console.log($scope.traceID)
+    if($scope.traceID){
+      var url = '../trace?action=searchTrace&traceid='+$scope.traceID
+      console.log(url);
+    $http.get(url).
     success(function(data, status, headers, config) {
       $scope.trace = data[0];
       var nextid = $scope.chartObject.data.rows.length;
       console.log(data[0]);
       //adding to the time line
-      $scope.chartObject.data.rows[nextid] = {
+      for(var i = 0; i < data.length; i++) {
+      var currentData = data[i];
+      $scope.chartObject.data.rows[nextid+i] = {
         "c": [{
-          "v": "Trace " + (nextid)
+          "v": "Trace " + (nextid+i)
         }, {
-          "v": $scope.trace.description
+          "v": currentData.description
         }, {
-          "v": new Date(parseFloat($scope.trace.start_time))
+          "v": new Date(parseFloat(currentData.start_time))
         }, {
-          "v": new Date(parseFloat($scope.trace.end_time))
+          "v": new Date(parseFloat(currentData.end_time))
         }]
       }
-    }).
+    }
+  }).
     error(function(data, status, headers, config) {
       console.log('error in loading time line item');
     });
+  }
+  else {
+    alert('Please, Add trace id');
+    }
   };
 
   $scope.loadTimeLine = function() {
     var limit = 7;
     $http.get('../trace?action=getall&limit='+limit).
     success(function(data, status, headers, config) {
-      for(var i = 1; i < data.length+1; i++) {
+      for(var i = 0; i < data.length; i++) {
+        console.log(data[i])
         var datax = data[i];
         var datamodel =[{
             "v": "Trace " + i
@@ -63,6 +80,7 @@ TimeLineCtrl.controller('TraceTimeLineCtrl', function($scope, $http) {
           }, {
             "v": new Date(parseFloat(datax.end_time))
           }]
+        console.log(i)
         timeLine.data.rows[i] = {"c": datamodel
         }
       }
@@ -71,6 +89,7 @@ TimeLineCtrl.controller('TraceTimeLineCtrl', function($scope, $http) {
       console.log('error of loading timeline in start');
     });
     $scope.chartObject = timeLine;
+    $scope.clearId();
   };
   $scope.loadTimeLine();
 });

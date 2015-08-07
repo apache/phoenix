@@ -5,8 +5,11 @@
 <div class="panel panel-default">
   <div class="panel-heading">Trace Picker</div>
   <div class="panel-body">
-    <div class="col-xs-2">
-      <label class="btn btn-primary" ng-click="addItemToTimeLine()">Add Trace</label>
+    <div class="col-xs-6">
+    <label>Trace ID:
+      <input type="text" ng-model="traceID" >
+      <a class="btn btn-primary" ng-click="addItemToTimeLine(false)">Add Trace</a>
+      <a class="btn btn-primary" ng-click="addItemToTimeLine(true)">Clear and Add</a></label>
     </div>
     <div class="col-xs-2">
       <select class="form-control" ng-model="myItemID"
@@ -18,4 +21,4 @@
     </div>
   </div>
 </div>
-<div google-chart chart="chartObject" style="height: 400px;"></div>
+<div google-chart chart="chartObject" style="height: 100%;"></div>
