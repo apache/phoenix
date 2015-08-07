@@ -49,6 +49,8 @@ import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.apache.commons.cli.PosixParser;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -68,20 +70,9 @@ import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.monitoring.GlobalMetric;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.schema.AmbiguousColumnException;
-import org.apache.phoenix.schema.ColumnNotFoundException;
-import org.apache.phoenix.schema.KeyValueSchema;
+import org.apache.phoenix.schema.*;
 import org.apache.phoenix.schema.KeyValueSchema.KeyValueSchemaBuilder;
-import org.apache.phoenix.schema.MetaDataClient;
-import org.apache.phoenix.schema.PColumn;
-import org.apache.phoenix.schema.PColumnFamily;
-import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
-import org.apache.phoenix.schema.PTableKey;
-import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.schema.RowKeyValueAccessor;
-import org.apache.phoenix.schema.TableNotFoundException;
-import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.types.PDataType;
 
 import com.google.common.base.Joiner;
@@ -97,6 +88,9 @@ import com.google.common.collect.Lists;
  * @since 0.1
  */
 public class PhoenixRuntime {
+
+    private static Log log = LogFactory.getLog(PhoenixRuntime.class);
+
     /**
      * Use this connection property to control HBase timestamps
      * by specifying your own long timestamp value at connection time. All
@@ -382,6 +376,11 @@ public class PhoenixRuntime {
         if (columns == null || columns.isEmpty()) {
             // use all columns in the table
             for(PColumn pColumn : table.getColumns()) {
+                if(table.getBucketNum() != null && table.getBucketNum()>0
+                        && SaltingUtil.SALTING_COLUMN_NAME.equals(pColumn.getName().getString())) {
+                    log.debug(" exist salting column");
+                    continue;
+                }
                int sqlType = pColumn.getDataType().getSqlType();
                columnInfoList.add(new ColumnInfo(pColumn.toString(), sqlType)); 
             }

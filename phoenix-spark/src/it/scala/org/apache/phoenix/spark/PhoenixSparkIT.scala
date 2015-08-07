@@ -447,4 +447,17 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
     count shouldEqual 1L
 
   }
+
+  test("Can read all column from salted table") {
+    val conf = PhoenixSparkITHelper.getTestClusterConfig
+    val quorum = conf.get("hbase.zookeeper.quorum")
+    val clientPort = conf.get("hbase.zookeeper.property.clientPort")
+    val znodeParent = conf.get("zookeeper.znode.parent")
+    val df_user = new SQLContext(sc).load(
+      "org.apache.phoenix.spark",
+      Map("table" -> "SALTED_TABLE", "zkUrl" -> s"$quorum:$clientPort:$znodeParent")
+    )
+
+    df_user.show()
+  }
 }
