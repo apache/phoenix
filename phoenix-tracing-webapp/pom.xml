@@ -157,6 +157,7 @@
               <source>${project.basedir}/src/main/webapp/js/controllers/accordion-controllers.js</source>
               <source>${project.basedir}/src/main/webapp/js/controllers/timeline-controllers.js</source>
               <source>${project.basedir}/src/main/webapp/js/controllers/search-controllers.js</source>
+              <source>${project.basedir}/src/main/webapp/js/controllers/dependency-tree-controllers.js</source>
               <source>${project.basedir}/src/main/webapp/js/app.js</source>
               <source>${project.basedir}/src/main/webapp/js/controllers.js</source>
           </preloadSources>

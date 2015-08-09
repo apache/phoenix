@@ -21,14 +21,6 @@ TraceCtrl.controller('TraceListCtrl', function($scope, $http) {
     $scope.loadTrace();
 });
 
-//this will change with after db binding.
-TraceCtrl.controller('TraceDepTreeCtrl', function($scope) {
-  $scope.rootId = "-6024241463441346911";
-  $scope.drawTree = function() {
-    $scope.chartObject = dependencyChart;
-  }
-});
-
 TraceCtrl.controller('TraceCountChartCtrl', function($scope,$http) {
   $scope.page = {
     title: 'Trace Count Chart Graph'

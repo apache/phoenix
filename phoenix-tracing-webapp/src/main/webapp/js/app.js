@@ -3,6 +3,7 @@ var TraceApp = angular.module('TracingAppCtrl', [
     'TracingCtrl',
     'UICtrl',
     'TimeLineCtrl',
+    'DepTreeCtrl',
     'SearchCtrl'
 ]);
 
