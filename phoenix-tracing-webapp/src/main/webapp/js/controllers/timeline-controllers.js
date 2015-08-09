@@ -5,11 +5,11 @@ TimeLineCtrl.controller('TraceTimeLineCtrl', function($scope, $http) {
   $scope.page = {
     title: 'Timeline for Trace'
   };
-  
-  
+
+
   $scope.clear = function() {
     var nextid = $scope.chartObject.data.rows.length;
-    $scope.chartObject.data.rows.splice(nextid - 1, 1);
+    $scope.chartObject.data.rows.splice(1, nextid - 2);
   }
 
   $scope.myItemID = "Trace 01";
@@ -25,63 +25,64 @@ TimeLineCtrl.controller('TraceTimeLineCtrl', function($scope, $http) {
 
   $scope.trace = {};
   $scope.addItemToTimeLine = function(clear) {
-    if(clear == true){
-      console.log('clear all');
-      console.log($scope.chartObject.data.rows);
+    if(clear == true) {
       $scope.chartObject.data.rows[0].c = [];
-    }
-    console.log($scope.traceID)
-    if($scope.traceID){
-      var url = '../trace?action=searchTrace&traceid='+$scope.traceID
-      console.log(url);
-    $http.get(url).
-    success(function(data, status, headers, config) {
-      $scope.trace = data[0];
-      var nextid = $scope.chartObject.data.rows.length;
-      console.log(data[0]);
-      //adding to the time line
-      for(var i = 0; i < data.length; i++) {
-      var currentData = data[i];
-      $scope.chartObject.data.rows[nextid+i] = {
-        "c": [{
-          "v": "Trace " + (nextid+i)
-        }, {
-          "v": currentData.description
-        }, {
-          "v": new Date(parseFloat(currentData.start_time))
-        }, {
-          "v": new Date(parseFloat(currentData.end_time))
-        }]
+      $scope.loadTimeLine('../trace?action=searchTrace&traceid=' + $scope.traceID);
+    } else {
+      console.log($scope.traceID)
+      if($scope.traceID) {
+        var url = '../trace?action=searchTrace&traceid=' + $scope.traceID
+        $http.get(url).
+        success(function(data, status, headers, config) {
+          $scope.trace = data[0];
+          var nextid = $scope.chartObject.data.rows.length;
+          console.log(data[0]);
+          //adding to the time line
+          for(var i = 0; i < data.length; i++) {
+            var currentData = data[i];
+            var dest = getDescription(currentData.description);
+            $scope.chartObject.data.rows[nextid + i] = {
+              "c": [{
+                "v": "Trace " + (nextid + i)
+              }, {
+                "v": dest
+              }, {
+                "v": new Date(parseFloat(currentData.start_time))
+              }, {
+                "v": new Date(parseFloat(currentData.end_time))
+              }]
+            }
+          } //end of for loop
+        }).
+        error(function(data, status, headers, config) {
+          console.log('error in loading time line item');
+        });
+      } else {
+        alert('Please, Add trace id');
       }
-    }
-  }).
-    error(function(data, status, headers, config) {
-      console.log('error in loading time line item');
-    });
-  }
-  else {
-    alert('Please, Add trace id');
     }
   };
 
-  $scope.loadTimeLine = function() {
-    var limit = 7;
-    $http.get('../trace?action=getall&limit='+limit).
+  $scope.loadTimeLine = function(url) {
+
+    $http.get(url).
     success(function(data, status, headers, config) {
       for(var i = 0; i < data.length; i++) {
         console.log(data[i])
         var datax = data[i];
-        var datamodel =[{
-            "v": "Trace " + i
-          }, {
-            "v": datax.description
-          }, {
-            "v": new Date(parseFloat(datax.start_time))
-          }, {
-            "v": new Date(parseFloat(datax.end_time))
-          }]
+        var dest = getDescription(datax.description);
+        var datamodel = [{
+          "v": "Trace " + i
+        }, {
+          "v": dest
+        }, {
+          "v": new Date(parseFloat(datax.start_time))
+        }, {
+          "v": new Date(parseFloat(datax.end_time))
+        }]
         console.log(i)
-        timeLine.data.rows[i] = {"c": datamodel
+        timeLine.data.rows[i] = {
+          "c": datamodel
         }
       }
     }).
@@ -91,5 +92,18 @@ TimeLineCtrl.controller('TraceTimeLineCtrl', function($scope, $http) {
     $scope.chartObject = timeLine;
     $scope.clearId();
   };
-  $scope.loadTimeLine();
+
+  //shortning description
+  function getDescription(description) {
+    var dst = '';
+    var haveBracket = description.indexOf("(");
+    if(haveBracket != -1) {
+      dst = description.substring(0, description.indexOf("("))
+    } else {
+      dst = description;
+    }
+    console.log(dst);
+    return dst;
+  }
+  $scope.loadTimeLine('../trace?action=getall&limit=7');
 });
