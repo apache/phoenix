@@ -10,22 +10,30 @@
          min="1" max="250" required>
   <a class="btn btn-default" ng-click="loadTrace()">Load</a>
   </label>
-
+<div class="row">
+  <div class="col-md-12">
   <table class="table table-striped">
     <thead>
       <tr>
         <th>Parent ID</th>
         <th>Span ID</th>
         <th>Description</th>
+        <th></th>
       </tr>
     </thead>
     <tbody>
       <tr ng-repeat="trace in traces">
         <td>{{trace.parent_id}}</td>
         <td>{{trace.span_id}}</td>
-        <td>{{trace.description}}</td>
+        <td>{{trace.description | limitTo:letterLimit}}</td>
+        <td>
+          <!--div class="btn-group btn-group-sm" role="group" aria-label="...">
+             <a href="./#/dependency-tree?traceid={{trace.trace_id}}" class="btn btn-info" role="button">{{trace.trace_id}}</a>
+          </div>
+          -->
+        </td>
       </tr>
      </tbody>
   </table>
-
+</div></div>
 </div>
