@@ -25,7 +25,7 @@ TraceCtrl.controller('TraceListCtrl', function($scope, $http) {
 TraceCtrl.controller('TraceDepTreeCtrl', function($scope) {
   $scope.rootId = "-6024241463441346911";
   $scope.drawTree = function() {
-    loadTree();
+    $scope.chartObject = dependencyChart;
   }
 });
 

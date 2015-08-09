@@ -1,4 +1,5 @@
 var timeLine = {};
+var dependencyChart = {};
 var chartObject = {
   "type": "PieChart",
   "displayed": true,
@@ -92,6 +93,60 @@ timeLine = {
           },
           {
             "v": new Date(1434196101784)
+          }
+        ]
+      }
+    ]
+  },
+  "options": {},
+  "formatters": {}
+};
+// model of the dependency chart (org chart model)
+dependencyChart = 
+{"type": "OrgChart",
+  "displayed": true,
+  "data": {
+    "cols": [
+      {
+        "id": "TraceID",
+        "label": "TraceID",
+        "type": "string"
+      },
+      {
+        "id": "Label",
+        "label": "Label",
+        "type": "string"
+      },
+      {
+        "id": "ToolTip",
+        "label": "ToolTip",
+        "type": "string"
+      }
+    ],
+    "rows": [
+      {
+        "c": [
+          {
+            "v": "Trace01"
+          },
+          {
+            "v": ""
+          },
+          {
+            "v": "root"
+          }
+        ]
+      },
+            {
+        "c": [
+          {
+            "v": "Trace 02"
+          },
+          {
+            "v": "Trace01"
+          },
+          {
+            "v": "Trace 02"
           }
         ]
       }
