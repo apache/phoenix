@@ -1,5 +1,6 @@
 'use strict';
 
+var searchURL = "../trace/?action=searchTrace&traceid=";
 var DepTreeCtrl = angular.module('DepTreeCtrl', ['ui.bootstrap']);
 DepTreeCtrl.controller('TraceDepTreeCtrl', function($scope, $http, $location) {
   $scope.page = {
@@ -12,6 +13,11 @@ DepTreeCtrl.controller('TraceDepTreeCtrl', function($scope, $http, $location) {
     $scope.traceId = searchObject.traceid
     console.log($scope.traceId);
     getTreeData(url+$scope.traceId);
+    $scope.chartObject = dependencyChart;
+  };
+
+   $scope.drawTree = function() {
+    getTreeData(searchURL+$scope.traceId);
     $scope.chartObject = dependencyChart;
   };
 
@@ -73,5 +79,5 @@ DepTreeCtrl.controller('TraceDepTreeCtrl', function($scope, $http, $location) {
     return dependencyChart;
   };
 
-  $scope.loadDependencyTree('../trace/?action=searchTrace&traceid=');
+  $scope.loadDependencyTree(searchURL);
 });

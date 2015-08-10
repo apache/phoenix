@@ -72,9 +72,10 @@ public class TraceServlet extends HttpServlet {
     } else {
       jsonObject = "{ Server: 'Phoenix Tracing Web App', API version: '0.1' }";
     }
-    response.setContentType("application/json");
+    response.setContentType("application/json");    
+    String output = jsonObject;
     PrintWriter out = response.getWriter();
-    out.print(jsonObject);
+    out.print(output);
     out.flush();
 
   }
@@ -85,8 +86,8 @@ public class TraceServlet extends HttpServlet {
       limit = DEFAULT_LIMIT;
     }
     String sqlQuery = "SELECT * FROM SYSTEM.TRACING_STATS LIMIT "+limit;
-    json = getResults(sqlQuery);
-    return json;
+    json = getResults(sqlQuery);    
+    return getJson(json);
   }
 
   protected String getCount(String countby) {
@@ -110,7 +111,15 @@ public class TraceServlet extends HttpServlet {
       query = "SELECT * FROM SYSTEM.TRACING_STATS WHERE trace_id="+traceId;
     }
     json = getResults(query);
-    return json;
+    return getJson(json);
+  }
+  
+  protected String getJson(String json) {
+    String output = json.toString().replace("_id\":", "_id\":\"")
+        .replace(",\"hostname", "\",\"hostname")
+        .replace(",\"parent", "\",\"parent")
+        .replace(",\"end", "\",\"end");   
+    return output;
   }
   
   protected String getResults(String sqlQuery) {
