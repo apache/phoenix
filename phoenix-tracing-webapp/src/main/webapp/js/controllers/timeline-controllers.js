@@ -1,7 +1,7 @@
 'use strict';
 
 var TimeLineCtrl = angular.module('TimeLineCtrl', ['ui.bootstrap']);
-TimeLineCtrl.controller('TraceTimeLineCtrl', function($scope, $http) {
+TimeLineCtrl.controller('TraceTimeLineCtrl', function($scope, $http, $location) {
   $scope.page = {
     title: 'Timeline for Trace'
   };
@@ -27,7 +27,8 @@ TimeLineCtrl.controller('TraceTimeLineCtrl', function($scope, $http) {
   $scope.addItemToTimeLine = function(clear) {
     if(clear == true) {
       $scope.chartObject.data.rows[0].c = [];
-      $scope.loadTimeLine('../trace?action=searchTrace&traceid=' + $scope.traceID);
+      $scope.loadTimeLine('../trace?action=searchTrace&traceid=' + $scope
+        .traceID);
     } else {
       console.log($scope.traceID)
       if($scope.traceID) {
@@ -64,10 +65,38 @@ TimeLineCtrl.controller('TraceTimeLineCtrl', function($scope, $http) {
   };
 
   $scope.loadTimeLine = function(url) {
+    $scope.chartObject = timeLine;
+    var searchObject = $location.search();
+    $scope.traceID = searchObject.traceid
+    console.log($scope.traceID);
+    if($scope.traceID == null) {
+      getTimeLineChart(url);
+    } else {
+      //TODO draw chart in start of the page.
+      //getTimeLineChart(searchURL + $scope.traceID);
+      getTimeLineChart(url);
+    }
 
+    $scope.clearId();
+  };
+
+  //shortning description
+  function getDescription(description) {
+    var dst = '';
+    var haveBracket = description.indexOf("(");
+    if(haveBracket != -1) {
+      dst = description.substring(0, description.indexOf("("))
+    } else {
+      dst = description;
+    }
+    console.log(dst);
+    return dst;
+  }
+
+  function getTimeLineChart(url) {
     $http.get(url).
     success(function(data, status, headers, config) {
-      for(var i = 0; i < data.length; i++) {
+      for(var i = 0; i < data.length - 1; i++) {
         console.log(data[i])
         var datax = data[i];
         var dest = getDescription(datax.description);
@@ -85,25 +114,14 @@ TimeLineCtrl.controller('TraceTimeLineCtrl', function($scope, $http) {
           "c": datamodel
         }
       }
+      $scope.chartObject = timeLine;
     }).
     error(function(data, status, headers, config) {
       console.log('error of loading timeline in start');
     });
-    $scope.chartObject = timeLine;
-    $scope.clearId();
-  };
-
-  //shortning description
-  function getDescription(description) {
-    var dst = '';
-    var haveBracket = description.indexOf("(");
-    if(haveBracket != -1) {
-      dst = description.substring(0, description.indexOf("("))
-    } else {
-      dst = description;
-    }
-    console.log(dst);
-    return dst;
+    console.log(timeLine);
+    return timeLine;
   }
+
   $scope.loadTimeLine('../trace?action=getall&limit=7');
 });

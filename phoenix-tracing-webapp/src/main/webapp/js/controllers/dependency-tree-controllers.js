@@ -12,13 +12,17 @@ DepTreeCtrl.controller('TraceDepTreeCtrl', function($scope, $http, $location) {
     var searchObject = $location.search();
     $scope.traceId = searchObject.traceid
     console.log($scope.traceId);
-    getTreeData(url+$scope.traceId);
+    getTreeData(url + $scope.traceId);
     $scope.chartObject = dependencyChart;
   };
 
-   $scope.drawTree = function() {
-    getTreeData(searchURL+$scope.traceId);
-    $scope.chartObject = dependencyChart;
+  $scope.drawTree = function() {
+    if($scope.traceId != null) {
+      getTreeData(searchURL + $scope.traceId);
+      $scope.chartObject = dependencyChart;
+    } else {
+      $scope.reqStatus = "Please Enter TraceID";
+    }
   };
 
   //shortning description
@@ -33,6 +37,20 @@ DepTreeCtrl.controller('TraceDepTreeCtrl', function($scope, $http, $location) {
     return shortDescription;
   }
 
+  function getToolTip(data) {
+    var toolTip = '';
+    var dst = getDescription(data.description);
+    var start_time = new Date(parseFloat(data.start_time));
+    var end_time = new Date(parseFloat(data.end_time));
+    var duration = (data.end_time - data.start_time) + ' ns';
+    var hostname = data.hostname;
+    toolTip = 'Hostname :  ' + hostname + '\nDescription :  ' + dst +
+      '\nStart At :  ' + start_time + '\nEnd At :  ' + end_time +
+      '\nTrace Id :  ' +
+      data.trace_id + '\nDuration :  ' + duration;
+    return toolTip;
+  }
+
   function getRootID(data) {
     var rootId = null;
     for(var i = 0; i < data.length; i++) {
@@ -42,8 +60,8 @@ DepTreeCtrl.controller('TraceDepTreeCtrl', function($scope, $http, $location) {
       for(var j = 0; j < data.length; j++) {
         if(currentSpanId == data.parent_id)
           break;
-        if(j == data.length-1){
-        console.log(currentSpanId)
+        if(j == data.length - 1) {
+          console.log(currentSpanId)
         }
       }
     }
@@ -52,30 +70,30 @@ DepTreeCtrl.controller('TraceDepTreeCtrl', function($scope, $http, $location) {
   }
 
   function getTreeData(url) {
+    $scope.reqStatus = "Retriving data from phonix.";
     $http.get(url).
     success(function(data, status, headers, config) {
       getRootID(data);
       for(var i = 0; i < data.length; i++) {
-        console.log(data[i])
         var currentData = data[i];
-        var dest = getDescription(currentData.description);
+        var toolTip = getToolTip(currentData);
         var datamodel = [{
           "v": currentData.span_id
         }, {
           "v": currentData.parent_id
         }, {
-          "v": dest
+          "v": toolTip
         }]
-        console.log(i)
         dependencyChart.data.rows[i] = {
           "c": datamodel
         }
       }
     }).
     error(function(data, status, headers, config) {
-      console.log('error of loading timeline in start');
+      console.log('error of loading dependencyChart');
+      $scope.reqStatus = "Error in data retrieving.";
     });
-    console.log(dependencyChart);
+    $scope.reqStatus = "Data retrieved.";
     return dependencyChart;
   };
 

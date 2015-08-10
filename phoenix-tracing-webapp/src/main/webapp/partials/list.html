@@ -18,7 +18,7 @@
         <th>Parent ID</th>
         <th>Span ID</th>
         <th>Description</th>
-        <th></th>
+        <th>View Models</th>
       </tr>
     </thead>
     <tbody>
@@ -27,8 +27,9 @@
         <td>{{trace.span_id}}</td>
         <td>{{trace.description | limitTo:letterLimit}}</td>
         <td>
-          <div class="btn-group btn-group-sm" role="group" aria-label="...">
+          <div class="btn-group " role="group" aria-label="...">
              <a href="./#/dependency-tree?traceid={{trace.trace_id}}" class="btn btn-info" role="button"><i class="fa fa-sort-amount-asc"></i></a>
+             <a href="./#/trace-timeline?traceid={{trace.trace_id}}" class="btn btn-info" role="button"><i class="fa fa-sliders"></i></a>
           </div>
         </td>
       </tr>

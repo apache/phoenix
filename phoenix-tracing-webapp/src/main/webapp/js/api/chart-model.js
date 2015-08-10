@@ -136,22 +136,13 @@ dependencyChart =
             "v": "root"
           }
         ]
-      },
-            {
-        "c": [
-          {
-            "v": "Trace 02"
-          },
-          {
-            "v": "Trace01"
-          },
-          {
-            "v": "Trace 02"
-          }
-        ]
       }
     ]
   },
-  "options": {},
+  "options": {
+    allowHtml:true,
+    allowCollapse:true,
+    tooltip: { isHtml: true }
+  },
   "formatters": {}
 };

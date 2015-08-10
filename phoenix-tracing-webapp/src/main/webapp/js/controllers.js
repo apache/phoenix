@@ -49,6 +49,11 @@ TraceCtrl.controller('TraceCountChartCtrl', function($scope,$http) {
 
     $scope.chartObject = chartObject;
   };
+
+  $scope.setChartType = function(type) {
+    $scope.chartObject.type = type;
+  };
+
   $scope.chartObject = {};
   $scope.loadData();
   $scope.chartObject.type = "ColumnChart";
@@ -82,6 +87,11 @@ TraceCtrl.controller('TraceDistChartCtrl', function($scope, $http) {
     
     $scope.chartObject = chartObject;
   };
+
+  $scope.setChartType = function(type) {
+    $scope.chartObject.type = type;
+  };
+
   $scope.chartObject = {};
   $scope.loadData();
   //$scope.chartObject = chartObject
