@@ -41,6 +41,7 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.ConstraintViolationException;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
@@ -740,6 +741,38 @@ public class PDataTypeTest {
         float nna = PFloat.INSTANCE.getCodec().decodeFloat(ba, 0, SortOrder.DESC);
         float nnb = PFloat.INSTANCE.getCodec().decodeFloat(bb, 0, SortOrder.DESC);
         assertTrue(Float.compare(nna, nnb) < 0);
+    }
+    
+    @Test
+    public void testDoubleComparison() {
+        testRealNumberComparison(PDouble.INSTANCE, new Double[] {0.99, 1.0, 1.001, 1.01, 2.0});
+    }
+    
+    @Test
+    public void testFloatComparison() {
+        testRealNumberComparison(PFloat.INSTANCE, new Float[] {0.99f, 1.0f, 1.001f, 1.01f, 2.0f});
+    }
+    
+    @Test
+    public void testDecimalComparison() {
+        testRealNumberComparison(PDecimal.INSTANCE, new BigDecimal[] {BigDecimal.valueOf(0.99), BigDecimal.valueOf(1.0), BigDecimal.valueOf(1.001), BigDecimal.valueOf(1.01), BigDecimal.valueOf(2.0)});
+    }
+    
+    private static void testRealNumberComparison(PDataType type, Object[] a) {
+        
+        for (SortOrder sortOrder : SortOrder.values()) {
+            int factor = (sortOrder == SortOrder.ASC ? 1 : -1);
+            byte[] prev_b = null;
+            Object prev_o = null;
+            for (Object o : a) {
+                byte[] b = type.toBytes(o, sortOrder);
+                if (prev_b != null) {
+                    assertTrue("Compare of " + o + " with " + prev_o + " " + sortOrder + " failed.", ScanUtil.getComparator(type.isFixedWidth(), sortOrder).compare(prev_b, 0, prev_b.length, b, 0, b.length) * factor < 0);
+                }
+                prev_b = b;
+                prev_o = o;
+            }
+        }
     }
     
     @Test
