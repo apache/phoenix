@@ -236,15 +236,21 @@ public class PDouble extends PRealNumber<Double> {
     }
 
     @Override
-    public double decodeDouble(byte[] b, int o, SortOrder sortOrder) {
+    public double decodeDouble(byte[] bytes, int o, SortOrder sortOrder) {
       Preconditions.checkNotNull(sortOrder);
-      checkForSufficientLength(b, o, Bytes.SIZEOF_LONG);
+      checkForSufficientLength(bytes, o, Bytes.SIZEOF_LONG);
+      long l;
       if (sortOrder == SortOrder.DESC) {
-        for (int i = o; i < Bytes.SIZEOF_LONG; i++) {
-          b[i] = (byte) (b[i] ^ 0xff);
-        }
+          // Copied from Bytes.toLong(), but without using the toLongUnsafe
+          // TODO: would it be possible to use the toLongUnsafe?
+          l = 0;
+          for(int i = o; i < o + Bytes.SIZEOF_LONG; i++) {
+            l <<= 8;
+            l ^= (bytes[i] ^ 0xff) & 0xFF;
+          }
+      } else {
+          l = Bytes.toLong(bytes, o);
       }
-      long l = Bytes.toLong(b, o);
       l--;
       l ^= (~l >> Long.SIZE - 1) | Long.MIN_VALUE;
       return Double.longBitsToDouble(l);

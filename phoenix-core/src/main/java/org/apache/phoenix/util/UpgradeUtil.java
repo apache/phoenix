@@ -84,6 +84,8 @@ import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.schema.types.PDouble;
+import org.apache.phoenix.schema.types.PFloat;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PVarbinary;
@@ -884,12 +886,15 @@ public class UpgradeUtil {
     // Return all types that are descending and either:
     // 1) variable length, which includes all array types (PHOENIX-2067)
     // 2) fixed length with padding (PHOENIX-2120)
+    // 3) float and double (PHOENIX-2171)
     // We exclude VARBINARY as we no longer support DESC for it.
     private static String getAffectedDataTypes() {
         StringBuilder buf = new StringBuilder("(" 
                 + PVarchar.INSTANCE.getSqlType() + "," +
                 + PChar.INSTANCE.getSqlType() + "," +
                 + PBinary.INSTANCE.getSqlType() + "," +
+                + PFloat.INSTANCE.getSqlType() + "," +
+                + PDouble.INSTANCE.getSqlType() + "," +
                 + PDecimal.INSTANCE.getSqlType() + ","
                 );
         for (PDataType type : PDataType.values()) {
