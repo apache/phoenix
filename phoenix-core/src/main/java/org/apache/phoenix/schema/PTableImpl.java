@@ -57,6 +57,8 @@ import org.apache.phoenix.schema.stats.PTableStatsImpl;
 import org.apache.phoenix.schema.types.PBinary;
 import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDouble;
+import org.apache.phoenix.schema.types.PFloat;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -407,7 +409,13 @@ public class PTableImpl implements PTable {
         for (PColumn column : allColumns) {
             PName familyName = column.getFamilyName();
             if (familyName == null) {
-                hasColumnsRequiringUpgrade |= (column.getSortOrder() == SortOrder.DESC && (!column.getDataType().isFixedWidth() || column.getDataType() == PChar.INSTANCE || column.getDataType() == PBinary.INSTANCE))
+                hasColumnsRequiringUpgrade |= 
+                        ( column.getSortOrder() == SortOrder.DESC 
+                            && (!column.getDataType().isFixedWidth() 
+                                || column.getDataType() == PChar.INSTANCE 
+                                || column.getDataType() == PFloat.INSTANCE 
+                                || column.getDataType() == PDouble.INSTANCE 
+                                || column.getDataType() == PBinary.INSTANCE) )
                         || (column.getSortOrder() == SortOrder.ASC && column.getDataType() == PBinary.INSTANCE && column.getMaxLength() != null && column.getMaxLength() > 1);
             	pkColumns.add(column);
             }

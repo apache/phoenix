@@ -88,6 +88,8 @@ import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.schema.types.PBinary;
 import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDouble;
+import org.apache.phoenix.schema.types.PFloat;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.KeyValueUtil;
@@ -312,6 +314,10 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
                                                 len--;
                                             }
                                             ptr.set(ptr.get(), ptr.getOffset(), len);
+                                        // Special case for re-writing DESC FLOAT and DOUBLE, as they're not inverted like they should be (PHOENIX-2171)
+                                        } else if (field.getDataType() == PFloat.INSTANCE || field.getDataType() == PDouble.INSTANCE) {
+                                            byte[] invertedBytes = SortOrder.invert(ptr.get(), ptr.getOffset(), ptr.getLength());
+                                            ptr.set(invertedBytes);
                                         }
                                     } else if (field.getDataType() == PBinary.INSTANCE) {
                                         // Remove trailing space characters so that the setValues call below will replace them
