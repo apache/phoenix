@@ -66,16 +66,15 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
         this.ordinal = ordinal;
     }
 
-    @Deprecated
     public static PDataType[] values() {
         return PDataTypeFactory.getInstance().getOrderedTypes();
     }
 
-    @Deprecated
     public int ordinal() {
         return ordinal;
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     public Class<T> encodedClass() {
         return getJavaClass();
@@ -942,6 +941,7 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
     public abstract Object toObject(byte[] bytes, int offset, int length, PDataType actualType, SortOrder sortOrder,
             Integer maxLength, Integer scale);
 
+    @SuppressWarnings("unchecked")
     @Override
     public T decode(PositionedByteRange pbr) {
         // default implementation based on existing PDataType methods.
