@@ -243,15 +243,19 @@ public class PFloat extends PRealNumber<Float> {
     public float decodeFloat(byte[] b, int o, SortOrder sortOrder) {
       Preconditions.checkNotNull(sortOrder);
       checkForSufficientLength(b, o, Bytes.SIZEOF_INT);
+      int value;
       if (sortOrder == SortOrder.DESC) {
-        for (int i = o; i < Bytes.SIZEOF_INT; i++) {
-          b[i] = (byte) (b[i] ^ 0xff);
-        }
+          value = 0;
+          for(int i = o; i < (o + Bytes.SIZEOF_INT); i++) {
+            value <<= 8;
+            value ^= (b[i] ^ 0xff) & 0xFF;
+          }
+      } else {
+          value = Bytes.toInt(b, o);
       }
-      int i = Bytes.toInt(b, o);
-      i--;
-      i ^= (~i >> Integer.SIZE - 1) | Integer.MIN_VALUE;
-      return Float.intBitsToFloat(i);
+      value--;
+      value ^= (~value >> Integer.SIZE - 1) | Integer.MIN_VALUE;
+      return Float.intBitsToFloat(value);
     }
 
     @Override
