@@ -18,16 +18,15 @@
 
 package org.apache.phoenix.pherf.configuration;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import org.apache.commons.lang.builder.HashCodeBuilder;
+import org.apache.phoenix.pherf.util.PhoenixUtil;
 
 import javax.xml.bind.annotation.XmlAttribute;
 import javax.xml.bind.annotation.XmlElement;
 import javax.xml.bind.annotation.XmlRootElement;
-
-import org.apache.commons.lang.builder.HashCodeBuilder;
-import org.apache.phoenix.pherf.util.PhoenixUtil;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
 @XmlRootElement(namespace = "org.apache.phoenix.pherf.configuration.DataModel")
 public class Scenario {
@@ -38,7 +37,6 @@ public class Scenario {
     private List<QuerySet> querySet = new ArrayList<>();
     private WriteParams writeParams;
     private String name;
-    private String tenantId;
 
     public Scenario() {
         writeParams = new WriteParams();
@@ -163,19 +161,6 @@ public class Scenario {
 
     public void setName(String name) {
         this.name = name;
-    }
-    
-    /**
-     * Tenant Id used by connection of this query
-     * @return
-     */
-    @XmlAttribute
-    public String getTenantId() {
-        return tenantId;
-    }
-
-    public void setTenantId(String tenantId) {
-        this.tenantId = tenantId;
     }
 
     public WriteParams getWriteParams() {

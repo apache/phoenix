@@ -18,21 +18,6 @@
 
 package org.apache.phoenix.pherf.workload;
 
-import java.math.BigDecimal;
-import java.sql.Connection;
-import java.sql.Date;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
-import java.sql.Types;
-import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Properties;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-
 import org.apache.phoenix.pherf.PherfConstants;
 import org.apache.phoenix.pherf.configuration.Column;
 import org.apache.phoenix.pherf.configuration.Scenario;
@@ -48,6 +33,17 @@ import org.apache.phoenix.pherf.util.PhoenixUtil;
 import org.apache.phoenix.pherf.util.RowCalculator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.math.BigDecimal;
+import java.sql.*;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Properties;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 public class WriteWorkload implements Workload {
     private static final Logger logger = LoggerFactory.getLogger(WriteWorkload.class);
@@ -162,7 +158,7 @@ public class WriteWorkload implements Workload {
         waitForBatches(dataLoadTimeSummary, scenario, start, writeBatches);
 
         // always update stats for Phoenix base tables
-        updatePhoenixStats(scenario.getTableName(), scenario);
+        updatePhoenixStats(scenario.getTableName());
     }
 
     private List<Future> getBatches(DataLoadThreadTime dataLoadThreadTime, Scenario scenario)
@@ -176,7 +172,7 @@ public class WriteWorkload implements Workload {
             List<Column>
                     phxMetaCols =
                     pUtil.getColumnsFromPhoenix(scenario.getSchemaName(),
-                            scenario.getTableNameWithoutSchemaName(), pUtil.getConnection(scenario.getTenantId()));
+                            scenario.getTableNameWithoutSchemaName(), pUtil.getConnection());
             int threadRowCount = rowCalculator.getNext();
             logger.info(
                     "Kick off thread (#" + i + ")for upsert with (" + threadRowCount + ") rows.");
@@ -219,9 +215,9 @@ public class WriteWorkload implements Workload {
      * @param tableName
      * @throws Exception
      */
-    public void updatePhoenixStats(String tableName, Scenario scenario) throws Exception {
+    public void updatePhoenixStats(String tableName) throws Exception {
         logger.info("Updating stats for " + tableName);
-        pUtil.executeStatement("UPDATE STATISTICS " + tableName, scenario);
+        pUtil.executeStatement("UPDATE STATISTICS " + tableName);
     }
 
     public Future<Info> upsertData(final Scenario scenario, final List<Column> columns,
@@ -234,7 +230,7 @@ public class WriteWorkload implements Workload {
                 SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
                 Connection connection = null;
                 try {
-                    connection = pUtil.getConnection(scenario.getTenantId());
+                    connection = pUtil.getConnection();
                     long logStartTime = System.currentTimeMillis();
                     long
                             maxDuration =
