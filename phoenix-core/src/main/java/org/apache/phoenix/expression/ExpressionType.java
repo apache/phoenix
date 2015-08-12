@@ -72,6 +72,7 @@ import org.apache.phoenix.expression.function.MinuteFunction;
 import org.apache.phoenix.expression.function.MonthFunction;
 import org.apache.phoenix.expression.function.NowFunction;
 import org.apache.phoenix.expression.function.NthValueFunction;
+import org.apache.phoenix.expression.function.OctetLengthFunction;
 import org.apache.phoenix.expression.function.PercentRankAggregateFunction;
 import org.apache.phoenix.expression.function.PercentileContAggregateFunction;
 import org.apache.phoenix.expression.function.PercentileDiscAggregateFunction;
@@ -261,7 +262,8 @@ public enum ExpressionType {
     GetByteFunction(GetByteFunction.class),
     SetByteFunction(SetByteFunction.class),
     GetBitFunction(GetBitFunction.class),
-    SetBitFunction(SetBitFunction.class)
+    SetBitFunction(SetBitFunction.class),
+    OctetLengthFunction(OctetLengthFunction.class),
     ;
 
     ExpressionType(Class<? extends Expression> clazz) {
