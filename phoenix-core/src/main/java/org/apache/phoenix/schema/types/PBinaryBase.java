@@ -83,4 +83,16 @@ public abstract class PBinaryBase extends PDataType<byte[]> {
         ret = (byte) ((ret & (~(1 << (off % Byte.SIZE)))) | (newValue << (off % Byte.SIZE)));
         setByte(bytes, offset, length, sortOrder, off / Byte.SIZE, ret, outPtr);
     }
+
+    public void octetLength(ImmutableBytesWritable ptr, SortOrder sortOrder,
+            ImmutableBytesWritable outPtr) {
+        octetLength(ptr.get(), ptr.getOffset(), ptr.getLength(), sortOrder, outPtr);
+    }
+
+    public void octetLength(byte[] bytes, int offset, int length, SortOrder sortOrder,
+            ImmutableBytesWritable outPtr) {
+        bytes = new byte[PInteger.INSTANCE.getByteSize()];
+        PInteger.INSTANCE.getCodec().encodeInt(length, bytes, 0);
+        outPtr.set(bytes);
+    }
 }
