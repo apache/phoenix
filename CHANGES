@@ -1,3 +1,17 @@
+Release Notes - Phoenix - Version 4.5.1
+
+** Bug
+    * [PHOENIX-1791] - Pherf - Support data creation to multi-tenant views
+    * [PHOENIX-1994] - TestIndexWriter#testFailureOnRunningUpdateAbortsPending() deadlocks on JDK 8
+    * [PHOENIX-2132] - Pherf - Drop all command line argument does not work
+    * [PHOENIX-2137] - Range query on DECIMAL DESC sometimes incorrect
+    * [PHOENIX-2138] - Non equality comparisons don't work for ARRAY type columns that are DESC in row key
+    * [PHOENIX-2145] - Pherf - Fix threads not exiting after performance run
+    * [PHOENIX-2149] - MAX Value of Sequences not honored when closing Connection between calls to NEXT VALUE FOR
+    * [PHOENIX-2155] - Add gpg signing to release profile
+    * [PHOENIX-2171] - DOUBLE and FLOAT DESC are stored as ASC
+    * [PHOENIX-2177] - Adding a column to the view shouldn't call admin.modifyTable() for the base table.
+
 Release Notes - Phoenix - Version 4.5.0
 
 ** Improvement
