@@ -47,6 +47,11 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
     }
 
     @Test
+    public void testUpdatableViewLocalIndexNonStringTenantId() throws Exception {
+        testUpdatableViewNonString(null, true);
+    }
+
+    @Test
     public void testUpdatableViewsWithSameNameDifferentTenants() throws Exception {
         testUpdatableViewsWithSameNameDifferentTenants(null);
     }
