@@ -27,7 +27,7 @@
     <fileSets>
         <fileSet>
             <directory>${project.basedir}/config</directory>
-            <outputDirectory>pherf-${project.version}-cluster/config</outputDirectory>
+            <outputDirectory>phoenix-pherf-${project.version}-cluster/config</outputDirectory>
             <includes>
                 <include>*/*</include>
                 <include>*</include>
@@ -35,7 +35,7 @@
         </fileSet>
         <fileSet>
             <directory>${project.basedir}/cluster</directory>
-            <outputDirectory>pherf-${project.version}-cluster/</outputDirectory>
+            <outputDirectory>phoenix-pherf-${project.version}-cluster/</outputDirectory>
             <includes>
                 <include>*sh</include>
                 <include>*dependencies.jar</include>
@@ -43,7 +43,7 @@
         </fileSet>
         <fileSet>
             <directory>${project.build.directory}</directory>
-            <outputDirectory>pherf-${project.version}-cluster/lib</outputDirectory>
+            <outputDirectory>phoenix-pherf-${project.version}-cluster/lib</outputDirectory>
             <includes>
                 <include>*dependencies.jar</include>
             </includes>
