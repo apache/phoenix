@@ -822,7 +822,10 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         int nDeleteCF = 0;
         int nDeleteVersionCF = 0;
         for (Cell kv : pendingUpdates) {
-            if (kv.getTypeByte() == KeyValue.Type.DeleteFamilyVersion.getCode()) {
+        	if (kv.getTypeByte() == KeyValue.Type.DeleteFamily.getCode()) {
+        	    nDeleteCF++;
+        	}
+        	else if (kv.getTypeByte() == KeyValue.Type.DeleteFamilyVersion.getCode()) {
                 nDeleteVersionCF++;
             }
         }
@@ -884,12 +887,12 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             Delete delete = new Delete(indexRowKey);
             // If table delete was single version, then index delete should be as well
             if (deleteType == DeleteType.SINGLE_VERSION) {
-                for (ColumnReference ref : getAllColumns()) { // FIXME: Keep Set<byte[]> for index CFs?
+                for (ColumnReference ref : getCoverededColumns()) { // FIXME: Keep Set<byte[]> for index CFs?
                     delete.deleteFamilyVersion(ref.getFamily(), ts);
                 }
                 delete.deleteFamilyVersion(emptyCF, ts);
             } else {
-                for (ColumnReference ref : getAllColumns()) { // FIXME: Keep Set<byte[]> for index CFs?
+                for (ColumnReference ref : getCoverededColumns()) { // FIXME: Keep Set<byte[]> for index CFs?
                     delete.deleteFamily(ref.getFamily(), ts);
                 }
                 delete.deleteFamily(emptyCF, ts);
