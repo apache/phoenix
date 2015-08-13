@@ -22,6 +22,7 @@ import static org.apache.phoenix.query.QueryConstants.BASE_TABLE_BASE_COLUMN_COU
 import static org.apache.phoenix.query.QueryConstants.DIVERGED_VIEW_BASE_COLUMN_COUNT;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -35,6 +36,8 @@ import java.sql.Statement;
 import java.util.List;
 import java.util.Properties;
 
+import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -48,6 +51,7 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
+import org.junit.Assert;
 import org.junit.Test;
 
 import com.google.common.base.Objects;
@@ -1052,6 +1056,42 @@ public class AlterTableWithViewsIT extends BaseHBaseManagedTimeIT {
             try (Connection tenant1Conn = getTenantConnection("tenant1")) {
                 tenant1Conn.createStatement().execute("SELECT KV from " + view1);
                 tenant1Conn.createStatement().execute("SELECT PK2 from " + view1);
+            }
+        }
+    }
+    
+    @Test
+    public void testAlteringViewConditionallyModifiesHTableMetadata() throws Exception {
+        String baseTable = "testAlteringViewConditionallyModifiesBaseTable".toUpperCase();
+        String view1 = "view1".toUpperCase();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String baseTableDDL = "CREATE TABLE " + baseTable + " (TENANT_ID VARCHAR NOT NULL, PK1 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR, V3 VARCHAR CONSTRAINT NAME_PK PRIMARY KEY(TENANT_ID, PK1)) MULTI_TENANT = true ";
+            conn.createStatement().execute(baseTableDDL);
+            HTableDescriptor tableDesc1 = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin().getTableDescriptor(Bytes.toBytes(baseTable)); 
+            try (Connection tenant1Conn = getTenantConnection("tenant1")) {
+                String view1DDL = "CREATE VIEW " + view1 + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 CHAR(256)) AS SELECT * FROM " + baseTable;
+                tenant1Conn.createStatement().execute(view1DDL);
+                // This should not modify the base table
+                String alterView = "ALTER VIEW " + view1 + " ADD NEWCOL1 VARCHAR";
+                tenant1Conn.createStatement().execute(alterView);
+                HTableDescriptor tableDesc2 = tenant1Conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin().getTableDescriptor(Bytes.toBytes(baseTable));
+                assertEquals(tableDesc1, tableDesc2);
+                
+                // Add a new column family that doesn't already exist in the base table
+                alterView = "ALTER VIEW " + view1 + " ADD CF.NEWCOL2 VARCHAR";
+                tenant1Conn.createStatement().execute(alterView);
+                
+                // Verify that the column family now shows up in the base table descriptor
+                tableDesc2 = tenant1Conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin().getTableDescriptor(Bytes.toBytes(baseTable));
+                assertFalse(tableDesc2.equals(tableDesc1));
+                assertNotNull(tableDesc2.getFamily(Bytes.toBytes("CF")));
+                
+                // Add a column with an existing column family. This shouldn't modify the base table.
+                alterView = "ALTER VIEW " + view1 + " ADD CF.NEWCOL3 VARCHAR";
+                tenant1Conn.createStatement().execute(alterView);
+                HTableDescriptor tableDesc3 = tenant1Conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin().getTableDescriptor(Bytes.toBytes(baseTable));
+                assertTrue(tableDesc3.equals(tableDesc2));
+                assertNotNull(tableDesc3.getFamily(Bytes.toBytes("CF")));
             }
         }
     }
