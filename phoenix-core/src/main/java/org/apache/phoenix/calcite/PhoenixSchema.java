@@ -191,7 +191,7 @@ public class PhoenixSchema implements Schema {
         sb.setCharAt(6, ' '); // replace first comma with space.
         sb.append(" FROM ").append("\"").append(table.getTableName().getString()).append("\"");
         MaterializationService.instance().defineMaterialization(
-                calciteSchema, null, sb.toString(), path, index.getTableName().getString(), true);        
+                calciteSchema, null, sb.toString(), path, index.getTableName().getString(), true, true);        
     }
 
     /** Schema factory that creates a

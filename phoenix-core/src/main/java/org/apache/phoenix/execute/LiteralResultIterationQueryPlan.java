@@ -75,6 +75,7 @@ public class LiteralResultIterationQueryPlan extends BaseQueryPlan {
             throws SQLException {
         ResultIterator scanner = new ResultIterator() {
             private boolean closed = false;
+            private int count = 0;
 
             @Override
             public void close() throws SQLException {
@@ -83,7 +84,9 @@ public class LiteralResultIterationQueryPlan extends BaseQueryPlan {
 
             @Override
             public Tuple next() throws SQLException {
-                if (!this.closed && tupleIterator.hasNext()) {
+                if (!this.closed 
+                        && (limit == null || count++ < limit)
+                        && tupleIterator.hasNext()) {
                     return tupleIterator.next();
                 }
                 return null;

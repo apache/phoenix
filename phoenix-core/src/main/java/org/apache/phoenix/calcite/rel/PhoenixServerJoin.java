@@ -74,8 +74,7 @@ public class PhoenixServerJoin extends PhoenixAbstractJoin {
                 || getRight().getConvention() != PhoenixRel.CLIENT_CONVENTION)
             return planner.getCostFactory().makeInfiniteCost();            
         
-        if (joinType == JoinRelType.FULL || joinType == JoinRelType.RIGHT
-                || getLeft().getConvention() != PhoenixRel.SERVER_CONVENTION)
+        if (joinType == JoinRelType.FULL || joinType == JoinRelType.RIGHT)
             return planner.getCostFactory().makeInfiniteCost();
         
         //TODO return infinite cost if RHS size exceeds memory limit.

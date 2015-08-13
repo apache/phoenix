@@ -542,9 +542,9 @@ public class CalciteTest extends BaseClientManagedTimeIT {
         
         start().sql("select s.name, count(\"item_id\") from " + JOIN_SUPPLIER_TABLE_FULL_NAME + " s join " + JOIN_ITEM_TABLE_FULL_NAME + " i on s.\"supplier_id\" = i.\"supplier_id\" group by s.name")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixServerAggregate(group=[{2}], EXPR$1=[COUNT()])\n" +
-                           "    PhoenixServerJoin(condition=[=($1, $0)], joinType=[inner])\n" +
-                           "      PhoenixServerProject(supplier_id=[$5])\n" +
+                           "  PhoenixServerAggregate(group=[{3}], EXPR$1=[COUNT()])\n" +
+                           "    PhoenixServerJoin(condition=[=($2, $1)], joinType=[inner])\n" +
+                           "      PhoenixServerProject(item_id=[$0], supplier_id=[$5])\n" +
                            "        PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
                            "      PhoenixToClientConverter\n" +
                            "        PhoenixServerProject(supplier_id=[$0], NAME=[$1])\n" +
@@ -619,9 +619,9 @@ public class CalciteTest extends BaseClientManagedTimeIT {
         start().sql("select s.name, count(\"item_id\") from " + JOIN_SUPPLIER_TABLE_FULL_NAME + " s join " + JOIN_ITEM_TABLE_FULL_NAME + " i on s.\"supplier_id\" = i.\"supplier_id\" group by s.name order by count(\"item_id\"), s.name desc")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixCompactClientSort(sort0=[$1], sort1=[$0], dir0=[ASC], dir1=[DESC])\n" +
-                           "    PhoenixServerAggregate(group=[{2}], EXPR$1=[COUNT()])\n" +
-                           "      PhoenixServerJoin(condition=[=($1, $0)], joinType=[inner])\n" +
-                           "        PhoenixServerProject(supplier_id=[$5])\n" +
+                           "    PhoenixServerAggregate(group=[{3}], EXPR$1=[COUNT()])\n" +
+                           "      PhoenixServerJoin(condition=[=($2, $1)], joinType=[inner])\n" +
+                           "        PhoenixServerProject(item_id=[$0], supplier_id=[$5])\n" +
                            "          PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
                            "        PhoenixToClientConverter\n" +
                            "          PhoenixServerProject(supplier_id=[$0], NAME=[$1])\n" +
@@ -698,9 +698,9 @@ public class CalciteTest extends BaseClientManagedTimeIT {
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixLimit(fetch=[3])\n" +
                            "    PhoenixCompactClientSort(sort0=[$1], sort1=[$0], dir0=[ASC], dir1=[DESC])\n" +
-                           "      PhoenixServerAggregate(group=[{2}], EXPR$1=[COUNT()])\n" +
-                           "        PhoenixServerJoin(condition=[=($1, $0)], joinType=[inner])\n" +
-                           "          PhoenixServerProject(supplier_id=[$5])\n" +
+                           "      PhoenixServerAggregate(group=[{3}], EXPR$1=[COUNT()])\n" +
+                           "        PhoenixServerJoin(condition=[=($2, $1)], joinType=[inner])\n" +
+                           "          PhoenixServerProject(item_id=[$0], supplier_id=[$5])\n" +
                            "            PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
                            "          PhoenixToClientConverter\n" +
                            "            PhoenixServerProject(supplier_id=[$0], NAME=[$1])\n" +
@@ -758,9 +758,9 @@ public class CalciteTest extends BaseClientManagedTimeIT {
         start().sql("select s.name, count(\"item_id\") from " + JOIN_SUPPLIER_TABLE_FULL_NAME + " s join " + JOIN_ITEM_TABLE_FULL_NAME + " i on s.\"supplier_id\" = i.\"supplier_id\" group by s.name limit 3")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixLimit(fetch=[3])\n" +
-                           "    PhoenixServerAggregate(group=[{2}], EXPR$1=[COUNT()])\n" +
-                           "      PhoenixServerJoin(condition=[=($1, $0)], joinType=[inner])\n" +
-                           "        PhoenixServerProject(supplier_id=[$5])\n" +
+                           "    PhoenixServerAggregate(group=[{3}], EXPR$1=[COUNT()])\n" +
+                           "      PhoenixServerJoin(condition=[=($2, $1)], joinType=[inner])\n" +
+                           "        PhoenixServerProject(item_id=[$0], supplier_id=[$5])\n" +
                            "          PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
                            "        PhoenixToClientConverter\n" +
                            "          PhoenixServerProject(supplier_id=[$0], NAME=[$1])\n" +
@@ -859,6 +859,12 @@ public class CalciteTest extends BaseClientManagedTimeIT {
     
     @Test public void testIndex() {
         final Start start = start(getConnectionProps(true), false);
+        start.sql("select * from aTable where b_string = 'b'")
+            .explainIs("PhoenixToEnumerableConverter\n" +
+                   "  PhoenixToClientConverter\n" +
+                   "    PhoenixServerProject(ORGANIZATION_ID=[$1], ENTITY_ID=[$2], A_STRING=[$3], B_STRING=[$0], A_INTEGER=[$4], A_DATE=[$5], A_TIME=[$6], A_TIMESTAMP=[$7], X_DECIMAL=[$8], X_LONG=[$9], X_INTEGER=[$10], Y_INTEGER=[$11], A_BYTE=[$12], A_SHORT=[$13], A_FLOAT=[$14], A_DOUBLE=[$15], A_UNSIGNED_FLOAT=[$16], A_UNSIGNED_DOUBLE=[$17])\n" +
+                   "      PhoenixTableScan(table=[[phoenix, IDX_FULL]], filter=[=($0, 'b')])\n")
+            .close();
         start.sql("select x_integer from aTable")
             .explainIs("PhoenixToEnumerableConverter\n" +
                        "  PhoenixToClientConverter\n" +
@@ -879,9 +885,9 @@ public class CalciteTest extends BaseClientManagedTimeIT {
             .close();
         start.sql("select a_integer from aTable order by a_string")
             .explainIs("PhoenixToEnumerableConverter\n" +
-                       "  PhoenixClientProject(A_INTEGER=[$1])\n" +
-                       "    PhoenixServerSort(sort0=[$0], dir0=[ASC])\n" +
-                       "      PhoenixServerProject(A_STRING=[$2], A_INTEGER=[$4])\n" +
+                       "  PhoenixClientProject(A_INTEGER=[$0])\n" +
+                       "    PhoenixServerSort(sort0=[$1], dir0=[ASC])\n" +
+                       "      PhoenixServerProject(A_INTEGER=[$4], A_STRING=[$2])\n" +
                        "        PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
             .close();
         start.sql("select a_string, b_string from aTable where a_string = 'a'")
@@ -901,6 +907,14 @@ public class CalciteTest extends BaseClientManagedTimeIT {
                        "  PhoenixToClientConverter\n" +
                        "    PhoenixServerProject(A_STRING=[$3], B_STRING=[$0], X_INTEGER=[$10], Y_INTEGER=[$11])\n" +
                        "      PhoenixTableScan(table=[[phoenix, IDX_FULL]], filter=[=($0, 'b')])\n")
+            .close();
+    }
+    
+    @Test public void testValues() {
+        start().sql("select p0+p1 from (values (2, 1)) as t(p0, p1)")
+            .explainIs("PhoenixToEnumerableConverter\n" +
+                       "  PhoenixClientProject(EXPR$0=[+($0, $1)])\n" +
+                       "    PhoenixValues(tuples=[[{ 2, 1 }]])\n")
             .close();
     }
     
