@@ -582,6 +582,53 @@ public class PhoenixHBaseLoaderIT extends BaseHBaseManagedTimeIT {
           dropTable(INDEX_NAME);
         }
     }
+	 
+	@Test 
+	public void testLoadOfSaltTable() throws Exception {
+	    final String TABLE = "TABLE11";
+        final String sourceTableddl = "CREATE TABLE  " + TABLE
+                + "  (ID  INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, AGE INTEGER, SAL INTEGER) SALT_BUCKETS=2  ";
+         
+        conn.createStatement().execute(sourceTableddl);
+        
+        //prepare data with 10 rows having age 25 and the other 30.
+        final String dml = "UPSERT INTO " + TABLE + " VALUES(?,?,?,?)";
+        PreparedStatement stmt = conn.prepareStatement(dml);
+        int rows = 20;
+        int j = 0, k = 0;
+        for(int i = 0 ; i < rows; i++) {
+            stmt.setInt(1, i);
+            stmt.setString(2, "a"+i);
+            if(i % 2 == 0) {
+                stmt.setInt(3, 25);
+                stmt.setInt(4, 10 * 2 * j++);    
+            } else {
+                stmt.setInt(3, 30);
+                stmt.setInt(4, 10 * 3 * k++);
+            }
+            
+            stmt.execute();    
+        }
+        conn.commit();
+            
+        final Data data = Storage.resetData(pigServer);
+        List<Tuple> expectedList = new ArrayList<Tuple>();
+        expectedList.add(Storage.tuple(25,10));
+        expectedList.add(Storage.tuple(30,10));
+        
+        pigServer.setBatchOn();
+        pigServer.registerQuery(String.format(
+                "A = load 'hbase://table/%s' using " + PhoenixHBaseLoader.class.getName() + "('%s');", TABLE,
+                zkQuorum));
+        
+        pigServer.registerQuery("B = GROUP A BY AGE;");
+        pigServer.registerQuery("C = FOREACH B GENERATE group,COUNT(A);");
+        pigServer.registerQuery("STORE C INTO 'out' using mock.Storage();");
+        pigServer.executeBatch();
+        
+        List<Tuple> actualList = data.get("out");
+        assertEquals(expectedList.size(), actualList.size());
+	}
     
     @After
     public void tearDown() throws Exception {
