@@ -87,7 +87,6 @@ cp $(find -iname phoenix-pig-$PHOENIX-tests.jar) $DIR_REL_BIN_PATH;
 cp bin/* $DIR_BIN;
 
 # Copy release docs
-cp CHANGES $DIR_REL_BIN_PATH;
 cp README $DIR_REL_BIN_PATH;
 cp $DIR_DOCS/* $DIR_REL_BIN_PATH;
 
