@@ -381,7 +381,9 @@ public class PhoenixRuntime {
         Set<String> unresolvedColumnNames = new TreeSet<String>();
         if (columns == null || columns.isEmpty()) {
             // use all columns in the table
-            for(PColumn pColumn : table.getColumns()) {
+        	int offset = (table.getBucketNum() == null ? 0 : 1);
+        	for (int i = offset; i < table.getColumns().size(); i++) {
+        	   PColumn pColumn = table.getColumns().get(i);
                int sqlType = pColumn.getDataType().getSqlType();
                columnInfoList.add(new ColumnInfo(pColumn.toString(), sqlType)); 
             }
