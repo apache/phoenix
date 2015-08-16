@@ -77,6 +77,14 @@ timeLine = {
         "label": "End",
         "type": "date",
         "p": {}
+      },
+      {
+        "type": "string",
+        "role": "tooltip",
+        "p": {
+          "html": true,
+          "role": "tooltip"
+        }
       }
     ],
     "rows": [
@@ -93,12 +101,17 @@ timeLine = {
           },
           {
             "v": new Date(1434196101784)
+          },
+          {
+            "v": 'Mock tooltip'
           }
         ]
       }
     ]
   },
-  "options": {},
+  "options": {'tooltip': {
+              'isHtml': true
+            }},
   "formatters": {}
 };
 // model of the dependency chart (org chart model)

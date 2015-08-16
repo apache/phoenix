@@ -52,6 +52,8 @@ TimeLineCtrl.controller('TraceTimeLineCtrl', function($scope, $http, $location) 
                 "v": new Date(parseFloat(currentData.start_time))
               }, {
                 "v": new Date(parseFloat(currentData.end_time))
+              }, {
+                "v": dest
               }]
             }
           } //end of for loop
@@ -106,6 +108,8 @@ TimeLineCtrl.controller('TraceTimeLineCtrl', function($scope, $http, $location) 
     "v": new Date()
   }, {
     "v": new Date()
+  }, {
+    "v": "Current time"
   }];
 
   //getting TimeLine chart with data
@@ -124,6 +128,8 @@ TimeLineCtrl.controller('TraceTimeLineCtrl', function($scope, $http, $location) 
           "v": new Date(parseFloat(datax.start_time))
         }, {
           "v": new Date(parseFloat(datax.end_time))
+        }, {
+          "v": dest
         }]
         console.log(i)
         timeLine.data.rows[i] = {
