@@ -159,7 +159,9 @@
               <source>${project.basedir}/src/main/webapp/js/controllers/search-controllers.js</source>
               <source>${project.basedir}/src/main/webapp/js/controllers/dependency-tree-controllers.js</source>
               <source>${project.basedir}/src/main/webapp/js/app.js</source>
-              <source>${project.basedir}/src/main/webapp/js/controllers.js</source>
+              <source>${project.basedir}/src/main/webapp/js/controllers/list-controllers.js</source>
+              <source>${project.basedir}/src/main/webapp/js/controllers/trace-count-controllers.js</source>
+              <source>${project.basedir}/src/main/webapp/js/controllers/trace-distribution-controllers.js</source>
           </preloadSources>
             <!--jsSrcDir>${basedir}/src/main/webapp/js/controllers</jsSrcDir-->
             <jsTestSrcDir>${basedir}/src/test/webapp/js/specs</jsTestSrcDir>
