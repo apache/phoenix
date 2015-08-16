@@ -13,11 +13,12 @@ DepTreeCtrl.controller('TraceDepTreeCtrl', function($scope, $http, $location) {
     $scope.traceId = searchObject.traceid
     console.log($scope.traceId);
     getTreeData(url + $scope.traceId);
+    $scope.chartObject = null;
     $scope.chartObject = dependencyChart;
   };
 
   $scope.drawTree = function() {
-    if($scope.traceId != null) {
+    if ($scope.traceId != null) {
       getTreeData(searchURL + $scope.traceId);
       $scope.chartObject = dependencyChart;
     } else {
@@ -29,7 +30,7 @@ DepTreeCtrl.controller('TraceDepTreeCtrl', function($scope, $http, $location) {
   function getDescription(description) {
     var shortDescription = '';
     var haveBracket = description.indexOf("(");
-    if(haveBracket != -1) {
+    if (haveBracket != -1) {
       shortDescription = description.substring(0, description.indexOf("("))
     } else {
       shortDescription = description;
@@ -47,20 +48,21 @@ DepTreeCtrl.controller('TraceDepTreeCtrl', function($scope, $http, $location) {
     toolTip = 'Hostname :  ' + hostname + '\nDescription :  ' + dst +
       '\nStart At :  ' + start_time + '\nEnd At :  ' + end_time +
       '\nTrace Id :  ' +
-      data.trace_id + '\nDuration :  ' + duration;
+      data.trace_id + '\nParent Id :  ' + data.parent_id + '\nSpan Id :  ' +
+      data.span_id + '\nDuration :  ' + duration;
     return toolTip;
   }
 
   function getRootID(data) {
     var rootId = null;
-    for(var i = 0; i < data.length; i++) {
+    for (var i = 0; i < data.length; i++) {
       console.log('i' + i);
       var foundRoot = false;
       var currentSpanId = data.span_id;
-      for(var j = 0; j < data.length; j++) {
-        if(currentSpanId == data.parent_id)
+      for (var j = 0; j < data.length; j++) {
+        if (currentSpanId == data.parent_id)
           break;
-        if(j == data.length - 1) {
+        if (j == data.length - 1) {
           console.log(currentSpanId)
         }
       }
@@ -74,11 +76,12 @@ DepTreeCtrl.controller('TraceDepTreeCtrl', function($scope, $http, $location) {
     $http.get(url).
     success(function(data, status, headers, config) {
       getRootID(data);
-      for(var i = 0; i < data.length; i++) {
+      for (var i = 0; i < data.length; i++) {
         var currentData = data[i];
         var toolTip = getToolTip(currentData);
         var datamodel = [{
-          "v": currentData.span_id
+          "v": currentData.span_id,
+          'f': getDescription(currentData.description)
         }, {
           "v": currentData.parent_id
         }, {

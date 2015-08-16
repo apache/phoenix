@@ -50,12 +50,14 @@ public class TraceServlet extends HttpServlet {
   protected String LOGIC_AND = "AND";
   protected String LOGIC_OR = "OR";
   protected String PHOENIX_HOST = "localhost";
+  protected String TRACING_TABLE = "SYSTEM.TRACING_STATS";
   protected int PHOENIX_PORT = 2181;
   
   
   protected void doGet(HttpServletRequest request, HttpServletResponse response)
       throws ServletException, IOException {
     
+    //reading url params
     String action = request.getParameter("action");
     String limit = request.getParameter("limit");
     String traceid = request.getParameter("traceid");
@@ -72,6 +74,7 @@ public class TraceServlet extends HttpServlet {
     } else {
       jsonObject = "{ Server: 'Phoenix Tracing Web App', API version: '0.1' }";
     }
+    //response send as json
     response.setContentType("application/json");    
     String output = jsonObject;
     PrintWriter out = response.getWriter();
@@ -80,40 +83,44 @@ public class TraceServlet extends HttpServlet {
 
   }
 
+  //get all trace results with limit count
   protected String getAll(String limit) {
     String json = null;
     if(limit == null) {
       limit = DEFAULT_LIMIT;
     }
-    String sqlQuery = "SELECT * FROM SYSTEM.TRACING_STATS LIMIT "+limit;
+    String sqlQuery = "SELECT * FROM " + TRACING_TABLE + " LIMIT "+limit;
     json = getResults(sqlQuery);    
     return getJson(json);
   }
 
+  //get count on traces can pick on param to count
   protected String getCount(String countby) {
     String json = null;
     if(countby == null) {
       countby = DEFAULT_COUNTBY;
     }
-    String sqlQuery = "SELECT "+countby+", COUNT(*) AS count FROM SYSTEM.TRACING_STATS GROUP BY "+countby+" HAVING COUNT(*) > 1 ";
+    String sqlQuery = "SELECT "+countby+", COUNT(*) AS count FROM " + TRACING_TABLE + " GROUP BY "+countby+" HAVING COUNT(*) > 1 ";
     json = getResults(sqlQuery);
     return json;
   }
-  
+
+  //search the trace over parent id or trace id
   protected String searchTrace(String parentId, String traceId,String logic) {
     String json = null;
     String query = null;
     if(parentId != null && traceId != null) {
-      query = "SELECT * FROM SYSTEM.TRACING_STATS WHERE parent_id="+parentId+" "+logic+" trace_id="+traceId;
+      query = "SELECT * FROM " + TRACING_TABLE + " WHERE parent_id="+parentId+" "+logic+" trace_id="+traceId;
     }else if (parentId != null && traceId == null) {
-      query = "SELECT * FROM SYSTEM.TRACING_STATS WHERE parent_id="+parentId;
+      query = "SELECT * FROM " + TRACING_TABLE + " WHERE parent_id="+parentId;
     }else if(parentId == null && traceId != null) {
-      query = "SELECT * FROM SYSTEM.TRACING_STATS WHERE trace_id="+traceId;
+      query = "SELECT * FROM " + TRACING_TABLE + " WHERE trace_id="+traceId;
     }
     json = getResults(query);
     return getJson(json);
   }
-  
+
+  //return json string
   protected String getJson(String json) {
     String output = json.toString().replace("_id\":", "_id\":\"")
         .replace(",\"hostname", "\",\"hostname")
@@ -121,7 +128,8 @@ public class TraceServlet extends HttpServlet {
         .replace(",\"end", "\",\"end");   
     return output;
   }
-  
+
+  //get results with passing sql query
   protected String getResults(String sqlQuery) {
     String json = null;
     if(sqlQuery == null){
