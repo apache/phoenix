@@ -159,3 +159,19 @@ dependencyChart =
   },
   "formatters": {}
 };
+//model for clearing tree
+var ClearRow = [
+      {
+        "c": [
+          {
+            "v": ""
+          },
+          {
+            "v": ""
+          },
+          {
+            "v": ""
+          }
+        ]
+      }
+    ];

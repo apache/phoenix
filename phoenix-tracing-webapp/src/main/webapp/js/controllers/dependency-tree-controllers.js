@@ -14,6 +14,7 @@ DepTreeCtrl.controller('TraceDepTreeCtrl', function($scope, $http, $location) {
   
   $scope.rootId = "";
   $scope.loadDependencyTree = function(url) {
+    $scope.clearTree();
     $scope.page.alertType = 'alert-info';
     $scope.reqStatus = "Loading Phoenix Tracing data";
     var searchObject = $location.search();
@@ -29,11 +30,24 @@ DepTreeCtrl.controller('TraceDepTreeCtrl', function($scope, $http, $location) {
   };
 
   $scope.drawTree = function() {
+    $scope.clearTree();
     if ($scope.traceId != null) {
       getTreeData(searchURL + $scope.traceId);
       $scope.chartObject = dependencyChart;
     } else {
       $scope.reqStatus = "Please Enter TraceID";
+    }
+  };
+
+  $scope.clearTree = function() {
+    if ($scope.chartObject != null) {
+      for (var i = 0; i < $scope.chartObject.data.rows.length; i++) {
+        $scope.chartObject.data.rows[i] = ClearRow[0];
+      }
+      $scope.page.alertType = 'alert-info';
+      $scope.reqStatus = "Tree is Cleared";
+    } else {
+      $scope.reqStatus = "There is no Tree to clear";
     }
   };
 
