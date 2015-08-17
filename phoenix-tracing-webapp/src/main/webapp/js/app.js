@@ -43,6 +43,9 @@ TraceApp.config(['$routeProvider',
       when('/home', {
         templateUrl: 'partials/home.html'
       }).
+      when('/dashboard', {
+        templateUrl: 'partials/phoenix-trace.html'
+      }).
       otherwise({
         redirectTo: '/home'
       });
