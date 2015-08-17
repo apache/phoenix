@@ -1,20 +1,31 @@
 'use strict';
 
-var searchURL = "../trace/?action=searchTrace&traceid=";
 var DepTreeCtrl = angular.module('DepTreeCtrl', ['ui.bootstrap']);
 DepTreeCtrl.controller('TraceDepTreeCtrl', function($scope, $http, $location) {
+  var searchURL = "../trace/?action=searchTrace&traceid=";
+  var sqlQuery = null;
+  var rootId = null;
   $scope.page = {
     title: 'Dependency Tree for Trace'
   };
-
+  $scope.page = {
+    alertType: 'alert-info'
+  };
+  
   $scope.rootId = "";
   $scope.loadDependencyTree = function(url) {
+    $scope.page.alertType = 'alert-info';
+    $scope.reqStatus = "Loading Phoenix Tracing data";
     var searchObject = $location.search();
     $scope.traceId = searchObject.traceid
-    console.log($scope.traceId);
-    getTreeData(url + $scope.traceId);
-    $scope.chartObject = null;
-    $scope.chartObject = dependencyChart;
+    if($scope.traceId != null){
+      getTreeData(url + $scope.traceId);
+      $scope.chartObject = null;
+      $scope.chartObject = dependencyChart;
+    }else{
+      $scope.page.alertType = 'alert-warning';
+      $scope.reqStatus = "Please Enter the TraceID.";
+    }
   };
 
   $scope.drawTree = function() {
@@ -53,37 +64,43 @@ DepTreeCtrl.controller('TraceDepTreeCtrl', function($scope, $http, $location) {
     return toolTip;
   }
 
-  function getRootID(data) {
-    var rootId = null;
+  function setSQLQuery(data) {
     for (var i = 0; i < data.length; i++) {
-      console.log('i' + i);
-      var foundRoot = false;
-      var currentSpanId = data.span_id;
+      var currentParentID = data[i].parent_id;
+      //console.log('p '+currentParentID);
       for (var j = 0; j < data.length; j++) {
-        if (currentSpanId == data.parent_id)
+        var currentSpanID = data[j].span_id;
+        //console.log('s '+currentSpanID);
+        if (currentSpanID == currentParentID) {
           break;
-        if (j == data.length - 1) {
-          console.log(currentSpanId)
+        } else if (j == data.length - 1) {
+          sqlQuery = data[i].description;
+          rootId = currentParentID;
         }
       }
     }
-    console.log(data);
-    return rootId;
   }
 
+  //get Dependancy tree with data model
   function getTreeData(url) {
-    $scope.reqStatus = "Retriving data from phonix.";
+    $scope.reqStatus = "Retriving data from Phoenix.";
     $http.get(url).
     success(function(data, status, headers, config) {
-      getRootID(data);
+      //getRootID(data);
+      setSQLQuery(data);
       for (var i = 0; i < data.length; i++) {
         var currentData = data[i];
+        var currentDataParentId = currentData.parent_id;
+        //check for root id
+        if (currentDataParentId == rootId) {
+          currentDataParentId = '';
+        }
         var toolTip = getToolTip(currentData);
         var datamodel = [{
           "v": currentData.span_id,
           'f': getDescription(currentData.description)
         }, {
-          "v": currentData.parent_id
+          "v": currentDataParentId
         }, {
           "v": toolTip
         }]
@@ -91,12 +108,20 @@ DepTreeCtrl.controller('TraceDepTreeCtrl', function($scope, $http, $location) {
           "c": datamodel
         }
       }
+      $scope.page.alertType = 'alert-success';
+      $scope.reqStatus = "Data retrieved on SQL Query - " +
+        sqlQuery;
     }).
     error(function(data, status, headers, config) {
       console.log('error of loading dependencyChart');
-      $scope.reqStatus = "Error in data retrieving.";
+      $scope.page.alertType = 'alert-warning';
+      if ($scope.traceId == null) {
+        $scope.reqStatus = "Please Enter the TraceID.";
+      } else {
+        $scope.reqStatus = "Error in data retrieving.";
+      }
     });
-    $scope.reqStatus = "Data retrieved.";
+    //$scope.reqStatus = "Data retrieved on "+sqlQuery;
     return dependencyChart;
   };
 
