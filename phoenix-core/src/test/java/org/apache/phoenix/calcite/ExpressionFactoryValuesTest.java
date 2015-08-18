@@ -2,10 +2,10 @@ package org.apache.phoenix.calcite;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+
 import org.apache.calcite.jdbc.CalcitePrepare;
 import org.apache.calcite.jdbc.Driver;
 import org.apache.calcite.linq4j.function.Function0;
-import org.apache.calcite.sql.test.SqlOperatorBaseTest;
 import org.apache.phoenix.calcite.jdbc.PhoenixPrepareImpl;
 import org.apache.phoenix.calcite.rules.PhoenixConverterRules;
 

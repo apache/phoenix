@@ -37,23 +37,40 @@ import org.apache.phoenix.expression.DoubleMultiplyExpression;
 import org.apache.phoenix.expression.DoubleSubtractExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.ExpressionType;
+import org.apache.phoenix.expression.IsNullExpression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.LongAddExpression;
 import org.apache.phoenix.expression.LongDivideExpression;
 import org.apache.phoenix.expression.LongMultiplyExpression;
 import org.apache.phoenix.expression.LongSubtractExpression;
+import org.apache.phoenix.expression.NotExpression;
 import org.apache.phoenix.expression.OrExpression;
+import org.apache.phoenix.expression.StringBasedLikeExpression;
 import org.apache.phoenix.expression.TimestampAddExpression;
 import org.apache.phoenix.expression.TimestampSubtractExpression;
+import org.apache.phoenix.expression.function.AbsFunction;
 import org.apache.phoenix.expression.function.AggregateFunction;
+import org.apache.phoenix.expression.function.CeilDateExpression;
+import org.apache.phoenix.expression.function.CeilDecimalExpression;
+import org.apache.phoenix.expression.function.CeilTimestampExpression;
+import org.apache.phoenix.expression.function.CoalesceFunction;
 import org.apache.phoenix.expression.function.CountAggregateFunction;
+import org.apache.phoenix.expression.function.CurrentDateFunction;
+import org.apache.phoenix.expression.function.CurrentTimeFunction;
+import org.apache.phoenix.expression.function.ExpFunction;
+import org.apache.phoenix.expression.function.FloorDateExpression;
+import org.apache.phoenix.expression.function.FloorDecimalExpression;
 import org.apache.phoenix.expression.function.FunctionExpression;
+import org.apache.phoenix.expression.function.LnFunction;
+import org.apache.phoenix.expression.function.LowerFunction;
 import org.apache.phoenix.expression.function.MaxAggregateFunction;
 import org.apache.phoenix.expression.function.MinAggregateFunction;
 import org.apache.phoenix.expression.function.PowerFunction;
 import org.apache.phoenix.expression.function.RoundDecimalExpression;
 import org.apache.phoenix.expression.function.RoundTimestampExpression;
 import org.apache.phoenix.expression.function.SqrtFunction;
+import org.apache.phoenix.expression.function.TrimFunction;
+import org.apache.phoenix.expression.function.UpperFunction;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.types.PDataType;
@@ -510,7 +527,6 @@ public class CalciteUtils {
                     throw new RuntimeException(e);
                 }
             }
-
         });
         EXPRESSION_MAP.put(SqlKind.OTHER_FUNCTION, new ExpressionFactory() {
             @Override
@@ -524,6 +540,22 @@ public class CalciteUtils {
                         return new SqrtFunction(children);
                     } else if (op == SqlStdOperatorTable.POWER) {
                         return new PowerFunction(children);
+                    } else if (op == SqlStdOperatorTable.LN) {
+                        return new LnFunction(children);
+                    } else if (op == SqlStdOperatorTable.EXP) {
+                        return new ExpFunction(children);
+                    } else if (op == SqlStdOperatorTable.ABS) {
+                        return new AbsFunction(children);
+                    } else if (op == SqlStdOperatorTable.CURRENT_DATE) {
+                        return new CurrentDateFunction();
+                    } else if (op == SqlStdOperatorTable.CURRENT_TIME) {
+                        return new CurrentTimeFunction();
+                    } else if (op == SqlStdOperatorTable.LOWER) {
+                        return new LowerFunction(children);
+                    } else if (op == SqlStdOperatorTable.UPPER) {
+                        return new UpperFunction(children);
+                    } else if (op == SqlStdOperatorTable.COALESCE) {
+                        return new CoalesceFunction(children);
                     }
                 } catch (SQLException e) {
                     throw new RuntimeException(e);
@@ -532,7 +564,114 @@ public class CalciteUtils {
                 throw new UnsupportedOperationException(
                         "Unsupported SqlFunction: " + op.getName());
             }
+		});
+        EXPRESSION_MAP.put(SqlKind.NOT, new ExpressionFactory() {
+            @Override
+            public Expression newExpression(RexNode node, Implementor implementor) {
+                return new NotExpression(convertChildren((RexCall) node, implementor));
+            }
         });
+        EXPRESSION_MAP.put(SqlKind.IS_TRUE, new ExpressionFactory() {
+            @Override
+            public Expression newExpression(RexNode node, Implementor implementor) {
+                List<Expression> children = convertChildren((RexCall) node, implementor);
+                return children.get(0);
+            }
+        });
+        EXPRESSION_MAP.put(SqlKind.IS_NOT_TRUE, new ExpressionFactory() {
+            @Override
+            public Expression newExpression(RexNode node, Implementor implementor) {
+                return new NotExpression(convertChildren((RexCall) node, implementor));
+            }
+        });
+        EXPRESSION_MAP.put(SqlKind.IS_FALSE, new ExpressionFactory() {
+            @Override
+            public Expression newExpression(RexNode node, Implementor implementor) {
+                return new NotExpression(convertChildren((RexCall) node, implementor));
+            }
+        });
+        EXPRESSION_MAP.put(SqlKind.IS_NOT_FALSE, new ExpressionFactory() {
+            @Override
+            public Expression newExpression(RexNode node, Implementor implementor) {
+                List<Expression> children = convertChildren((RexCall) node, implementor);
+                return children.get(0);
+            }
+        });
+        //TODO different kind of LikeExpression based on configuration
+        EXPRESSION_MAP.put(SqlKind.LIKE, new ExpressionFactory() {
+            @Override
+            public Expression newExpression(RexNode node, Implementor implementor) {
+                List<Expression> children = convertChildren((RexCall) node, implementor);
+                return new StringBasedLikeExpression(children);
+            }
+        });
+        EXPRESSION_MAP.put(SqlKind.IS_NULL, new ExpressionFactory() {
+            @Override
+            public Expression newExpression(RexNode node, Implementor implementor) {
+                return new IsNullExpression(convertChildren((RexCall) node, implementor), false);
+            }
+        });
+        EXPRESSION_MAP.put(SqlKind.IS_NOT_NULL, new ExpressionFactory() {
+            @Override
+            public Expression newExpression(RexNode node, Implementor implementor) {
+                return new IsNullExpression(convertChildren((RexCall) node, implementor), true);
+            }
+        });
+        EXPRESSION_MAP.put(SqlKind.TRIM, new ExpressionFactory() {
+            @Override
+            public Expression newExpression(RexNode node, Implementor implementor) {
+                //TODO Phoenix only support separate arguments.
+                try {
+                    return new TrimFunction(convertChildren((RexCall) node, implementor));
+                } catch (SQLException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        });
+        EXPRESSION_MAP.put(SqlKind.CEIL, new ExpressionFactory() {
+            @Override
+            public Expression newExpression(RexNode node, Implementor implementor) {
+                //TODO Phoenix only support separate arguments.
+                List<Expression> children = convertChildren((RexCall) node, implementor);
+                final Expression firstChild = children.get(0);
+                final PDataType firstChildDataType = firstChild.getDataType();
+                try {
+                    if (firstChildDataType.isCoercibleTo(PDate.INSTANCE)) {
+                        return CeilDateExpression.create(children);
+                    } else if (firstChildDataType == PTimestamp.INSTANCE
+                            || firstChildDataType == PUnsignedTimestamp.INSTANCE) {
+                        return CeilTimestampExpression.create(children);
+                    } else if (firstChildDataType.isCoercibleTo(PDecimal.INSTANCE)) {
+                        return CeilDecimalExpression.create(children);
+                    } else {
+                        throw TypeMismatchException.newException(firstChildDataType, "1");
+                    }
+                } catch (SQLException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        });
+        EXPRESSION_MAP.put(SqlKind.FLOOR, new ExpressionFactory() {
+            @Override
+            public Expression newExpression(RexNode node, Implementor implementor) {
+                // TODO Phoenix only support separate arguments.
+                List<Expression> children = convertChildren((RexCall) node, implementor);
+                final Expression firstChild = children.get(0);
+                final PDataType firstChildDataType = firstChild.getDataType();
+                try {
+                    if (firstChildDataType.isCoercibleTo(PTimestamp.INSTANCE)) {
+                        return FloorDateExpression.create(children);
+                    } else if (firstChildDataType.isCoercibleTo(PDecimal.INSTANCE)) {
+                        return FloorDecimalExpression.create(children);
+                    } else {
+                        throw TypeMismatchException.newException(firstChildDataType, "1");
+                    }
+                } catch (SQLException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        });
+        // TODO: SqlKind.CASE
 	}
 	
     private static final Map<String, FunctionFactory> FUNCTION_MAP = Maps
