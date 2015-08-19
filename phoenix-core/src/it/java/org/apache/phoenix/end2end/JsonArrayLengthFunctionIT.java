@@ -85,7 +85,7 @@ public class JsonArrayLengthFunctionIT extends BaseHBaseManagedTimeIT {
     public void testJsonArrayLengthWithDifferentDataTypes()
             throws Exception {
         Connection conn = getConnection();
-        String json = "[1,2.3,true,\"f1\",[\"string\",3]]";
+        String json = "[1,2.3,null,true,\"f1\",[\"string\",3]]";
         String pk = "valueOne";
         try {
             populateJsonTable(conn, json, pk);
@@ -95,7 +95,7 @@ public class JsonArrayLengthFunctionIT extends BaseHBaseManagedTimeIT {
             ResultSet rs = stmt.executeQuery();
             assertTrue(rs.next());
             assertEquals("Json array length is not as expected.",
-                    5, rs.getInt(1));
+                    6, rs.getInt(1));
 
             assertFalse(rs.next());
 

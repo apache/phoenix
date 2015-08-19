@@ -68,7 +68,7 @@ public class JsonArrayElementsFunctionIT extends BaseHBaseManagedTimeIT {
         Connection conn = getConnection();
 
         try {
-            String json = "[1,36.763,false,\"string\"]";
+            String json = "[1,36.763,null,false,\"string\"]";
             String pk = "valueOne";
 
             populateJsonTable(conn, json, pk);
@@ -77,11 +77,12 @@ public class JsonArrayElementsFunctionIT extends BaseHBaseManagedTimeIT {
             PreparedStatement stmt = conn.prepareStatement(selectQuery);
             ResultSet rs = stmt.executeQuery();
             assertTrue(rs.next());
-            String[] strArr = new String[4];
+            String[] strArr = new String[5];
             strArr[0] = "1";
             strArr[1] = "36.763";
-            strArr[2] = "false";
-            strArr[3] = "\"string\"";
+            strArr[2] = "null";
+            strArr[3] = "false";
+            strArr[4] = "\"string\"";
 
             Array array = conn.createArrayOf("VARCHAR", strArr);
             PhoenixArray resultArray = (PhoenixArray) rs.getArray(1);
