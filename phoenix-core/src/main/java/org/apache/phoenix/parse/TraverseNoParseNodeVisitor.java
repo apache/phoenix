@@ -307,4 +307,81 @@ public abstract class TraverseNoParseNodeVisitor<T> extends BaseParseNodeVisitor
     public T visitLeave(ArrayElemRefNode node, List<T> l) throws SQLException {
         return null;
     }
+    //feature for JSON
+    @Override
+    public boolean visitEnter(JsonSingleKeySearchParseNode node) throws SQLException {
+        return false;
+    }
+    @Override
+    public boolean visitEnter(JsonContainWithinRightParseNode node) throws SQLException {
+        return false;
+    }
+    @Override
+    public boolean visitEnter(JsonContainWithinLeftParseNode node) throws SQLException {
+        return false;
+    }
+    @Override
+    public boolean visitEnter(JsonMultiKeySearchOrParseNode node) throws SQLException {
+        return false;
+    }
+    @Override
+    public boolean visitEnter(JsonMultiKeySearchAndParseNode node) throws SQLException {
+        return false;
+    }
+    @Override
+    public boolean visitEnter(JsonPathAsTextParseNode node) throws SQLException {
+        return false;
+    }
+    @Override
+    public T visitLeave(JsonSingleKeySearchParseNode node, List<T> l) throws SQLException {
+        return null;
+    }
+    @Override
+    public T visitLeave(JsonContainWithinRightParseNode node, List<T> l) throws SQLException {
+        return null;
+    }
+    @Override
+    public T visitLeave(JsonContainWithinLeftParseNode node, List<T> l) throws SQLException {
+        return null;
+    }
+    @Override
+    public T visitLeave(JsonMultiKeySearchOrParseNode node, List<T> l) throws SQLException {
+        return null;
+    }
+    @Override
+    public T visitLeave(JsonMultiKeySearchAndParseNode node, List<T> l) throws SQLException {
+        return null;
+    }
+    @Override
+    public T visitLeave(JsonPathAsTextParseNode node, List<T> l) throws SQLException {
+        return null;
+    }
+    @Override
+    public boolean visitEnter(JsonPathAsElementParseNode node) throws SQLException {
+        return false;
+    }
+    
+    @Override
+    public T visitLeave( JsonPathAsElementParseNode node, List<T> l) throws SQLException {
+        return null;
+    }
+    @Override
+    public boolean visitEnter(JsonPointAsElementParseNode node) throws SQLException {
+        return false;
+    }
+    
+    @Override
+    public T visitLeave(JsonPointAsElementParseNode node, List<T> l) throws SQLException {
+        return null;
+    }
+    
+    @Override
+    public boolean visitEnter(JsonPointAsTextParseNode node) throws SQLException {
+        return false;
+    }
+    
+    @Override
+    public T visitLeave(JsonPointAsTextParseNode node, List<T> l) throws SQLException {
+        return null;
+    }
 }

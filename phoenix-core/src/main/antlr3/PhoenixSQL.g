@@ -808,7 +808,14 @@ bind_expression  returns [BindParseNode ret]
     ;
     
 value_expression returns [ParseNode ret]
-    :   i=add_expression { $ret = i; }
+    :   i=pre_value_expression { $ret = i; }
+    ;
+pre_value_expression returns [ParseNode ret]
+    :   i=add_expression { $ret = i; }  ( CONTAIN_WITHIN_LEFT cwl=add_expression { $ret = factory.jsonContainWithinLeft(i,cwl); }
+					| CONTAIN_WITHIN_RIGHT cwr=add_expression { $ret = factory.jsonContainWithinRight(i,cwr); }
+					| QUESTION ques=add_expression { $ret = factory.sSearch(i,ques); }
+					| M_SEARCH_OR mor=add_expression { $ret = factory.mOrSearch(i,mor); }
+					| M_SEARCH_AND mand=add_expression { $ret = factory.mAndSearch(i,mand); } )?
     ;
 
 add_expression returns [ParseNode ret]
@@ -846,8 +853,27 @@ negate_expression returns [ParseNode ret]
 
 // The lowest level function, which includes literals, binds, but also parenthesized expressions, functions, and case statements.
 array_expression returns [ParseNode ret]
-    :   e=term (LSQUARE s=value_expression RSQUARE)?  { if (s == null) { $ret = e; } else { $ret = factory.arrayElemRef(Arrays.<ParseNode>asList(e,s)); } } 
+    :  j=json_expression { $ret=j; }	
 	;
+// This is for json operation
+json_expression returns [ParseNode ret]
+    :   j=json_text_expression { $ret=j; }
+    ;
+json_text_expression returns [ParseNode ret]
+
+    :   i=json_element_expression { $ret = i; }  ( POINT_T j1=term {$ret = factory.jsonPointT(i,j1);} | 
+    					       	   PATH_T j2=term {$ret = factory.jsonPathT(i,j2);} )?
+    ;
+
+json_element_expression returns [ParseNode ret]
+    :   i=json_element { $ret = i; } ( POINT_E j1=term { $ret = factory.jsonPointE(i,j1); } 
+				     | PATH_E j2=term { $ret = factory.jsonPathE(i,j2); } )?
+    ;
+
+json_element returns [ParseNode ret]
+    :   e=term (LSQUARE s=value_expression RSQUARE)? { if (s == null) { $ret = e; } else { $ret = factory.arrayElemRef(Arrays.<ParseNode>asList(e,s)); } }
+    ;
+	
 	    
 term returns [ParseNode ret]
     :   e=literal_or_bind { $ret = e; }
@@ -1148,6 +1174,31 @@ PERCENT
 
 OUTER_JOIN
     : '(' '+' ')'
+    ;
+ // this is json support
+POINT_E
+    : '-''>'
+    ;
+PATH_E
+    : '#''>'
+    ;
+POINT_T
+    : '-''>''>'
+    ;
+PATH_T
+    : '#''>''>'
+    ;
+CONTAIN_WITHIN_LEFT
+    : '<''@'
+    ;
+CONTAIN_WITHIN_RIGHT
+    : '@''>'
+    ;
+M_SEARCH_OR
+    : '?''|'
+    ;
+M_SEARCH_AND
+    : '?''&'
     ;
 // A FieldCharacter is a letter, digit, underscore, or a certain unicode section.
 fragment

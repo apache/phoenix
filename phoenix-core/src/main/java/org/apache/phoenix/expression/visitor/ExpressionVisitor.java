@@ -31,6 +31,17 @@ import org.apache.phoenix.expression.DivideExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.InListExpression;
 import org.apache.phoenix.expression.IsNullExpression;
+import org.apache.phoenix.expression.JsonMultiKeySearchAndExpression;
+import org.apache.phoenix.expression.JsonMultiKeySearchOrExpression;
+import org.apache.phoenix.expression.JsonPathAsElementExpression;
+import org.apache.phoenix.expression.JsonPathAsTextExpression;
+import org.apache.phoenix.expression.JsonPointAsElementExpression;
+import org.apache.phoenix.expression.JsonPointAsTextExpression;
+import org.apache.phoenix.expression.JsonPointForArrayAsElementExpression;
+import org.apache.phoenix.expression.JsonPointForArrayAsTextExpression;
+import org.apache.phoenix.expression.JsonSingleKeySearchExpression;
+import org.apache.phoenix.expression.JsonContainWithinRightExpression;
+import org.apache.phoenix.expression.JsonContainWithinLeftExpression;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.LikeExpression;
 import org.apache.phoenix.expression.LiteralExpression;
@@ -128,6 +139,45 @@ public interface ExpressionVisitor<E> {
     
     public Iterator<Expression> visitEnter(ArrayElemRefExpression arrayElemRefExpression);
     public E visitLeave(ArrayElemRefExpression node, List<E> l);
+    
+    
+    //for JSON node
+    
+	public Iterator<Expression> visitEnter(JsonPointForArrayAsElementExpression jsonPointForArrayAsElementExpression);
+	public E visitLeave(JsonPointForArrayAsElementExpression node, List<E> l);
+	
+	public Iterator<Expression> visitEnter(JsonMultiKeySearchAndExpression jsonMultiKeySearchAndExpression);
+	public E visitLeave(JsonMultiKeySearchAndExpression node, List<E> l);
+	
+	public Iterator<Expression> visitEnter(JsonPathAsElementExpression jsonMultiKeySearchAndExpression);
+	public E visitLeave(JsonPathAsElementExpression node, List<E> l);
+	
+	public Iterator<Expression> visitEnter(JsonPathAsTextExpression jsonPathAdTextExpression);
+	public E visitLeave(JsonPathAsTextExpression node, List<E> l);
+	
+	public Iterator<Expression> visitEnter(JsonMultiKeySearchOrExpression jsonMultiKeySearchOrExpression);
+	public E visitLeave(JsonMultiKeySearchOrExpression node, List<E> l);
+	
+	public Iterator<Expression> visitEnter(JsonPointAsElementExpression jsonPointAsElementExpression);
+	public E visitLeave(JsonPointAsElementExpression node, List<E> l);
+	
+	public Iterator<Expression> visitEnter(JsonPointAsTextExpression jsonPointAsTextExpression);
+	public E visitLeave(JsonPointAsTextExpression node, List<E> l);
+	
+	public Iterator<Expression> visitEnter(JsonPointForArrayAsTextExpression jsonPointForArrayAsTextExpression);
+	public E visitLeave(JsonPointForArrayAsTextExpression node, List<E> l);
+	
+	public Iterator<Expression> visitEnter(JsonSingleKeySearchExpression jsonSingleKeySearchExpression);
+	public E visitLeave(JsonSingleKeySearchExpression node, List<E> l);
+	
+	public Iterator<Expression> visitEnter(JsonContainWithinRightExpression jsonContainWithinRightExpression);
+	public E visitLeave(JsonContainWithinRightExpression node, List<E> l);
+	
+	public Iterator<Expression> visitEnter(JsonContainWithinLeftExpression jsonContainWithinLeftExpression);
+	public E visitLeave(JsonContainWithinLeftExpression node, List<E> l);
+	
+    
+    
     
     
 }

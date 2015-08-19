@@ -57,7 +57,7 @@ public class PJson extends PDataType<String> {
     public boolean canBePrimaryKey() {
         return false;
     }
-
+    
     @Override
     public boolean isEqualitySupported() {
         return false;
