@@ -43,16 +43,10 @@ public class JsonPointAsTextExpression extends BaseCompoundExpression{
 	@Override
 	public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
 		if (!children.get(0).evaluate(tuple, ptr)) {
-            if (logger.isDebugEnabled()) {
-                logger.debug("->> left value is null");
-            }
             return false;
         }
 		 PhoenixJson source =(PhoenixJson) PJson.INSTANCE.toObject(ptr, children.get(0).getSortOrder());
 		if (!children.get(1).evaluate(tuple, ptr)) {
-            if (logger.isDebugEnabled()) {
-                logger.debug("->> right value is null");
-            }
             return false;
         }
 		String key = (String) PVarchar.INSTANCE.toObject(ptr, children.get(1).getSortOrder());
