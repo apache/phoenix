@@ -23,8 +23,6 @@ import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlOperator;
-import org.apache.calcite.sql.SqlSpecialOperator;
-import org.apache.calcite.sql.SqlSyntax;
 import org.apache.calcite.sql.SqlWriter;
 import org.apache.calcite.sql.parser.SqlParserPos;
 
@@ -34,6 +32,8 @@ import java.util.List;
  * Parse tree node for SQL {@code CREATE VIEW} command.
  */
 public class SqlCreateView extends SqlCall {
+    public static final SqlOperator OPERATOR = new SqlDdlOperator("CREATE VIEW", SqlKind.CREATE_VIEW);
+
     public final SqlIdentifier name;
     public final SqlNode query;
     public final String queryString;
@@ -47,18 +47,18 @@ public class SqlCreateView extends SqlCall {
     }
 
     public SqlOperator getOperator() {
-        return new SqlSpecialOperator("CREATE VIEW", SqlKind.OTHER) {
-            @Override
-            public void unparse(SqlWriter writer, SqlCall call, int leftPrec, int rightPrec) {
-                writer.sep("CREATE VIEW");
-                name.unparse(writer, 0, 0);
-                writer.sep(" ");
-                query.unparse(writer, 0, 0);
-            }
-        };
+        return OPERATOR;
     }
 
     public List<SqlNode> getOperandList() {
         return ImmutableList.of(name, query);
+    }
+
+    @Override
+    public void unparse(SqlWriter writer, int leftPrec, int rightPrec) {
+        writer.keyword("CREATE VIEW");
+        name.unparse(writer, 0, 0);
+        writer.keyword(" ");
+        query.unparse(writer, 0, 0);
     }
 }

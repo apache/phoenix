@@ -7,8 +7,10 @@ import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.prepare.CalcitePrepareImpl;
 import org.apache.calcite.rel.rules.JoinCommuteRule;
+import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.parser.SqlParser;
 import org.apache.phoenix.calcite.PhoenixSchema;
+import org.apache.phoenix.calcite.parse.SqlCreateView;
 import org.apache.phoenix.calcite.parser.PhoenixParserImpl;
 import org.apache.phoenix.calcite.rules.PhoenixAddScanLimitRule;
 import org.apache.phoenix.calcite.rules.PhoenixCompactClientSortRule;
@@ -69,5 +71,17 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
         }
 
         return planner;
+    }
+
+    @Override
+    public void executeDdl(Context context, SqlNode node) {
+        switch (node.getKind()) {
+        case CREATE_VIEW:
+            final SqlCreateView cv = (SqlCreateView) node;
+            System.out.println("Create view: " + cv.name);
+            break;
+        default:
+            throw new AssertionError("unknown DDL type " + node.getKind() + " " + node.getClass());
+        }
     }
 }
