@@ -926,6 +926,45 @@ public class CalciteTest extends BaseClientManagedTimeIT {
             .close();
     }
     
+    @Test public void testUnion() {
+        start().sql("select entity_id from atable where a_string = 'a' union all select entity_id from atable where a_string = 'b'")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                           "  PhoenixUnion(all=[true])\n" +
+                           "    PhoenixToClientConverter\n" +
+                           "      PhoenixServerProject(ENTITY_ID=[$1])\n" +
+                           "        PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'a')])\n" +
+                           "    PhoenixToClientConverter\n" +
+                           "      PhoenixServerProject(ENTITY_ID=[$1])\n" +
+                           "        PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'b')])\n")
+                .resultIs(new Object[][] {
+                        {"00A123122312312"},
+                        {"00A223122312312"},
+                        {"00A323122312312"},
+                        {"00A423122312312"},
+                        {"00B523122312312"},
+                        {"00B623122312312"},
+                        {"00B723122312312"},
+                        {"00B823122312312"}})
+                .close();
+        
+        start().sql("select entity_id, a_string from atable where a_string = 'a' union all select entity_id, a_string from atable where a_string = 'c' order by entity_id desc limit 3")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                           "  PhoenixLimit(fetch=[3])\n" +
+                           "    PhoenixClientSort(sort0=[$0], dir0=[DESC])\n" +
+                           "      PhoenixUnion(all=[true])\n" +
+                           "        PhoenixToClientConverter\n" +
+                           "          PhoenixServerProject(ENTITY_ID=[$1], A_STRING=[$2])\n" +
+                           "            PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'a')])\n" +
+                           "        PhoenixToClientConverter\n" +
+                           "          PhoenixServerProject(ENTITY_ID=[$1], A_STRING=[$2])\n" +
+                           "            PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'c')])\n")
+                .resultIs(new Object[][] {
+                        {"00C923122312312", "c"},
+                        {"00A423122312312", "a"},
+                        {"00A323122312312", "a"}})                
+                .close();
+    }
+    
     @Test public void testConnectJoinHsqldb() {
         final Start start = new Start(new Properties(), false) {
             @Override

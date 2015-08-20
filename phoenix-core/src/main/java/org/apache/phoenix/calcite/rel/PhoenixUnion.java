@@ -4,10 +4,18 @@ import java.util.List;
 
 import org.apache.calcite.linq4j.Ord;
 import org.apache.calcite.plan.RelOptCluster;
+import org.apache.calcite.plan.RelOptCost;
+import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Union;
 import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.compile.RowProjector;
+import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
+import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
+import org.apache.phoenix.execute.UnionPlan;
+import org.apache.phoenix.parse.SelectStatement;
+import com.google.common.collect.Lists;
 
 /**
  * Implementation of {@link org.apache.calcite.rel.core.Union}
@@ -31,13 +39,25 @@ public class PhoenixUnion extends Union implements PhoenixRel {
     }
 
     @Override
-    public QueryPlan implement(Implementor implementor) {
+    public RelOptCost computeSelfCost(RelOptPlanner planner) {
         for (RelNode input : getInputs()) {
-            assert getConvention() == input.getConvention();
+            if (input.getConvention() != PhoenixRel.CLIENT_CONVENTION) {
+                return planner.getCostFactory().makeInfiniteCost();
+            }
         }
+        
+        return super.computeSelfCost(planner)
+                .multiplyBy(PHOENIX_FACTOR);
+    }
+
+    @Override
+    public QueryPlan implement(Implementor implementor) {
+        List<QueryPlan> subPlans = Lists.newArrayListWithExpectedSize(inputs.size());
         for (Ord<RelNode> input : Ord.zip(inputs)) {
-            implementor.visitInput(input.i, (PhoenixRel) input.e);
+            subPlans.add(implementor.visitInput(input.i, (PhoenixRel) input.e));
         }
-        throw new UnsupportedOperationException();
+        
+        return new UnionPlan(subPlans.get(0).getContext(), SelectStatement.SELECT_ONE, subPlans.get(0).getTableRef(), RowProjector.EMPTY_PROJECTOR,
+                null, OrderBy.EMPTY_ORDER_BY, GroupBy.EMPTY_GROUP_BY, subPlans, null);
     }
 }

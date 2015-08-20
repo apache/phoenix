@@ -29,7 +29,6 @@ import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
-import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.iterate.ConcatResultIterator;
 import org.apache.phoenix.iterate.LimitingResultIterator;
@@ -54,7 +53,6 @@ public class UnionPlan implements QueryPlan {
     private final Integer limit;
     private final GroupBy groupBy;
     private final RowProjector projector;
-    private final boolean isDegenerate;
     private final List<QueryPlan> plans;
     private UnionResultIterators iterators;
 
@@ -69,19 +67,11 @@ public class UnionPlan implements QueryPlan {
         this.groupBy = groupBy;
         this.plans = plans;
         this.paramMetaData = paramMetaData;
-        boolean isDegen = true;
-        for (QueryPlan plan : plans) {           
-            if (plan.getContext().getScanRanges() != ScanRanges.NOTHING) {
-                isDegen = false;
-                break;
-            } 
-        }
-        this.isDegenerate = isDegen;     
     }
 
     @Override
     public boolean isDegenerate() {
-        return isDegenerate;
+        return false;
     }
 
     @Override

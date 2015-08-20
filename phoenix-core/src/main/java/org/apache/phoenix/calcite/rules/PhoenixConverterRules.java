@@ -812,9 +812,8 @@ public class PhoenixConverterRules {
         return true;
     }
     
-    public static boolean isConvertible(Union input) {
-        // TODO disable for now since PhoenixUnion is not implemented yet.
-        return false;
+    public static boolean isConvertible(Union union) {
+        return union.all;
     }
 }
 
