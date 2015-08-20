@@ -116,6 +116,40 @@
             </execution>
           </executions>
         </plugin>
+        <plugin>
+          <groupId>com.github.searls</groupId>
+          <artifactId>jasmine-maven-plugin</artifactId>
+          <version>1.3.1.6</version>
+          <executions>
+            <execution>
+              <goals>
+                <goal>test</goal>
+              </goals>
+            </execution>
+          </executions>
+          <configuration>
+            <!--browserVersion>FIREFOX_16</browserVersion-->
+            <preloadSources combine.children="append">
+              <source>${project.basedir}/src/main/webapp/js/lib/jquery.min.js</source>
+              <source>${project.basedir}/src/main/webapp/js/lib/angular.js</source>
+              <source>${project.basedir}/src/main/webapp/js/lib/angular-route.js</source>
+              <source>${project.basedir}/src/main/webapp/js/lib/angular-mocks.js</source>
+              <source>${project.basedir}/src/main/webapp/js/lib/ng-google-chart.js</source>
+              <source>${project.basedir}/src/main/webapp/js/lib/bootstrap.js</source>
+              <source>${project.basedir}/src/main/webapp/js/lib/ui-bootstrap-tpls.js</source>
+              <source>${project.basedir}/src/main/webapp/js/controllers/accordion-controllers.js</source>
+              <source>${project.basedir}/src/main/webapp/js/controllers/timeline-controllers.js</source>
+              <source>${project.basedir}/src/main/webapp/js/controllers/search-controllers.js</source>
+              <source>${project.basedir}/src/main/webapp/js/controllers/dependency-tree-controllers.js</source>
+              <source>${project.basedir}/src/main/webapp/js/app.js</source>
+              <source>${project.basedir}/src/main/webapp/js/controllers/list-controllers.js</source>
+              <source>${project.basedir}/src/main/webapp/js/controllers/trace-count-controllers.js</source>
+              <source>${project.basedir}/src/main/webapp/js/controllers/trace-distribution-controllers.js</source>
+          </preloadSources>
+            <!--jsSrcDir>${basedir}/src/main/webapp/js/controllers</jsSrcDir-->
+            <jsTestSrcDir>${basedir}/src/test/webapp/js/specs</jsTestSrcDir>
+          </configuration>
+        </plugin>
       </plugins>
     </build>
 
