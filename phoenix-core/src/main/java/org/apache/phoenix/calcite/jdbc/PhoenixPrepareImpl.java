@@ -17,6 +17,9 @@ import org.apache.phoenix.calcite.rules.PhoenixInnerSortRemoveRule;
 import org.apache.phoenix.calcite.rules.PhoenixJoinSingleValueAggregateMergeRule;
 
 public class PhoenixPrepareImpl extends CalcitePrepareImpl {
+    public static final ThreadLocal<String> THREAD_SQL_STRING =
+        new ThreadLocal<>();
+
     protected final RelOptRule[] defaultConverterRules;
 
     public PhoenixPrepareImpl(RelOptRule[] defaultConverterRules) {
@@ -28,6 +31,12 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
     protected SqlParser.ConfigBuilder createParserConfig() {
         return super.createParserConfig()
             .setParserFactory(PhoenixParserImpl.FACTORY);
+    }
+
+    protected SqlParser createParser(String sql,
+        SqlParser.ConfigBuilder parserConfig) {
+        THREAD_SQL_STRING.set(sql);
+        return SqlParser.create(sql, parserConfig.build());
     }
 
     @Override
