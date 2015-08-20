@@ -48,7 +48,7 @@ import static org.junit.Assert.*;
 /**
  * Integration test for queries powered by Calcite.
  */
-public class CalciteTest extends BaseClientManagedTimeIT {
+public class CalciteIT extends BaseClientManagedTimeIT {
     public static final String ATABLE_NAME = "ATABLE";
 
     public static Start start() {
@@ -71,8 +71,8 @@ public class CalciteTest extends BaseClientManagedTimeIT {
 
         Connection createConnection() throws Exception {
             return connectUsingModel ? 
-                    CalciteTest.connectUsingModel(props) 
-                  : CalciteTest.createConnection(props);
+                    CalciteIT.connectUsingModel(props) 
+                  : CalciteIT.createConnection(props);
         }
 
         public Sql sql(String sql) {
