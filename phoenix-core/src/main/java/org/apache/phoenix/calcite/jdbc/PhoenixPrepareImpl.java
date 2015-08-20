@@ -7,7 +7,9 @@ import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.prepare.CalcitePrepareImpl;
 import org.apache.calcite.rel.rules.JoinCommuteRule;
+import org.apache.calcite.sql.parser.SqlParser;
 import org.apache.phoenix.calcite.PhoenixSchema;
+import org.apache.phoenix.calcite.parser.PhoenixParserImpl;
 import org.apache.phoenix.calcite.rules.PhoenixAddScanLimitRule;
 import org.apache.phoenix.calcite.rules.PhoenixCompactClientSortRule;
 import org.apache.phoenix.calcite.rules.PhoenixFilterScanMergeRule;
@@ -22,6 +24,12 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
         this.defaultConverterRules = defaultConverterRules;
     }
     
+    @Override
+    protected SqlParser.ConfigBuilder createParserConfig() {
+        return super.createParserConfig()
+            .setParserFactory(PhoenixParserImpl.FACTORY);
+    }
+
     @Override
     protected RelOptPlanner createPlanner(
             final CalcitePrepare.Context prepareContext,

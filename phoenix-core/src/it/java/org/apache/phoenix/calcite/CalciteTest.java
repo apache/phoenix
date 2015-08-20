@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.apache.phoenix.calcite;
 
 import com.google.common.collect.Lists;
@@ -10,6 +27,7 @@ import org.apache.phoenix.end2end.BaseClientManagedTimeIT;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.io.File;
@@ -118,6 +136,18 @@ public class CalciteTest extends BaseClientManagedTimeIT {
             String explain = (String) (list.get(0)[0]);
             assertEquals(explain, expected);
             return this;
+        }
+
+
+        public boolean execute() {
+            try {
+                final Statement statement = start.getConnection().createStatement();
+                final boolean execute = statement.execute(sql);
+                statement.close();
+                return execute;
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
         }
 
         public List<Object[]> getResult(String sql) {
@@ -423,25 +453,29 @@ public class CalciteTest extends BaseClientManagedTimeIT {
                         {"invalid001", "INVALID-1", null, null}})
                 .close();
         
-        start().sql("select t1.entity_id, t2.a_string, t1.organization_id from aTable t1 join aTable t2 on t1.organization_id = t2.organization_id and t1.entity_id = t2.entity_id") 
+        start().sql("select t1.entity_id, t2.a_string, t1.organization_id from aTable t1 join aTable t2 on t1.organization_id = t2.organization_id and t1.entity_id = t2.entity_id")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixClientProject(ENTITY_ID=[$1], A_STRING=[$4], ORGANIZATION_ID=[$0])\n" +
-                           "    PhoenixClientJoin(condition=[AND(=($0, $2), =($1, $3))], joinType=[inner])\n" +
-                           "      PhoenixToClientConverter\n" +
-                           "        PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1])\n" +
-                           "          PhoenixTableScan(table=[[phoenix, ATABLE]])\n" +
-                           "      PhoenixToClientConverter\n" +
-                           "        PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1], A_STRING=[$2])\n" +
-                           "          PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
+                    "  PhoenixClientProject(ENTITY_ID=[$1], A_STRING=[$4], ORGANIZATION_ID=[$0])\n"
+                    +
+                    "    PhoenixClientJoin(condition=[AND(=($0, $2), =($1, $3))], joinType=[inner])\n"
+                    +
+                    "      PhoenixToClientConverter\n" +
+                    "        PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1])\n"
+                    +
+                    "          PhoenixTableScan(table=[[phoenix, ATABLE]])\n" +
+                    "      PhoenixToClientConverter\n" +
+                    "        PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1], A_STRING=[$2])\n"
+                    +
+                    "          PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
                 .resultIs(new Object[][] {
-                          {"00A123122312312", "a", "00D300000000XHP"}, 
-                          {"00A223122312312", "a", "00D300000000XHP"}, 
-                          {"00A323122312312", "a", "00D300000000XHP"}, 
-                          {"00A423122312312", "a", "00D300000000XHP"}, 
-                          {"00B523122312312", "b", "00D300000000XHP"}, 
-                          {"00B623122312312", "b", "00D300000000XHP"}, 
-                          {"00B723122312312", "b", "00D300000000XHP"}, 
-                          {"00B823122312312", "b", "00D300000000XHP"}, 
+                          {"00A123122312312", "a", "00D300000000XHP"},
+                          {"00A223122312312", "a", "00D300000000XHP"},
+                          {"00A323122312312", "a", "00D300000000XHP"},
+                          {"00A423122312312", "a", "00D300000000XHP"},
+                          {"00B523122312312", "b", "00D300000000XHP"},
+                          {"00B623122312312", "b", "00D300000000XHP"},
+                          {"00B723122312312", "b", "00D300000000XHP"},
+                          {"00B823122312312", "b", "00D300000000XHP"},
                           {"00C923122312312", "c", "00D300000000XHP"}})
                 .close();
     }
@@ -494,26 +528,30 @@ public class CalciteTest extends BaseClientManagedTimeIT {
                           {"00A423122312312", "a", "00D300000000XHP"}})
                 .close();
         
-        start().sql("select t1.entity_id, t2.a_string, t3.organization_id from aTable t1 join aTable t2 on t1.entity_id = t2.entity_id and t1.organization_id = t2.organization_id join atable t3 on t1.entity_id = t3.entity_id and t1.organization_id = t3.organization_id") 
+        start().sql("select t1.entity_id, t2.a_string, t3.organization_id from aTable t1 join aTable t2 on t1.entity_id = t2.entity_id and t1.organization_id = t2.organization_id join atable t3 on t1.entity_id = t3.entity_id and t1.organization_id = t3.organization_id")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixClientProject(ENTITY_ID=[$19], A_STRING=[$2], ORGANIZATION_ID=[$36])\n" +
-                           "    PhoenixToClientConverter\n" +
-                           "      PhoenixServerJoin(condition=[AND(=($19, $1), =($18, $0))], joinType=[inner])\n" +
-                           "        PhoenixTableScan(table=[[phoenix, ATABLE]])\n" +
-                           "        PhoenixToClientConverter\n" +
-                           "          PhoenixServerJoin(condition=[AND(=($1, $19), =($0, $18))], joinType=[inner])\n" +
-                           "            PhoenixTableScan(table=[[phoenix, ATABLE]])\n" +
-                           "            PhoenixToClientConverter\n" +
-                           "              PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
+                    "  PhoenixClientProject(ENTITY_ID=[$19], A_STRING=[$2], ORGANIZATION_ID=[$36])\n"
+                    +
+                    "    PhoenixToClientConverter\n" +
+                    "      PhoenixServerJoin(condition=[AND(=($19, $1), =($18, $0))], joinType=[inner])\n"
+                    +
+                    "        PhoenixTableScan(table=[[phoenix, ATABLE]])\n" +
+                    "        PhoenixToClientConverter\n" +
+                    "          PhoenixServerJoin(condition=[AND(=($1, $19), =($0, $18))], joinType=[inner])\n"
+                    +
+                    "            PhoenixTableScan(table=[[phoenix, ATABLE]])\n"
+                    +
+                    "            PhoenixToClientConverter\n" +
+                    "              PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
                 .resultIs(new Object[][] {
-                          {"00A123122312312", "a", "00D300000000XHP"}, 
-                          {"00A223122312312", "a", "00D300000000XHP"}, 
-                          {"00A323122312312", "a", "00D300000000XHP"}, 
-                          {"00A423122312312", "a", "00D300000000XHP"}, 
-                          {"00B523122312312", "b", "00D300000000XHP"}, 
-                          {"00B623122312312", "b", "00D300000000XHP"}, 
-                          {"00B723122312312", "b", "00D300000000XHP"}, 
-                          {"00B823122312312", "b", "00D300000000XHP"}, 
+                          {"00A123122312312", "a", "00D300000000XHP"},
+                          {"00A223122312312", "a", "00D300000000XHP"},
+                          {"00A323122312312", "a", "00D300000000XHP"},
+                          {"00A423122312312", "a", "00D300000000XHP"},
+                          {"00B523122312312", "b", "00D300000000XHP"},
+                          {"00B623122312312", "b", "00D300000000XHP"},
+                          {"00B723122312312", "b", "00D300000000XHP"},
+                          {"00B823122312312", "b", "00D300000000XHP"},
                           {"00C923122312312", "c", "00D300000000XHP"}})
                 .close();
     }
@@ -816,7 +854,7 @@ public class CalciteTest extends BaseClientManagedTimeIT {
                          {"000000000000005", 5000}})
                .close();
     }
-    
+
     @Test public void testScalarSubquery() {
         start().sql("select \"item_id\", name, (select max(quantity) sq \n"
             + "from " + JOIN_ORDER_TABLE_FULL_NAME + " o where o.\"item_id\" = i.\"item_id\")\n"
@@ -833,12 +871,12 @@ public class CalciteTest extends BaseClientManagedTimeIT {
                        "              PhoenixServerProject(item_id=[$0])\n" +
                        "                PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n")
             .resultIs(new Object[][] {
-                    new Object[] {"0000000001", "T1", 1000}, 
-                    new Object[] {"0000000002", "T2", 3000}, 
-                    new Object[] {"0000000003", "T3", 5000}, 
-                    new Object[] {"0000000004", "T4", null}, 
-                    new Object[] {"0000000005", "T5", null}, 
-                    new Object[] {"0000000006", "T6", 4000}, 
+                    new Object[] {"0000000001", "T1", 1000},
+                    new Object[] {"0000000002", "T2", 3000},
+                    new Object[] {"0000000003", "T3", 5000},
+                    new Object[] {"0000000004", "T4", null},
+                    new Object[] {"0000000005", "T5", null},
+                    new Object[] {"0000000006", "T6", 4000},
                     new Object[] {"invalid001", "INVALID-1", null}})
             .close();
         
@@ -857,10 +895,10 @@ public class CalciteTest extends BaseClientManagedTimeIT {
                           "              PhoenixServerAggregate(group=[{0}])\n" +
                           "                PhoenixTableScan(table=[[phoenix, Join, ItemTable]], filter=[<($0, '0000000006')])\n")
                .resultIs(new Object[][] {
-                         new Object[] {"0000000001", "T1", 1000}, 
-                         new Object[] {"0000000002", "T2", 3000}, 
-                         new Object[] {"0000000003", "T3", 5000}, 
-                         new Object[] {"0000000004", "T4", null}, 
+                         new Object[] {"0000000001", "T1", 1000},
+                         new Object[] {"0000000002", "T2", 3000},
+                         new Object[] {"0000000003", "T3", 5000},
+                         new Object[] {"0000000004", "T4", null},
                          new Object[] {"0000000005", "T5", null}})
                .close();;
     }
@@ -961,10 +999,16 @@ public class CalciteTest extends BaseClientManagedTimeIT {
                 .resultIs(new Object[][] {
                         {"00C923122312312", "c"},
                         {"00A423122312312", "a"},
-                        {"00A323122312312", "a"}})                
+                        {"00A323122312312", "a"}})
                 .close();
     }
-    
+
+    /** Tests a simple command that is defined in Phoenix's extended SQL parser. */
+    @Ignore
+    @Test public void testCommit() {
+        start().sql("commit").execute();
+    }
+
     @Test public void testConnectJoinHsqldb() {
         final Start start = new Start(new Properties(), false) {
             @Override
