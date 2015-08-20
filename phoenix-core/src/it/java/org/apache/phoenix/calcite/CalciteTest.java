@@ -288,7 +288,8 @@ public class CalciteTest extends BaseClientManagedTimeIT {
         createIndices(
                 "CREATE INDEX IDX1 ON aTable (a_string) INCLUDE (b_string, x_integer)",
                 "CREATE INDEX IDX2 ON aTable (b_string) INCLUDE (a_string, y_integer)",
-                "CREATE INDEX IDX_FULL ON aTable (b_string) INCLUDE (a_string, a_integer, a_date, a_time, a_timestamp, x_decimal, x_long, x_integer, y_integer, a_byte, a_short, a_float, a_double, a_unsigned_float, a_unsigned_double)");
+                "CREATE INDEX IDX_FULL ON aTable (b_string) INCLUDE (a_string, a_integer, a_date, a_time, a_timestamp, x_decimal, x_long, x_integer, y_integer, a_byte, a_short, a_float, a_double, a_unsigned_float, a_unsigned_double)",
+                "CREATE VIEW v AS SELECT * from aTable where a_string = 'a'");
         final Connection connection = DriverManager.getConnection(url);
         connection.createStatement().execute("UPDATE STATISTICS ATABLE");
         connection.createStatement().execute("UPDATE STATISTICS " + JOIN_CUSTOMER_TABLE_FULL_NAME);
@@ -1000,6 +1001,19 @@ public class CalciteTest extends BaseClientManagedTimeIT {
                         {"00C923122312312", "c"},
                         {"00A423122312312", "a"},
                         {"00A323122312312", "a"}})
+                .close();
+    }
+    
+    @Test public void testSelectFromView() {
+        start().sql("select * from v")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                           "  PhoenixToClientConverter\n" +
+                           "    PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'a')])\n")
+                .resultIs(new Object[][] {
+                        {"00D300000000XHP", "00A123122312312", "a"}, 
+                        {"00D300000000XHP", "00A223122312312", "a"}, 
+                        {"00D300000000XHP", "00A323122312312", "a"}, 
+                        {"00D300000000XHP", "00A423122312312", "a"}})
                 .close();
     }
 

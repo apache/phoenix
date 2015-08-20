@@ -1,7 +1,6 @@
 package org.apache.phoenix.calcite;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -10,6 +9,7 @@ import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.tree.Expression;
 import org.apache.calcite.materialize.MaterializationService;
 import org.apache.calcite.schema.*;
+import org.apache.calcite.schema.impl.ViewTable;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -20,6 +20,8 @@ import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTable.ViewType;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.IndexUtil;
 
@@ -50,6 +52,7 @@ public class PhoenixSchema implements Schema {
     
     protected final Set<String> subSchemaNames;
     protected final Map<String, PTable> tableMap;
+    protected final Map<String, Function> functionMap;
     
     private PhoenixSchema(String name, SchemaPlus parentSchema, String schemaName, PhoenixConnection pc) {
         this.name = name;
@@ -58,7 +61,9 @@ public class PhoenixSchema implements Schema {
         this.pc = pc;
         this.client = new MetaDataClient(pc);
         this.calciteSchema = new CalciteSchema(CalciteSchema.from(parentSchema), this, name);
-        this.tableMap = ImmutableMap.<String, PTable> copyOf(loadTables());
+        this.tableMap = Maps.<String, PTable> newHashMap();
+        this.functionMap = Maps.<String, Function> newHashMap();
+        loadTables();
         this.subSchemaNames = schemaName == null ? 
                   ImmutableSet.<String> copyOf(loadSubSchemaNames()) 
                 : Collections.<String> emptySet();
@@ -79,23 +84,28 @@ public class PhoenixSchema implements Schema {
         }
     }
     
-    private Map<String, PTable> loadTables() {
+    private void loadTables() {
         try {
             DatabaseMetaData md = pc.getMetaData();
             ResultSet rs = md.getTables(null, schemaName == null ? "" : schemaName, null, null);
-            Map<String, PTable> tableMap = Maps.<String, PTable> newHashMap();
             while (rs.next()) {
                 String tableName = rs.getString(PhoenixDatabaseMetaData.TABLE_NAME);
-                ColumnResolver x = FromCompiler.getResolver(
-                        NamedTableNode.create(
-                                null,
-                                TableName.create(schemaName, tableName),
-                                ImmutableList.<ColumnDef>of()), pc);
-                final List<TableRef> tables = x.getTables();
-                assert tables.size() == 1;
-                tableMap.put(tableName, tables.get(0).getTable());
+                String tableType = rs.getString(PhoenixDatabaseMetaData.TABLE_TYPE);
+                if (!tableType.equals(PTableType.VIEW.getValue().getString())) {
+                    ColumnResolver x = FromCompiler.getResolver(
+                            NamedTableNode.create(
+                                    null,
+                                    TableName.create(schemaName, tableName),
+                                    ImmutableList.<ColumnDef>of()), pc);
+                    final List<TableRef> tables = x.getTables();
+                    assert tables.size() == 1;
+                    tableMap.put(tableName, tables.get(0).getTable());
+                } else {
+                    String viewSql = rs.getString(PhoenixDatabaseMetaData.VIEW_STATEMENT);
+                    String viewType = rs.getString(PhoenixDatabaseMetaData.VIEW_TYPE);
+                    functionMap.put(tableName, ViewTable.viewMacro(calciteSchema.plus(), viewSql, calciteSchema.path(null), viewType.equals(ViewType.UPDATABLE.name())));
+                }
             }
-            return tableMap;
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -134,12 +144,13 @@ public class PhoenixSchema implements Schema {
 
     @Override
     public Collection<Function> getFunctions(String name) {
-        return ImmutableSet.of();
+        Function func = functionMap.get(name);
+        return func == null ? Collections.<Function>emptyList() : ImmutableList.of(functionMap.get(name));
     }
 
     @Override
     public Set<String> getFunctionNames() {
-        return ImmutableSet.of();
+        return functionMap.keySet();
     }
 
     @Override
