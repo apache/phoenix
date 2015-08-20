@@ -24,6 +24,7 @@ import java.util.List;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
+import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
@@ -59,6 +60,11 @@ public class DegenerateQueryPlan extends BaseQueryPlan {
     @Override
     public boolean useRoundRobinIterator() {
         return false;
+    }
+
+    @Override
+    public QueryPlan limit(Integer limit) {
+        return this;
     }
 
 }

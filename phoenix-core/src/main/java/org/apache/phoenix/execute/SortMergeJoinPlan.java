@@ -644,5 +644,12 @@ public class SortMergeJoinPlan implements QueryPlan {
         return false;
     }
 
+    @Override
+    public QueryPlan limit(Integer limit) {
+        // This should never be reached, since SortMergeJoinPlan should always be
+        // wrapped inside a ClientProcessingPlan.
+        throw new UnsupportedOperationException();
+    }
+
 }
 

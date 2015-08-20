@@ -530,6 +530,11 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
                 public boolean useRoundRobinIterator() throws SQLException {
                     return false;
                 }
+
+                @Override
+                public QueryPlan limit(Integer limit) {
+                    return this;
+                }
                 
             };
         }

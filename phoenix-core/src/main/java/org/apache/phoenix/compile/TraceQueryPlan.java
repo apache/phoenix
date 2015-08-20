@@ -238,4 +238,9 @@ public class TraceQueryPlan implements QueryPlan {
     public boolean useRoundRobinIterator() {
         return false;
     }
+
+    @Override
+    public QueryPlan limit(Integer limit) {
+        return this;
+    }
 }

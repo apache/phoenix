@@ -90,4 +90,13 @@ public class ClientScanPlan extends ClientProcessingPlan {
         return new ExplainPlan(planSteps);
     }
 
+    @Override
+    public QueryPlan limit(Integer limit) {
+        if (limit == this.limit || (limit != null && limit.equals(this.limit)))
+            return this;
+        
+        return new ClientScanPlan(this.context, this.statement, this.table,
+                this.projector, limit, this.where, this.orderBy, this.delegate);
+    }
+
 }

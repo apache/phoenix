@@ -91,4 +91,13 @@ public class TupleProjectionPlan extends DelegateQueryPlan {
         
         return iterator;
     }
+
+    @Override
+    public QueryPlan limit(Integer limit) {
+        QueryPlan delegate = this.delegate.limit(limit);
+        if (delegate == this.delegate)
+            return this;
+        
+        return new TupleProjectionPlan(delegate, this.tupleProjector, this.postFilter);
+    }
 }

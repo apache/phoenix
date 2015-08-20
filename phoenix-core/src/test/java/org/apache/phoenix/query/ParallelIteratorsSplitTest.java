@@ -437,6 +437,11 @@ public class ParallelIteratorsSplitTest extends BaseConnectionlessQueryTest {
             public boolean useRoundRobinIterator() {
                 return false;
             }
+
+            @Override
+            public QueryPlan limit(Integer limit) {
+                return this;
+            }
             
         }, null, new SpoolingResultIterator.SpoolingResultIteratorFactory(context.getConnection().getQueryServices()));
         List<KeyRange> keyRanges = parallelIterators.getSplits();

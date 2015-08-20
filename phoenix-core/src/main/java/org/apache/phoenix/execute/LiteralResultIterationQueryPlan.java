@@ -26,6 +26,7 @@ import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
+import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.iterate.ParallelIteratorFactory;
@@ -103,6 +104,15 @@ public class LiteralResultIterationQueryPlan extends BaseQueryPlan {
         }
         
         return scanner;
+    }
+
+    @Override
+    public QueryPlan limit(Integer limit) {
+        if (limit == this.limit || (limit != null && limit.equals(this.limit)))
+            return this;
+        
+        return new LiteralResultIterationQueryPlan(this.tupleIterator, this.context, this.statement, this.tableRef, 
+                this.projection, limit, this.orderBy, this.parallelIteratorFactory);
     }
 
 }

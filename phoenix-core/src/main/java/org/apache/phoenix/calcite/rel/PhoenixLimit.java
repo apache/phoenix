@@ -90,9 +90,10 @@ public class PhoenixLimit extends SingleRel implements PhoenixRel {
     @Override
     public QueryPlan implement(Implementor implementor) {
         QueryPlan plan = implementor.visitInput(0, (PhoenixRel) getInput());
-        // TODO only wrap with ClientScanPlan 
-        // if (plan.getLimit() != null);
-        // otherwise add limit to "plan"
+        if (plan.getLimit() == null) {
+            return plan.limit(statelessFetch);
+        }
+        
         return new ClientScanPlan(plan.getContext(), plan.getStatement(), 
                 implementor.getTableRef(), RowProjector.EMPTY_PROJECTOR, 
                 statelessFetch, null, OrderBy.EMPTY_ORDER_BY, plan);

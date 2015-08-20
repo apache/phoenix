@@ -59,7 +59,7 @@ public class UnionPlan implements QueryPlan {
     private UnionResultIterators iterators;
 
     public UnionPlan(StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector,
-            Integer limit, OrderBy orderBy, GroupBy groupBy, List<QueryPlan> plans, ParameterMetaData paramMetaData) throws SQLException {
+            Integer limit, OrderBy orderBy, GroupBy groupBy, List<QueryPlan> plans, ParameterMetaData paramMetaData) {
         this.parentContext = context;
         this.statement = statement;
         this.tableRef = table;
@@ -196,6 +196,15 @@ public class UnionPlan implements QueryPlan {
     @Override
     public boolean useRoundRobinIterator() throws SQLException {
         return false;
+    }
+
+    @Override
+    public QueryPlan limit(Integer limit) {
+        if (limit == this.limit || (limit != null && limit.equals(this.limit)))
+            return this;
+        
+        return new UnionPlan(this.parentContext, this.statement, this.tableRef, this.projector,
+            limit, this.orderBy, this.groupBy, this.plans, this.paramMetaData);
     }
 }
 

@@ -78,7 +78,7 @@ public class PhoenixValues extends Values implements PhoenixRel {
         List<Tuple> literalResult = Lists.newArrayList();
         Iterator<ImmutableList<RexLiteral>> iter = getTuples().iterator();
         Tuple baseTuple = new SingleKeyValueTuple(KeyValue.LOWESTKEY);
-        if (iter.hasNext()) {
+        while (iter.hasNext()) {
             ImmutableList<RexLiteral> row = iter.next();
             List<Expression> exprs = Lists.newArrayListWithExpectedSize(row.size());
             for (RexLiteral rexLiteral : row) {

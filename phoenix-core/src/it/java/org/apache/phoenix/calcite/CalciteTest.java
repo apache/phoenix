@@ -787,6 +787,14 @@ public class CalciteTest extends BaseClientManagedTimeIT {
                           {"0000000002", "T2", "0000000001", "S1"}, 
                           {"0000000003", "T3", "0000000002", "S2"}})
                 .close();
+        
+        start().sql("SELECT x from (values (1, 2), (2, 4), (3, 6)) as t(x, y) limit 2")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                           "  PhoenixClientProject(X=[$0])\n" +
+                           "    PhoenixLimit(fetch=[2])\n" +
+                           "      PhoenixValues(tuples=[[{ 1, 2 }, { 2, 4 }, { 3, 6 }]])\n")
+                .resultIs(new Object[][] {{1}, {2}})
+                .close();
     }
     
     @Test public void testSubquery() {

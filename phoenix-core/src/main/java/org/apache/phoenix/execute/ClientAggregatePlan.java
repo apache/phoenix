@@ -68,16 +68,24 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
     private final Expression having;
     private final Aggregators serverAggregators;
     private final Aggregators clientAggregators;
-    
+
     public ClientAggregatePlan(StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector,
             Integer limit, Expression where, OrderBy orderBy, GroupBy groupBy, Expression having, QueryPlan delegate) {
+        this(context, statement, table, projector, limit, where, orderBy, groupBy, having, delegate, 
+                ServerAggregators.deserialize(
+                        context.getScan().getAttribute(BaseScannerRegionObserver.AGGREGATORS), 
+                        QueryServicesOptions.withDefaults().getConfiguration()), 
+                context.getAggregationManager().getAggregators());
+    }
+    
+    private ClientAggregatePlan(StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector,
+            Integer limit, Expression where, OrderBy orderBy, GroupBy groupBy, Expression having, QueryPlan delegate,
+            Aggregators serverAggregators, Aggregators clientAggregators) {
         super(context, statement, table, projector, limit, where, orderBy, delegate);
         this.groupBy = groupBy;
         this.having = having;
-        this.serverAggregators =
-                ServerAggregators.deserialize(context.getScan()
-                        .getAttribute(BaseScannerRegionObserver.AGGREGATORS), QueryServicesOptions.withDefaults().getConfiguration());
-        this.clientAggregators = context.getAggregationManager().getAggregators();
+        this.serverAggregators = serverAggregators;
+        this.clientAggregators = clientAggregators;
     }
 
     @Override
@@ -228,5 +236,15 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
             return "ClientUngroupedAggregatingResultIterator [resultIterator=" 
                     + resultIterator + ", aggregators=" + aggregators + "]";
         }
+    }
+
+    @Override
+    public QueryPlan limit(Integer limit) {
+        if (limit == this.limit || (limit != null && limit.equals(this.limit)))
+            return this;
+        
+        return new ClientAggregatePlan(this.context, this.statement, this.table, 
+                this.projector, limit, this.where, this.orderBy, this.groupBy, this.having, 
+                this.delegate, this.serverAggregators, this.clientAggregators);
     }
 }

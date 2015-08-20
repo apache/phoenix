@@ -103,6 +103,10 @@ public class PhoenixToEnumerableConverter extends ConverterImpl implements Enume
                     throws SQLException {
                 return delegate.iterator(scanGrouper);
             }
+            @Override
+            public QueryPlan limit(Integer limit) {
+                return delegate.limit(limit);
+            }
         };
     }
 

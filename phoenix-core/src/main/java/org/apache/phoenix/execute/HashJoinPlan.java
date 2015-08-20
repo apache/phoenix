@@ -417,6 +417,16 @@ public class HashJoinPlan extends DelegateQueryPlan {
         }
         
     }
+
+    @Override
+    public QueryPlan limit(Integer limit) {
+        QueryPlan delegate = this.delegate.limit(limit);
+        if (delegate == this.delegate)
+            return this;
+
+        return new HashJoinPlan(this.statement, delegate, this.joinInfo, 
+                this.subPlans, this.recompileWhereClause);
+    }
 }
 
 

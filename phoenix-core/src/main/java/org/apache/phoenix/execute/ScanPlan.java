@@ -18,6 +18,7 @@
 package org.apache.phoenix.execute;
 
 
+import java.sql.ParameterMetaData;
 import java.sql.SQLException;
 import java.util.List;
 
@@ -25,6 +26,7 @@ import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
+import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
@@ -81,9 +83,14 @@ public class ScanPlan extends BaseQueryPlan {
     }
     
     public ScanPlan(StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector, Integer limit, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory, boolean allowPageFilter) throws SQLException {
-        super(context, statement, table, projector, context.getBindManager().getParameterMetaData(), limit, orderBy, GroupBy.EMPTY_GROUP_BY,
-                parallelIteratorFactory != null ? parallelIteratorFactory :
-                        buildResultIteratorFactory(context, table, orderBy, limit, allowPageFilter));
+        this(context, statement, table, projector, context.getBindManager().getParameterMetaData(), limit, orderBy, 
+                parallelIteratorFactory != null ? parallelIteratorFactory : 
+                    buildResultIteratorFactory(context, table, orderBy, limit, allowPageFilter), 
+                allowPageFilter);
+    }
+    
+    private ScanPlan(StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector, ParameterMetaData paramMetaData, Integer limit, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory, boolean allowPageFilter) {
+        super(context, statement, table, projector, paramMetaData, limit, orderBy, GroupBy.EMPTY_GROUP_BY, parallelIteratorFactory);
         this.allowPageFilter = allowPageFilter;
         if (!orderBy.getOrderByExpressions().isEmpty()) { // TopN
             int thresholdBytes = context.getConnection().getQueryServices().getProps().getInt(
@@ -220,6 +227,15 @@ public class ScanPlan extends BaseQueryPlan {
     @Override
     public boolean useRoundRobinIterator() throws SQLException {
         return ScanUtil.isRoundRobinPossible(orderBy, context);
+    }
+
+    @Override
+    public QueryPlan limit(Integer limit) {
+        if (limit == this.limit || (limit != null && limit.equals(this.limit)))
+            return this;
+        
+        return new ScanPlan(this.context, this.statement, this.tableRef, this.projection, 
+                this.paramMetaData, limit, this.orderBy, this.parallelIteratorFactory, this.allowPageFilter);
     }
 
 }
