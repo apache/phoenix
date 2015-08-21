@@ -278,7 +278,10 @@ public final class TypeUtil {
                     tuple.set(i, DataType.toBoolean(object));
                     break;
                 case DataType.DATETIME:
-                    tuple.set(i, DataType.toDateTime(object));
+                    if (object instanceof java.sql.Timestamp)
+                        tuple.set(i,new DateTime(((java.sql.Timestamp)object).getTime()));
+                    else
+                        tuple.set(i,new DateTime(object));
                     break;
                 case DataType.BIGDECIMAL:
                     tuple.set(i, DataType.toBigDecimal(object));

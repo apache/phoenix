@@ -19,11 +19,11 @@
  */
 package org.apache.phoenix.pig;
 
+import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
+import static org.apache.phoenix.util.TestUtil.LOCALHOST;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
-import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
-import static org.apache.phoenix.util.TestUtil.LOCALHOST;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -51,6 +51,7 @@ import org.apache.pig.impl.logicalLayer.schema.Schema.FieldSchema;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+
 import com.google.common.base.Preconditions;
 
 /**
@@ -395,6 +396,90 @@ public class PhoenixHBaseLoaderIT extends BaseHBaseManagedTimeIT {
         
         List<Tuple> actualList = data.get("out");
         assertEquals(expectedList, actualList);
+    }
+	 
+    @Test
+    public void testTimestampForSQLQuery() throws Exception {
+        try {
+            //create the table
+            String ddl = "CREATE TABLE TIMESTAMP_T (MYKEY VARCHAR,DATE_STP TIMESTAMP CONSTRAINT PK PRIMARY KEY (MYKEY)) ";
+            conn.createStatement().execute(ddl);
+
+            final String dml = "UPSERT INTO TIMESTAMP_T VALUES('foo',TO_TIMESTAMP('2006-04-12 00:00:00'))";
+            conn.createStatement().execute(dml);
+            conn.commit();
+
+            //sql query
+            final String sqlQuery = " SELECT mykey, year(DATE_STP) FROM TIMESTAMP_T ";
+            pigServer.registerQuery(String.format(
+                "A = load 'hbase://query/%s' using org.apache.phoenix.pig.PhoenixHBaseLoader('%s');", sqlQuery,
+                zkQuorum));
+
+            final Iterator<Tuple> iterator = pigServer.openIterator("A");
+            while (iterator.hasNext()) {
+                Tuple tuple = iterator.next();
+                assertEquals("foo", tuple.get(0));
+                assertEquals(2006, tuple.get(1));
+            }
+        } finally {
+            dropTable("TIMESTAMP_T");
+        }
+    }
+    
+    @Test
+    public void testDateForSQLQuery() throws Exception {
+        try {
+            //create the table
+            String ddl = "CREATE TABLE DATE_T (MYKEY VARCHAR,DATE_STP Date CONSTRAINT PK PRIMARY KEY (MYKEY)) ";
+            conn.createStatement().execute(ddl);
+
+            final String dml = "UPSERT INTO DATE_T VALUES('foo',TO_DATE('2004-03-10 10:00:00'))";
+            conn.createStatement().execute(dml);
+            conn.commit();
+
+            //sql query
+            final String sqlQuery = " SELECT mykey, hour(DATE_STP) FROM DATE_T ";
+            pigServer.registerQuery(String.format(
+                "A = load 'hbase://query/%s' using org.apache.phoenix.pig.PhoenixHBaseLoader('%s');", sqlQuery,
+                zkQuorum));
+
+            final Iterator<Tuple> iterator = pigServer.openIterator("A");
+            while (iterator.hasNext()) {
+                Tuple tuple = iterator.next();
+                assertEquals("foo", tuple.get(0));
+                assertEquals(10, tuple.get(1));
+            }
+        } finally {
+            dropTable("DATE_T");
+        }
+    }
+
+    @Test
+    public void testTimeForSQLQuery() throws Exception {
+        try {
+            //create the table
+            String ddl = "CREATE TABLE TIME_T (MYKEY VARCHAR,DATE_STP TIME CONSTRAINT PK PRIMARY KEY (MYKEY)) ";
+            conn.createStatement().execute(ddl);
+
+            final String dml = "UPSERT INTO TIME_T VALUES('foo',TO_TIME('2008-05-16 00:30:00'))";
+            conn.createStatement().execute(dml);
+            conn.commit();
+
+            //sql query
+            final String sqlQuery = " SELECT mykey, minute(DATE_STP) FROM TIME_T ";
+            pigServer.registerQuery(String.format(
+                "A = load 'hbase://query/%s' using org.apache.phoenix.pig.PhoenixHBaseLoader('%s');", sqlQuery,
+                zkQuorum));
+
+            final Iterator<Tuple> iterator = pigServer.openIterator("A");
+            while (iterator.hasNext()) {
+                Tuple tuple = iterator.next();
+                assertEquals("foo", tuple.get(0));
+                assertEquals(30, tuple.get(1));
+            }
+        } finally {
+            dropTable("TIME_T");
+        }
     }
     
     /**
