@@ -80,6 +80,7 @@ public class PhoenixConverterRules {
         PhoenixClientAggregateRule.INSTANCE,
         PhoenixServerAggregateRule.SERVER,
         PhoenixServerAggregateRule.SERVERJOIN,
+        PhoenixUnionRule.INSTANCE,
         PhoenixClientJoinRule.INSTANCE,
         PhoenixServerJoinRule.INSTANCE,
         PhoenixValuesRule.INSTANCE,

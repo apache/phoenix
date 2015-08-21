@@ -456,18 +456,14 @@ public class CalciteIT extends BaseClientManagedTimeIT {
         
         start().sql("select t1.entity_id, t2.a_string, t1.organization_id from aTable t1 join aTable t2 on t1.organization_id = t2.organization_id and t1.entity_id = t2.entity_id")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                    "  PhoenixClientProject(ENTITY_ID=[$1], A_STRING=[$4], ORGANIZATION_ID=[$0])\n"
-                    +
-                    "    PhoenixClientJoin(condition=[AND(=($0, $2), =($1, $3))], joinType=[inner])\n"
-                    +
-                    "      PhoenixToClientConverter\n" +
-                    "        PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1])\n"
-                    +
-                    "          PhoenixTableScan(table=[[phoenix, ATABLE]])\n" +
-                    "      PhoenixToClientConverter\n" +
-                    "        PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1], A_STRING=[$2])\n"
-                    +
-                    "          PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
+                           "  PhoenixClientProject(ENTITY_ID=[$1], A_STRING=[$4], ORGANIZATION_ID=[$0])\n" +
+                           "    PhoenixClientJoin(condition=[AND(=($0, $2), =($1, $3))], joinType=[inner])\n" +
+                           "      PhoenixToClientConverter\n" +
+                           "        PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1])\n" +
+                           "          PhoenixTableScan(table=[[phoenix, ATABLE]])\n" +
+                           "      PhoenixToClientConverter\n" +
+                           "        PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1], A_STRING=[$2])\n" +
+                           "          PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
                 .resultIs(new Object[][] {
                           {"00A123122312312", "a", "00D300000000XHP"},
                           {"00A223122312312", "a", "00D300000000XHP"},
@@ -531,19 +527,15 @@ public class CalciteIT extends BaseClientManagedTimeIT {
         
         start().sql("select t1.entity_id, t2.a_string, t3.organization_id from aTable t1 join aTable t2 on t1.entity_id = t2.entity_id and t1.organization_id = t2.organization_id join atable t3 on t1.entity_id = t3.entity_id and t1.organization_id = t3.organization_id")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                    "  PhoenixClientProject(ENTITY_ID=[$19], A_STRING=[$2], ORGANIZATION_ID=[$36])\n"
-                    +
-                    "    PhoenixToClientConverter\n" +
-                    "      PhoenixServerJoin(condition=[AND(=($19, $1), =($18, $0))], joinType=[inner])\n"
-                    +
-                    "        PhoenixTableScan(table=[[phoenix, ATABLE]])\n" +
-                    "        PhoenixToClientConverter\n" +
-                    "          PhoenixServerJoin(condition=[AND(=($1, $19), =($0, $18))], joinType=[inner])\n"
-                    +
-                    "            PhoenixTableScan(table=[[phoenix, ATABLE]])\n"
-                    +
-                    "            PhoenixToClientConverter\n" +
-                    "              PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
+                           "  PhoenixClientProject(ENTITY_ID=[$19], A_STRING=[$2], ORGANIZATION_ID=[$36])\n" +
+                           "    PhoenixToClientConverter\n" +
+                           "      PhoenixServerJoin(condition=[AND(=($19, $1), =($18, $0))], joinType=[inner])\n" +
+                           "        PhoenixTableScan(table=[[phoenix, ATABLE]])\n" +
+                           "        PhoenixToClientConverter\n" +
+                           "          PhoenixServerJoin(condition=[AND(=($1, $19), =($0, $18))], joinType=[inner])\n" +
+                           "            PhoenixTableScan(table=[[phoenix, ATABLE]])\n" +
+                           "            PhoenixToClientConverter\n" +
+                           "              PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
                 .resultIs(new Object[][] {
                           {"00A123122312312", "a", "00D300000000XHP"},
                           {"00A223122312312", "a", "00D300000000XHP"},
@@ -962,6 +954,12 @@ public class CalciteIT extends BaseClientManagedTimeIT {
             .explainIs("PhoenixToEnumerableConverter\n" +
                        "  PhoenixClientProject(EXPR$0=[+($0, $1)])\n" +
                        "    PhoenixValues(tuples=[[{ 2, 1 }]])\n")
+            .close();
+        start().sql("select count(p0), max(p1) from (values (2, 1), (3, 4), (5, 2)) as t(p0, p1)")
+            .explainIs("PhoenixToEnumerableConverter\n" +
+                       "  PhoenixClientAggregate(group=[{}], EXPR$0=[COUNT()], EXPR$1=[MAX($1)])\n" +
+                       "    PhoenixValues(tuples=[[{ 2, 1 }, { 3, 4 }, { 5, 2 }]])\n")
+            .resultIs(new Object[][] {{3L, 4}})
             .close();
     }
     

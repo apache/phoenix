@@ -52,7 +52,7 @@ public class LiteralResultIterationQueryPlan extends BaseQueryPlan {
     public LiteralResultIterationQueryPlan(Iterator<Tuple> tupleIterator, StatementContext context, 
             FilterableStatement statement, TableRef tableRef, RowProjector projection, 
             Integer limit, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory) {
-        super(context, statement, tableRef, projection, context == null ? null : context.getBindManager().getParameterMetaData(), limit, orderBy, GroupBy.EMPTY_GROUP_BY, parallelIteratorFactory);
+        super(context, statement, tableRef, projection, context.getBindManager().getParameterMetaData(), limit, orderBy, GroupBy.EMPTY_GROUP_BY, parallelIteratorFactory);
         this.tupleIterator = tupleIterator;
     }
 
@@ -99,7 +99,7 @@ public class LiteralResultIterationQueryPlan extends BaseQueryPlan {
             
         };
         
-        if (context != null && context.getSequenceManager().getSequenceCount() > 0) {
+        if (context.getSequenceManager().getSequenceCount() > 0) {
             scanner = new SequenceResultIterator(scanner, context.getSequenceManager());
         }
         
