@@ -35,10 +35,10 @@ import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.execute.AggregatePlan;
 import org.apache.phoenix.execute.ClientAggregatePlan;
 import org.apache.phoenix.execute.ClientScanPlan;
-import org.apache.phoenix.execute.EmptyTableQueryPlan;
 import org.apache.phoenix.execute.HashJoinPlan;
 import org.apache.phoenix.execute.HashJoinPlan.HashSubPlan;
 import org.apache.phoenix.execute.HashJoinPlan.WhereClauseSubPlan;
+import org.apache.phoenix.execute.LiteralResultIterationPlan;
 import org.apache.phoenix.execute.ScanPlan;
 import org.apache.phoenix.execute.SortMergeJoinPlan;
 import org.apache.phoenix.execute.TupleProjectionPlan;
@@ -557,7 +557,7 @@ public class QueryCompiler {
         if (plan == null) {
             ParallelIteratorFactory parallelIteratorFactory = asSubquery ? null : this.parallelIteratorFactory;
             plan = select.getFrom() == null ?
-                      new EmptyTableQueryPlan(context, select, tableRef, projector, limit, orderBy, parallelIteratorFactory)
+                      new LiteralResultIterationPlan(context, select, tableRef, projector, limit, orderBy, parallelIteratorFactory)
                     : (select.isAggregate() || select.isDistinct() ? 
                               new AggregatePlan(context, select, tableRef, projector, limit, orderBy, parallelIteratorFactory, groupBy, having)
                             : new ScanPlan(context, select, tableRef, projector, limit, orderBy, parallelIteratorFactory, allowPageFilter));
