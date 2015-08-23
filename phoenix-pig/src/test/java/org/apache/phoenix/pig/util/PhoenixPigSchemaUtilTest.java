@@ -30,25 +30,23 @@ import java.sql.Types;
 import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.phoenix.mapreduce.util.ColumnInfoToStringEncoderDecoder;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.SchemaType;
+import org.apache.phoenix.pig.util.PhoenixPigSchemaUtil.Dependencies;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.util.ColumnInfo;
-import org.apache.phoenix.util.SchemaUtil;
 import org.apache.pig.ResourceSchema;
 import org.apache.pig.ResourceSchema.ResourceFieldSchema;
 import org.apache.pig.data.DataType;
 import org.junit.Test;
 
-import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 
 /**
  * 
  * Tests on PhoenixPigSchemaUtil
  */
 public class PhoenixPigSchemaUtilTest {
-
     private static final ColumnInfo ID_COLUMN = new ColumnInfo("ID", Types.BIGINT);
     private static final ColumnInfo NAME_COLUMN = new ColumnInfo("NAME", Types.VARCHAR);
     private static final ColumnInfo LOCATION_COLUMN = new ColumnInfo("LOCATION", Types.ARRAY);
@@ -58,12 +56,14 @@ public class PhoenixPigSchemaUtilTest {
     public void testSchema() throws SQLException, IOException {
         
         final Configuration configuration = mock(Configuration.class);
-        final List<ColumnInfo> columnInfos = ImmutableList.of(ID_COLUMN,NAME_COLUMN);
-        final String encodedColumnInfos = ColumnInfoToStringEncoderDecoder.encode(columnInfos);
-        when(configuration.get(PhoenixConfigurationUtil.SELECT_COLUMN_INFO_KEY)).thenReturn(encodedColumnInfos);
         when(configuration.get(PhoenixConfigurationUtil.SCHEMA_TYPE)).thenReturn(SchemaType.TABLE.name());
-        final ResourceSchema actual = PhoenixPigSchemaUtil.getResourceSchema(configuration);
-        
+		final ResourceSchema actual = PhoenixPigSchemaUtil.getResourceSchema(
+				configuration, new Dependencies() {
+					List<ColumnInfo> getSelectColumnMetadataList(
+							Configuration configuration) throws SQLException {
+						return Lists.newArrayList(ID_COLUMN, NAME_COLUMN);
+					}
+				});        
         // expected schema.
         final ResourceFieldSchema[] fields = new ResourceFieldSchema[2];
         fields[0] = new ResourceFieldSchema().setName("ID")
@@ -81,10 +81,14 @@ public class PhoenixPigSchemaUtilTest {
     public void testUnSupportedTypes() throws SQLException, IOException {
         
         final Configuration configuration = mock(Configuration.class);
-        final List<ColumnInfo> columnInfos = ImmutableList.of(ID_COLUMN,LOCATION_COLUMN);
-        final String encodedColumnInfos = ColumnInfoToStringEncoderDecoder.encode(columnInfos);
-        when(configuration.get(PhoenixConfigurationUtil.SELECT_COLUMN_INFO_KEY)).thenReturn(encodedColumnInfos);
-        PhoenixPigSchemaUtil.getResourceSchema(configuration);
+        when(configuration.get(PhoenixConfigurationUtil.SCHEMA_TYPE)).thenReturn(SchemaType.TABLE.name());
+		PhoenixPigSchemaUtil.getResourceSchema(
+				configuration, new Dependencies() {
+					List<ColumnInfo> getSelectColumnMetadataList(
+							Configuration configuration) throws SQLException {
+						return Lists.newArrayList(ID_COLUMN, LOCATION_COLUMN);
+					}
+				});  
         fail("We currently don't support Array type yet. WIP!!");
     }
 }

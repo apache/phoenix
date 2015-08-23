@@ -33,12 +33,12 @@ import org.apache.phoenix.expression.function.FloorDateExpression;
 import org.apache.phoenix.expression.function.FloorDecimalExpression;
 import org.apache.phoenix.expression.function.TimeUnit;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
-import org.apache.phoenix.schema.types.PDecimal;
-import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PTimestamp;
-import org.apache.phoenix.schema.types.PUnsignedTimestamp;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TypeMismatchException;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.schema.types.PTimestamp;
+import org.apache.phoenix.schema.types.PUnsignedTimestamp;
 
 import com.google.common.collect.Lists;
 
@@ -53,7 +53,7 @@ import com.google.common.collect.Lists;
 public abstract class BaseExpression implements Expression {
     
     public static interface ExpressionComparabilityWrapper {
-        public Expression wrap(Expression lhs, Expression rhs) throws SQLException;
+        public Expression wrap(Expression lhs, Expression rhs, boolean rowKeyOrderOptimizable) throws SQLException;
     }
     
     /*
@@ -68,7 +68,7 @@ public abstract class BaseExpression implements Expression {
         WRAPPERS[CompareOp.LESS.ordinal()] = new ExpressionComparabilityWrapper() {
 
             @Override
-            public Expression wrap(Expression lhs, Expression rhs) throws SQLException {
+            public Expression wrap(Expression lhs, Expression rhs, boolean rowKeyOrderOptimizable) throws SQLException {
                 Expression e = rhs;
                 PDataType rhsType = rhs.getDataType();
                 PDataType lhsType = lhs.getDataType();
@@ -77,7 +77,7 @@ public abstract class BaseExpression implements Expression {
                 } else if ((rhsType == PTimestamp.INSTANCE || rhsType == PUnsignedTimestamp.INSTANCE)  && (lhsType != PTimestamp.INSTANCE && lhsType != PUnsignedTimestamp.INSTANCE)) {
                     e = FloorDateExpression.create(rhs, TimeUnit.MILLISECOND);
                 }
-                e = CoerceExpression.create(e, lhsType, lhs.getSortOrder(), lhs.getMaxLength());
+                e = CoerceExpression.create(e, lhsType, lhs.getSortOrder(), lhs.getMaxLength(), rowKeyOrderOptimizable);
                 return e;
             }
             
@@ -87,7 +87,7 @@ public abstract class BaseExpression implements Expression {
         WRAPPERS[CompareOp.GREATER.ordinal()] = new ExpressionComparabilityWrapper() {
 
             @Override
-            public Expression wrap(Expression lhs, Expression rhs) throws SQLException {
+            public Expression wrap(Expression lhs, Expression rhs, boolean rowKeyOrderOptimizable) throws SQLException {
                 Expression e = rhs;
                 PDataType rhsType = rhs.getDataType();
                 PDataType lhsType = lhs.getDataType();
@@ -96,7 +96,7 @@ public abstract class BaseExpression implements Expression {
                 } else if ((rhsType == PTimestamp.INSTANCE || rhsType == PUnsignedTimestamp.INSTANCE)  && (lhsType != PTimestamp.INSTANCE && lhsType != PUnsignedTimestamp.INSTANCE)) {
                     e = CeilTimestampExpression.create(rhs);
                 }
-                e = CoerceExpression.create(e, lhsType, lhs.getSortOrder(), lhs.getMaxLength());
+                e = CoerceExpression.create(e, lhsType, lhs.getSortOrder(), lhs.getMaxLength(), rowKeyOrderOptimizable);
                 return e;
             }
             
@@ -105,9 +105,9 @@ public abstract class BaseExpression implements Expression {
         WRAPPERS[CompareOp.EQUAL.ordinal()] = new ExpressionComparabilityWrapper() {
 
             @Override
-            public Expression wrap(Expression lhs, Expression rhs) throws SQLException {
+            public Expression wrap(Expression lhs, Expression rhs, boolean rowKeyOrderOptimizable) throws SQLException {
                 PDataType lhsType = lhs.getDataType();
-                Expression e = CoerceExpression.create(rhs, lhsType, lhs.getSortOrder(), lhs.getMaxLength());
+                Expression e = CoerceExpression.create(rhs, lhsType, lhs.getSortOrder(), lhs.getMaxLength(), rowKeyOrderOptimizable);
                 return e;
             }
             
@@ -127,42 +127,43 @@ public abstract class BaseExpression implements Expression {
      * @param lhs left hand side expression
      * @param rhs right hand side expression
      * @param op operator being used to compare the expressions, which can affect rounding we may need to do.
+     * @param rowKeyOrderOptimizable 
      * @return the newly coerced expression
      * @throws SQLException
      */
-    public static Expression coerce(Expression lhs, Expression rhs, CompareOp op) throws SQLException {
-        return coerce(lhs, rhs, getWrapper(op));
+    public static Expression coerce(Expression lhs, Expression rhs, CompareOp op, boolean rowKeyOrderOptimizable) throws SQLException {
+        return coerce(lhs, rhs, getWrapper(op), rowKeyOrderOptimizable);
     }
         
-    public static Expression coerce(Expression lhs, Expression rhs, ExpressionComparabilityWrapper wrapper) throws SQLException {
+    public static Expression coerce(Expression lhs, Expression rhs, ExpressionComparabilityWrapper wrapper, boolean rowKeyOrderOptimizable) throws SQLException {
         
         if (lhs instanceof RowValueConstructorExpression && rhs instanceof RowValueConstructorExpression) {
             int i = 0;
             List<Expression> coercedNodes = Lists.newArrayListWithExpectedSize(Math.max(lhs.getChildren().size(), rhs.getChildren().size()));
             for (; i < Math.min(lhs.getChildren().size(),rhs.getChildren().size()); i++) {
-                coercedNodes.add(coerce(lhs.getChildren().get(i), rhs.getChildren().get(i), wrapper));
+                coercedNodes.add(coerce(lhs.getChildren().get(i), rhs.getChildren().get(i), wrapper, rowKeyOrderOptimizable));
             }
             for (; i < lhs.getChildren().size(); i++) {
-                coercedNodes.add(coerce(lhs.getChildren().get(i), null, wrapper));
+                coercedNodes.add(coerce(lhs.getChildren().get(i), null, wrapper, rowKeyOrderOptimizable));
             }
             for (; i < rhs.getChildren().size(); i++) {
-                coercedNodes.add(coerce(null, rhs.getChildren().get(i), wrapper));
+                coercedNodes.add(coerce(null, rhs.getChildren().get(i), wrapper, rowKeyOrderOptimizable));
             }
             trimTrailingNulls(coercedNodes);
             return coercedNodes.equals(rhs.getChildren()) ? rhs : new RowValueConstructorExpression(coercedNodes, rhs.isStateless());
         } else if (lhs instanceof RowValueConstructorExpression) {
             List<Expression> coercedNodes = Lists.newArrayListWithExpectedSize(Math.max(rhs.getChildren().size(), lhs.getChildren().size()));
-            coercedNodes.add(coerce(lhs.getChildren().get(0), rhs, wrapper));
+            coercedNodes.add(coerce(lhs.getChildren().get(0), rhs, wrapper, rowKeyOrderOptimizable));
             for (int i = 1; i < lhs.getChildren().size(); i++) {
-                coercedNodes.add(coerce(lhs.getChildren().get(i), null, wrapper));
+                coercedNodes.add(coerce(lhs.getChildren().get(i), null, wrapper, rowKeyOrderOptimizable));
             }
             trimTrailingNulls(coercedNodes);
             return coercedNodes.equals(rhs.getChildren()) ? rhs : new RowValueConstructorExpression(coercedNodes, rhs.isStateless());
         } else if (rhs instanceof RowValueConstructorExpression) {
             List<Expression> coercedNodes = Lists.newArrayListWithExpectedSize(Math.max(rhs.getChildren().size(), lhs.getChildren().size()));
-            coercedNodes.add(coerce(lhs, rhs.getChildren().get(0), wrapper));
+            coercedNodes.add(coerce(lhs, rhs.getChildren().get(0), wrapper, rowKeyOrderOptimizable));
             for (int i = 1; i < rhs.getChildren().size(); i++) {
-                coercedNodes.add(coerce(null, rhs.getChildren().get(i), wrapper));
+                coercedNodes.add(coerce(null, rhs.getChildren().get(i), wrapper, rowKeyOrderOptimizable));
             }
             trimTrailingNulls(coercedNodes);
             return coercedNodes.equals(rhs.getChildren()) ? rhs : new RowValueConstructorExpression(coercedNodes, rhs.isStateless());
@@ -174,7 +175,7 @@ public abstract class BaseExpression implements Expression {
             if (rhs.getDataType() != null && lhs.getDataType() != null && !rhs.getDataType().isCastableTo(lhs.getDataType())) {
                 throw TypeMismatchException.newException(lhs.getDataType(), rhs.getDataType());
             }
-            return wrapper.wrap(lhs, rhs);
+            return wrapper.wrap(lhs, rhs, rowKeyOrderOptimizable);
         }
     }
     

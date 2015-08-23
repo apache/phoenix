@@ -85,8 +85,11 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.stats.StatisticsCollector;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
-import org.apache.phoenix.schema.types.PArrayDataType;
+import org.apache.phoenix.schema.types.PBinary;
+import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDouble;
+import org.apache.phoenix.schema.types.PFloat;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.KeyValueUtil;
@@ -95,6 +98,7 @@ import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
+import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TimeKeeper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -296,11 +300,34 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
                                         break;
                                     }
                                     Field field = schema.getField(i);
-                                    // Special case for re-writing DESC ARRAY, as the actual byte value needs to change in this case
-                                    if (field.getDataType().isArrayType() && field.getSortOrder() == SortOrder.DESC && !PArrayDataType.arrayBaseType(field.getDataType()).isFixedWidth()) {
-                                        field.getDataType().coerceBytes(ptr, null, field.getDataType(),
-                                                field.getMaxLength(), field.getScale(), field.getSortOrder(), 
-                                                field.getMaxLength(), field.getScale(), field.getSortOrder(), true); // force to use correct separator byte
+                                    if (field.getSortOrder() == SortOrder.DESC) {
+                                        // Special case for re-writing DESC ARRAY, as the actual byte value needs to change in this case
+                                        if (field.getDataType().isArrayType()) {
+                                            field.getDataType().coerceBytes(ptr, null, field.getDataType(),
+                                                    field.getMaxLength(), field.getScale(), field.getSortOrder(), 
+                                                    field.getMaxLength(), field.getScale(), field.getSortOrder(), true); // force to use correct separator byte
+                                        }
+                                        // Special case for re-writing DESC CHAR or DESC BINARY, to force the re-writing of trailing space characters
+                                        else if (field.getDataType() == PChar.INSTANCE || field.getDataType() == PBinary.INSTANCE) {
+                                            int len = ptr.getLength();
+                                            while (len > 0 && ptr.get()[ptr.getOffset() + len - 1] == StringUtil.SPACE_UTF8) {
+                                                len--;
+                                            }
+                                            ptr.set(ptr.get(), ptr.getOffset(), len);
+                                        // Special case for re-writing DESC FLOAT and DOUBLE, as they're not inverted like they should be (PHOENIX-2171)
+                                        } else if (field.getDataType() == PFloat.INSTANCE || field.getDataType() == PDouble.INSTANCE) {
+                                            byte[] invertedBytes = SortOrder.invert(ptr.get(), ptr.getOffset(), ptr.getLength());
+                                            ptr.set(invertedBytes);
+                                        }
+                                    } else if (field.getDataType() == PBinary.INSTANCE) {
+                                        // Remove trailing space characters so that the setValues call below will replace them
+                                        // with the correct zero byte character. Note this is somewhat dangerous as these
+                                        // could be legit, but I don't know what the alternative is.
+                                        int len = ptr.getLength();
+                                        while (len > 0 && ptr.get()[ptr.getOffset() + len - 1] == StringUtil.SPACE_UTF8) {
+                                            len--;
+                                        }
+                                        ptr.set(ptr.get(), ptr.getOffset(), len);                                        
                                     }
                                     values[i] = ptr.copyBytes();
                                 }

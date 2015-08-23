@@ -19,6 +19,7 @@
 package org.apache.phoenix.pherf;
 
 import org.apache.commons.cli.*;
+import org.apache.phoenix.pherf.PherfConstants.GeneratePhoenixStats;
 import org.apache.phoenix.pherf.configuration.XMLConfigParser;
 import org.apache.phoenix.pherf.jmx.MonitorManager;
 import org.apache.phoenix.pherf.schema.SchemaReader;
@@ -73,6 +74,8 @@ public class Pherf {
                         + "See pherf.default.dataloader.threadpool in Pherf.properties.");
         options.addOption("h", "help", false, "Get help on using this utility.");
         options.addOption("d", "debug", false, "Put tool in debug mode");
+        options.addOption("stats", false,
+                "Update Phoenix Statistics after data is loaded with -l argument");
     }
 
     private final String zookeeper;
@@ -89,6 +92,7 @@ public class Pherf {
     private final int rowCountOverride;
     private final boolean listFiles;
     private final boolean applySchema;
+    private final GeneratePhoenixStats generateStatistics;
 
     public Pherf(String[] args) throws Exception {
         CommandLineParser parser = new PosixParser();
@@ -126,6 +130,7 @@ public class Pherf {
                 command.hasOption("scenarioFile") ? command.getOptionValue("scenarioFile") : null;
         schemaFile = command.hasOption("schemaFile") ? command.getOptionValue("schemaFile") : null;
         rowCountOverride = Integer.parseInt(command.getOptionValue("rowCountOverride", "0"));
+        generateStatistics = command.hasOption("stats") ? GeneratePhoenixStats.YES : GeneratePhoenixStats.NO;
         String
                 writerThreadPoolSize =
                 command.getOptionValue("writerThreadSize",
@@ -204,23 +209,11 @@ public class Pherf {
             // Schema and Data Load
             if (preLoadData) {
                 logger.info("\nStarting Data Load...");
-                WriteWorkload workload = new WriteWorkload(parser);
+                WriteWorkload workload = new WriteWorkload(parser, generateStatistics);
                 workloadExecutor.add(workload);
 
                 // Wait for dataLoad to complete
                 workloadExecutor.get(workload);
-
-                logger.info("\nGenerate query gold files after data load");
-                QueryExecutor
-                        goldFileGenerator =
-                        new QueryExecutor(parser, phoenixUtil, workloadExecutor.getPool(),
-                                parser.getDataModels(), queryHint, true,
-                                PherfConstants.RunMode.FUNCTIONAL);
-                workloadExecutor
-                        .add(goldFileGenerator);
-
-                // Wait for dataLoad to complete
-                workloadExecutor.get(goldFileGenerator);
             } else {
                 logger.info(
                         "\nSKIPPED: Data Load and schema creation as -l argument not specified");
@@ -254,6 +247,10 @@ public class Pherf {
             if (workloadExecutor != null) {
                 logger.info("Run completed. Shutting down thread pool.");
                 workloadExecutor.shutdown();
+                if (preLoadData) {
+                	System.exit(0);
+                }
+                
             }
         }
     }

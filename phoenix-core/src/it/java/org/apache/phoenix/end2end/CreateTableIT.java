@@ -105,6 +105,31 @@ public class CreateTableIT extends BaseClientManagedTimeIT {
         conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute("DROP TABLE m_interface_job");
     }
+
+    @Test
+    public void testCreateMultiTenantTable() throws Exception {
+        long ts = nextTimestamp();
+        Properties props = new Properties();
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String ddl = "CREATE TABLE m_multi_tenant_test(                TenantId UNSIGNED_INT NOT NULL ,\n" +
+                "                Id UNSIGNED_INT NOT NULL ,\n" +
+                "                val VARCHAR ,\n" +
+                "                CONSTRAINT pk PRIMARY KEY(TenantId, Id) \n" +
+                "                ) MULTI_TENANT=true";
+        conn.createStatement().execute(ddl);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            conn.createStatement().execute(ddl);
+            fail();
+        } catch (TableAlreadyExistsException e) {
+            // expected
+        }
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
+        conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute("DROP TABLE m_multi_tenant_test");
+    }
     
     /**
      * Test that when the ddl only has PK cols, ttl is set.

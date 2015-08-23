@@ -207,6 +207,7 @@ public class TestUtil {
     public static final String JOIN_ITEM_TABLE_DISPLAY_NAME = JOIN_SCHEMA + "." + JOIN_ITEM_TABLE;
     public static final String JOIN_SUPPLIER_TABLE_DISPLAY_NAME = JOIN_SCHEMA + "." + JOIN_SUPPLIER_TABLE;
     public static final String JOIN_COITEM_TABLE_DISPLAY_NAME = JOIN_SCHEMA + "." + JOIN_COITEM_TABLE;
+    public static final String BINARY_NAME = "BinaryTable";
 
     /**
      * Read-only properties used by all tests
@@ -321,7 +322,7 @@ public class TestUtil {
     }
 
     public static Expression in(Expression... expressions) throws SQLException {
-        return InListExpression.create(Arrays.asList(expressions), false, new ImmutableBytesWritable());
+        return InListExpression.create(Arrays.asList(expressions), false, new ImmutableBytesWritable(), true);
     }
 
     public static Expression in(Expression e, Object... literals) throws SQLException {
@@ -331,7 +332,7 @@ public class TestUtil {
         for (Object o : literals) {
             expressions.add(LiteralExpression.newConstant(o, childType));
         }
-        return InListExpression.create(expressions, false, new ImmutableBytesWritable());
+        return InListExpression.create(expressions, false, new ImmutableBytesWritable(), true);
     }
 
     public static void assertDegenerate(StatementContext context) {

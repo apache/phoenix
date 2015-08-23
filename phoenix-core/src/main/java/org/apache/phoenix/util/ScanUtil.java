@@ -40,21 +40,26 @@ import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.io.WritableComparator;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
-import org.apache.phoenix.filter.BooleanExpressionFilter;
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.execute.DescVarLengthFastByteComparisons;import org.apache.phoenix.filter.BooleanExpressionFilter;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.KeyRange.Bound;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.RowKeySchema;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
@@ -283,7 +288,15 @@ public class ScanUtil {
         for (int i = 0; i < position.length; i++) {
             position[i] = bound == Bound.LOWER ? 0 : slots.get(i).size()-1;
             KeyRange range = slots.get(i).get(position[i]);
-            maxLength += range.getRange(bound).length + (schema.getField(i + slotSpan[i]).getDataType().isFixedWidth() ? 0 : 1);
+            Field field = schema.getField(i + slotSpan[i]);
+            int keyLength = range.getRange(bound).length;
+            if (!field.getDataType().isFixedWidth()) {
+                keyLength++;
+                if (range.isUnbound(bound) && !range.isInclusive(bound) && field.getSortOrder() == SortOrder.DESC) {
+                    keyLength++;
+                }
+            }
+            maxLength += keyLength;
         }
         byte[] key = new byte[maxLength];
         int length = setKey(schema, slots, slotSpan, position, bound, key, 0, 0, position.length);
@@ -371,8 +384,8 @@ public class ScanUtil {
             // key slots would cause the flag to become true.
             lastInclusiveUpperSingleKey = range.isSingleKey() && inclusiveUpper;
             anyInclusiveUpperRangeKey |= !range.isSingleKey() && inclusiveUpper;
-            // A match for IS NULL or IS NOT NULL should not have a DESC_SEPARATOR_BYTE as nulls sort first
-            byte sepByte = SchemaUtil.getSeparatorByte(schema.rowKeyOrderOptimizable(), bytes.length == 0 || range == KeyRange.IS_NULL_RANGE || range == KeyRange.IS_NOT_NULL_RANGE, field);
+            // A null or empty byte array is always represented as a zero byte
+            byte sepByte = SchemaUtil.getSeparatorByte(schema.rowKeyOrderOptimizable(), bytes.length == 0, field);
             
             if (!isFixedWidth && ( fieldIndex < schema.getMaxFields() || inclusiveUpper || exclusiveLower || sepByte == QueryConstants.DESC_SEPARATOR_BYTE)) {
                 key[offset++] = sepByte;
@@ -383,7 +396,7 @@ public class ScanUtil {
             // If we are setting the lower bound with an exclusive range key, we need to bump the
             // slot up for each key part. For an upper bound, we bump up an inclusive key, but
             // only after the last key part.
-            if (!range.isSingleKey() && exclusiveLower) {
+            if (exclusiveLower) {
                 if (!ByteUtil.nextKey(key, offset)) {
                     // Special case for not being able to increment.
                     // In this case we return a negative byteOffset to
@@ -391,6 +404,14 @@ public class ScanUtil {
                     // key has overflowed, this means that we should not
                     // have an end key specified.
                     return -byteOffset;
+                }
+                // We're filtering on values being non null here, but we still need the 0xFF
+                // terminator, since DESC keys ignore the last byte as it's expected to be 
+                // the terminator. Without this, we'd ignore the separator byte that was
+                // just added and incremented.
+                if (!isFixedWidth && bytes.length == 0 
+                    && SchemaUtil.getSeparatorByte(schema.rowKeyOrderOptimizable(), false, field) == QueryConstants.DESC_SEPARATOR_BYTE) {
+                    key[offset++] = QueryConstants.DESC_SEPARATOR_BYTE;
                 }
             }
         }
@@ -409,7 +430,8 @@ public class ScanUtil {
         // byte.
         if (bound == Bound.LOWER) {
             while (--i >= schemaStartIndex && offset > byteOffset && 
-                    !schema.getField(--fieldIndex).getDataType().isFixedWidth() && 
+                    !(field=schema.getField(--fieldIndex)).getDataType().isFixedWidth() && 
+                    field.getSortOrder() == SortOrder.ASC &&
                     key[offset-1] == QueryConstants.SEPARATOR_BYTE) {
                 offset--;
                 fieldIndex -= slotSpan[i];
@@ -417,19 +439,47 @@ public class ScanUtil {
         }
         return offset - byteOffset;
     }
+    
+    public static interface BytesComparator {
+        public int compare(byte[] b1, int s1, int l1, byte[] b2, int s2, int l2);
+    };
 
+    private static final BytesComparator DESC_VAR_WIDTH_COMPARATOR = new BytesComparator() {
+
+        @Override
+        public int compare(byte[] b1, int s1, int l1, byte[] b2, int s2, int l2) {
+            return DescVarLengthFastByteComparisons.compareTo(b1, s1, l1, b2, s2, l2);
+        }
+        
+    };
+    
+    private static final BytesComparator ASC_FIXED_WIDTH_COMPARATOR = new BytesComparator() {
+
+        @Override
+        public int compare(byte[] b1, int s1, int l1, byte[] b2, int s2, int l2) {
+            return WritableComparator.compareBytes(b1, s1, l1, b2, s2, l2);
+        }
+        
+    };
+    public static BytesComparator getComparator(boolean isFixedWidth, SortOrder sortOrder) {
+        return isFixedWidth || sortOrder == SortOrder.ASC ? ASC_FIXED_WIDTH_COMPARATOR : DESC_VAR_WIDTH_COMPARATOR;
+    }
+    public static BytesComparator getComparator(Field field) {
+        return getComparator(field.getDataType().isFixedWidth(),field.getSortOrder());
+    }
     /**
      * Perform a binary lookup on the list of KeyRange for the tightest slot such that the slotBound
      * of the current slot is higher or equal than the slotBound of our range. 
      * @return  the index of the slot whose slot bound equals or are the tightest one that is 
      *          smaller than rangeBound of range, or slots.length if no bound can be found.
      */
-    public static int searchClosestKeyRangeWithUpperHigherThanPtr(List<KeyRange> slots, ImmutableBytesWritable ptr, int lower) {
+    public static int searchClosestKeyRangeWithUpperHigherThanPtr(List<KeyRange> slots, ImmutableBytesWritable ptr, int lower, Field field) {
         int upper = slots.size() - 1;
         int mid;
+        BytesComparator comparator = ScanUtil.getComparator(field.getDataType().isFixedWidth(), field.getSortOrder());
         while (lower <= upper) {
             mid = (lower + upper) / 2;
-            int cmp = slots.get(mid).compareUpperToLowerBound(ptr, true);
+            int cmp = slots.get(mid).compareUpperToLowerBound(ptr, true, comparator);
             if (cmp < 0) {
                 lower = mid + 1;
             } else if (cmp > 0) {
@@ -439,7 +489,7 @@ public class ScanUtil {
             }
         }
         mid = (lower + upper) / 2;
-        if (mid == 0 && slots.get(mid).compareUpperToLowerBound(ptr, true) > 0) {
+        if (mid == 0 && slots.get(mid).compareUpperToLowerBound(ptr, true, comparator) > 0) {
             return mid;
         } else {
             return ++mid;
@@ -488,7 +538,7 @@ public class ScanUtil {
         while (schema.next(ptr, pos, maxOffset) != null) {
             pos++;
         }
-        Field field = schema.getField(pos-1);
+        Field field = schema.getField(pos - 1);
         if (!field.getDataType().isFixedWidth()) {
             byte[] newLowerRange = new byte[key.length + 1];
             System.arraycopy(key, 0, newLowerRange, 0, key.length);
@@ -640,21 +690,24 @@ public class ScanUtil {
         }
         return Bytes.compareTo(key, 0, nBytesToCheck, ZERO_BYTE_ARRAY, 0, nBytesToCheck) != 0;
     }
-    
-    public static PName padTenantIdIfNecessary(RowKeySchema schema, boolean isSalted, PName tenantId) {
+
+    public static byte[] getTenantIdBytes(RowKeySchema schema, boolean isSalted, PName tenantId)
+            throws SQLException {
         int pkPos = isSalted ? 1 : 0;
-        String tenantIdStr = tenantId.getString();
         Field field = schema.getField(pkPos);
         PDataType dataType = field.getDataType();
-        boolean isFixedWidth = dataType.isFixedWidth();
-        Integer maxLength = field.getMaxLength();
-        if (isFixedWidth && maxLength != null) {
-            if (tenantIdStr.length() < maxLength) {
-                tenantIdStr = (String)dataType.pad(tenantIdStr, maxLength);
-                return PNameFactory.newName(tenantIdStr);
-            }
+        byte[] convertedValue;
+        try {
+            Object value = dataType.toObject(tenantId.getString());
+            convertedValue = dataType.toBytes(value);
+            ImmutableBytesWritable ptr = new ImmutableBytesWritable(convertedValue);
+            dataType.pad(ptr, field.getMaxLength(), field.getSortOrder());
+            convertedValue = ByteUtil.copyKeyBytesIfNecessary(ptr);
+        } catch(IllegalDataException ex) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.TENANTID_IS_OF_WRONG_TYPE)
+                    .build().buildException();
         }
-        return tenantId;
+        return convertedValue;
     }
 
     public static Iterator<Filter> getFilterIterator(Scan scan) {

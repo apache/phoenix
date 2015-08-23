@@ -21,7 +21,7 @@ import scala.collection.JavaConversions._
 
 object ConfigurationUtil extends Serializable {
 
-  def getOutputConfiguration(tableName: String, columns: Seq[String], zkUrl: Option[String], conf: Option[Configuration]): Configuration = {
+  def getOutputConfiguration(tableName: String, columns: Seq[String], zkUrl: Option[String], conf: Option[Configuration] = None): Configuration = {
 
     // Create an HBaseConfiguration object from the passed in config, if present
     val config = conf match {
@@ -31,9 +31,10 @@ object ConfigurationUtil extends Serializable {
 
     // Set the table to save to
     PhoenixConfigurationUtil.setOutputTableName(config, tableName)
+    PhoenixConfigurationUtil.setPhysicalTableName(config, tableName)
 
     // Infer column names from the DataFrame schema
-    PhoenixConfigurationUtil.setUpsertColumnNames(config, columns.mkString(","))
+    PhoenixConfigurationUtil.setUpsertColumnNames(config, Array(columns : _*))
 
     // Override the Zookeeper URL if present. Throw exception if no address given.
     zkUrl match {
@@ -52,14 +53,17 @@ object ConfigurationUtil extends Serializable {
   }
 
   // Return a serializable representation of the columns
-  def encodeColumns(conf: Configuration): String = {
-    ColumnInfoToStringEncoderDecoder.encode(
-      PhoenixConfigurationUtil.getUpsertColumnMetadataList(conf)
+  def encodeColumns(conf: Configuration) = {
+    ColumnInfoToStringEncoderDecoder.encode(conf, PhoenixConfigurationUtil.getUpsertColumnMetadataList(conf)
     )
   }
 
   // Decode the columns to a list of ColumnInfo objects
-  def decodeColumns(encodedColumns: String): List[ColumnInfo] = {
-    ColumnInfoToStringEncoderDecoder.decode(encodedColumns).toList
+  def decodeColumns(conf: Configuration): List[ColumnInfo] = {
+    ColumnInfoToStringEncoderDecoder.decode(conf).toList
+  }
+  
+  def getZookeeperURL(conf: Configuration): Option[String] = {
+    Option(conf.get(HConstants.ZOOKEEPER_QUORUM))
   }
 }

@@ -49,20 +49,9 @@ import org.apache.phoenix.monitoring.MutationMetricQueue.MutationMetric;
 import org.apache.phoenix.monitoring.MutationMetricQueue.NoOpMutationMetricsQueue;
 import org.apache.phoenix.monitoring.ReadMetricQueue;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.IllegalDataException;
-import org.apache.phoenix.schema.MetaDataClient;
-import org.apache.phoenix.schema.PColumn;
-import org.apache.phoenix.schema.PRow;
-import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.*;
 import org.apache.phoenix.trace.util.Tracing;
-import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.IndexUtil;
-import org.apache.phoenix.util.LogUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.SQLCloseable;
-import org.apache.phoenix.util.ServerUtil;
+import org.apache.phoenix.util.*;
 import org.apache.htrace.Span;
 import org.apache.htrace.TraceScope;
 import org.slf4j.Logger;
@@ -370,7 +359,7 @@ public class MutationState implements SQLCloseable {
     @SuppressWarnings("deprecation")
     public void commit() throws SQLException {
         int i = 0;
-        byte[] tenantId = connection.getTenantId() == null ? null : connection.getTenantId().getBytes();
+        PName tenantId = connection.getTenantId();
         long[] serverTimeStamps = validate();
         Iterator<Map.Entry<TableRef, Map<ImmutableBytesPtr,RowMutationState>>> iterator = this.mutations.entrySet().iterator();
         // add tracing for this operation
@@ -424,7 +413,11 @@ public class MutationState implements SQLCloseable {
                             // or set the index metadata directly on the Mutation
                             for (Mutation mutation : mutations) {
                                 if (tenantId != null) {
-                                    mutation.setAttribute(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+                                    byte[] tenantIdBytes = ScanUtil.getTenantIdBytes(
+                                        table.getRowKeySchema(),
+                                        table.getBucketNum()!=null,
+                                        tenantId);
+                                    mutation.setAttribute(PhoenixRuntime.TENANT_ID_ATTRIB, tenantIdBytes);
                                 }
                                 mutation.setAttribute(PhoenixIndexCodec.INDEX_UUID, uuidValue);
                                 if (attribValue != null) {

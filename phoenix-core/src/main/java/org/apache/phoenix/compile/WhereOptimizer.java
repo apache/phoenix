@@ -63,7 +63,6 @@ import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.tuple.Tuple;
-import org.apache.phoenix.schema.types.PArrayDataType;
 import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
@@ -72,7 +71,6 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.StringUtil;
 
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
@@ -101,28 +99,30 @@ public class WhereOptimizer {
      * @param whereClause the where clause expression
      * @return the new where clause with the key expressions removed
      */
-    public static Expression pushKeyExpressionsToScan(StatementContext context, FilterableStatement statement, Expression whereClause) {
+    public static Expression pushKeyExpressionsToScan(StatementContext context, FilterableStatement statement, Expression whereClause)
+            throws SQLException{
         return pushKeyExpressionsToScan(context, statement, whereClause, null);
     }
 
     // For testing so that the extractedNodes can be verified
     public static Expression pushKeyExpressionsToScan(StatementContext context, FilterableStatement statement,
-            Expression whereClause, Set<Expression> extractNodes) {
+            Expression whereClause, Set<Expression> extractNodes) throws SQLException {
         PName tenantId = context.getConnection().getTenantId();
+        byte[] tenantIdBytes = null;
         PTable table = context.getCurrentTable().getTable();
     	Integer nBuckets = table.getBucketNum();
     	boolean isSalted = nBuckets != null;
     	RowKeySchema schema = table.getRowKeySchema();
     	boolean isMultiTenant = tenantId != null && table.isMultiTenant();
     	if (isMultiTenant) {
-    		tenantId = ScanUtil.padTenantIdIfNecessary(schema, isSalted, tenantId);
+            tenantIdBytes = ScanUtil.getTenantIdBytes(schema, isSalted, tenantId);
     	}
 
         if (whereClause == null && (tenantId == null || !table.isMultiTenant()) && table.getViewIndexId() == null) {
             context.setScanRanges(ScanRanges.EVERYTHING);
             return whereClause;
         }
-        if (LiteralExpression.isFalse(whereClause)) {
+        if (LiteralExpression.isBooleanFalseOrNull(whereClause)) {
             context.setScanRanges(ScanRanges.NOTHING);
             return null;
         }
@@ -169,7 +169,7 @@ public class WhereOptimizer {
         boolean hasViewIndex = table.getViewIndexId() != null;
         if (hasMinMaxRange) {
             int minMaxRangeSize = (isSalted ? SaltingUtil.NUM_SALTING_BYTES : 0)
-                    + (isMultiTenant ? tenantId.getBytes().length + 1 : 0) 
+                    + (isMultiTenant ? tenantIdBytes.length + 1 : 0)
                     + (hasViewIndex ? MetaDataUtil.getViewIndexIdDataType().getByteSize() : 0);
             minMaxRangePrefix = new byte[minMaxRangeSize];
         }
@@ -190,7 +190,6 @@ public class WhereOptimizer {
         
         // Add tenant data isolation for tenant-specific tables
         if (isMultiTenant) {
-            byte[] tenantIdBytes = tenantId.getBytes();
             KeyRange tenantIdKeyRange = KeyRange.getKeyRange(tenantIdBytes);
             cnf.add(singletonList(tenantIdKeyRange));
             if (hasMinMaxRange) {
@@ -262,7 +261,6 @@ public class WhereOptimizer {
                     hasNonPointKey = true;
                 }
             }
-            keyRanges = transformKeyRangesIfNecessary(slot, context);
             
             hasMultiRanges |= keyRanges.size() > 1;
             // Force a range scan if we've encountered a multi-span slot (i.e. RVC)
@@ -320,45 +318,6 @@ public class WhereOptimizer {
         } else {
             return whereClause.accept(new RemoveExtractedNodesVisitor(extractNodes));
         }
-    }
-    
-    // Special hack for PHOENIX-2067 to change the constant array to match
-    // the separators used for descending, variable length arrays.
-    // Note that there'd already be a coerce expression around the constant
-    // to convert it to the right type, so we shouldn't do that here.
-    private static List<KeyRange> transformKeyRangesIfNecessary(KeyExpressionVisitor.KeySlot slot, StatementContext context) {
-        KeyPart keyPart = slot.getKeyPart();
-        List<KeyRange> keyRanges = slot.getKeyRanges();
-        PColumn column = keyPart.getColumn();
-        if (column != null) {
-            PDataType type = column.getDataType();
-            PTable table = context.getCurrentTable().getTable();
-            // Constants are always build with rowKeyOptimizable as true, using the correct separators
-            // We only need to do this conversion if we have a table that has not yet been converted.
-            if (type != null && type.isArrayType() && column.getSortOrder() == SortOrder.DESC && !PArrayDataType.arrayBaseType(type).isFixedWidth() && !table.rowKeyOrderOptimizable()) {
-                ImmutableBytesWritable ptr = context.getTempPtr();
-                List<KeyRange> newKeyRanges = Lists.newArrayListWithExpectedSize(keyRanges.size());
-                for (KeyRange keyRange : keyRanges) {
-                    byte[] lower = keyRange.getLowerRange();
-                    if (!keyRange.lowerUnbound()) {
-                        ptr.set(lower);;
-                        type.coerceBytes(ptr, null, type, null, null, SortOrder.DESC, null, null, SortOrder.DESC, false);
-                        lower = ByteUtil.copyKeyBytesIfNecessary(ptr);
-                    }
-                    byte[] upper = keyRange.getUpperRange();
-                    if (!keyRange.upperUnbound()) {
-                        ptr.set(upper);;
-                        type.coerceBytes(ptr, null, type, null, null, SortOrder.DESC, null, null, SortOrder.DESC, false);
-                        upper = ByteUtil.copyKeyBytesIfNecessary(ptr);
-                    }
-                    keyRange = KeyRange.getKeyRange(lower, keyRange.isLowerInclusive(), upper, keyRange.isUpperInclusive());
-                    newKeyRanges.add(keyRange);
-                }
-                
-                return newKeyRanges;
-            }
-        }
-        return keyRanges;
     }
     
     /**
@@ -423,7 +382,7 @@ public class WhereOptimizer {
             Expression lhs = count == 0 ? candidates.get(0) : new RowValueConstructorExpression(candidates.subList(0, count + 1), false);
             Expression firstRhs = count == 0 ? sampleValues.get(0).get(0) : new RowValueConstructorExpression(sampleValues.get(0).subList(0, count + 1), true);
             Expression secondRhs = count == 0 ? sampleValues.get(1).get(0) : new RowValueConstructorExpression(sampleValues.get(1).subList(0, count + 1), true);
-            Expression testExpression = InListExpression.create(Lists.newArrayList(lhs, firstRhs, secondRhs), false, context.getTempPtr());
+            Expression testExpression = InListExpression.create(Lists.newArrayList(lhs, firstRhs, secondRhs), false, context.getTempPtr(), context.getCurrentTable().getTable().rowKeyOrderOptimizable());
             remaining = pushKeyExpressionsToScan(context, statement, testExpression);
             if (context.getScanRanges().isPointLookup()) {
                 count++;
@@ -532,7 +491,7 @@ public class WhereOptimizer {
             List<Expression> extractNodes = extractNode == null || slot.getKeyPart().getExtractNodes().isEmpty()
                   ? Collections.<Expression>emptyList()
                   : Collections.<Expression>singletonList(extractNode);
-            return new SingleKeySlot(new BaseKeyPart(slot.getKeyPart().getColumn(), extractNodes), slot.getPKPosition(), slot.getPKSpan(), keyRanges, minMaxRange, slot.getOrderPreserving());
+            return new SingleKeySlot(new BaseKeyPart(table, slot.getKeyPart().getColumn(), extractNodes), slot.getPKPosition(), slot.getPKSpan(), keyRanges, minMaxRange, slot.getOrderPreserving());
         }
 
         private KeySlots newKeyParts(KeySlot slot, List<Expression> extractNodes, List<KeyRange> keyRanges, KeyRange minMaxRange) {
@@ -540,7 +499,7 @@ public class WhereOptimizer {
                 return EMPTY_KEY_SLOTS;
             }
             
-            return new SingleKeySlot(new BaseKeyPart(slot.getKeyPart().getColumn(), extractNodes), slot.getPKPosition(), slot.getPKSpan(), keyRanges, minMaxRange, slot.getOrderPreserving());
+            return new SingleKeySlot(new BaseKeyPart(table, slot.getKeyPart().getColumn(), extractNodes), slot.getPKPosition(), slot.getPKSpan(), keyRanges, minMaxRange, slot.getOrderPreserving());
         }
 
         private KeySlots newRowValueConstructorKeyParts(RowValueConstructorExpression rvc, List<KeySlots> childSlots) {
@@ -648,6 +607,11 @@ public class WhereOptimizer {
                 public PColumn getColumn() {
                     return childPart.getColumn();
                 }
+
+                @Override
+                public PTable getTable() {
+                    return childPart.getTable();
+                }
             }, slot.getPKPosition(), slot.getKeyRanges());
         }
 
@@ -724,7 +688,7 @@ public class WhereOptimizer {
 
             if (!minMaxExtractNodes.isEmpty()) {
                 if (keySlot[initPosition] == null) {
-                    keySlot[initPosition] = new KeySlot(new BaseKeyPart(table.getPKColumns().get(initPosition), minMaxExtractNodes), initPosition, 1, EVERYTHING_RANGES, null);
+                    keySlot[initPosition] = new KeySlot(new BaseKeyPart(table, table.getPKColumns().get(initPosition), minMaxExtractNodes), initPosition, 1, EVERYTHING_RANGES, null);
                 } else {
                     keySlot[initPosition] = keySlot[initPosition].concatExtractNodes(minMaxExtractNodes);
                 }
@@ -841,7 +805,7 @@ public class WhereOptimizer {
                 slotRanges = Collections.emptyList();
             }
             if (theSlot == null) {
-                theSlot = new KeySlot(new BaseKeyPart(table.getPKColumns().get(initialPos), slotExtractNodes), initialPos, 1, EVERYTHING_RANGES, null);
+                theSlot = new KeySlot(new BaseKeyPart(table, table.getPKColumns().get(initialPos), slotExtractNodes), initialPos, 1, EVERYTHING_RANGES, null);
             } else if (minMaxRange != KeyRange.EMPTY_RANGE && !slotExtractNodes.isEmpty()) {
                 theSlot = theSlot.concatExtractNodes(slotExtractNodes);
             }
@@ -926,7 +890,7 @@ public class WhereOptimizer {
         @Override
         public KeySlots visit(RowKeyColumnExpression node) {
             PColumn column = table.getPKColumns().get(node.getPosition());
-            return new SingleKeySlot(new BaseKeyPart(column, Collections.<Expression>singletonList(node)), node.getPosition(), 1, EVERYTHING_RANGES);
+            return new SingleKeySlot(new BaseKeyPart(table, column, Collections.<Expression>singletonList(node)), node.getPosition(), 1, EVERYTHING_RANGES);
         }
 
         @Override
@@ -997,7 +961,8 @@ public class WhereOptimizer {
             KeySlots childSlots = childParts.get(0);
             KeySlot childSlot = childSlots.iterator().next();
             final String startsWith = node.getLiteralPrefix();
-            byte[] key = PVarchar.INSTANCE.toBytes(startsWith, node.getChildren().get(0).getSortOrder());
+            SortOrder sortOrder = node.getChildren().get(0).getSortOrder();
+            byte[] key = PVarchar.INSTANCE.toBytes(startsWith, sortOrder);
             // If the expression is an equality expression against a fixed length column
             // and the key length doesn't match the column length, the expression can
             // never be true.
@@ -1013,9 +978,19 @@ public class WhereOptimizer {
             byte[] lowerRange = key;
             byte[] upperRange = ByteUtil.nextKey(key);
             Integer columnFixedLength = column.getMaxLength();
-            if (type.isFixedWidth() && columnFixedLength != null) {
-                lowerRange = StringUtil.padChar(lowerRange, columnFixedLength);
-                upperRange = StringUtil.padChar(upperRange, columnFixedLength);
+            if (type.isFixedWidth()) {
+                if (columnFixedLength != null) { // Sanity check - should always be non null
+                    // Always use minimum byte to fill as otherwise our key is bigger
+                    // that it should be when the sort order is descending.
+                    lowerRange = type.pad(lowerRange, columnFixedLength, SortOrder.ASC);
+                    upperRange = type.pad(upperRange, columnFixedLength, SortOrder.ASC);
+                }
+            } else if (column.getSortOrder() == SortOrder.DESC && table.rowKeyOrderOptimizable()) {
+                // Append a zero byte if descending since a \xFF byte will be appended to the lowerRange
+                // causing rows to be skipped that should be included. For example, with rows 'ab', 'a',
+                // a lowerRange of 'a\xFF' would skip 'ab', while 'a\x00\xFF' would not.
+                lowerRange = Arrays.copyOf(lowerRange, lowerRange.length+1);
+                lowerRange[lowerRange.length-1] = QueryConstants.SEPARATOR_BYTE;
             }
             KeyRange keyRange = type.getKeyRange(lowerRange, true, upperRange, false);
             // Only extract LIKE expression if pattern ends with a wildcard and everything else was extracted
@@ -1117,7 +1092,7 @@ public class WhereOptimizer {
 
             public final KeySlot concatExtractNodes(List<Expression> extractNodes) {
                 return new KeySlot(
-                        new BaseKeyPart(this.getKeyPart().getColumn(),
+                        new BaseKeyPart(this.getKeyPart().getTable(), this.getKeyPart().getColumn(),
                                     SchemaUtil.concat(this.getKeyPart().getExtractNodes(),extractNodes)),
                         this.getPKPosition(),
                         this.getPKSpan(),
@@ -1135,7 +1110,7 @@ public class WhereOptimizer {
                         return null;
                     }
                     return new KeySlot(
-                            new BaseKeyPart(this.getKeyPart().getColumn(),
+                            new BaseKeyPart(this.getKeyPart().getTable(), this.getKeyPart().getColumn(),
                                         SchemaUtil.concat(this.getKeyPart().getExtractNodes(),
                                                           that.getKeyPart().getExtractNodes())),
                             this.getPKPosition(),
@@ -1181,7 +1156,7 @@ public class WhereOptimizer {
                             return null;
                         }
                         return new KeySlot(
-                                new BaseKeyPart(this.getKeyPart().getColumn(),
+                                new BaseKeyPart(this.getKeyPart().getTable(), this.getKeyPart().getColumn(),
                                             SchemaUtil.concat(this.getKeyPart().getExtractNodes(),
                                                               that.getKeyPart().getExtractNodes())),
                                 this.getPKPosition(),
@@ -1272,10 +1247,12 @@ public class WhereOptimizer {
                 return ByteUtil.getKeyRange(key, op, type);
             }
 
+            private final PTable table;
             private final PColumn column;
             private final List<Expression> nodes;
 
-            private BaseKeyPart(PColumn column, List<Expression> nodes) {
+            private BaseKeyPart(PTable table, PColumn column, List<Expression> nodes) {
+                this.table = table;
                 this.column = column;
                 this.nodes = nodes;
             }
@@ -1289,9 +1266,14 @@ public class WhereOptimizer {
             public PColumn getColumn() {
                 return column;
             }
+
+            @Override
+            public PTable getTable() {
+                return table;
+            }
         }
         
-        private  class RowValueConstructorKeyPart implements KeyPart {
+        private class RowValueConstructorKeyPart implements KeyPart {
             private final RowValueConstructorExpression rvc;
             private final PColumn column;
             private final List<Expression> nodes;
@@ -1319,7 +1301,13 @@ public class WhereOptimizer {
             public PColumn getColumn() {
                 return column;
             }
-           @Override
+
+            @Override
+            public PTable getTable() {
+                return table;
+            }
+
+            @Override
             public KeyRange getKeyRange(CompareOp op, Expression rhs) {
                // With row value constructors, we need to convert the operator for any transformation we do on individual values
                // to prevent keys from being increased to the next key as would be done for fixed width values. The next key is
@@ -1363,7 +1351,7 @@ public class WhereOptimizer {
                     rhs = BaseExpression.coerce(rvc, rhs, new ExpressionComparabilityWrapper() {
 
                         @Override
-                        public Expression wrap(final Expression lhs, final Expression rhs) throws SQLException {
+                        public Expression wrap(final Expression lhs, final Expression rhs, boolean rowKeyOrderOptimizable) throws SQLException {
                             final KeyPart childPart = keySlotsIterator.next().iterator().next().getKeyPart();
                             // TODO: DelegateExpression
                             return new BaseTerminalExpression() {
@@ -1435,7 +1423,7 @@ public class WhereOptimizer {
                             };
                         }
                         
-                    });
+                    }, table.rowKeyOrderOptimizable());
                 } catch (SQLException e) {
                     return null; // Shouldn't happen
                 }
@@ -1446,7 +1434,6 @@ public class WhereOptimizer {
                 byte[] key = ByteUtil.copyKeyBytesIfNecessary(ptr);
                 return ByteUtil.getKeyRange(key, op, PVarbinary.INSTANCE);
             }
-
         }
     }
 }

@@ -138,7 +138,7 @@ public class CalciteUtils {
 			public Expression newExpression(RexNode node, Implementor implementor) {
 				ImmutableBytesWritable ptr = new ImmutableBytesWritable();
 				try {
-					return ComparisonExpression.create(CompareOp.EQUAL, convertChildren((RexCall) node, implementor), ptr);
+					return ComparisonExpression.create(CompareOp.EQUAL, convertChildren((RexCall) node, implementor), ptr, implementor.getTableRef().getTable().rowKeyOrderOptimizable());
 				} catch (SQLException e) {
 					throw new RuntimeException(e);
 				}
@@ -151,7 +151,7 @@ public class CalciteUtils {
             public Expression newExpression(RexNode node, Implementor implementor) {
                 ImmutableBytesWritable ptr = new ImmutableBytesWritable();
                 try {
-                    return ComparisonExpression.create(CompareOp.NOT_EQUAL, convertChildren((RexCall) node, implementor), ptr);
+                    return ComparisonExpression.create(CompareOp.NOT_EQUAL, convertChildren((RexCall) node, implementor), ptr, implementor.getTableRef().getTable().rowKeyOrderOptimizable());
                 } catch (SQLException e) {
                     throw new RuntimeException(e);
                 }
@@ -164,7 +164,7 @@ public class CalciteUtils {
             public Expression newExpression(RexNode node, Implementor implementor) {
                 ImmutableBytesWritable ptr = new ImmutableBytesWritable();
                 try {
-                    return ComparisonExpression.create(CompareOp.GREATER, convertChildren((RexCall) node, implementor), ptr);
+                    return ComparisonExpression.create(CompareOp.GREATER, convertChildren((RexCall) node, implementor), ptr, implementor.getTableRef().getTable().rowKeyOrderOptimizable());
                 } catch (SQLException e) {
                     throw new RuntimeException(e);
                 }
@@ -177,7 +177,7 @@ public class CalciteUtils {
             public Expression newExpression(RexNode node, Implementor implementor) {
                 ImmutableBytesWritable ptr = new ImmutableBytesWritable();
                 try {
-                    return ComparisonExpression.create(CompareOp.GREATER_OR_EQUAL, convertChildren((RexCall) node, implementor), ptr);
+                    return ComparisonExpression.create(CompareOp.GREATER_OR_EQUAL, convertChildren((RexCall) node, implementor), ptr, implementor.getTableRef().getTable().rowKeyOrderOptimizable());
                 } catch (SQLException e) {
                     throw new RuntimeException(e);
                 }
@@ -190,7 +190,7 @@ public class CalciteUtils {
             public Expression newExpression(RexNode node, Implementor implementor) {
                 ImmutableBytesWritable ptr = new ImmutableBytesWritable();
                 try {
-                    return ComparisonExpression.create(CompareOp.LESS, convertChildren((RexCall) node, implementor), ptr);
+                    return ComparisonExpression.create(CompareOp.LESS, convertChildren((RexCall) node, implementor), ptr, implementor.getTableRef().getTable().rowKeyOrderOptimizable());
                 } catch (SQLException e) {
                     throw new RuntimeException(e);
                 }
@@ -203,7 +203,7 @@ public class CalciteUtils {
             public Expression newExpression(RexNode node, Implementor implementor) {
                 ImmutableBytesWritable ptr = new ImmutableBytesWritable();
                 try {
-                    return ComparisonExpression.create(CompareOp.LESS_OR_EQUAL, convertChildren((RexCall) node, implementor), ptr);
+                    return ComparisonExpression.create(CompareOp.LESS_OR_EQUAL, convertChildren((RexCall) node, implementor), ptr, implementor.getTableRef().getTable().rowKeyOrderOptimizable());
                 } catch (SQLException e) {
                     throw new RuntimeException(e);
                 }
@@ -268,7 +268,7 @@ public class CalciteUtils {
                     }
                     
                     PDataType targetType = sqlTypeNameToPDataType(node.getType().getSqlTypeName());
-                    return cast(targetType, expr);
+                    return cast(targetType, expr, implementor);
                 } catch (SQLException e) {
                     throw new RuntimeException(e);
                 }
@@ -381,7 +381,7 @@ public class CalciteUtils {
                         throw TypeMismatchException.newException(theType, node.toString());
                     }
                     PDataType targetType = sqlTypeNameToPDataType(node.getType().getSqlTypeName());
-                    return cast(targetType, expr);
+                    return cast(targetType, expr, implementor);
                 } catch (SQLException e) {
                     throw new RuntimeException(e);
                 }
@@ -428,7 +428,7 @@ public class CalciteUtils {
                         expr = LiteralExpression.newConstant(null, theType, determinism);
                     }
                     PDataType targetType = sqlTypeNameToPDataType(node.getType().getSqlTypeName());
-                    return cast(targetType, expr);
+                    return cast(targetType, expr, implementor);
                 } catch (SQLException e) {
                     throw new RuntimeException(e);
                 }
@@ -475,7 +475,7 @@ public class CalciteUtils {
                         expr = LiteralExpression.newConstant(null, theType, determinism);
                     }
                     PDataType targetType = sqlTypeNameToPDataType(node.getType().getSqlTypeName());
-                    return cast(targetType, expr);
+                    return cast(targetType, expr, implementor);
                 } catch (SQLException e) {
                     throw new RuntimeException(e);
                 }
@@ -522,7 +522,7 @@ public class CalciteUtils {
                 List<Expression> children = convertChildren((RexCall) node, implementor);
                 PDataType targetType = sqlTypeNameToPDataType(node.getType().getSqlTypeName());
                 try {
-                    return cast(targetType, children.get(0));
+                    return cast(targetType, children.get(0), implementor);
                 } catch (SQLException e) {
                     throw new RuntimeException(e);
                 }
@@ -729,14 +729,14 @@ public class CalciteUtils {
     }
     
     @SuppressWarnings("rawtypes")
-    private static Expression cast(PDataType targetDataType, Expression childExpr) throws SQLException {
+    private static Expression cast(PDataType targetDataType, Expression childExpr, Implementor implementor) throws SQLException {
         PDataType fromDataType = childExpr.getDataType();
         
         Expression expr = childExpr;
         if(fromDataType != null) {
             expr =  convertToRoundExpressionIfNeeded(fromDataType, targetDataType, childExpr);
         }
-        return CoerceExpression.create(expr, targetDataType, SortOrder.getDefault(), expr.getMaxLength());
+        return CoerceExpression.create(expr, targetDataType, SortOrder.getDefault(), expr.getMaxLength(), implementor.getTableRef().getTable().rowKeyOrderOptimizable());
     }
     
     @SuppressWarnings("rawtypes")

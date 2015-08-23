@@ -32,8 +32,9 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 
-import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -428,4 +429,54 @@ public class InListIT extends BaseHBaseManagedTimeIT {
         
         testWithIntegerTypesWithVariedSaltingAndTenancy(DEFAULT_UPSERT_BODIES, whereClause, expecteds);
     }
+    
+    @Test
+    public void testWithFixedLengthDescPK() throws Exception {
+        testWithFixedLengthPK(SortOrder.DESC);
+    }
+    
+    @Test
+    public void testWithFixedLengthAscPK() throws Exception {
+        testWithFixedLengthPK(SortOrder.ASC);        
+    }
+    
+    @Test
+    public void testWithFixedLengthKV() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute("CREATE TABLE in_test ( id INTEGER PRIMARY KEY, k CHAR(3))");
+
+        conn.createStatement().execute("upsert into in_test values (1, 'aa')");
+        conn.createStatement().execute("upsert into in_test values (2, 'bb')");
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery("select k from in_test WHERE k IN ('aa','bb')");
+        assertTrue(rs.next());
+        assertEquals("aa", rs.getString(1));
+        assertTrue(rs.next());
+        assertEquals("bb", rs.getString(1));
+        assertFalse(rs.next());
+        
+        conn.close();
+    }
+
+    private void testWithFixedLengthPK(SortOrder sortOrder) throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute("CREATE TABLE in_test ( k CHAR(3) PRIMARY KEY " + (sortOrder == SortOrder.DESC ? "DESC" : "") + ")");
+
+        conn.createStatement().execute("upsert into in_test (k) values ('aa')");
+        conn.createStatement().execute("upsert into in_test (k) values ('bb')");
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery("select k from in_test WHERE k IN ('aa','bb')");
+        assertTrue(rs.next());
+        assertEquals(sortOrder == SortOrder.ASC ? "aa" : "bb", rs.getString(1));
+        assertTrue(rs.next());
+        assertEquals(sortOrder == SortOrder.ASC ? "bb" : "aa", rs.getString(1));
+        assertFalse(rs.next());
+        
+        conn.close();
+    }
+
 }

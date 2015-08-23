@@ -18,6 +18,9 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -26,12 +29,20 @@ import java.sql.Date;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.Collections;
 import java.util.GregorianCalendar;
 import java.util.List;
 import java.util.Properties;
 
 import org.apache.commons.lang.ArrayUtils;
+import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.schema.types.PDouble;
+import org.apache.phoenix.schema.types.PFloat;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Assert;
 import org.junit.Test;
@@ -171,6 +182,63 @@ public class SortOrderIT extends BaseHBaseManagedTimeIT {
     }    
     
     @Test
+    public void substrFixedLengthDescPK1() throws Exception {
+        String ddl = "CREATE TABLE " + TABLE + " (oid CHAR(3) PRIMARY KEY DESC)";
+        Object[][] insertedRows = new Object[][]{{"a"}, {"ab"}};
+        Object[][] expectedRows = new Object[][]{{"ab"}, {"a"} };
+        runQueryTest(ddl, upsert("oid"), insertedRows, expectedRows, new WhereCondition("SUBSTR(oid, 1, 1)", "=", "'a'"));
+    }
+        
+    @Test
+    public void substrVarLengthDescPK1() throws Exception {
+        String ddl = "CREATE TABLE " + TABLE + " (oid VARCHAR PRIMARY KEY DESC)";
+        Object[][] insertedRows = new Object[][]{{"a"}, {"ab"}};
+        Object[][] expectedRows = new Object[][]{{"ab"}, {"a"} };
+        runQueryTest(ddl, upsert("oid"), insertedRows, expectedRows, new WhereCondition("SUBSTR(oid, 1, 1)", "=", "'a'"));
+    }
+        
+    @Test
+    public void likeVarLengthDescPK1() throws Exception {
+        String ddl = "CREATE TABLE " + TABLE + " (oid VARCHAR PRIMARY KEY DESC)";
+        Object[][] insertedRows = new Object[][]{{"a"}, {"ab"}};
+        Object[][] expectedRows = new Object[][]{{"ab"}, {"a"} };
+        runQueryTest(ddl, upsert("oid"), insertedRows, expectedRows, new WhereCondition("oid", "like", "'a%'"));
+    }
+        
+    @Test
+    public void likeFixedLengthDescPK1() throws Exception {
+        String ddl = "CREATE TABLE " + TABLE + " (oid CHAR(3) PRIMARY KEY DESC)";
+        Object[][] insertedRows = new Object[][]{{"a"}, {"ab"}};
+        Object[][] expectedRows = new Object[][]{{"ab"}, {"a"} };
+        runQueryTest(ddl, upsert("oid"), insertedRows, expectedRows, new WhereCondition("oid", "like", "'a%'"));
+    }
+        
+    @Test
+    public void decimalRangeDescPK1() throws Exception {
+        String ddl = "CREATE TABLE " + TABLE + " (oid DECIMAL PRIMARY KEY DESC)";
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute(ddl);
+        conn.createStatement().execute("UPSERT INTO " + TABLE + " VALUES(4.99)");
+        conn.createStatement().execute("UPSERT INTO " + TABLE + " VALUES(4.0)");
+        conn.createStatement().execute("UPSERT INTO " + TABLE + " VALUES(5.0)");
+        conn.createStatement().execute("UPSERT INTO " + TABLE + " VALUES(5.001)");
+        conn.createStatement().execute("UPSERT INTO " + TABLE + " VALUES(5.999)");
+        conn.createStatement().execute("UPSERT INTO " + TABLE + " VALUES(6.0)");
+        conn.createStatement().execute("UPSERT INTO " + TABLE + " VALUES(6.001)");
+        conn.commit();
+        
+        String query = "SELECT * FROM " + TABLE + " WHERE oid >= 5.0 AND oid < 6.0";
+        ResultSet rs = conn.createStatement().executeQuery(query);
+        assertTrue(rs.next());
+        assertTrue(new BigDecimal("5.999").compareTo(rs.getBigDecimal(1)) == 0);
+        assertTrue(rs.next());
+        assertTrue(new BigDecimal("5.001").compareTo(rs.getBigDecimal(1)) == 0);
+        assertTrue(rs.next());
+        assertTrue(new BigDecimal("5.0").compareTo(rs.getBigDecimal(1)) == 0);
+        assertFalse(rs.next());
+    }
+        
+    @Test
     public void lTrimDescCompositePK() throws Exception {
         String ddl = "CREATE TABLE " + TABLE + " (oid VARCHAR NOT NULL, code INTEGER NOT NULL constraint pk primary key (oid DESC, code DESC))";
         Object[][] insertedRows = new Object[][]{{" o1 ", 1}, {"  o2", 2}, {"  o3", 3}};
@@ -298,6 +366,102 @@ public class SortOrderIT extends BaseHBaseManagedTimeIT {
                 null, null, new OrderBy("id", OrderBy.Direction.DESC));
     }
     
+    @Test
+    public void descVarLengthAscPKGT() throws Exception {
+        String ddl = "CREATE TABLE " + TABLE + " (k1 INTEGER NOT NULL, k2 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1, k2))";
+        Object[][] insertedRows = new Object[][]{{0, null}, {1, "a"}, {2, "b"}, {3, "ba"}, {4, "baa"}, {5, "c"}, {6, "d"}};
+        Object[][] expectedRows = new Object[][]{{3}, {4}, {5}, {6}};
+        runQueryTest(ddl, upsert("k1", "k2"), select("k1"), insertedRows, expectedRows,
+                new WhereCondition("k2", ">", "'b'"), null, null);
+    }
+        
+    @Test
+    public void descVarLengthDescPKGT() throws Exception {
+        String ddl = "CREATE TABLE " + TABLE + " (k1 INTEGER NOT NULL, k2 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1, k2 desc))";
+        Object[][] insertedRows = new Object[][]{{0, null}, {1, "a"}, {2, "b"}, {3, "ba"}, {4, "baa"}, {5, "c"}, {6, "d"}};
+        Object[][] expectedRows = new Object[][]{{3}, {4}, {5}, {6}};
+        runQueryTest(ddl, upsert("k1", "k2"), select("k1"), insertedRows, expectedRows,
+                new WhereCondition("k2", ">", "'b'"), null, null);
+    }
+        
+    @Test
+    public void descVarLengthDescPKLTE() throws Exception {
+        String ddl = "CREATE TABLE " + TABLE + " (k1 INTEGER NOT NULL, k2 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1, k2 desc))";
+        Object[][] insertedRows = new Object[][]{{0, null}, {1, "a"}, {2, "b"}, {3, "ba"}, {4, "bb"}, {5, "bc"}, {6, "bba"}, {7, "c"}};
+        Object[][] expectedRows = new Object[][]{{1}, {2}, {3}, {4}};
+        runQueryTest(ddl, upsert("k1", "k2"), select("k1"), insertedRows, expectedRows,
+                new WhereCondition("k2", "<=", "'bb'"), null, null);
+    }
+        
+    @Test
+    public void descVarLengthAscPKLTE() throws Exception {
+        String ddl = "CREATE TABLE " + TABLE + " (k1 INTEGER NOT NULL, k2 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1, k2))";
+        Object[][] insertedRows = new Object[][]{{0, null}, {1, "a"}, {2, "b"}, {3, "ba"}, {4, "bb"}, {5, "bc"}, {6, "bba"}, {7, "c"}};
+        Object[][] expectedRows = new Object[][]{{1}, {2}, {3}, {4}};
+        runQueryTest(ddl, upsert("k1", "k2"), select("k1"), insertedRows, expectedRows,
+                new WhereCondition("k2", "<=", "'bb'"), null, null);
+    }
+        
+   @Test
+    public void testNonPKCompare() throws Exception {
+        List<Integer> expectedResults = Lists.newArrayList(2,3,4);
+        Integer[] saltBuckets = new Integer[] {null,3};
+        PDataType[] dataTypes = new PDataType[] {PDecimal.INSTANCE, PDouble.INSTANCE, PFloat.INSTANCE};
+        for (Integer saltBucket : saltBuckets) {
+            for (PDataType dataType : dataTypes) {
+                for (SortOrder sortOrder : SortOrder.values()) {
+                    testCompareCompositeKey(saltBucket, dataType, sortOrder, "", expectedResults, "");
+                }
+            }
+        }
+    }
+
+    @Test
+    public void testSkipScanCompare() throws Exception {
+        List<Integer> expectedResults = Lists.newArrayList(2,4);
+        List<Integer> rExpectedResults = new ArrayList<>(expectedResults);
+        Collections.reverse(rExpectedResults);
+        Integer[] saltBuckets = new Integer[] {null,3};
+        PDataType[] dataTypes = new PDataType[] {PDecimal.INSTANCE, PDouble.INSTANCE, PFloat.INSTANCE};
+        for (Integer saltBucket : saltBuckets) {
+            for (PDataType dataType : dataTypes) {
+                for (SortOrder sortOrder : SortOrder.values()) {
+                    testCompareCompositeKey(saltBucket, dataType, sortOrder, "k1 in (2,4)", expectedResults, "");
+                    testCompareCompositeKey(saltBucket, dataType, sortOrder, "k1 in (2,4)", rExpectedResults, "ORDER BY k1 DESC");
+                }
+            }
+        }
+    }
+
+    private void testCompareCompositeKey(Integer saltBuckets, PDataType dataType, SortOrder sortOrder, String whereClause, List<Integer> expectedResults, String orderBy) throws SQLException {
+        String tableName = "t_" + saltBuckets + "_" + dataType + "_" + sortOrder;
+        String ddl = "create table if not exists " + tableName + " (k1 bigint not null, k2 " + dataType.getSqlTypeName() + (dataType.isFixedWidth() ? " not null" : "") + ", constraint pk primary key (k1,k2 " + sortOrder + "))" + (saltBuckets == null ? "" : (" SALT_BUCKETS= " + saltBuckets));
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+        conn.createStatement().execute(ddl);
+        if (!dataType.isFixedWidth()) {
+            conn.createStatement().execute("upsert into " + tableName + " values (0, null)");
+        }
+        conn.createStatement().execute("upsert into "  + tableName + " values (1, 0.99)");
+        conn.createStatement().execute("upsert into " + tableName + " values (2, 1.01)");
+        conn.createStatement().execute("upsert into "  + tableName + " values (3, 2.0)");
+        conn.createStatement().execute("upsert into " + tableName + " values (4, 1.001)");
+        conn.commit();
+
+        String query = "select k1 from " + tableName + " where " + (whereClause.length() > 0 ? (whereClause + " AND ") : "") + " k2>1.0 " + (orderBy.length() == 0 ? "" : orderBy);
+        try {
+            ResultSet rs = conn.createStatement().executeQuery(query);
+
+            for (int k : expectedResults) {
+                assertTrue (tableName, rs.next());
+                assertEquals(tableName, k,rs.getInt(1));
+            }
+
+            assertFalse(tableName, rs.next());
+        } finally {
+            conn.close();
+        }
+    }
+
     private void runQueryTest(String ddl, String columnName, Object[][] rows, Object[][] expectedRows) throws Exception {
         runQueryTest(ddl, new String[]{columnName}, rows, expectedRows, null);
     }
@@ -487,8 +651,13 @@ public class SortOrderIT extends BaseHBaseManagedTimeIT {
                 return ">";
             } else if (operator.equals(">")) {
                 return "<";
+            } else if (operator.equals(">=")) {
+                return "<=";
+            } else if (operator.equals("<=")) {
+                return ">=";
+            } else {
+                return operator;
             }
-            return operator;
         }
     }
     

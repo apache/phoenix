@@ -39,17 +39,17 @@ import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.SingleKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 
-public class LiteralResultIterationQueryPlan extends BaseQueryPlan {
+public class LiteralResultIterationPlan extends BaseQueryPlan {
     protected final Iterator<Tuple> tupleIterator;
 
-    public LiteralResultIterationQueryPlan(StatementContext context, 
+    public LiteralResultIterationPlan(StatementContext context, 
             FilterableStatement statement, TableRef tableRef, RowProjector projection, 
             Integer limit, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory) {
         this(Collections.<Tuple> singletonList(new SingleKeyValueTuple(KeyValue.LOWESTKEY)).iterator(), 
                 context, statement, tableRef, projection, limit, orderBy, parallelIteratorFactory);
     }
 
-    public LiteralResultIterationQueryPlan(Iterator<Tuple> tupleIterator, StatementContext context, 
+    public LiteralResultIterationPlan(Iterator<Tuple> tupleIterator, StatementContext context, 
             FilterableStatement statement, TableRef tableRef, RowProjector projection, 
             Integer limit, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory) {
         super(context, statement, tableRef, projection, context.getBindManager().getParameterMetaData(), limit, orderBy, GroupBy.EMPTY_GROUP_BY, parallelIteratorFactory);
@@ -111,7 +111,7 @@ public class LiteralResultIterationQueryPlan extends BaseQueryPlan {
         if (limit == this.limit || (limit != null && limit.equals(this.limit)))
             return this;
         
-        return new LiteralResultIterationQueryPlan(this.tupleIterator, this.context, this.statement, this.tableRef, 
+        return new LiteralResultIterationPlan(this.tupleIterator, this.context, this.statement, this.tableRef, 
                 this.projection, limit, this.orderBy, this.parallelIteratorFactory);
     }
 

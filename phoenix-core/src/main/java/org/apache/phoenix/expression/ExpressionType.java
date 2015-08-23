@@ -52,6 +52,8 @@ import org.apache.phoenix.expression.function.FirstValueFunction;
 import org.apache.phoenix.expression.function.FloorDateExpression;
 import org.apache.phoenix.expression.function.FloorDecimalExpression;
 import org.apache.phoenix.expression.function.FloorFunction;
+import org.apache.phoenix.expression.function.GetBitFunction;
+import org.apache.phoenix.expression.function.GetByteFunction;
 import org.apache.phoenix.expression.function.HourFunction;
 import org.apache.phoenix.expression.function.IndexStateNameFunction;
 import org.apache.phoenix.expression.function.InstrFunction;
@@ -70,6 +72,7 @@ import org.apache.phoenix.expression.function.MinuteFunction;
 import org.apache.phoenix.expression.function.MonthFunction;
 import org.apache.phoenix.expression.function.NowFunction;
 import org.apache.phoenix.expression.function.NthValueFunction;
+import org.apache.phoenix.expression.function.OctetLengthFunction;
 import org.apache.phoenix.expression.function.PercentRankAggregateFunction;
 import org.apache.phoenix.expression.function.PercentileContAggregateFunction;
 import org.apache.phoenix.expression.function.PercentileDiscAggregateFunction;
@@ -88,6 +91,8 @@ import org.apache.phoenix.expression.function.SQLIndexTypeFunction;
 import org.apache.phoenix.expression.function.SQLTableTypeFunction;
 import org.apache.phoenix.expression.function.SQLViewTypeFunction;
 import org.apache.phoenix.expression.function.SecondFunction;
+import org.apache.phoenix.expression.function.SetBitFunction;
+import org.apache.phoenix.expression.function.SetByteFunction;
 import org.apache.phoenix.expression.function.SignFunction;
 import org.apache.phoenix.expression.function.SqlTypeNameFunction;
 import org.apache.phoenix.expression.function.SqrtFunction;
@@ -96,6 +101,7 @@ import org.apache.phoenix.expression.function.StddevSampFunction;
 import org.apache.phoenix.expression.function.StringBasedRegexpReplaceFunction;
 import org.apache.phoenix.expression.function.StringBasedRegexpSplitFunction;
 import org.apache.phoenix.expression.function.StringBasedRegexpSubstrFunction;
+import org.apache.phoenix.expression.function.StringToArrayFunction;
 import org.apache.phoenix.expression.function.SubstrFunction;
 import org.apache.phoenix.expression.function.SumAggregateFunction;
 import org.apache.phoenix.expression.function.TimezoneOffsetFunction;
@@ -251,7 +257,13 @@ public enum ExpressionType {
     PowerFunction(PowerFunction.class),
     ArrayConcatFunction(ArrayConcatFunction.class),
     ArrayFillFunction(ArrayFillFunction.class),
-    ArrayToStringFunction(ArrayToStringFunction.class)
+    ArrayToStringFunction(ArrayToStringFunction.class),
+    StringToArrayFunction(StringToArrayFunction.class),
+    GetByteFunction(GetByteFunction.class),
+    SetByteFunction(SetByteFunction.class),
+    GetBitFunction(GetBitFunction.class),
+    SetBitFunction(SetBitFunction.class),
+    OctetLengthFunction(OctetLengthFunction.class),
     ;
 
     ExpressionType(Class<? extends Expression> clazz) {

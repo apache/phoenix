@@ -33,13 +33,14 @@ import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.query.KeyRange;
-import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.PColumn;
-import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PDataType.PDataCodec;
-import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDataType.PDataCodec;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
 
 import com.google.common.collect.Lists;
@@ -254,6 +255,11 @@ public class RoundDateExpression extends ScalarFunction {
                 default:
                     return childPart.getKeyRange(op, rhs);
                 }
+            }
+
+            @Override
+            public PTable getTable() {
+                return childPart.getTable();
             }
         };
     }

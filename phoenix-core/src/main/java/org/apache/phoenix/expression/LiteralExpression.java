@@ -28,6 +28,7 @@ import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PArrayDataType;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
@@ -88,10 +89,10 @@ public class LiteralExpression extends BaseTerminalExpression {
     }
 
     public static boolean isFalse(Expression child) {
-    	if (child!=null) {
-    		return child == BOOLEAN_EXPRESSIONS[child.getDeterminism().ordinal()];
-    	}
-    	return false;
+        if (child!=null) {
+            return child == BOOLEAN_EXPRESSIONS[child.getDeterminism().ordinal()];
+        }
+        return false;
     }
     
     public static boolean isTrue(Expression child) {
@@ -99,6 +100,21 @@ public class LiteralExpression extends BaseTerminalExpression {
     		return child == BOOLEAN_EXPRESSIONS[Determinism.values().length+child.getDeterminism().ordinal()];
     	}
     	return false;
+    }
+
+    public static boolean isBooleanNull(Expression child) {
+    	if (child!=null) {
+    		return child == TYPED_NULL_EXPRESSIONS[PBoolean.INSTANCE.ordinal()+PDataType.values().length*child.getDeterminism().ordinal()];
+    	}
+    	return false;
+    }
+
+    public static boolean isBooleanFalseOrNull(Expression child) {
+        if (child!=null) {
+            return child == BOOLEAN_EXPRESSIONS[child.getDeterminism().ordinal()]
+                    || child == TYPED_NULL_EXPRESSIONS[PBoolean.INSTANCE.ordinal()+PDataType.values().length*child.getDeterminism().ordinal()];
+        }
+        return false;
     }
     
     public static LiteralExpression newConstant(Object value) {
@@ -151,8 +167,13 @@ public class LiteralExpression extends BaseTerminalExpression {
         return newConstant(value, type, maxLength, scale, SortOrder.getDefault(), determinism);
     }
 
+    public static LiteralExpression newConstant(Object value, PDataType type, Integer maxLength, Integer scale, SortOrder sortOrder, Determinism determinism) 
+            throws SQLException {
+        return newConstant(value, type, maxLength, scale, sortOrder, determinism, true);
+    }
+    
     // TODO: cache?
-    public static LiteralExpression newConstant(Object value, PDataType type, Integer maxLength, Integer scale, SortOrder sortOrder, Determinism determinism)
+    public static LiteralExpression newConstant(Object value, PDataType type, Integer maxLength, Integer scale, SortOrder sortOrder, Determinism determinism, boolean rowKeyOrderOptimizable)
             throws SQLException {
         if (value == null) {
             return  (type == null) ?  getNullLiteralExpression(determinism) : getTypedNullLiteralExpression(type, determinism);
@@ -171,10 +192,15 @@ public class LiteralExpression extends BaseTerminalExpression {
             throw TypeMismatchException.newException(type, actualType, value.toString());
         }
         value = type.toObject(value, actualType);
-        byte[] b = type.toBytes(value, sortOrder);
+        byte[] b = type.isArrayType() ? ((PArrayDataType)type).toBytes(value, PArrayDataType.arrayBaseType(type), sortOrder, rowKeyOrderOptimizable) :
+                type.toBytes(value, sortOrder);
         if (type == PVarchar.INSTANCE || type == PChar.INSTANCE) {
             if (type == PChar.INSTANCE && maxLength != null  && b.length < maxLength) {
-                b = StringUtil.padChar(b, maxLength);
+                if (rowKeyOrderOptimizable) {
+                    b = type.pad(b, maxLength, sortOrder);
+                } else {
+                    b = StringUtil.padChar(b, maxLength);
+                }
             } else if (value != null) {
                 maxLength = ((String)value).length();
             }

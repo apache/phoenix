@@ -24,6 +24,7 @@ import java.sql.Types;
 import java.text.Format;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.regex.Pattern;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -79,7 +80,7 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
         super(sqlTypeName, sqlType, clazz, codec, ordinal);
     }
 
-    private static byte getSeparatorByte(boolean rowKeyOrderOptimizable, SortOrder sortOrder) {
+    public static byte getSeparatorByte(boolean rowKeyOrderOptimizable, SortOrder sortOrder) {
         return SchemaUtil.getSeparatorByte(rowKeyOrderOptimizable, false, sortOrder);
     }
 
@@ -108,7 +109,8 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
             byteStream = new TrustedByteArrayOutputStream(size + capacity + Bytes.SIZEOF_INT + Bytes.SIZEOF_BYTE
                     + Bytes.SIZEOF_INT);
         } else {
-            int size = arr.getMaxLength() * noOfElements;
+            int elemLength = (arr.getMaxLength() == null ? baseType.getByteSize() : arr.getMaxLength());
+            int size = elemLength * noOfElements;
             // Here the int for noofelements, byte for the version
             byteStream = new TrustedByteArrayOutputStream(size);
         }
@@ -177,7 +179,7 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
         writeEndSeperatorForVarLengthArray(oStream, sortOrder, true);
     }
     
-    private static void writeEndSeperatorForVarLengthArray(DataOutputStream oStream, SortOrder sortOrder, boolean rowKeyOrderOptimizable)
+    public static void writeEndSeperatorForVarLengthArray(DataOutputStream oStream, SortOrder sortOrder, boolean rowKeyOrderOptimizable)
             throws IOException {
         byte sepByte = getSeparatorByte(rowKeyOrderOptimizable, sortOrder);
         oStream.write(sepByte);
@@ -301,8 +303,10 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
             }
             baseType = desiredBaseType;
         } else {
-            pArr = (PhoenixArray)value;
-            pArr = new PhoenixArray(pArr, desiredMaxLength);
+            pArr = (PhoenixArray) value;
+            if (!Objects.equal(maxLength, desiredMaxLength)) {
+                pArr = new PhoenixArray(pArr, desiredMaxLength);
+            }
         }
         ptr.set(toBytes(pArr, baseType, desiredSortOrder, expectedRowKeyOrderOptimizable));
     }
@@ -984,6 +988,26 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
             result.append(element.toString());
         }
         ptr.set(PVarchar.INSTANCE.toBytes(result.toString(), sortOrder));
+        return true;
+    }
+
+    public static boolean stringToArray(ImmutableBytesWritable ptr, String string, String delimiter, String nullString, SortOrder sortOrder) {
+        Pattern pattern = Pattern.compile(Pattern.quote(delimiter));
+        String[] array;
+        if (delimiter.length() != 0) {
+            array = pattern.split(string);
+            if (nullString != null) {
+                for (int i = 0; i < array.length; i++) {
+                    if (array[i].equals(nullString)) {
+                        array[i] = null;
+                    }
+                }
+            }
+        } else {
+            array = string.split("(?!^)");
+        }
+        PhoenixArray phoenixArray = new PhoenixArray(PVarchar.INSTANCE, array);
+        ptr.set(PVarcharArray.INSTANCE.toBytes(phoenixArray, PVarchar.INSTANCE, sortOrder));
         return true;
     }
 
