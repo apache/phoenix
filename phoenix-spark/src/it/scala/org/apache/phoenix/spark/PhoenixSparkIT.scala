@@ -23,8 +23,8 @@ import org.apache.phoenix.query.BaseTest
 import org.apache.phoenix.schema.{TableNotFoundException, ColumnNotFoundException}
 import org.apache.phoenix.schema.types.PVarchar
 import org.apache.phoenix.util.{SchemaUtil, ColumnInfo}
-import org.apache.spark.sql.{SaveMode, execution, SQLContext}
-import org.apache.spark.sql.types.{LongType, DataType, StringType, StructField}
+import org.apache.spark.sql.{Row, SaveMode, execution, SQLContext}
+import org.apache.spark.sql.types._
 import org.apache.spark.{SparkConf, SparkContext}
 import org.joda.time.DateTime
 import org.scalatest._
@@ -447,5 +447,23 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
 
     count shouldEqual 1L
 
+  }
+
+  test("Ensure DataFrame field normalization (PHOENIX-2196)") {
+    val rdd1 = sc
+      .parallelize(Seq((1L,1L,"One"),(2L,2L,"Two")))
+      .map(p => Row(p._1, p._2, p._3))
+
+    val sqlContext = new SQLContext(sc)
+
+    val schema = StructType(Seq(
+      StructField("id", LongType, nullable = false),
+      StructField("table1_id", LongType, nullable = true),
+      StructField("\"t2col1\"", StringType, nullable = true)
+    ))
+
+    val df = sqlContext.createDataFrame(rdd1, schema)
+
+    df.saveToPhoenix("TABLE2", zkUrl = Some(quorumAddress))
   }
 }
