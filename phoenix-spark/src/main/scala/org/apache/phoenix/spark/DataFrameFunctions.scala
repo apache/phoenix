@@ -33,7 +33,7 @@ class DataFrameFunctions(data: DataFrame) extends Logging with Serializable {
     val zkUrlFinal = ConfigurationUtil.getZookeeperURL(outConfig)
 
      // Retrieve the schema field names, need to do this outside of mapPartitions
-     val fieldArray = data.schema.fieldNames.map(x => x.toUpperCase)
+     val fieldArray = data.schema.fieldNames.map(x => if (x.startsWith("\"") && x.endsWith("\"")) x else x.toUpperCase())
      // Map the row objects into PhoenixRecordWritable
      val phxRDD = data.mapPartitions{ rows =>
  
