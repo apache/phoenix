@@ -37,6 +37,7 @@ import java.sql.*;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Map.Entry;
 
 import static org.apache.phoenix.util.TestUtil.JOIN_CUSTOMER_TABLE_FULL_NAME;
 import static org.apache.phoenix.util.TestUtil.JOIN_ITEM_TABLE_FULL_NAME;
@@ -243,6 +244,9 @@ public class CalciteIT extends BaseClientManagedTimeIT {
         final String url = getUrl();
         Map<String, Object> operand = Maps.newHashMap();
         operand.put("url", url);
+        for (Entry<Object, Object> entry : props.entrySet()) {
+            operand.put((String) entry.getKey(), entry.getValue());
+        }
         SchemaPlus rootSchema = calciteConnection.getRootSchema();
         rootSchema.add("phoenix",
             PhoenixSchema.FACTORY.create(rootSchema, "phoenix", operand));
