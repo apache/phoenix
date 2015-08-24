@@ -289,6 +289,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
         ensureTableCreated(url, ATABLE_NAME);
         initATableValues(getOrganizationId(), null, url);
         initJoinTableValues(url, null, null);
+        initArrayTable();
         createIndices(
                 "CREATE INDEX IDX1 ON aTable (a_string) INCLUDE (b_string, x_integer)",
                 "CREATE INDEX IDX2 ON aTable (b_string) INCLUDE (a_string, y_integer)",
@@ -300,6 +301,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
         connection.createStatement().execute("UPDATE STATISTICS " + JOIN_ITEM_TABLE_FULL_NAME);
         connection.createStatement().execute("UPDATE STATISTICS " + JOIN_SUPPLIER_TABLE_FULL_NAME);
         connection.createStatement().execute("UPDATE STATISTICS " + JOIN_ORDER_TABLE_FULL_NAME);
+        connection.createStatement().execute("UPDATE STATISTICS " + SCORES_TABLE_NAME);
         connection.createStatement().execute("UPDATE STATISTICS IDX1");
         connection.createStatement().execute("UPDATE STATISTICS IDX2");
         connection.createStatement().execute("UPDATE STATISTICS IDX_FULL");
@@ -314,6 +316,33 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                 conn.createStatement().execute(ddl);
             } catch (TableAlreadyExistsException e) {
             }
+        }
+        conn.close();        
+    }
+    
+    protected static final String SCORES_TABLE_NAME = "scores";
+    
+    protected void initArrayTable() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            conn.createStatement().execute(
+                    "CREATE TABLE " + SCORES_TABLE_NAME
+                    + "(student_id INTEGER PRIMARY KEY, scores INTEGER[])");
+            PreparedStatement stmt = conn.prepareStatement(
+                    "UPSERT INTO " + SCORES_TABLE_NAME
+                    + " VALUES(?, ?)");
+            stmt.setInt(1, 1);
+            stmt.setArray(2, conn.createArrayOf("INTEGER", new Integer[] {85, 80, 82}));
+            stmt.execute();
+            stmt.setInt(1, 2);
+            stmt.setArray(2, null);
+            stmt.execute();
+            stmt.setInt(1, 3);
+            stmt.setArray(2, conn.createArrayOf("INTEGER", new Integer[] {87, 88, 80}));
+            stmt.execute();
+            conn.commit();
+        } catch (TableAlreadyExistsException e) {
         }
         conn.close();        
     }
@@ -1003,6 +1032,23 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                         {"00C923122312312", "c"},
                         {"00A423122312312", "a"},
                         {"00A323122312312", "a"}})
+                .close();
+    }
+    
+    @Test public void testUnnest() {
+        start().sql("SELECT t.s FROM UNNEST((SELECT scores FROM " + SCORES_TABLE_NAME + ")) AS t(s)")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                           "  PhoenixUncollect\n" +
+                           "    PhoenixToClientConverter\n" +
+                           "      PhoenixServerProject(EXPR$0=[$1])\n" +
+                           "        PhoenixTableScan(table=[[phoenix, SCORES]])\n")
+                .resultIs(new Object[][] {
+                        {85}, 
+                        {80}, 
+                        {82}, 
+                        {87}, 
+                        {88}, 
+                        {80}})
                 .close();
     }
     

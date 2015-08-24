@@ -24,6 +24,7 @@ import org.apache.calcite.rel.core.JoinInfo;
 import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rel.core.Project;
 import org.apache.calcite.rel.core.Sort;
+import org.apache.calcite.rel.core.Uncollect;
 import org.apache.calcite.rel.core.Union;
 import org.apache.calcite.rel.logical.LogicalAggregate;
 import org.apache.calcite.rel.logical.LogicalFilter;
@@ -49,6 +50,7 @@ import org.apache.phoenix.calcite.rel.PhoenixServerProject;
 import org.apache.phoenix.calcite.rel.PhoenixServerSort;
 import org.apache.phoenix.calcite.rel.PhoenixToClientConverter;
 import org.apache.phoenix.calcite.rel.PhoenixToEnumerableConverter;
+import org.apache.phoenix.calcite.rel.PhoenixUncollect;
 import org.apache.phoenix.calcite.rel.PhoenixUnion;
 import org.apache.phoenix.calcite.rel.PhoenixValues;
 
@@ -84,6 +86,7 @@ public class PhoenixConverterRules {
         PhoenixClientJoinRule.INSTANCE,
         PhoenixServerJoinRule.INSTANCE,
         PhoenixValuesRule.INSTANCE,
+        PhoenixUncollectRule.INSTANCE,
     };
 
     public static final RelOptRule[] CONVERTIBLE_RULES = {
@@ -104,6 +107,7 @@ public class PhoenixConverterRules {
         PhoenixClientJoinRule.CONVERTIBLE,
         PhoenixServerJoinRule.CONVERTIBLE,
         PhoenixValuesRule.INSTANCE,
+        PhoenixUncollectRule.INSTANCE,
     };
 
     /** Base class for planner rules that convert a relational expression to
@@ -594,6 +598,28 @@ public class PhoenixConverterRules {
                     valuesRel.getCluster(),
                     valuesRel.getRowType(),
                     valuesRel.getTuples());
+        }
+    }
+
+    /**
+     * Rule to convert a {@link org.apache.calcite.rel.core.Uncollect} to a
+     * {@link PhoenixUncollect}.
+     */
+    public static class PhoenixUncollectRule extends PhoenixConverterRule {
+        
+        private static final PhoenixUncollectRule INSTANCE = new PhoenixUncollectRule();
+
+        private PhoenixUncollectRule() {
+            super(Uncollect.class, Convention.NONE, 
+                    PhoenixRel.CLIENT_CONVENTION, "PhoenixUncollectRule");
+        }
+
+        public RelNode convert(RelNode rel) {
+            final Uncollect uncollect = (Uncollect) rel;
+            return PhoenixUncollect.create(
+                convert(
+                        uncollect.getInput(), 
+                        uncollect.getInput().getTraitSet().replace(out)));
         }
     }
 

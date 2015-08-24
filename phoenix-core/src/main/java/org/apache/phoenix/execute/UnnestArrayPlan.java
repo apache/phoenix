@@ -22,6 +22,7 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.expression.BaseSingleExpression;
 import org.apache.phoenix.expression.BaseTerminalExpression;
@@ -179,5 +180,14 @@ public class UnnestArrayPlan extends DelegateQueryPlan {
         public PDataType getDataType() {
             return PInteger.INSTANCE;
         }
+    }
+
+    @Override
+    public QueryPlan limit(Integer limit) {
+        if (limit == null)
+            return this;
+        
+        return new ClientScanPlan(this.getContext(), this.getStatement(), this.getTableRef(),
+                this.getProjector(), limit, null, OrderBy.EMPTY_ORDER_BY, this);
     }
 }
