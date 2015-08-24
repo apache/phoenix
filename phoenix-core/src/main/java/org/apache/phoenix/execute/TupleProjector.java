@@ -73,6 +73,16 @@ public class TupleProjector {
         schema = builder.build();
         valueSet = ValueBitSet.newInstance(schema);
     }
+
+    public TupleProjector(Expression[] expressions) {
+        this.expressions = expressions;
+        KeyValueSchemaBuilder builder = new KeyValueSchemaBuilder(0);
+        for (int i = 0; i < expressions.length; i++) {
+            builder.addField(expressions[i]);
+        }
+        schema = builder.build();
+        valueSet = ValueBitSet.newInstance(schema);
+    }
     
     public TupleProjector(PTable projectedTable) {
         Preconditions.checkArgument(projectedTable.getType() == PTableType.PROJECTED);
