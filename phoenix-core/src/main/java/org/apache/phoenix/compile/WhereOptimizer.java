@@ -423,6 +423,11 @@ public class WhereOptimizer {
         public Iterator<Expression> visitEnter(AndExpression node) {
             return node.getChildren().iterator();
         }
+        
+        @Override
+        public Expression visit(LiteralExpression node) {
+            return nodesToRemove.contains(node) ? null : node;            
+        }
 
         @Override
         public Expression visitLeave(AndExpression node, List<Expression> l) {
