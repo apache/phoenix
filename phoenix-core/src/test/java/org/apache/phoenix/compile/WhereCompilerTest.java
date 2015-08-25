@@ -218,8 +218,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
 
     @Test
     public void testCollapseFunctionToNull() throws SQLException {
-        String tenantId = "000000000000001";
-        String query = "select * from atable where organization_id='" + tenantId + "' and substr(entity_id,null) = 'foo'";
+        String query = "select * from atable where substr(entity_id,null) = 'foo'";
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
         PhoenixPreparedStatement pstmt = newPreparedStatement(pconn, query);
         QueryPlan plan = pstmt.optimizeQuery();
