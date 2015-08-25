@@ -38,17 +38,52 @@ public class NullValueTest extends BaseConnectionlessQueryTest {
     }
     
     @Test
-    public void testAndOrExpressionWithNullOperands() throws Exception {
-        String[] query = {"SELECT 'a' >= '' or '' < 'a'", 
+    public void testAndExpressionWithNullOperands() throws Exception {
+        String[] query = {"SELECT 'b' >= 'a' and '' < 'b'", 
+                          "SELECT 'b' >= '' and 'a' < 'b'",
+                          "SELECT 'a' >= 'b' and 'a' < ''",
+                          "SELECT '' >= 'a' and 'b' < 'a'",
                           "SELECT 'a' >= '' and '' < 'a'"};
+        Boolean[] result = {null,
+                            null,
+                            Boolean.FALSE,
+                            Boolean.FALSE,
+                            null};
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
-            for (String q : query) {
-                ResultSet rs = conn.createStatement().executeQuery(q);
+            for (int i = 0; i < query.length; i++) {
+                ResultSet rs = conn.createStatement().executeQuery(query[i]);
                 assertTrue(rs.next());
-                assertNull(rs.getObject(1));
+                assertEquals(result[i], rs.getObject(1));
                 assertEquals(false, rs.getBoolean(1));
+                assertFalse(rs.next());
+            }
+        } finally {
+            conn.close();
+        }       
+    }
+    
+    @Test
+    public void testOrExpressionWithNullOperands() throws Exception {
+        String[] query = {"SELECT 'b' >= 'a' or '' < 'b'", 
+                          "SELECT 'b' >= '' or 'a' < 'b'",
+                          "SELECT 'a' >= 'b' or 'a' < ''",
+                          "SELECT '' >= 'a' or 'b' < 'a'",
+                          "SELECT 'a' >= '' or '' < 'a'"};
+        Boolean[] result = {Boolean.TRUE,
+                            Boolean.TRUE,
+                            null,
+                            null,
+                            null};
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            for (int i = 0; i < query.length; i++) {
+                ResultSet rs = conn.createStatement().executeQuery(query[i]);
+                assertTrue(rs.next());
+                assertEquals(result[i], rs.getObject(1));
+                assertEquals(Boolean.TRUE.equals(result[i]) ? true : false, rs.getBoolean(1));
                 assertFalse(rs.next());
             }
         } finally {
