@@ -26,6 +26,11 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * EntityFactory is used to get results entities
+ * For SQL query
+ * 
+ */
 public class EntityFactory {
 
   private final String queryString;

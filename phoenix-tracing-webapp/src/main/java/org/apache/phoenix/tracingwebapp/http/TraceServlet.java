@@ -39,8 +39,6 @@ import java.util.Map;
  *
  * Server to show trace information
  *
- *
- * @since 4.4.1
  */
 public class TraceServlet extends HttpServlet {
 
@@ -52,11 +50,11 @@ public class TraceServlet extends HttpServlet {
   protected String PHOENIX_HOST = "localhost";
   protected String TRACING_TABLE = "SYSTEM.TRACING_STATS";
   protected int PHOENIX_PORT = 2181;
-  
-  
+
+
   protected void doGet(HttpServletRequest request, HttpServletResponse response)
       throws ServletException, IOException {
-    
+
     //reading url params
     String action = request.getParameter("action");
     String limit = request.getParameter("limit");
@@ -75,12 +73,11 @@ public class TraceServlet extends HttpServlet {
       jsonObject = "{ \"Server\": \"Phoenix Tracing Web App\", \"API version\": 0.1 }";
     }
     //response send as json
-    response.setContentType("application/json");    
+    response.setContentType("application/json");
     String output = jsonObject;
     PrintWriter out = response.getWriter();
     out.print(output);
     out.flush();
-
   }
 
   //get all trace results with limit count
@@ -90,7 +87,7 @@ public class TraceServlet extends HttpServlet {
       limit = DEFAULT_LIMIT;
     }
     String sqlQuery = "SELECT * FROM " + TRACING_TABLE + " LIMIT "+limit;
-    json = getResults(sqlQuery);    
+    json = getResults(sqlQuery);
     return getJson(json);
   }
 
@@ -133,7 +130,7 @@ public class TraceServlet extends HttpServlet {
   protected String getResults(String sqlQuery) {
     String json = null;
     if(sqlQuery == null){
-    json = "{error:true,msg:'SQL was null'}";
+      json = "{error:true,msg:'SQL was null'}";
     }else{
     try {
       Class.forName("org.apache.phoenix.jdbc.PhoenixDriver");

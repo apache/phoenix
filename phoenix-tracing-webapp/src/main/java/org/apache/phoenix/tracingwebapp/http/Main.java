@@ -33,7 +33,6 @@ import org.eclipse.jetty.webapp.WebAppContext;
 /**
  * tracing web app runner
  * 
- * @since 4.5.5
  */
 public final class Main extends Configured implements Tool {
 
@@ -48,7 +47,6 @@ public final class Main extends Configured implements Tool {
     public static void main(String[] args) throws Exception {
         int ret = ToolRunner.run(HBaseConfiguration.create(), new Main(), args);
         System.exit(ret);
-
     }
 
     @Override
@@ -67,9 +65,9 @@ public final class Main extends Configured implements Tool {
         if (home.length() != 0) {
             webapp.setTempDirectory(new File(home));
         }
-        
-	    String warPath = location.toString().split("target")[0] + "build/trace-webapp-demo.war";
-	    webapp.setWar(warPath);
+        //TODO : Embedding service rather deploying war file.(PHOENIX-2212)
+        String warPath = location.toString().split("target")[0] + "build/trace-webapp-demo.war";
+        webapp.setWar(warPath);
         server.setHandler(webapp);
         server.start();
         server.join();
