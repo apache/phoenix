@@ -217,4 +217,28 @@ public class UDFExpression extends ScalarFunction {
     public static void setConfig(Configuration conf) {
         config = conf;
     }
+
+    @Override
+    public boolean equals(Object obj) {
+		if (this == obj)
+			return true;
+		if (!(obj instanceof UDFExpression)) {
+			return false;
+		}
+		UDFExpression that = (UDFExpression) obj;
+		if (!this.udfFunction.getName().equals(that.udfFunction.getName())) {
+			return false;
+		}
+		if (!this.udfFunction.getChildren().equals(
+				that.udfFunction.getChildren())) {
+			return false;
+		}
+		if (!functionClassName.equals(that.functionClassName)) {
+			return false;
+		}
+		if (!jarPath.equals(that.jarPath)) {
+			return false;
+		}
+		return true;
+    }
 }

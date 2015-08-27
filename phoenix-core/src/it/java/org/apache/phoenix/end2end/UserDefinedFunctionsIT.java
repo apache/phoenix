@@ -38,6 +38,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.HashSet;
@@ -144,14 +145,51 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT{
                     .append("        Expression arrayExpr = children.get(0);\n")
                     .append("        return PArrayDataType.positionAtArrayElement(tuple, ptr, index, arrayExpr, getDataType(),getMaxLength());\n")
                     .append("    }\n").toString();
-    
+
+    private static String GETY_EVALUATE_METHOD =
+            new StringBuffer()
+                    .append("    public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {\n")
+                    .append("        Expression arg = getChildren().get(0);\n")
+                    .append("        if (!arg.evaluate(tuple, ptr)) {\n")
+                    .append("           return false;\n")
+                    .append("        }\n")
+                    .append("        int targetOffset = ptr.getLength();\n")
+                    .append("        if (targetOffset == 0) {\n")
+                    .append("           return true;\n")
+                    .append("        }\n")
+                    .append("        byte[] s = ptr.get();\n")
+                    .append("        int retVal = (int)Bytes.toShort(s);\n")
+                    .append("        ptr.set(PInteger.INSTANCE.toBytes(retVal));\n")
+                    .append("        return true;\n")
+                    .append("    }\n").toString();
+    private static String GETX_EVALUATE_METHOD =
+            new StringBuffer()
+                    .append("    public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {\n")
+                    .append("        Expression arg = getChildren().get(0);\n")
+                    .append("        if (!arg.evaluate(tuple, ptr)) {\n")
+                    .append("           return false;\n")
+                    .append("        }\n")
+                    .append("        int targetOffset = ptr.getLength();\n")
+                    .append("        if (targetOffset == 0) {\n")
+                    .append("           return true;\n")
+                    .append("        }\n")
+                    .append("        byte[] s = ptr.get();\n")
+                    .append("        Long retVal = Long.reverseBytes(Bytes.toLong(s));\n")
+                    .append("        ptr.set(PLong.INSTANCE.toBytes(retVal));\n")
+                    .append("        return true;\n")
+                    .append("    }\n").toString();
+
     
     private static String MY_REVERSE_CLASS_NAME = "MyReverse";
     private static String MY_SUM_CLASS_NAME = "MySum";
     private static String MY_ARRAY_INDEX_CLASS_NAME = "MyArrayIndex";
+    private static String GETX_CLASSNAME = "GetX";
+    private static String GETY_CLASSNAME = "GetY";
     private static String MY_REVERSE_PROGRAM = getProgram(MY_REVERSE_CLASS_NAME, STRING_REVERSE_EVALUATE_METHOD, "return PVarchar.INSTANCE;");
     private static String MY_SUM_PROGRAM = getProgram(MY_SUM_CLASS_NAME, SUM_COLUMN_VALUES_EVALUATE_METHOD, "return PInteger.INSTANCE;");
     private static String MY_ARRAY_INDEX_PROGRAM = getProgram(MY_ARRAY_INDEX_CLASS_NAME, ARRAY_INDEX_EVALUATE_METHOD, "return PDataType.fromTypeId(children.get(0).getDataType().getSqlType()- PDataType.ARRAY_TYPE_BASE);");
+    private static String GETX_CLASSNAME_PROGRAM = getProgram(GETX_CLASSNAME, GETX_EVALUATE_METHOD, "return PLong.INSTANCE;");
+    private static String GETY_CLASSNAME_PROGRAM = getProgram(GETY_CLASSNAME, GETY_EVALUATE_METHOD, "return PInteger.INSTANCE;");
     private static Properties EMPTY_PROPS = new Properties();
     
 
@@ -159,9 +197,15 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT{
         return new StringBuffer()
                 .append("package org.apache.phoenix.end2end;\n")
                 .append("import java.sql.SQLException;\n")
-                .append("import java.sql.SQLException;\n")
                 .append("import java.util.List;\n")
+                .append("import java.lang.Long;\n")
+                .append("import java.lang.Integer;\n")
                 .append("import org.apache.hadoop.hbase.io.ImmutableBytesWritable;\n")
+                .append("import org.apache.hadoop.hbase.util.Bytes;\n")
+                .append("import org.apache.phoenix.schema.types.PLong;")
+                .append("import org.apache.phoenix.schema.types.PInteger;"
+                		+ ""
+                		+ "")
                 .append("import org.apache.phoenix.expression.Expression;\n")
                 .append("import org.apache.phoenix.expression.function.ScalarFunction;\n")
                 .append("import org.apache.phoenix.schema.SortOrder;\n")
@@ -173,7 +217,7 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT{
                 .append("import org.apache.phoenix.schema.types.PArrayDataType;\n")
                 .append("import org.apache.phoenix.parse.ParseException;\n")
                 .append("public class "+className+" extends ScalarFunction{\n")
-                .append("    public static final String NAME = \"MY_REVERSE\";\n")
+                .append("    public static final String NAME = \""+className+"\";\n")
                 .append("    public "+className+"() {\n")
                 .append("    }\n")
                 .append("    public "+className+"(List<Expression> children) throws SQLException {\n")
@@ -220,6 +264,8 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT{
         compileTestClass(MY_SUM_CLASS_NAME, MY_SUM_PROGRAM, 2);
         compileTestClass(MY_ARRAY_INDEX_CLASS_NAME, MY_ARRAY_INDEX_PROGRAM, 3);
         compileTestClass(MY_ARRAY_INDEX_CLASS_NAME, MY_ARRAY_INDEX_PROGRAM, 4);
+        compileTestClass(GETX_CLASSNAME, GETX_CLASSNAME_PROGRAM, 5);
+        compileTestClass(GETY_CLASSNAME, GETY_CLASSNAME_PROGRAM, 6);
     }
     
     @Test
@@ -233,6 +279,10 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT{
         assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar2.jar", rs.getString("jar_location"));
         assertTrue(rs.next());
         assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar3.jar", rs.getString("jar_location"));
+        assertTrue(rs.next());
+        assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar5.jar", rs.getString("jar_location"));
+        assertTrue(rs.next());
+        assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar6.jar", rs.getString("jar_location"));
         assertFalse(rs.next());
     }
 
@@ -249,6 +299,10 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT{
         assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar3.jar", rs.getString("jar_location"));
         assertTrue(rs.next());
         assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar4.jar", rs.getString("jar_location"));
+        assertTrue(rs.next());
+        assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar5.jar", rs.getString("jar_location"));
+        assertTrue(rs.next());
+        assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar6.jar", rs.getString("jar_location"));
         assertFalse(rs.next());
         stmt.execute("delete jar '"+ util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar4.jar'");
         rs = stmt.executeQuery("list jars");
@@ -258,6 +312,10 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT{
         assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar2.jar", rs.getString("jar_location"));
         assertTrue(rs.next());
         assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar3.jar", rs.getString("jar_location"));
+        assertTrue(rs.next());
+        assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar5.jar", rs.getString("jar_location"));
+        assertTrue(rs.next());
+        assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar6.jar", rs.getString("jar_location"));
         assertFalse(rs.next());
     }
 
@@ -763,6 +821,38 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT{
         rs = stmt.executeQuery("select k from t10 where myfunction63(k)=11");
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
+    }
+
+    @Test
+    public void testUDFsWithSameChildrenInAQuery() throws Exception {
+        Connection conn = driver.connect(url, EMPTY_PROPS);
+        Statement stmt = conn.createStatement();
+        conn.createStatement().execute("create table t11(k varbinary primary key, k1 integer, lastname varchar)");
+        String query = "UPSERT INTO t11"
+                + "(k, k1, lastname) "
+                + "VALUES(?,?,?)";
+        PreparedStatement pStmt = conn.prepareStatement(query);
+        pStmt.setBytes(1, new byte[] {0,0,0,0,0,0,0,1});
+        pStmt.setInt(2, 1);
+        pStmt.setString(3, "jock");
+        pStmt.execute();
+        conn.commit();
+        stmt.execute("create function udf1(VARBINARY) returns UNSIGNED_LONG as 'org.apache.phoenix.end2end."+GETX_CLASSNAME+"' using jar "
+                + "'"+util.getConfiguration().get(DYNAMIC_JARS_DIR_KEY) + "/myjar5.jar"+"'");
+        stmt.execute("create function udf2(VARBINARY) returns INTEGER as 'org.apache.phoenix.end2end."+GETY_CLASSNAME+"' using jar "
+                + "'"+util.getConfiguration().get(DYNAMIC_JARS_DIR_KEY) + "/myjar6.jar"+"'");
+        ResultSet rs = stmt.executeQuery("select udf1(k), udf2(k) from t11");
+        assertTrue(rs.next());
+        assertEquals(72057594037927936l, rs.getLong(1));
+        assertEquals(0, rs.getInt(2));
+        rs = stmt.executeQuery("select udf2(k), udf1(k) from t11");
+        assertTrue(rs.next());
+        assertEquals(0, rs.getInt(1));
+        assertEquals(72057594037927936l, rs.getLong(2));
+        rs = stmt.executeQuery("select udf1(k), udf1(k) from t11");
+        assertTrue(rs.next());
+        assertEquals(72057594037927936l, rs.getLong(1));
+        assertEquals(72057594037927936l, rs.getLong(2));
     }
 
     /**
