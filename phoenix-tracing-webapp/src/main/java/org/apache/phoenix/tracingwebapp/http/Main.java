@@ -16,7 +16,6 @@
  */
 package org.apache.phoenix.tracingwebapp.http;
 
-import java.io.File;
 import java.net.URL;
 import java.security.ProtectionDomain;
 
@@ -48,7 +47,7 @@ public final class Main extends Configured implements Tool {
     public static final int DEFAULT_HTTP_PORT = 8864;
     public static final String TRACE_SERVER_HTTP_JETTY_HOME_KEY =
             "phoenix.traceserver.http.home";
-    public static final String DEFAULT_HTTP_HOME = "";
+    public static final String DEFAULT_HTTP_HOME = "/";
 
     public static void main(String[] args) throws Exception {
         int ret = ToolRunner.run(HBaseConfiguration.create(), new Main(), args);
@@ -63,18 +62,19 @@ public final class Main extends Configured implements Tool {
         BasicConfigurator.configure();
         final String home = getConf().get(TRACE_SERVER_HTTP_JETTY_HOME_KEY,
                 DEFAULT_HTTP_HOME);
-        Server server = new Server(port);
+        //setting up the embedded server
         ProtectionDomain domain = Main.class.getProtectionDomain();
         URL location = domain.getCodeSource().getLocation();
-        WebAppContext webapp = new WebAppContext();
-        webapp.setContextPath("/");
-        if (home.length() != 0) {
-            webapp.setTempDirectory(new File(home));
-        }
-        //TODO : Embedding service rather deploying war file.(PHOENIX-2212)
-        String warPath = location.toString().split("target")[0] + "build/trace-webapp-demo.war";
-        webapp.setWar(warPath);
-        server.setHandler(webapp);
+        String webappDirLocation = location.toString().split("target")[0] +"src/main/webapp";
+        Server server = new Server(port);
+        WebAppContext root = new WebAppContext();
+     
+        root.setContextPath(home);
+        root.setDescriptor(webappDirLocation + "/WEB-INF/web.xml");
+        root.setResourceBase(webappDirLocation);     
+        root.setParentLoaderPriority(true);     
+        server.setHandler(root);
+     
         server.start();
         server.join();
         return 0;
