@@ -12,8 +12,10 @@ import java.sql.SQLException;
 public class ConnectionFactory {
   
   private static Connection con;
+  //TODO : need to get port and host from configuration 
   protected static String PHOENIX_HOST = "localhost";
   protected static int PHOENIX_PORT = 2181;
+
   
   public static Connection getConnection() throws SQLException, ClassNotFoundException {
     if (con == null || con.isClosed()) {
