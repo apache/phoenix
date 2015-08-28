@@ -27,11 +27,7 @@ import javax.servlet.http.HttpServletResponse;
 import org.codehaus.jackson.map.ObjectMapper;
 
 import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.PreparedStatement;
-import java.sql.Statement;
 import java.util.List;
 import java.util.Map;
 
@@ -42,14 +38,14 @@ import java.util.Map;
  */
 public class TraceServlet extends HttpServlet {
 
-  protected Connection con;
+  private static final long serialVersionUID = -354285100083055559L;
+  private static Connection con;
   protected String DEFAULT_LIMIT = "25";
   protected String DEFAULT_COUNTBY = "hostname";
   protected String LOGIC_AND = "AND";
   protected String LOGIC_OR = "OR";
-  protected String PHOENIX_HOST = "localhost";
   protected String TRACING_TABLE = "SYSTEM.TRACING_STATS";
-  protected int PHOENIX_PORT = 2181;
+
 
 
   protected void doGet(HttpServletRequest request, HttpServletResponse response)
@@ -125,6 +121,8 @@ public class TraceServlet extends HttpServlet {
         .replace(",\"end", "\",\"end");   
     return output;
   }
+  
+
 
   //get results with passing sql query
   protected String getResults(String sqlQuery) {
@@ -133,8 +131,8 @@ public class TraceServlet extends HttpServlet {
       json = "{error:true,msg:'SQL was null'}";
     }else{
     try {
-      Class.forName("org.apache.phoenix.jdbc.PhoenixDriver");
-      con = DriverManager.getConnection("jdbc:phoenix:"+PHOENIX_HOST+":"+PHOENIX_PORT);
+      
+      con = ConnectionFactory.getConnection();
       EntityFactory nutrientEntityFactory = new EntityFactory(con,sqlQuery);
       List<Map<String, Object>> nutrients = nutrientEntityFactory
           .findMultiple(new Object[] {});

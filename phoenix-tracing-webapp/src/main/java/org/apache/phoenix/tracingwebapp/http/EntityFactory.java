@@ -33,7 +33,7 @@ import java.util.Map;
  */
 public class EntityFactory {
 
-  private final String queryString;
+  private String queryString;
   protected Connection connection;
 
   public EntityFactory(Connection connection, String queryString) {
@@ -78,7 +78,7 @@ public class EntityFactory {
     }
   }
 
-  protected List<Map<String, Object>> getEntitiesFromResultSet(
+  protected static List<Map<String, Object>> getEntitiesFromResultSet(
       ResultSet resultSet) throws SQLException {
     ArrayList<Map<String, Object>> entities = new ArrayList<>();
     while (resultSet.next()) {
@@ -87,7 +87,7 @@ public class EntityFactory {
     return entities;
   }
 
-  protected Map<String, Object> getEntityFromResultSet(ResultSet resultSet)
+  protected static Map<String, Object> getEntityFromResultSet(ResultSet resultSet)
       throws SQLException {
     ResultSetMetaData metaData = resultSet.getMetaData();
     int columnCount = metaData.getColumnCount();
