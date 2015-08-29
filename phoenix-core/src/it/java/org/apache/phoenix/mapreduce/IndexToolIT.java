@@ -20,7 +20,6 @@ package org.apache.phoenix.mapreduce;
 import static org.apache.phoenix.query.BaseTest.setUpConfigForMiniCluster;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
@@ -91,7 +90,31 @@ public class IndexToolIT {
         testSecondaryIndex("SCHEMA", "DATA_TABLE4", false, true);
     }
     
+    @Test
+    public void testImmutableGlobalIndexDirectApi() throws Exception {
+    	testSecondaryIndex("SCHEMA", "DATA_TABLE5", true, false, true);
+    }
+    
+    @Test
+    public void testImmutableLocalIndexDirectApi() throws Exception {
+    	testSecondaryIndex("SCHEMA", "DATA_TABLE6", true, true, true);
+    }
+    
+    @Test
+    public void testMutableGlobalIndexDirectApi() throws Exception {
+    	testSecondaryIndex("SCHEMA", "DATA_TABLE7", false, false, true);
+    }
+    
+    @Test
+    public void testMutableLocalIndexDirectApi() throws Exception {
+    	testSecondaryIndex("SCHEMA", "DATA_TABLE8", false, true, true);
+    }
+    
     public void testSecondaryIndex(final String schemaName, final String dataTable, final boolean isImmutable , final boolean isLocal) throws Exception {
+    	testSecondaryIndex(schemaName, dataTable, isImmutable, isLocal, false);
+    }
+    
+    public void testSecondaryIndex(final String schemaName, final String dataTable, final boolean isImmutable , final boolean isLocal, final boolean directApi) throws Exception {
         
     	final String fullTableName = SchemaUtil.getTableName(schemaName, dataTable);
         final String indxTable = String.format("%s_%s",dataTable,"INDX");
@@ -130,7 +153,7 @@ public class IndexToolIT {
             final IndexTool indexingTool = new IndexTool();
             indexingTool.setConf(new Configuration(hbaseTestUtil.getConfiguration()));
             
-            final String[] cmdArgs = getArgValues(schemaName, dataTable, indxTable);
+            final String[] cmdArgs = getArgValues(schemaName, dataTable, indxTable, directApi);
             int status = indexingTool.run(cmdArgs);
             assertEquals(0, status);
             
@@ -263,15 +286,25 @@ public class IndexToolIT {
     }
 
     private String[] getArgValues(String schemaName, String dataTable, String indxTable) {
+        return getArgValues(schemaName, dataTable, indxTable, false);
+    }
+    
+    private String[] getArgValues(String schemaName, String dataTable, String indxTable, boolean directApi) {
         final List<String> args = Lists.newArrayList();
         if (schemaName!=null) {
-        	args.add("-s");
-        	args.add(schemaName);
+            args.add("-s");
+            args.add(schemaName);
         }
         args.add("-dt");
         args.add(dataTable);
         args.add("-it");
         args.add(indxTable);
+        if(directApi) {
+            args.add("-direct");
+            // Need to run this job in foreground for the test to be deterministic
+            args.add("-runfg");
+        }
+
         args.add("-op");
         args.add("/tmp/"+UUID.randomUUID().toString());
         return args.toArray(new String[0]);
