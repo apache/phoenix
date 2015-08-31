@@ -96,6 +96,17 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         assertEquals(limit, plan.getLimit());
         return plan.getContext();
     }
+  
+    @Test
+    public void testMathFunc() throws SQLException {
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+        conn.createStatement().execute("create table test (id integer primary key)");
+        Scan scan = compileStatement("select ID, exp(ID) from test where exp(ID) < 10").getScan();
+
+        assertNotNull(scan.getFilter());
+        assertTrue(scan.getStartRow().length == 0);
+        assertTrue(scan.getStopRow().length == 0);
+    }
     
     @Test
     public void testSingleKeyExpression() throws SQLException {
