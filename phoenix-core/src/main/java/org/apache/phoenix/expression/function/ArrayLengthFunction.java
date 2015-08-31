@@ -27,11 +27,11 @@ import org.apache.phoenix.schema.types.PBinaryArray;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PArrayDataType;
 import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.schema.types.PVarbinaryArray;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 @BuiltInFunction(name = ArrayLengthFunction.NAME, args = { @Argument(allowedTypes = {
-		PBinaryArray.class, PVarbinary.class }) })
+		PBinaryArray.class, PVarbinaryArray.class }) })
 public class ArrayLengthFunction extends ScalarFunction {
 	public static final String NAME = "ARRAY_LENGTH";
 
