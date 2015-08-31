@@ -18,6 +18,8 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.util.TestUtil.closeStmtAndConn;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
@@ -125,4 +127,26 @@ public class ExpFunctionEnd2EndIT extends BaseHBaseManagedTimeIT {
             testUnsignedNumberSpec(conn, d);
         }
     }
+    
+    @Test
+    public void testExpForLeadingPK() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String ddl = "create table test (id integer primary key)";
+        conn.createStatement().execute(ddl);
+        String dml = "upsert into test values (?)";
+        PreparedStatement stmt = conn.prepareStatement(dml);
+        for (int i = 1; i <= 5; i++) {
+            stmt.setInt(1, i);
+            stmt.execute();
+        }
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery("select ID, exp(ID) from test where exp(ID) < 10");
+        assertTrue(rs.next());
+        assertEquals(1, rs.getInt(1));
+        assertTrue(rs.next());
+        assertEquals(2, rs.getInt(1));
+        assertFalse(rs.next());
+    }
+    
 }
