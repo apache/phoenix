@@ -71,17 +71,9 @@ mv $REL_SRC.tar.gz $DIR_REL_SRC_TAR_PATH;
 mvn clean apache-rat:check package -DskipTests;
 rm -rf $(find . -type d -name archive-tmp);
 
-cp $(find -iname phoenix-$PHOENIX-client-minimal.jar) $DIR_REL_BIN_PATH;
-cp $(find -iname phoenix-$PHOENIX-client-without-hbase.jar) $DIR_REL_BIN_PATH;
-cp $(find -iname phoenix-core-$PHOENIX.jar) $DIR_REL_BIN_PATH;
-cp $(find -iname phoenix-$PHOENIX-client.jar) $DIR_REL_BIN_PATH;
-cp $(find -iname phoenix-$PHOENIX-server.jar) $DIR_REL_BIN_PATH;
-cp $(find -iname phoenix-$PHOENIX-server-without-antlr.jar) $DIR_REL_BIN_PATH;
-cp $(find -iname phoenix-core-$PHOENIX-tests.jar) $DIR_REL_BIN_PATH;
-cp $(find -iname phoenix-flume-$PHOENIX.jar) $DIR_REL_BIN_PATH;
-cp $(find -iname phoenix-flume-$PHOENIX-tests.jar) $DIR_REL_BIN_PATH;
-cp $(find -iname phoenix-pig-$PHOENIX.jar) $DIR_REL_BIN_PATH;
-cp $(find -iname phoenix-pig-$PHOENIX-tests.jar) $DIR_REL_BIN_PATH;
+# Copy all phoenix-*.jars to release dir
+phx_jars=$(find -iname phoenix-*.jar)
+cp $phx_jars $DIR_REL_BIN_PATH;
 
 # Copy bin
 cp bin/* $DIR_BIN;
