@@ -62,6 +62,8 @@ public class PherfConstants {
     public static final int MONITOR_FREQUENCY = 5000;
     public static final String MONITOR_FILE_NAME = "STATS_MONITOR";
 
+    public static final String SUMMARY_HTML_FILE_NAME = "summary.html";
+    
     public static enum GeneratePhoenixStats {
         YES,
         NO

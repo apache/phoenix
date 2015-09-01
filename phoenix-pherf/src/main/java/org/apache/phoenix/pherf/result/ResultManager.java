@@ -47,8 +47,13 @@ public class ResultManager {
         util = new ResultUtil();
         this.runMode = runMode;
     }
+    
+    public ResultManager(String fileNameSeed) {
+        this(RunMode.PERFORMANCE, Arrays.asList(new XMLResultHandler(fileNameSeed, ResultFileDetails.XML),
+                new ImageResultHandler(fileNameSeed, ResultFileDetails.IMAGE)));
+     }
 
-    /**
+	/**
      * Write out the result to each writer in the pool
      *
      * @param result {@link DataModelResult}

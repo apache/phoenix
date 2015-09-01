@@ -66,7 +66,7 @@ class MultiThreadedRunner implements Runnable {
         this.dataModelResult = dataModelResult;
         this.numberOfExecutions = numberOfExecutions;
         this.executionDurationInMs = executionDurationInMs;
-        this.resultManager = new ResultManager(dataModelResult.getName(), RunMode.PERFORMANCE);
+        this.resultManager = new ResultManager(dataModelResult.getName());
     }
 
     /**
