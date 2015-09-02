@@ -303,11 +303,13 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
             public boolean nextRaw(List<Cell> result) throws IOException {
                 try {
                     boolean next = s.nextRaw(result);
+                    Cell arrayElementCell = null;
                     if (result.size() == 0) {
                         return next;
                     }
                     if (arrayFuncRefs != null && arrayFuncRefs.length > 0 && arrayKVRefs.size() > 0) {
-                        replaceArrayIndexElement(arrayKVRefs, arrayFuncRefs, result);
+                        int arrayElementCellPosition = replaceArrayIndexElement(arrayKVRefs, arrayFuncRefs, result);
+                        arrayElementCell = result.get(arrayElementCellPosition);
                     }
                     if (ScanUtil.isLocalIndex(scan) && !ScanUtil.isAnalyzeTable(scan)) {
                         IndexUtil.wrapResultUsingOffset(c, result, offset, dataColumns,
@@ -317,6 +319,8 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
                         Tuple tuple = projector.projectResults(new ResultTuple(Result.create(result)));
                         result.clear();
                         result.add(tuple.getValue(0));
+                        if(arrayElementCell != null)
+                            result.add(arrayElementCell);
                     }
                     // There is a scanattribute set to retrieve the specific array element
                     return next;
@@ -331,11 +335,13 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
                 throws IOException {
               try {
                 boolean next = s.nextRaw(result, scannerContext);
+                Cell arrayElementCell = null;
                 if (result.size() == 0) {
                     return next;
                 }
                 if (arrayFuncRefs != null && arrayFuncRefs.length > 0 && arrayKVRefs.size() > 0) {
-                    replaceArrayIndexElement(arrayKVRefs, arrayFuncRefs, result);
+                    int arrayElementCellPosition = replaceArrayIndexElement(arrayKVRefs, arrayFuncRefs, result);
+                    arrayElementCell = result.get(arrayElementCellPosition);
                 }
                 if ((offset > 0 || ScanUtil.isLocalIndex(scan))  && !ScanUtil.isAnalyzeTable(scan)) {
                     IndexUtil.wrapResultUsingOffset(c, result, offset, dataColumns,
@@ -345,6 +351,8 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
                     Tuple tuple = projector.projectResults(new ResultTuple(Result.create(result)));
                     result.clear();
                     result.add(tuple.getValue(0));
+                    if(arrayElementCell != null)
+                        result.add(arrayElementCell);
                 }
                 // There is a scanattribute set to retrieve the specific array element
                 return next;
@@ -354,7 +362,7 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
               }
             }
 
-            private void replaceArrayIndexElement(final Set<KeyValueColumnExpression> arrayKVRefs,
+            private int replaceArrayIndexElement(final Set<KeyValueColumnExpression> arrayKVRefs,
                     final Expression[] arrayFuncRefs, List<Cell> result) {
                 // make a copy of the results array here, as we're modifying it below
                 MultiKeyValueTuple tuple = new MultiKeyValueTuple(ImmutableList.copyOf(result));
@@ -385,6 +393,7 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
                         QueryConstants.ARRAY_VALUE_COLUMN_QUALIFIER, 0,
                         QueryConstants.ARRAY_VALUE_COLUMN_QUALIFIER.length, HConstants.LATEST_TIMESTAMP,
                         Type.codeToType(rowKv.getTypeByte()), value, 0, value.length));
+                return result.size() - 1;
             }
 
             @Override
