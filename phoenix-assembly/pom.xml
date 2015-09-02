@@ -113,6 +113,8 @@
                 <descriptor>src/build/server.xml</descriptor>
                <!-- build the phoenix server side jar, that includes phoenix-hadoopX-compat and phoenix-hadoop-compat. -->
                 <descriptor>src/build/server-without-antlr.xml</descriptor>
+	       <!-- build the phoenix server side jar with all dependencies -->
+                <descriptor>src/build/server-with-txns.xml</descriptor>
               </descriptors>
             </configuration>
           </execution>

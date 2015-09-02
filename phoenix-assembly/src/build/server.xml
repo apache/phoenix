@@ -36,15 +36,9 @@
       <includes>
         <include>org.apache.phoenix:phoenix-core</include>
         <include>org.iq80.snappy:snappy</include>
+	<include>org.antlr:antlr*</include>
         <include>co.cask.tephra:tephra*</include>
-        <include>com.google.code.gson:gson*</include>
-      </includes>
-    </dependencySet>
-    <dependencySet>
-      <unpack>true</unpack>
-      <outputDirectory>/</outputDirectory>
-      <includes>
-        <include>org.antlr:antlr*</include>
+        <include>com.google.code.gson:gson</include>
       </includes>
     </dependencySet>
   </dependencySets>

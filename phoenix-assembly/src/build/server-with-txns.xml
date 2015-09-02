@@ -23,8 +23,8 @@
 <assembly xmlns="http://maven.apache.org/plugins/maven-assembly-plugin/assembly/1.1.0"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
   xsi:schemaLocation="http://maven.apache.org/plugins/maven-assembly-plugin/assembly/1.1.0 http://maven.apache.org/xsd/assembly-1.1.0.xsd">
-  <!-- build the phoenix server side jar, that includes phoenix-hadoopX-compat and phoenix-hadoop-compat. -->
-  <id>server-without-antlr</id>
+  <!-- build the phoenix server side jar, that includes phoenix-hadoopX-compat, phoenix-hadoop-compat and antlr -->
+  <id>server-with-txns</id>
   <formats>
     <format>jar</format>
   </formats>
@@ -36,8 +36,12 @@
       <includes>
         <include>org.apache.phoenix:phoenix-core</include>
         <include>org.iq80.snappy:snappy</include>
+        <include>org.antlr:antlr*</include>
         <include>co.cask.tephra:tephra*</include>
         <include>com.google.code.gson:gson</include>
+	<include>com.google.inject.extensions:guice-assistedinject</include>
+	<include>it.unimi.dsi:fastutil</include>
+	<include>io.dropwizard.metrics:metrics-core</include>
       </includes>
     </dependencySet>
   </dependencySets>
