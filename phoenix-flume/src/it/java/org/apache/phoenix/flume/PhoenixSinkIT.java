@@ -17,24 +17,35 @@
  */
 package org.apache.phoenix.flume;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-import org.apache.flume.Channel;
-import org.apache.flume.Context;
-import org.apache.flume.Sink;
-import org.apache.flume.SinkFactory;
+import org.apache.flume.*;
 import org.apache.flume.channel.MemoryChannel;
 import org.apache.flume.conf.Configurables;
+import org.apache.flume.event.EventBuilder;
 import org.apache.flume.lifecycle.LifecycleState;
 import org.apache.flume.sink.DefaultSinkFactory;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.flume.serializer.EventSerializers;
+import org.apache.phoenix.flume.serializer.CustomSerializer;
+import org.apache.phoenix.flume.sink.NullPhoenixSink;
 import org.apache.phoenix.flume.sink.PhoenixSink;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Assert;
 import org.junit.Test;
+
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.util.Properties;
+
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
 
 public class PhoenixSinkIT extends BaseHBaseManagedTimeIT {
@@ -79,7 +90,7 @@ public class PhoenixSinkIT extends BaseHBaseManagedTimeIT {
         Configurables.configure(sink, sinkContext);
     }
     
-    @Test(expected=IllegalArgumentException.class)
+    @Test(expected=RuntimeException.class)
     public void testInvalidConfigurationOfSerializer () {
         
         sinkContext = new Context ();
@@ -98,13 +109,13 @@ public class PhoenixSinkIT extends BaseHBaseManagedTimeIT {
         sinkContext = new Context ();
         sinkContext.put(FlumeConstants.CONFIG_TABLE, "flume_test");
         sinkContext.put(FlumeConstants.CONFIG_JDBC_URL, getUrl());
-        sinkContext.put(FlumeConstants.CONFIG_SERIALIZER,EventSerializers.REGEX.name());
-        sinkContext.put(FlumeConstants.CONFIG_SERIALIZER_PREFIX + FlumeConstants.CONFIG_COLUMN_NAMES,"col1,col2");
+        sinkContext.put(FlumeConstants.CONFIG_SERIALIZER, EventSerializers.REGEX.name());
+        sinkContext.put(FlumeConstants.CONFIG_SERIALIZER_PREFIX + FlumeConstants.CONFIG_COLUMN_NAMES, "col1,col2");
         sinkContext.put(FlumeConstants.CONFIG_SERIALIZER_PREFIX + FlumeConstants.CONFIG_ROWKEY_TYPE_GENERATOR,DefaultKeyGenerator.TIMESTAMP.name());
 
         sink = new PhoenixSink();
         Configurables.configure(sink, sinkContext);
-      
+
         final Channel channel = this.initChannel();
         sink.setChannel(channel);
         try {
@@ -131,14 +142,14 @@ public class PhoenixSinkIT extends BaseHBaseManagedTimeIT {
         sinkContext.put(FlumeConstants.CONFIG_SERIALIZER_PREFIX + FlumeConstants.CONFIG_COLUMN_NAMES,"col1,col2");
         sinkContext.put(FlumeConstants.CONFIG_SERIALIZER_PREFIX + FlumeConstants.CONFIG_ROWKEY_TYPE_GENERATOR,DefaultKeyGenerator.TIMESTAMP.name());
 
-        
+
         sink = new PhoenixSink();
         Configurables.configure(sink, sinkContext);
         Assert.assertEquals(LifecycleState.IDLE, sink.getLifecycleState());
-      
+
         final Channel channel = this.initChannel();
         sink.setChannel(channel);
-        
+
         sink.start();
         Assert.assertEquals(LifecycleState.START, sink.getLifecycleState());
         sink.stop();
@@ -160,13 +171,13 @@ public class PhoenixSinkIT extends BaseHBaseManagedTimeIT {
         sinkContext.put(FlumeConstants.CONFIG_TABLE_DDL, ddl);
         sinkContext.put(FlumeConstants.CONFIG_SERIALIZER_PREFIX + FlumeConstants.CONFIG_REGULAR_EXPRESSION,"^([^\t]+)\t([^\t]+)$");
         sinkContext.put(FlumeConstants.CONFIG_SERIALIZER_PREFIX + FlumeConstants.CONFIG_COLUMN_NAMES,"col1,col2");
-        sinkContext.put(FlumeConstants.CONFIG_SERIALIZER_PREFIX + FlumeConstants.CONFIG_ROWKEY_TYPE_GENERATOR,DefaultKeyGenerator.TIMESTAMP.name());
+        sinkContext.put(FlumeConstants.CONFIG_SERIALIZER_PREFIX + FlumeConstants.CONFIG_ROWKEY_TYPE_GENERATOR, DefaultKeyGenerator.TIMESTAMP.name());
 
-        
+
         sink = new PhoenixSink();
         Configurables.configure(sink, sinkContext);
         Assert.assertEquals(LifecycleState.IDLE, sink.getLifecycleState());
-      
+
         final Channel channel = this.initChannel();
         sink.setChannel(channel);
         
@@ -178,6 +189,66 @@ public class PhoenixSinkIT extends BaseHBaseManagedTimeIT {
         }finally {
             admin.close();
         }
+    }
+
+    @Test
+    public void testExtendedSink() throws Exception {
+        // Create a mock NullPhoenixSink which extends PhoenixSink, and verify configure is invoked()
+
+        PhoenixSink sink = mock(NullPhoenixSink.class);
+        sinkContext = new Context();
+        sinkContext.put(FlumeConstants.CONFIG_TABLE, "FLUME_TEST_EXTENDED");
+        sinkContext.put(FlumeConstants.CONFIG_JDBC_URL, getUrl());
+        sinkContext.put(FlumeConstants.CONFIG_SERIALIZER, CustomSerializer.class.getName());
+        sinkContext.put(FlumeConstants.CONFIG_SERIALIZER_PREFIX + FlumeConstants.CONFIG_COLUMN_NAMES, "ID, COUNTS");
+        sinkContext.put(FlumeConstants.CONFIG_SERIALIZER_PREFIX + FlumeConstants.CONFIG_ROWKEY_TYPE_GENERATOR, DefaultKeyGenerator.TIMESTAMP.name());
+
+        Configurables.configure(sink, sinkContext);
+        verify(sink).configure(sinkContext);
+    }
+
+    @Test
+    public void testExtendedSerializer() throws Exception {
+        /*
+        Sadly, we can't mock a serializer, as the PhoenixSink does a Class.forName() to instantiate
+        it. Instead. we'll setup a Flume channel and verify the data our custom serializer wrote.
+        */
+
+        final String fullTableName = "FLUME_TEST_EXTENDED";
+        final String ddl = "CREATE TABLE " + fullTableName + " (ID BIGINT NOT NULL PRIMARY KEY, COUNTS UNSIGNED_LONG)";
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        final Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute(ddl);
+        conn.commit();
+
+        sinkContext = new Context();
+        sinkContext.put(FlumeConstants.CONFIG_TABLE, "FLUME_TEST_EXTENDED");
+        sinkContext.put(FlumeConstants.CONFIG_JDBC_URL, getUrl());
+        sinkContext.put(FlumeConstants.CONFIG_SERIALIZER, CustomSerializer.class.getName());
+        sinkContext.put(FlumeConstants.CONFIG_SERIALIZER_PREFIX + FlumeConstants.CONFIG_COLUMN_NAMES, "ID, COUNTS");
+        sinkContext.put(FlumeConstants.CONFIG_SERIALIZER_PREFIX + FlumeConstants.CONFIG_ROWKEY_TYPE_GENERATOR, DefaultKeyGenerator.TIMESTAMP.name());
+
+        PhoenixSink sink = new PhoenixSink();
+        Configurables.configure(sink, sinkContext);
+
+        // Send a test event through Flume, using our custom serializer
+        final Channel channel = this.initChannel();
+        sink.setChannel(channel);
+        sink.start();
+
+        final Transaction transaction = channel.getTransaction();
+        transaction.begin();
+        channel.put(EventBuilder.withBody(Bytes.toBytes("test event")));
+        transaction.commit();
+        transaction.close();
+
+        sink.process();
+        sink.stop();
+
+        // Verify our serializer wrote out data
+        ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM FLUME_TEST_EXTENDED");
+        assertTrue(rs.next());
+        assertTrue(rs.getLong(1) == 1L);
     }
     
     private Channel initChannel() {
