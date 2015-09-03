@@ -42,7 +42,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 import com.google.common.collect.Lists;
 
-public final class PhoenixSink  extends AbstractSink implements Configurable {
+public class PhoenixSink extends AbstractSink implements Configurable {
     private static final Logger logger = LoggerFactory.getLogger(PhoenixSink.class);
     private static AtomicInteger counter = new AtomicInteger();
     private static final String NAME   = "Phoenix Sink__";
@@ -70,14 +70,13 @@ public final class PhoenixSink  extends AbstractSink implements Configurable {
      * @param eventSerializerType
      */
     private void initializeSerializer(final Context context,final String eventSerializerType) {
-        
-       EventSerializers eventSerializer = null;
-       try {
-               eventSerializer =  EventSerializers.valueOf(eventSerializerType.toUpperCase());
+        String serializerClazz = null;
+        EventSerializers eventSerializer = null;
+
+        try {
+            eventSerializer = EventSerializers.valueOf(eventSerializerType.toUpperCase());
         } catch(IllegalArgumentException iae) {
-               logger.error("An invalid eventSerializer {} was passed. Please specify one of {} ",eventSerializerType,
-                       Joiner.on(",").skipNulls().join(EventSerializers.values()));
-               Throwables.propagate(iae);
+            serializerClazz = eventSerializerType;
         }
        
        final Context serializerContext = new Context();
@@ -86,7 +85,14 @@ public final class PhoenixSink  extends AbstractSink implements Configurable {
              
        try {
          @SuppressWarnings("unchecked")
-         Class<? extends EventSerializer> clazz = (Class<? extends EventSerializer>) Class.forName(eventSerializer.getClassName());
+         Class<? extends EventSerializer> clazz = null;
+         if(serializerClazz == null) {
+             clazz = (Class<? extends EventSerializer>) Class.forName(eventSerializer.getClassName());
+         }
+         else {
+             clazz = (Class<? extends EventSerializer>) Class.forName(serializerClazz);
+         }
+
          serializer = clazz.newInstance();
          serializer.configure(serializerContext);
          
