@@ -40,6 +40,7 @@ public class ProjectedColumnExpression extends ColumnExpression {
 	private int position;
 	private String displayName;
 	private final Collection<PColumn> columns;
+    private PColumn column;
 	
 	public ProjectedColumnExpression() {
         this.columns = Collections.emptyList();
@@ -48,9 +49,10 @@ public class ProjectedColumnExpression extends ColumnExpression {
 	public ProjectedColumnExpression(PColumn column, PTable table, String displayName) {
 		this(column, table.getColumns(), column.getPosition() - table.getPKColumns().size(), displayName);
 	}
-    
+
     public ProjectedColumnExpression(PColumn column, Collection<PColumn> columns, int position, String displayName) {
         super(column);
+        this.column = column;
         this.columns = columns;
         this.position = position;
         this.displayName = displayName;
@@ -143,4 +145,7 @@ public class ProjectedColumnExpression extends ColumnExpression {
         return visitor.visit(this);
     }
 
+    public PColumn getColumn() {
+        return column;
+    }
 }

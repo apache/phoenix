@@ -24,7 +24,7 @@ import java.util.List;
 
 import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
-import org.apache.phoenix.expression.visitor.CloneExpressionVisitor;
+import org.apache.phoenix.expression.visitor.CloneNonDeterministicExpressionVisitor;
 import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.util.SchemaUtil;
@@ -118,7 +118,7 @@ public class RowProjector {
             ColumnProjector colProjector = columnProjectors.get(i);
             Expression expression = colProjector.getExpression();
             if (expression.getDeterminism() == Determinism.PER_INVOCATION) {
-                CloneExpressionVisitor visitor = new CloneExpressionVisitor();
+                CloneNonDeterministicExpressionVisitor visitor = new CloneNonDeterministicExpressionVisitor();
                 Expression clonedExpression = expression.accept(visitor);
                 clonedColProjectors.add(new ExpressionProjector(colProjector.getName(),
                         colProjector.getTableName(), 

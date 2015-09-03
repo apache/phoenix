@@ -156,6 +156,9 @@ public abstract class ExplainTable {
             groupByLimit = (Integer) PInteger.INSTANCE.toObject(groupByLimitBytes);
         }
         groupBy.explain(planSteps, groupByLimit);
+        if (scan.getAttribute(BaseScannerRegionObserver.SPECIFIC_ARRAY_INDEX) != null) {
+            planSteps.add("    SERVER ARRAY ELEMENT PROJECTION");
+        }
     }
 
     private void appendPKColumnValue(StringBuilder buf, byte[] range, Boolean isNull, int slotIndex) {

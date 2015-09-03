@@ -424,6 +424,11 @@ public class WhereOptimizer {
         public Iterator<Expression> visitEnter(AndExpression node) {
             return node.getChildren().iterator();
         }
+        
+        @Override
+        public Expression visit(LiteralExpression node) {
+            return nodesToRemove.contains(node) ? null : node;            
+        }
 
         @Override
         public Expression visitLeave(AndExpression node, List<Expression> l) {
@@ -824,17 +829,6 @@ public class WhereOptimizer {
             this.table = table;
         }
 
-//        private boolean isFullyQualified(int pkSpan) {
-//            int nPKColumns = table.getPKColumns().size();
-//            return table.getBucketNum() == null ? pkSpan == nPKColumns : pkSpan == nPKColumns-1;
-//        }
-        @Override
-        public KeySlots defaultReturn(Expression node, List<KeySlots> l) {
-            // Passes the CompositeKeyExpression up the tree
-            return l.size() == 1 ? l.get(0) : null;
-        }
-
-
         @Override
         public Iterator<Expression> visitEnter(CoerceExpression node) {
             return node.getChildren().iterator();
@@ -868,10 +862,6 @@ public class WhereOptimizer {
         public KeySlots visitLeave(OrExpression node, List<KeySlots> l) {
             KeySlots keySlots = orKeySlots(node, l);
             if (keySlots == null) {
-                // If we don't clear the child list, we end up passing some of
-                // the child expressions of the OR up the tree, causing only
-                // those expressions to form the scan start/stop key.
-                l.clear();
                 return null;
             }
             return keySlots;
