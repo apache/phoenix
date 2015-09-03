@@ -527,7 +527,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
         // Join key being order-by fields with the other side sorted on order-by fields
         start().sql("SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" order by item.\"supplier_id\"")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixClientProject(item_id=[$0], NAME=[$1], supplier_id=[$3], NAME0=[$4])\n" +
+                           "  PhoenixClientProject(item_id=[$0], NAME=[$1], supplier_id=[$3], NAME0=[$4], supplier_id0=[$2])\n" +
                            "    PhoenixClientJoin(condition=[=($2, $3)], joinType=[inner])\n" +
                            "      PhoenixServerSort(sort0=[$2], dir0=[ASC])\n" +
                            "        PhoenixServerProject(item_id=[$0], NAME=[$1], supplier_id=[$5])\n" +
@@ -952,15 +952,14 @@ public class CalciteIT extends BaseClientManagedTimeIT {
         start.sql("select a_string from aTable order by organization_id")
             .explainIs("PhoenixToEnumerableConverter\n" +
                        "  PhoenixToClientConverter\n" +
-                       "    PhoenixServerProject(A_STRING=[$2])\n" +
+                       "    PhoenixServerProject(A_STRING=[$2], ORGANIZATION_ID=[$0])\n" +
                        "      PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
             .close();
         start.sql("select a_integer from aTable order by a_string")
             .explainIs("PhoenixToEnumerableConverter\n" +
-                       "  PhoenixClientProject(A_INTEGER=[$0])\n" +
-                       "    PhoenixServerSort(sort0=[$1], dir0=[ASC])\n" +
-                       "      PhoenixServerProject(A_INTEGER=[$4], A_STRING=[$2])\n" +
-                       "        PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
+                       "  PhoenixServerSort(sort0=[$1], dir0=[ASC])\n" +
+                       "    PhoenixServerProject(A_INTEGER=[$4], A_STRING=[$2])\n" +
+                       "      PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
             .close();
         start.sql("select a_string, b_string from aTable where a_string = 'a'")
             .explainIs("PhoenixToEnumerableConverter\n" +
