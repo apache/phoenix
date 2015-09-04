@@ -26,7 +26,6 @@ import org.apache.phoenix.expression.ArrayConstructorExpression;
 import org.apache.phoenix.expression.CaseExpression;
 import org.apache.phoenix.expression.CoerceExpression;
 import org.apache.phoenix.expression.ComparisonExpression;
-import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.DivideExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.InListExpression;
@@ -49,7 +48,7 @@ import org.apache.phoenix.expression.function.ScalarFunction;
 import org.apache.phoenix.expression.function.SingleAggregateFunction;
 import org.apache.phoenix.expression.function.UDFExpression;
 
-public class CloneExpressionVisitor extends TraverseAllExpressionVisitor<Expression> {
+public abstract class CloneExpressionVisitor extends TraverseAllExpressionVisitor<Expression> {
 
     public CloneExpressionVisitor() {
     }
@@ -88,17 +87,17 @@ public class CloneExpressionVisitor extends TraverseAllExpressionVisitor<Express
 
     @Override
     public Expression visitLeave(AndExpression node, List<Expression> l) {
-        return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node : new AndExpression(l);
+        return isCloneNode(node, l) ? new AndExpression(l) : node;
     }
 
     @Override
     public Expression visitLeave(OrExpression node, List<Expression> l) {
-        return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node :  new OrExpression(l);
+        return isCloneNode(node, l) ? new OrExpression(l) : node;
     }
 
     @Override
     public Expression visitLeave(ScalarFunction node, List<Expression> l) {
-        return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node :  node.clone(l);
+        return isCloneNode(node, l) ? node.clone(l) : node;
     }
 
     public Expression visitLeave(UDFExpression node, List<Expression> l) {
@@ -108,95 +107,95 @@ public class CloneExpressionVisitor extends TraverseAllExpressionVisitor<Express
 
     @Override
     public Expression visitLeave(ComparisonExpression node, List<Expression> l) {
-        return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node :  node.clone(l);
+        return isCloneNode(node, l) ? node.clone(l) : node;
     }
 
     @Override
     public Expression visitLeave(LikeExpression node, List<Expression> l) {
-        return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node : node
-                .clone(l);
+        return isCloneNode(node, l) ? node.clone(l): node;
     }
 
     @Override
     public Expression visitLeave(SingleAggregateFunction node, List<Expression> l) {
         // Do not clone aggregate functions, as they're executed on the server side,
         // so any state for evaluation will live there.
-        return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node :  node;
+        return isCloneNode(node, l) ? node :  node;
     }
 
     @Override
     public Expression visitLeave(CaseExpression node, List<Expression> l) {
-        return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node :  new CaseExpression(l);
+        return isCloneNode(node, l) ? new CaseExpression(l) : node;
     }
 
     @Override
     public Expression visitLeave(NotExpression node, List<Expression> l) {
-        return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node :  new NotExpression(l);
+        return isCloneNode(node, l) ? new NotExpression(l) : node;
     }
 
     @Override
     public Expression visitLeave(InListExpression node, List<Expression> l) {
-        return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node :  node.clone(l);
+        return isCloneNode(node, l) ? node.clone(l) : node;
     }
 
     @Override
     public Expression visitLeave(IsNullExpression node, List<Expression> l) {
-        return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node :  node.clone(l);
+        return isCloneNode(node, l) ? node.clone(l) : node;
     }
 
     @Override
     public Expression visitLeave(SubtractExpression node, List<Expression> l) {
-        return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node :  node.clone(l);
+        return isCloneNode(node, l) ? node.clone(l) : node;
     }
 
     @Override
     public Expression visitLeave(MultiplyExpression node, List<Expression> l) {
-        return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node :  node.clone(l);
+        return isCloneNode(node, l) ? node.clone(l) : node;
     }
 
     @Override
     public Expression visitLeave(AddExpression node, List<Expression> l) {
-        return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node : node.clone(l);
+        return isCloneNode(node, l) ? node.clone(l) : node;
     }
 
     @Override
     public Expression visitLeave(DivideExpression node, List<Expression> l) {
-        return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node :  node.clone(l);
+        return isCloneNode(node, l) ? node.clone(l) : node;
     }
 
     @Override
     public Expression visitLeave(ModulusExpression node, List<Expression> l) {
-        return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node :  node.clone(l);
+        return isCloneNode(node, l) ? node.clone(l) : node;
     }
 
     @Override
     public Expression visitLeave(CoerceExpression node, List<Expression> l) {
-        return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node :  node.clone(l);
+        return isCloneNode(node, l) ? node.clone(l) : node;
     }
 
     @Override
     public Expression visitLeave(ArrayConstructorExpression node, List<Expression> l) {
-        return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node :  node.clone(l);
+        return isCloneNode(node, l) ? node.clone(l) : node;
     }
 
     @Override
     public Expression visitLeave(StringConcatExpression node, List<Expression> l) {
-        return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node :  new StringConcatExpression(l);
+        return isCloneNode(node, l) ? new StringConcatExpression(l) : node;
     }
 
     @Override
     public Expression visitLeave(RowValueConstructorExpression node, List<Expression> l) {
-        return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node :  node.clone(l);
+        return isCloneNode(node, l) ? node.clone(l) : node;
     }
 
     @Override
     public Expression visitLeave(ArrayAnyComparisonExpression node, List<Expression> l) {
-        return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node :  new ArrayAnyComparisonExpression(l);
+        return isCloneNode(node, l) ? new ArrayAnyComparisonExpression(l) : node;
     }
 
     @Override
     public Expression visitLeave(ArrayElemRefExpression node, List<Expression> l) {
-        return Determinism.PER_INVOCATION.compareTo(node.getDeterminism()) > 0 ? node :  new ArrayElemRefExpression(l);
+        return isCloneNode(node, l) ? new ArrayElemRefExpression(l) : node;
     }
 
+    public abstract boolean isCloneNode(Expression node, List<Expression> children);
 }
