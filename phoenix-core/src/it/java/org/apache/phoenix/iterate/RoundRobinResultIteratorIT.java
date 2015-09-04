@@ -28,8 +28,10 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
@@ -39,12 +41,15 @@ import java.util.concurrent.TimeUnit;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
@@ -395,5 +400,38 @@ public class RoundRobinResultIteratorIT extends BaseHBaseManagedTimeIT {
             assertEquals(numFetches, roundRobinItr.getNumberOfParallelFetches());
         }
     }
-
+    
+    @Test
+    public void testIteratorsPickedInRoundRobinFashionForSaltedTable() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String testTable = "testIteratorsPickedInRoundRobinFashionForSaltedTable".toUpperCase();
+            Statement stmt = conn.createStatement();
+            stmt.execute("CREATE TABLE " + testTable + "(K VARCHAR PRIMARY KEY) SALT_BUCKETS = 8");
+            PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class);
+            MockParallelIteratorFactory parallelIteratorFactory = new MockParallelIteratorFactory();
+            phxConn.setIteratorFactory(parallelIteratorFactory);
+            ResultSet rs = stmt.executeQuery("SELECT * FROM " + testTable);
+            StatementContext ctx = rs.unwrap(PhoenixResultSet.class).getContext();
+            PTable table = ctx.getResolver().getTables().get(0).getTable();
+            parallelIteratorFactory.setTable(table);
+            PhoenixStatement pstmt = stmt.unwrap(PhoenixStatement.class);
+            int numIterators = pstmt.getQueryPlan().getSplits().size();
+            assertEquals(8, numIterators);
+            int numFetches = 2 * numIterators;
+            List<String> iteratorOrder = new ArrayList<>(numFetches);
+            for (int i = 1; i <= numFetches; i++) {
+                rs.next();
+                iteratorOrder.add(rs.getString(1));
+            }
+            /*
+             * Because TableResultIterators are created in parallel in multiple threads, their relative order is not
+             * deterministic. However, once the iterators are assigned to a RoundRobinResultIterator, the order in which
+             * the next iterator is picked is deterministic - i1, i2, .. i7, i8, i1, i2, .. i7, i8, i1, i2, ..
+             */
+            for (int i = 0; i < numIterators; i++) {
+                assertEquals(iteratorOrder.get(i), iteratorOrder.get(i + numIterators));
+            }
+        }
+    }
+    
 }

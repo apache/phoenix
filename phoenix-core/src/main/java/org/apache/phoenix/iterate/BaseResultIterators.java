@@ -666,9 +666,19 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         }
     }
 
-    private void addIterator(List<PeekingResultIterator> parentIterators, List<PeekingResultIterator> childIterators) {
+    private void addIterator(List<PeekingResultIterator> parentIterators, List<PeekingResultIterator> childIterators) throws SQLException {
         if (!childIterators.isEmpty()) {
-            parentIterators.add(ConcatResultIterator.newIterator(childIterators));
+            if (plan.useRoundRobinIterator()) {
+                /*
+                 * When using a round robin iterator we shouldn't concatenate the iterators together. This is because a
+                 * round robin iterator should be calling next() on these iterators directly after selecting them in a 
+                 * round robin fashion. This helps take advantage of loading the underlying scanners' caches in parallel
+                 * as well as preventing errors arising out of scanner lease expirations.
+                 */
+                parentIterators.addAll(childIterators);
+            } else {
+                parentIterators.add(ConcatResultIterator.newIterator(childIterators));
+            }
         }
     }
 
