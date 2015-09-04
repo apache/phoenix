@@ -2238,4 +2238,445 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         rs = stmt.executeQuery();
         assertTrue(rs.next());
     }
+
+    @Test
+    public void testServerArrayElementProjection1() throws SQLException {
+        long ts = nextTimestamp();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String ddl = "CREATE TABLE a (p INTEGER PRIMARY KEY, arr1 INTEGER ARRAY, arr2 VARCHAR ARRAY)";
+        conn.createStatement().execute(ddl);
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
+        conn = DriverManager.getConnection(getUrl(), props);
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO a VALUES (1, ARRAY[1, 2], ARRAY['a', 'b'])");
+        stmt.execute();
+        conn.commit();
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
+        conn = DriverManager.getConnection(getUrl(), props);
+        ResultSet rs;
+        stmt = conn.prepareStatement("SELECT arr1, arr1[1], arr2[1] FROM a");
+        rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertEquals(conn.createArrayOf("INTEGER", new Integer[]{1, 2}), rs.getArray(1));
+        assertEquals(1, rs.getInt(2));
+        assertEquals("a", rs.getString(3));
+    }
+
+    @Test
+    public void testServerArrayElementProjection2() throws SQLException {
+        long ts = nextTimestamp();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String ddl = "CREATE TABLE a (p INTEGER PRIMARY KEY, arr1 INTEGER ARRAY, arr2 VARCHAR ARRAY, arr3 INTEGER ARRAY)";
+        conn.createStatement().execute(ddl);
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
+        conn = DriverManager.getConnection(getUrl(), props);
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO a VALUES (1, ARRAY[1, 2], ARRAY['a', 'b'], ARRAY[2, 3])");
+        stmt.execute();
+        conn.commit();
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
+        conn = DriverManager.getConnection(getUrl(), props);
+        ResultSet rs;
+        stmt = conn.prepareStatement("SELECT arr1, arr1[1], arr2[1], arr3[1] from a");
+        rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertEquals(conn.createArrayOf("INTEGER", new Integer[]{1, 2}), rs.getArray(1));
+        assertEquals(1, rs.getInt(2));
+        assertEquals("a", rs.getString(3));
+        assertEquals(2, rs.getInt(4));
+    }
+
+    @Test
+    public void testServerArrayElementProjection3() throws SQLException {
+        long ts = nextTimestamp();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String ddl = "CREATE TABLE a (p INTEGER PRIMARY KEY, arr1 INTEGER ARRAY, arr2 VARCHAR ARRAY, arr3 INTEGER ARRAY)";
+        conn.createStatement().execute(ddl);
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
+        conn = DriverManager.getConnection(getUrl(), props);
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO a VALUES (1, ARRAY[1, 2], ARRAY['a', 'b'], ARRAY[2, 3])");
+        stmt.execute();
+        conn.commit();
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
+        conn = DriverManager.getConnection(getUrl(), props);
+        ResultSet rs;
+        stmt = conn.prepareStatement("SELECT arr1, arr1[1], arr2[1], arr3, arr3[1] from a");
+        rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertEquals(conn.createArrayOf("INTEGER", new Integer[]{1, 2}), rs.getArray(1));
+        assertEquals(1, rs.getInt(2));
+        assertEquals("a", rs.getString(3));
+        assertEquals(conn.createArrayOf("INTEGER", new Integer[]{2, 3}), rs.getArray(4));
+        assertEquals(2, rs.getInt(5));
+    }
+
+    @Test
+    public void testServerArrayElementProjection4() throws SQLException {
+        long ts = nextTimestamp();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String ddl = "CREATE TABLE a (p INTEGER PRIMARY KEY, arr1 INTEGER ARRAY, arr2 VARCHAR ARRAY, arr3 INTEGER ARRAY)";
+        conn.createStatement().execute(ddl);
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
+        conn = DriverManager.getConnection(getUrl(), props);
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO a VALUES (1, ARRAY[1, 2], ARRAY['a', 'b'], ARRAY[2, 3])");
+        stmt.execute();
+        conn.commit();
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
+        conn = DriverManager.getConnection(getUrl(), props);
+        ResultSet rs;
+        stmt = conn.prepareStatement("SELECT arr1, arr1[1], arr2[1], ARRAY_APPEND(arr3, 4), arr3[1] from a");
+        rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertEquals(conn.createArrayOf("INTEGER", new Integer[]{1, 2}), rs.getArray(1));
+        assertEquals(1, rs.getInt(2));
+        assertEquals("a", rs.getString(3));
+        assertEquals(conn.createArrayOf("INTEGER", new Integer[]{2, 3, 4}), rs.getArray(4));
+        assertEquals(2, rs.getInt(5));
+    }
+
+    @Test
+    public void testServerArrayElementProjection5() throws SQLException {
+        long ts = nextTimestamp();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String ddl = "CREATE TABLE a (p INTEGER PRIMARY KEY, arr1 INTEGER ARRAY, arr3 INTEGER ARRAY)";
+        conn.createStatement().execute(ddl);
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
+        conn = DriverManager.getConnection(getUrl(), props);
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO a VALUES (1, ARRAY[1, 2], ARRAY[2, 3])");
+        stmt.execute();
+        conn.commit();
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
+        conn = DriverManager.getConnection(getUrl(), props);
+        ResultSet rs;
+        stmt = conn.prepareStatement("SELECT arr1, arr1[1], ARRAY_APPEND(arr1, arr3[1]) from a");
+        rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertEquals(conn.createArrayOf("INTEGER", new Integer[]{1, 2}), rs.getArray(1));
+        assertEquals(1, rs.getInt(2));
+        assertEquals(conn.createArrayOf("INTEGER", new Integer[]{1, 2, 2}), rs.getArray(3));
+    }
+
+    @Test
+    public void testServerArrayElementProjection6() throws SQLException {
+        long ts = nextTimestamp();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String ddl = "CREATE TABLE a (p INTEGER PRIMARY KEY, arr1 INTEGER ARRAY, arr2 INTEGER ARRAY)";
+        conn.createStatement().execute(ddl);
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
+        conn = DriverManager.getConnection(getUrl(), props);
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO a VALUES (1, ARRAY[1, 2], ARRAY[2, 3])");
+        stmt.execute();
+        conn.commit();
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
+        conn = DriverManager.getConnection(getUrl(), props);
+        ResultSet rs;
+        stmt = conn.prepareStatement("SELECT arr1, arr1[1], ARRAY_APPEND(arr1, arr2[1]), p from a");
+        rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertEquals(conn.createArrayOf("INTEGER", new Integer[]{1, 2}), rs.getArray(1));
+        assertEquals(1, rs.getInt(2));
+        assertEquals(conn.createArrayOf("INTEGER", new Integer[]{1, 2, 2}), rs.getArray(3));
+        assertEquals(1, rs.getInt(4));
+    }
+
+    @Test
+    public void testServerArrayElementProjection7() throws SQLException {
+        long ts = nextTimestamp();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String ddl = "CREATE TABLE a (p INTEGER PRIMARY KEY, arr1 INTEGER ARRAY, arr2 INTEGER ARRAY)";
+        conn.createStatement().execute(ddl);
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
+        conn = DriverManager.getConnection(getUrl(), props);
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO a VALUES (1, ARRAY[1, 2], ARRAY[2, 3])");
+        stmt.execute();
+        conn.commit();
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
+        conn = DriverManager.getConnection(getUrl(), props);
+        ResultSet rs;
+        stmt = conn.prepareStatement("SELECT arr1, arr1[1], ARRAY_APPEND(ARRAY_APPEND(arr1, arr2[2]), arr2[1]), p from a");
+        rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertEquals(conn.createArrayOf("INTEGER", new Integer[]{1, 2}), rs.getArray(1));
+        assertEquals(1, rs.getInt(2));
+        assertEquals(conn.createArrayOf("INTEGER", new Integer[]{1, 2, 3, 2}), rs.getArray(3));
+        assertEquals(1, rs.getInt(4));
+    }
+
+    @Test
+    public void testServerArrayElementProjection8() throws SQLException {
+        long ts = nextTimestamp();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String ddl = "CREATE TABLE a (p INTEGER PRIMARY KEY, arr1 INTEGER ARRAY, arr2 INTEGER ARRAY)";
+        conn.createStatement().execute(ddl);
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
+        conn = DriverManager.getConnection(getUrl(), props);
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO a VALUES (1, ARRAY[1, 2], ARRAY[2, 3])");
+        stmt.execute();
+        conn.commit();
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
+        conn = DriverManager.getConnection(getUrl(), props);
+        ResultSet rs;
+        stmt = conn.prepareStatement("SELECT arr1, arr1[1], ARRAY_ELEM(ARRAY_APPEND(arr1, arr2[1]), 1), p, arr2[2] from a");
+        rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertEquals(conn.createArrayOf("INTEGER", new Integer[]{1, 2}), rs.getArray(1));
+        assertEquals(1, rs.getInt(2));
+        assertEquals(1, rs.getInt(3));
+        assertEquals(1, rs.getInt(4));
+        assertEquals(3, rs.getInt(5));
+    }
+
+    @Test
+    public void testServerArrayElementProjection9() throws SQLException {
+        long ts = nextTimestamp();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String ddl = "CREATE TABLE a (p INTEGER ARRAY PRIMARY KEY, arr1 INTEGER ARRAY, arr2 INTEGER ARRAY)";
+        conn.createStatement().execute(ddl);
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
+        conn = DriverManager.getConnection(getUrl(), props);
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO a VALUES (ARRAY[5, 6], ARRAY[1, 2], ARRAY[2, 3])");
+        stmt.execute();
+        conn.commit();
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
+        conn = DriverManager.getConnection(getUrl(), props);
+        ResultSet rs;
+        stmt = conn.prepareStatement("SELECT arr1, arr1[1], ARRAY_ELEM(ARRAY_APPEND(arr1, arr2[1]), 1), p, arr2[2] from a");
+        rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertEquals(conn.createArrayOf("INTEGER", new Integer[]{1, 2}), rs.getArray(1));
+        assertEquals(1, rs.getInt(2));
+        assertEquals(1, rs.getInt(3));
+        assertEquals(conn.createArrayOf("INTEGER", new Integer[]{5, 6}), rs.getArray(4));
+        assertEquals(3, rs.getInt(5));
+    }
+
+    @Test
+    public void testServerArrayElementProjection10() throws SQLException {
+        long ts = nextTimestamp();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String ddl = "CREATE TABLE a (p INTEGER PRIMARY KEY, arr1 INTEGER ARRAY, arr2 INTEGER ARRAY)";
+        conn.createStatement().execute(ddl);
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
+        conn = DriverManager.getConnection(getUrl(), props);
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO a VALUES (1, ARRAY[1, 2], ARRAY[2, 3])");
+        stmt.execute();
+        conn.commit();
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
+        conn = DriverManager.getConnection(getUrl(), props);
+        ResultSet rs;
+        stmt = conn.prepareStatement("SELECT arr1[1] + 5, arr2[1] FROM a");
+        rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertEquals(6, rs.getInt(1));
+        assertEquals(2, rs.getInt(2));
+    }
+
+    @Test
+    public void testServerArrayElementProjection11() throws SQLException {
+        long ts = nextTimestamp();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String ddl = "CREATE TABLE a (p INTEGER PRIMARY KEY, arr1 INTEGER ARRAY, arr2 INTEGER ARRAY)";
+        conn.createStatement().execute(ddl);
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
+        conn = DriverManager.getConnection(getUrl(), props);
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO a VALUES (1, ARRAY[1, 2], ARRAY[2, 3])");
+        stmt.execute();
+        stmt = conn.prepareStatement("UPSERT INTO a VALUES (2, ARRAY[1, 2], ARRAY[2, 3])");
+        stmt.execute();
+        stmt = conn.prepareStatement("UPSERT INTO a VALUES (3, ARRAY[1, 2], ARRAY[2, 3])");
+        stmt.execute();
+        stmt = conn.prepareStatement("UPSERT INTO a VALUES (4, ARRAY[1, 2], ARRAY[2, 3])");
+        stmt.execute();
+        conn.commit();
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
+        conn = DriverManager.getConnection(getUrl(), props);
+        ResultSet rs;
+        stmt = conn.prepareStatement("SELECT CASE WHEN p = 1 THEN arr1[1] WHEN p = 2 THEN arr1[2] WHEN p = 3 THEN arr2[1] ELSE arr2[2] END FROM a");
+        rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertEquals(1, rs.getInt(1));
+        assertTrue(rs.next());
+        assertEquals(2, rs.getInt(1));
+        assertTrue(rs.next());
+        assertEquals(2, rs.getInt(1));
+        assertTrue(rs.next());
+        assertEquals(3, rs.getInt(1));
+        assertFalse(rs.next());
+    }
+
+    @Test
+    public void testServerArrayElementProjection12() throws SQLException {
+        long ts = nextTimestamp();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String ddl = "CREATE TABLE a (p INTEGER PRIMARY KEY, arr1 INTEGER ARRAY, arr2 INTEGER ARRAY)";
+        conn.createStatement().execute(ddl);
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
+        conn = DriverManager.getConnection(getUrl(), props);
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO a VALUES (1, ARRAY[1, 2], ARRAY[2, 3])");
+        stmt.execute();
+        stmt = conn.prepareStatement("UPSERT INTO a VALUES (2, ARRAY[1, 2], ARRAY[2, 3])");
+        stmt.execute();
+        stmt = conn.prepareStatement("UPSERT INTO a VALUES (3, ARRAY[1, 2], ARRAY[2, 3])");
+        stmt.execute();
+        stmt = conn.prepareStatement("UPSERT INTO a VALUES (4, ARRAY[1, 2], ARRAY[2, 3])");
+        stmt.execute();
+        conn.commit();
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
+        conn = DriverManager.getConnection(getUrl(), props);
+        ResultSet rs;
+        stmt = conn.prepareStatement("SELECT CASE WHEN p = 1 THEN arr1[1] WHEN p = 2 THEN arr1[2] WHEN p = 3 THEN arr2[1] ELSE arr2[2] END, ARRAY_APPEND(arr1, arr1[1]) FROM a");
+        rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertEquals(1, rs.getInt(1));
+        assertEquals(conn.createArrayOf("INTEGER", new Integer[]{1, 2, 1}), rs.getArray(2));
+        assertTrue(rs.next());
+        assertEquals(2, rs.getInt(1));
+        assertEquals(conn.createArrayOf("INTEGER", new Integer[]{1, 2, 1}), rs.getArray(2));
+        assertTrue(rs.next());
+        assertEquals(2, rs.getInt(1));
+        assertEquals(conn.createArrayOf("INTEGER", new Integer[]{1, 2, 1}), rs.getArray(2));
+        assertTrue(rs.next());
+        assertEquals(3, rs.getInt(1));
+        assertEquals(conn.createArrayOf("INTEGER", new Integer[]{1, 2, 1}), rs.getArray(2));
+        assertFalse(rs.next());
+    }
+
+    @Test
+    public void testServerArrayElementProjection13() throws SQLException {
+        long ts = nextTimestamp();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String ddl = "CREATE TABLE a (p INTEGER PRIMARY KEY, arr1 INTEGER ARRAY, arr2 INTEGER ARRAY)";
+        conn.createStatement().execute(ddl);
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
+        conn = DriverManager.getConnection(getUrl(), props);
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO a VALUES (1, ARRAY[1, 2], ARRAY[2, 3])");
+        stmt.execute();
+        stmt = conn.prepareStatement("UPSERT INTO a VALUES (2, ARRAY[3, 2], ARRAY[2, 3])");
+        stmt.execute();
+        stmt = conn.prepareStatement("UPSERT INTO a VALUES (3, ARRAY[3, 5], ARRAY[2, 3])");
+        stmt.execute();
+        stmt = conn.prepareStatement("UPSERT INTO a VALUES (4, ARRAY[3, 5], ARRAY[6, 3])");
+        stmt.execute();
+        conn.commit();
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
+        conn = DriverManager.getConnection(getUrl(), props);
+        ResultSet rs;
+        stmt = conn.prepareStatement("SELECT CASE WHEN arr1[1] = 1 THEN 1 WHEN arr1[2] = 2 THEN 2 WHEN arr2[1] = 2 THEN 2 ELSE arr2[2] END FROM a");
+        rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertEquals(1, rs.getInt(1));
+        assertTrue(rs.next());
+        assertEquals(2, rs.getInt(1));
+        assertTrue(rs.next());
+        assertEquals(2, rs.getInt(1));
+        assertTrue(rs.next());
+        assertEquals(3, rs.getInt(1));
+        assertFalse(rs.next());
+    }
+
+    @Test
+    public void testServerArrayElementProjection14() throws SQLException {
+        long ts = nextTimestamp();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String ddl = "CREATE TABLE a (p INTEGER ARRAY PRIMARY KEY, arr1 INTEGER ARRAY, arr2 INTEGER ARRAY)";
+        conn.createStatement().execute(ddl);
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
+        conn = DriverManager.getConnection(getUrl(), props);
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO a VALUES (ARRAY[5, 6], ARRAY[1, 2], ARRAY[2, 3])");
+        stmt.execute();
+        conn.commit();
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
+        conn = DriverManager.getConnection(getUrl(), props);
+        ResultSet rs;
+        stmt = conn.prepareStatement("SELECT ARRAY_ELEM(ARRAY_PREPEND(arr2[1], ARRAY_CAT(arr1, ARRAY[arr2[2],3])), 1), arr1[1], ARRAY_ELEM(ARRAY_APPEND(arr1, arr2[1]), 1), p, arr2[2] from a");
+        rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertEquals(2, rs.getInt(1));
+        assertEquals(1, rs.getInt(2));
+        assertEquals(1, rs.getInt(3));
+        assertEquals(conn.createArrayOf("INTEGER", new Integer[]{5, 6}), rs.getArray(4));
+        assertEquals(3, rs.getInt(5));
+    }
 }
