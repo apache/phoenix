@@ -164,7 +164,10 @@ public class WriteWorkload implements Workload {
             DataLoadThreadTime dataLoadThreadTime, Scenario scenario) throws Exception {
         logger.info("\nLoading " + scenario.getRowCount() + " rows for " + scenario.getTableName());
         long start = System.currentTimeMillis();
-
+        
+        // Execute any Scenario DDL before running workload
+        pUtil.executeScenarioDdl(scenario);
+        
         List<Future> writeBatches = getBatches(dataLoadThreadTime, scenario);
 
         waitForBatches(dataLoadTimeSummary, scenario, start, writeBatches);
