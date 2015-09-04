@@ -39,13 +39,11 @@ import java.sql.Time;
 import java.sql.Timestamp;
 import java.text.Format;
 import java.util.Calendar;
-import java.util.List;
 import java.util.Map;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.ColumnProjector;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.StatementContext;
@@ -1293,6 +1291,10 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable, org.apache.pho
     public void resetMetrics() {
         readMetricsQueue.clearMetrics();
         overAllQueryMetrics.reset();
+    }
+    
+    public StatementContext getContext() {
+        return context;
     }
 
 }
