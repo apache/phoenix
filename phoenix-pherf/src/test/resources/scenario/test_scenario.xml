@@ -223,5 +223,11 @@
         <!-- Test writing to a Multi-tenant View -->
         <scenario tableName="PHERF.TEST_VIEW" tenantId="abcdefghijklmno" rowCount="100" name="testMTWriteScenario">
         </scenario>
+        <!--  Test scenario DDL -->
+        <scenario tableName="PHERF.TEST_MT_VIEW" tenantId="abcdefghijklmno" 
+                    ddl="CREATE VIEW IF NOT EXISTS PHERF.TEST_MT_VIEW (field1 VARCHAR) AS SELECT * FROM PHERF.TEST_MULTI_TENANT_TABLE" 
+                    rowCount="100" name="testMTDdlWriteScenario">
+        </scenario>
+        
     </scenarios>
 </datamodel>
