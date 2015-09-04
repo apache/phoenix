@@ -1070,6 +1070,10 @@ public class CalciteIT extends BaseClientManagedTimeIT {
         start().sql("commit").execute();
     }
 
+    @Test public void testCreateView() {
+        start().sql("create view v as select * from (values (1, 'a'), (2, 'b')) as t(x, y)").execute();
+    }
+
     @Test public void testConnectJoinHsqldb() {
         final Start start = new Start(new Properties(), false) {
             @Override

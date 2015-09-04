@@ -31,7 +31,8 @@
 
   # List of methods for parsing custom SQL statements.
   statementParserMethods: [
-    "SqlCommit()"
+    "SqlCommit()",
+    "SqlCreateView()"
   ]
 
   # List of methods for parsing custom literals.

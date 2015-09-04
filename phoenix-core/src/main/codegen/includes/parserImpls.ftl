@@ -34,3 +34,33 @@ SqlNode SqlCommit() :
         return new SqlCommit(pos);
     }
 }
+
+// Remove when
+//  [CALCITE-851] Add original SQL string as a field in the parser
+// is fixed.
+JAVACODE
+public String originalSql() {
+   return org.apache.phoenix.calcite.jdbc.PhoenixPrepareImpl.THREAD_SQL_STRING.get();
+}
+
+SqlNode SqlCreateView() :
+{
+    SqlParserPos pos;
+    SqlIdentifier name;
+    SqlNode query;
+}
+{
+    <CREATE> { pos = getPos(); } <VIEW> name = CompoundIdentifier()
+    <AS>
+    query = OrderedQueryOrExpr(ExprContext.ACCEPT_QUERY)
+    {
+        String sql = originalSql();
+        SqlParserPos pos2 = query.getParserPosition();
+        SqlParserPos pos3 = getPos();
+        int start = SqlParserUtil.lineColToIndex(sql, pos2.getLineNum(), pos2.getColumnNum());
+        int end = SqlParserUtil.lineColToIndex(sql, pos3.getEndLineNum(), pos3.getEndColumnNum());
+        String queryString = sql.substring(start, end + 1);
+        System.out.println("[" + queryString + "]");
+        return new SqlCreateView(pos.plus(pos3), name, query, queryString);
+    }
+}
