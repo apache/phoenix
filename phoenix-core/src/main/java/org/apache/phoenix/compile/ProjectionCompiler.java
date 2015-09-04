@@ -23,6 +23,7 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -42,12 +43,14 @@ import org.apache.phoenix.expression.CoerceExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.LiteralExpression;
+import org.apache.phoenix.expression.ProjectedColumnExpression;
 import org.apache.phoenix.expression.aggregator.ClientAggregators;
 import org.apache.phoenix.expression.aggregator.ServerAggregators;
 import org.apache.phoenix.expression.function.ArrayIndexFunction;
 import org.apache.phoenix.expression.function.SingleAggregateFunction;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
-import org.apache.phoenix.expression.visitor.KeyValueExpressionVisitor;
+import org.apache.phoenix.expression.visitor.ProjectedColumnExpressionVisitor;
+import org.apache.phoenix.expression.visitor.ReplaceArrayFunctionExpressionVisitor;
 import org.apache.phoenix.expression.visitor.SingleAggregateFunctionVisitor;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.parse.AliasedNode;
@@ -104,8 +107,6 @@ import com.google.common.collect.Sets;
  * @since 0.1
  */
 public class ProjectionCompiler {
-    private static ValueBitSet arrayIndexesBitSet; 
-    private static KeyValueSchema arrayIndexesSchema;
     private ProjectionCompiler() {
     }
     
@@ -339,10 +340,13 @@ public class ProjectionCompiler {
      */
     public static RowProjector compile(StatementContext context, SelectStatement statement, GroupBy groupBy, List<? extends PDatum> targetColumns) throws SQLException {
         List<KeyValueColumnExpression> arrayKVRefs = new ArrayList<KeyValueColumnExpression>();
+        List<ProjectedColumnExpression> arrayProjectedColumnRefs = new ArrayList<ProjectedColumnExpression>();
         List<Expression> arrayKVFuncs = new ArrayList<Expression>();
+        List<Expression> arrayOldFuncs = new ArrayList<Expression>();
+        Map<Expression, Integer> arrayExpressionCounts = new HashMap<>();
         List<AliasedNode> aliasedNodes = statement.getSelect();
         // Setup projected columns in Scan
-        SelectClauseVisitor selectVisitor = new SelectClauseVisitor(context, groupBy, arrayKVRefs, arrayKVFuncs, statement);
+        SelectClauseVisitor selectVisitor = new SelectClauseVisitor(context, groupBy, arrayKVRefs, arrayKVFuncs, arrayExpressionCounts, arrayProjectedColumnRefs, arrayOldFuncs, statement);
         List<ExpressionProjector> projectedColumns = new ArrayList<ExpressionProjector>();
         ColumnResolver resolver = context.getResolver();
         TableRef tableRef = context.getCurrentTable();
@@ -409,22 +413,46 @@ public class ProjectionCompiler {
                 String name = columnAlias == null ? expression.toString() : columnAlias;
                 projectedColumns.add(new ExpressionProjector(name, tableRef.getTableAlias() == null ? (table.getName() == null ? "" : table.getName().getString()) : tableRef.getTableAlias(), expression, isCaseSensitive));
             }
-            if(arrayKVFuncs.size() > 0 && arrayKVRefs.size() > 0) {
-                serailizeArrayIndexInformationAndSetInScan(context, arrayKVFuncs, arrayKVRefs);
-                KeyValueSchemaBuilder builder = new KeyValueSchemaBuilder(0);
-                for (Expression expression : arrayKVRefs) {
-                    builder.addField(expression);
-                }
-                KeyValueSchema kvSchema = builder.build();
-                arrayIndexesBitSet = ValueBitSet.newInstance(kvSchema);
-                builder = new KeyValueSchemaBuilder(0);
-                for (Expression expression : arrayKVFuncs) {
-                    builder.addField(expression);
-                }
-                arrayIndexesSchema = builder.build();
-            }
+
             selectVisitor.reset();
             index++;
+        }
+
+        for (int i = arrayProjectedColumnRefs.size() - 1; i >= 0; i--) {
+            Expression expression = arrayProjectedColumnRefs.get(i);
+            Integer count = arrayExpressionCounts.get(expression);
+            if (count != 0) {
+                arrayKVRefs.remove(i);
+                arrayKVFuncs.remove(i);
+                arrayOldFuncs.remove(i);
+            }
+        }
+
+        if (arrayKVFuncs.size() > 0 && arrayKVRefs.size() > 0) {
+            serailizeArrayIndexInformationAndSetInScan(context, arrayKVFuncs, arrayKVRefs);
+            KeyValueSchemaBuilder builder = new KeyValueSchemaBuilder(0);
+            for (Expression expression : arrayKVRefs) {
+                builder.addField(expression);
+            }
+            KeyValueSchema kvSchema = builder.build();
+            ValueBitSet arrayIndexesBitSet = ValueBitSet.newInstance(kvSchema);
+            builder = new KeyValueSchemaBuilder(0);
+            for (Expression expression : arrayKVFuncs) {
+                builder.addField(expression);
+            }
+            KeyValueSchema arrayIndexesSchema = builder.build();
+
+            Map<Expression, Expression> replacementMap = new HashMap<>();
+            for(int i = 0; i < arrayOldFuncs.size(); i++){
+                Expression function =arrayKVFuncs.get(i);
+                replacementMap.put(arrayOldFuncs.get(i), new ArrayIndexExpression(i, function.getDataType(), arrayIndexesBitSet, arrayIndexesSchema));
+            }
+
+            ReplaceArrayFunctionExpressionVisitor visitor = new ReplaceArrayFunctionExpressionVisitor(replacementMap);
+            for (int i = 0; i < projectedColumns.size(); i++) {
+                ExpressionProjector projector = projectedColumns.get(i);
+                projectedColumns.set(i, new ExpressionProjector(projector.getName(), tableRef.getTableAlias() == null ? (table.getName() == null ? "" : table.getName().getString()) : tableRef.getTableAlias(), projector.getExpression().accept(visitor), projector.isCaseSensitive()));
+            }
         }
 
         // TODO make estimatedByteSize more accurate by counting the joined columns.
@@ -473,17 +501,21 @@ public class ProjectionCompiler {
     static class ArrayIndexExpression extends BaseTerminalExpression {
         private final int position;
         private final PDataType type;
+        private final ValueBitSet arrayIndexesBitSet;
+        private final KeyValueSchema arrayIndexesSchema;
 
-        public ArrayIndexExpression(int position, PDataType type) {
+        public ArrayIndexExpression(int position, PDataType type, ValueBitSet arrayIndexesBitSet, KeyValueSchema arrayIndexesSchema) {
             this.position = position;
             this.type =  type;
+            this.arrayIndexesBitSet = arrayIndexesBitSet;
+            this.arrayIndexesSchema = arrayIndexesSchema;
         }
 
         @Override
         public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
             if (!tuple.getValue(QueryConstants.ARRAY_VALUE_COLUMN_FAMILY, QueryConstants.ARRAY_VALUE_COLUMN_QUALIFIER,
                     ptr)) { 
-              return false; 
+              return false;
             }
             int maxOffset = ptr.getOffset() + ptr.getLength();
             arrayIndexesBitSet.or(ptr);
@@ -556,13 +588,19 @@ public class ProjectionCompiler {
         private int elementCount;
         private List<KeyValueColumnExpression> arrayKVRefs;
         private List<Expression> arrayKVFuncs;
+        private List<Expression> arrayOldFuncs;
+        private List<ProjectedColumnExpression> arrayProjectedColumnRefs;
+        private Map<Expression, Integer> arrayExpressionCounts;
         private SelectStatement statement; 
         
         private SelectClauseVisitor(StatementContext context, GroupBy groupBy, 
-                List<KeyValueColumnExpression> arrayKVRefs, List<Expression> arrayKVFuncs, SelectStatement statement) {
+                List<KeyValueColumnExpression> arrayKVRefs, List<Expression> arrayKVFuncs, Map<Expression, Integer> arrayExpressionCounts, List<ProjectedColumnExpression> arrayProjectedColumnRefs, List<Expression> arrayOldFuncs, SelectStatement statement) {
             super(context, groupBy);
             this.arrayKVRefs = arrayKVRefs;
             this.arrayKVFuncs = arrayKVFuncs;
+            this.arrayOldFuncs = arrayOldFuncs;
+            this.arrayExpressionCounts = arrayExpressionCounts;
+            this.arrayProjectedColumnRefs = arrayProjectedColumnRefs;
             this.statement = statement;
             reset();
         }
@@ -614,6 +652,16 @@ public class ProjectionCompiler {
             isCaseSensitive = isCaseSensitive && node.isCaseSensitive();
             return ref;
         }
+
+        @Override
+        public Expression visit(ColumnParseNode node) throws SQLException {
+            Expression expression = super.visit(node);
+            if (expression.getDataType().isArrayType()) {
+                Integer count = arrayExpressionCounts.get(expression);
+                arrayExpressionCounts.put(expression, count != null ? (count + 1) : 1);
+            }
+            return expression;
+        }
         
         @Override
         public void addElement(List<Expression> l, Expression element) {
@@ -633,37 +681,43 @@ public class ProjectionCompiler {
         }
         
         @Override
-        public Expression visitLeave(FunctionParseNode node, List<Expression> children) throws SQLException {
-            Expression func = super.visitLeave(node,children);
+        public Expression visitLeave(FunctionParseNode node, final List<Expression> children) throws SQLException {
+
             // this need not be done for group by clause with array. Hence the below check
-            if (!statement.isAggregate() && ArrayIndexFunction.NAME.equals(node.getName())) {
+            if (!statement.isAggregate() && ArrayIndexFunction.NAME.equals(node.getName()) && children.get(0) instanceof ProjectedColumnExpression) {
                  final List<KeyValueColumnExpression> indexKVs = Lists.newArrayList();
+                 final List<ProjectedColumnExpression> indexProjectedColumns = Lists.newArrayList();
+                 final List<Expression> copyOfChildren = new ArrayList<>(children);
                  // Create anon visitor to find reference to array in a generic way
-                 children.get(0).accept(new KeyValueExpressionVisitor() {
+                 children.get(0).accept(new ProjectedColumnExpressionVisitor() {
                      @Override
-                     public Void visit(KeyValueColumnExpression expression) {
+                     public Void visit(ProjectedColumnExpression expression) {
                          if (expression.getDataType().isArrayType()) {
-                             indexKVs.add(expression);
+                             indexProjectedColumns.add(expression);
+                             KeyValueColumnExpression keyValueColumnExpression = new KeyValueColumnExpression(expression.getColumn());
+                             indexKVs.add(keyValueColumnExpression);
+                             copyOfChildren.set(0, keyValueColumnExpression);
+                             Integer count = arrayExpressionCounts.get(expression);
+                             arrayExpressionCounts.put(expression, count != null ? (count - 1) : -1);
                          }
                          return null;
                      }
                  });
+
+                 Expression func = super.visitLeave(node,children);
                  // Add the keyvalues which is of type array
                  if (!indexKVs.isEmpty()) {
                     arrayKVRefs.addAll(indexKVs);
-                    // Track the array index function also 
-                    arrayKVFuncs.add(func);
-                    // Store the index of the array index function in the select query list
-                    func = replaceArrayIndexFunction(func, arrayKVFuncs.size() - 1);
-                    return func;
+                    arrayProjectedColumnRefs.addAll(indexProjectedColumns);
+                    Expression funcModified = super.visitLeave(node, copyOfChildren);
+                    // Track the array index function also
+                    arrayKVFuncs.add(funcModified);
+                    arrayOldFuncs.add(func);
                 }
+                return func;
+            } else {
+                return super.visitLeave(node,children);
             }
-            return func;
-        }
-        
-        public Expression replaceArrayIndexFunction(Expression func, int size) {
-            return new ArrayIndexExpression(size, func.getDataType());
         }
     }
-
 }
