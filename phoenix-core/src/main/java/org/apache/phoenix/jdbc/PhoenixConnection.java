@@ -64,6 +64,7 @@ import org.apache.phoenix.execute.CommitException;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.expression.function.FunctionArgumentType;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
+import org.apache.phoenix.iterate.ParallelIteratorFactory;
 import org.apache.phoenix.jdbc.PhoenixStatement.PhoenixStatementParser;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.query.ConnectionQueryServices;
@@ -141,6 +142,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     private Map<String, String> customTracingAnnotations = emptyMap();
     private final boolean isRequestLevelMetricsEnabled;
     private final boolean isDescVarLengthRowKeyUpgrade;
+    private ParallelIteratorFactory parallelIteratorFactory;
     
     
     static {
@@ -905,5 +907,19 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
      */
     public boolean isDescVarLengthRowKeyUpgrade() {
         return isDescVarLengthRowKeyUpgrade;
+    }
+    
+    /**
+     * Added for tests only. Do not use this elsewhere.
+     */
+    public ParallelIteratorFactory getIteratorFactory() {
+        return parallelIteratorFactory;
+    }
+    
+    /**
+     * Added for testing purposes. Do not use this elsewhere.
+     */
+    public void setIteratorFactory(ParallelIteratorFactory parallelIteratorFactory) {
+        this.parallelIteratorFactory = parallelIteratorFactory;
     }
 }
