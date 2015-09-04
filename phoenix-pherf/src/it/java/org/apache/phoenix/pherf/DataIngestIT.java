@@ -18,10 +18,6 @@
 
 package org.apache.phoenix.pherf;
 
-import com.jcabi.jdbc.JdbcSession;
-import com.jcabi.jdbc.Outcome;
-
-import org.apache.phoenix.pherf.PherfConstants.GeneratePhoenixStats;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
@@ -35,6 +31,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.phoenix.pherf.PherfConstants.GeneratePhoenixStats;
 import org.apache.phoenix.pherf.configuration.Column;
 import org.apache.phoenix.pherf.configuration.DataModel;
 import org.apache.phoenix.pherf.configuration.DataTypeMapping;
@@ -177,6 +174,26 @@ public class DataIngestIT extends ResultBaseTestIT {
         assertExpectedNumberOfRecordsWritten(scenario);
     }
 
+    
+    @Test
+    public void testMultiTenantScenarioRunBeforeWriteWorkload() throws Exception {
+        // Arrange
+        Scenario scenario = parser.getScenarioByName("testMTDdlWriteScenario");
+        WorkloadExecutor executor = new WorkloadExecutor();
+        executor.add(new WriteWorkload(util, parser, scenario, GeneratePhoenixStats.NO));
+        
+        // Act
+        try {
+            // Wait for data to load up.
+            executor.get();
+            executor.shutdown();
+        } catch (Exception e) {
+            fail("Failed to load data. An exception was thrown: " + e.getMessage());
+        }
+
+        assertExpectedNumberOfRecordsWritten(scenario);
+    }
+    
     private void assertExpectedNumberOfRecordsWritten(Scenario scenario) throws Exception,
             SQLException {
         Connection connection = util.getConnection(scenario.getTenantId());
