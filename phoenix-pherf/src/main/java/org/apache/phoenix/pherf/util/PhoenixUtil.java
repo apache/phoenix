@@ -243,6 +243,27 @@ public class PhoenixUtil {
             }
         }
     }
+    
+    /**
+     * Executes any ddl defined at the scenario level. This is executed before we commence
+     * the data load.
+     * 
+     * @throws Exception
+     */
+    public void executeScenarioDdl(Scenario scenario) throws Exception {
+        if (null != scenario.getDdl()) {
+            Connection conn = null;
+            try {
+                logger.info("\nExecuting DDL:" + scenario.getDdl() + " on tenantId:"
+                        + scenario.getTenantId());
+                executeStatement(scenario.getDdl(), conn = getConnection(scenario.getTenantId()));
+            } finally {
+                if (null != conn) {
+                    conn.close();
+                }
+            }
+        }
+    }
 
     public static String getZookeeper() {
         return zookeeper;

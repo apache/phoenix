@@ -39,6 +39,7 @@ public class Scenario {
     private WriteParams writeParams;
     private String name;
     private String tenantId;
+    private String ddl;
 
     public Scenario() {
         writeParams = new WriteParams();
@@ -178,6 +179,18 @@ public class Scenario {
         this.tenantId = tenantId;
     }
 
+    /**
+     * Scenario level DDL that is executed before running the scenario.
+     */
+    @XmlAttribute
+    public String getDdl() {
+        return ddl;
+    }
+    
+    public void setDdl(String ddl) {
+        this.ddl = ddl;
+    }
+    
     public WriteParams getWriteParams() {
         return writeParams;
     }
