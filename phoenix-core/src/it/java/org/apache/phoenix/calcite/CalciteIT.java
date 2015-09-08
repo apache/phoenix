@@ -418,8 +418,8 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                            "      PhoenixServerJoin(condition=[=($5, $7)], joinType=[inner])\n" +
                            "        PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
                            "        PhoenixToClientConverter\n" +
-                           "          PhoenixServerProject(supplier_id=[$0], NAME=[$1], PHONE=[$2], ADDRESS=[$3], LOC_ID=[$4], $f5=[CAST($1):VARCHAR(2) CHARACTER SET \"ISO-8859-1\" COLLATE \"ISO-8859-1$en_US$primary\" NOT NULL])\n" +
-                           "            PhoenixTableScan(table=[[phoenix, Join, SupplierTable]], filter=[=(CAST($1):VARCHAR(2) CHARACTER SET \"ISO-8859-1\" COLLATE \"ISO-8859-1$en_US$primary\" NOT NULL, 'S5')])\n")
+                           "          PhoenixServerProject(supplier_id=[$0], NAME=[$1], PHONE=[$2], ADDRESS=[$3], LOC_ID=[$4], $f5=[CAST($1):VARCHAR(2) CHARACTER SET \"ISO-8859-1\" COLLATE \"ISO-8859-1$en_US$primary\"])\n" +
+                           "            PhoenixTableScan(table=[[phoenix, Join, SupplierTable]], filter=[=(CAST($1):VARCHAR(2) CHARACTER SET \"ISO-8859-1\" COLLATE \"ISO-8859-1$en_US$primary\", 'S5')])\n")
                 .resultIs(new Object[][] {
                           {"0000000005", "T5", 500, 8, 15, "0000000005", "Item T5", "0000000005", "S5", "888-888-5555", "505 YYY Street", "10005"}})
                 .close();
@@ -433,7 +433,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                            "        PhoenixServerProject(item_id=[$0], NAME=[$1], PRICE=[$2], DISCOUNT2=[$4], $f7=[/(*($2, -(100, $4)), 100.0)])\n" +
                            "          PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
                            "        PhoenixToClientConverter\n" +
-                           "          PhoenixServerProject(order_id=[$0], item_id=[$2], QUANTITY=[$4], $f7=[CAST($3):DECIMAL(17, 6) NOT NULL])\n" +
+                           "          PhoenixServerProject(order_id=[$0], item_id=[$2], QUANTITY=[$4], $f7=[CAST($3):DECIMAL(17, 6)])\n" +
                            "            PhoenixTableScan(table=[[phoenix, Join, OrderTable]], filter=[<($4, 5000)])\n")
                 .resultIs(new Object[][] {
                           {"000000000000004", "T6", 600, 15, 4000}})
