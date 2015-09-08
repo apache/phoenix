@@ -89,6 +89,7 @@ public class PhoenixTable extends AbstractTable implements TranslatableTable {
                 type = typeFactory.createArrayType(type, arraySize == null ? -1 : arraySize);
             }
             builder.add(pColumn.getName().getString(), type);
+            builder.nullable(pColumn.isNullable());
         }
         return builder.build();
     }

@@ -583,9 +583,9 @@ public class CalciteIT extends BaseClientManagedTimeIT {
     }
     
     @Test public void testAggregate() {
-        start().sql("select a_string, count(entity_id) from atable group by a_string")
+        start().sql("select a_string, count(b_string) from atable group by a_string")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixServerAggregate(group=[{2}], EXPR$1=[COUNT()])\n" +
+                           "  PhoenixServerAggregate(group=[{2}], EXPR$1=[COUNT($3)])\n" +
                            "    PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
                 .resultIs(new Object[][] {
                           {"a", 4L},
