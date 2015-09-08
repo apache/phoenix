@@ -368,7 +368,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
 
         assertNull(scan.getFilter());
         byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
-                PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY);
+                PVarchar.INSTANCE.toBytes(host)/*,QueryConstants.SEPARATOR_BYTE_ARRAY*/);
         assertArrayEquals(startRow, scan.getStartRow());
         byte[] stopRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
                 PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY,
@@ -388,7 +388,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         assertNull(scan.getFilter());
 
         byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
-                PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY);
+                PVarchar.INSTANCE.toBytes(host)/*,QueryConstants.SEPARATOR_BYTE_ARRAY*/);
         assertArrayEquals(startRow, scan.getStartRow());
         byte[] stopRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
                 PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY,
@@ -408,7 +408,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         assertNull(scan.getFilter());
 
         byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
-                PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY);
+                PVarchar.INSTANCE.toBytes(host)/*,QueryConstants.SEPARATOR_BYTE_ARRAY*/);
         assertArrayEquals(startRow, scan.getStartRow());
         byte[] stopRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
                 PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY,
@@ -428,7 +428,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
 
         assertNull(scan.getFilter());
         byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
-                PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY);
+                PVarchar.INSTANCE.toBytes(host)/*,QueryConstants.SEPARATOR_BYTE_ARRAY*/);
         assertArrayEquals(startRow, scan.getStartRow());
         byte[] stopRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
                 PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY,
@@ -466,8 +466,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         // loop during skip scan. We could end up having a first slot just under the upper
         // limit of slot one and a value equal to the value in slot two and we need this to
         // be less than the upper range that would get formed.
-        byte[] stopRow = ByteUtil.concat(StringUtil.padChar(ByteUtil.nextKey(PVarchar.INSTANCE.toBytes(tenantId.substring(0,3))),15),ByteUtil.nextKey(
-            PVarchar.INSTANCE.toBytes(entityId)));
+        byte[] stopRow = ByteUtil.concat(StringUtil.padChar(ByteUtil.nextKey(PVarchar.INSTANCE.toBytes(tenantId.substring(0,3))),15));
         assertArrayEquals(stopRow, scan.getStopRow());
     }
 
@@ -681,7 +680,14 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         Scan scan = context.getScan();
 
         assertNotNull(scan.getFilter());
-        assertArrayEquals(PVarchar.INSTANCE.toBytes(tenantId), scan.getStartRow());
+//        assertArrayEquals(PVarchar.INSTANCE.toBytes(tenantId), scan.getStartRow());
+        assertArrayEquals(
+                ByteUtil.concat(PChar.INSTANCE.toBytes(tenantId),
+                                PChar.INSTANCE.toBytes(
+                                        PChar.INSTANCE.pad(
+                                                PChar.INSTANCE.toObject(ByteUtil.nextKey(PChar.INSTANCE.toBytes(keyPrefix))),
+                                                15))),
+                                                        scan.getStartRow());
         assertArrayEquals(HConstants.EMPTY_END_ROW, scan.getStopRow());
     }
 
@@ -1247,7 +1253,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
             PVarchar.INSTANCE.toBytes(tenantId), StringUtil.padChar(PVarchar.INSTANCE.toBytes(keyPrefix),15), PDate.INSTANCE.toBytes(startTime));
         assertArrayEquals(expectedStartRow, scan.getStartRow());
         byte[] expectedStopRow = ByteUtil.concat(
-            PVarchar.INSTANCE.toBytes(tenantId), StringUtil.padChar(ByteUtil.nextKey(PVarchar.INSTANCE.toBytes(keyPrefix)),15), PDate.INSTANCE.toBytes(stopTime));
+            PVarchar.INSTANCE.toBytes(tenantId), StringUtil.padChar(ByteUtil.nextKey(PVarchar.INSTANCE.toBytes(keyPrefix)),15));
         assertArrayEquals(expectedStopRow, scan.getStopRow());
     }
 

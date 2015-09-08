@@ -40,9 +40,9 @@ import org.apache.phoenix.parse.AliasedNode;
 import org.apache.phoenix.parse.AndParseNode;
 import org.apache.phoenix.parse.BooleanParseNodeVisitor;
 import org.apache.phoenix.parse.ColumnParseNode;
-import org.apache.phoenix.parse.IndexExpressionParseNodeRewriter;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.HintNode.Hint;
+import org.apache.phoenix.parse.IndexExpressionParseNodeRewriter;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.ParseNodeRewriter;
@@ -384,8 +384,8 @@ public class QueryOptimizer {
                 // For shared indexes (i.e. indexes on views and local indexes),
                 // a) add back any view constants as these won't be in the index, and
                 // b) ignore the viewIndexId which will be part of the row key columns.
-                int c = (plan2.getContext().getScanRanges().getRanges().size() + (table2.getViewIndexId() == null ? 0 : (boundRanges - 1))) - 
-                        (plan1.getContext().getScanRanges().getRanges().size() + (table1.getViewIndexId() == null ? 0 : (boundRanges - 1)));
+                int c = (plan2.getContext().getScanRanges().getBoundPkColumnCount() + (table2.getViewIndexId() == null ? 0 : (boundRanges - 1))) - 
+                        (plan1.getContext().getScanRanges().getBoundPkColumnCount() + (table1.getViewIndexId() == null ? 0 : (boundRanges - 1)));
                 if (c != 0) return c;
                 if (plan1.getGroupBy()!=null && plan2.getGroupBy()!=null) {
                     if (plan1.getGroupBy().isOrderPreserving() != plan2.getGroupBy().isOrderPreserving()) {
