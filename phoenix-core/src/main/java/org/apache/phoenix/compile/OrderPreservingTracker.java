@@ -65,6 +65,7 @@ public class OrderPreservingTracker {
             this.orderPreserving = orderPreserving;
         }
     }
+    private final StatementContext context;
     private final TrackOrderPreservingExpressionVisitor visitor;
     private final GroupBy groupBy;
     private final Ordering ordering;
@@ -78,6 +79,7 @@ public class OrderPreservingTracker {
     }
     
     public OrderPreservingTracker(StatementContext context, GroupBy groupBy, Ordering ordering, int nNodes, TupleProjector projector) {
+        this.context = context;
         int pkPositionOffset = 0;
         PTable table = context.getResolver().getTables().get(0).getTable();
         isOrderPreserving = table.rowKeyOrderOptimizable();
@@ -156,7 +158,12 @@ public class OrderPreservingTracker {
             Collections.sort(orderPreservingInfos, new Comparator<Info>() {
                 @Override
                 public int compare(Info o1, Info o2) {
-                    return o1.pkPosition-o2.pkPosition;
+                    int cmp = o1.pkPosition-o2.pkPosition;
+                    if (cmp != 0) return cmp;
+                    // After pk position, sort on reverse OrderPreserving ordinal: NO, YES_IF_LAST, YES
+                    // In this way, if we have an ORDER BY over a YES_IF_LAST followed by a YES, we'll
+                    // allow subsequent columns to be ordered.
+                    return o2.orderPreserving.ordinal() - o1.orderPreserving.ordinal();
                 }
             });
         }
@@ -169,12 +176,22 @@ public class OrderPreservingTracker {
         for (int i = 0; i < orderPreservingInfos.size() && isOrderPreserving; i++) {
             Info entry = orderPreservingInfos.get(i);
             int pos = entry.pkPosition;
-            isOrderPreserving &= (entry.orderPreserving != OrderPreserving.NO) && (pos == prevPos || ((pos - prevSlotSpan == prevPos) && (prevOrderPreserving == OrderPreserving.YES)));
+            isOrderPreserving &= entry.orderPreserving != OrderPreserving.NO && prevOrderPreserving == OrderPreserving.YES && (pos == prevPos || pos - prevSlotSpan == prevPos  || hasEqualityConstraints(prevPos+prevSlotSpan, pos));
             prevPos = pos;
             prevSlotSpan = entry.slotSpan;
             prevOrderPreserving = entry.orderPreserving;
         }
         return isOrderPreserving;
+    }
+    
+    private boolean hasEqualityConstraints(int startPos, int endPos) {
+        ScanRanges ranges = context.getScanRanges();
+        for (int pos = startPos; pos < endPos; pos++) {
+            if (!ranges.hasEqualityConstraint(pos)) {
+                return false;
+            }
+        }
+        return true;
     }
     
     public boolean isReverse() {

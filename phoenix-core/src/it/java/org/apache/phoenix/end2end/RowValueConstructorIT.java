@@ -1522,4 +1522,73 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
         assertTrue(rs.next());
         assertEquals(3, rs.getInt(1));
     }
+
+    @Test
+    public void testRVCRequiringExtractNodeClear() throws Exception {
+        Connection conn = nextConnection(getUrl());
+        String tableName = "testRVCWithTrailingGT";
+        String ddl = "CREATE TABLE  " + tableName + "  (k1 VARCHAR, k2 VARCHAR, k3 VARCHAR, k4 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1,k2,k3,k4))";
+        conn.createStatement().execute(ddl);
+        
+        conn = nextConnection(getUrl());
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " VALUES('a','b','c','d')");
+        stmt.execute();
+        stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " VALUES('b', 'b', 'c', 'e')");
+        stmt.execute();
+        stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " VALUES('c', 'b','c','f')");
+        stmt.execute();
+        conn.commit();
+        
+        conn = nextConnection(getUrl());
+        ResultSet rs;
+        rs = conn.createStatement().executeQuery("SELECT k1 from  " + tableName + " WHERE k1 IN ('a','c') AND (k2,k3) IN (('b','c'),('f','g')) AND k4 > 'c'");
+        assertTrue(rs.next());
+        assertEquals("a", rs.getString(1));
+        assertTrue(rs.next());
+        assertEquals("c", rs.getString(1));
+        assertFalse(rs.next());
+    }
+
+    @Test
+    public void testRVCRequiringNoSkipScan() throws Exception {
+        Connection conn = nextConnection(getUrl());
+        String tableName = "testRVCWithTrailingGT";
+        String ddl = "CREATE TABLE  " + tableName + "  (k1 VARCHAR, k2 VARCHAR, k3 VARCHAR, k4 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1,k2,k3,k4))";
+        conn.createStatement().execute(ddl);
+        
+        conn = nextConnection(getUrl());
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " VALUES('','','a')");
+        stmt.execute();
+        stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " VALUES('', '', 'a', 'a')");
+        stmt.execute();
+        stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " VALUES('', '','b')");
+        stmt.execute();
+        stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " VALUES('', '','b','a')");
+        stmt.execute();
+        stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " VALUES('a', '','c')");
+        stmt.execute();
+        stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " VALUES('a', '','c', 'a')");
+        stmt.execute();
+        conn.commit();
+        
+        conn = nextConnection(getUrl());
+        ResultSet rs;
+        rs = conn.createStatement().executeQuery("SELECT k1,k3,k4 from  " + tableName + " WHERE (k1,k2,k3) IN (('','','a'),('','','b'),('a','','c')) AND k4 is not null");
+        assertTrue(rs.next());
+        assertEquals(null, rs.getString(1));
+        assertEquals("a", rs.getString(2));
+        assertEquals("a", rs.getString(3));
+        
+        assertTrue(rs.next());
+        assertEquals(null, rs.getString(1));
+        assertEquals("b", rs.getString(2));
+        assertEquals("a", rs.getString(3));
+        
+        assertTrue(rs.next());
+        assertEquals("a", rs.getString(1));
+        assertEquals("c", rs.getString(2));
+        assertEquals("a", rs.getString(3));
+        
+        assertFalse(rs.next());
+    }
 }

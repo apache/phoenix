@@ -25,7 +25,6 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -47,7 +46,8 @@ import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
-import org.apache.phoenix.execute.DescVarLengthFastByteComparisons;import org.apache.phoenix.filter.BooleanExpressionFilter;
+import org.apache.phoenix.execute.DescVarLengthFastByteComparisons;
+import org.apache.phoenix.filter.BooleanExpressionFilter;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.KeyRange.Bound;
@@ -56,7 +56,6 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.PName;
-import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.types.PDataType;
@@ -325,6 +324,7 @@ public class ScanUtil {
         int offset = byteOffset;
         boolean lastInclusiveUpperSingleKey = false;
         boolean anyInclusiveUpperRangeKey = false;
+        boolean lastUnboundUpper = false;
         // The index used for slots should be incremented by 1,
         // but the index for the field it represents in the schema
         // should be incremented by 1 + value in the current slotSpan index
@@ -338,7 +338,6 @@ public class ScanUtil {
             // Use last slot in a multi-span column to determine if fixed width
             field = schema.getField(fieldIndex + slotSpan[i]);
             boolean isFixedWidth = field.getDataType().isFixedWidth();
-            fieldIndex += slotSpan[i] + 1;
             /*
              * If the current slot is unbound then stop if:
              * 1) setting the upper bound. There's no value in
@@ -347,21 +346,27 @@ public class ScanUtil {
              *    for the same reason. However, if the type is variable width
              *    continue building the key because null values will be filtered
              *    since our separator byte will be appended and incremented.
+             * 3) if the range includes everything as we cannot add any more useful
+             *    information to the key after that.
              */
+            lastUnboundUpper = false;
             if (  range.isUnbound(bound) &&
-                ( bound == Bound.UPPER || isFixedWidth) ){
+                ( bound == Bound.UPPER || isFixedWidth || range == KeyRange.EVERYTHING_RANGE) ){
+                lastUnboundUpper = (bound == Bound.UPPER);
                 break;
             }
             byte[] bytes = range.getRange(bound);
             System.arraycopy(bytes, 0, key, offset, bytes.length);
             offset += bytes.length;
+            
             /*
              * We must add a terminator to a variable length key even for the last PK column if
              * the lower key is non inclusive or the upper key is inclusive. Otherwise, we'd be
              * incrementing the key value itself, and thus bumping it up too much.
              */
-            boolean inclusiveUpper = range.isInclusive(bound) && bound == Bound.UPPER;
-            boolean exclusiveLower = !range.isInclusive(bound) && bound == Bound.LOWER;
+            boolean inclusiveUpper = range.isUpperInclusive() && bound == Bound.UPPER;
+            boolean exclusiveLower = !range.isLowerInclusive() && bound == Bound.LOWER;
+            boolean exclusiveUpper = !range.isUpperInclusive() && bound == Bound.UPPER;
             // If we are setting the upper bound of using inclusive single key, we remember 
             // to increment the key if we exit the loop after this iteration.
             // 
@@ -377,11 +382,19 @@ public class ScanUtil {
             // A match for IS NULL or IS NOT NULL should not have a DESC_SEPARATOR_BYTE as nulls sort first
             byte sepByte = SchemaUtil.getSeparatorByte(schema.rowKeyOrderOptimizable(), bytes.length == 0 || range == KeyRange.IS_NULL_RANGE || range == KeyRange.IS_NOT_NULL_RANGE, field);
             
-            if (!isFixedWidth && ( fieldIndex < schema.getMaxFields() || inclusiveUpper || exclusiveLower || sepByte == QueryConstants.DESC_SEPARATOR_BYTE)) {
+            if ( !isFixedWidth && ( sepByte == QueryConstants.DESC_SEPARATOR_BYTE 
+                                    || ( !exclusiveUpper 
+                                         && (fieldIndex < schema.getMaxFields() || inclusiveUpper || exclusiveLower) ) ) ) {
                 key[offset++] = sepByte;
                 // Set lastInclusiveUpperSingleKey back to false if this is the last pk column
                 // as we don't want to increment the null byte in this case
                 lastInclusiveUpperSingleKey &= i < schema.getMaxFields()-1;
+            }
+            if (exclusiveUpper) {
+                // Cannot include anything else on the key, as otherwise
+                // keys that match the upper range will be included. For example WHERE k1 < 2 and k2 = 3
+                // would match k1 = 2, k2 = 3 which is wrong.
+                break;
             }
             // If we are setting the lower bound with an exclusive range key, we need to bump the
             // slot up for each key part. For an upper bound, we bump up an inclusive key, but
@@ -396,8 +409,10 @@ public class ScanUtil {
                     return -byteOffset;
                 }
             }
+            
+            fieldIndex += slotSpan[i] + 1;
         }
-        if (lastInclusiveUpperSingleKey || anyInclusiveUpperRangeKey) {
+        if (lastInclusiveUpperSingleKey || anyInclusiveUpperRangeKey || lastUnboundUpper) {
             if (!ByteUtil.nextKey(key, offset)) {
                 // Special case for not being able to increment.
                 // In this case we return a negative byteOffset to
@@ -454,7 +469,7 @@ public class ScanUtil {
         for (Mutation m : mutations) {
             keys.add(PVarbinary.INSTANCE.getKeyRange(m.getRow()));
         }
-        ScanRanges keyRanges = ScanRanges.create(SchemaUtil.VAR_BINARY_SCHEMA, Collections.singletonList(keys), ScanUtil.SINGLE_COLUMN_SLOT_SPAN);
+        ScanRanges keyRanges = ScanRanges.createPointLookup(keys);
         return keyRanges;
     }
 
@@ -580,19 +595,6 @@ public class ScanUtil {
     }
 
     /**
-     * Finds the total number of row keys spanned by this ranges / slotSpan pair.
-     * This accounts for slots in the ranges that may span more than on row key.
-     * @param ranges  the KeyRange slots paired with this slotSpan. corresponds to {@link ScanRanges#ranges}
-     * @param slotSpan  the extra span per skip scan slot. corresponds to {@link ScanRanges#slotSpan}
-     * @return  the total number of row keys spanned yb this ranges / slotSpan pair.
-     * @see #getRowKeyPosition(int[], int)
-     */
-    public static int getTotalSpan(List<List<KeyRange>> ranges, int[] slotSpan) {
-        // finds the position at the "end" of the ranges, which is also the total span
-        return getRowKeyPosition(slotSpan, ranges.size());
-    }
-
-    /**
      * Finds the position in the row key schema for a given position in the scan slots.
      * For example, with a slotSpan of {0, 1, 0}, the slot at index 1 spans an extra column in the row key. This means
      * that the slot at index 2 has a slot index of 2 but a row key index of 3.
@@ -601,7 +603,6 @@ public class ScanUtil {
      * @param slotSpan  the extra span per skip scan slot. corresponds to {@link ScanRanges#slotSpan}
      * @param slotPosition  the index of a slot in the SkipScan slots list.
      * @return  the equivalent row key position in the RowKeySchema
-     * @see #getTotalSpan(java.util.List, int[])
      */
     public static int getRowKeyPosition(int[] slotSpan, int slotPosition) {
         int offset = 0;
