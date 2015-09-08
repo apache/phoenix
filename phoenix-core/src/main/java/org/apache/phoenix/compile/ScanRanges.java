@@ -52,18 +52,24 @@ public class ScanRanges {
     public static final ScanRanges NOTHING = new ScanRanges(null,ScanUtil.SINGLE_COLUMN_SLOT_SPAN,NOTHING_RANGES, KeyRange.EMPTY_RANGE, KeyRange.EMPTY_RANGE, false, false, null);
     private static final Scan HAS_INTERSECTION = new Scan();
 
-    public static ScanRanges create(RowKeySchema schema, List<List<KeyRange>> ranges, int[] slotSpan) {
-        return create(schema, ranges, slotSpan, KeyRange.EVERYTHING_RANGE, false, null);
+    public static ScanRanges createPointLookup(List<KeyRange> keys) {
+        return ScanRanges.create(SchemaUtil.VAR_BINARY_SCHEMA, Collections.singletonList(keys), ScanUtil.SINGLE_COLUMN_SLOT_SPAN, KeyRange.EVERYTHING_RANGE, null, true);
     }
     
-    public static ScanRanges create(RowKeySchema schema, List<List<KeyRange>> ranges, int[] slotSpan, KeyRange minMaxRange, boolean forceRangeScan, Integer nBuckets) {
+    // For testing
+    public static ScanRanges createSingleSpan(RowKeySchema schema, List<List<KeyRange>> ranges) {
+        return create(schema, ranges, ScanUtil.getDefaultSlotSpans(ranges.size()), KeyRange.EVERYTHING_RANGE, null, true);
+    }
+    
+    public static ScanRanges create(RowKeySchema schema, List<List<KeyRange>> ranges, int[] slotSpan, KeyRange minMaxRange, Integer nBuckets, boolean useSkipScan) {
         int offset = nBuckets == null ? 0 : SaltingUtil.NUM_SALTING_BYTES;
-        if (ranges.size() == offset && minMaxRange == KeyRange.EVERYTHING_RANGE) {
+        int nSlots = ranges.size();
+        if (nSlots == offset && minMaxRange == KeyRange.EVERYTHING_RANGE) {
             return EVERYTHING;
-        } else if (minMaxRange == KeyRange.EMPTY_RANGE || (ranges.size() == 1 + offset && ranges.get(offset).size() == 1 && ranges.get(offset).get(0) == KeyRange.EMPTY_RANGE)) {
+        } else if (minMaxRange == KeyRange.EMPTY_RANGE || (nSlots == 1 + offset && ranges.get(offset).size() == 1 && ranges.get(offset).get(0) == KeyRange.EMPTY_RANGE)) {
             return NOTHING;
         }
-        boolean isPointLookup = !forceRangeScan && ScanRanges.isPointLookup(schema, ranges, slotSpan);
+        boolean isPointLookup = isPointLookup(schema, ranges, slotSpan, useSkipScan);
         if (isPointLookup) {
             // TODO: consider keeping original to use for serialization as it would be smaller?
             List<byte[]> keys = ScanRanges.getPointKeys(ranges, slotSpan, schema, nBuckets);
@@ -86,6 +92,7 @@ public class ScanRanges {
                 }
             }
             ranges = Collections.singletonList(keyRanges);
+            useSkipScan = keyRanges.size() > 1;
             // Treat as binary if descending because we've got a separator byte at the end
             // which is not part of the value.
             if (keys.size() > 1 || SchemaUtil.getSeparatorByte(schema.rowKeyOrderOptimizable(), false, schema.getField(0)) == QueryConstants.DESC_SEPARATOR_BYTE) {
@@ -103,7 +110,6 @@ public class ScanRanges {
             Collections.sort(sorted, KeyRange.COMPARATOR);
             sortedRanges.add(ImmutableList.copyOf(sorted));
         }
-        boolean useSkipScanFilter = useSkipScanFilter(forceRangeScan, isPointLookup, sortedRanges);
         
         // Don't set minMaxRange for point lookup because it causes issues during intersect
         // by going across region boundaries
@@ -111,7 +117,7 @@ public class ScanRanges {
         // if (!isPointLookup && (nBuckets == null || !useSkipScanFilter)) {
         // if (! ( isPointLookup || (nBuckets != null && useSkipScanFilter) ) ) {
         // if (nBuckets == null || (nBuckets != null && (!isPointLookup || !useSkipScanFilter))) {
-        if (nBuckets == null || !isPointLookup || !useSkipScanFilter) {
+        if (nBuckets == null || !isPointLookup || !useSkipScan) {
             byte[] minKey = ScanUtil.getMinKey(schema, sortedRanges, slotSpan);
             byte[] maxKey = ScanUtil.getMaxKey(schema, sortedRanges, slotSpan);
             // If the maxKey has crossed the salt byte boundary, then we do not
@@ -133,7 +139,7 @@ public class ScanRanges {
         if (scanRange == KeyRange.EMPTY_RANGE) {
             return NOTHING;
         }
-        return new ScanRanges(schema, slotSpan, sortedRanges, scanRange, minMaxRange, useSkipScanFilter, isPointLookup, nBuckets);
+        return new ScanRanges(schema, slotSpan, sortedRanges, scanRange, minMaxRange, useSkipScan, isPointLookup, nBuckets);
     }
 
     private SkipScanFilter filter;
@@ -163,8 +169,13 @@ public class ScanRanges {
         this.ranges = ImmutableList.copyOf(ranges);
         this.slotSpan = slotSpan;
         this.schema = schema;
-        if (schema != null && !ranges.isEmpty()) { // TODO: only create if useSkipScanFilter is true?
-            this.filter = new SkipScanFilter(this.ranges, slotSpan, schema);
+        if (schema != null && !ranges.isEmpty()) {
+            if (!this.useSkipScanFilter) {
+                int boundSlotCount = this.getBoundSlotCount();
+                ranges = ranges.subList(0, boundSlotCount);
+                slotSpan = Arrays.copyOf(slotSpan, boundSlotCount);
+            }
+            this.filter = new SkipScanFilter(ranges, slotSpan, this.schema);
         }
     }
     
@@ -405,12 +416,16 @@ public class ScanRanges {
         return ranges;
     }
 
+    public List<List<KeyRange>> getBoundRanges() {
+        return ranges.subList(0, getBoundSlotCount());
+    }
+
     public RowKeySchema getSchema() {
         return schema;
     }
 
     public boolean isEverything() {
-        return this == EVERYTHING;
+        return this == EVERYTHING || ranges.get(0).get(0) == KeyRange.EVERYTHING_RANGE;
     }
 
     public boolean isDegenerate() {
@@ -427,33 +442,48 @@ public class ScanRanges {
         return useSkipScanFilter;
     }
     
-    private static boolean useSkipScanFilter(boolean forceRangeScan, boolean isPointLookup, List<List<KeyRange>> ranges) {
-        if (forceRangeScan) {
-            return false;
-        }
-        if (isPointLookup) {
-            return getPointLookupCount(isPointLookup, ranges) > 1;
-        }
-        boolean hasRangeKey = false, useSkipScan = false;
-        for (List<KeyRange> orRanges : ranges) {
-            useSkipScan |= (orRanges.size() > 1 || hasRangeKey);
-            if (useSkipScan) {
-                return true;
-            }
+    /**
+     * Finds the total number of row keys spanned by this ranges / slotSpan pair.
+     * This accounts for slots in the ranges that may span more than on row key.
+     * @param ranges  the KeyRange slots paired with this slotSpan. corresponds to {@link ScanRanges#ranges}
+     * @param slotSpan  the extra span per skip scan slot. corresponds to {@link ScanRanges#slotSpan}
+     * @return  the total number of row keys spanned yb this ranges / slotSpan pair.
+     */
+    private static int getBoundPkSpan(List<List<KeyRange>> ranges, int[] slotSpan) {
+        int count = 0;
+        boolean hasUnbound = false;
+        int nRanges = ranges.size();
+
+        for(int i = 0; i < nRanges && !hasUnbound; i++) {
+            List<KeyRange> orRanges = ranges.get(i);
             for (KeyRange range : orRanges) {
-                hasRangeKey |= !range.isSingleKey();
+                if (range == KeyRange.EVERYTHING_RANGE) {
+                    return count;
+                }
+                if (range.isUnbound()) {
+                    hasUnbound = true;
+                }
             }
+            count += slotSpan[i] + 1;
         }
-        return false;
+
+        return count;
     }
 
-    private static boolean isPointLookup(RowKeySchema schema, List<List<KeyRange>> ranges, int[] slotSpan) {
-        if (ScanUtil.getTotalSpan(ranges, slotSpan) < schema.getMaxFields()) {
+    private static boolean isFullyQualified(RowKeySchema schema, List<List<KeyRange>> ranges, int[] slotSpan) {
+        return getBoundPkSpan(ranges, slotSpan) == schema.getMaxFields();
+    }
+    
+    private static boolean isPointLookup(RowKeySchema schema, List<List<KeyRange>> ranges, int[] slotSpan, boolean useSkipScan) {
+        if (!isFullyQualified(schema, ranges, slotSpan)) {
             return false;
         }
         int lastIndex = ranges.size()-1;
         for (int i = lastIndex; i >= 0; i--) {
             List<KeyRange> orRanges = ranges.get(i);
+            if (!useSkipScan && orRanges.size() > 1) {
+                return false;
+            }
             for (KeyRange keyRange : orRanges) {
                 // Special case for single trailing IS NULL. We cannot consider this as a point key because
                 // we strip trailing nulls when we form the key.
@@ -519,8 +549,29 @@ public class ScanRanges {
         return isPointLookup ? ranges.get(0).iterator() : Iterators.<KeyRange>emptyIterator();
     }
 
-    public int getPkColumnSpan() {
-        return this == ScanRanges.NOTHING ? 0 : ScanUtil.getTotalSpan(ranges, slotSpan);
+    public int getBoundPkColumnCount() {
+        return this.useSkipScanFilter ? ScanUtil.getRowKeyPosition(slotSpan, ranges.size()) : getBoundPkSpan(ranges, slotSpan);
+    }
+
+    public int getBoundSlotCount() {
+        int count = 0;
+        boolean hasUnbound = false;
+        int nRanges = ranges.size();
+
+        for(int i = 0; i < nRanges && !hasUnbound; i++) {
+            List<KeyRange> orRanges = ranges.get(i);
+            for (KeyRange range : orRanges) {
+                if (range == KeyRange.EVERYTHING_RANGE) {
+                    return count;
+                }
+                if (range.isUnbound()) {
+                    hasUnbound = true;
+                }
+            }
+            count++;
+        }
+
+        return count;
     }
 
     @Override
@@ -528,4 +579,27 @@ public class ScanRanges {
         return "ScanRanges[" + ranges.toString() + "]";
     }
 
+    public int[] getSlotSpans() {
+        return slotSpan;
+    }
+
+    public boolean hasEqualityConstraint(int pkPosition) {
+        if (isPointLookup) {
+            return true;
+        }
+        
+        int pkOffset = 0;
+        int nRanges = ranges.size();
+
+        for(int i = 0; i < nRanges; i++) {
+            if (pkOffset + slotSpan[i] >= pkPosition) {
+                List<KeyRange> range = ranges.get(i);
+                return range.size() == 1 && range.get(0).isSingleKey();
+            }
+            pkOffset += slotSpan[i] + 1;
+        }
+
+        return false;
+        
+    }
 }

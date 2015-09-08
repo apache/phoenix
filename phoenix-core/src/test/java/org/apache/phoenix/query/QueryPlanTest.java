@@ -35,6 +35,10 @@ public class QueryPlanTest extends BaseConnectionlessQueryTest {
     public void testExplainPlan() throws Exception {
         String[] queryPlans = new String[] {
 
+                "SELECT host FROM PTSDB WHERE inst IS NULL AND host IS NOT NULL AND date >= to_date('2013-01-01')",
+                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER PTSDB [null,not null]\n" + 
+                "    SERVER FILTER BY FIRST KEY ONLY AND DATE >= DATE '2013-01-01 00:00:00.000'",
+
                 "SELECT a_string,b_string FROM atable WHERE organization_id = '000000000000001' AND entity_id > '000000000000002' AND entity_id < '000000000000008' AND (organization_id,entity_id) >= ('000000000000001','000000000000005') ",
                 "CLIENT PARALLEL 1-WAY RANGE SCAN OVER ATABLE ['000000000000001','000000000000005'] - ['000000000000001','000000000000008']",
 
@@ -49,10 +53,6 @@ public class QueryPlanTest extends BaseConnectionlessQueryTest {
                 "SELECT inst,date FROM PTSDB2 WHERE inst = 'na1' ORDER BY inst DESC, date DESC",
                 "CLIENT PARALLEL 1-WAY REVERSE RANGE SCAN OVER PTSDB2 ['na1']\n" +
                 "    SERVER FILTER BY FIRST KEY ONLY",
-
-                "SELECT host FROM PTSDB WHERE inst IS NULL AND host IS NOT NULL AND date >= to_date('2013-01-01')",
-                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER PTSDB [null,not null]\n" + 
-                "    SERVER FILTER BY FIRST KEY ONLY AND DATE >= DATE '2013-01-01 00:00:00.000'",
 
                 // Since inst IS NOT NULL is unbounded, we won't continue optimizing
                 "SELECT host FROM PTSDB WHERE inst IS NOT NULL AND host IS NULL AND date >= to_date('2013-01-01')",
@@ -149,7 +149,7 @@ public class QueryPlanTest extends BaseConnectionlessQueryTest {
                 "CLIENT PARALLEL 1-WAY RANGE SCAN OVER ATABLE ['000000000000001']\n" + 
                 "    SERVER AGGREGATE INTO DISTINCT ROWS BY [ORGANIZATION_ID, ENTITY_ID, ROUND(A_DATE)]\n" + 
                 "CLIENT MERGE SORT\n" + 
-                "CLIENT TOP 10 ROWS SORTED BY [ENTITY_ID NULLS LAST]",
+                "CLIENT 10 ROW LIMIT",
 
                 "SELECT a_string,b_string FROM atable WHERE organization_id = '000000000000001' ORDER BY a_string DESC NULLS LAST LIMIT 10",
                 "CLIENT PARALLEL 1-WAY RANGE SCAN OVER ATABLE ['000000000000001']\n" + 
