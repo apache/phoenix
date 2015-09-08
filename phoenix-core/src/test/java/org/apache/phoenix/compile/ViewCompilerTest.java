@@ -85,7 +85,6 @@ public class ViewCompilerTest extends BaseConnectionlessQueryTest {
         conn.createStatement().execute("CREATE VIEW s2.v3 AS SELECT * FROM s1.t WHERE v = 'bar'");
         
         // TODO: should it be an error to remove columns from a VIEW that we're defined there?
-        // TOOD: should we require an ALTER VIEW instead of ALTER TABLE?
         conn.createStatement().execute("ALTER VIEW s2.v3 DROP COLUMN v");
         try {
             conn.createStatement().executeQuery("SELECT * FROM s2.v3");

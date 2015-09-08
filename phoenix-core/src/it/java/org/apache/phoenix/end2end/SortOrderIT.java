@@ -402,6 +402,33 @@ public class SortOrderIT extends BaseHBaseManagedTimeIT {
                 new WhereCondition("k2", "<=", "'bb'"), null, null);
     }
         
+    @Test
+    public void varLengthAscLT() throws Exception {
+        String ddl = "CREATE TABLE " + TABLE + " (k1 VARCHAR NOT NULL, k2 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1, k2))";
+        Object[][] insertedRows = new Object[][]{{"a", ""}, {"b",""}, {"b","a"}};
+        Object[][] expectedRows = new Object[][]{{"a"}};
+        runQueryTest(ddl, upsert("k1", "k2"), select("k1"), insertedRows, expectedRows,
+                new WhereCondition("k1", "<", "'b'"), null, null);
+    }
+        
+    @Test
+    public void varLengthDescLT() throws Exception {
+        String ddl = "CREATE TABLE " + TABLE + " (k1 VARCHAR NOT NULL, k2 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1 desc, k2))";
+        Object[][] insertedRows = new Object[][]{{"a", ""}, {"b",""}, {"b","a"}};
+        Object[][] expectedRows = new Object[][]{{"a"}};
+        runQueryTest(ddl, upsert("k1", "k2"), select("k1"), insertedRows, expectedRows,
+                new WhereCondition("k1", "<", "'b'"), null, null);
+    }
+        
+    @Test
+    public void varLengthDescGT() throws Exception {
+        String ddl = "CREATE TABLE " + TABLE + " (k1 VARCHAR NOT NULL, k2 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1 desc, k2))";
+        Object[][] insertedRows = new Object[][]{{"a", ""}, {"b",""}, {"b","a"}, {"ba","a"}};
+        Object[][] expectedRows = new Object[][]{{"ba"}};
+        runQueryTest(ddl, upsert("k1", "k2"), select("k1"), insertedRows, expectedRows,
+                new WhereCondition("k1", ">", "'b'"), null, null);
+    }
+        
    @Test
     public void testNonPKCompare() throws Exception {
         List<Integer> expectedResults = Lists.newArrayList(2,3,4);
