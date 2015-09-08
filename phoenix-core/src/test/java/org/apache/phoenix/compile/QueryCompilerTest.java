@@ -469,7 +469,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         List<Object> binds = Collections.emptyList();
         for (String query : queries) {
             QueryPlan plan = getQueryPlan(query, binds);
-            assertEquals(plan.getGroupBy().getScanAttribName(), BaseScannerRegionObserver.KEY_ORDERED_GROUP_BY_EXPRESSIONS);
+            assertEquals(query, BaseScannerRegionObserver.KEY_ORDERED_GROUP_BY_EXPRESSIONS, plan.getGroupBy().getScanAttribName());
         }
     }
 
@@ -864,15 +864,15 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         String query = "SELECT host FROM ptsdb WHERE regexp_substr(inst, '[a-zA-Z]+') = 'abc'";
         List<Object> binds = Collections.emptyList();
         Scan scan = compileQuery(query, binds);
-        assertArrayEquals(ByteUtil.concat(Bytes.toBytes("abc")), scan.getStartRow());
-        assertArrayEquals(ByteUtil.concat(ByteUtil.nextKey(Bytes.toBytes("abc")), QueryConstants.SEPARATOR_BYTE_ARRAY),scan.getStopRow());
+        assertArrayEquals(Bytes.toBytes("abc"), scan.getStartRow());
+        assertArrayEquals(ByteUtil.nextKey(Bytes.toBytes("abc")),scan.getStopRow());
         assertTrue(scan.getFilter() != null);
 
         query = "SELECT host FROM ptsdb WHERE regexp_substr(inst, '[a-zA-Z]+', 0) = 'abc'";
         binds = Collections.emptyList();
         scan = compileQuery(query, binds);
-        assertArrayEquals(ByteUtil.concat(Bytes.toBytes("abc")), scan.getStartRow());
-        assertArrayEquals(ByteUtil.concat(ByteUtil.nextKey(Bytes.toBytes("abc")),QueryConstants.SEPARATOR_BYTE_ARRAY), scan.getStopRow());
+        assertArrayEquals(Bytes.toBytes("abc"), scan.getStartRow());
+        assertArrayEquals(ByteUtil.nextKey(Bytes.toBytes("abc")), scan.getStopRow());
         assertTrue(scan.getFilter() != null);
 
         // Test scan keys are not set when the offset is not 0 or 1.
@@ -980,7 +980,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         List<Object> binds = Collections.emptyList();
         Scan scan = compileQuery(query, binds);
         assertArrayEquals(Bytes.toBytes("abc"), scan.getStartRow());
-        assertArrayEquals(ByteUtil.concat(ByteUtil.nextKey(Bytes.toBytes("abc")), QueryConstants.SEPARATOR_BYTE_ARRAY), scan.getStopRow());
+        assertArrayEquals(ByteUtil.nextKey(Bytes.toBytes("abc")), scan.getStopRow());
         assertTrue(scan.getFilter() == null); // Extracted.
     }
 
@@ -989,8 +989,8 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         String query = "SELECT inst FROM ptsdb WHERE rtrim(inst) = 'abc'";
         List<Object> binds = Collections.emptyList();
         Scan scan = compileQuery(query, binds);
-        assertArrayEquals(ByteUtil.concat(Bytes.toBytes("abc")), scan.getStartRow());
-        assertArrayEquals(ByteUtil.concat(ByteUtil.nextKey(Bytes.toBytes("abc ")), QueryConstants.SEPARATOR_BYTE_ARRAY), scan.getStopRow());
+        assertArrayEquals(Bytes.toBytes("abc"), scan.getStartRow());
+        assertArrayEquals(ByteUtil.nextKey(Bytes.toBytes("abc ")), scan.getStopRow());
         assertNotNull(scan.getFilter());
     }
     
@@ -1732,6 +1732,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute("CREATE TABLE t (k1 date not null, k2 date not null, k3 varchar, v varchar, constraint pk primary key(k1,k2,k3))");
         String[] queries = {
+                "SELECT * FROM T WHERE k2=CURRENT_DATE() ORDER BY k1, k3",
                 "SELECT * FROM T ORDER BY (k1,k2), k3",
                 "SELECT * FROM T ORDER BY k1,k2,k3 NULLS FIRST",
                 "SELECT * FROM T ORDER BY k1,k2,k3",
@@ -1741,6 +1742,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
                 "SELECT * FROM T ORDER BY (k1,k2,k3)",
                 "SELECT * FROM T ORDER BY TRUNC(k1, 'DAY'), CEIL(k2, 'HOUR')",
                 "SELECT * FROM T ORDER BY INVERT(k1) DESC",
+                "SELECT * FROM T WHERE k1=CURRENT_DATE() ORDER BY k2",
                 };
         String query;
         for (int i = 0; i < queries.length; i++) {
