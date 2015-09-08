@@ -30,15 +30,18 @@ import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
 
+import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.ColumnAlreadyExistsException;
 import org.apache.phoenix.schema.ReadOnlyTableException;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
 
@@ -570,6 +573,27 @@ public class ViewIT extends BaseViewIT {
         } catch (SQLException e) {
             assertEquals(NOT_NULLABLE_COLUMN_IN_ROW_KEY.getErrorCode(), e.getErrorCode());
         }
+    }
+    
+    @Test
+    public void testQueryViewStatementOptimization() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String sql = "CREATE TABLE tp (k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, v1 DECIMAL, CONSTRAINT pk PRIMARY KEY (k1, k2))";
+        conn.createStatement().execute(sql);
+        sql = "CREATE VIEW v1  AS SELECT * FROM tp";
+        conn.createStatement().execute(sql);
+        sql = "CREATE VIEW v2  AS SELECT * FROM tp WHERE k1 = 1.0";
+        conn.createStatement().execute(sql);
+        
+        sql = "SELECT * FROM v1 order by k1, k2";
+        PreparedStatement stmt = conn.prepareStatement(sql);
+        QueryPlan plan = PhoenixRuntime.getOptimizedQueryPlan(stmt);
+        assertEquals(0, plan.getOrderBy().getOrderByExpressions().size());
+        
+        sql = "SELECT * FROM v2 order by k1, k2";
+        stmt = conn.prepareStatement(sql);
+        plan = PhoenixRuntime.getOptimizedQueryPlan(stmt);
+        assertEquals(0, plan.getOrderBy().getOrderByExpressions().size());
     }
     
     private void assertPKs(ResultSet rs, String[] expectedPKs) throws SQLException {

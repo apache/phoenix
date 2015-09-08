@@ -182,15 +182,12 @@ import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.QueryUtil;
-import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.UpgradeUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.base.Objects;
-import com.google.common.base.Preconditions;
 import com.google.common.cache.Cache;
 import com.google.common.collect.Lists;
 import com.google.protobuf.ByteString;
@@ -498,9 +495,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         }
         Scan scan = new Scan();
         scan.setTimeRange(MIN_TABLE_TIMESTAMP, clientTimeStamp);
-        ScanRanges scanRanges =
-                ScanRanges.create(SchemaUtil.VAR_BINARY_SCHEMA,
-                    Collections.singletonList(keyRanges), ScanUtil.SINGLE_COLUMN_SLOT_SPAN);
+        ScanRanges scanRanges = ScanRanges.createPointLookup(keyRanges);
         scanRanges.initializeScan(scan);
         scan.setFilter(scanRanges.getSkipScanFilter());
 
