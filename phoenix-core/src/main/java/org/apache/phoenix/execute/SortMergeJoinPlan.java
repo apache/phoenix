@@ -83,6 +83,7 @@ public class SortMergeJoinPlan implements QueryPlan {
     private final KeyValueSchema rhsSchema;
     private final int rhsFieldPosition;
     private final boolean isSingleValueOnly;
+    private final int thresholdBytes;
 
     public SortMergeJoinPlan(StatementContext context, FilterableStatement statement, TableRef table, 
             JoinType type, QueryPlan lhsPlan, QueryPlan rhsPlan, List<Expression> lhsKeyExpressions, List<Expression> rhsKeyExpressions,
@@ -101,6 +102,8 @@ public class SortMergeJoinPlan implements QueryPlan {
         this.rhsSchema = buildSchema(rhsTable);
         this.rhsFieldPosition = rhsFieldPosition;
         this.isSingleValueOnly = isSingleValueOnly;
+        this.thresholdBytes = context.getConnection().getQueryServices().getProps().getInt(
+                QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB, QueryServicesOptions.DEFAULT_SPOOL_THRESHOLD_BYTES);
     }
 
     private static KeyValueSchema buildSchema(PTable table) {
@@ -244,8 +247,6 @@ public class SortMergeJoinPlan implements QueryPlan {
             int len = lhsBitSet.getEstimatedLength();
             this.emptyProjectedValue = new byte[len];
             lhsBitSet.toBytes(emptyProjectedValue, 0);
-            int thresholdBytes = context.getConnection().getQueryServices().getProps().getInt(
-                    QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB, QueryServicesOptions.DEFAULT_SPOOL_THRESHOLD_BYTES);
             this.queue = new MappedByteBufferTupleQueue(thresholdBytes);
             this.queueIterator = null;
         }

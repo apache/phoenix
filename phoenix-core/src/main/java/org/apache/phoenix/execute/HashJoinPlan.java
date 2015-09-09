@@ -83,9 +83,9 @@ public class HashJoinPlan extends DelegateQueryPlan {
     private final HashJoinInfo joinInfo;
     private final SubPlan[] subPlans;
     private final boolean recompileWhereClause;
+    private final int maxServerCacheTimeToLive;
     private List<SQLCloseable> dependencies;
     private HashCacheClient hashClient;
-    private int maxServerCacheTimeToLive;
     private AtomicLong firstJobEndTime;
     private List<Expression> keyRangeExpressions;
     
@@ -114,6 +114,8 @@ public class HashJoinPlan extends DelegateQueryPlan {
         this.joinInfo = joinInfo;
         this.subPlans = subPlans;
         this.recompileWhereClause = recompileWhereClause;
+        this.maxServerCacheTimeToLive = plan.getContext().getConnection().getQueryServices().getProps().getInt(
+                QueryServices.MAX_SERVER_CACHE_TIME_TO_LIVE_MS_ATTRIB, QueryServicesOptions.DEFAULT_MAX_SERVER_CACHE_TIME_TO_LIVE_MS);
     }
     
     @Override
@@ -130,8 +132,9 @@ public class HashJoinPlan extends DelegateQueryPlan {
         List<Future<Object>> futures = Lists.<Future<Object>>newArrayListWithExpectedSize(count);
         dependencies = Lists.newArrayList();
         if (joinInfo != null) {
-            hashClient = new HashCacheClient(delegate.getContext().getConnection());
-            maxServerCacheTimeToLive = services.getProps().getInt(QueryServices.MAX_SERVER_CACHE_TIME_TO_LIVE_MS_ATTRIB, QueryServicesOptions.DEFAULT_MAX_SERVER_CACHE_TIME_TO_LIVE_MS);
+            hashClient = hashClient != null ? 
+                    hashClient 
+                  : new HashCacheClient(delegate.getContext().getConnection());
             firstJobEndTime = new AtomicLong(0);
             keyRangeExpressions = new CopyOnWriteArrayList<Expression>();
         }

@@ -26,6 +26,7 @@ import org.apache.phoenix.expression.ArrayConstructorExpression;
 import org.apache.phoenix.expression.CaseExpression;
 import org.apache.phoenix.expression.CoerceExpression;
 import org.apache.phoenix.expression.ComparisonExpression;
+import org.apache.phoenix.expression.CorrelateVariableFieldAccessExpression;
 import org.apache.phoenix.expression.DivideExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.InListExpression;
@@ -57,6 +58,11 @@ public abstract class CloneExpressionVisitor extends TraverseAllExpressionVisito
     public Expression defaultReturn(Expression node, List<Expression> l) {
         // Needed for Expressions derived from BaseTerminalExpression which don't
         // have accept methods. TODO: get rid of those
+        return node;
+    }
+
+    @Override
+    public Expression visit(CorrelateVariableFieldAccessExpression node) {
         return node;
     }
 
