@@ -19,6 +19,7 @@ package org.apache.phoenix.util;
 
 import com.google.common.base.Charsets;
 import com.google.common.base.Joiner;
+import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -219,7 +220,8 @@ public class CSVCommonsLoader {
         try {
             conn.setAutoCommit(false);
             long start = System.currentTimeMillis();
-            CsvUpsertListener upsertListener = new CsvUpsertListener(conn, conn.getMutateBatchSize());
+            CsvUpsertListener upsertListener = new CsvUpsertListener(conn,
+                    conn.getMutateBatchSize(), isStrict);
             CsvUpsertExecutor csvUpsertExecutor = CsvUpsertExecutor.create(conn, tableName,
                     columnInfoList, upsertListener, arrayElementSeparator);
 
@@ -394,10 +396,12 @@ public class CSVCommonsLoader {
         private final PhoenixConnection conn;
         private final int upsertBatchSize;
         private long totalUpserts = 0L;
+        private final boolean strict;
 
-        CsvUpsertListener(PhoenixConnection conn, int upsertBatchSize) {
+        CsvUpsertListener(PhoenixConnection conn, int upsertBatchSize, boolean strict) {
             this.conn = conn;
             this.upsertBatchSize = upsertBatchSize;
+            this.strict = strict;
         }
 
         @Override
@@ -417,8 +421,11 @@ public class CSVCommonsLoader {
         }
 
         @Override
-        public void errorOnRecord(CSVRecord csvRecord, String errorMessage) {
-            LOG.error("Error upserting record {}: {}", csvRecord, errorMessage);
+        public void errorOnRecord(CSVRecord csvRecord, Throwable throwable) {
+            LOG.error("Error upserting record " + csvRecord, throwable.getMessage());
+            if (strict) {
+                throw Throwables.propagate(throwable);
+            }
         }
 
         /**
