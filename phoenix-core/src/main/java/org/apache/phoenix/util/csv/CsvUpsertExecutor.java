@@ -78,7 +78,7 @@ public class CsvUpsertExecutor implements Closeable {
          *
          * @param csvRecord the CSV record that was being upserted when the error occurred
          */
-        void errorOnRecord(CSVRecord csvRecord, String errorMessage);
+        void errorOnRecord(CSVRecord csvRecord, Throwable throwable);
     }
 
 
@@ -165,7 +165,7 @@ public class CsvUpsertExecutor implements Closeable {
                 // listener, and it can do its own logging if needed
                 LOG.debug("Error on CSVRecord " + csvRecord, e);
             }
-            upsertListener.errorOnRecord(csvRecord, e.getMessage());
+            upsertListener.errorOnRecord(csvRecord, e);
         }
     }
 

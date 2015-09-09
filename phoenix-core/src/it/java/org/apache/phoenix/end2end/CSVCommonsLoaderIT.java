@@ -32,10 +32,12 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Properties;
 
+import com.google.common.collect.ImmutableList;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
+import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PArrayDataType;
 import org.apache.phoenix.util.CSVCommonsLoader;
@@ -403,6 +405,40 @@ public class CSVCommonsLoaderIT extends BaseHBaseManagedTimeIT {
         }
     }
 
+    // Ensure that strict mode also causes the import to stop if a data type on a single
+    // row is not correct
+    @Test
+    public void testCSVUpsertWithInvalidNumericalData_StrictMode() throws Exception {
+        CSVParser parser = null;
+        PhoenixConnection conn = null;
+        try {
+            // Create table
+            String statements = "CREATE TABLE IF NOT EXISTS " + STOCK_TABLE
+                    + "(SYMBOL VARCHAR NOT NULL PRIMARY KEY, COMPANY_ID BIGINT);";
+            conn = DriverManager.getConnection(getUrl())
+                    .unwrap(PhoenixConnection.class);
+            PhoenixRuntime.executeStatements(conn,
+                    new StringReader(statements), null);
+
+            // Upsert CSV file in strict mode
+            CSVCommonsLoader csvUtil = new CSVCommonsLoader(conn, STOCK_TABLE,
+                    Arrays.asList("SYMBOL", "COMPANY_ID"), true);
+            try {
+                csvUtil.upsert(new StringReader(STOCK_CSV_VALUES));
+                fail("Running an upsert with data that can't be upserted in strict mode "
+                        + "should throw an exception");
+            } catch (IllegalDataException e) {
+                // Expected
+            }
+
+        } finally {
+            if (parser != null)
+                parser.close();
+            if (conn != null)
+                conn.close();
+        }
+    }
+
     @Test
     public void testCSVUpsertWithAllColumn() throws Exception {
         CSVParser parser = null;
@@ -631,7 +667,7 @@ public class CSVCommonsLoaderIT extends BaseHBaseManagedTimeIT {
 
             // Upsert CSV file
             CSVCommonsLoader csvUtil = new CSVCommonsLoader(conn, "ARRAY_TABLE",
-                    null, true, ',', '"', null, "!");
+                    ImmutableList.<String>of(), true, ',', '"', null, "!");
             csvUtil.upsert(
                     new StringReader("ID,VALARRAY\n"
                             + "1,2!3!4\n"));
@@ -670,7 +706,7 @@ public class CSVCommonsLoaderIT extends BaseHBaseManagedTimeIT {
 
             // Upsert CSV file
             CSVCommonsLoader csvUtil = new CSVCommonsLoader(conn, "TS_TABLE",
-                    null, true, ',', '"', null, "!");
+                    ImmutableList.<String>of(), true, ',', '"', null, "!");
             csvUtil.upsert(
                     new StringReader("ID,TS\n"
                             + "1,1970-01-01 00:00:10\n"
