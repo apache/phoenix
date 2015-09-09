@@ -22,9 +22,11 @@ import org.apache.commons.cli.*;
 import org.apache.phoenix.pherf.PherfConstants.GeneratePhoenixStats;
 import org.apache.phoenix.pherf.configuration.XMLConfigParser;
 import org.apache.phoenix.pherf.jmx.MonitorManager;
+import org.apache.phoenix.pherf.result.ResultUtil;
 import org.apache.phoenix.pherf.schema.SchemaReader;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
 import org.apache.phoenix.pherf.util.ResourceList;
+import org.apache.phoenix.pherf.util.ResultsComparator;
 import org.apache.phoenix.pherf.workload.QueryExecutor;
 import org.apache.phoenix.pherf.workload.Workload;
 import org.apache.phoenix.pherf.workload.WorkloadExecutor;
@@ -76,6 +78,8 @@ public class Pherf {
         options.addOption("d", "debug", false, "Put tool in debug mode");
         options.addOption("stats", false,
                 "Update Phoenix Statistics after data is loaded with -l argument");
+		options.addOption("label", true, "Label a run. Result file name will be suffixed with specified label");
+		options.addOption("compare", true, "Specify labeled runs to compare against current run");
     }
 
     private final String zookeeper;
@@ -93,6 +97,8 @@ public class Pherf {
     private final boolean listFiles;
     private final boolean applySchema;
     private final GeneratePhoenixStats generateStatistics;
+    private final String label;
+    private final String compareResults;
 
     public Pherf(String[] args) throws Exception {
         CommandLineParser parser = new PosixParser();
@@ -136,6 +142,8 @@ public class Pherf {
                 command.getOptionValue("writerThreadSize",
                         properties.getProperty("pherf.default.dataloader.threadpool"));
         properties.setProperty("pherf. default.dataloader.threadpool", writerThreadPoolSize);
+        label = command.getOptionValue("label", null);
+        compareResults = command.getOptionValue("compare", null);
 
         if ((command.hasOption("h") || (args == null || args.length == 0)) && !command
                 .hasOption("listFiles")) {
@@ -144,6 +152,7 @@ public class Pherf {
         }
         PhoenixUtil.setZookeeper(zookeeper);
         PhoenixUtil.setRowCountOverride(rowCountOverride);
+        ResultUtil.setFileSuffix(label);
     }
 
     public static void main(String[] args) {
@@ -179,6 +188,15 @@ public class Pherf {
                 }
                 return;
             }
+
+            // Compare results and exit  
+			if (null != compareResults) {
+				logger.info("\nStarting to compare results and exiting for " + compareResults);
+				ResultsComparator rc = new ResultsComparator(compareResults);
+				rc.readAndRender();
+				return;
+            }
+            
             XMLConfigParser parser = new XMLConfigParser(scenarioFile);
 
             // Drop tables with PHERF schema and regex comparison
