@@ -26,7 +26,9 @@ import org.apache.phoenix.expression.ArrayConstructorExpression;
 import org.apache.phoenix.expression.CaseExpression;
 import org.apache.phoenix.expression.CoerceExpression;
 import org.apache.phoenix.expression.ComparisonExpression;
+import org.apache.phoenix.expression.CorrelateVariableFieldAccessExpression;
 import org.apache.phoenix.expression.DivideExpression;
+import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.InListExpression;
 import org.apache.phoenix.expression.IsNullExpression;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
@@ -95,6 +97,11 @@ public class StatelessTraverseNoExpressionVisitor<E> extends TraverseNoExpressio
 
     @Override
     public E visitLeave(InListExpression node, List<E> l) {
+        return null;
+    }
+
+    @Override
+    public E visit(CorrelateVariableFieldAccessExpression node) {
         return null;
     }
 
