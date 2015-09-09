@@ -56,6 +56,7 @@ import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
+import com.google.common.base.Throwables;
 
 /**
  * MapReduce mapper that converts CSV input lines into KeyValues that can be written to HFiles.
@@ -250,12 +251,11 @@ public class CsvToKeyValueMapper extends Mapper<LongWritable,Text,ImmutableBytes
         }
 
         @Override
-        public void errorOnRecord(CSVRecord csvRecord, String errorMessage) {
-            LOG.error("Error on record {}: {}", csvRecord, errorMessage);
+        public void errorOnRecord(CSVRecord csvRecord, Throwable throwable) {
+            LOG.error("Error on record " + csvRecord, throwable);
             context.getCounter(COUNTER_GROUP_NAME, "Errors on records").increment(1L);
             if (!ignoreRecordErrors) {
-                throw new RuntimeException("Error on record, " + errorMessage + ", " +
-                        "record =" + csvRecord);
+                throw Throwables.propagate(throwable);
             }
         }
     }
