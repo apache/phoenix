@@ -14,8 +14,10 @@ import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.TupleProjectionCompiler;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
+import org.apache.phoenix.execute.RuntimeContext;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.ColumnExpression;
+import org.apache.phoenix.expression.CorrelateVariableFieldAccessExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.schema.ColumnRef;
@@ -28,14 +30,17 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.types.PDataType;
 
 import com.google.common.collect.Lists;
 
 public class PhoenixRelImplementorImpl implements PhoenixRel.Implementor {
+    private final RuntimeContext runtimeContext;
 	private TableRef tableRef;
 	private Stack<ImplementorContext> contextStack;
 	
-	public PhoenixRelImplementorImpl() {
+	public PhoenixRelImplementorImpl(RuntimeContext runtimeContext) {
+	    this.runtimeContext = runtimeContext;
 	    this.contextStack = new Stack<ImplementorContext>();
 	    pushContext(new ImplementorContext(true, false));
 	}
@@ -50,7 +55,19 @@ public class PhoenixRelImplementorImpl implements PhoenixRel.Implementor {
 		ColumnRef colRef = new ColumnRef(this.tableRef, index);
 		return colRef.newColumnExpression();
 	}
-
+    
+    @SuppressWarnings("rawtypes")
+    @Override
+    public Expression newFieldAccessExpression(String variableId, int index, PDataType type) {
+        TableRef variableDef = runtimeContext.getCorrelateVariableDef(variableId);
+        Expression fieldAccessExpr = new ColumnRef(variableDef, index).newColumnExpression();
+        return new CorrelateVariableFieldAccessExpression(runtimeContext, variableId, fieldAccessExpr);
+    }
+    
+    @Override
+    public RuntimeContext getRuntimeContext() {
+        return runtimeContext;
+    }
 
     @Override
 	public void setTableRef(TableRef tableRef) {

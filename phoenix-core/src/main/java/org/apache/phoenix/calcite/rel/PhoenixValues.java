@@ -40,6 +40,7 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.SelectStatement;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.SingleKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
@@ -116,6 +117,8 @@ public class PhoenixValues extends Values implements PhoenixRel {
             TupleProjector projector = implementor.project(exprs);
             literalResult.add(projector.projectResults(baseTuple));
         }
+        PTable projectedTable = implementor.createProjectedTable();
+        implementor.setTableRef(new TableRef(projectedTable));
         
         try {
             PhoenixStatement stmt = new PhoenixStatement(phoenixConnection);

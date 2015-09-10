@@ -74,7 +74,7 @@ public class PhoenixServerAggregate extends PhoenixAbstractAggregate {
         GroupBy groupBy = super.getGroupBy(implementor);       
         super.serializeAggregators(implementor, context, groupBy.isEmpty());
         
-        QueryPlan aggPlan = new AggregatePlan(context, basePlan.getStatement(), basePlan.getTableRef(), RowProjector.EMPTY_PROJECTOR, null, OrderBy.EMPTY_ORDER_BY, null, groupBy, null);
+        QueryPlan aggPlan = new AggregatePlan(context, basePlan.getStatement(), basePlan.getTableRef(), RowProjector.EMPTY_PROJECTOR, null, OrderBy.EMPTY_ORDER_BY, null, groupBy, null, basePlan.getDynamicFilter());
         if (hashJoinPlan != null) {        
             aggPlan = HashJoinPlan.create(hashJoinPlan.getStatement(), aggPlan, hashJoinPlan.getJoinInfo(), hashJoinPlan.getSubPlans());
         }

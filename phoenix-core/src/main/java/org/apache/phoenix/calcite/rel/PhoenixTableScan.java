@@ -32,6 +32,7 @@ import org.apache.phoenix.compile.WhereOptimizer;
 import org.apache.phoenix.execute.ScanPlan;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.iterate.ParallelIteratorFactory;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.SelectStatement;
@@ -40,6 +41,7 @@ import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.base.Supplier;
@@ -88,7 +90,24 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
                 final PhoenixTable phoenixTable = table.unwrap(PhoenixTable.class);
                 PTable pTable = phoenixTable.getTable();
                 TableRef tableRef = new TableRef(CalciteUtils.createTempAlias(), pTable, HConstants.LATEST_TIMESTAMP, false);
-                Implementor tmpImplementor = new PhoenixRelImplementorImpl();
+                // We use a implementor with a special implementation for field access
+                // here, which translates RexFieldAccess into a LiteralExpression
+                // with a sample value. This will achieve 3 goals at a time:
+                // 1) avoid getting exception when translating RexFieldAccess at this 
+                //    time when the correlate variable has not been defined yet.
+                // 2) get a guess of ScanRange even if the runtime value is absent.
+                // 3) test whether this dynamic filter is worth a recompile at runtime.
+                Implementor tmpImplementor = new PhoenixRelImplementorImpl(null) {                    
+                    @SuppressWarnings("rawtypes")
+                    @Override
+                    public Expression newFieldAccessExpression(String variableId, int index, PDataType type) {
+                        try {
+                            return LiteralExpression.newConstant(type.getSampleValue(), type);
+                        } catch (SQLException e) {
+                            throw new RuntimeException(e);
+                        }
+                    }                    
+                };
                 tmpImplementor.setTableRef(tableRef);
                 SelectStatement select = SelectStatement.SELECT_ONE;
                 PhoenixStatement stmt = new PhoenixStatement(phoenixTable.pc);
@@ -163,10 +182,18 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
             ColumnResolver resolver = FromCompiler.getResolver(tableRef);
             StatementContext context = new StatementContext(stmt, resolver, new Scan(), new SequenceManager(stmt));
             SelectStatement select = SelectStatement.SELECT_ONE;
+            Expression dynamicFilter = null;
             if (filter != null) {
                 Expression filterExpr = CalciteUtils.toExpression(filter, implementor);
                 filterExpr = WhereOptimizer.pushKeyExpressionsToScan(context, select, filterExpr);
                 WhereCompiler.setScanFilter(context, select, filterExpr, true, false);
+                // TODO This is not absolutely strict. We may have a filter like:
+                // pk = '0' and pk = $cor0 where $cor0 happens to get a sample value
+                // as '0', thus making the below test return false and adding an
+                // unnecessary dynamic filter. This would only be a performance bug though.
+                if (!context.getScanRanges().equals(this.scanRanges)) {
+                    dynamicFilter = filterExpr;
+                }
             }
             projectAllColumnFamilies(context.getScan(), phoenixTable.getTable());
             if (implementor.getCurrentContext().forceProject()) {
@@ -178,7 +205,7 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
             Integer limit = null;
             OrderBy orderBy = OrderBy.EMPTY_ORDER_BY;
             ParallelIteratorFactory iteratorFactory = null;
-            return new ScanPlan(context, select, tableRef, RowProjector.EMPTY_PROJECTOR, limit, orderBy, iteratorFactory, true);
+            return new ScanPlan(context, select, tableRef, RowProjector.EMPTY_PROJECTOR, limit, orderBy, iteratorFactory, true, dynamicFilter);
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }

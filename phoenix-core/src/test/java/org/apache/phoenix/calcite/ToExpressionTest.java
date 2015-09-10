@@ -28,6 +28,7 @@ import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.ExpressionCompiler;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.execute.RuntimeContextImpl;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -79,7 +80,7 @@ public class ToExpressionTest extends BaseConnectionlessQueryTest {
 	    }
 
 	    public ExpressionChecker checkExpressionEquality() {        
-	        Implementor implementor = new PhoenixRelImplementorImpl();
+	        Implementor implementor = new PhoenixRelImplementorImpl(new RuntimeContextImpl());
 	        implementor.setTableRef(new TableRef(table));
 	        Expression e = CalciteUtils.toExpression(this.calciteExpr, implementor);
 	        assertEquals(this.phoenixExpr,e);

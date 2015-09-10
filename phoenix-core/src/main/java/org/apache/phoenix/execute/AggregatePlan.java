@@ -85,7 +85,7 @@ public class AggregatePlan extends BaseQueryPlan {
         this(context, statement, table, projector, limit, orderBy, parallelIteratorFactory, groupBy, having, null);
     }
     
-    private AggregatePlan(
+    public AggregatePlan(
             StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector,
             Integer limit, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory, GroupBy groupBy,
             Expression having, Expression dynamicFilter) {

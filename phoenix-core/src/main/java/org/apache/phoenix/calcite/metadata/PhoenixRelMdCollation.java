@@ -10,9 +10,11 @@ import org.apache.calcite.rel.metadata.ReflectiveRelMetadataProvider;
 import org.apache.calcite.rel.metadata.RelMdCollation;
 import org.apache.calcite.rel.metadata.RelMetadataProvider;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
+import org.apache.calcite.sql.SemiJoinType;
 import org.apache.calcite.util.BuiltInMethod;
 import org.apache.calcite.util.ImmutableIntList;
 import org.apache.phoenix.calcite.rel.PhoenixClientJoin;
+import org.apache.phoenix.calcite.rel.PhoenixCorrelate;
 import org.apache.phoenix.calcite.rel.PhoenixLimit;
 import org.apache.phoenix.calcite.rel.PhoenixServerJoin;
 
@@ -25,6 +27,10 @@ public class PhoenixRelMdCollation {
 
     private PhoenixRelMdCollation() { }
 
+    public ImmutableList<RelCollation> collations(PhoenixCorrelate correlate) {
+        return ImmutableList.copyOf(correlate(correlate.getLeft(), correlate.getRight(), correlate.getJoinType()));
+    }
+
     public ImmutableList<RelCollation> collations(PhoenixLimit limit) {
         return ImmutableList.copyOf(RelMdCollation.limit(limit.getInput()));
     }
@@ -35,6 +41,11 @@ public class PhoenixRelMdCollation {
 
     public ImmutableList<RelCollation> collations(PhoenixClientJoin join) {
         return ImmutableList.copyOf(PhoenixRelMdCollation.mergeJoin(join.getLeft(), join.getRight(), join.joinInfo.leftKeys, join.joinInfo.rightKeys));
+    }
+    
+    /** Helper method to determine a {@link PhoenixCorrelate}'s collation. */
+    public static List<RelCollation> correlate(RelNode left, RelNode right, SemiJoinType joinType) {
+        return RelMetadataQuery.collations(left);
     }
     
     /** Helper method to determine a {@link PhoenixServerJoin}'s collation. */

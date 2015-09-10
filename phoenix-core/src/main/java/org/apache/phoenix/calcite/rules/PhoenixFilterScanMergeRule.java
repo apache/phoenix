@@ -11,18 +11,27 @@ public class PhoenixFilterScanMergeRule extends RelOptRule {
 
     /** Predicate that returns true if a table scan has no filter. */
     private static final Predicate<PhoenixTableScan> NO_FILTER =
-        new Predicate<PhoenixTableScan>() {
-            @Override
-            public boolean apply(PhoenixTableScan phoenixTableScan) {
-                return phoenixTableScan.filter == null;
-            }
-        };
+            new Predicate<PhoenixTableScan>() {
+        @Override
+        public boolean apply(PhoenixTableScan phoenixTableScan) {
+            return phoenixTableScan.filter == null;
+        }
+    };
+
+    /** Predicate that returns true if a filter is Phoenix implementable. */
+    private static Predicate<Filter> IS_CONVERTIBLE = 
+            new Predicate<Filter>() {
+        @Override
+        public boolean apply(Filter input) {
+            return PhoenixConverterRules.isConvertible(input);
+        }            
+    };
 
     public static final PhoenixFilterScanMergeRule INSTANCE = new PhoenixFilterScanMergeRule();
 
     private PhoenixFilterScanMergeRule() {
         super(
-            operand(Filter.class,
+            operand(Filter.class, null, IS_CONVERTIBLE,
                 operand(PhoenixTableScan.class, null, NO_FILTER, any())));
     }
 

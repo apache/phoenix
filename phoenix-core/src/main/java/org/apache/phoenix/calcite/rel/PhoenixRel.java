@@ -8,11 +8,13 @@ import org.apache.calcite.rel.metadata.RelMetadataProvider;
 import org.apache.phoenix.calcite.metadata.PhoenixRelMetadataProvider;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
+import org.apache.phoenix.execute.RuntimeContext;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.ColumnExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.types.PDataType;
 
 /**
  * Relational expression in Phoenix.
@@ -68,6 +70,9 @@ public interface PhoenixRel extends RelNode {
   interface Implementor {
     QueryPlan visitInput(int i, PhoenixRel input);
     ColumnExpression newColumnExpression(int index);
+    @SuppressWarnings("rawtypes")
+    Expression newFieldAccessExpression(String variableId, int index, PDataType type);
+    RuntimeContext getRuntimeContext();
     void setTableRef(TableRef tableRef);
     TableRef getTableRef();
     void pushContext(ImplementorContext context);

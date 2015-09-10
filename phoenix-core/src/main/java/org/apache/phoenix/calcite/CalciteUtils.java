@@ -7,10 +7,14 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.calcite.avatica.util.ByteString;
+import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rex.RexCall;
+import org.apache.calcite.rex.RexCorrelVariable;
+import org.apache.calcite.rex.RexFieldAccess;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.sql.SemiJoinType;
 import org.apache.calcite.sql.SqlAggFunction;
 import org.apache.calcite.sql.SqlFunction;
 import org.apache.calcite.sql.SqlKind;
@@ -71,6 +75,7 @@ import org.apache.phoenix.expression.function.RoundTimestampExpression;
 import org.apache.phoenix.expression.function.SqrtFunction;
 import org.apache.phoenix.expression.function.TrimFunction;
 import org.apache.phoenix.expression.function.UpperFunction;
+import org.apache.phoenix.parse.JoinTableNode.JoinType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.types.PDataType;
@@ -99,6 +104,48 @@ public class CalciteUtils {
     @SuppressWarnings("rawtypes")
     public static PDataType sqlTypeNameToPDataType(SqlTypeName sqlTypeName) {
         return PDataType.fromTypeId(sqlTypeName.getJdbcOrdinal());
+    }
+    
+    public static JoinType convertJoinType(JoinRelType type) {
+        JoinType ret = null;
+        switch (type) {
+        case INNER:
+            ret = JoinType.Inner;
+            break;
+        case LEFT:
+            ret = JoinType.Left;
+            break;
+        case RIGHT:
+            ret = JoinType.Right;
+            break;
+        case FULL:
+            ret = JoinType.Full;
+            break;
+        default:
+        }
+        
+        return ret;
+    }
+    
+    public static JoinType convertSemiJoinType(SemiJoinType type) {
+        JoinType ret = null;
+        switch (type) {
+        case INNER:
+            ret = JoinType.Inner;
+            break;
+        case LEFT:
+            ret = JoinType.Left;
+            break;
+        case SEMI:
+            ret = JoinType.Semi;
+            break;
+        case ANTI:
+            ret = JoinType.Anti;
+            break;
+        default:
+        }
+        
+        return ret;
     }
 
 	private static final Map<SqlKind, ExpressionFactory> EXPRESSION_MAP = Maps
@@ -513,6 +560,21 @@ public class CalciteUtils {
 			}
 			
 		});
+		EXPRESSION_MAP.put(SqlKind.FIELD_ACCESS, new ExpressionFactory() {
+            @SuppressWarnings("rawtypes")
+            @Override
+            public Expression newExpression(RexNode node, Implementor implementor) {
+                RexFieldAccess fieldAccess = (RexFieldAccess) node;
+                RexNode refExpr = fieldAccess.getReferenceExpr();
+                if (refExpr.getKind() != SqlKind.CORREL_VARIABLE) {
+                    throw new UnsupportedOperationException("Non-correl-variable as reference expression of RexFieldAccess.");
+                }
+                String varId = ((RexCorrelVariable) refExpr).getName();
+                int index = fieldAccess.getField().getIndex();
+                PDataType type = sqlTypeNameToPDataType(node.getType().getSqlTypeName());
+                return implementor.newFieldAccessExpression(varId, index, type);
+            }		    
+		});
 		EXPRESSION_MAP.put(SqlKind.CAST, new ExpressionFactory() {
 
             @SuppressWarnings("rawtypes")
@@ -629,6 +691,7 @@ public class CalciteUtils {
             }
         });
         EXPRESSION_MAP.put(SqlKind.CEIL, new ExpressionFactory() {
+            @SuppressWarnings("rawtypes")
             @Override
             public Expression newExpression(RexNode node, Implementor implementor) {
                 //TODO Phoenix only support separate arguments.
@@ -652,6 +715,7 @@ public class CalciteUtils {
             }
         });
         EXPRESSION_MAP.put(SqlKind.FLOOR, new ExpressionFactory() {
+            @SuppressWarnings("rawtypes")
             @Override
             public Expression newExpression(RexNode node, Implementor implementor) {
                 // TODO Phoenix only support separate arguments.

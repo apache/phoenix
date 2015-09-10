@@ -27,6 +27,7 @@ import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.execute.DelegateQueryPlan;
+import org.apache.phoenix.execute.RuntimeContextImpl;
 import org.apache.phoenix.iterate.DefaultParallelScanGrouper;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
@@ -83,7 +84,7 @@ public class PhoenixToEnumerableConverter extends ConverterImpl implements Enume
     }
     
     static QueryPlan makePlan(PhoenixRel rel) {
-        final PhoenixRel.Implementor phoenixImplementor = new PhoenixRelImplementorImpl();
+        final PhoenixRel.Implementor phoenixImplementor = new PhoenixRelImplementorImpl(new RuntimeContextImpl());
         final QueryPlan plan = phoenixImplementor.visitInput(0, rel);
         return new DelegateQueryPlan(plan) {
             @Override

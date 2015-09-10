@@ -16,7 +16,6 @@ import org.apache.calcite.util.ImmutableIntList;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
-import org.apache.phoenix.parse.JoinTableNode.JoinType;
 
 /**
  * Implementation of {@link org.apache.calcite.rel.core.Join}
@@ -56,26 +55,5 @@ abstract public class PhoenixAbstractJoin extends Join implements PhoenixRel {
         }
 
         return plan;
-    }
-    
-    protected static JoinType convertJoinType(JoinRelType type) {
-        JoinType ret = null;
-        switch (type) {
-        case INNER:
-            ret = JoinType.Inner;
-            break;
-        case LEFT:
-            ret = JoinType.Left;
-            break;
-        case RIGHT:
-            ret = JoinType.Right;
-            break;
-        case FULL:
-            ret = JoinType.Full;
-            break;
-        default:
-        }
-        
-        return ret;
     }
 }

@@ -18,15 +18,18 @@ import org.apache.calcite.rel.convert.ConverterRule;
 import org.apache.calcite.rel.core.Aggregate;
 import org.apache.calcite.rel.core.Aggregate.Group;
 import org.apache.calcite.rel.core.AggregateCall;
+import org.apache.calcite.rel.core.Correlate;
 import org.apache.calcite.rel.core.Filter;
 import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.rel.core.JoinInfo;
 import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rel.core.Project;
+import org.apache.calcite.rel.core.SemiJoin;
 import org.apache.calcite.rel.core.Sort;
 import org.apache.calcite.rel.core.Uncollect;
 import org.apache.calcite.rel.core.Union;
 import org.apache.calcite.rel.logical.LogicalAggregate;
+import org.apache.calcite.rel.logical.LogicalCorrelate;
 import org.apache.calcite.rel.logical.LogicalFilter;
 import org.apache.calcite.rel.logical.LogicalJoin;
 import org.apache.calcite.rel.logical.LogicalProject;
@@ -40,13 +43,16 @@ import org.apache.phoenix.calcite.rel.PhoenixAbstractAggregate;
 import org.apache.phoenix.calcite.rel.PhoenixClientAggregate;
 import org.apache.phoenix.calcite.rel.PhoenixClientJoin;
 import org.apache.phoenix.calcite.rel.PhoenixClientProject;
+import org.apache.phoenix.calcite.rel.PhoenixClientSemiJoin;
 import org.apache.phoenix.calcite.rel.PhoenixClientSort;
+import org.apache.phoenix.calcite.rel.PhoenixCorrelate;
 import org.apache.phoenix.calcite.rel.PhoenixFilter;
 import org.apache.phoenix.calcite.rel.PhoenixLimit;
 import org.apache.phoenix.calcite.rel.PhoenixRel;
 import org.apache.phoenix.calcite.rel.PhoenixServerAggregate;
 import org.apache.phoenix.calcite.rel.PhoenixServerJoin;
 import org.apache.phoenix.calcite.rel.PhoenixServerProject;
+import org.apache.phoenix.calcite.rel.PhoenixServerSemiJoin;
 import org.apache.phoenix.calcite.rel.PhoenixServerSort;
 import org.apache.phoenix.calcite.rel.PhoenixToClientConverter;
 import org.apache.phoenix.calcite.rel.PhoenixToEnumerableConverter;
@@ -85,8 +91,11 @@ public class PhoenixConverterRules {
         PhoenixUnionRule.INSTANCE,
         PhoenixClientJoinRule.INSTANCE,
         PhoenixServerJoinRule.INSTANCE,
+        PhoenixClientSemiJoinRule.INSTANCE,
+        PhoenixServerSemiJoinRule.INSTANCE,
         PhoenixValuesRule.INSTANCE,
         PhoenixUncollectRule.INSTANCE,
+        PhoenixCorrelateRule.INSTANCE,
     };
 
     public static final RelOptRule[] CONVERTIBLE_RULES = {
@@ -106,8 +115,11 @@ public class PhoenixConverterRules {
         PhoenixUnionRule.CONVERTIBLE,
         PhoenixClientJoinRule.CONVERTIBLE,
         PhoenixServerJoinRule.CONVERTIBLE,
+        PhoenixClientSemiJoinRule.INSTANCE,
+        PhoenixServerSemiJoinRule.INSTANCE,
         PhoenixValuesRule.INSTANCE,
         PhoenixUncollectRule.INSTANCE,
+        PhoenixCorrelateRule.INSTANCE,
     };
 
     /** Base class for planner rules that convert a relational expression to
@@ -275,7 +287,7 @@ public class PhoenixConverterRules {
      * {@link PhoenixFilter}.
      */
     public static class PhoenixFilterRule extends PhoenixConverterRule {
-        private static Predicate<LogicalFilter> IS_CONVERTIBLE = new Predicate<LogicalFilter>() {
+        protected static Predicate<LogicalFilter> IS_CONVERTIBLE = new Predicate<LogicalFilter>() {
             @Override
             public boolean apply(LogicalFilter input) {
                 return isConvertible(input);
@@ -582,6 +594,78 @@ public class PhoenixConverterRules {
     }
 
     /**
+     * Rule to convert a {@link org.apache.calcite.rel.core.SemiJoin} to a
+     * {@link PhoenixClientSemiJoin}.
+     */
+    public static class PhoenixClientSemiJoinRule extends PhoenixConverterRule {
+        
+        public static final PhoenixClientSemiJoinRule INSTANCE = new PhoenixClientSemiJoinRule();
+
+        private PhoenixClientSemiJoinRule() {
+            super(SemiJoin.class, Convention.NONE, 
+                    PhoenixRel.CLIENT_CONVENTION, "PhoenixClientSemiJoinRule");
+        }
+
+        public RelNode convert(RelNode rel) {
+            final SemiJoin join = (SemiJoin) rel;
+            RelNode left = join.getLeft();
+            RelNode right = join.getRight();
+            
+            JoinInfo joinInfo = JoinInfo.of(join.getLeft(), join.getRight(), join.getCondition());
+            if (!joinInfo.leftKeys.isEmpty()) {
+                List<RelFieldCollation> leftFieldCollations = Lists.newArrayList();
+                for (Iterator<Integer> iter = joinInfo.leftKeys.iterator(); iter.hasNext();) {
+                    leftFieldCollations.add(new RelFieldCollation(iter.next(), Direction.ASCENDING));
+                }
+                RelCollation leftCollation = RelCollations.of(leftFieldCollations);
+                left = LogicalSort.create(left, leftCollation, null, null);
+                
+                List<RelFieldCollation> rightFieldCollations = Lists.newArrayList();
+                for (Iterator<Integer> iter = joinInfo.rightKeys.iterator(); iter.hasNext();) {
+                    rightFieldCollations.add(new RelFieldCollation(iter.next(), Direction.ASCENDING));
+                }
+                RelCollation rightCollation = RelCollations.of(rightFieldCollations);
+                right = LogicalSort.create(right, rightCollation, null, null);
+            }
+            
+            return PhoenixClientSemiJoin.create(
+                    convert(
+                            left, 
+                            left.getTraitSet().replace(PhoenixRel.CLIENT_CONVENTION)),
+                    convert(
+                            right, 
+                            right.getTraitSet().replace(PhoenixRel.CLIENT_CONVENTION)),
+                    join.getCondition());
+        }
+    }
+
+    /**
+     * Rule to convert a {@link org.apache.calcite.rel.core.SemiJoin} to a
+     * {@link PhoenixServerSemiJoin}.
+     */
+    public static class PhoenixServerSemiJoinRule extends PhoenixConverterRule {
+        
+        public static final PhoenixServerSemiJoinRule INSTANCE = new PhoenixServerSemiJoinRule();
+
+        private PhoenixServerSemiJoinRule() {
+            super(SemiJoin.class, Convention.NONE, 
+                    PhoenixRel.SERVERJOIN_CONVENTION, "PhoenixServerSemiJoinRule");
+        }
+
+        public RelNode convert(RelNode rel) {
+            final SemiJoin join = (SemiJoin) rel;
+            return PhoenixServerSemiJoin.create(
+                    convert(
+                            join.getLeft(), 
+                            join.getLeft().getTraitSet().replace(PhoenixRel.SERVER_CONVENTION)),
+                    convert(
+                            join.getRight(), 
+                            join.getRight().getTraitSet().replace(PhoenixRel.CLIENT_CONVENTION)),
+                    join.getCondition());
+        }
+    }
+
+    /**
      * Rule to convert a {@link org.apache.calcite.rel.core.Values} to a
      * {@link PhoenixValues}.
      */
@@ -620,6 +704,32 @@ public class PhoenixConverterRules {
                 convert(
                         uncollect.getInput(), 
                         uncollect.getInput().getTraitSet().replace(out)));
+        }
+    }
+
+    /**
+     * Rule to convert a {@link org.apache.calcite.rel.logical.LogicalCorrelate} to a
+     * {@link PhoenixCorrelate}.
+     */
+    public static class PhoenixCorrelateRule extends PhoenixConverterRule {
+        
+        private static final PhoenixCorrelateRule INSTANCE = new PhoenixCorrelateRule();
+
+        private PhoenixCorrelateRule() {
+            super(LogicalCorrelate.class, Convention.NONE, 
+                    PhoenixRel.CLIENT_CONVENTION, "PhoenixCorrelateRule");
+        }
+
+        public RelNode convert(RelNode rel) {
+            final Correlate correlate = (Correlate) rel;
+            return PhoenixCorrelate.create(
+                convert(correlate.getLeft(), 
+                        correlate.getLeft().getTraitSet().replace(out)),
+                convert(correlate.getRight(), 
+                        correlate.getRight().getTraitSet().replace(out)),
+                correlate.getCorrelationId(),
+                correlate.getRequiredColumns(),
+                correlate.getJoinType());
         }
     }
 

@@ -647,9 +647,11 @@ public class SortMergeJoinPlan implements QueryPlan {
 
     @Override
     public QueryPlan limit(Integer limit) {
-        // This should never be reached, since SortMergeJoinPlan should always be
-        // wrapped inside a ClientProcessingPlan.
-        throw new UnsupportedOperationException();
+        if (limit == null)
+            return this;
+        
+        return new ClientScanPlan(this.getContext(), this.getStatement(), this.getTableRef(),
+                this.getProjector(), limit, null, OrderBy.EMPTY_ORDER_BY, this);
     }
 
 }

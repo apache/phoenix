@@ -1,5 +1,6 @@
 package org.apache.phoenix.calcite.jdbc;
 
+import org.apache.calcite.adapter.enumerable.EnumerableRules;
 import org.apache.calcite.jdbc.CalcitePrepare;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.plan.RelOptCostFactory;
@@ -48,6 +49,7 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
             RelOptCostFactory costFactory) {
         RelOptPlanner planner = super.createPlanner(prepareContext, externalContext, costFactory);
         
+        planner.removeRule(EnumerableRules.ENUMERABLE_SEMI_JOIN_RULE);
         planner.removeRule(JoinCommuteRule.INSTANCE);
         planner.addRule(JoinCommuteRule.SWAP_OUTER);
         

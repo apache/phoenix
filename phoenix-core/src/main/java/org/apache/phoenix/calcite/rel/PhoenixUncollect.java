@@ -13,6 +13,8 @@ import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.execute.UnnestArrayPlan;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PDataType;
 
 public class PhoenixUncollect extends Uncollect implements PhoenixRel {
@@ -53,6 +55,8 @@ public class PhoenixUncollect extends Uncollect implements PhoenixRel {
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
+        PTable projectedTable = implementor.createProjectedTable();
+        implementor.setTableRef(new TableRef(projectedTable));
         return new UnnestArrayPlan(plan, arrayExpression, false);
     }
 
