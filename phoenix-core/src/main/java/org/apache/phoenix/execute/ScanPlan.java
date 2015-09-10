@@ -18,7 +18,6 @@
 package org.apache.phoenix.execute;
 
 
-import java.sql.ParameterMetaData;
 import java.sql.SQLException;
 import java.util.List;
 
@@ -31,6 +30,7 @@ import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.ScanRegionObserver;
+import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.iterate.ChunkedResultIterator;
 import org.apache.phoenix.iterate.ConcatResultIterator;
 import org.apache.phoenix.iterate.LimitingResultIterator;
@@ -79,18 +79,17 @@ public class ScanPlan extends BaseQueryPlan {
     private boolean allowPageFilter;
 
     public static ScanPlan create(ScanPlan plan, OrderBy newOrderBy) throws SQLException {
-        return new ScanPlan(plan.getContext(), plan.getStatement(), plan.getTableRef(), plan.getProjector(), null, newOrderBy, plan.parallelIteratorFactory, plan.allowPageFilter);
+        return new ScanPlan(plan.getContext(), plan.getStatement(), plan.getTableRef(), plan.getProjector(), null, newOrderBy, plan.parallelIteratorFactory, plan.allowPageFilter, plan.dynamicFilter);
     }
-    
+        
     public ScanPlan(StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector, Integer limit, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory, boolean allowPageFilter) throws SQLException {
-        this(context, statement, table, projector, context.getBindManager().getParameterMetaData(), limit, orderBy, 
-                parallelIteratorFactory != null ? parallelIteratorFactory : 
-                    buildResultIteratorFactory(context, table, orderBy, limit, allowPageFilter), 
-                allowPageFilter);
+        this(context, statement, table, projector, limit, orderBy, parallelIteratorFactory, allowPageFilter, null);
     }
     
-    private ScanPlan(StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector, ParameterMetaData paramMetaData, Integer limit, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory, boolean allowPageFilter) {
-        super(context, statement, table, projector, paramMetaData, limit, orderBy, GroupBy.EMPTY_GROUP_BY, parallelIteratorFactory);
+    private ScanPlan(StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector, Integer limit, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory, boolean allowPageFilter, Expression dynamicFilter) throws SQLException {
+        super(context, statement, table, projector, context.getBindManager().getParameterMetaData(), limit, orderBy, GroupBy.EMPTY_GROUP_BY,
+                parallelIteratorFactory != null ? parallelIteratorFactory :
+                        buildResultIteratorFactory(context, table, orderBy, limit, allowPageFilter), dynamicFilter);
         this.allowPageFilter = allowPageFilter;
         if (!orderBy.getOrderByExpressions().isEmpty()) { // TopN
             int thresholdBytes = context.getConnection().getQueryServices().getProps().getInt(
@@ -234,8 +233,12 @@ public class ScanPlan extends BaseQueryPlan {
         if (limit == this.limit || (limit != null && limit.equals(this.limit)))
             return this;
         
-        return new ScanPlan(this.context, this.statement, this.tableRef, this.projection, 
-                this.paramMetaData, limit, this.orderBy, this.parallelIteratorFactory, this.allowPageFilter);
+        try {
+            return new ScanPlan(this.context, this.statement, this.tableRef, this.projection, 
+                    limit, this.orderBy, this.parallelIteratorFactory, this.allowPageFilter, this.dynamicFilter);
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
     }
 
 }

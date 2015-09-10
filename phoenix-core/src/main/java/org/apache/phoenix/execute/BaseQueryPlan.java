@@ -41,7 +41,9 @@ import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.compile.WhereCompiler;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.ProjectedColumnExpression;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.iterate.DefaultParallelScanGrouper;
@@ -93,12 +95,19 @@ public abstract class BaseQueryPlan implements QueryPlan {
     protected final Integer limit;
     protected final OrderBy orderBy;
     protected final GroupBy groupBy;
-    protected final ParallelIteratorFactory parallelIteratorFactory;
+    protected final ParallelIteratorFactory parallelIteratorFactory;    
+    /*
+     * The filter expression that contains CorrelateVariableFieldAccessExpression
+     * and will have impact on the ScanRanges. It will recompiled at runtime 
+     * immediately before creating the ResultIterator.
+     */
+    protected final Expression dynamicFilter;
 
     protected BaseQueryPlan(
             StatementContext context, FilterableStatement statement, TableRef table,
             RowProjector projection, ParameterMetaData paramMetaData, Integer limit, OrderBy orderBy,
-            GroupBy groupBy, ParallelIteratorFactory parallelIteratorFactory) {
+            GroupBy groupBy, ParallelIteratorFactory parallelIteratorFactory,
+            Expression dynamicFilter) {
         this.context = context;
         this.statement = statement;
         this.tableRef = table;
@@ -108,6 +117,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
         this.orderBy = orderBy;
         this.groupBy = groupBy;
         this.parallelIteratorFactory = parallelIteratorFactory;
+        this.dynamicFilter = dynamicFilter;
     }
 
     @Override
@@ -140,6 +150,10 @@ public abstract class BaseQueryPlan implements QueryPlan {
     @Override
     public RowProjector getProjector() {
         return projection;
+    }
+    
+    public Expression getDynamicFilter() {
+        return dynamicFilter;
     }
 
 //    /**
@@ -174,6 +188,10 @@ public abstract class BaseQueryPlan implements QueryPlan {
         // clone the scan for each parallelized chunk.
         Scan scan = context.getScan();
         PTable table = context.getCurrentTable().getTable();
+        
+        if (dynamicFilter != null) {
+            WhereCompiler.compile(context, statement, null, Collections.singletonList(dynamicFilter), false, null);            
+        }
         
         if (OrderBy.REV_ROW_KEY_ORDER_BY.equals(orderBy)) {
             ScanUtil.setReversed(scan);

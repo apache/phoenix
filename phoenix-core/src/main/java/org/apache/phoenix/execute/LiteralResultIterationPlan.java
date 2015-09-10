@@ -40,20 +40,20 @@ import org.apache.phoenix.schema.tuple.SingleKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 public class LiteralResultIterationPlan extends BaseQueryPlan {
-    protected final Iterator<Tuple> tupleIterator;
+    protected final Iterable<Tuple> tuples;
 
     public LiteralResultIterationPlan(StatementContext context, 
             FilterableStatement statement, TableRef tableRef, RowProjector projection, 
             Integer limit, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory) {
-        this(Collections.<Tuple> singletonList(new SingleKeyValueTuple(KeyValue.LOWESTKEY)).iterator(), 
+        this(Collections.<Tuple> singletonList(new SingleKeyValueTuple(KeyValue.LOWESTKEY)), 
                 context, statement, tableRef, projection, limit, orderBy, parallelIteratorFactory);
     }
 
-    public LiteralResultIterationPlan(Iterator<Tuple> tupleIterator, StatementContext context, 
+    public LiteralResultIterationPlan(Iterable<Tuple> tuples, StatementContext context, 
             FilterableStatement statement, TableRef tableRef, RowProjector projection, 
             Integer limit, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory) {
-        super(context, statement, tableRef, projection, context.getBindManager().getParameterMetaData(), limit, orderBy, GroupBy.EMPTY_GROUP_BY, parallelIteratorFactory);
-        this.tupleIterator = tupleIterator;
+        super(context, statement, tableRef, projection, context.getBindManager().getParameterMetaData(), limit, orderBy, GroupBy.EMPTY_GROUP_BY, parallelIteratorFactory, null);
+        this.tuples = tuples;
     }
 
     @Override
@@ -75,6 +75,7 @@ public class LiteralResultIterationPlan extends BaseQueryPlan {
     protected ResultIterator newIterator(ParallelScanGrouper scanGrouper)
             throws SQLException {
         ResultIterator scanner = new ResultIterator() {
+            private final Iterator<Tuple> tupleIterator = tuples.iterator();
             private boolean closed = false;
             private int count = 0;
 
@@ -111,7 +112,7 @@ public class LiteralResultIterationPlan extends BaseQueryPlan {
         if (limit == this.limit || (limit != null && limit.equals(this.limit)))
             return this;
         
-        return new LiteralResultIterationPlan(this.tupleIterator, this.context, this.statement, this.tableRef, 
+        return new LiteralResultIterationPlan(this.tuples, this.context, this.statement, this.tableRef, 
                 this.projection, limit, this.orderBy, this.parallelIteratorFactory);
     }
 

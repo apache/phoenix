@@ -67,13 +67,13 @@ import com.google.common.collect.Lists;
 @SuppressWarnings("rawtypes")
 public class UnnestArrayPlanTest {
     
-    private static final StatementContext context;
+    private static final StatementContext CONTEXT;
     static {
         try {
             PhoenixConnection connection = DriverManager.getConnection(JDBC_PROTOCOL + JDBC_PROTOCOL_SEPARATOR + CONNECTIONLESS).unwrap(PhoenixConnection.class);
             PhoenixStatement stmt = new PhoenixStatement(connection);
             ColumnResolver resolver = FromCompiler.getResolverForQuery(SelectStatement.SELECT_ONE, connection);
-            context = new StatementContext(stmt, resolver, new Scan(), new SequenceManager(stmt));
+            CONTEXT = new StatementContext(stmt, resolver, new Scan(), new SequenceManager(stmt));
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -112,7 +112,7 @@ public class UnnestArrayPlanTest {
     private void testUnnestArrays(PArrayDataType arrayType, List<Object[]> arrays, boolean withOrdinality) throws Exception {
         PDataType baseType = PDataType.fromTypeId(arrayType.getSqlType() - PDataType.ARRAY_TYPE_BASE);
         List<Tuple> tuples = toTuples(arrayType, arrays);
-        LiteralResultIterationPlan subPlan = new LiteralResultIterationPlan(tuples.iterator(), context, SelectStatement.SELECT_ONE, TableRef.EMPTY_TABLE_REF, RowProjector.EMPTY_PROJECTOR, null, OrderBy.EMPTY_ORDER_BY, null);
+        LiteralResultIterationPlan subPlan = new LiteralResultIterationPlan(tuples, CONTEXT, SelectStatement.SELECT_ONE, TableRef.EMPTY_TABLE_REF, RowProjector.EMPTY_PROJECTOR, null, OrderBy.EMPTY_ORDER_BY, null);
         LiteralExpression dummy = LiteralExpression.newConstant(null, arrayType);
         RowKeyValueAccessor accessor = new RowKeyValueAccessor(Arrays.asList(dummy), 0);
         UnnestArrayPlan plan = new UnnestArrayPlan(subPlan, new RowKeyColumnExpression(dummy, accessor), withOrdinality);

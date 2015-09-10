@@ -287,7 +287,7 @@ public enum ExpressionType {
      * Return the ExpressionType for a given Expression instance
      */
     public static ExpressionType valueOf(Expression expression) {
-        ExpressionType type = classToEnumMap.get(expression.getClass());
+        ExpressionType type = valueOfOrNull(expression);
         if (type == null) { // FIXME: this exception gets swallowed and retries happen
             throw new IllegalArgumentException("No ExpressionType for " + expression.getClass());
         }
@@ -299,7 +299,14 @@ public enum ExpressionType {
      * or null if none exists.
      */
     public static ExpressionType valueOfOrNull(Expression expression) {
-        return classToEnumMap.get(expression.getClass());
+        Class <? extends Expression> clazz = expression.getClass();
+        // We will not have CorrelateVariableFieldAccessExpression on the server side,
+        // it will be evaluated at client side and will be serialized as 
+        // LiteralExpression instead.
+        if (clazz == CorrelateVariableFieldAccessExpression.class) {
+            clazz = LiteralExpression.class;
+        }
+        return classToEnumMap.get(clazz);
     }
 
     /**

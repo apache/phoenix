@@ -21,10 +21,15 @@ import static org.junit.Assert.assertEquals;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.Calendar;
 import java.util.Properties;
+import java.util.TimeZone;
 
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
+import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
@@ -48,6 +53,132 @@ public class TenantSpecificViewIndexCompileTest extends BaseConnectionlessQueryT
         assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_T ['me',-32768,'a'] - ['me',-32768,*]",
                 QueryUtil.getExplainPlan(rs));
     }
+
+    @Test
+    public void testOrderByOptimizedOutWithoutPredicateInView() throws Exception {
+
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute("CREATE TABLE t(t_id CHAR(15) NOT NULL, k1 CHAR(3) NOT NULL, k2 CHAR(15) NOT NULL, k3 DATE NOT NULL, v1 VARCHAR," +
+                " CONSTRAINT pk PRIMARY KEY(t_id, k1, k2, k3)) multi_tenant=true");
+        conn.createStatement().execute("CREATE VIEW v1  AS SELECT * FROM t");
+
+        conn = createTenantSpecificConnection();
+        
+        // Query without predicate ordered by full row key
+        String sql = "SELECT * FROM v1 ORDER BY k1, k2, k3";
+        String expectedExplainOutput = "CLIENT PARALLEL 1-WAY RANGE SCAN OVER T ['tenant123456789']"; 
+        assertExplainPlanIsCorrect(conn, sql, expectedExplainOutput);
+        assertOrderByHasBeenOptimizedOut(conn, sql);
+
+        // Predicate with valid partial PK
+        sql = "SELECT * FROM v1 WHERE k1 = 'xyz' ORDER BY k1, k2, k3";
+        expectedExplainOutput = "CLIENT PARALLEL 1-WAY RANGE SCAN OVER T ['tenant123456789','xyz']";
+        assertExplainPlanIsCorrect(conn, sql, expectedExplainOutput);
+        assertOrderByHasBeenOptimizedOut(conn, sql);
+        
+        sql = "SELECT * FROM v1 WHERE k1 > 'xyz' ORDER BY k1, k2, k3";
+        expectedExplainOutput = "CLIENT PARALLEL 1-WAY RANGE SCAN OVER T ['tenant123456789','xy{'] - ['tenant123456789',*]";
+        assertExplainPlanIsCorrect(conn, sql, expectedExplainOutput);
+        assertOrderByHasBeenOptimizedOut(conn, sql);
+
+        String datePredicate = createStaticDate();
+        sql = "SELECT * FROM v1 WHERE k1 = 'xyz' AND k2 = '123456789012345' AND k3 < TO_DATE('" + datePredicate + "') ORDER BY k1, k2, k3";
+        expectedExplainOutput = "CLIENT PARALLEL 1-WAY RANGE SCAN OVER T ['tenant123456789','xyz','123456789012345',*] - ['tenant123456789','xyz','123456789012345','2015-01-01 08:00:00.000']";
+        assertExplainPlanIsCorrect(conn, sql, expectedExplainOutput);
+        assertOrderByHasBeenOptimizedOut(conn, sql);
+
+        
+        // Predicate without valid partial PK
+        sql = "SELECT * FROM v1 WHERE k2 < 'abcde1234567890' ORDER BY k1, k2, k3";
+        expectedExplainOutput = "CLIENT PARALLEL 1-WAY RANGE SCAN OVER T ['tenant123456789']\n" +
+                "    SERVER FILTER BY K2 < 'abcde1234567890'";
+        assertExplainPlanIsCorrect(conn, sql, expectedExplainOutput);
+        assertOrderByHasBeenOptimizedOut(conn, sql);
+    }
+    
+    @Test
+    public void testOrderByOptimizedOutWithPredicateInView() throws Exception {
+        // Arrange
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute("CREATE TABLE t(t_id CHAR(15) NOT NULL, k1 CHAR(3) NOT NULL, k2 CHAR(15) NOT NULL, k3 DATE NOT NULL, v1 VARCHAR," +
+                " CONSTRAINT pk PRIMARY KEY(t_id, k1, k2, k3)) multi_tenant=true");
+        conn.createStatement().execute("CREATE VIEW v1  AS SELECT * FROM t WHERE k1 = 'xyz'");
+        conn = createTenantSpecificConnection();
+
+        // Query without predicate ordered by full row key
+        String sql = "SELECT * FROM v1 ORDER BY k2, k3";
+        String expectedExplainOutput = "CLIENT PARALLEL 1-WAY RANGE SCAN OVER T ['tenant123456789','xyz']"; 
+        assertExplainPlanIsCorrect(conn, sql, expectedExplainOutput);
+        assertOrderByHasBeenOptimizedOut(conn, sql);
+        
+        // Query without predicate ordered by full row key, but without column view predicate
+        sql = "SELECT * FROM v1 ORDER BY k2, k3";
+        expectedExplainOutput = "CLIENT PARALLEL 1-WAY RANGE SCAN OVER T ['tenant123456789','xyz']"; 
+        assertExplainPlanIsCorrect(conn, sql, expectedExplainOutput);
+        assertOrderByHasBeenOptimizedOut(conn, sql);
+        
+        // Predicate with valid partial PK
+        sql = "SELECT * FROM v1 WHERE k1 = 'xyz' ORDER BY k2, k3";
+        expectedExplainOutput = "CLIENT PARALLEL 1-WAY RANGE SCAN OVER T ['tenant123456789','xyz']";
+        assertExplainPlanIsCorrect(conn, sql, expectedExplainOutput);
+        assertOrderByHasBeenOptimizedOut(conn, sql);
+
+        sql = "SELECT * FROM v1 WHERE k2 < 'abcde1234567890' ORDER BY k2, k3";
+        expectedExplainOutput = "CLIENT PARALLEL 1-WAY RANGE SCAN OVER T ['tenant123456789','xyz',*] - ['tenant123456789','xyz','abcde1234567890']";
+        assertExplainPlanIsCorrect(conn, sql, expectedExplainOutput);
+        assertOrderByHasBeenOptimizedOut(conn, sql);
+
+        // Predicate with full PK
+        String datePredicate = createStaticDate();
+        sql = "SELECT * FROM v1 WHERE k2 = '123456789012345' AND k3 < TO_DATE('" + datePredicate + "') ORDER BY k2, k3";
+        expectedExplainOutput = "CLIENT PARALLEL 1-WAY RANGE SCAN OVER T ['tenant123456789','xyz','123456789012345',*] - ['tenant123456789','xyz','123456789012345','2015-01-01 08:00:00.000']";
+        assertExplainPlanIsCorrect(conn, sql, expectedExplainOutput);
+        assertOrderByHasBeenOptimizedOut(conn, sql);
+
+        
+        // Predicate with valid partial PK
+        sql = "SELECT * FROM v1 WHERE k3 < TO_DATE('" + datePredicate + "') ORDER BY k2, k3";
+        expectedExplainOutput = "CLIENT PARALLEL 1-WAY RANGE SCAN OVER T ['tenant123456789','xyz']\n" +
+                "    SERVER FILTER BY K3 < DATE '" + datePredicate + "'";
+        assertExplainPlanIsCorrect(conn, sql, expectedExplainOutput);
+        assertOrderByHasBeenOptimizedOut(conn, sql);
+    }
+
+    @Test
+    public void testOrderByOptimizedOutWithMultiplePredicatesInView() throws Exception {
+        // Arrange
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute("CREATE TABLE t(t_id CHAR(15) NOT NULL, k1 CHAR(3) NOT NULL, k2 CHAR(5) NOT NULL, k3 DATE NOT NULL, v1 VARCHAR," +
+                " CONSTRAINT pk PRIMARY KEY(t_id, k1, k2, k3 DESC)) multi_tenant=true");
+        conn.createStatement().execute("CREATE VIEW v1  AS SELECT * FROM t WHERE k1 = 'xyz' AND k2='abcde'");
+        conn = createTenantSpecificConnection();
+
+        // Query without predicate ordered by full row key
+        String sql = "SELECT * FROM v1 ORDER BY k3 DESC";
+        String expectedExplainOutput = "CLIENT PARALLEL 1-WAY RANGE SCAN OVER T ['tenant123456789','xyz','abcde']"; 
+        assertExplainPlanIsCorrect(conn, sql, expectedExplainOutput);
+        assertOrderByHasBeenOptimizedOut(conn, sql);
+        
+        // Query without predicate ordered by full row key, but without column view predicate
+        sql = "SELECT * FROM v1 ORDER BY k3 DESC";
+        expectedExplainOutput = "CLIENT PARALLEL 1-WAY RANGE SCAN OVER T ['tenant123456789','xyz','abcde']"; 
+        assertExplainPlanIsCorrect(conn, sql, expectedExplainOutput);
+        assertOrderByHasBeenOptimizedOut(conn, sql);
+
+        // Query with predicate ordered by full row key
+        sql = "SELECT * FROM v1 WHERE k3 < TO_DATE('" + createStaticDate() + "') ORDER BY k3 DESC";
+        expectedExplainOutput = "CLIENT PARALLEL 1-WAY RANGE SCAN OVER T ['tenant123456789','xyz','abcde',~'2015-01-01 07:59:59.999'] - ['tenant123456789','xyz','abcde',*]";
+        assertExplainPlanIsCorrect(conn, sql, expectedExplainOutput);
+        assertOrderByHasBeenOptimizedOut(conn, sql);
+
+        // Query with predicate ordered by full row key with date in reverse order
+        sql = "SELECT * FROM v1 WHERE k3 < TO_DATE('" + createStaticDate() + "') ORDER BY k3";
+        expectedExplainOutput = "CLIENT PARALLEL 1-WAY REVERSE RANGE SCAN OVER T ['tenant123456789','xyz','abcde',~'2015-01-01 07:59:59.999'] - ['tenant123456789','xyz','abcde',*]";
+        assertExplainPlanIsCorrect(conn, sql, expectedExplainOutput);
+        assertOrderByHasBeenOptimizedOut(conn, sql);
+
+    }
+
 
     @Test
     public void testViewConstantsOptimizedOut() throws Exception {
@@ -99,4 +230,45 @@ public class TenantSpecificViewIndexCompileTest extends BaseConnectionlessQueryT
         assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_T ['me',-32767,'a'] - ['me',-32767,*]",
                 QueryUtil.getExplainPlan(rs));
     }
+    
+    //-----------------------------------------------------------------
+    // Private Helper Methods
+    //-----------------------------------------------------------------
+    private Connection createTenantSpecificConnection() throws SQLException {
+        Connection conn;
+        Properties props = new Properties();
+        String tenantId = "tenant123456789";
+        props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId); // connection is tenant-specific
+        conn = DriverManager.getConnection(getUrl(), props);
+        return conn;
+    }
+    
+    
+    private void assertExplainPlanIsCorrect(Connection conn, String sql,
+            String expectedExplainOutput) throws SQLException {
+        ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + sql);
+        assertEquals(expectedExplainOutput, QueryUtil.getExplainPlan(rs));
+    }
+
+    private void assertOrderByHasBeenOptimizedOut(Connection conn, String sql) throws SQLException {
+        PreparedStatement stmt = conn.prepareStatement(sql);
+        QueryPlan plan = PhoenixRuntime.getOptimizedQueryPlan(stmt);
+        assertEquals(0, plan.getOrderBy().getOrderByExpressions().size());
+    }
+    
+    /**
+     * Returns the default String representation of 1/1/2015 00:00:00
+     */
+    private String createStaticDate() {
+        Calendar cal = Calendar.getInstance();
+        cal.set(Calendar.DAY_OF_YEAR, 1);
+        cal.set(Calendar.YEAR, 2015);
+        cal.set(Calendar.HOUR_OF_DAY, 0);
+        cal.set(Calendar.MINUTE, 0);
+        cal.set(Calendar.SECOND, 0);
+        cal.set(Calendar.MILLISECOND, 0);
+        cal.setTimeZone(TimeZone.getTimeZone("America/Los_Angeles"));
+        return DateUtil.DEFAULT_DATE_FORMATTER.format(cal.getTime());
+    }
+    
 }

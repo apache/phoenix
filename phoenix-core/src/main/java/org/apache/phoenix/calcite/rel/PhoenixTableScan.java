@@ -124,7 +124,7 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
         if (scanRanges != null) {
             if (scanRanges.isPointLookup()) {
                 filteredRowCount = 1.0;
-            } else if (scanRanges.getPkColumnSpan() > 0) {
+            } else if (scanRanges.getBoundPkColumnCount() > 0) {
                 // TODO
                 filteredRowCount = rowCount * RelMetadataQuery.getSelectivity(this, filter);
             }

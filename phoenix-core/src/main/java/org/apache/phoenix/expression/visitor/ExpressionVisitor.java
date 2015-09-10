@@ -27,6 +27,7 @@ import org.apache.phoenix.expression.ArrayConstructorExpression;
 import org.apache.phoenix.expression.CaseExpression;
 import org.apache.phoenix.expression.CoerceExpression;
 import org.apache.phoenix.expression.ComparisonExpression;
+import org.apache.phoenix.expression.CorrelateVariableFieldAccessExpression;
 import org.apache.phoenix.expression.DivideExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.InListExpression;
@@ -108,6 +109,7 @@ public interface ExpressionVisitor<E> {
     public Iterator<Expression> visitEnter(ArrayConstructorExpression node);
     public E visitLeave(ArrayConstructorExpression node, List<E> l);
     
+    public E visit(CorrelateVariableFieldAccessExpression node);
     public E visit(LiteralExpression node);
     public E visit(RowKeyColumnExpression node);
     public E visit(KeyValueColumnExpression node);

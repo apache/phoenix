@@ -121,7 +121,7 @@ public class PhoenixValues extends Values implements PhoenixRel {
             PhoenixStatement stmt = new PhoenixStatement(phoenixConnection);
             ColumnResolver resolver = FromCompiler.getResolver(implementor.getTableRef());
             StatementContext context = new StatementContext(stmt, resolver, new Scan(), new SequenceManager(stmt));
-            return new LiteralResultIterationPlan(literalResult.iterator(), context, SelectStatement.SELECT_ONE, TableRef.EMPTY_TABLE_REF, RowProjector.EMPTY_PROJECTOR, null, OrderBy.EMPTY_ORDER_BY, null);
+            return new LiteralResultIterationPlan(literalResult, context, SelectStatement.SELECT_ONE, TableRef.EMPTY_TABLE_REF, RowProjector.EMPTY_PROJECTOR, null, OrderBy.EMPTY_ORDER_BY, null);
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }

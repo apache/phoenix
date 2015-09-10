@@ -75,14 +75,21 @@ public class AggregatePlan extends BaseQueryPlan {
     private List<List<Scan>> scans;
     
     public static AggregatePlan create(AggregatePlan plan, OrderBy newOrderBy) {
-        return new AggregatePlan(plan.getContext(), plan.getStatement(), plan.getTableRef(), plan.getProjector(), null, newOrderBy, plan.parallelIteratorFactory, plan.getGroupBy(), plan.getHaving());
+        return new AggregatePlan(plan.getContext(), plan.getStatement(), plan.getTableRef(), plan.getProjector(), null, newOrderBy, plan.parallelIteratorFactory, plan.getGroupBy(), plan.getHaving(), plan.dynamicFilter);
     }
 
     public AggregatePlan(
             StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector,
             Integer limit, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory, GroupBy groupBy,
             Expression having) {
-        super(context, statement, table, projector, context.getBindManager().getParameterMetaData(), limit, orderBy, groupBy, parallelIteratorFactory);
+        this(context, statement, table, projector, limit, orderBy, parallelIteratorFactory, groupBy, having, null);
+    }
+    
+    private AggregatePlan(
+            StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector,
+            Integer limit, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory, GroupBy groupBy,
+            Expression having, Expression dynamicFilter) {
+        super(context, statement, table, projector, context.getBindManager().getParameterMetaData(), limit, orderBy, groupBy, parallelIteratorFactory, dynamicFilter);
         this.having = having;
         this.aggregators = context.getAggregationManager().getAggregators();
     }
@@ -228,6 +235,6 @@ public class AggregatePlan extends BaseQueryPlan {
             return this;
         
         return new AggregatePlan(this.context, this.statement, this.tableRef, this.projection,
-            limit, this.orderBy, this.parallelIteratorFactory, this.groupBy, this.having);
+            limit, this.orderBy, this.parallelIteratorFactory, this.groupBy, this.having, this.dynamicFilter);
     }
 }

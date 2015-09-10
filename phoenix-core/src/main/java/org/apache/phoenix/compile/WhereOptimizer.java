@@ -157,7 +157,6 @@ public class WhereOptimizer {
         int pkPos = 0;
         int nPKColumns = table.getPKColumns().size();
         int[] slotSpan = new int[nPKColumns];
-        List<Expression> removeFromExtractNodes = null;
         List<List<KeyRange>> cnf = Lists.newArrayListWithExpectedSize(schema.getMaxFields());
         KeyRange minMaxRange = keySlots.getMinMaxRange();
         if (minMaxRange == null) {
@@ -225,9 +224,10 @@ public class WhereOptimizer {
         boolean forcedRangeScan = statement.getHint().hasHint(Hint.RANGE_SCAN);
         boolean hasUnboundedRange = false;
         boolean hasMultiRanges = false;
-        boolean hasMultiColumnSpan = false;
-        boolean hasNonPointKey = false;
+        boolean hasRangeKey = false;
         boolean stopExtracting = false;
+        boolean useSkipScan = false;
+        //boolean useSkipScan = !forcedRangeScan && nBuckets != null;
         // Concat byte arrays of literals to form scan start key
         while (iterator.hasNext()) {
             KeyExpressionVisitor.KeySlot slot = iterator.next();
@@ -235,11 +235,14 @@ public class WhereOptimizer {
             // then we have to handle in the next phase through a key filter.
             // If the slot is null this means we have no entry for this pk position.
             if (slot == null || slot.getKeyRanges().isEmpty())  {
-                if (!forcedSkipScan || hasMultiColumnSpan) break;
                 continue;
             }
             if (slot.getPKPosition() != pkPos) {
-                if (!forcedSkipScan || hasMultiColumnSpan) break;
+                if (!forcedSkipScan) {
+                    stopExtracting = true;
+                } else {
+                    useSkipScan |= !stopExtracting && !forcedRangeScan && forcedSkipScan;
+                }
                 for (int i=pkPos; i < slot.getPKPosition(); i++) {
                     cnf.add(Collections.singletonList(KeyRange.EVERYTHING_RANGE));
                 }
@@ -247,29 +250,36 @@ public class WhereOptimizer {
             KeyPart keyPart = slot.getKeyPart();
             slotSpan[cnf.size()] = slot.getPKSpan() - 1;
             pkPos = slot.getPKPosition() + slot.getPKSpan();
-            hasMultiColumnSpan |= slot.getPKSpan() > 1;
             // Skip span-1 slots as we skip one at the top of the loop
             for (int i = 1; i < slot.getPKSpan() && iterator.hasNext(); i++) {
                 iterator.next();
             }
             List<KeyRange> keyRanges = slot.getKeyRanges();
-            for (int i = 0; (!hasUnboundedRange || !hasNonPointKey) && i < keyRanges.size(); i++) {
+            cnf.add(keyRanges);
+            
+            // TODO: when stats are available, we may want to use a skip scan if the
+            // cardinality of this slot is low.
+            /*
+             *  Stop extracting nodes once we encounter:
+             *  1) An unbound range unless we're forcing a skip scan and havn't encountered
+             *     a multi-column span. Even if we're trying to force a skip scan, we can't
+             *     execute it over a multi-column span.
+             *  2) A non range key as we can extract the first one, but further ones need
+             *     to be evaluated in a filter.
+             */
+            stopExtracting |= (hasUnboundedRange && !forcedSkipScan) || (hasRangeKey && forcedRangeScan);
+            useSkipScan |= !stopExtracting && !forcedRangeScan && (keyRanges.size() > 1 || hasRangeKey);
+            
+            for (int i = 0; (!hasUnboundedRange || !hasRangeKey) && i < keyRanges.size(); i++) {
                 KeyRange range  = keyRanges.get(i);
                 if (range.isUnbound()) {
-                    hasUnboundedRange = hasNonPointKey = true;
+                    hasUnboundedRange = hasRangeKey = true;
                 } else if (!range.isSingleKey()) {
-                    hasNonPointKey = true;
+                    hasRangeKey = true;
                 }
             }
             
             hasMultiRanges |= keyRanges.size() > 1;
-            // Force a range scan if we've encountered a multi-span slot (i.e. RVC)
-            // and a non point key, as our skip scan only handles fully qualified
-            // RVC in our skip scan. This will force us to not extract nodes any
-            // longer as well.
-            // TODO: consider ending loop here if true.
-            forcedRangeScan |= (hasMultiColumnSpan && hasNonPointKey);
-            cnf.add(keyRanges);
             
             // We cannot extract if we have multiple ranges and are forcing a range scan.
             stopExtracting |= forcedRangeScan && hasMultiRanges;
@@ -282,36 +292,14 @@ public class WhereOptimizer {
             // that, so must filter on the remaining conditions (see issue #467).
             if (!stopExtracting) {
                 List<Expression> nodesToExtract = keyPart.getExtractNodes();
-                // Detect case of a RVC used in a range. We do not want to
-                // remove these from the extract nodes.
-                if (hasMultiColumnSpan && !hasUnboundedRange) {
-                    if (removeFromExtractNodes == null) {
-                        removeFromExtractNodes = Lists.newArrayListWithExpectedSize(nodesToExtract.size() + table.getPKColumns().size() - pkPos);
-                    }
-                    removeFromExtractNodes.addAll(nodesToExtract);
-                }
                 extractNodes.addAll(nodesToExtract);
             }
-            /*
-             *  Stop building start/stop key once we encounter An unbound range unless we're
-             *  forcing a skip scan and havn't encountered a multi-column span. Even if we're
-             *  trying to force a skip scan, we can't execute it over a multi-column span.
-             */
-            if (hasUnboundedRange && (!forcedSkipScan || hasMultiColumnSpan)) {
-                // TODO: when stats are available, we may want to continue this loop if the
-                // cardinality of this slot is low. We could potentially even continue this
-                // loop in the absence of a range for a key slot.
-                break;
-            }
-            // Set stopExtracting if we're forcing a range scan and have anything other than
-            // an equality constraint. We can extract the first one, but no future ones.
-            stopExtracting |= forcedRangeScan && hasNonPointKey;
         }
         // If we have fully qualified point keys with multi-column spans (i.e. RVC),
         // we can still use our skip scan. The ScanRanges.create() call will explode
         // out the keys.
         slotSpan = Arrays.copyOf(slotSpan, cnf.size());
-        ScanRanges scanRanges = ScanRanges.create(schema, cnf, slotSpan, minMaxRange, forcedRangeScan, nBuckets);
+        ScanRanges scanRanges = ScanRanges.create(schema, cnf, slotSpan, minMaxRange, nBuckets, useSkipScan);
         context.setScanRanges(scanRanges);
         if (whereClause == null) {
             return null;
@@ -332,8 +320,9 @@ public class WhereOptimizer {
     public static boolean getKeyExpressionCombination(List<Expression> result, StatementContext context, FilterableStatement statement, List<Expression> expressions) throws SQLException {
         List<Integer> candidateIndexes = Lists.newArrayList();
         final List<Integer> pkPositions = Lists.newArrayList();
+        PTable table = context.getCurrentTable().getTable();
         for (int i = 0; i < expressions.size(); i++) {
-            KeyExpressionVisitor visitor = new KeyExpressionVisitor(context, context.getCurrentTable().getTable());
+            KeyExpressionVisitor visitor = new KeyExpressionVisitor(context, table);
             KeyExpressionVisitor.KeySlots keySlots = expressions.get(i).accept(visitor);
             int minPkPos = Integer.MAX_VALUE; 
             if (keySlots != null) {
@@ -376,6 +365,7 @@ public class WhereOptimizer {
         }
         
         int count = 0;
+        int offset = table.getBucketNum() == null ? 0 : SaltingUtil.NUM_SALTING_BYTES;
         int maxPkSpan = 0;
         Expression remaining = null;
         while (count < candidates.size()) {
@@ -388,7 +378,7 @@ public class WhereOptimizer {
                 count++;
                 break; // found the best match
             }
-            int pkSpan = context.getScanRanges().getPkColumnSpan();
+            int pkSpan = context.getScanRanges().getBoundPkColumnCount() - offset;
             if (pkSpan <= maxPkSpan) {
                 break;
             }
