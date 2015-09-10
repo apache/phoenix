@@ -24,6 +24,7 @@ import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.GregorianCalendar;
 import java.util.Random;
+import java.util.TimeZone;
 
 public class GeneratePerformanceData {
     private static final String FILENAME = "data.csv";
@@ -37,6 +38,7 @@ public class GeneratePerformanceData {
         try {
             Random random = new Random();
             SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+            sdf.setTimeZone(TimeZone.getTimeZone("GMT"));
             if (args.length < 1) {
                 System.out.println("Row count must be specified as argument");
                 return;
@@ -61,3 +63,4 @@ public class GeneratePerformanceData {
         }
     }
 }
+
