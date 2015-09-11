@@ -260,13 +260,13 @@ public class QueryExecutor implements Workload {
         Runnable thread;
         if (workloadExecutor.isPerformance()) {
             thread =
-                    new MultithreadedDiffer(threadTime.getThreadName(), queryResult, threadTime,
-                            querySet.getNumberOfExecutions(), querySet.getExecutionDurationInMs());
-        } else {
-            thread =
                     new MultiThreadedRunner(threadTime.getThreadName(), queryResult,
                             dataModelResult, threadTime, querySet.getNumberOfExecutions(),
                             querySet.getExecutionDurationInMs());
+        } else {
+            thread =
+                    new MultithreadedDiffer(threadTime.getThreadName(), queryResult, threadTime,
+                            querySet.getNumberOfExecutions(), querySet.getExecutionDurationInMs());
         }
         return thread;
     }
