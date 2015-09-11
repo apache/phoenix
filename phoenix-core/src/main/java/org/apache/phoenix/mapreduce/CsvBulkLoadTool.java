@@ -341,28 +341,19 @@ public class CsvBulkLoadTool extends Configured implements Tool {
         char delimiterChar = ',';
         if (cmdLine.hasOption(DELIMITER_OPT.getOpt())) {
             String delimString = cmdLine.getOptionValue(DELIMITER_OPT.getOpt());
-            if (delimString.length() != 1) {
-                throw new IllegalArgumentException("Illegal delimiter character: " + delimString);
-            }
-            delimiterChar = delimString.charAt(0);
+            delimiterChar = toChar(delimString);
         }
 
         char quoteChar = '"';
         if (cmdLine.hasOption(QUOTE_OPT.getOpt())) {
             String quoteString = cmdLine.getOptionValue(QUOTE_OPT.getOpt());
-            if (quoteString.length() != 1) {
-                throw new IllegalArgumentException("Illegal quote character: " + quoteString);
-            }
-            quoteChar = quoteString.charAt(0);
+            quoteChar = toChar(quoteString);
         }
 
         char escapeChar = '\\';
         if (cmdLine.hasOption(ESCAPE_OPT.getOpt())) {
             String escapeString = cmdLine.getOptionValue(ESCAPE_OPT.getOpt());
-            if (escapeString.length() != 1) {
-                throw new IllegalArgumentException("Illegal escape character: " + escapeString);
-            }
-            escapeChar = escapeString.charAt(0);
+            escapeChar = toChar(escapeString);
         }
 
         CsvBulkImportUtil.initCsvImportJob(
@@ -376,6 +367,83 @@ public class CsvBulkLoadTool extends Configured implements Tool {
                 cmdLine.getOptionValue(ARRAY_DELIMITER_OPT.getOpt()),
                 importColumns,
                 cmdLine.hasOption(IGNORE_ERRORS_OPT.getOpt()));
+    }
+
+    /**
+     * Given a string containing a single character or an escape sequence
+     * representing a char, return that char itself.
+     *
+     * Normal literal characters return themselves: "x" -&gt; 'x', etc.
+     * Strings containing a '\' followed by one of t, r, n, or b escape to the
+     * usual character as seen in Java: "\n" -&gt; (newline), etc.
+     *
+     * Strings like "\0ooo" return the character specified by the octal sequence
+     * 'ooo'. Strings like "\0xhhh" or "\0Xhhh" return the character specified by
+     * the hex sequence 'hhh'.
+     *
+     * If the input string contains leading or trailing spaces, these are
+     * ignored.
+     */
+    public static char toChar(String charish) throws IllegalArgumentException {
+        if (null == charish || charish.length() == 0) {
+            throw new IllegalArgumentException("Illegal escape character: " + charish);
+        }
+
+        if (charish.startsWith("\\0x") || charish.startsWith("\\0X")) {
+            if (charish.length() == 3) {
+                throw new IllegalArgumentException("Illegal escape character: " + charish);
+            } else {
+                String valStr = charish.substring(3);
+                int val = Integer.parseInt(valStr, 16);
+                return (char) val;
+            }
+        } else if (charish.startsWith("\\0")) {
+            if (charish.equals("\\0")) {
+                // it's just '\0', which we can take as shorthand for nul.
+                return '\000';
+            } else {
+                // it's an octal value.
+                String valStr = charish.substring(2);
+                int val = Integer.parseInt(valStr, 8);
+                return (char) val;
+            }
+        } else if (charish.startsWith("\\")) {
+            if (charish.length() == 1) {
+                // it's just a '\'. Keep it literal.
+                return '\\';
+            } else if (charish.length() > 2) {
+                // we don't have any 3+ char escape strings.
+                throw new IllegalArgumentException("Illegal escape character: " + charish);
+            } else {
+                // this is some sort of normal 1-character escape sequence.
+                char escapeWhat = charish.charAt(1);
+                switch(escapeWhat) {
+                    case 'b':
+                        return '\b';
+                    case 'n':
+                        return '\n';
+                    case 'r':
+                        return '\r';
+                    case 't':
+                        return '\t';
+                    case '\"':
+                        return '\"';
+                    case '\'':
+                        return '\'';
+                    case '\\':
+                        return '\\';
+                    default:
+                        throw new IllegalArgumentException("Illegal escape character: " + charish);
+                }
+            }
+        } else {
+            // it's a normal character.
+            if (charish.length() > 1) {
+                LOG.warn("Character argument " + charish + " has multiple characters; "
+                        + "only the first will be used.");
+            }
+            return charish.charAt(0);
+        }
     }
 
     /**
