@@ -10,6 +10,7 @@ import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Aggregate;
 import org.apache.calcite.rel.core.AggregateCall;
 import org.apache.calcite.util.ImmutableBitSet;
+import org.apache.calcite.util.ImmutableIntList;
 import org.apache.phoenix.calcite.CalciteUtils;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
@@ -66,6 +67,18 @@ abstract public class PhoenixAbstractAggregate extends Aggregate implements Phoe
             return planner.getCostFactory().makeInfiniteCost();
         
         return super.computeSelfCost(planner);
+    }
+    
+    protected ImmutableIntList getColumnRefList() {
+        List<Integer> columnRefList = Lists.newArrayList();
+        for (ImmutableBitSet set : groupSets) {
+            columnRefList.addAll(set.asList());
+        }
+        // TODO filterArg??
+        for (AggregateCall call : aggCalls) {
+            columnRefList.addAll(call.getArgList());
+        }
+        return ImmutableIntList.copyOf(columnRefList);
     }
     
     protected GroupBy getGroupBy(Implementor implementor) {

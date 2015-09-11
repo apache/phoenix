@@ -14,6 +14,7 @@ import org.apache.calcite.rel.core.Correlate;
 import org.apache.calcite.rel.core.CorrelationId;
 import org.apache.calcite.sql.SemiJoinType;
 import org.apache.calcite.util.ImmutableBitSet;
+import org.apache.calcite.util.ImmutableIntList;
 import org.apache.phoenix.calcite.CalciteUtils;
 import org.apache.phoenix.calcite.metadata.PhoenixRelMdCollation;
 import org.apache.phoenix.compile.JoinCompiler;
@@ -68,14 +69,14 @@ public class PhoenixCorrelate extends Correlate implements PhoenixRel {
     
     @Override
     public QueryPlan implement(Implementor implementor) {
-        implementor.pushContext(new ImplementorContext(implementor.getCurrentContext().isRetainPKColumns(), true));
+        implementor.pushContext(new ImplementorContext(implementor.getCurrentContext().retainPKColumns, true, ImmutableIntList.identity(getLeft().getRowType().getFieldCount())));
         QueryPlan leftPlan = implementor.visitInput(0, (PhoenixRel) getLeft());
         PTable leftTable = implementor.getTableRef().getTable();
         implementor.popContext();
 
         implementor.getRuntimeContext().defineCorrelateVariable(getCorrelVariable(), implementor.getTableRef());
 
-        implementor.pushContext(new ImplementorContext(false, true));
+        implementor.pushContext(new ImplementorContext(false, true, ImmutableIntList.identity(getRight().getRowType().getFieldCount())));
         QueryPlan rightPlan = implementor.visitInput(1, (PhoenixRel) getRight());
         PTable rightTable = implementor.getTableRef().getTable();
         implementor.popContext();

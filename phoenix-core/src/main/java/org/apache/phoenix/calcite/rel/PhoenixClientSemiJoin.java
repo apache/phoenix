@@ -96,12 +96,12 @@ public class PhoenixClientSemiJoin extends PhoenixAbstractSemiJoin implements
         List<Expression> leftExprs = Lists.<Expression> newArrayList();
         List<Expression> rightExprs = Lists.<Expression> newArrayList();
 
-        implementor.pushContext(new ImplementorContext(implementor.getCurrentContext().isRetainPKColumns() && getJoinType() != JoinRelType.FULL, true));
+        implementor.pushContext(new ImplementorContext(implementor.getCurrentContext().retainPKColumns && getJoinType() != JoinRelType.FULL, true, getColumnRefList(0)));
         QueryPlan leftPlan = implementInput(implementor, 0, leftExprs);
         TableRef joinedTable = implementor.getTableRef();
         implementor.popContext();
 
-        implementor.pushContext(new ImplementorContext(false, true));
+        implementor.pushContext(new ImplementorContext(false, true, getColumnRefList(1)));
         QueryPlan rightPlan = implementInput(implementor, 1, rightExprs);
         implementor.popContext();
         

@@ -5,12 +5,15 @@ import java.util.List;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptCost;
 import org.apache.calcite.plan.RelOptPlanner;
+import org.apache.calcite.plan.RelOptUtil.InputFinder;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Project;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.util.ImmutableBitSet;
+import org.apache.calcite.util.ImmutableIntList;
 import org.apache.phoenix.calcite.CalciteUtils;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.Expression;
@@ -35,6 +38,15 @@ abstract public class PhoenixAbstractProject extends Project implements PhoenixR
         double rowCount = RelMetadataQuery.getRowCount(getInput());
         double rows = 2 * rowCount / (rowCount + 1);
         return planner.getCostFactory().makeCost(rows, 0, 0);
+    }
+    
+    protected ImmutableIntList getColumnRefList() {
+        ImmutableBitSet bitSet = ImmutableBitSet.of();
+        for (RexNode node : getProjects()) {
+            InputFinder inputFinder = InputFinder.analyze(node);
+            bitSet = bitSet.union(inputFinder.inputBitSet.build());
+        }
+        return ImmutableIntList.copyOf(bitSet.asList());
     }
     
     protected TupleProjector project(Implementor implementor) {        

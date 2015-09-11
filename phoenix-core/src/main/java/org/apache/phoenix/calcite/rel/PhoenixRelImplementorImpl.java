@@ -42,7 +42,6 @@ public class PhoenixRelImplementorImpl implements PhoenixRel.Implementor {
 	public PhoenixRelImplementorImpl(RuntimeContext runtimeContext) {
 	    this.runtimeContext = runtimeContext;
 	    this.contextStack = new Stack<ImplementorContext>();
-	    pushContext(new ImplementorContext(true, false));
 	}
 	
     @Override
@@ -102,7 +101,7 @@ public class PhoenixRelImplementorImpl implements PhoenixRel.Implementor {
         }
         
         try {
-            return TupleProjectionCompiler.createProjectedTable(getTableRef(), sourceColumnRefs, getCurrentContext().isRetainPKColumns());
+            return TupleProjectionCompiler.createProjectedTable(getTableRef(), sourceColumnRefs, getCurrentContext().retainPKColumns);
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }

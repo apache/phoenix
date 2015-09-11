@@ -58,7 +58,9 @@ public class PhoenixClientAggregate extends PhoenixAbstractAggregate {
 
     @Override
     public QueryPlan implement(Implementor implementor) {
+        implementor.pushContext(implementor.getCurrentContext().withColumnRefList(getColumnRefList()));
         QueryPlan plan = implementor.visitInput(0, (PhoenixRel) getInput());
+        implementor.popContext();
         
         TableRef tableRef = implementor.getTableRef();
         PhoenixStatement stmt = plan.getContext().getStatement();

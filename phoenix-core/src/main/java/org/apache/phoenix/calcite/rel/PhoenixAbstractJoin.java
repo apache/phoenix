@@ -40,6 +40,14 @@ abstract public class PhoenixAbstractJoin extends Join implements PhoenixRel {
             .itemIf("isSingleValueRhs", isSingleValueRhs, isSingleValueRhs);
     }
     
+    protected ImmutableIntList getColumnRefList(int index) {
+        assert index <= 1;
+        
+        return index == 0 ? 
+                ImmutableIntList.identity(getLeft().getRowType().getFieldCount()) 
+              : ImmutableIntList.identity(getRight().getRowType().getFieldCount());
+    }
+    
     protected QueryPlan implementInput(Implementor implementor, int index, List<Expression> conditionExprs) {
         assert index <= 1;
         

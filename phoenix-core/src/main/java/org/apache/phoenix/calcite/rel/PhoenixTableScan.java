@@ -7,6 +7,7 @@ import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptCost;
 import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelOptTable;
+import org.apache.calcite.plan.RelOptUtil.InputFinder;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelCollation;
 import org.apache.calcite.rel.RelCollationTraitDef;
@@ -15,6 +16,8 @@ import org.apache.calcite.rel.RelWriter;
 import org.apache.calcite.rel.core.TableScan;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.util.ImmutableBitSet;
+import org.apache.calcite.util.ImmutableIntList;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.calcite.CalciteUtils;
@@ -38,7 +41,7 @@ import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.schema.KeyValueSchema.KeyValueSchemaBuilder;
 import org.apache.phoenix.schema.PColumn;
-import org.apache.phoenix.schema.PColumnFamily;
+import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PDataType;
@@ -182,8 +185,11 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
             ColumnResolver resolver = FromCompiler.getResolver(tableRef);
             StatementContext context = new StatementContext(stmt, resolver, new Scan(), new SequenceManager(stmt));
             SelectStatement select = SelectStatement.SELECT_ONE;
+            ImmutableIntList columnRefList = implementor.getCurrentContext().columnRefList;
             Expression dynamicFilter = null;
             if (filter != null) {
+                ImmutableBitSet bitSet = InputFinder.analyze(filter).inputBitSet.addAll(columnRefList).build();
+                columnRefList = ImmutableIntList.copyOf(bitSet.asList());
                 Expression filterExpr = CalciteUtils.toExpression(filter, implementor);
                 filterExpr = WhereOptimizer.pushKeyExpressionsToScan(context, select, filterExpr);
                 WhereCompiler.setScanFilter(context, select, filterExpr, true, false);
@@ -195,8 +201,8 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
                     dynamicFilter = filterExpr;
                 }
             }
-            projectAllColumnFamilies(context.getScan(), phoenixTable.getTable());
-            if (implementor.getCurrentContext().forceProject()) {
+            projectColumnFamilies(context.getScan(), phoenixTable.getTable(), columnRefList);
+            if (implementor.getCurrentContext().forceProject) {
                 TupleProjector tupleProjector = createTupleProjector(implementor, phoenixTable.getTable());
                 TupleProjector.serializeProjectorIntoScan(context.getScan(), tupleProjector);
                 PTable projectedTable = implementor.createProjectedTable();
@@ -215,7 +221,7 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
         KeyValueSchemaBuilder builder = new KeyValueSchemaBuilder(0);
         List<Expression> exprs = Lists.<Expression> newArrayList();
         for (PColumn column : table.getColumns()) {
-            if (!SchemaUtil.isPKColumn(column) || !implementor.getCurrentContext().isRetainPKColumns()) {
+            if (!SchemaUtil.isPKColumn(column) || !implementor.getCurrentContext().retainPKColumns) {
                 Expression expr = implementor.newColumnExpression(column.getPosition());
                 exprs.add(expr);
                 builder.addField(expr);                
@@ -225,11 +231,14 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
         return new TupleProjector(builder.build(), exprs.toArray(new Expression[exprs.size()]));
     }
     
-    // TODO only project needed columns
-    private void projectAllColumnFamilies(Scan scan, PTable table) {
+    private void projectColumnFamilies(Scan scan, PTable table, ImmutableIntList columnRefList) {
         scan.getFamilyMap().clear();
-        for (PColumnFamily family : table.getColumnFamilies()) {
-            scan.addFamily(family.getName().getBytes());
+        for (Integer index : columnRefList) {
+            PColumn column = table.getColumns().get(index);
+            PName familyName = column.getFamilyName();
+            if (familyName != null) {
+                scan.addFamily(familyName.getBytes());
+            }
         }
     }
 

@@ -22,7 +22,9 @@ import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.convert.ConverterImpl;
 import org.apache.calcite.rel.type.RelDataType;
+import org.apache.calcite.util.ImmutableIntList;
 import org.apache.phoenix.calcite.BuiltInMethod;
+import org.apache.phoenix.calcite.rel.PhoenixRel.ImplementorContext;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
@@ -85,6 +87,7 @@ public class PhoenixToEnumerableConverter extends ConverterImpl implements Enume
     
     static QueryPlan makePlan(PhoenixRel rel) {
         final PhoenixRel.Implementor phoenixImplementor = new PhoenixRelImplementorImpl(new RuntimeContextImpl());
+        phoenixImplementor.pushContext(new ImplementorContext(true, false, ImmutableIntList.identity(rel.getRowType().getFieldCount())));
         final QueryPlan plan = phoenixImplementor.visitInput(0, rel);
         return new DelegateQueryPlan(plan) {
             @Override

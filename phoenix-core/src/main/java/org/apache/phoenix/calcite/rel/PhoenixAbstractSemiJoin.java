@@ -21,6 +21,14 @@ abstract public class PhoenixAbstractSemiJoin extends SemiJoin implements Phoeni
         super(cluster, traitSet, left, right, condition, leftKeys, rightKeys);
     }
     
+    protected ImmutableIntList getColumnRefList(int index) {
+        assert index <= 1;
+        
+        return index == 0 ? 
+                ImmutableIntList.identity(getLeft().getRowType().getFieldCount()) 
+              : rightKeys;
+    }
+    
     protected QueryPlan implementInput(Implementor implementor, int index, List<Expression> conditionExprs) {
         assert index <= 1;
         

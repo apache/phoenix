@@ -5,6 +5,7 @@ import java.util.List;
 import org.apache.calcite.plan.Convention;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.metadata.RelMetadataProvider;
+import org.apache.calcite.util.ImmutableIntList;
 import org.apache.phoenix.calcite.metadata.PhoenixRelMetadataProvider;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
@@ -48,20 +49,18 @@ public interface PhoenixRel extends RelNode {
   QueryPlan implement(Implementor implementor);
   
   class ImplementorContext {
-      private boolean retainPKColumns;
-      private boolean forceProject;
+      public final boolean retainPKColumns;
+      public final boolean forceProject;
+      public final ImmutableIntList columnRefList;
       
-      public ImplementorContext(boolean retainPKColumns, boolean forceProject) {
+      public ImplementorContext(boolean retainPKColumns, boolean forceProject, ImmutableIntList columnRefList) {
           this.retainPKColumns = retainPKColumns;
           this.forceProject = forceProject;
+          this.columnRefList = columnRefList;
       }
       
-      public boolean isRetainPKColumns() {
-          return this.retainPKColumns;
-      }
-      
-      public boolean forceProject() {
-          return this.forceProject;
+      public ImplementorContext withColumnRefList(ImmutableIntList columnRefList) {
+          return new ImplementorContext(this.retainPKColumns, this.forceProject, columnRefList);
       }
   }
 

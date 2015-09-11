@@ -57,9 +57,10 @@ public class PhoenixServerProject extends PhoenixAbstractProject {
 
     @Override
     public QueryPlan implement(Implementor implementor) {
-        implementor.pushContext(new ImplementorContext(implementor.getCurrentContext().isRetainPKColumns(), false));
+        implementor.pushContext(new ImplementorContext(implementor.getCurrentContext().retainPKColumns, false, getColumnRefList()));
         QueryPlan plan = implementor.visitInput(0, (PhoenixRel) getInput());
         implementor.popContext();
+        
         assert (plan instanceof ScanPlan);
         
         TupleProjector tupleProjector = super.project(implementor);
