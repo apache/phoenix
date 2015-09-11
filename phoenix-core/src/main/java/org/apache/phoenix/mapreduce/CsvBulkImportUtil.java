@@ -19,7 +19,9 @@ package org.apache.phoenix.mapreduce;
 
 import java.util.List;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.util.Base64;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.util.ColumnInfo;
 
@@ -49,9 +51,9 @@ public class CsvBulkImportUtil {
         Preconditions.checkNotNull(columnInfoList);
         Preconditions.checkArgument(!columnInfoList.isEmpty(), "Column info list is empty");
         conf.set(CsvToKeyValueMapper.TABLE_NAME_CONFKEY, tableName);
-        conf.set(CsvToKeyValueMapper.FIELD_DELIMITER_CONFKEY, String.valueOf(fieldDelimiter));
-        conf.set(CsvToKeyValueMapper.QUOTE_CHAR_CONFKEY, String.valueOf(quoteChar));
-        conf.set(CsvToKeyValueMapper.ESCAPE_CHAR_CONFKEY, String.valueOf(escapeChar));
+        setChar(conf, CsvToKeyValueMapper.FIELD_DELIMITER_CONFKEY, fieldDelimiter);
+        setChar(conf, CsvToKeyValueMapper.QUOTE_CHAR_CONFKEY, quoteChar);
+        setChar(conf, CsvToKeyValueMapper.ESCAPE_CHAR_CONFKEY, escapeChar);
         if (arrayDelimiter != null) {
             conf.set(CsvToKeyValueMapper.ARRAY_DELIMITER_CONFKEY, arrayDelimiter);
         }
@@ -69,5 +71,19 @@ public class CsvBulkImportUtil {
             Class<? extends ImportPreUpsertKeyValueProcessor> processorClass) {
         conf.setClass(PhoenixConfigurationUtil.UPSERT_HOOK_CLASS_CONFKEY, processorClass,
                 ImportPreUpsertKeyValueProcessor.class);
+    }
+
+    @VisibleForTesting
+    static void setChar(Configuration conf, String confKey, char charValue) {
+        conf.set(confKey, Base64.encodeBytes(Character.toString(charValue).getBytes()));
+    }
+
+    @VisibleForTesting
+    static Character getCharacter(Configuration conf, String confKey) {
+        String strValue = conf.get(confKey);
+        if (strValue == null) {
+            return null;
+        }
+        return new String(Base64.decode(strValue)).charAt(0);
     }
 }

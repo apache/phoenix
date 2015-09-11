@@ -124,8 +124,10 @@ public class CsvToKeyValueMapper extends Mapper<LongWritable,Text,ImmutableBytes
         upsertListener = new MapperUpsertListener(
                 context, conf.getBoolean(IGNORE_INVALID_ROW_CONFKEY, true));
         csvUpsertExecutor = buildUpsertExecutor(conf);
-        csvLineParser = new CsvLineParser(conf.get(FIELD_DELIMITER_CONFKEY).charAt(0), conf.get(QUOTE_CHAR_CONFKEY).charAt(0),
-                conf.get(ESCAPE_CHAR_CONFKEY).charAt(0));
+        csvLineParser = new CsvLineParser(
+                CsvBulkImportUtil.getCharacter(conf, FIELD_DELIMITER_CONFKEY),
+                CsvBulkImportUtil.getCharacter(conf, QUOTE_CHAR_CONFKEY),
+                CsvBulkImportUtil.getCharacter(conf, ESCAPE_CHAR_CONFKEY));
 
         preUpdateProcessor = PhoenixConfigurationUtil.loadPreUpsertProcessor(conf);
         if(!conf.get(CsvToKeyValueMapper.INDEX_TABLE_NAME_CONFKEY, "").isEmpty()){
