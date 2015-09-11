@@ -20,6 +20,10 @@ package org.apache.phoenix.mapreduce;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
@@ -34,13 +38,13 @@ import com.google.common.collect.ImmutableList;
 public class CsvBulkImportUtilTest {
 
     @Test
-    public void testInitCsvImportJob() {
+    public void testInitCsvImportJob() throws IOException {
         Configuration conf = new Configuration();
 
         String tableName = "SCHEMANAME.TABLENAME";
-        char delimiter = '!';
-        char quote = '"';
-        char escape = '\\';
+        char delimiter = '\001';
+        char quote = '\002';
+        char escape = '!';
 
         List<ColumnInfo> columnInfoList = ImmutableList.of(
                 new ColumnInfo("MYCOL", PInteger.INSTANCE.getSqlType()));
@@ -48,11 +52,27 @@ public class CsvBulkImportUtilTest {
         CsvBulkImportUtil.initCsvImportJob(
                 conf, tableName, delimiter, quote, escape, null, columnInfoList, true);
 
-        assertEquals(tableName, conf.get(CsvToKeyValueMapper.TABLE_NAME_CONFKEY));
-        assertEquals("!", conf.get(CsvToKeyValueMapper.FIELD_DELIMITER_CONFKEY));
-        assertNull(conf.get(CsvToKeyValueMapper.ARRAY_DELIMITER_CONFKEY));
-        assertEquals(columnInfoList, CsvToKeyValueMapper.buildColumnInfoList(conf));
-        assertEquals(true, conf.getBoolean(CsvToKeyValueMapper.IGNORE_INVALID_ROW_CONFKEY, false));
+        // Serialize and deserialize the config to ensure that there aren't any issues
+        // with non-printable characters as delimiters
+        File tempFile = File.createTempFile("test-config", ".xml");
+        FileOutputStream fileOutputStream = new FileOutputStream(tempFile);
+        conf.writeXml(fileOutputStream);
+        fileOutputStream.close();
+        Configuration deserialized = new Configuration();
+        deserialized.addResource(new FileInputStream(tempFile));
+
+        assertEquals(tableName, deserialized.get(CsvToKeyValueMapper.TABLE_NAME_CONFKEY));
+        assertEquals(Character.valueOf('\001'),
+                CsvBulkImportUtil.getCharacter(deserialized, CsvToKeyValueMapper.FIELD_DELIMITER_CONFKEY));
+        assertEquals(Character.valueOf('\002'),
+                CsvBulkImportUtil.getCharacter(deserialized, CsvToKeyValueMapper.QUOTE_CHAR_CONFKEY));
+        assertEquals(Character.valueOf('!'),
+                CsvBulkImportUtil.getCharacter(deserialized, CsvToKeyValueMapper.ESCAPE_CHAR_CONFKEY));
+        assertNull(deserialized.get(CsvToKeyValueMapper.ARRAY_DELIMITER_CONFKEY));
+        assertEquals(columnInfoList, CsvToKeyValueMapper.buildColumnInfoList(deserialized));
+        assertEquals(true, deserialized.getBoolean(CsvToKeyValueMapper.IGNORE_INVALID_ROW_CONFKEY, false));
+
+        tempFile.delete();
     }
 
     @Test
@@ -63,6 +83,25 @@ public class CsvBulkImportUtilTest {
         assertEquals(MockProcessor.class, processor.getClass());
     }
 
+    @Test
+    public void testGetAndSetChar_BasicChar() {
+        Configuration conf = new Configuration();
+        CsvBulkImportUtil.setChar(conf, "conf.key", '|');
+        assertEquals(Character.valueOf('|'), CsvBulkImportUtil.getCharacter(conf, "conf.key"));
+    }
+
+    @Test
+    public void testGetAndSetChar_NonPrintableChar() {
+        Configuration conf = new Configuration();
+        CsvBulkImportUtil.setChar(conf, "conf.key", '\001');
+        assertEquals(Character.valueOf('\001'), CsvBulkImportUtil.getCharacter(conf, "conf.key"));
+    }
+
+    @Test
+    public void testGetChar_NotPresent() {
+        Configuration conf = new Configuration();
+        assertNull(CsvBulkImportUtil.getCharacter(conf, "conf.key"));
+    }
 
     public static class MockProcessor implements ImportPreUpsertKeyValueProcessor {
 
