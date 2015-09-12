@@ -18,13 +18,11 @@
 package org.apache.phoenix.calcite;
 
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 
 import org.apache.calcite.config.CalciteConnectionProperty;
-import org.apache.calcite.jdbc.CalciteConnection;
-import org.apache.calcite.schema.SchemaPlus;
 import org.apache.phoenix.end2end.BaseClientManagedTimeIT;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Before;
 import org.junit.Ignore;
@@ -35,9 +33,7 @@ import java.io.FileWriter;
 import java.io.PrintWriter;
 import java.sql.*;
 import java.util.List;
-import java.util.Map;
 import java.util.Properties;
-import java.util.Map.Entry;
 
 import static org.apache.phoenix.util.TestUtil.JOIN_CUSTOMER_TABLE_FULL_NAME;
 import static org.apache.phoenix.util.TestUtil.JOIN_ITEM_TABLE_FULL_NAME;
@@ -52,28 +48,27 @@ import static org.junit.Assert.*;
 public class CalciteIT extends BaseClientManagedTimeIT {
     public static final String ATABLE_NAME = "ATABLE";
 
-    public static Start start() {
-        return new Start(getConnectionProps(false), false);
+    public static Start start(boolean materializationEnabled) {
+        return new Start(getConnectionProps(materializationEnabled));
     }
     
-    public static Start start(Properties props, boolean connectUsingModel) {
-        return new Start(props, connectUsingModel);
+    public static Start start(Properties props) {
+        return new Start(props);
     }
 
     public static class Start {
         protected final Properties props;
-        protected final boolean connectUsingModel;
         private Connection connection;
         
-        Start(Properties props, boolean connectUsingModel) {
+        Start(Properties props) {
             this.props = props;
-            this.connectUsingModel = connectUsingModel;
         }
 
         Connection createConnection() throws Exception {
-            return connectUsingModel ? 
-                    CalciteIT.connectUsingModel(props) 
-                  : CalciteIT.createConnection(props);
+            return DriverManager.getConnection(
+                    "jdbc:phoenixcalcite:" 
+                            + getUrl().substring(PhoenixRuntime.JDBC_PROTOCOL.length() + 1), 
+                    props);
         }
 
         public Sql sql(String sql) {
@@ -232,29 +227,11 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                 + "}\n");
         pw.close();
         final Connection connection =
-            DriverManager.getConnection("jdbc:phoenixcalcite:model=" + file.getAbsolutePath(), props == null ? new Properties() : props);
+            DriverManager.getConnection("jdbc:phoenixcalcite:model=" + file.getAbsolutePath(), props);
         return connection;
     }
 
-    private static Connection createConnection(Properties props) throws SQLException {
-        final Connection connection = DriverManager.getConnection(
-            "jdbc:phoenixcalcite:", props);
-        final CalciteConnection calciteConnection =
-            connection.unwrap(CalciteConnection.class);
-        final String url = getUrl();
-        Map<String, Object> operand = Maps.newHashMap();
-        operand.put("url", url);
-        for (Entry<Object, Object> entry : props.entrySet()) {
-            operand.put((String) entry.getKey(), entry.getValue());
-        }
-        SchemaPlus rootSchema = calciteConnection.getRootSchema();
-        rootSchema.add("phoenix",
-            PhoenixSchema.FACTORY.create(rootSchema, "phoenix", operand));
-        calciteConnection.setSchema("phoenix");
-        return connection;
-    }
-
-    private static Connection connectWithHsqldbUsingModel() throws Exception {
+    private static Connection connectWithHsqldbUsingModel(Properties props) throws Exception {
         final File file = File.createTempFile("model", ".json");
         final PrintWriter pw = new PrintWriter(new FileWriter(file));
         pw.print(
@@ -268,7 +245,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                 + "}\n");
         pw.close();
         final Connection connection =
-            DriverManager.getConnection("jdbc:phoenixcalcite:model=" + file.getAbsolutePath());
+            DriverManager.getConnection("jdbc:phoenixcalcite:model=" + file.getAbsolutePath(), props);
         return connection;
     }
 
@@ -351,7 +328,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
     }
     
     @Test public void testTableScan() throws Exception {
-        start().sql("select * from aTable where a_string = 'a'")
+        start(false).sql("select * from aTable where a_string = 'a'")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixToClientConverter\n" +
                            "    PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'a')])\n")
@@ -364,7 +341,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
     }
     
     @Test public void testProject() throws Exception {
-        start().sql("select entity_id, a_string, organization_id from aTable where a_string = 'a'")
+        start(false).sql("select entity_id, a_string, organization_id from aTable where a_string = 'a'")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixToClientConverter\n" +
                            "    PhoenixServerProject(ENTITY_ID=[$1], A_STRING=[$2], ORGANIZATION_ID=[$0])\n" +
@@ -378,7 +355,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
     }
     
     @Test public void testJoin() throws Exception {
-        start().sql("select t1.entity_id, t2.a_string, t1.organization_id from aTable t1 join aTable t2 on t1.entity_id = t2.entity_id and t1.organization_id = t2.organization_id where t1.a_string = 'a'") 
+        start(false).sql("select t1.entity_id, t2.a_string, t1.organization_id from aTable t1 join aTable t2 on t1.entity_id = t2.entity_id and t1.organization_id = t2.organization_id where t1.a_string = 'a'") 
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixClientProject(ENTITY_ID=[$4], A_STRING=[$2], ORGANIZATION_ID=[$3])\n" +
                            "    PhoenixToClientConverter\n" +
@@ -395,7 +372,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                           {"00A423122312312", "a", "00D300000000XHP"}})
                 .close();
         
-        start().sql("SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\"")
+        start(false).sql("SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\"")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixClientProject(item_id=[$0], NAME=[$1], supplier_id=[$3], NAME0=[$4])\n" +
                            "    PhoenixToClientConverter\n" +
@@ -414,7 +391,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                           {"0000000006", "T6", "0000000006", "S6"}})
                 .close();
         
-        start().sql("SELECT * FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" AND supp.name = 'S5'")
+        start(false).sql("SELECT * FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" AND supp.name = 'S5'")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixClientProject(item_id=[$0], NAME=[$1], PRICE=[$2], DISCOUNT1=[$3], DISCOUNT2=[$4], supplier_id=[$5], DESCRIPTION=[$6], supplier_id0=[$7], NAME0=[$8], PHONE=[$9], ADDRESS=[$10], LOC_ID=[$11])\n" +
                            "    PhoenixToClientConverter\n" +
@@ -427,7 +404,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                           {"0000000005", "T5", 500, 8, 15, "0000000005", "Item T5", "0000000005", "S5", "888-888-5555", "505 YYY Street", "10005"}})
                 .close();
         
-        start().sql("SELECT \"order_id\", i.name, i.price, discount2, quantity FROM " + JOIN_ORDER_TABLE_FULL_NAME + " o INNER JOIN " 
+        start(false).sql("SELECT \"order_id\", i.name, i.price, discount2, quantity FROM " + JOIN_ORDER_TABLE_FULL_NAME + " o INNER JOIN " 
                 + JOIN_ITEM_TABLE_FULL_NAME + " i ON o.\"item_id\" = i.\"item_id\" AND o.price = (i.price * (100 - discount2)) / 100.0 WHERE quantity < 5000")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixClientProject(order_id=[$5], NAME=[$1], PRICE=[$2], DISCOUNT2=[$3], QUANTITY=[$7])\n" +
@@ -444,7 +421,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
     }
     
     @Test public void testRightOuterJoin() throws Exception {
-        start().sql("SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item RIGHT OUTER JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\"")
+        start(false).sql("SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item RIGHT OUTER JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\"")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixClientProject(item_id=[$2], NAME=[$3], supplier_id=[$0], NAME0=[$1])\n" +
                            "    PhoenixToClientConverter\n" +
@@ -467,7 +444,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
     }
     
     @Test public void testClientJoin() throws Exception {        
-        start().sql("SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item FULL OUTER JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" order by \"item_id\", supp.name")
+        start(false).sql("SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item FULL OUTER JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" order by \"item_id\", supp.name")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixClientSort(sort0=[$0], sort1=[$3], dir0=[ASC], dir1=[ASC])\n" +
                            "    PhoenixClientProject(item_id=[$0], NAME=[$1], supplier_id=[$3], NAME0=[$4])\n" +
@@ -490,7 +467,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                         {"invalid001", "INVALID-1", null, null}})
                 .close();
         
-        start().sql("select t1.entity_id, t2.a_string, t1.organization_id from aTable t1 join aTable t2 on t1.organization_id = t2.organization_id and t1.entity_id = t2.entity_id")
+        start(false).sql("select t1.entity_id, t2.a_string, t1.organization_id from aTable t1 join aTable t2 on t1.organization_id = t2.organization_id and t1.entity_id = t2.entity_id")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixClientProject(ENTITY_ID=[$1], A_STRING=[$4], ORGANIZATION_ID=[$0])\n" +
                            "    PhoenixClientJoin(condition=[AND(=($0, $2), =($1, $3))], joinType=[inner])\n" +
@@ -515,7 +492,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
     
     @Test public void testJoinPlanningWithCollation() throws Exception { 
         // Server-join with LHS sorted on order-by fields
-        start().sql("SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" order by supp.\"supplier_id\"")
+        start(false).sql("SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" order by supp.\"supplier_id\"")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixClientProject(item_id=[$2], NAME=[$3], supplier_id=[$0], NAME0=[$1])\n" +
                            "    PhoenixToClientConverter\n" +
@@ -528,7 +505,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                 .close();
         
         // Join key being order-by fields with the other side sorted on order-by fields
-        start().sql("SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" order by item.\"supplier_id\"")
+        start(false).sql("SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" order by item.\"supplier_id\"")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixClientProject(item_id=[$0], NAME=[$1], supplier_id=[$3], NAME0=[$4], supplier_id0=[$2])\n" +
                            "    PhoenixClientJoin(condition=[=($2, $3)], joinType=[inner])\n" +
@@ -542,7 +519,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
     }
     
     @Test public void testMultiJoin() throws Exception {
-        start().sql("select t1.entity_id, t2.a_string, t3.organization_id from aTable t1 join aTable t2 on t1.entity_id = t2.entity_id and t1.organization_id = t2.organization_id join atable t3 on t1.entity_id = t3.entity_id and t1.organization_id = t3.organization_id where t1.a_string = 'a'") 
+        start(false).sql("select t1.entity_id, t2.a_string, t3.organization_id from aTable t1 join aTable t2 on t1.entity_id = t2.entity_id and t1.organization_id = t2.organization_id join atable t3 on t1.entity_id = t3.entity_id and t1.organization_id = t3.organization_id where t1.a_string = 'a'") 
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixClientProject(ENTITY_ID=[$19], A_STRING=[$38], ORGANIZATION_ID=[$0])\n" +
                            "    PhoenixToClientConverter\n" +
@@ -561,7 +538,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                           {"00A423122312312", "a", "00D300000000XHP"}})
                 .close();
         
-        start().sql("select t1.entity_id, t2.a_string, t3.organization_id from aTable t1 join aTable t2 on t1.entity_id = t2.entity_id and t1.organization_id = t2.organization_id join atable t3 on t1.entity_id = t3.entity_id and t1.organization_id = t3.organization_id")
+        start(false).sql("select t1.entity_id, t2.a_string, t3.organization_id from aTable t1 join aTable t2 on t1.entity_id = t2.entity_id and t1.organization_id = t2.organization_id join atable t3 on t1.entity_id = t3.entity_id and t1.organization_id = t3.organization_id")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixClientProject(ENTITY_ID=[$19], A_STRING=[$2], ORGANIZATION_ID=[$36])\n" +
                            "    PhoenixToClientConverter\n" +
@@ -586,7 +563,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
     }
     
     @Test public void testAggregate() {
-        start().sql("select a_string, count(b_string) from atable group by a_string")
+        start(false).sql("select a_string, count(b_string) from atable group by a_string")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixServerAggregate(group=[{2}], EXPR$1=[COUNT($3)])\n" +
                            "    PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
@@ -596,7 +573,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                           {"c", 1L}})
                 .close();
         
-        start().sql("select count(entity_id), a_string from atable group by a_string")
+        start(false).sql("select count(entity_id), a_string from atable group by a_string")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixClientProject(EXPR$0=[$1], A_STRING=[$0])\n" +
                            "    PhoenixServerAggregate(group=[{2}], EXPR$0=[COUNT()])\n" +
@@ -607,7 +584,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                           {1L, "c"}})
                 .close();
         
-        start().sql("select s.name, count(\"item_id\") from " + JOIN_SUPPLIER_TABLE_FULL_NAME + " s join " + JOIN_ITEM_TABLE_FULL_NAME + " i on s.\"supplier_id\" = i.\"supplier_id\" group by s.name")
+        start(false).sql("select s.name, count(\"item_id\") from " + JOIN_SUPPLIER_TABLE_FULL_NAME + " s join " + JOIN_ITEM_TABLE_FULL_NAME + " i on s.\"supplier_id\" = i.\"supplier_id\" group by s.name")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixServerAggregate(group=[{3}], EXPR$1=[COUNT()])\n" +
                            "    PhoenixServerJoin(condition=[=($2, $1)], joinType=[inner])\n" +
@@ -625,7 +602,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
     }
     
     @Test public void testDistinct() {
-        start().sql("select distinct a_string from aTable")
+        start(false).sql("select distinct a_string from aTable")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixServerAggregate(group=[{2}])\n" +
                            "    PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
@@ -637,7 +614,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
     }
     
     @Test public void testSort() {
-        start().sql("select organization_id, entity_id, a_string from aTable order by a_string, entity_id")
+        start(false).sql("select organization_id, entity_id, a_string from aTable order by a_string, entity_id")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixServerSort(sort0=[$2], sort1=[$1], dir0=[ASC], dir1=[ASC])\n" +
                            "    PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1], A_STRING=[$2])\n" +
@@ -654,7 +631,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                           {"00D300000000XHP", "00C923122312312", "c"}})
                 .close();
         
-        start().sql("select organization_id, entity_id, a_string from aTable order by organization_id, entity_id")
+        start(false).sql("select organization_id, entity_id, a_string from aTable order by organization_id, entity_id")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixToClientConverter\n" +
                            "    PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1], A_STRING=[$2])\n" +
@@ -671,7 +648,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                           {"00D300000000XHP", "00C923122312312", "c"}})
                 .close();
         
-        start().sql("select count(entity_id), a_string from atable group by a_string order by count(entity_id), a_string desc")
+        start(false).sql("select count(entity_id), a_string from atable group by a_string order by count(entity_id), a_string desc")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixClientProject(EXPR$0=[$1], A_STRING=[$0])\n" +
                            "    PhoenixCompactClientSort(sort0=[$1], sort1=[$0], dir0=[ASC], dir1=[DESC])\n" +
@@ -683,7 +660,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                           {4L, "a"}})
                 .close();
         
-        start().sql("select s.name, count(\"item_id\") from " + JOIN_SUPPLIER_TABLE_FULL_NAME + " s join " + JOIN_ITEM_TABLE_FULL_NAME + " i on s.\"supplier_id\" = i.\"supplier_id\" group by s.name order by count(\"item_id\"), s.name desc")
+        start(false).sql("select s.name, count(\"item_id\") from " + JOIN_SUPPLIER_TABLE_FULL_NAME + " s join " + JOIN_ITEM_TABLE_FULL_NAME + " i on s.\"supplier_id\" = i.\"supplier_id\" group by s.name order by count(\"item_id\"), s.name desc")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixCompactClientSort(sort0=[$1], sort1=[$0], dir0=[ASC], dir1=[DESC])\n" +
                            "    PhoenixServerAggregate(group=[{3}], EXPR$1=[COUNT()])\n" +
@@ -700,7 +677,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                           {"S1", 2L}})
                 .close();
         
-        start().sql("SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" order by item.name desc")
+        start(false).sql("SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" order by item.name desc")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixClientProject(item_id=[$0], NAME=[$1], supplier_id=[$3], NAME0=[$4])\n" +
                            "    PhoenixServerSort(sort0=[$1], dir0=[DESC])\n" +
@@ -721,7 +698,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
     }
     
     @Test public void testSortWithLimit() {
-        start().sql("select organization_id, entity_id, a_string from aTable order by a_string, entity_id limit 5")
+        start(false).sql("select organization_id, entity_id, a_string from aTable order by a_string, entity_id limit 5")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixLimit(fetch=[5])\n" +
                            "    PhoenixServerSort(sort0=[$2], sort1=[$1], dir0=[ASC], dir1=[ASC])\n" +
@@ -735,7 +712,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                           {"00D300000000XHP", "00B523122312312", "b"}})
                 .close();
         
-        start().sql("select organization_id, entity_id, a_string from aTable order by organization_id, entity_id limit 5")
+        start(false).sql("select organization_id, entity_id, a_string from aTable order by organization_id, entity_id limit 5")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixLimit(fetch=[5])\n" +
                            "    PhoenixToClientConverter\n" +
@@ -749,7 +726,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                           {"00D300000000XHP", "00B523122312312", "b"}})
                 .close();
         
-        start().sql("select count(entity_id), a_string from atable group by a_string order by count(entity_id), a_string desc limit 2")
+        start(false).sql("select count(entity_id), a_string from atable group by a_string order by count(entity_id), a_string desc limit 2")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixClientProject(EXPR$0=[$1], A_STRING=[$0])\n" +
                            "    PhoenixLimit(fetch=[2])\n" +
@@ -761,7 +738,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                           {4L, "b"}})
                 .close();
         
-        start().sql("select s.name, count(\"item_id\") from " + JOIN_SUPPLIER_TABLE_FULL_NAME + " s join " + JOIN_ITEM_TABLE_FULL_NAME + " i on s.\"supplier_id\" = i.\"supplier_id\" group by s.name order by count(\"item_id\"), s.name desc limit 3")
+        start(false).sql("select s.name, count(\"item_id\") from " + JOIN_SUPPLIER_TABLE_FULL_NAME + " s join " + JOIN_ITEM_TABLE_FULL_NAME + " i on s.\"supplier_id\" = i.\"supplier_id\" group by s.name order by count(\"item_id\"), s.name desc limit 3")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixLimit(fetch=[3])\n" +
                            "    PhoenixCompactClientSort(sort0=[$1], sort1=[$0], dir0=[ASC], dir1=[DESC])\n" +
@@ -778,7 +755,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                           {"S2", 2L}})
                 .close();
         
-        start().sql("SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" order by item.name desc limit 3")
+        start(false).sql("SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" order by item.name desc limit 3")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixClientProject(item_id=[$0], NAME=[$1], supplier_id=[$3], NAME0=[$4])\n" +
                            "    PhoenixLimit(fetch=[3])\n" +
@@ -797,7 +774,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
     }
     
     @Test public void testLimit() {
-        start().sql("select organization_id, entity_id, a_string from aTable limit 5")
+        start(false).sql("select organization_id, entity_id, a_string from aTable limit 5")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixLimit(fetch=[5])\n" +
                            "    PhoenixToClientConverter\n" +
@@ -811,7 +788,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                           {"00D300000000XHP", "00B523122312312", "b"}})
                 .close();
         
-        start().sql("select count(entity_id), a_string from atable group by a_string limit 2")
+        start(false).sql("select count(entity_id), a_string from atable group by a_string limit 2")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixClientProject(EXPR$0=[$1], A_STRING=[$0])\n" +
                            "    PhoenixLimit(fetch=[2])\n" +
@@ -822,7 +799,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                           {4L, "b"}})
                 .close();
         
-        start().sql("select s.name, count(\"item_id\") from " + JOIN_SUPPLIER_TABLE_FULL_NAME + " s join " + JOIN_ITEM_TABLE_FULL_NAME + " i on s.\"supplier_id\" = i.\"supplier_id\" group by s.name limit 3")
+        start(false).sql("select s.name, count(\"item_id\") from " + JOIN_SUPPLIER_TABLE_FULL_NAME + " s join " + JOIN_ITEM_TABLE_FULL_NAME + " i on s.\"supplier_id\" = i.\"supplier_id\" group by s.name limit 3")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixLimit(fetch=[3])\n" +
                            "    PhoenixServerAggregate(group=[{3}], EXPR$1=[COUNT()])\n" +
@@ -838,7 +815,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                           {"S5", 1L}})
                 .close();
         
-        start().sql("SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" limit 3")
+        start(false).sql("SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" limit 3")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixClientProject(item_id=[$0], NAME=[$1], supplier_id=[$3], NAME0=[$4])\n" +
                            "    PhoenixLimit(fetch=[3])\n" +
@@ -855,7 +832,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                           {"0000000003", "T3", "0000000002", "S2"}})
                 .close();
         
-        start().sql("SELECT x from (values (1, 2), (2, 4), (3, 6)) as t(x, y) limit 2")
+        start(false).sql("SELECT x from (values (1, 2), (2, 4), (3, 6)) as t(x, y) limit 2")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixClientProject(X=[$0])\n" +
                            "    PhoenixLimit(fetch=[2])\n" +
@@ -865,7 +842,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
     }
 
     @Test public void testScalarSubquery() {
-        start().sql("select \"item_id\", name, (select max(quantity) sq \n"
+        start(false).sql("select \"item_id\", name, (select max(quantity) sq \n"
             + "from " + JOIN_ORDER_TABLE_FULL_NAME + " o where o.\"item_id\" = i.\"item_id\")\n"
             + "from " + JOIN_ITEM_TABLE_FULL_NAME + " i")
             .explainIs("PhoenixToEnumerableConverter\n" +
@@ -889,7 +866,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                     new Object[] {"invalid001", "INVALID-1", null}})
             .close();
         
-        start().sql("select \"item_id\", name, (select quantity sq \n"
+        start(false).sql("select \"item_id\", name, (select quantity sq \n"
                     + "from " + JOIN_ORDER_TABLE_FULL_NAME + " o where o.\"item_id\" = i.\"item_id\")\n"
                     + "from " + JOIN_ITEM_TABLE_FULL_NAME + " i where \"item_id\" < '0000000006'")
                .explainIs("PhoenixToEnumerableConverter\n" +
@@ -913,50 +890,49 @@ public class CalciteIT extends BaseClientManagedTimeIT {
     }
     
     @Test public void testIndex() {
-        final Start start = start(getConnectionProps(true), false);
-        start.sql("select * from aTable where b_string = 'b'")
+        start(true).sql("select * from aTable where b_string = 'b'")
             .explainIs("PhoenixToEnumerableConverter\n" +
                    "  PhoenixToClientConverter\n" +
                    "    PhoenixServerProject(ORGANIZATION_ID=[$1], ENTITY_ID=[$2], A_STRING=[$3], B_STRING=[$0], A_INTEGER=[$4], A_DATE=[$5], A_TIME=[$6], A_TIMESTAMP=[$7], X_DECIMAL=[$8], X_LONG=[$9], X_INTEGER=[$10], Y_INTEGER=[$11], A_BYTE=[$12], A_SHORT=[$13], A_FLOAT=[$14], A_DOUBLE=[$15], A_UNSIGNED_FLOAT=[$16], A_UNSIGNED_DOUBLE=[$17])\n" +
                    "      PhoenixTableScan(table=[[phoenix, IDX_FULL]], filter=[=($0, 'b')])\n")
             .close();
-        start.sql("select x_integer from aTable")
+        start(true).sql("select x_integer from aTable")
             .explainIs("PhoenixToEnumerableConverter\n" +
                        "  PhoenixToClientConverter\n" +
                        "    PhoenixServerProject(X_INTEGER=[$4])\n" +
                        "      PhoenixTableScan(table=[[phoenix, IDX1]])\n")
             .close();
-        start.sql("select a_string from aTable order by a_string")
+        start(true).sql("select a_string from aTable order by a_string")
             .explainIs("PhoenixToEnumerableConverter\n" +
                        "  PhoenixToClientConverter\n" +
                        "    PhoenixServerProject(A_STRING=[$0])\n" +
                        "      PhoenixTableScan(table=[[phoenix, IDX1]])\n")
             .close();
-        start.sql("select a_string from aTable order by organization_id")
+        start(true).sql("select a_string from aTable order by organization_id")
             .explainIs("PhoenixToEnumerableConverter\n" +
                        "  PhoenixToClientConverter\n" +
                        "    PhoenixServerProject(A_STRING=[$2], ORGANIZATION_ID=[$0])\n" +
                        "      PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
             .close();
-        start.sql("select a_integer from aTable order by a_string")
+        start(true).sql("select a_integer from aTable order by a_string")
             .explainIs("PhoenixToEnumerableConverter\n" +
                        "  PhoenixServerSort(sort0=[$1], dir0=[ASC])\n" +
                        "    PhoenixServerProject(A_INTEGER=[$4], A_STRING=[$2])\n" +
                        "      PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
             .close();
-        start.sql("select a_string, b_string from aTable where a_string = 'a'")
+        start(true).sql("select a_string, b_string from aTable where a_string = 'a'")
             .explainIs("PhoenixToEnumerableConverter\n" +
                        "  PhoenixToClientConverter\n" +
                        "    PhoenixServerProject(A_STRING=[$0], B_STRING=[$3])\n" +
                        "      PhoenixTableScan(table=[[phoenix, IDX1]], filter=[=($0, 'a')])\n")
             .close();
-        start.sql("select a_string, b_string from aTable where b_string = 'b'")
+        start(true).sql("select a_string, b_string from aTable where b_string = 'b'")
             .explainIs("PhoenixToEnumerableConverter\n" +
                        "  PhoenixToClientConverter\n" +
                        "    PhoenixServerProject(A_STRING=[$3], B_STRING=[$0])\n" +
                        "      PhoenixTableScan(table=[[phoenix, IDX2]], filter=[=($0, 'b')])\n")
             .close();
-        start.sql("select a_string, b_string, x_integer, y_integer from aTable where b_string = 'b'")
+        start(true).sql("select a_string, b_string, x_integer, y_integer from aTable where b_string = 'b'")
             .explainIs("PhoenixToEnumerableConverter\n" +
                        "  PhoenixToClientConverter\n" +
                        "    PhoenixServerProject(A_STRING=[$3], B_STRING=[$0], X_INTEGER=[$10], Y_INTEGER=[$11])\n" +
@@ -965,12 +941,12 @@ public class CalciteIT extends BaseClientManagedTimeIT {
     }
     
     @Test public void testValues() {
-        start().sql("select p0+p1 from (values (2, 1)) as t(p0, p1)")
+        start(false).sql("select p0+p1 from (values (2, 1)) as t(p0, p1)")
             .explainIs("PhoenixToEnumerableConverter\n" +
                        "  PhoenixClientProject(EXPR$0=[+($0, $1)])\n" +
                        "    PhoenixValues(tuples=[[{ 2, 1 }]])\n")
             .close();
-        start().sql("select count(p0), max(p1) from (values (2, 1), (3, 4), (5, 2)) as t(p0, p1)")
+        start(false).sql("select count(p0), max(p1) from (values (2, 1), (3, 4), (5, 2)) as t(p0, p1)")
             .explainIs("PhoenixToEnumerableConverter\n" +
                        "  PhoenixClientAggregate(group=[{}], EXPR$0=[COUNT()], EXPR$1=[MAX($1)])\n" +
                        "    PhoenixValues(tuples=[[{ 2, 1 }, { 3, 4 }, { 5, 2 }]])\n")
@@ -979,7 +955,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
     }
     
     @Test public void testUnion() {
-        start().sql("select entity_id from atable where a_string = 'a' union all select entity_id from atable where a_string = 'b'")
+        start(false).sql("select entity_id from atable where a_string = 'a' union all select entity_id from atable where a_string = 'b'")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixUnion(all=[true])\n" +
                            "    PhoenixToClientConverter\n" +
@@ -999,7 +975,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                         {"00B823122312312"}})
                 .close();
         
-        start().sql("select entity_id, a_string from atable where a_string = 'a' union all select entity_id, a_string from atable where a_string = 'c' order by entity_id desc limit 3")
+        start(false).sql("select entity_id, a_string from atable where a_string = 'a' union all select entity_id, a_string from atable where a_string = 'c' order by entity_id desc limit 3")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixLimit(fetch=[3])\n" +
                            "    PhoenixClientSort(sort0=[$0], dir0=[DESC])\n" +
@@ -1018,7 +994,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
     }
     
     @Test public void testUnnest() {
-        start().sql("SELECT t.s FROM UNNEST((SELECT scores FROM " + SCORES_TABLE_NAME + ")) AS t(s)")
+        start(false).sql("SELECT t.s FROM UNNEST((SELECT scores FROM " + SCORES_TABLE_NAME + ")) AS t(s)")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixUncollect\n" +
                            "    PhoenixToClientConverter\n" +
@@ -1032,7 +1008,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                         {88}, 
                         {80}})
                 .close();
-        start().sql("SELECT s.student_id, t.score FROM " + SCORES_TABLE_NAME + " s, UNNEST((SELECT scores FROM " + SCORES_TABLE_NAME + " s2 where s.student_id = s2.student_id)) AS t(score)")
+        start(false).sql("SELECT s.student_id, t.score FROM " + SCORES_TABLE_NAME + " s, UNNEST((SELECT scores FROM " + SCORES_TABLE_NAME + " s2 where s.student_id = s2.student_id)) AS t(score)")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixClientProject(STUDENT_ID=[$0], SCORE=[$3])\n" +
                            "    PhoenixCorrelate(correlation=[$cor0], joinType=[INNER], requiredColumns=[{0}])\n" +
@@ -1053,9 +1029,9 @@ public class CalciteIT extends BaseClientManagedTimeIT {
     }
     
     @Test public void testCorrelateAndDecorrelation() {
-        Properties correlProps = new Properties();
+        Properties correlProps = getConnectionProps(false);
         correlProps.setProperty("forceDecorrelate", Boolean.FALSE.toString());
-        Properties decorrelProps = new Properties();
+        Properties decorrelProps = getConnectionProps(false);
         decorrelProps.setProperty("forceDecorrelate", Boolean.TRUE.toString());
         
         String q1 = "select \"order_id\", quantity from " + JOIN_ORDER_TABLE_FULL_NAME + " o where quantity = (select max(quantity) from " + JOIN_ORDER_TABLE_FULL_NAME + " o2 where o.\"item_id\" = o2.\"item_id\")";
@@ -1084,8 +1060,8 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                 "            PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n" +
                 "            PhoenixServerAggregate(group=[{2}])\n" +
                 "              PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n";
-        start(correlProps, false).sql(q1).explainIs(p1Correlate).resultIs(r1).close();
-        start(decorrelProps, false).sql(q1).explainIs(p1Decorrelated).resultIs(r1).close();
+        start(correlProps).sql(q1).explainIs(p1Correlate).resultIs(r1).close();
+        start(decorrelProps).sql(q1).explainIs(p1Decorrelated).resultIs(r1).close();
                 
         String q2 = "select name from " + JOIN_ITEM_TABLE_FULL_NAME + " i where price = (select max(price) from " + JOIN_ITEM_TABLE_FULL_NAME + " i2 where i.\"item_id\" = i2.\"item_id\" and i.name = i2.name and i2.\"item_id\" <> 'invalid001')";
         Object[][] r2 = new Object[][]{
@@ -1116,8 +1092,8 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                 "              PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
                 "            PhoenixToClientConverter\n" +
                 "              PhoenixTableScan(table=[[phoenix, Join, ItemTable]], filter=[<>($0, 'invalid001')])\n";
-        start(correlProps, false).sql(q2).explainIs(p2Correlate).resultIs(r2).close();
-        start(decorrelProps, false).sql(q2).explainIs(p2Decorrelated).resultIs(r2).close();
+        start(correlProps).sql(q2).explainIs(p2Correlate).resultIs(r2).close();
+        start(decorrelProps).sql(q2).explainIs(p2Decorrelated).resultIs(r2).close();
         
         String q3a = "select \"item_id\", name from " + JOIN_ITEM_TABLE_FULL_NAME + " i where exists (select 1 from " + JOIN_ORDER_TABLE_FULL_NAME + " o where i.\"item_id\" = o.\"item_id\")";
         Object[][] r3a = new Object[][] {
@@ -1148,8 +1124,8 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                 "              PhoenixToClientConverter\n" +
                 "                PhoenixServerProject(item_id=[$0])\n" +
                 "                  PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n";
-        start(correlProps, false).sql(q3a).explainIs(p3aCorrelate).resultIs(r3a).close();
-        start(decorrelProps, false).sql(q3a).explainIs(p3aDecorrelated).resultIs(r3a).close();
+        start(correlProps).sql(q3a).explainIs(p3aCorrelate).resultIs(r3a).close();
+        start(decorrelProps).sql(q3a).explainIs(p3aDecorrelated).resultIs(r3a).close();
         // Test PhoenixClientSemiJoin
         String q3b = "select \"item_id\", name from " + JOIN_ITEM_TABLE_FULL_NAME + " i where exists (select 1 from " + JOIN_ITEM_TABLE_FULL_NAME + " o where i.\"item_id\" = o.\"item_id\" and name <> 'INVALID-1')";
         Object[][] r3b = new Object[][] {
@@ -1172,7 +1148,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                 "              PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
                 "          PhoenixToClientConverter\n" +
                 "            PhoenixTableScan(table=[[phoenix, Join, ItemTable]], filter=[<>(CAST($1):VARCHAR(9) CHARACTER SET \"ISO-8859-1\" COLLATE \"ISO-8859-1$en_US$primary\", 'INVALID-1')])\n";
-        start(decorrelProps, false).sql(q3b).explainIs(p3bDecorrelated).resultIs(r3b).close();
+        start(decorrelProps).sql(q3b).explainIs(p3bDecorrelated).resultIs(r3b).close();
         
         String q4 = "select \"item_id\", name from " + JOIN_ITEM_TABLE_FULL_NAME + " i where \"item_id\" in (select \"item_id\" from " + JOIN_ORDER_TABLE_FULL_NAME + ")";
         Object[][] r4 = new Object[][] {
@@ -1189,7 +1165,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                 "          PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
                 "        PhoenixToClientConverter\n" +
                 "          PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n";
-        start(decorrelProps, false).sql(q4).explainIs(p4Decorrelated).resultIs(r4).close();
+        start(decorrelProps).sql(q4).explainIs(p4Decorrelated).resultIs(r4).close();
         
         // CALCITE-864: switching orders and items in the first join wouldn't work.
         String q5 = "select \"order_id\" from " + JOIN_ITEM_TABLE_FULL_NAME + " i JOIN " + JOIN_ORDER_TABLE_FULL_NAME + " o on o.\"item_id\" = i.\"item_id\" where quantity = (select max(quantity) from " + JOIN_ORDER_TABLE_FULL_NAME + " o2 JOIN " + JOIN_ITEM_TABLE_FULL_NAME + " i2 on o2.\"item_id\" = i2.\"item_id\" where i.\"supplier_id\" = i2.\"supplier_id\")";
@@ -1232,12 +1208,12 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                 "                        PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
                 "                        PhoenixToClientConverter\n" +
                 "                          PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n";
-        start(correlProps, false).sql(q5).explainIs(p5Correlate).resultIs(r5).close();
-        start(decorrelProps, false).sql(q5).explainIs(p5Decorrelated).resultIs(r5).close();
+        start(correlProps).sql(q5).explainIs(p5Correlate).resultIs(r5).close();
+        start(decorrelProps).sql(q5).explainIs(p5Decorrelated).resultIs(r5).close();
     }
     
     @Test public void testSelectFromView() {
-        start().sql("select * from v")
+        start(false).sql("select * from v")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixToClientConverter\n" +
                            "    PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'a')])\n")
@@ -1252,18 +1228,18 @@ public class CalciteIT extends BaseClientManagedTimeIT {
     /** Tests a simple command that is defined in Phoenix's extended SQL parser. */
     @Ignore
     @Test public void testCommit() {
-        start().sql("commit").execute();
+        start(false).sql("commit").execute();
     }
 
     @Test public void testCreateView() {
-        start().sql("create view v as select * from (values (1, 'a'), (2, 'b')) as t(x, y)").execute();
+        start(false).sql("create view v as select * from (values (1, 'a'), (2, 'b')) as t(x, y)").execute();
     }
 
     @Test public void testConnectJoinHsqldb() {
-        final Start start = new Start(new Properties(), false) {
+        final Start start = new Start(getConnectionProps(false)) {
             @Override
             Connection createConnection() throws Exception {
-                return connectWithHsqldbUsingModel();
+                return connectWithHsqldbUsingModel(props);
             }
         };
         start.sql("select the_year, quantity as q, (select count(*) cnt \n"
@@ -1293,7 +1269,12 @@ public class CalciteIT extends BaseClientManagedTimeIT {
     }
 
     @Test public void testConnectUsingModel() throws Exception {
-        final Start start = start(new Properties(), true);
+        final Start start = new Start(getConnectionProps(false)) {
+            @Override
+            Connection createConnection() throws Exception {
+                return connectUsingModel(props);
+            }
+        };
         start.sql("select * from aTable")
             .explainIs("PhoenixToEnumerableConverter\n" +
                        "  PhoenixToClientConverter\n" +
