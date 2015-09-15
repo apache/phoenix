@@ -7,6 +7,7 @@ import java.util.Stack;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.calcite.CalciteUtils;
+import org.apache.phoenix.calcite.PhoenixTable;
 import org.apache.phoenix.calcite.rel.PhoenixRel.ImplementorContext;
 import org.apache.phoenix.compile.ColumnProjector;
 import org.apache.phoenix.compile.ExpressionProjector;
@@ -29,7 +30,6 @@ import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PDataType;
 
@@ -52,7 +52,7 @@ public class PhoenixRelImplementorImpl implements PhoenixRel.Implementor {
 
 	@Override
 	public ColumnExpression newColumnExpression(int index) {
-	    int pos = this.tableRef.getTable().getBucketNum() == null ? index : (index + 1);
+	    int pos = index + PhoenixTable.getStartingColumnPosition(this.tableRef.getTable());
 		ColumnRef colRef = new ColumnRef(this.tableRef, pos);
 		return colRef.newColumnExpression();
 	}
@@ -61,7 +61,7 @@ public class PhoenixRelImplementorImpl implements PhoenixRel.Implementor {
     @Override
     public Expression newFieldAccessExpression(String variableId, int index, PDataType type) {
         TableRef variableDef = runtimeContext.getCorrelateVariableDef(variableId);
-        int pos = variableDef.getTable().getBucketNum() == null ? index : (index + 1);
+        int pos = index + PhoenixTable.getStartingColumnPosition(variableDef.getTable());
         Expression fieldAccessExpr = new ColumnRef(variableDef, pos).newColumnExpression();
         return new CorrelateVariableFieldAccessExpression(runtimeContext, variableId, fieldAccessExpr);
     }
@@ -99,9 +99,9 @@ public class PhoenixRelImplementorImpl implements PhoenixRel.Implementor {
     @Override
     public PTable createProjectedTable() {
         List<ColumnRef> sourceColumnRefs = Lists.<ColumnRef> newArrayList();
-        for (PColumn column : getTableRef().getTable().getColumns()) {
-            if (!getCurrentContext().retainPKColumns && column == SaltingUtil.SALTING_COLUMN) continue;
-            sourceColumnRefs.add(new ColumnRef(getTableRef(), column.getPosition()));
+        int start = getCurrentContext().retainPKColumns ? 0 : PhoenixTable.getStartingColumnPosition(getTableRef().getTable());
+        for (int i = start; i < getTableRef().getTable().getColumns().size(); i++) {
+            sourceColumnRefs.add(new ColumnRef(getTableRef(), getTableRef().getTable().getColumns().get(i).getPosition()));
         }
         
         try {
@@ -114,10 +114,10 @@ public class PhoenixRelImplementorImpl implements PhoenixRel.Implementor {
     @Override
     public RowProjector createRowProjector() {
         List<ColumnProjector> columnProjectors = Lists.<ColumnProjector>newArrayList();
-        int pos = 0;
-        for (PColumn column : getTableRef().getTable().getColumns()) {
-            if (column == SaltingUtil.SALTING_COLUMN) continue;
-            Expression expr = newColumnExpression(pos++); // Do not use column.position() here.
+        int start = PhoenixTable.getStartingColumnPosition(getTableRef().getTable());
+        for (int i = start; i < getTableRef().getTable().getColumns().size(); i++) {
+            PColumn column = getTableRef().getTable().getColumns().get(i);
+            Expression expr = newColumnExpression(i - start); // Do not use column.position() here.
             columnProjectors.add(new ExpressionProjector(column.getName().getString(), getTableRef().getTable().getName().getString(), expr, false));
         }
         // TODO get estimate row size

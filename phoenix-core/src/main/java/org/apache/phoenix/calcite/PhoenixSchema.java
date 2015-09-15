@@ -22,7 +22,6 @@ import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.IndexUtil;
 
@@ -194,8 +193,8 @@ public class PhoenixSchema implements Schema {
     protected void addMaterialization(PTable table, PTable index, List<String> path) {
         StringBuffer sb = new StringBuffer();
         sb.append("SELECT");
-        for (PColumn column : index.getColumns()) {
-            if (column == SaltingUtil.SALTING_COLUMN) continue;
+        for (int i = PhoenixTable.getStartingColumnPosition(index); i < index.getColumns().size(); i++) {
+            PColumn column = index.getColumns().get(i);
             String indexColumnName = column.getName().getString();
             String dataColumnName = IndexUtil.getDataColumnName(indexColumnName);
             sb.append(",").append("\"").append(dataColumnName).append("\"");

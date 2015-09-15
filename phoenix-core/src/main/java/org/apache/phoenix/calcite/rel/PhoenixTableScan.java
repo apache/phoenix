@@ -44,7 +44,6 @@ import org.apache.phoenix.schema.KeyValueSchema.KeyValueSchemaBuilder;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.SchemaUtil;
@@ -223,8 +222,8 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
         KeyValueSchemaBuilder builder = new KeyValueSchemaBuilder(0);
         List<Expression> exprs = Lists.<Expression> newArrayList();
         TableRef tableRef = implementor.getTableRef();
-        for (PColumn column : tableRef.getTable().getColumns()) {
-            if (column == SaltingUtil.SALTING_COLUMN) continue;
+        for (int i = PhoenixTable.getStartingColumnPosition(tableRef.getTable()); i < tableRef.getTable().getColumns().size(); i++) {
+            PColumn column = tableRef.getTable().getColumns().get(i);
             if (!SchemaUtil.isPKColumn(column) || !implementor.getCurrentContext().retainPKColumns) {
                 Expression expr = new ColumnRef(tableRef, column.getPosition()).newColumnExpression();
                 exprs.add(expr);

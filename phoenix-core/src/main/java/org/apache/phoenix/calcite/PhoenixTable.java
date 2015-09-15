@@ -24,7 +24,6 @@ import org.apache.phoenix.calcite.rel.PhoenixTableScan;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.types.PDataType;
@@ -43,6 +42,10 @@ public class PhoenixTable extends AbstractTable implements TranslatableTable {
   public final ImmutableBitSet pkBitSet;
   public final RelCollation collation;
   public final PhoenixConnection pc;
+  
+  public static int getStartingColumnPosition(PTable pTable) {
+      return (pTable.getBucketNum() == null ? 0 : 1) + (pTable.isMultiTenant() ? 1 : 0) + (pTable.getViewIndexId() == null ? 0 : 1);
+  }
 
   public PhoenixTable(PhoenixConnection pc, PTable pTable) {
       this.pc = Preconditions.checkNotNull(pc);
@@ -67,8 +70,8 @@ public class PhoenixTable extends AbstractTable implements TranslatableTable {
     @Override
     public RelDataType getRowType(RelDataTypeFactory typeFactory) {
         final RelDataTypeFactory.FieldInfoBuilder builder = typeFactory.builder();
-        for (PColumn pColumn : pTable.getColumns()) {
-            if (pColumn == SaltingUtil.SALTING_COLUMN) continue;
+        for (int i = getStartingColumnPosition(pTable); i < pTable.getColumns().size(); i++) {
+            PColumn pColumn = pTable.getColumns().get(i);
             final PDataType baseType = 
                     pColumn.getDataType().isArrayType() ?
                             PDataType.fromTypeId(pColumn.getDataType().getSqlType() - PDataType.ARRAY_TYPE_BASE) 
