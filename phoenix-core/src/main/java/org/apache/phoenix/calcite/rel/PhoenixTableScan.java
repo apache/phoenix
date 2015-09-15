@@ -39,10 +39,12 @@ import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.iterate.ParallelIteratorFactory;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.SelectStatement;
+import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.KeyValueSchema.KeyValueSchemaBuilder;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.SchemaUtil;
@@ -203,7 +205,7 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
             }
             projectColumnFamilies(context.getScan(), phoenixTable.getTable(), columnRefList);
             if (implementor.getCurrentContext().forceProject) {
-                TupleProjector tupleProjector = createTupleProjector(implementor, phoenixTable.getTable());
+                TupleProjector tupleProjector = createTupleProjector(implementor);
                 TupleProjector.serializeProjectorIntoScan(context.getScan(), tupleProjector);
                 PTable projectedTable = implementor.createProjectedTable();
                 implementor.setTableRef(new TableRef(projectedTable));
@@ -217,12 +219,14 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
         }
     }
     
-    private TupleProjector createTupleProjector(Implementor implementor, PTable table) {
+    private TupleProjector createTupleProjector(Implementor implementor) {
         KeyValueSchemaBuilder builder = new KeyValueSchemaBuilder(0);
         List<Expression> exprs = Lists.<Expression> newArrayList();
-        for (PColumn column : table.getColumns()) {
+        TableRef tableRef = implementor.getTableRef();
+        for (PColumn column : tableRef.getTable().getColumns()) {
+            if (column == SaltingUtil.SALTING_COLUMN) continue;
             if (!SchemaUtil.isPKColumn(column) || !implementor.getCurrentContext().retainPKColumns) {
-                Expression expr = implementor.newColumnExpression(column.getPosition());
+                Expression expr = new ColumnRef(tableRef, column.getPosition()).newColumnExpression();
                 exprs.add(expr);
                 builder.addField(expr);                
             }

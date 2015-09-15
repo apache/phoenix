@@ -76,6 +76,7 @@ import org.apache.phoenix.expression.function.SqrtFunction;
 import org.apache.phoenix.expression.function.TrimFunction;
 import org.apache.phoenix.expression.function.UpperFunction;
 import org.apache.phoenix.parse.JoinTableNode.JoinType;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.types.PDataType;
@@ -797,7 +798,7 @@ public class CalciteUtils {
         PDataType fromDataType = childExpr.getDataType();
         
         Expression expr = childExpr;
-        if(fromDataType != null) {
+        if(fromDataType != null && implementor.getTableRef().getTable().getType() != PTableType.INDEX) {
             expr =  convertToRoundExpressionIfNeeded(fromDataType, targetDataType, childExpr);
         }
         return CoerceExpression.create(expr, targetDataType, SortOrder.getDefault(), expr.getMaxLength(), implementor.getTableRef().getTable().rowKeyOrderOptimizable());

@@ -24,6 +24,7 @@ import org.apache.phoenix.calcite.rel.PhoenixTableScan;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.types.PDataType;
@@ -67,6 +68,7 @@ public class PhoenixTable extends AbstractTable implements TranslatableTable {
     public RelDataType getRowType(RelDataTypeFactory typeFactory) {
         final RelDataTypeFactory.FieldInfoBuilder builder = typeFactory.builder();
         for (PColumn pColumn : pTable.getColumns()) {
+            if (pColumn == SaltingUtil.SALTING_COLUMN) continue;
             final PDataType baseType = 
                     pColumn.getDataType().isArrayType() ?
                             PDataType.fromTypeId(pColumn.getDataType().getSqlType() - PDataType.ARRAY_TYPE_BASE) 
@@ -123,7 +125,9 @@ public class PhoenixTable extends AbstractTable implements TranslatableTable {
 
             @Override
             public List<RelCollation> getCollations() {
-                return ImmutableList.<RelCollation> of(collation);
+                return pTable.getBucketNum() == null ? 
+                        ImmutableList.<RelCollation> of(collation)
+                      : ImmutableList.<RelCollation>of();
             }
 
             @Override

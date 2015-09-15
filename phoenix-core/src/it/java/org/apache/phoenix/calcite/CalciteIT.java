@@ -267,6 +267,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
         initATableValues(getOrganizationId(), null, url);
         initJoinTableValues(url, null, null);
         initArrayTable();
+        initSaltedTables();
         createIndices(
                 "CREATE INDEX IDX1 ON aTable (a_string) INCLUDE (b_string, x_integer)",
                 "CREATE INDEX IDX2 ON aTable (b_string) INCLUDE (a_string, y_integer)",
@@ -279,6 +280,8 @@ public class CalciteIT extends BaseClientManagedTimeIT {
         connection.createStatement().execute("UPDATE STATISTICS " + JOIN_SUPPLIER_TABLE_FULL_NAME);
         connection.createStatement().execute("UPDATE STATISTICS " + JOIN_ORDER_TABLE_FULL_NAME);
         connection.createStatement().execute("UPDATE STATISTICS " + SCORES_TABLE_NAME);
+        connection.createStatement().execute("UPDATE STATISTICS " + SALTED_TABLE_NAME);
+        connection.createStatement().execute("UPDATE STATISTICS IDX_" + SALTED_TABLE_NAME);
         connection.createStatement().execute("UPDATE STATISTICS IDX1");
         connection.createStatement().execute("UPDATE STATISTICS IDX2");
         connection.createStatement().execute("UPDATE STATISTICS IDX_FULL");
@@ -321,6 +324,71 @@ public class CalciteIT extends BaseClientManagedTimeIT {
             stmt.setInt(2, 2);
             stmt.setArray(3, conn.createArrayOf("INTEGER", new Integer[] {87, 88, 80}));
             stmt.execute();
+            conn.commit();
+        } catch (TableAlreadyExistsException e) {
+        }
+        conn.close();        
+    }
+    
+    protected static final String NOSALT_TABLE_NAME = "nosalt_test_table";
+    protected static final String NOSALT_TABLE_SALTED_INDEX_NAME = "idxsalted_nosalt_test_table";
+    protected static final String SALTED_TABLE_NAME = "salted_test_table";
+    protected static final String SALTED_TABLE_NOSALT_INDEX_NAME = "idx_salted_test_table";
+    protected static final String SALTED_TABLE_SALTED_INDEX_NAME = "idxsalted_salted_test_table";
+    
+    protected void initSaltedTables() throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            conn.createStatement().execute(
+                    "CREATE TABLE " + NOSALT_TABLE_NAME + " (mypk0 INTEGER NOT NULL, mypk1 INTEGER NOT NULL, col0 INTEGER, col1 INTEGER CONSTRAINT pk PRIMARY KEY (mypk0, mypk1))");
+            PreparedStatement stmt = conn.prepareStatement(
+                    "UPSERT INTO " + NOSALT_TABLE_NAME
+                    + " VALUES(?, ?, ?, ?)");
+            stmt.setInt(1, 1);
+            stmt.setInt(2, 2);
+            stmt.setInt(3, 3);
+            stmt.setInt(4, 4);
+            stmt.execute();
+            stmt.setInt(1, 2);
+            stmt.setInt(2, 3);
+            stmt.setInt(3, 4);
+            stmt.setInt(4, 5);
+            stmt.execute();
+            stmt.setInt(1, 3);
+            stmt.setInt(2, 4);
+            stmt.setInt(3, 5);
+            stmt.setInt(4, 6);
+            stmt.execute();
+            conn.commit();
+            
+            conn.createStatement().execute("CREATE INDEX " + NOSALT_TABLE_SALTED_INDEX_NAME + " ON " + NOSALT_TABLE_NAME + " (col0) SALT_BUCKETS=4");
+            conn.commit();
+            
+            conn.createStatement().execute(
+                    "CREATE TABLE " + SALTED_TABLE_NAME + " (mypk0 INTEGER NOT NULL, mypk1 INTEGER NOT NULL, col0 INTEGER, col1 INTEGER CONSTRAINT pk PRIMARY KEY (mypk0, mypk1)) SALT_BUCKETS=4");
+            stmt = conn.prepareStatement(
+                    "UPSERT INTO " + SALTED_TABLE_NAME
+                    + " VALUES(?, ?, ?, ?)");
+            stmt.setInt(1, 1);
+            stmt.setInt(2, 2);
+            stmt.setInt(3, 3);
+            stmt.setInt(4, 4);
+            stmt.execute();
+            stmt.setInt(1, 2);
+            stmt.setInt(2, 3);
+            stmt.setInt(3, 4);
+            stmt.setInt(4, 5);
+            stmt.execute();
+            stmt.setInt(1, 3);
+            stmt.setInt(2, 4);
+            stmt.setInt(3, 5);
+            stmt.setInt(4, 6);
+            stmt.execute();
+            conn.commit();
+            
+            conn.createStatement().execute("CREATE INDEX " + SALTED_TABLE_NOSALT_INDEX_NAME + " ON " + SALTED_TABLE_NAME + " (col0)");
+            conn.createStatement().execute("CREATE INDEX " + SALTED_TABLE_SALTED_INDEX_NAME + " ON " + SALTED_TABLE_NAME + " (col1) INCLUDE (col0) SALT_BUCKETS=4");
             conn.commit();
         } catch (TableAlreadyExistsException e) {
         }
@@ -1222,6 +1290,72 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                         {"00D300000000XHP", "00A223122312312", "a"}, 
                         {"00D300000000XHP", "00A323122312312", "a"}, 
                         {"00D300000000XHP", "00A423122312312", "a"}})
+                .close();
+    }
+    
+    @Test public void testSaltedIndex() {
+        start(true).sql("select count(*) from " + NOSALT_TABLE_NAME + " where col0 > 3")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                           "  PhoenixServerAggregate(group=[{}], EXPR$0=[COUNT()])\n" +
+                           "    PhoenixTableScan(table=[[phoenix, IDXSALTED_NOSALT_TEST_TABLE]], filter=[>(CAST($0):INTEGER, 3)])\n")
+                .resultIs(new Object[][]{{2L}})
+                .close();
+        start(true).sql("select mypk0, mypk1, col0 from " + NOSALT_TABLE_NAME + " where col0 <= 4")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                           "  PhoenixToClientConverter\n" +
+                           "    PhoenixServerProject(MYPK0=[$1], MYPK1=[$2], COL0=[CAST($0):INTEGER])\n" +
+                           "      PhoenixTableScan(table=[[phoenix, IDXSALTED_NOSALT_TEST_TABLE]], filter=[<=(CAST($0):INTEGER, 4)])\n")
+                .resultIs(new Object[][] {
+                        {2, 3, 4},
+                        {1, 2, 3}})
+                .close();
+        start(true).sql("select * from " + SALTED_TABLE_NAME + " where mypk0 < 3")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                           "  PhoenixToClientConverter\n" +
+                           "    PhoenixTableScan(table=[[phoenix, SALTED_TEST_TABLE]], filter=[<($0, 3)])\n")
+                .resultIs(new Object[][] {
+                        {1, 2, 3, 4},
+                        {2, 3, 4, 5}})
+                .close();
+        start(true).sql("select count(*) from " + SALTED_TABLE_NAME + " where col0 > 3")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                           "  PhoenixServerAggregate(group=[{}], EXPR$0=[COUNT()])\n" +
+                           "    PhoenixTableScan(table=[[phoenix, IDX_SALTED_TEST_TABLE]], filter=[>(CAST($0):INTEGER, 3)])\n")
+                .resultIs(new Object[][]{{2L}})
+                .close();
+        start(true).sql("select mypk0, mypk1, col0 from " + SALTED_TABLE_NAME + " where col0 <= 4")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                           "  PhoenixToClientConverter\n" +
+                           "    PhoenixServerProject(MYPK0=[$1], MYPK1=[$2], COL0=[CAST($0):INTEGER])\n" +
+                           "      PhoenixTableScan(table=[[phoenix, IDX_SALTED_TEST_TABLE]], filter=[<=(CAST($0):INTEGER, 4)])\n")
+                .resultIs(new Object[][] {
+                        {2, 3, 4},
+                        {1, 2, 3}})
+                .close();
+        start(true).sql("select count(*) from " + SALTED_TABLE_NAME + " where col1 > 4")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                           "  PhoenixServerAggregate(group=[{}], EXPR$0=[COUNT()])\n" +
+                           "    PhoenixTableScan(table=[[phoenix, IDXSALTED_SALTED_TEST_TABLE]], filter=[>(CAST($0):INTEGER, 4)])\n")
+                .resultIs(new Object[][]{{2L}})
+                .close();
+        start(true).sql("select * from " + SALTED_TABLE_NAME + " where col1 <= 5")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                           "  PhoenixToClientConverter\n" +
+                           "    PhoenixServerProject(MYPK0=[$1], MYPK1=[$2], COL0=[$3], COL1=[CAST($0):INTEGER])\n" +
+                           "      PhoenixTableScan(table=[[phoenix, IDXSALTED_SALTED_TEST_TABLE]], filter=[<=(CAST($0):INTEGER, 5)])\n")
+                .resultIs(new Object[][] {
+                        {1, 2, 3, 4},
+                        {2, 3, 4, 5}})
+                .close();
+        start(true).sql("select * from " + SALTED_TABLE_NAME + " s1, " + SALTED_TABLE_NAME + " s2 where s1.mypk0 = s2.mypk0 and s1.mypk1 = s2.mypk1 and s1.mypk0 > 1 and s2.col1 < 6")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                           "  PhoenixToClientConverter\n" +
+                           "    PhoenixServerJoin(condition=[AND(=($0, $4), =($1, $5))], joinType=[inner])\n" +
+                           "      PhoenixTableScan(table=[[phoenix, SALTED_TEST_TABLE]], filter=[>($0, 1)])\n" +
+                           "      PhoenixToClientConverter\n" +
+                           "        PhoenixTableScan(table=[[phoenix, SALTED_TEST_TABLE]], filter=[<($3, 6)])\n")
+                .resultIs(new Object[][] {
+                        {2, 3, 4, 5, 2, 3, 4, 5}})
                 .close();
     }
 

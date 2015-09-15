@@ -29,6 +29,7 @@ import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PDataType;
 
@@ -51,7 +52,8 @@ public class PhoenixRelImplementorImpl implements PhoenixRel.Implementor {
 
 	@Override
 	public ColumnExpression newColumnExpression(int index) {
-		ColumnRef colRef = new ColumnRef(this.tableRef, index);
+	    int pos = this.tableRef.getTable().getBucketNum() == null ? index : (index + 1);
+		ColumnRef colRef = new ColumnRef(this.tableRef, pos);
 		return colRef.newColumnExpression();
 	}
     
@@ -59,7 +61,8 @@ public class PhoenixRelImplementorImpl implements PhoenixRel.Implementor {
     @Override
     public Expression newFieldAccessExpression(String variableId, int index, PDataType type) {
         TableRef variableDef = runtimeContext.getCorrelateVariableDef(variableId);
-        Expression fieldAccessExpr = new ColumnRef(variableDef, index).newColumnExpression();
+        int pos = variableDef.getTable().getBucketNum() == null ? index : (index + 1);
+        Expression fieldAccessExpr = new ColumnRef(variableDef, pos).newColumnExpression();
         return new CorrelateVariableFieldAccessExpression(runtimeContext, variableId, fieldAccessExpr);
     }
     
@@ -97,6 +100,7 @@ public class PhoenixRelImplementorImpl implements PhoenixRel.Implementor {
     public PTable createProjectedTable() {
         List<ColumnRef> sourceColumnRefs = Lists.<ColumnRef> newArrayList();
         for (PColumn column : getTableRef().getTable().getColumns()) {
+            if (!getCurrentContext().retainPKColumns && column == SaltingUtil.SALTING_COLUMN) continue;
             sourceColumnRefs.add(new ColumnRef(getTableRef(), column.getPosition()));
         }
         
@@ -110,8 +114,10 @@ public class PhoenixRelImplementorImpl implements PhoenixRel.Implementor {
     @Override
     public RowProjector createRowProjector() {
         List<ColumnProjector> columnProjectors = Lists.<ColumnProjector>newArrayList();
+        int pos = 0;
         for (PColumn column : getTableRef().getTable().getColumns()) {
-            Expression expr = newColumnExpression(column.getPosition());
+            if (column == SaltingUtil.SALTING_COLUMN) continue;
+            Expression expr = newColumnExpression(pos++); // Do not use column.position() here.
             columnProjectors.add(new ExpressionProjector(column.getName().getString(), getTableRef().getTable().getName().getString(), expr, false));
         }
         // TODO get estimate row size
