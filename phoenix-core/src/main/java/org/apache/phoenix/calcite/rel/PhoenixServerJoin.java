@@ -1,6 +1,7 @@
 package org.apache.phoenix.calcite.rel;
 
 import java.sql.SQLException;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 
@@ -21,10 +22,11 @@ import org.apache.phoenix.compile.JoinCompiler;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.execute.HashJoinPlan;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.join.HashJoinInfo;
-import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.JoinTableNode.JoinType;
+import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableRef;
 
@@ -105,7 +107,7 @@ public class PhoenixServerJoin extends PhoenixAbstractJoin {
         List<Expression> rightExprs = Lists.<Expression> newArrayList();
 
         implementor.pushContext(new ImplementorContext(implementor.getCurrentContext().retainPKColumns, true, getColumnRefList(0)));
-        QueryPlan leftPlan = implementInput(implementor, 0, leftExprs);
+        QueryPlan leftPlan = implementInput(implementor, 0, null);
         PTable leftTable = implementor.getTableRef().getTable();
         implementor.popContext();
 
@@ -122,6 +124,16 @@ public class PhoenixServerJoin extends PhoenixAbstractJoin {
             throw new RuntimeException(e);
         }
         implementor.setTableRef(new TableRef(joinedTable));
+        
+        // Compile left conditions against the joined table due to implementation of HashJoinRegionScanner.
+        for (Iterator<Integer> iter = joinInfo.leftKeys.iterator(); iter.hasNext();) {
+            Integer i = iter.next();
+            leftExprs.add(implementor.newColumnExpression(i));
+        }
+        if (leftExprs.isEmpty()) {
+            leftExprs.add(LiteralExpression.newConstant(0));
+        }
+
         RexNode postFilter = joinInfo.getRemaining(getCluster().getRexBuilder());
         Expression postFilterExpr = postFilter.isAlwaysTrue() ? null : CalciteUtils.toExpression(postFilter, implementor);
         @SuppressWarnings("unchecked")

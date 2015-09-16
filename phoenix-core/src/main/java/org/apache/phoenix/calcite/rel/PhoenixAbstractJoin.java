@@ -52,16 +52,19 @@ abstract public class PhoenixAbstractJoin extends Join implements PhoenixRel {
         assert index <= 1;
         
         PhoenixRel input = index == 0 ? (PhoenixRel) left : (PhoenixRel) right;
-        ImmutableIntList keys = index == 0 ? joinInfo.leftKeys : joinInfo.rightKeys;
         QueryPlan plan = implementor.visitInput(0, input);
-        for (Iterator<Integer> iter = keys.iterator(); iter.hasNext();) {
-            Integer i = iter.next();
-            conditionExprs.add(implementor.newColumnExpression(i));
+        
+        if (conditionExprs != null) {
+            ImmutableIntList keys = index == 0 ? joinInfo.leftKeys : joinInfo.rightKeys;
+            for (Iterator<Integer> iter = keys.iterator(); iter.hasNext();) {
+                Integer i = iter.next();
+                conditionExprs.add(implementor.newColumnExpression(i));
+            }
+            if (conditionExprs.isEmpty()) {
+                conditionExprs.add(LiteralExpression.newConstant(0));
+            }
         }
-        if (conditionExprs.isEmpty()) {
-            conditionExprs.add(LiteralExpression.newConstant(0));
-        }
-
+        
         return plan;
     }
 }

@@ -1278,6 +1278,34 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                 "                          PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n";
         start(correlProps).sql(q5).explainIs(p5Correlate).resultIs(r5).close();
         start(decorrelProps).sql(q5).explainIs(p5Decorrelated).resultIs(r5).close();
+        
+        String q6 = "select organization_id, entity_id, a_integer from v v1 where a_integer = (select min(a_integer) from v v2 where v1.organization_id = v2.organization_id and v1.b_string = v2.b_string)";
+        Object[][] r6 = new Object[][] {
+                {"00D300000000XHP", "00A123122312312", 1}, 
+                {"00D300000000XHP", "00A223122312312", 2}, 
+                {"00D300000000XHP", "00A323122312312", 3}};
+        String p6Correlate = 
+                "PhoenixToEnumerableConverter\n" +
+                "  PhoenixClientProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1], A_INTEGER=[$4])\n" +
+                "    PhoenixFilter(condition=[=($4, $18)])\n" +
+                "      PhoenixCorrelate(correlation=[$cor0], joinType=[LEFT], requiredColumns=[{0, 3}])\n" +
+                "        PhoenixToClientConverter\n" +
+                "          PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'a')])\n" +
+                "        PhoenixServerAggregate(group=[{}], EXPR$0=[MIN($4)])\n" +
+                "          PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[AND(=($2, 'a'), =($cor0.ORGANIZATION_ID, $0), =($cor0.B_STRING, $3))])\n";
+        String p6Decorrelated = 
+                "PhoenixToEnumerableConverter\n" +
+                "  PhoenixClientProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1], A_INTEGER=[$4])\n" +
+                "    PhoenixToClientConverter\n" +
+                "      PhoenixServerJoin(condition=[AND(=($0, $18), =($3, $19), =($4, $20))], joinType=[inner])\n" +
+                "        PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'a')])\n" +
+                "        PhoenixServerAggregate(group=[{18, 19}], EXPR$0=[MIN($4)])\n" +
+                "          PhoenixServerJoin(condition=[AND(=($18, $0), =($19, $3))], joinType=[inner])\n" +
+                "            PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'a')])\n" +
+                "            PhoenixServerAggregate(group=[{0, 3}])\n" +
+                "              PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'a')])\n";
+        start(correlProps).sql(q6).explainIs(p6Correlate).resultIs(r6).close();
+        start(decorrelProps).sql(q6).explainIs(p6Decorrelated).resultIs(r6).close();
     }
     
     @Test public void testSelectFromView() {
