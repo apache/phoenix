@@ -774,7 +774,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 // without making an additional query
                 PTable table =
                         loadTable(env, key, cacheKey, clientTimeStamp, HConstants.LATEST_TIMESTAMP);
-                if (table != null) {
+                if (table != null && !isTableDeleted(table)) {
                     if (table.getTimeStamp() < clientTimeStamp) {
                         // If the table is older than the client time stamp and it's deleted,
                         // continue
@@ -803,7 +803,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 // on the system table. This is an issue because of the way we manage batch mutation
                 // in the
                 // Indexer.
-                region.mutateRowsWithLocks(tableMetadata, Collections.<byte[]> emptySet());
+				region.mutateRowsWithLocks(tableMetadata, Collections.<byte[]> emptySet());
 
                 // Invalidate the cache - the next getTable call will add it
                 // TODO: consider loading the table that was just created here, patching up the parent table, and updating the cache

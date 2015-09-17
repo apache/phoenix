@@ -831,7 +831,7 @@ public class PTableImpl implements PTable {
 
     @Override
     public synchronized boolean getIndexMaintainers(ImmutableBytesWritable ptr, PhoenixConnection connection) {
-        if (indexMaintainersPtr == null) {
+        if (indexMaintainersPtr == null || indexMaintainersPtr.getLength()==0) {
             indexMaintainersPtr = new ImmutableBytesWritable();
             if (indexes.isEmpty()) {
                 indexMaintainersPtr.set(ByteUtil.EMPTY_BYTE_ARRAY);

@@ -308,7 +308,7 @@ public class SkipScanQueryIT extends BaseHBaseManagedTimeIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
-            createMultiCFTestTable(TestUtil.DEFAULT_DATA_TABLE_FULL_NAME);
+            createMultiCFTestTable(TestUtil.DEFAULT_DATA_TABLE_FULL_NAME, null);
             populateMultiCFTestTable(TestUtil.DEFAULT_DATA_TABLE_FULL_NAME);
             String upsert = "UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME
                     + " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";

@@ -134,6 +134,7 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.ConfigUtil;
+import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
@@ -178,7 +179,7 @@ import com.google.inject.util.Providers;
  *
  */
 public abstract class BaseTest {
-    private static final String TEST_TABLE_SCHEMA = "(" +
+    protected static final String TEST_TABLE_SCHEMA = "(" +
 	                "   varchar_pk VARCHAR NOT NULL, " +
 	                "   char_pk CHAR(6) NOT NULL, " +
 	                "   int_pk INTEGER NOT NULL, "+ 
@@ -468,9 +469,9 @@ public abstract class BaseTest {
         return conf.get(QueryServices.ZOOKEEPER_PORT_ATTRIB);
     }
     
-    private static String url;
+    protected static String url;
     protected static PhoenixTestDriver driver;
-    private static boolean clusterInitialized = false;
+    protected static boolean clusterInitialized = false;
     private static HBaseTestingUtility utility;
     protected static final Configuration config = HBaseConfiguration.create(); 
     
@@ -495,7 +496,7 @@ public abstract class BaseTest {
         
     }
     
-    private static void setupTxManager() throws SQLException, IOException {
+    protected static void setupTxManager() throws SQLException, IOException {
         config.setBoolean(TxConstants.Manager.CFG_DO_PERSIST, false);
         config.set(TxConstants.Service.CFG_DATA_TX_CLIENT_RETRY_STRATEGY, "n-times");
         config.setInt(TxConstants.Service.CFG_DATA_TX_CLIENT_ATTEMPTS, 1);
@@ -1729,7 +1730,81 @@ public abstract class BaseTest {
         return utility;
     }
 
-    protected static void createMultiCFTestTable(String tableName) throws SQLException {
+    // Populate the test table with data.
+	public static void populateTestTable(String fullTableName) throws SQLException {
+	    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+	    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+	        String upsert = "UPSERT INTO " + fullTableName
+	                + " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+	        PreparedStatement stmt = conn.prepareStatement(upsert);
+	        stmt.setString(1, "varchar1");
+	        stmt.setString(2, "char1");
+	        stmt.setInt(3, 1);
+	        stmt.setLong(4, 1L);
+	        stmt.setBigDecimal(5, new BigDecimal(1.0));
+	        Date date = DateUtil.parseDate("2015-01-01 00:00:00");
+	        stmt.setDate(6, date);
+	        stmt.setString(7, "varchar_a");
+	        stmt.setString(8, "chara");
+	        stmt.setInt(9, 2);
+	        stmt.setLong(10, 2L);
+	        stmt.setBigDecimal(11, new BigDecimal(2.0));
+	        stmt.setDate(12, date);
+	        stmt.setString(13, "varchar_b");
+	        stmt.setString(14, "charb");
+	        stmt.setInt(15, 3);
+	        stmt.setLong(16, 3L);
+	        stmt.setBigDecimal(17, new BigDecimal(3.0));
+	        stmt.setDate(18, date);
+	        stmt.executeUpdate();
+	        
+	        stmt.setString(1, "varchar2");
+	        stmt.setString(2, "char2");
+	        stmt.setInt(3, 2);
+	        stmt.setLong(4, 2L);
+	        stmt.setBigDecimal(5, new BigDecimal(2.0));
+	        date = DateUtil.parseDate("2015-01-02 00:00:00");
+	        stmt.setDate(6, date);
+	        stmt.setString(7, "varchar_a");
+	        stmt.setString(8, "chara");
+	        stmt.setInt(9, 3);
+	        stmt.setLong(10, 3L);
+	        stmt.setBigDecimal(11, new BigDecimal(3.0));
+	        stmt.setDate(12, date);
+	        stmt.setString(13, "varchar_b");
+	        stmt.setString(14, "charb");
+	        stmt.setInt(15, 4);
+	        stmt.setLong(16, 4L);
+	        stmt.setBigDecimal(17, new BigDecimal(4.0));
+	        stmt.setDate(18, date);
+	        stmt.executeUpdate();
+	        
+	        stmt.setString(1, "varchar3");
+	        stmt.setString(2, "char3");
+	        stmt.setInt(3, 3);
+	        stmt.setLong(4, 3L);
+	        stmt.setBigDecimal(5, new BigDecimal(3.0));
+	        date = DateUtil.parseDate("2015-01-03 00:00:00");
+	        stmt.setDate(6, date);
+	        stmt.setString(7, "varchar_a");
+	        stmt.setString(8, "chara");
+	        stmt.setInt(9, 4);
+	        stmt.setLong(10, 4L);
+	        stmt.setBigDecimal(11, new BigDecimal(4.0));
+	        stmt.setDate(12, date);
+	        stmt.setString(13, "varchar_b");
+	        stmt.setString(14, "charb");
+	        stmt.setInt(15, 5);
+	        stmt.setLong(16, 5L);
+	        stmt.setBigDecimal(17, new BigDecimal(5.0));
+	        stmt.setDate(18, date);
+	        stmt.executeUpdate();
+	        
+	        conn.commit();
+	    }
+	}
+
+	protected static void createMultiCFTestTable(String tableName, String options) throws SQLException {
         String ddl = "create table if not exists " + tableName + "(" +
                 "   varchar_pk VARCHAR NOT NULL, " +
                 "   char_pk CHAR(5) NOT NULL, " +
@@ -1747,7 +1822,8 @@ public abstract class BaseTest {
                 "   b.long_col2 BIGINT, " +
                 "   b.decimal_col2 DECIMAL, " +
                 "   b.date_col DATE " + 
-                "   CONSTRAINT pk PRIMARY KEY (varchar_pk, char_pk, int_pk, long_pk DESC, decimal_pk))";
+                "   CONSTRAINT pk PRIMARY KEY (varchar_pk, char_pk, int_pk, long_pk DESC, decimal_pk)) "
+                + (options!=null? options : "");
             Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             Connection conn = DriverManager.getConnection(getUrl(), props);
             conn.createStatement().execute(ddl);

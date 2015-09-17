@@ -1228,7 +1228,7 @@ public class MetaDataClient {
             Long timestamp = null;
             if (parent != null) {
                 transactional = parent.isTransactional();
-                timestamp = TransactionUtil.getTableTimestamp(connection, transactional, null);
+                timestamp = TransactionUtil.getTableTimestamp(connection, transactional);
                 storeNulls = parent.getStoreNulls();
                 if (tableType == PTableType.INDEX) {
                     // Index on view
@@ -1376,12 +1376,15 @@ public class MetaDataClient {
             if (transactional) { // FIXME: remove once Tephra handles storing multiple versions of a cell value, 
             	// and allows ignoring empty key values for an operation
             	if (Boolean.FALSE.equals(storeNullsProp)) {
-            		throw new SQLExceptionInfo.Builder(SQLExceptionCode.STORE_NULLS_MUST_BE_FALSE_FOR_TRANSACTIONAL)
+            		throw new SQLExceptionInfo.Builder(SQLExceptionCode.STORE_NULLS_MUST_BE_TRUE_FOR_TRANSACTIONAL)
             		.setSchemaName(schemaName).setTableName(tableName)
             		.build().buildException();
             	}
+            	// Force STORE_NULLS to true when transactional as Tephra cannot deal with column deletes
+            	storeNulls = true;
+            	tableProps.put(PhoenixDatabaseMetaData.STORE_NULLS, Boolean.TRUE);
             }
-            timestamp = timestamp==null ? TransactionUtil.getTableTimestamp(connection, transactional, null) : timestamp;
+            timestamp = timestamp==null ? TransactionUtil.getTableTimestamp(connection, transactional) : timestamp;
 
             // Delay this check as it is supported to have IMMUTABLE_ROWS and SALT_BUCKETS defined on views
             if (statement.getTableType() == PTableType.VIEW || indexId != null) {
@@ -1891,8 +1894,7 @@ public class MetaDataClient {
 
                 .setSchemaName(schemaName).setTableName(tableName).build().buildException();
             default:
-				connection.removeTable(tenantId, SchemaUtil.getTableName(schemaName, tableName), parentTableName,
-                        TransactionUtil.getTableTimestamp(connection, transactional, result.getMutationTime()));
+				connection.removeTable(tenantId, SchemaUtil.getTableName(schemaName, tableName), parentTableName, result.getMutationTime());
 
                 if (result.getTable() != null && tableType != PTableType.VIEW) {
                     connection.setAutoCommit(true);

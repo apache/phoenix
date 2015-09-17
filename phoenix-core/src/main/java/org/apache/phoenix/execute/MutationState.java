@@ -27,6 +27,7 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
 
 import co.cask.tephra.Transaction;
@@ -196,13 +197,18 @@ public class MutationState implements SQLCloseable {
             }
             if (hasUncommittedData) {
                 try {
-                    tx = currentTx = connection.getQueryServices().getTransactionSystemClient().checkpoint(currentTx);
+                	if (txContext == null) {
+                		tx = currentTx = connection.getQueryServices().getTransactionSystemClient().checkpoint(currentTx);
+                	}  else {
+                		txContext.checkpoint();
+                		tx = currentTx = txContext.getCurrentTransaction();
+                	}
                     // Since we've checkpointed, we can clear out uncommitted set, since a statement run afterwards
                     // should see all this data.
                     uncommittedPhysicalNames.clear();
-                } catch (TransactionNotInProgressException e) {
+                } catch (TransactionFailureException | TransactionNotInProgressException e) {
                     throw new SQLException(e);
-                }
+				} 
             }
             // Since we're querying our own table while mutating it, we must exclude
             // see our current mutations, otherwise we can get erroneous results (for DELETE)
@@ -367,37 +373,14 @@ public class MutationState implements SQLCloseable {
         throwIfTooBig();
     }
     
-    private Iterator<Pair<byte[],List<Mutation>>> addRowMutations(final TableRef tableRef, final Map<ImmutableBytesPtr, Map<PColumn, byte[]>> values, long timestamp, boolean includeMutableIndexes) {
+    private Iterator<Pair<byte[],List<Mutation>>> addRowMutations(final TableRef tableRef, final Map<ImmutableBytesPtr, Map<PColumn, byte[]>> values, final long timestamp, boolean includeMutableIndexes, final boolean sendAll) {
         final Iterator<PTable> indexes = // Only maintain tables with immutable rows through this client-side mechanism
                 (tableRef.getTable().isImmutableRows() || includeMutableIndexes) ? 
                         IndexMaintainer.nonDisabledIndexIterator(tableRef.getTable().getIndexes().iterator()) : 
                         Iterators.<PTable>emptyIterator();
-        final List<Mutation> mutations = Lists.newArrayListWithExpectedSize(values.size());
+        final List<Mutation> mutationList = Lists.newArrayListWithExpectedSize(values.size());
         final List<Mutation> mutationsPertainingToIndex = indexes.hasNext() ? Lists.<Mutation>newArrayListWithExpectedSize(values.size()) : null;
-        Iterator<Map.Entry<ImmutableBytesPtr,Map<PColumn,byte[]>>> iterator = values.entrySet().iterator();
-        final ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-        while (iterator.hasNext()) {
-            Map.Entry<ImmutableBytesPtr,Map<PColumn,byte[]>> rowEntry = iterator.next();
-            ImmutableBytesPtr key = rowEntry.getKey();
-            PRow row = tableRef.getTable().newRow(connection.getKeyValueBuilder(), timestamp, key);
-            List<Mutation> rowMutations, rowMutationsPertainingToIndex;
-            if (rowEntry.getValue() == PRow.DELETE_MARKER) { // means delete
-                row.delete();
-                rowMutations = row.toRowMutations();
-                // Row deletes for index tables are processed by running a re-written query
-                // against the index table (as this allows for flexibility in being able to
-                // delete rows).
-                rowMutationsPertainingToIndex = Collections.emptyList();
-            } else {
-                for (Map.Entry<PColumn,byte[]> valueEntry : rowEntry.getValue().entrySet()) {
-                    row.setValue(valueEntry.getKey(), valueEntry.getValue());
-                }
-                rowMutations = row.toRowMutations();
-                rowMutationsPertainingToIndex = rowMutations;
-            }
-            mutations.addAll(rowMutations);
-            if (mutationsPertainingToIndex != null) mutationsPertainingToIndex.addAll(rowMutationsPertainingToIndex);
-        }
+        generateMutations(tableRef, timestamp, values, mutationList, mutationsPertainingToIndex);
         return new Iterator<Pair<byte[],List<Mutation>>>() {
             boolean isFirst = true;
 
@@ -410,14 +393,24 @@ public class MutationState implements SQLCloseable {
             public Pair<byte[], List<Mutation>> next() {
                 if (isFirst) {
                     isFirst = false;
-                    return new Pair<byte[],List<Mutation>>(tableRef.getTable().getPhysicalName().getBytes(),mutations);
+                    return new Pair<byte[],List<Mutation>>(tableRef.getTable().getPhysicalName().getBytes(),mutationList);
                 }
                 PTable index = indexes.next();
                 List<Mutation> indexMutations;
                 try {
                     indexMutations =
                             IndexUtil.generateIndexData(tableRef.getTable(), index, mutationsPertainingToIndex,
-                                    ptr, connection.getKeyValueBuilder(), connection);
+                                    connection.getKeyValueBuilder(), connection);
+                    // we may also have to include delete mutations for immutable tables if we are not processing all the tables in the mutations map
+                    if (!sendAll) {
+	                    TableRef key = new TableRef(index);
+						Map<ImmutableBytesPtr, Map<PColumn, byte[]>> rowToColumnMap = mutations.remove(key);
+	                    if (rowToColumnMap!=null) {
+		                    final List<Mutation> deleteMutations = Lists.newArrayList();
+		                    generateMutations(tableRef, timestamp, rowToColumnMap, deleteMutations, null);
+		                    indexMutations.addAll(deleteMutations);
+	                    }
+                    }
                 } catch (SQLException e) {
                     throw new IllegalDataException(e);
                 }
@@ -431,6 +424,35 @@ public class MutationState implements SQLCloseable {
             
         };
     }
+
+	private void generateMutations(final TableRef tableRef, long timestamp,
+			final Map<ImmutableBytesPtr, Map<PColumn, byte[]>> values,
+			final List<Mutation> mutationList,
+			final List<Mutation> mutationsPertainingToIndex) {
+		Iterator<Map.Entry<ImmutableBytesPtr,Map<PColumn,byte[]>>> iterator = values.entrySet().iterator();
+        while (iterator.hasNext()) {
+            Map.Entry<ImmutableBytesPtr,Map<PColumn,byte[]>> rowEntry = iterator.next();
+            ImmutableBytesPtr key = rowEntry.getKey();
+			PRow row = tableRef.getTable().newRow(connection.getKeyValueBuilder(), timestamp, key);
+			List<Mutation> rowMutations, rowMutationsPertainingToIndex;
+			if (rowEntry.getValue() == PRow.DELETE_MARKER) { // means delete
+			    row.delete();
+			    rowMutations = row.toRowMutations();
+			    // Row deletes for index tables are processed by running a re-written query
+			    // against the index table (as this allows for flexibility in being able to
+			    // delete rows).
+			    rowMutationsPertainingToIndex = Collections.emptyList();
+			} else {
+			    for (Map.Entry<PColumn,byte[]> valueEntry : rowEntry.getValue().entrySet()) {
+			        row.setValue(valueEntry.getKey(), valueEntry.getValue());
+			    }
+			    rowMutations = row.toRowMutations();
+			    rowMutationsPertainingToIndex = rowMutations;
+			}
+			mutationList.addAll(rowMutations);
+			if (mutationsPertainingToIndex != null) mutationsPertainingToIndex.addAll(rowMutationsPertainingToIndex);
+        }
+	}
     
     /**
      * Get the unsorted list of HBase mutations for the tables with uncommitted data.
@@ -453,7 +475,7 @@ public class MutationState implements SQLCloseable {
             private Iterator<Pair<byte[],List<Mutation>>> innerIterator = init();
                     
             private Iterator<Pair<byte[],List<Mutation>>> init() {
-                return addRowMutations(current.getKey(), current.getValue(), timestamp, includeMutableIndexes);
+                return addRowMutations(current.getKey(), current.getValue(), timestamp, includeMutableIndexes, true);
             }
             
             @Override
@@ -651,7 +673,7 @@ public class MutationState implements SQLCloseable {
             boolean isDataTable = true;
             // Validate as we go if transactional since we can undo if a problem occurs (which is unlikely)
             long serverTimestamp = serverTimeStamps == null ? validate(tableRef, valuesMap) : serverTimeStamps[i++];
-            Iterator<Pair<byte[],List<Mutation>>> mutationsIterator = addRowMutations(tableRef, valuesMap, serverTimestamp, false);
+            Iterator<Pair<byte[],List<Mutation>>> mutationsIterator = addRowMutations(tableRef, valuesMap, serverTimestamp, false, sendAll);
             while (mutationsIterator.hasNext()) {
                 Pair<byte[],List<Mutation>> pair = mutationsIterator.next();
                 byte[] htableName = pair.getFirst();
@@ -855,13 +877,17 @@ public class MutationState implements SQLCloseable {
     }
     
     public void commit() throws SQLException {
+    	boolean sendMutationsFailed=false;
         try {
             send();
+        } catch (Throwable t) {
+        	sendMutationsFailed=true;
+        	throw t;
         } finally {
             txAwares.clear();
             if (txContext != null) {
                 try {
-                    if (txStarted) {
+                    if (txStarted && !sendMutationsFailed) {
                         txContext.finish();
                     }
                 } catch (TransactionFailureException e) {
@@ -872,8 +898,10 @@ public class MutationState implements SQLCloseable {
                         throw TransactionUtil.getSQLException(e);
                     }
                 } finally {
-                	reset();
-                }
+                  	if (!sendMutationsFailed) {
+                  		reset();
+                  	}
+                  }
             }
         }
     }

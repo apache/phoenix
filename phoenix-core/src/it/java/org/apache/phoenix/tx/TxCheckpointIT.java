@@ -26,21 +26,59 @@ import static org.junit.Assert.assertTrue;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Map;
 import java.util.Properties;
 
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
+import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.ReadOnlyProps;
+import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameters;
+
+import com.google.common.collect.Maps;
 
 import co.cask.tephra.Transaction.VisibilityLevel;
 
+@RunWith(Parameterized.class)
 public class TxCheckpointIT extends BaseHBaseManagedTimeIT {
+	
+	private final boolean localIndex;
+	private final boolean mutable;
 
-    
+	public TxCheckpointIT(boolean localIndex, boolean mutable) {
+		this.localIndex = localIndex;
+		this.mutable = mutable;
+	}
+	
+	@BeforeClass
+    @Shadower(classBeingShadowed = BaseHBaseManagedTimeIT.class)
+    public static void doSetup() throws Exception {
+        Map<String,String> props = Maps.newHashMapWithExpectedSize(2);
+        props.put(QueryServices.DEFAULT_TRANSACTIONAL_ATTRIB, Boolean.toString(true));
+        // We need this b/c we don't allow a transactional table to be created if the underlying
+        // HBase table already exists (since we don't know if it was transactional before).
+        props.put(QueryServices.DROP_METADATA_ATTRIB, Boolean.toString(true));
+        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+    }
+	
+	@Parameters(name="localIndex = {0} , mutable = {1}")
+    public static Collection<Boolean[]> data() {
+        return Arrays.asList(new Boolean[][] {     
+                 { false, false }, { false, true }, { true, false }, { true, true }  
+           });
+    }
+
     @Test
     public void testUpsertSelectDoesntSeeUpsertedData() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -50,7 +88,8 @@ public class TxCheckpointIT extends BaseHBaseManagedTimeIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(true);
         conn.createStatement().execute("CREATE SEQUENCE keys");
-        conn.createStatement().execute("CREATE TABLE txfoo (pk INTEGER PRIMARY KEY, val INTEGER) TRANSACTIONAL=true");
+        conn.createStatement().execute("CREATE TABLE txfoo (pk INTEGER PRIMARY KEY, val INTEGER)"+(!mutable? " IMMUTABLE_ROWS=true" : ""));
+        conn.createStatement().execute("CREATE "+(localIndex? "LOCAL " : "")+"INDEX idx ON txfoo (val)");
 
         conn.createStatement().execute("UPSERT INTO txfoo VALUES (NEXT VALUE FOR keys,1)");
         for (int i=0; i<6; i++) {
@@ -62,150 +101,239 @@ public class TxCheckpointIT extends BaseHBaseManagedTimeIT {
     }
     
     @Test
-    public void testCheckpointForUpsertSelect() throws Exception {
-        ResultSet rs;
+    public void testRollbackOfUncommittedDelete() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        conn.createStatement().execute("create table tx1 (id bigint not null primary key) TRANSACTIONAL=true");
-        conn.createStatement().execute("create table tx2 (id bigint not null primary key) TRANSACTIONAL=true");
+        conn.setAutoCommit(false);
+        try {
+            Statement stmt = conn.createStatement();
+            stmt.execute("CREATE TABLE DEMO(k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)"+(!mutable? " IMMUTABLE_ROWS=true" : ""));
+            stmt.execute("CREATE "+(localIndex? "LOCAL " : "")+"INDEX DEMO_idx ON DEMO (v1) INCLUDE(v2)");
+            
+            stmt.executeUpdate("upsert into DEMO values('x1', 'y1', 'a1')");
+            stmt.executeUpdate("upsert into DEMO values('x2', 'y2', 'a2')");
+            
+            //assert values in data table
+            ResultSet rs = stmt.executeQuery("select k, v1, v2 from DEMO ORDER BY k");
+            assertTrue(rs.next());
+            assertEquals("x1", rs.getString(1));
+            assertEquals("y1", rs.getString(2));
+            assertEquals("a1", rs.getString(3));
+            assertTrue(rs.next());
+            assertEquals("x2", rs.getString(1));
+            assertEquals("y2", rs.getString(2));
+            assertEquals("a2", rs.getString(3));
+            assertFalse(rs.next());
+            
+            //assert values in index table
+            rs = stmt.executeQuery("select k, v1, v2 from DEMO ORDER BY v1");
+            assertTrue(rs.next());
+            assertEquals("x1", rs.getString(1));
+            assertEquals("y1", rs.getString(2));
+            assertEquals("a1", rs.getString(3));
+            assertTrue(rs.next());
+            assertEquals("x2", rs.getString(1));
+            assertEquals("y2", rs.getString(2));
+            assertEquals("a2", rs.getString(3));
+            assertFalse(rs.next());
+            
+            conn.commit();
+            
+            stmt.executeUpdate("DELETE FROM DEMO WHERE k='x1' AND v1='y1' AND v2='a1'");
+            //assert row is delete in data table
+            rs = stmt.executeQuery("select k, v1, v2 from DEMO ORDER BY k");
+            assertTrue(rs.next());
+            assertEquals("x2", rs.getString(1));
+            assertEquals("y2", rs.getString(2));
+            assertEquals("a2", rs.getString(3));
+            assertFalse(rs.next());
+            
+            //assert row is delete in index table
+            rs = stmt.executeQuery("select k, v1, v2 from DEMO ORDER BY v1");
+            assertTrue(rs.next());
+            assertEquals("x2", rs.getString(1));
+            assertEquals("y2", rs.getString(2));
+            assertEquals("a2", rs.getString(3));
+            assertFalse(rs.next());
+            
+            conn.rollback();
+            
+            //assert two rows in data table
+            rs = stmt.executeQuery("select k, v1, v2 from DEMO ORDER BY k");
+            assertTrue(rs.next());
+            assertEquals("x1", rs.getString(1));
+            assertEquals("y1", rs.getString(2));
+            assertEquals("a1", rs.getString(3));
+            assertTrue(rs.next());
+            assertEquals("x2", rs.getString(1));
+            assertEquals("y2", rs.getString(2));
+            assertEquals("a2", rs.getString(3));
+            assertFalse(rs.next());
+            
+            //assert two rows in index table
+            rs = stmt.executeQuery("select k, v1, v2 from DEMO ORDER BY v1");
+            assertTrue(rs.next());
+            assertEquals("x1", rs.getString(1));
+            assertEquals("y1", rs.getString(2));
+            assertEquals("a1", rs.getString(3));
+            assertTrue(rs.next());
+            assertEquals("x2", rs.getString(1));
+            assertEquals("y2", rs.getString(2));
+            assertEquals("a2", rs.getString(3));
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
+    
+	@Test
+	public void testCheckpointForUpsertSelect() throws Exception {
+		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+		try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
+			conn.setAutoCommit(false);
+			Statement stmt = conn.createStatement();
 
-        conn.createStatement().execute("upsert into tx1 values (1)");
-        conn.createStatement().execute("upsert into tx1 values (2)");
-        conn.createStatement().execute("upsert into tx1 values (3)");
-        conn.commit();
+			stmt.execute("CREATE TABLE DEMO(ID BIGINT NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)"
+					+ (!mutable ? " IMMUTABLE_ROWS=true" : ""));
+			stmt.execute("CREATE " + (localIndex ? "LOCAL " : "")
+					+ "INDEX IDX ON DEMO (v1) INCLUDE(v2)");
 
-        MutationState state = conn.unwrap(PhoenixConnection.class).getMutationState();
-        state.startTransaction();
-        long wp = state.getWritePointer();
-        conn.createStatement().execute("upsert into tx1 select max(id)+1 from tx1");
-        assertEquals(VisibilityLevel.SNAPSHOT_EXCLUDE_CURRENT, state.getVisibilityLevel());
-        assertEquals(wp, state.getWritePointer()); // Make sure write ptr didn't move
-        rs = conn.createStatement().executeQuery("select max(id) from tx1");
-        
-        assertTrue(rs.next());
-        assertEquals(4,rs.getLong(1));
-        assertFalse(rs.next());
-        
-        conn.createStatement().execute("upsert into tx1 select max(id)+1 from tx1");
-        assertEquals(VisibilityLevel.SNAPSHOT_EXCLUDE_CURRENT, state.getVisibilityLevel());
-        assertNotEquals(wp, state.getWritePointer()); // Make sure write ptr moves
-        wp = state.getWritePointer();
-        
-        conn.createStatement().execute("upsert into tx1 select id from tx2");
-        assertEquals(VisibilityLevel.SNAPSHOT, state.getVisibilityLevel());
-        // Write ptr shouldn't move b/c we're not reading from a table with uncommitted data
-        assertEquals(wp, state.getWritePointer()); 
-        
-        rs = conn.createStatement().executeQuery("select max(id) from tx1");
-        
-        assertTrue(rs.next());
-        assertEquals(5,rs.getLong(1));
-        assertFalse(rs.next());
-        
-        conn.rollback();
-        
-        rs = conn.createStatement().executeQuery("select max(id) from tx1");
-        
-        assertTrue(rs.next());
-        assertEquals(3,rs.getLong(1));
-        assertFalse(rs.next());
+            stmt.executeUpdate("upsert into DEMO values(1, 'a2', 'b1')");
+            stmt.executeUpdate("upsert into DEMO values(2, 'a2', 'b2')");
+            stmt.executeUpdate("upsert into DEMO values(3, 'a3', 'b3')");
+			conn.commit();
 
-        wp = state.getWritePointer();
-        conn.createStatement().execute("upsert into tx1 select max(id)+1 from tx1");
-        assertEquals(VisibilityLevel.SNAPSHOT_EXCLUDE_CURRENT, state.getVisibilityLevel());
-        assertEquals(wp, state.getWritePointer()); // Make sure write ptr didn't move
-        rs = conn.createStatement().executeQuery("select max(id) from tx1");
-        
-        assertTrue(rs.next());
-        assertEquals(4,rs.getLong(1));
-        assertFalse(rs.next());
-        
-        conn.createStatement().execute("upsert into tx1 select max(id)+1 from tx1");
-        assertEquals(VisibilityLevel.SNAPSHOT_EXCLUDE_CURRENT, state.getVisibilityLevel());
-        assertNotEquals(wp, state.getWritePointer()); // Make sure write ptr moves
-        rs = conn.createStatement().executeQuery("select max(id) from tx1");
-        
-        assertTrue(rs.next());
-        assertEquals(5,rs.getLong(1));
-        assertFalse(rs.next());
-        
-        conn.commit();
-        
-        rs = conn.createStatement().executeQuery("select max(id) from tx1");
-        
-        assertTrue(rs.next());
-        assertEquals(5,rs.getLong(1));
-        assertFalse(rs.next());
-    }  
+			upsertRows(conn);
+			conn.rollback();
+			verifyRows(conn, 3);
 
-    @Test
+			upsertRows(conn);
+			conn.commit();
+			verifyRows(conn, 6);
+		}
+	}
+
+	private void verifyRows(Connection conn, int expectedMaxId) throws SQLException {
+		ResultSet rs;
+		//query the data table
+		rs = conn.createStatement().executeQuery("select /*+ NO_INDEX */ max(id) from DEMO");
+		assertTrue(rs.next());
+		assertEquals(expectedMaxId, rs.getLong(1));
+		assertFalse(rs.next());
+		
+		// query the index
+		rs = conn.createStatement().executeQuery("select /*+ INDEX(DEMO IDX) */ max(id) from DEMO");
+		assertTrue(rs.next());
+		assertEquals(expectedMaxId, rs.getLong(1));
+		assertFalse(rs.next());
+	}
+
+	private void upsertRows(Connection conn) throws SQLException {
+		ResultSet rs;
+		MutationState state = conn.unwrap(PhoenixConnection.class)
+				.getMutationState();
+		state.startTransaction();
+		long wp = state.getWritePointer();
+		conn.createStatement().execute(
+				"upsert into DEMO select max(id)+1, 'a4', 'b4' from DEMO");
+		assertEquals(VisibilityLevel.SNAPSHOT_EXCLUDE_CURRENT,
+				state.getVisibilityLevel());
+		assertEquals(wp, state.getWritePointer()); // Make sure write ptr
+													// didn't move
+		rs = conn.createStatement().executeQuery("select max(id) from DEMO");
+
+		assertTrue(rs.next());
+		assertEquals(4, rs.getLong(1));
+		assertFalse(rs.next());
+
+		conn.createStatement().execute(
+				"upsert into DEMO select max(id)+1, 'a5', 'b5' from DEMO");
+		assertEquals(VisibilityLevel.SNAPSHOT_EXCLUDE_CURRENT,
+				state.getVisibilityLevel());
+		assertNotEquals(wp, state.getWritePointer()); // Make sure write ptr
+														// moves
+		wp = state.getWritePointer();
+		rs = conn.createStatement().executeQuery("select max(id) from DEMO");
+
+		assertTrue(rs.next());
+		assertEquals(5, rs.getLong(1));
+		assertFalse(rs.next());
+		
+		conn.createStatement().execute(
+				"upsert into DEMO select max(id)+1, 'a6', 'b6' from DEMO");
+		assertEquals(VisibilityLevel.SNAPSHOT_EXCLUDE_CURRENT,
+				state.getVisibilityLevel());
+		assertNotEquals(wp, state.getWritePointer()); // Make sure write ptr
+														// moves
+		wp = state.getWritePointer();
+		rs = conn.createStatement().executeQuery("select max(id) from DEMO");
+
+		assertTrue(rs.next());
+		assertEquals(6, rs.getLong(1));
+		assertFalse(rs.next());
+	}
+	
+	@Test
     public void testCheckpointForDelete() throws Exception {
-        ResultSet rs;
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        conn.createStatement().execute("create table tx3 (id1 bigint primary key, fk1 integer) TRANSACTIONAL=true");
-        conn.createStatement().execute("create table tx4 (id2 bigint primary key, fk2 integer) TRANSACTIONAL=true");
+		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+		ResultSet rs;
+		try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
+			conn.setAutoCommit(false);
+			Statement stmt = conn.createStatement();
+			stmt.execute("CREATE TABLE DEMO1(ID1 BIGINT NOT NULL PRIMARY KEY, FK1A INTEGER, FK1B INTEGER)"
+					+ (!mutable ? " IMMUTABLE_ROWS=true" : ""));
+			stmt.execute("CREATE TABLE DEMO2(ID2 BIGINT NOT NULL PRIMARY KEY, FK2 INTEGER)"
+					+ (!mutable ? " IMMUTABLE_ROWS=true" : ""));
+			stmt.execute("CREATE " + (localIndex ? "LOCAL " : "")
+					+ "INDEX IDX ON DEMO1 (FK1B)");
+			
+			stmt.executeUpdate("upsert into DEMO1 values (1, 3, 3)");
+			stmt.executeUpdate("upsert into DEMO1 values (2, 2, 2)");
+			stmt.executeUpdate("upsert into DEMO1 values (3, 1, 1)");
+			stmt.executeUpdate("upsert into DEMO2 values (1, 1)");
+			conn.commit();
 
-        conn.createStatement().execute("upsert into tx3 values (1, 3)");
-        conn.createStatement().execute("upsert into tx3 values (2, 2)");
-        conn.createStatement().execute("upsert into tx3 values (3, 1)");
-        conn.createStatement().execute("upsert into tx4 values (1, 1)");
-        conn.commit();
-
-        MutationState state = conn.unwrap(PhoenixConnection.class).getMutationState();
-        state.startTransaction();
-        long wp = state.getWritePointer();
-        conn.createStatement().execute("delete from tx3 where id1=fk1");
-        assertEquals(VisibilityLevel.SNAPSHOT, state.getVisibilityLevel());
-        assertEquals(wp, state.getWritePointer()); // Make sure write ptr didn't move
-
-        rs = conn.createStatement().executeQuery("select id1 from tx3");
-        assertTrue(rs.next());
-        assertEquals(1,rs.getLong(1));
-        assertTrue(rs.next());
-        assertEquals(3,rs.getLong(1));
-        assertFalse(rs.next());
-
-        conn.createStatement().execute("delete from tx3 where id1 in (select fk1 from tx3 join tx4 on (fk2=id1))");
-        assertEquals(VisibilityLevel.SNAPSHOT_EXCLUDE_CURRENT, state.getVisibilityLevel());
-        assertNotEquals(wp, state.getWritePointer()); // Make sure write ptr moved
-
-        rs = conn.createStatement().executeQuery("select id1 from tx3");
-        assertTrue(rs.next());
-        assertEquals(1,rs.getLong(1));
-        assertFalse(rs.next());
-
-        /*
-         * TODO: file Tephra JIRA, as this fails with an NPE because the
-         * ActionChange has a null family since we're issuing row deletes.
-         * See this code in TransactionAwareHTable.transactionalizeAction(Delete)
-         * and try modifying addToChangeSet(deleteRow, null, null);
-         * to modifying addToChangeSet(deleteRow, family, null);
-            } else {
-              for (Map.Entry<byte [], List<Cell>> familyEntry : familyToDelete.entrySet()) {
-                byte[] family = familyEntry.getKey();
-                List<Cell> entries = familyEntry.getValue();
-                boolean isFamilyDelete = false;
-                if (entries.size() == 1) {
-                  Cell cell = entries.get(0);
-                  isFamilyDelete = CellUtil.isDeleteFamily(cell);
-                }
-                if (isFamilyDelete) {
-                  if (conflictLevel == TxConstants.ConflictDetection.ROW ||
-                      conflictLevel == TxConstants.ConflictDetection.NONE) {
-                    // no need to identify individual columns deleted
-                    txDelete.deleteFamily(family);
-                    addToChangeSet(deleteRow, null, null);
-         */
-//        conn.rollback();
-//        rs = conn.createStatement().executeQuery("select id1 from tx3");
-//        assertTrue(rs.next());
-//        assertEquals(1,rs.getLong(1));
-//        assertTrue(rs.next());
-//        assertEquals(2,rs.getLong(1));
-//        assertTrue(rs.next());
-//        assertEquals(3,rs.getLong(1));
-//        assertFalse(rs.next());
-
+	        MutationState state = conn.unwrap(PhoenixConnection.class).getMutationState();
+	        state.startTransaction();
+	        long wp = state.getWritePointer();
+	        conn.createStatement().execute("delete from DEMO1 where id1=fk1b AND fk1b=id1");
+	        assertEquals(VisibilityLevel.SNAPSHOT, state.getVisibilityLevel());
+	        assertEquals(wp, state.getWritePointer()); // Make sure write ptr didn't move
+	
+	        rs = conn.createStatement().executeQuery("select /*+ NO_INDEX */ id1 from DEMO1");
+	        assertTrue(rs.next());
+	        assertEquals(1,rs.getLong(1));
+	        assertTrue(rs.next());
+	        assertEquals(3,rs.getLong(1));
+	        assertFalse(rs.next());
+	        
+	        rs = conn.createStatement().executeQuery("select /*+ INDEX(DEMO IDX) */ id1 from DEMO1");
+	        assertTrue(rs.next());
+	        assertEquals(3,rs.getLong(1));
+	        assertTrue(rs.next());
+	        assertEquals(1,rs.getLong(1));
+	        assertFalse(rs.next());
+	
+	        conn.createStatement().execute("delete from DEMO1 where id1 in (select fk1a from DEMO1 join DEMO2 on (fk2=id1))");
+	        assertEquals(VisibilityLevel.SNAPSHOT_EXCLUDE_CURRENT, state.getVisibilityLevel());
+	        assertNotEquals(wp, state.getWritePointer()); // Make sure write ptr moved
+	
+	        rs = conn.createStatement().executeQuery("select /*+ NO_INDEX */ id1 from DEMO1");
+	        assertTrue(rs.next());
+	        assertEquals(1,rs.getLong(1));
+	        assertFalse(rs.next());
+	
+	        conn.rollback();
+	        rs = conn.createStatement().executeQuery("select /*+ NO_INDEX */ id1 from DEMO1");
+	        assertTrue(rs.next());
+	        assertEquals(1,rs.getLong(1));
+	        assertTrue(rs.next());
+	        assertEquals(2,rs.getLong(1));
+	        assertTrue(rs.next());
+	        assertEquals(3,rs.getLong(1));
+	        assertFalse(rs.next());
+		}
     }  
+
+    
 }

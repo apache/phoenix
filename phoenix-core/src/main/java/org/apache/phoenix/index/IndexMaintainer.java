@@ -34,6 +34,7 @@ import java.util.Set;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.client.Delete;
@@ -82,6 +83,8 @@ import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TrustedByteArrayOutputStream;
+
+import co.cask.tephra.TxConstants;
 
 import com.google.common.base.Predicate;
 import com.google.common.collect.Iterators;
@@ -822,12 +825,15 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         int nDeleteCF = 0;
         int nDeleteVersionCF = 0;
         for (Cell kv : pendingUpdates) {
-        	if (kv.getTypeByte() == KeyValue.Type.DeleteFamily.getCode()) {
-        	    nDeleteCF++;
-        	}
-        	else if (kv.getTypeByte() == KeyValue.Type.DeleteFamilyVersion.getCode()) {
+        	if (kv.getTypeByte() == KeyValue.Type.DeleteFamilyVersion.getCode()) {
                 nDeleteVersionCF++;
             }
+        	else if (kv.getTypeByte() == KeyValue.Type.DeleteFamily.getCode()
+        			// Since we don't include the index rows in the change set for txn tables, we need to detect row deletes that have transformed by TransactionProcessor
+        			// TODO see if implement PhoenixTransactionalIndexer.preDelete will work instead of the following check
+        			|| (CellUtil.matchingQualifier(kv, TxConstants.FAMILY_DELETE_QUALIFIER) && CellUtil.matchingValue(kv, HConstants.EMPTY_BYTE_ARRAY))) {
+        	    nDeleteCF++;
+        	}
         }
         // This is what a delete looks like on the server side for mutable indexing...
         // Should all be one or the other for DeleteFamily versus DeleteFamilyVersion, but just in case not
@@ -850,7 +856,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         	Cell newValue = newState.get(ref);
         	if (newValue != null) { // Indexed column has potentially changed
         	    ImmutableBytesWritable oldValue = oldState.getLatestValue(ref);
-        		boolean newValueSetAsNull = (newValue.getTypeByte() == Type.DeleteColumn.getCode() || newValue.getTypeByte() == Type.Delete.getCode());
+        		boolean newValueSetAsNull = (newValue.getTypeByte() == Type.DeleteColumn.getCode() || newValue.getTypeByte() == Type.Delete.getCode() || CellUtil.matchingValue(newValue, HConstants.EMPTY_BYTE_ARRAY));
         		//If the new column value has to be set as null and the older value is null too,
         		//then just skip to the next indexed column.
         		if (newValueSetAsNull && oldValue == null) {

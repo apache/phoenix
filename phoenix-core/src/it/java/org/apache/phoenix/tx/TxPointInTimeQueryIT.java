@@ -41,32 +41,22 @@ public class TxPointInTimeQueryIT extends BaseClientManagedTimeIT {
 	public void initTable() throws Exception {
 		ts = nextTimestamp();
 	}
-	
+
 	@Test
 	public void testQueryWithSCN() throws Exception {
 		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 		props.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
-		Connection conn = DriverManager.getConnection(getUrl(), props);
-		try {
-			conn.createStatement()
-					.execute(
-							"CREATE TABLE t (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR) TRANSACTIONAL=true");
-
-			props.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
-			conn = DriverManager.getConnection(getUrl(), props);
-
-			String selectQuery = "SELECT k FROM t";
+		try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
 			try {
-				conn.createStatement().executeQuery(selectQuery);
+				conn.createStatement()
+						.execute(
+								"CREATE TABLE t (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR) TRANSACTIONAL=true");
 				fail();
 			} catch (SQLException e) {
 				assertEquals("Unexpected Exception",
-						SQLExceptionCode.CANNOT_START_TRANSACTION_WITH_SCN_SET.getErrorCode(),
-						e.getErrorCode());
+						SQLExceptionCode.CANNOT_START_TRANSACTION_WITH_SCN_SET
+								.getErrorCode(), e.getErrorCode());
 			}
-
-		} finally {
-			conn.close();
 		}
 	}
 

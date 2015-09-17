@@ -347,7 +347,7 @@ public class FromCompiler {
             PTable theTable = null;
             if (updateCacheImmediately || connection.getAutoCommit()) {
                 MetaDataMutationResult result = client.updateCache(schemaName, tableName);
-                timeStamp = TransactionUtil.getTableTimestamp(connection, result);
+                timeStamp = TransactionUtil.getResolvedTimestamp(connection, result);
                 theTable = result.getTable();
                 if (theTable == null) {
                     throw new TableNotFoundException(schemaName, tableName, timeStamp);
@@ -367,7 +367,7 @@ public class FromCompiler {
                 if (theTable == null) {
                     MetaDataMutationResult result = client.updateCache(schemaName, tableName);
                     if (result.wasUpdated()) {
-                    	timeStamp = TransactionUtil.getTableTimestamp(connection, result);
+                    	timeStamp = TransactionUtil.getResolvedTimestamp(connection, result);
                         theTable = result.getTable();
                     }
                 }
