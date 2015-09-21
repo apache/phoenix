@@ -41,21 +41,29 @@ public class QueryExecutor implements Workload {
     private final XMLConfigParser parser;
     private final PhoenixUtil util;
     private final WorkloadExecutor workloadExecutor;
+    private final boolean writeRuntimeResults;
 
     public QueryExecutor(XMLConfigParser parser, PhoenixUtil util,
             WorkloadExecutor workloadExecutor) {
-        this(parser, util, workloadExecutor, parser.getDataModels(), null, false);
+        this(parser, util, workloadExecutor, parser.getDataModels(), null, false, true);
     }
 
     public QueryExecutor(XMLConfigParser parser, PhoenixUtil util,
             WorkloadExecutor workloadExecutor, List<DataModel> dataModels, String queryHint,
             boolean exportCSV) {
+    	this(parser, util, workloadExecutor, dataModels, queryHint, exportCSV, true);
+    }
+
+    public QueryExecutor(XMLConfigParser parser, PhoenixUtil util,
+            WorkloadExecutor workloadExecutor, List<DataModel> dataModels, String queryHint,
+            boolean exportCSV, boolean writeRuntimeResults) {
         this.parser = parser;
         this.queryHint = queryHint;
         this.exportCSV = exportCSV;
         this.dataModels = dataModels;
         this.util = util;
         this.workloadExecutor = workloadExecutor;
+        this.writeRuntimeResults = writeRuntimeResults;
     }
 
     @Override
@@ -262,7 +270,7 @@ public class QueryExecutor implements Workload {
             thread =
                     new MultiThreadedRunner(threadTime.getThreadName(), queryResult,
                             dataModelResult, threadTime, querySet.getNumberOfExecutions(),
-                            querySet.getExecutionDurationInMs());
+                            querySet.getExecutionDurationInMs(), writeRuntimeResults);
         } else {
             thread =
                     new MultithreadedDiffer(threadTime.getThreadName(), queryResult, threadTime,

@@ -20,15 +20,18 @@ package org.apache.phoenix.pherf.result;
 
 import org.apache.phoenix.pherf.configuration.Query;
 import org.apache.phoenix.pherf.result.file.ResultFileDetails;
+import org.apache.phoenix.pherf.util.PhoenixUtil;
 import org.apache.phoenix.util.DateUtil;
 
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
 public class QueryResult extends Query {
     private List<ThreadTime> threadTimes = new ArrayList<>();
-
+    private static PhoenixUtil pUtil = PhoenixUtil.create();
+    
     public QueryResult() {
         super();
     }
@@ -106,7 +109,34 @@ public class QueryResult extends Query {
         rowValues.add(new ResultValue(util.convertNull(String.valueOf(getAvgRunTimeInMs()))));
         rowValues.add(new ResultValue(util.convertNull(String.valueOf(getAvgMinRunTimeInMs()))));
         rowValues.add(new ResultValue(util.convertNull(String.valueOf(getRunCount()))));
+        rowValues.add(new ResultValue(util.convertNull(String.valueOf(getExplainPlan()))));
+        rowValues.add(new ResultValue(util.convertNull(String.valueOf(getResultRowCount()))));
         return rowValues;
+    }
+    
+    private String getExplainPlan() {
+    	try {
+			return pUtil.getExplainPlan(this);
+		} catch (SQLException e) {
+			e.printStackTrace();
+		}
+    	return null;
+    }
+    
+    private long getResultRowCount() {
+        long resultRowCount = -1;
+        for (ThreadTime tt : getThreadTimes()) {
+        	for (int i = 0; i < tt.getRunTimesInMs().size(); i++) {
+        		if (resultRowCount == -1) {
+        			resultRowCount = tt.getRunTimesInMs().get(i).getResultRowCount();
+        		} else {
+        			if (resultRowCount != tt.getRunTimesInMs().get(i).getResultRowCount()) {
+        				return -1;
+        			}
+        		}
+        	}
+        }
+        return resultRowCount;
     }
 
     public List<List<ResultValue>> getCsvDetailedRepresentation(ResultUtil util, ResultFileDetails details) {
