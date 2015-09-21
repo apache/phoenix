@@ -153,9 +153,9 @@ public class ResultUtil {
         if (null == FILE_SUFFIX) {
             Date date = new Date();
             Format formatter = new SimpleDateFormat("YYYY-MM-dd_hh-mm-ss");
-            FILE_SUFFIX = "_" + formatter.format(date);
+            FILE_SUFFIX = formatter.format(date);
         }
-        return FILE_SUFFIX;
+        return "_" + FILE_SUFFIX;
     }
 
     public String convertNull(String str) {
@@ -235,5 +235,13 @@ public class ResultUtil {
             sb.append(entry.getKey() + "=" + entry.getValue());
         }
         return sb.toString();
+    }
+    
+    /**
+     * Set the file suffix
+     * @param suffix
+     */
+    public static void setFileSuffix(String suffix) {
+    	FILE_SUFFIX = suffix;
     }
 }

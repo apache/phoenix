@@ -25,6 +25,7 @@ import org.apache.phoenix.pherf.PherfConstants;
 import org.apache.phoenix.pherf.configuration.Query;
 import org.apache.phoenix.pherf.result.RunTime;
 import org.apache.phoenix.pherf.result.ThreadTime;
+import org.apache.phoenix.pherf.util.PhoenixUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -36,6 +37,7 @@ class MultithreadedDiffer implements Runnable {
     private long numberOfExecutions;
     private long executionDurationInMs;
     private QueryVerifier queryVerifier = new QueryVerifier(true);
+    private static PhoenixUtil pUtil = PhoenixUtil.create();
 
     private synchronized ThreadTime getThreadTime() {
         return threadTime;
@@ -51,7 +53,7 @@ class MultithreadedDiffer implements Runnable {
         Date startDate = Calendar.getInstance().getTime();
         String newCSV = queryVerifier.exportCSV(query);
         boolean verifyResult = queryVerifier.doDiff(query, newCSV);
-        String explainPlan = queryVerifier.getExplainPlan(query);
+        String explainPlan = pUtil.getExplainPlan(query);
         getThreadTime().getRunTimesInMs().add(new RunTime(
                         verifyResult == true ? PherfConstants.DIFF_PASS : PherfConstants.DIFF_FAIL,
                         explainPlan, startDate, -1L, (int) (System.currentTimeMillis() - start)));

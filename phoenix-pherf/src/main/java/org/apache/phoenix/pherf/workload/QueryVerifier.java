@@ -141,36 +141,6 @@ public class QueryVerifier {
     }
 
     /**
-     * Get explain plan for a query
-     *
-     * @param query
-     * @return
-     * @throws SQLException
-     */
-    public String getExplainPlan(Query query) throws SQLException {
-        Connection conn = null;
-        ResultSet rs = null;
-        PreparedStatement statement = null;
-        StringBuilder buf = new StringBuilder();
-        try {
-            conn = pUtil.getConnection(query.getTenantId());
-            statement = conn.prepareStatement("EXPLAIN " + query.getStatement());
-            rs = statement.executeQuery();
-            while (rs.next()) {
-                buf.append(rs.getString(1).trim().replace(",", "-"));
-            }
-            statement.close();
-        } catch (Exception e) {
-            e.printStackTrace();
-        } finally {
-            if (rs != null) rs.close();
-            if (statement != null) statement.close();
-            if (conn != null) conn.close();
-        }
-        return buf.toString();
-    }
-
-    /**
      * Helper method to generate CSV file name
      *
      * @param query

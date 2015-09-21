@@ -32,7 +32,8 @@ public class ResultManager {
     private final List<ResultHandler> resultHandlers;
     private final ResultUtil util;
     private static final List<ResultHandler> defaultHandlers;
-
+    private static final List<ResultHandler> minimalHandlers;
+    
     static {
         defaultHandlers = new ArrayList<>();
         XMLResultHandler xmlResultHandler = new XMLResultHandler();
@@ -51,9 +52,23 @@ public class ResultManager {
         handlerDet.setResultFileDetails(ResultFileDetails.CSV_DETAILED_PERFORMANCE);
         defaultHandlers.add(handlerDet);
     }
+    
+    static {
+    	minimalHandlers = new ArrayList<>();
+        ImageResultHandler imageResultHandler = new ImageResultHandler();
+        imageResultHandler.setResultFileDetails(ResultFileDetails.IMAGE);
+        minimalHandlers.add(imageResultHandler);
+    }
 
     public ResultManager(String fileNameSeed) {
-        this(fileNameSeed, InstanceResolver.get(ResultHandler.class, defaultHandlers));
+        this(fileNameSeed, true);
+    }
+    
+    @SuppressWarnings("unchecked")
+	public ResultManager(String fileNameSeed, boolean writeRuntimeResults) {
+        this(fileNameSeed, writeRuntimeResults ?
+        		InstanceResolver.get(ResultHandler.class, defaultHandlers) :
+        		InstanceResolver.get(ResultHandler.class, minimalHandlers));
     }
 
     public ResultManager(String fileNameSeed, List<ResultHandler> resultHandlers) {
