@@ -228,7 +228,9 @@
              the tablename attribute. This assumes the tenant specific view has been created. To 
              dynamically create the view see comments below with regard to the ddl attribute. 
         -->
-        <scenario tableName="PHERF.TEST_VIEW" tenantId="abcdefghijklmno" rowCount="100" name="testMTWriteScenario">
+        <scenario tableName="PHERF.TEST_VIEW" tenantId="xyzdefghijklmno"
+                    ddl="CREATE VIEW IF NOT EXISTS PHERF.TEST_VIEW (field1 VARCHAR, field2 VARCHAR) AS SELECT * FROM PHERF.TEST_MULTI_TENANT_TABLE" 
+                    rowCount="100" name="testMTWriteScenario">
         </scenario>
         <!--  Scenario level DDL that is dynamically executed before the Write Workload is run.
               This pattern is really useful when you want to write data to multi-tenant view and the tenant id is
