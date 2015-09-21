@@ -574,4 +574,76 @@ public class GroupByIT extends BaseQueryIT {
         conn.close();
     }
 
+
+    @Test
+    public void testGroupByWithIntegerDivision1() throws Exception {
+        long ts = nextTimestamp();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String ddl = "create table test1(time integer not null, hostname varchar not null,usage float,period integer constraint pk PRIMARY KEY(time, hostname))";
+        conn.createStatement().execute(ddl);
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
+        conn = DriverManager.getConnection(getUrl(), props);
+        PreparedStatement stmt = conn.prepareStatement("upsert into test1 values(1439853462,'qa9',8.27,1439853462)");
+        stmt.execute();
+        stmt = conn.prepareStatement("upsert into test1 values(1439853461,'qa9',8.27,1439853362)");
+        stmt.execute();
+        stmt = conn.prepareStatement("upsert into test1 values(1439853461,'qa9',5.27,1439853461)");
+        stmt.execute();
+        stmt = conn.prepareStatement("upsert into test1 values(1439853451,'qa9',4.27,1439853451)");
+        stmt.execute();
+        conn.commit();
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
+        conn = DriverManager.getConnection(getUrl(), props);
+        ResultSet rs;
+        stmt = conn.prepareStatement("select time/10 as tm, hostname, avg(usage) from test1 group by hostname, tm");
+        rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertEquals(143985345, rs.getInt(1));
+        assertEquals(4.2699, rs.getDouble(3), 0.1);
+        assertTrue(rs.next());
+        assertEquals(143985346, rs.getInt(1));
+        assertEquals(6.77, rs.getDouble(3), 0.1);
+    }
+
+    @Test
+    public void testGroupByWithIntegerDivision2() throws Exception {
+        long ts = nextTimestamp();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String ddl = "create table test1(time integer not null, hostname varchar not null,usage float,period integer constraint pk PRIMARY KEY(time, hostname))";
+        conn.createStatement().execute(ddl);
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
+        conn = DriverManager.getConnection(getUrl(), props);
+        PreparedStatement stmt = conn.prepareStatement("upsert into test1 values(1439853462,'qa9',8.27,1439853462)");
+        stmt.execute();
+        stmt = conn.prepareStatement("upsert into test1 values(1439853461,'qa9',8.27,1439853362)");
+        stmt.execute();
+        stmt = conn.prepareStatement("upsert into test1 values(1439853461,'qa9',5.27,1439853461)");
+        stmt.execute();
+        stmt = conn.prepareStatement("upsert into test1 values(1439853451,'qa9',4.27,1439853451)");
+        stmt.execute();
+        conn.commit();
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
+        conn = DriverManager.getConnection(getUrl(), props);
+        ResultSet rs;
+        stmt = conn.prepareStatement("select period/10 as tm, hostname, avg(usage) from test1 group by hostname, tm");
+        rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertEquals(143985345, rs.getInt(1));
+        assertEquals(4.2699, rs.getDouble(3), 0.1);
+        assertTrue(rs.next());
+        assertEquals(143985346, rs.getInt(1));
+        assertEquals(6.77, rs.getDouble(3), 0.1);
+    }
 }
