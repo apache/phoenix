@@ -74,7 +74,7 @@ public class DataIngestIT extends ResultBaseTestIT {
             WorkloadExecutor executor = new WorkloadExecutor();
             executor.add(loader);
             executor.get();
-
+            
             RulesApplier rulesApplier = loader.getRulesApplier();
             List<Map> modelList = rulesApplier.getModelList();
             assertTrue("Could not generate the modelList", modelList.size() > 0);
@@ -101,6 +101,7 @@ public class DataIngestIT extends ResultBaseTestIT {
             Workload query = new QueryExecutor(parser, util, executor);
             executor.add(query);
             executor.get();
+            executor.shutdown();
 
         } catch (Exception e) {
             fail("We had an exception: " + e.getMessage());
