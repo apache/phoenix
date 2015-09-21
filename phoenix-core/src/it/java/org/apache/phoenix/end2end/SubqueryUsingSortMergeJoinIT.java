@@ -114,8 +114,6 @@ public class SubqueryUsingSortMergeJoinIT extends BaseHBaseManagedTimeIT {
                 "        CLIENT MERGE SORT\n" +
                 "    AND\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_DISPLAY_NAME + "\n" +
-                "            SERVER SORTED BY [\"S.supplier_id\"]\n" +
-                "        CLIENT MERGE SORT\n" +
                 "    CLIENT SORTED BY [\"I.item_id\"]\n" +
                 "AND (SKIP MERGE)\n" +
                 "    CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + " ['000000000000001'] - [*]\n" +

@@ -113,8 +113,6 @@ public class SortMergeJoinIT extends BaseHBaseManagedTimeIT {
                 "AND\n" +
                 "    SORT-MERGE-JOIN (INNER) TABLES\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
-                "            SERVER SORTED BY [\"I.item_id\"]\n" +
-                "        CLIENT MERGE SORT\n" +
                 "    AND (SKIP MERGE)\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
                 "            SERVER FILTER BY QUANTITY < 5000\n" +
@@ -129,6 +127,12 @@ public class SortMergeJoinIT extends BaseHBaseManagedTimeIT {
                 "        SERVER SORTED BY [\"O.item_id\"]\n" +
                 "    CLIENT MERGE SORT\n" +
                 "CLIENT 4 ROW LIMIT",
+                
+                "SORT-MERGE-JOIN (INNER) TABLES\n" +
+                "    CLIENT PARALLEL 1-WAY FULL SCAN OVER Join.ItemTable\n" +
+                "AND\n" +
+                "    CLIENT PARALLEL 1-WAY FULL SCAN OVER Join.ItemTable\n" +
+                "        SERVER FILTER BY FIRST KEY ONLY"
                 }});
         testCases.add(new String[][] {
                 {
@@ -163,6 +167,18 @@ public class SortMergeJoinIT extends BaseHBaseManagedTimeIT {
                 "        SERVER SORTED BY [\"O.item_id\"]\n" +
                 "    CLIENT MERGE SORT\n" +
                 "CLIENT 4 ROW LIMIT",
+                
+                "SORT-MERGE-JOIN (INNER) TABLES\n" +
+                "    CLIENT PARALLEL 1-WAY FULL SCAN OVER Join.idx_item\n" +
+                "        SERVER FILTER BY FIRST KEY ONLY\n" +
+                "        SERVER SORTED BY [\"I1.:item_id\"]\n" +
+                "    CLIENT MERGE SORT\n" +
+                "AND\n" +
+                "    CLIENT PARALLEL 1-WAY FULL SCAN OVER Join.idx_item\n" +
+                "        SERVER FILTER BY FIRST KEY ONLY\n" +
+                "        SERVER SORTED BY [\"I2.:item_id\"]\n" +
+                "    CLIENT MERGE SORT\n" +
+                "CLIENT SORTED BY [\"I1.:item_id\"]"
                 }});
         testCases.add(new String[][] {
                 {
@@ -197,6 +213,18 @@ public class SortMergeJoinIT extends BaseHBaseManagedTimeIT {
                 "        SERVER SORTED BY [\"O.item_id\"]\n" +
                 "    CLIENT MERGE SORT\n" +
                 "CLIENT 4 ROW LIMIT",
+                
+                "SORT-MERGE-JOIN (INNER) TABLES\n" +
+                "    CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_Join.ItemTable [-32768]\n" +
+                "        SERVER FILTER BY FIRST KEY ONLY\n" +
+                "        SERVER SORTED BY [\"I1.:item_id\"]\n" +
+                "    CLIENT MERGE SORT\n" +
+                "AND\n" +
+                "    CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_Join.ItemTable [-32768]\n" +
+                "        SERVER FILTER BY FIRST KEY ONLY\n" +
+                "        SERVER SORTED BY [\"I2.:item_id\"]\n" +
+                "    CLIENT MERGE SORT\n" +
+                "CLIENT SORTED BY [\"I1.:item_id\"]"
                 }});
         return testCases;
     }
@@ -1673,6 +1701,9 @@ public class SortMergeJoinIT extends BaseHBaseManagedTimeIT {
             assertEquals(rs.getString(2), "INVALID-1");
             
             assertFalse(rs.next());
+
+            rs = conn.createStatement().executeQuery("EXPLAIN " + query1);
+            assertEquals(plans[2], QueryUtil.getExplainPlan(rs));
 
             statement = conn.prepareStatement(query2);
             rs = statement.executeQuery();

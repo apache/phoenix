@@ -242,10 +242,11 @@ public class QueryCompiler {
             if (!table.isSubselect()) {
                 context.setCurrentTable(table.getTableRef());
                 PTable projectedTable = table.createProjectedTable(!projectPKColumns, context);
-                TupleProjector.serializeProjectorIntoScan(context.getScan(), new TupleProjector(projectedTable));
+                TupleProjector projector = new TupleProjector(projectedTable);
+                TupleProjector.serializeProjectorIntoScan(context.getScan(), projector);
                 context.setResolver(FromCompiler.getResolverForProjectedTable(projectedTable, context.getConnection(), subquery.getUdfParseNodes()));
                 table.projectColumns(context.getScan());
-                return compileSingleQuery(context, subquery, binds, asSubquery, !asSubquery);
+                return compileSingleFlatQuery(context, subquery, binds, asSubquery, !asSubquery, null, projectPKColumns ? projector : null, true);
             }
             QueryPlan plan = compileSubquery(subquery, false);
             PTable projectedTable = table.createProjectedTable(plan.getProjector());
@@ -314,7 +315,7 @@ public class QueryCompiler {
                 subPlans[i] = new HashSubPlan(i, joinPlan, optimized ? null : hashExpressions, joinSpec.isSingleValueOnly(), keyRangeLhsExpression, keyRangeRhsExpression);
             }
             TupleProjector.serializeProjectorIntoScan(context.getScan(), tupleProjector);
-            QueryPlan plan = compileSingleQuery(context, query, binds, asSubquery, !asSubquery && joinTable.isAllLeftJoin());
+            QueryPlan plan = compileSingleFlatQuery(context, query, binds, asSubquery, !asSubquery && joinTable.isAllLeftJoin(), null, !table.isSubselect() && projectPKColumns ? tupleProjector : null, true);
             Expression postJoinFilterExpression = joinTable.compilePostFilterExpression(context, table);
             Integer limit = null;
             if (!query.isAggregate() && !query.isDistinct() && query.getOrderBy().isEmpty()) {
@@ -368,7 +369,7 @@ public class QueryCompiler {
             PTable projectedTable = needsMerge ? JoinCompiler.joinProjectedTables(rhsProjTable, lhsTable, type == JoinType.Right ? JoinType.Left : type) : rhsProjTable;
             TupleProjector.serializeProjectorIntoScan(context.getScan(), tupleProjector);
             context.setResolver(FromCompiler.getResolverForProjectedTable(projectedTable, context.getConnection(), rhs.getUdfParseNodes()));
-            QueryPlan rhsPlan = compileSingleQuery(context, rhs, binds, asSubquery, !asSubquery && type == JoinType.Right);
+            QueryPlan rhsPlan = compileSingleFlatQuery(context, rhs, binds, asSubquery, !asSubquery && type == JoinType.Right, null, !rhsTable.isSubselect() && projectPKColumns ? tupleProjector : null, true);
             Expression postJoinFilterExpression = joinTable.compilePostFilterExpression(context, rhsTable);
             Integer limit = null;
             if (!rhs.isAggregate() && !rhs.isDistinct() && rhs.getOrderBy().isEmpty()) {
@@ -536,7 +537,7 @@ public class QueryCompiler {
         Expression where = WhereCompiler.compile(context, select, viewWhere, subqueries);
         context.setResolver(resolver); // recover resolver
         RowProjector projector = ProjectionCompiler.compile(context, select, groupBy, asSubquery ? Collections.<PDatum>emptyList() : targetColumns);
-        OrderBy orderBy = OrderByCompiler.compile(context, select, groupBy, limit, projector, isInRowKeyOrder); 
+        OrderBy orderBy = OrderByCompiler.compile(context, select, groupBy, limit, projector, groupBy == GroupBy.EMPTY_GROUP_BY ? innerPlanTupleProjector : null, isInRowKeyOrder); 
         // Final step is to build the query plan
         if (!asSubquery) {
             int maxRows = statement.getMaxRows();
