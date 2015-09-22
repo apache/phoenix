@@ -20,6 +20,7 @@ package org.apache.phoenix.pherf;
 
 import com.jcabi.jdbc.JdbcSession;
 import com.jcabi.jdbc.Outcome;
+
 import org.apache.phoenix.pherf.PherfConstants.GeneratePhoenixStats;
 import org.apache.phoenix.pherf.configuration.Column;
 import org.apache.phoenix.pherf.configuration.DataModel;
@@ -27,6 +28,7 @@ import org.apache.phoenix.pherf.configuration.DataTypeMapping;
 import org.apache.phoenix.pherf.configuration.Scenario;
 import org.apache.phoenix.pherf.rules.DataValue;
 import org.apache.phoenix.pherf.rules.RulesApplier;
+import org.apache.phoenix.pherf.util.PhoenixUtil;
 import org.apache.phoenix.pherf.workload.QueryExecutor;
 import org.apache.phoenix.pherf.workload.Workload;
 import org.apache.phoenix.pherf.workload.WorkloadExecutor;
@@ -72,6 +74,7 @@ public class DataIngestIT extends ResultBaseTestIT {
             WorkloadExecutor executor = new WorkloadExecutor();
             executor.add(loader);
             executor.get();
+            executor.shutdown();
             
             RulesApplier rulesApplier = loader.getRulesApplier();
             List<Map> modelList = rulesApplier.getModelList();
@@ -96,11 +99,12 @@ public class DataIngestIT extends ResultBaseTestIT {
             }
 
             // Run some queries
+            executor = new WorkloadExecutor();
             Workload query = new QueryExecutor(parser, util, executor);
             executor.add(query);
             executor.get();
             executor.shutdown();
-
+            PhoenixUtil.create().deleteTables("ALL");
         } catch (Exception e) {
             fail("We had an exception: " + e.getMessage());
         }
