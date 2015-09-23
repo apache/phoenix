@@ -23,6 +23,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.math.BigDecimal;
+import java.sql.Timestamp;
 import java.sql.Date;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -33,22 +34,11 @@ import java.util.List;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.compile.KeyPart;
-import org.apache.phoenix.expression.function.CeilDateExpression;
-import org.apache.phoenix.expression.function.CeilDecimalExpression;
-import org.apache.phoenix.expression.function.FloorDateExpression;
-import org.apache.phoenix.expression.function.FloorDecimalExpression;
-import org.apache.phoenix.expression.function.RoundDateExpression;
-import org.apache.phoenix.expression.function.RoundDecimalExpression;
-import org.apache.phoenix.expression.function.ScalarFunction;
-import org.apache.phoenix.expression.function.TimeUnit;
+import org.apache.phoenix.expression.function.*;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.query.KeyRange;
-import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.schema.types.*;
 import org.apache.phoenix.schema.IllegalDataException;
-import org.apache.phoenix.schema.types.PDate;
-import org.apache.phoenix.schema.types.PInteger;
-import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.DateUtil;
 import org.junit.Test;
 
@@ -577,7 +567,22 @@ public class RoundFloorCeilExpressionsTest {
         Date resultDate = (Date)result;
         assertEquals(DateUtil.parseDate("2012-01-01 14:25:30"), resultDate);
     }
-    
+
+    @Test
+    public void testCeilTimestampExpression() throws Exception {
+        Expression tsLiteral = LiteralExpression.newConstant(DateUtil.parseTimestamp(
+                "123456789000"), PTimestamp.INSTANCE);
+        Expression ceilTsExpression = CeilTimestampExpression.create(tsLiteral, 1);
+
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+        ceilTsExpression.evaluate(null, ptr);
+        Object result = ceilTsExpression.getDataType().toObject(ptr);
+
+        assertTrue(result instanceof Timestamp);
+        Timestamp resultTs = (Timestamp)result;
+        assertEquals(DateUtil.parseTimestamp("123456789000"), resultTs);
+    }
+
     /**
      * Tests {@link RoundDateExpression} constructor check which only allows number of arguments between 2 and 3.
      */
