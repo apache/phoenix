@@ -36,14 +36,16 @@ import com.google.common.base.Throwables;
  */
 public class PhoenixContextExecutor {
 
+    // We cache the class loader because calls to Class.getClassLoader are relatively expensive
+    private static final ClassLoader CACHED_CLASSLOADER = PhoenixContextExecutor.class.getClassLoader();
+
     private static class CurrentContextWrapper implements CallWrapper {
         private ClassLoader saveCcl;
 
         @Override
         public void before() {
             saveCcl = Thread.currentThread().getContextClassLoader();
-            Thread.currentThread().setContextClassLoader(
-                PhoenixContextExecutor.class.getClassLoader());
+            Thread.currentThread().setContextClassLoader(CACHED_CLASSLOADER);
         }
 
         @Override
@@ -72,8 +74,7 @@ public class PhoenixContextExecutor {
     public static <T> T call(Callable<T> target) throws Exception {
         ClassLoader saveCcl = Thread.currentThread().getContextClassLoader();
         try {
-            Thread.currentThread().setContextClassLoader(
-                    PhoenixContextExecutor.class.getClassLoader());
+            Thread.currentThread().setContextClassLoader(CACHED_CLASSLOADER);
             return target.call();
         } finally {
             Thread.currentThread().setContextClassLoader(saveCcl);
