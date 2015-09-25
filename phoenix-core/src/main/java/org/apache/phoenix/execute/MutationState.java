@@ -27,11 +27,15 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import co.cask.tephra.Transaction;
+import co.cask.tephra.Transaction.VisibilityLevel;
 import co.cask.tephra.TransactionAware;
+import co.cask.tephra.TransactionCodec;
 import co.cask.tephra.TransactionContext;
 import co.cask.tephra.TransactionFailureException;
+import co.cask.tephra.TransactionNotInProgressException;
 import co.cask.tephra.TransactionSystemClient;
 import co.cask.tephra.hbase98.TransactionAwareHTable;
 
@@ -44,6 +48,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.cache.ServerCacheClient;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
+import org.apache.phoenix.compile.MutationPlan;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -53,6 +58,7 @@ import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.IndexMetaDataCacheClient;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.monitoring.PhoenixMetrics;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.IllegalDataException;
@@ -80,6 +86,7 @@ import com.google.common.base.Predicate;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 
 /**
  * 
@@ -90,34 +97,40 @@ import com.google.common.collect.Maps;
  */
 public class MutationState implements SQLCloseable {
     private static final Logger logger = LoggerFactory.getLogger(MutationState.class);
-
+    private static final TransactionCodec CODEC = new TransactionCodec();
+    
     private PhoenixConnection connection;
     private final long maxSize;
     // map from table to rows 
     //   rows - map from rowkey to columns
     //      columns - map from column to value
     private final Map<TableRef, Map<ImmutableBytesPtr,Map<PColumn,byte[]>>> mutations = Maps.newHashMapWithExpectedSize(3); // TODO: Sizing?
-    private final Transaction tx;
     private final List<TransactionAware> txAwares;
     private final TransactionContext txContext;
+    private final Set<String> uncommittedPhysicalNames = Sets.newHashSetWithExpectedSize(10);
     
+    private Transaction tx;
     private long sizeOffset;
     private int numRows = 0;
     private boolean txStarted = false;
     
-    public MutationState(int maxSize, PhoenixConnection connection) {
+    public MutationState(long maxSize, PhoenixConnection connection) {
         this(maxSize,connection,null);
     }
     
-    public MutationState(int maxSize, PhoenixConnection connection, Transaction tx) {
-        this(maxSize,connection, tx, 0);
+    public MutationState(MutationState mutationState) {
+        this(mutationState.maxSize,mutationState.connection,mutationState.getTransaction());
     }
     
-    public MutationState(int maxSize, PhoenixConnection connection, long sizeOffset) {
+    public MutationState(long maxSize, PhoenixConnection connection, long sizeOffset) {
         this(maxSize, connection, null, sizeOffset);
     }
     
-    public MutationState(int maxSize, PhoenixConnection connection, Transaction tx, long sizeOffset) {
+    private MutationState(long maxSize, PhoenixConnection connection, Transaction tx) {
+        this(maxSize,connection, tx, 0);
+    }
+    
+    private MutationState(long maxSize, PhoenixConnection connection, Transaction tx, long sizeOffset) {
         this.maxSize = maxSize;
         this.connection = connection;
         this.sizeOffset = sizeOffset;
@@ -144,7 +157,63 @@ public class MutationState implements SQLCloseable {
         throwIfTooBig();
     }
     
-    private void addTxParticipant(TransactionAware txAware) throws SQLException {
+    public boolean checkpoint(MutationPlan plan) throws SQLException {
+        Transaction currentTx = getTransaction();
+        if (currentTx == null || plan.getTargetRef() == null || plan.getTargetRef().getTable() == null || !plan.getTargetRef().getTable().isTransactional()) {
+            return false;
+        }
+        Set<TableRef> sources = plan.getSourceRefs();
+        if (sources.isEmpty()) {
+            return false;
+        }
+        // For a DELETE statement, we're always querying the table being deleted from. This isn't
+        // a problem, but it potentially could be if there are other references to the same table
+        // nested in the DELETE statement (as a sub query or join, for example).
+        TableRef ignoreForExcludeCurrent = plan.getOperation() == Operation.DELETE && sources.size() == 1 ? plan.getTargetRef() : null;
+        boolean excludeCurrent = false;
+        String targetPhysicalName = plan.getTargetRef().getTable().getPhysicalName().getString();
+        for (TableRef source : sources) {
+            if (source.getTable().isTransactional() && !source.equals(ignoreForExcludeCurrent)) {
+                String sourcePhysicalName = source.getTable().getPhysicalName().getString();
+                if (targetPhysicalName.equals(sourcePhysicalName)) {
+                    excludeCurrent = true;
+                    break;
+                }
+            }
+        }
+        // If we're querying the same table we're updating, we must exclude our writes to
+        // it from being visible.
+        if (excludeCurrent) {
+            // If any source tables have uncommitted data prior to last checkpoint,
+            // then we must create a new checkpoint.
+            boolean hasUncommittedData = false;
+            for (TableRef source : sources) {
+                String sourcePhysicalName = source.getTable().getPhysicalName().getString();
+                if (source.getTable().isTransactional() && uncommittedPhysicalNames.contains(sourcePhysicalName)) {
+                    hasUncommittedData = true;
+                    break;
+                }
+            }
+            if (hasUncommittedData) {
+                try {
+                    tx = currentTx = connection.getQueryServices().getTransactionSystemClient().checkpoint(currentTx);
+                    // Since we've checkpointed, we can clear out uncommitted set, since a statement run afterwards
+                    // should see all this data.
+                    uncommittedPhysicalNames.clear();
+                } catch (TransactionNotInProgressException e) {
+                    throw new SQLException(e);
+                }
+            }
+            // Since we're querying our own table while mutating it, we must exclude
+            // see our current mutations, otherwise we can get erroneous results (for DELETE)
+            // or get into an infinite loop (for UPSERT SELECT).
+            currentTx.setVisibility(VisibilityLevel.SNAPSHOT_EXCLUDE_CURRENT);
+            return true;
+        }
+        return false;
+    }
+    
+    private void addTransactionParticipant(TransactionAware txAware) throws SQLException {
         if (txContext == null) {
             txAwares.add(txAware);
             assert(tx != null);
@@ -154,8 +223,52 @@ public class MutationState implements SQLCloseable {
         }
     }
     
-    public Transaction getTransaction() {
+    // Though MutationState is not thread safe in general, this method should be because it may
+    // be called by TableResultIterator in a multi-threaded manner. Since we do not want to expose
+    // the Transaction outside of MutationState, this seems reasonable, as the member variables
+    // would not change as these threads are running.
+    public HTableInterface getHTable(PTable table) throws SQLException {
+        HTableInterface htable = this.getConnection().getQueryServices().getTable(table.getPhysicalName().getBytes());
+        Transaction currentTx;
+        if (table.isTransactional() && (currentTx=getTransaction()) != null) {
+            TransactionAwareHTable txAware = TransactionUtil.getTransactionAwareHTable(htable, table);
+            // Using cloned mutationState as we may have started a new transaction already
+            // if auto commit is true and we need to use the original one here.
+            txAware.startTx(currentTx);
+            htable = txAware;
+        }
+        return htable;
+    }
+    
+    public PhoenixConnection getConnection() {
+    	return connection;
+    }
+    
+    // Kept private as the Transaction may change when check pointed. Keeping it private ensures
+    // no one holds on to a stale copy.
+    private Transaction getTransaction() {
         return tx != null ? tx : txContext != null ? txContext.getCurrentTransaction() : null;
+    }
+    
+    public boolean isTransactionStarted() {
+    	return getTransaction() != null;
+    }
+    
+    public long getReadPointer() {
+    	Transaction tx = getTransaction();
+    	return tx == null ? HConstants.LATEST_TIMESTAMP : tx.getReadPointer();
+    }
+    
+    // For testing
+    public long getWritePointer() {
+        Transaction tx = getTransaction();
+        return tx == null ? HConstants.LATEST_TIMESTAMP : tx.getWritePointer();
+    }
+    
+    // For testing
+    public VisibilityLevel getVisibilityLevel() {
+        Transaction tx = getTransaction();
+        return tx == null ? null : tx.getVisibilityLevel();
     }
     
     public boolean startTransaction() throws SQLException {
@@ -530,6 +643,10 @@ public class MutationState implements SQLCloseable {
                 continue;
             }
             PTable table = tableRef.getTable();
+            // Track tables to which we've sent uncommitted data
+            if (table.isTransactional()) {
+                uncommittedPhysicalNames.add(table.getPhysicalName().getString());
+            }
             table.getIndexMaintainers(indexMetaDataPtr, connection);
             boolean isDataTable = true;
             // Validate as we go if transactional since we can undo if a problem occurs (which is unlikely)
@@ -572,7 +689,7 @@ public class MutationState implements SQLCloseable {
                             if (isDataTable) {
                                 // Even for immutable, we need to do this so that an abort has the state
                                 // necessary to generate the rows to delete.
-                                addTxParticipant(txnAware);
+                                addTransactionParticipant(txnAware);
                             } else {
                                 txnAware.startTx(getTransaction());
                             }
@@ -646,8 +763,21 @@ public class MutationState implements SQLCloseable {
             }
         }
         trace.close();
-        assert(numRows==0);
-        assert(this.mutations.isEmpty());
+        // Note that we cannot assume that *all* mutations have been sent, since we've optimized this
+        // now to only send the mutations for the tables we're querying, hence we've removed the
+        // assertions that we're here before.
+    }
+
+    public byte[] encodeTransaction() throws SQLException {
+        try {
+            return CODEC.encode(getTransaction());
+        } catch (IOException e) {
+            throw new SQLException(e);
+        }
+    }
+    
+    public static Transaction decodeTransaction(byte[] txnBytes) throws IOException {
+    	return (txnBytes == null || txnBytes.length==0) ? null : CODEC.decode(txnBytes);
     }
 
     private ServerCache setMetaDataOnMutations(TableRef tableRef, List<? extends Mutation> mutations,
@@ -659,7 +789,7 @@ public class MutationState implements SQLCloseable {
         byte[] uuidValue = null;
         byte[] txState = ByteUtil.EMPTY_BYTE_ARRAY;
         if (table.isTransactional()) {
-            txState = TransactionUtil.encodeTxnState(getTransaction());
+            txState = encodeTransaction();
         }
         boolean hasIndexMetaData = indexMetaDataPtr.getLength() > 0;
         if (hasIndexMetaData) {
@@ -702,6 +832,12 @@ public class MutationState implements SQLCloseable {
     public void close() throws SQLException {
     }
 
+    private void reset() {
+        txStarted = false;
+        tx = null;
+        uncommittedPhysicalNames.clear();
+    }
+    
     public void rollback() throws SQLException {
         clear();
         txAwares.clear();
@@ -713,7 +849,7 @@ public class MutationState implements SQLCloseable {
             } catch (TransactionFailureException e) {
                 throw new SQLException(e); // TODO: error code
             } finally {
-                txStarted = false;
+            	reset();
             }
         }
     }
@@ -736,7 +872,7 @@ public class MutationState implements SQLCloseable {
                         throw TransactionUtil.getSQLException(e);
                     }
                 } finally {
-                    txStarted = false;
+                	reset();
                 }
             }
         }
@@ -749,7 +885,13 @@ public class MutationState implements SQLCloseable {
      * @return true if at least partially transactional and false otherwise.
      * @throws SQLException
      */
-    public boolean sendMutations(Iterator<TableRef> tableRefs) throws SQLException {
+    public boolean sendUncommitted(Iterator<TableRef> tableRefs) throws SQLException {
+        Transaction currentTx = getTransaction();
+        if (currentTx != null) {
+            // Initialize visibility so that transactions see their own writes.
+            // The checkpoint() method will set it to not see writes if necessary.
+            currentTx.setVisibility(VisibilityLevel.SNAPSHOT);
+        }
         Iterator<TableRef> filteredTableRefs = Iterators.filter(tableRefs, new Predicate<TableRef>(){
             @Override
             public boolean apply(TableRef tableRef) {

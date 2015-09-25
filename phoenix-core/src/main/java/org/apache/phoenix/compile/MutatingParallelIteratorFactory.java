@@ -53,12 +53,12 @@ public abstract class MutatingParallelIteratorFactory implements ParallelIterato
     /**
      * Method that does the actual mutation work
      */
-    abstract protected MutationState mutate(StatementContext context, ResultIterator iterator, PhoenixConnection connection) throws SQLException;
+    abstract protected MutationState mutate(ResultIterator iterator, PhoenixConnection connection) throws SQLException;
     
     @Override
-    public PeekingResultIterator newIterator(StatementContext context, ResultIterator iterator, Scan scan) throws SQLException {
+    public PeekingResultIterator newIterator(ResultIterator iterator, Scan scan) throws SQLException {
         final PhoenixConnection connection = new PhoenixConnection(this.connection);
-        MutationState state = mutate(context, iterator, connection);
+        MutationState state = mutate(iterator, connection);
         long totalRowCount = state.getUpdateCount();
         if (connection.getAutoCommit()) {
             connection.getMutationState().join(state);

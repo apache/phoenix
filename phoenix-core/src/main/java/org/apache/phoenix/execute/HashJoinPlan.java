@@ -113,15 +113,15 @@ public class HashJoinPlan extends DelegateQueryPlan {
         this.joinInfo = joinInfo;
         this.subPlans = subPlans;
         this.recompileWhereClause = recompileWhereClause;
-        this.tableRefs = Sets.newHashSetWithExpectedSize(subPlans.length + plan.getTableRefs().size());
-        this.tableRefs.addAll(plan.getTableRefs());
+        this.tableRefs = Sets.newHashSetWithExpectedSize(subPlans.length + plan.getSourceRefs().size());
+        this.tableRefs.addAll(plan.getSourceRefs());
         for (SubPlan subPlan : subPlans) {
-            tableRefs.addAll(subPlan.getInnerPlan().getTableRefs());
+            tableRefs.addAll(subPlan.getInnerPlan().getSourceRefs());
         }
     }
 
     @Override
-    public Set<TableRef> getTableRefs() {
+    public Set<TableRef> getSourceRefs() {
         return tableRefs;
     }
     

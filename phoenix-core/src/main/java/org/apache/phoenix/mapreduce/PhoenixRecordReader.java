@@ -100,7 +100,7 @@ public class PhoenixRecordReader<T extends DBWritable> extends RecordReader<Null
         try {
             List<PeekingResultIterator> iterators = Lists.newArrayListWithExpectedSize(scans.size());
             for (Scan scan : scans) {
-                final TableResultIterator tableResultIterator = new TableResultIterator(queryPlan.getContext(), queryPlan.getTableRef(),scan);
+                final TableResultIterator tableResultIterator = new TableResultIterator(queryPlan.getContext().getConnection().getMutationState(), queryPlan.getTableRef(),scan);
                 PeekingResultIterator peekingResultIterator = LookAheadResultIterator.wrap(tableResultIterator);
                 iterators.add(peekingResultIterator);
             }

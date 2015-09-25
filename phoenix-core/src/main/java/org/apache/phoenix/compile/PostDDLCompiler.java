@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.compile;
 
-import java.sql.ParameterMetaData;
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
@@ -32,8 +31,8 @@ import org.apache.phoenix.execute.AggregatePlan;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixParameterMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.AmbiguousColumnException;
@@ -104,22 +103,7 @@ public class PostDDLCompiler {
                 },
                 scan,
                 new SequenceManager(statement));
-        return new MutationPlan() {
-            
-            @Override
-            public PhoenixConnection getConnection() {
-                return connection;
-            }
-            
-            @Override
-            public ParameterMetaData getParameterMetaData() {
-                return PhoenixParameterMetaData.EMPTY_PARAMETER_META_DATA;
-            }
-            
-            @Override
-            public ExplainPlan getExplainPlan() throws SQLException {
-                return ExplainPlan.EMPTY_PLAN;
-            }
+        return new BaseMutationPlan(context, Operation.UPSERT /* FIXME */) {
             
             @Override
             public MutationState execute() throws SQLException {
@@ -280,11 +264,6 @@ public class PostDDLCompiler {
                 } finally {
                     if (!wasAutoCommit) connection.setAutoCommit(wasAutoCommit);
                 }
-            }
-
-            @Override
-            public StatementContext getContext() {
-                return context;
             }
         };
     }

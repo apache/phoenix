@@ -29,6 +29,7 @@ import co.cask.tephra.Transaction;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.cache.IndexMetaDataCache;
 import org.apache.phoenix.coprocessor.ServerCachingProtocol.ServerCacheFactory;
+import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
 import org.apache.phoenix.util.TransactionUtil;
@@ -52,7 +53,7 @@ public class IndexMetaDataCacheFactory implements ServerCacheFactory {
                 IndexMaintainer.deserialize(cachePtr, GenericKeyValueBuilder.INSTANCE);
         final Transaction txn;
         try {
-            txn = txState.length!=0 ? TransactionUtil.decodeTxnState(txState) : null;
+            txn = txState.length!=0 ? MutationState.decodeTransaction(txState) : null;
         } catch (IOException e) {
             throw new SQLException(e);
         }

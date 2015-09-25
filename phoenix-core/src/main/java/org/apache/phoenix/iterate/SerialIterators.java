@@ -80,11 +80,11 @@ public class SerialIterators extends BaseResultIterators {
                 	List<PeekingResultIterator> concatIterators = Lists.newArrayListWithExpectedSize(scans.size());
                 	for (final Scan scan : scans) {
 	                    long startTime = System.currentTimeMillis();
-	                    ResultIterator scanner = new TableResultIterator(context, tableRef, scan, ScannerCreation.DELAYED);
+	                    ResultIterator scanner = new TableResultIterator(mutationState, tableRef, scan, ScannerCreation.DELAYED);
 	                    if (logger.isDebugEnabled()) {
 	                        logger.debug(LogUtil.addCustomAnnotations("Id: " + scanId + ", Time: " + (System.currentTimeMillis() - startTime) + "ms, Scan: " + scan, ScanUtil.getCustomAnnotations(scan)));
 	                    }
-	                    concatIterators.add(iteratorFactory.newIterator(context, scanner, scan));
+	                    concatIterators.add(iteratorFactory.newIterator(scanner, scan));
                 	}
                 	PeekingResultIterator concatIterator = ConcatResultIterator.newIterator(concatIterators);
                     allIterators.add(concatIterator);

@@ -50,6 +50,7 @@ import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.iterate.SequenceResultIterator;
 import org.apache.phoenix.iterate.SpoolingResultIterator;
 import org.apache.phoenix.iterate.UngroupedAggregatingResultIterator;
+import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
@@ -102,7 +103,7 @@ public class AggregatePlan extends BaseQueryPlan {
             this.services = services;
         }
         @Override
-        public PeekingResultIterator newIterator(StatementContext context, ResultIterator scanner, Scan scan) throws SQLException {
+        public PeekingResultIterator newIterator(ResultIterator scanner, Scan scan) throws SQLException {
             Expression expression = RowKeyExpression.INSTANCE;
             OrderByExpression orderByExpression = new OrderByExpression(expression, false, true);
             int threshold = services.getProps().getInt(QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB, QueryServicesOptions.DEFAULT_SPOOL_THRESHOLD_BYTES);
@@ -119,9 +120,9 @@ public class AggregatePlan extends BaseQueryPlan {
             this.outerFactory = outerFactory;
         }
         @Override
-        public PeekingResultIterator newIterator(StatementContext context, ResultIterator scanner, Scan scan) throws SQLException {
-            PeekingResultIterator iterator = innerFactory.newIterator(context, scanner, scan);
-            return outerFactory.newIterator(context, iterator, scan);
+        public PeekingResultIterator newIterator(ResultIterator scanner, Scan scan) throws SQLException {
+            PeekingResultIterator iterator = innerFactory.newIterator(scanner, scan);
+            return outerFactory.newIterator(iterator, scan);
         }
     }
 

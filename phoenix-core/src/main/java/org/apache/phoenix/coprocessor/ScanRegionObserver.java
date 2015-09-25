@@ -39,6 +39,7 @@ import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.cache.GlobalCache;
 import org.apache.phoenix.cache.TenantCache;
+import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
@@ -202,7 +203,7 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
             indexMaintainer = indexMaintainers.get(0);
             viewConstants = IndexUtil.deserializeViewConstantsFromScan(scan);
             byte[] txState = scan.getAttribute(BaseScannerRegionObserver.TX_STATE);
-            tx = TransactionUtil.decodeTxnState(txState);
+            tx = MutationState.decodeTransaction(txState);
         }
         
         final TupleProjector p = TupleProjector.deserializeProjectorFromScan(scan);

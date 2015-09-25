@@ -48,6 +48,7 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.iterate.MappedByteBufferQueue;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixParameterMetaData;
+import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.JoinTableNode.JoinType;
 import org.apache.phoenix.query.KeyRange;
@@ -102,9 +103,15 @@ public class SortMergeJoinPlan implements QueryPlan {
         this.rhsSchema = buildSchema(rhsTable);
         this.rhsFieldPosition = rhsFieldPosition;
         this.isSingleValueOnly = isSingleValueOnly;
-        this.tableRefs = Sets.newHashSetWithExpectedSize(lhsPlan.getTableRefs().size() + rhsPlan.getTableRefs().size());
-        this.tableRefs.addAll(lhsPlan.getTableRefs());
-        this.tableRefs.addAll(rhsPlan.getTableRefs());
+        this.tableRefs = Sets.newHashSetWithExpectedSize(lhsPlan.getSourceRefs().size() + rhsPlan.getSourceRefs().size());
+        this.tableRefs.addAll(lhsPlan.getSourceRefs());
+        this.tableRefs.addAll(rhsPlan.getSourceRefs());
+    }
+
+    
+    @Override
+    public Operation getOperation() {
+        return statement.getOperation();
     }
 
     private static KeyValueSchema buildSchema(PTable table) {
@@ -639,7 +646,7 @@ public class SortMergeJoinPlan implements QueryPlan {
     }
 
     @Override
-    public Set<TableRef> getTableRefs() {
+    public Set<TableRef> getSourceRefs() {
         return tableRefs;
     }
 

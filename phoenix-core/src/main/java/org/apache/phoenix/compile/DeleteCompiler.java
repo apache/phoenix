@@ -47,6 +47,7 @@ import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.optimize.QueryOptimizer;
 import org.apache.phoenix.parse.AliasedNode;
 import org.apache.phoenix.parse.DeleteStatement;
@@ -78,7 +79,6 @@ import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.ScanUtil;
-import org.apache.phoenix.util.TransactionUtil;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
@@ -90,9 +90,11 @@ public class DeleteCompiler {
     private static ParseNodeFactory FACTORY = new ParseNodeFactory();
     
     private final PhoenixStatement statement;
+    private final Operation operation;
     
-    public DeleteCompiler(PhoenixStatement statement) {
+    public DeleteCompiler(PhoenixStatement statement, Operation operation) {
         this.statement = statement;
+        this.operation = operation;
     }
     
     private static MutationState deleteRows(PhoenixStatement statement, TableRef targetTableRef, TableRef indexTableRef, ResultIterator iterator, RowProjector projector, TableRef sourceTableRef) throws SQLException {
@@ -200,7 +202,7 @@ public class DeleteCompiler {
         }
         
         @Override
-        protected MutationState mutate(StatementContext context, ResultIterator iterator, PhoenixConnection connection) throws SQLException {
+        protected MutationState mutate(ResultIterator iterator, PhoenixConnection connection) throws SQLException {
             PhoenixStatement statement = new PhoenixStatement(connection);
             return deleteRows(statement, targetTableRef, indexTableRef, iterator, projector, sourceTableRef);
         }
@@ -263,11 +265,6 @@ public class DeleteCompiler {
         }
 
         @Override
-        public PhoenixConnection getConnection() {
-            return firstPlan.getConnection();
-        }
-
-        @Override
         public MutationState execute() throws SQLException {
             MutationState state = firstPlan.execute();
             for (MutationPlan plan : plans.subList(1, plans.size())) {
@@ -275,6 +272,21 @@ public class DeleteCompiler {
             }
             return state;
         }
+
+        @Override
+        public TableRef getTargetRef() {
+            return firstPlan.getTargetRef();
+        }
+
+        @Override
+        public Set<TableRef> getSourceRefs() {
+            return firstPlan.getSourceRefs();
+        }
+
+		@Override
+		public Operation getOperation() {
+			return operation;
+		}
     }
     
     public MutationPlan compile(DeleteStatement delete) throws SQLException {
@@ -294,6 +306,7 @@ public class DeleteCompiler {
         ColumnResolver resolverToBe = null;
         Set<PTable> immutableIndex = Collections.emptySet();
         DeletingParallelIteratorFactory parallelIteratorFactory = null;
+        QueryPlan dataPlanToBe = null;
         while (true) {
             try {
                 resolverToBe = FromCompiler.getResolverForMutation(delete, connection);
@@ -341,9 +354,11 @@ public class DeleteCompiler {
                 }
                 parallelIteratorFactory = hasLimit ? null : new DeletingParallelIteratorFactory(connection);
                 QueryOptimizer optimizer = new QueryOptimizer(services);
+                QueryCompiler compiler = new QueryCompiler(statement, select, resolverToBe, Collections.<PColumn>emptyList(), parallelIteratorFactory, new SequenceManager(statement));
+                dataPlanToBe = compiler.compile();
                 queryPlans = Lists.newArrayList(mayHaveImmutableIndexes
-                        ? optimizer.getApplicablePlans(statement, select, resolverToBe, Collections.<PColumn>emptyList(), parallelIteratorFactory)
-                        : optimizer.getBestPlan(statement, select, resolverToBe, Collections.<PColumn>emptyList(), parallelIteratorFactory));
+                        ? optimizer.getApplicablePlans(dataPlanToBe, statement, select, resolverToBe, Collections.<PColumn>emptyList(), parallelIteratorFactory)
+                        : optimizer.getBestPlan(dataPlanToBe, statement, select, resolverToBe, Collections.<PColumn>emptyList(), parallelIteratorFactory));
                 if (mayHaveImmutableIndexes) { // FIXME: this is ugly
                     // Lookup the table being deleted from in the cache, as it's possible that the
                     // optimizer updated the cache if it found indexes that were out of date.
@@ -368,6 +383,7 @@ public class DeleteCompiler {
             }
             break;
         }
+        final QueryPlan dataPlan = dataPlanToBe;
         final ColumnResolver resolver = resolverToBe;
         final boolean hasImmutableIndexes = !immutableIndex.isEmpty();
         // tableRefs is parallel with queryPlans
@@ -403,7 +419,7 @@ public class DeleteCompiler {
         
         // Make sure the first plan is targeting deletion from the data table
         // In the case of an immutable index, we'll also delete from the index.
-        tableRefs[0] = tableRefToBe;
+        final TableRef dataTableRef = tableRefs[0] = tableRefToBe;
         /*
          * Create a mutationPlan for each queryPlan. One plan will be for the deletion of the rows
          * from the data table, while the others will be for deleting rows from immutable indexes.
@@ -453,14 +469,25 @@ public class DeleteCompiler {
                     }
     
                     @Override
-                    public PhoenixConnection getConnection() {
-                        return connection;
-                    }
-    
-                    @Override
                     public StatementContext getContext() {
                         return context;
                     }
+
+                    @Override
+                    public TableRef getTargetRef() {
+                        return dataTableRef;
+                    }
+
+                    @Override
+                    public Set<TableRef> getSourceRefs() {
+                        // Don't include the target
+                        return Collections.emptySet();
+                    }
+
+            		@Override
+            		public Operation getOperation() {
+            			return operation;
+            		}
                 });
             } else if (runOnServer) {
                 // TODO: better abstraction
@@ -474,12 +501,6 @@ public class DeleteCompiler {
                 final RowProjector projector = ProjectionCompiler.compile(context, aggSelect, GroupBy.EMPTY_GROUP_BY);
                 final QueryPlan aggPlan = new AggregatePlan(context, select, tableRef, projector, null, OrderBy.EMPTY_ORDER_BY, null, GroupBy.EMPTY_GROUP_BY, null);
                 mutationPlans.add(new MutationPlan() {
-    
-                    @Override
-                    public PhoenixConnection getConnection() {
-                        return connection;
-                    }
-    
                     @Override
                     public ParameterMetaData getParameterMetaData() {
                         return context.getBindManager().getParameterMetaData();
@@ -491,12 +512,27 @@ public class DeleteCompiler {
                     }
     
                     @Override
+                    public TableRef getTargetRef() {
+                        return dataTableRef;
+                    }
+
+                    @Override
+                    public Set<TableRef> getSourceRefs() {
+                        return dataPlan.getSourceRefs();
+                    }
+
+            		@Override
+            		public Operation getOperation() {
+            			return operation;
+            		}
+
+                    @Override
                     public MutationState execute() throws SQLException {
                         // TODO: share this block of code with UPSERT SELECT
                         ImmutableBytesWritable ptr = context.getTempPtr();
                         PTable table = tableRef.getTable();
                         table.getIndexMaintainers(ptr, context.getConnection());
-                        byte[] txState = table.isTransactional() ? TransactionUtil.encodeTxnState(connection.getMutationState().getTransaction()) : ByteUtil.EMPTY_BYTE_ARRAY;
+                        byte[] txState = table.isTransactional() ? connection.getMutationState().encodeTransaction() : ByteUtil.EMPTY_BYTE_ARRAY;
                         ServerCache cache = null;
                         try {
                             if (ptr.getLength() > 0) {
@@ -543,12 +579,6 @@ public class DeleteCompiler {
                     parallelIteratorFactory.setIndexTargetTableRef(deleteFromImmutableIndexToo ? plan.getTableRef() : null);
                 }
                 mutationPlans.add( new MutationPlan() {
-    
-                    @Override
-                    public PhoenixConnection getConnection() {
-                        return connection;
-                    }
-    
                     @Override
                     public ParameterMetaData getParameterMetaData() {
                         return context.getBindManager().getParameterMetaData();
@@ -560,15 +590,22 @@ public class DeleteCompiler {
                     }
     
                     @Override
+                    public TableRef getTargetRef() {
+                        return dataTableRef;
+                    }
+
+                    @Override
+                    public Set<TableRef> getSourceRefs() {
+                        return dataPlan.getSourceRefs();
+                    }
+
+            		@Override
+            		public Operation getOperation() {
+            			return operation;
+            		}
+
+                    @Override
                     public MutationState execute() throws SQLException {
-                        // Repeated from PhoenixStatement.executeQuery which this call bypasses.
-                        // Send mutations to hbase, so they are visible to subsequent reads.
-                        // Use original plan for data table so that data and immutable indexes will be sent.
-                        boolean isTransactional = connection.getMutationState().sendMutations(resolver.getTables().iterator());
-                        if (isTransactional) {
-                            // Use real query plan  so that we have the right context object.
-                            plan.getContext().setTransaction(connection.getMutationState().getTransaction());
-                        }
                         ResultIterator iterator = plan.iterator();
                         if (!hasLimit) {
                             Tuple tuple;

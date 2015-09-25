@@ -33,6 +33,7 @@ import org.apache.phoenix.cache.TenantCache;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.covered.IndexMetaData;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -51,7 +52,7 @@ public class PhoenixIndexMetaData implements IndexMetaData {
         byte[] txState = attributes.get(BaseScannerRegionObserver.TX_STATE);
         if (md != null) {
             final List<IndexMaintainer> indexMaintainers = IndexMaintainer.deserialize(md);
-            final Transaction txn = TransactionUtil.decodeTxnState(txState);
+            final Transaction txn = MutationState.decodeTransaction(txState);
             return new IndexMetaDataCache() {
 
                 @Override

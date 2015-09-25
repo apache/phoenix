@@ -21,18 +21,14 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.List;
 
-import co.cask.tephra.Transaction;
-import co.cask.tephra.hbase98.TransactionAwareHTable;
-
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.ServerUtil;
-import org.apache.phoenix.util.TransactionUtil;
 
 
 /**
@@ -43,15 +39,15 @@ import org.apache.phoenix.util.TransactionUtil;
  * 
  * @since 0.1
  */
-public class TableResultIterator extends ExplainTable implements ResultIterator {
+public class TableResultIterator implements ResultIterator {
 	public enum ScannerCreation {IMMEDIATE, DELAYED};
 	
     private final Scan scan;
     private final HTableInterface htable;
     private volatile ResultIterator delegate;
 
-    public TableResultIterator(StatementContext context, TableRef tableRef) throws SQLException {
-        this(context, tableRef, context.getScan());
+    public TableResultIterator(MutationState mutationState, Scan scan, TableRef tableRef) throws SQLException {
+        this(mutationState, tableRef, scan);
     }
 
     /*
@@ -78,24 +74,14 @@ public class TableResultIterator extends ExplainTable implements ResultIterator 
         return delegate;
     }
     
-    public TableResultIterator(StatementContext context, TableRef tableRef, Scan scan) throws SQLException {
-        this(context, tableRef, scan, ScannerCreation.IMMEDIATE);
+    public TableResultIterator(MutationState mutationState, TableRef tableRef, Scan scan) throws SQLException {
+        this(mutationState, tableRef, scan, ScannerCreation.IMMEDIATE);
     }
 
-    public TableResultIterator(StatementContext context, TableRef tableRef, Scan scan, ScannerCreation creationMode) throws SQLException {
-        super(context, tableRef);
+    public TableResultIterator(MutationState mutationState, TableRef tableRef, Scan scan, ScannerCreation creationMode) throws SQLException {
         this.scan = scan;
         PTable table = tableRef.getTable();
-        HTableInterface htable = context.getConnection().getQueryServices().getTable(table.getPhysicalName().getBytes());
-        Transaction tx;
-        if (table.isTransactional() && (tx=context.getTransaction()) != null) {
-            TransactionAwareHTable txAware = TransactionUtil.getTransactionAwareHTable(htable, table);
-            // Use transaction cached on context as we may have started a new transaction already
-            // if auto commit is true.
-            txAware.startTx(tx);
-            htable = txAware;
-        }
-        this.htable = htable;
+        this.htable = mutationState.getHTable(table);
         if (creationMode == ScannerCreation.IMMEDIATE) {
         	getDelegate(false);
         }
@@ -121,8 +107,11 @@ public class TableResultIterator extends ExplainTable implements ResultIterator 
 
     @Override
     public void explain(List<String> planSteps) {
-        StringBuilder buf = new StringBuilder();
-        explain(buf.toString(),planSteps);
+    	try {
+			getDelegate(false).explain(planSteps);
+		} catch (SQLException e) {
+			throw new RuntimeException(e);
+		}
     }
 
 	@Override

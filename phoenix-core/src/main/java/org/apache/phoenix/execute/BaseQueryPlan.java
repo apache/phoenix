@@ -47,6 +47,7 @@ import org.apache.phoenix.iterate.DelegateResultIterator;
 import org.apache.phoenix.iterate.ParallelIteratorFactory;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.parse.ParseNodeFactory;
@@ -112,6 +113,12 @@ public abstract class BaseQueryPlan implements QueryPlan {
         this.parallelIteratorFactory = parallelIteratorFactory;
     }
 
+
+	@Override
+	public Operation getOperation() {
+		return Operation.QUERY;
+	}
+	
     @Override
     public boolean isDegenerate() {
         return context.getScanRanges() == ScanRanges.NOTHING;
@@ -135,7 +142,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
     }
 
     @Override
-    public Set<TableRef> getTableRefs() {
+    public Set<TableRef> getSourceRefs() {
         return tableRefs;
     }
 
@@ -276,8 +283,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
         IndexMaintainer.serialize(dataTable, ptr, indexes, context.getConnection());
         scan.setAttribute(BaseScannerRegionObserver.LOCAL_INDEX_BUILD, ByteUtil.copyKeyBytesIfNecessary(ptr));
         if (dataTable.isTransactional()) {
-            PhoenixConnection conn = context.getConnection();
-            scan.setAttribute(BaseScannerRegionObserver.TX_STATE, TransactionUtil.encodeTxnState(conn.getMutationState().getTransaction()));
+            scan.setAttribute(BaseScannerRegionObserver.TX_STATE, context.getConnection().getMutationState().encodeTransaction());
         }
     }
 

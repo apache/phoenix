@@ -50,6 +50,7 @@ import org.apache.phoenix.iterate.SpoolingResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixParameterMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.schema.ColumnRef;
@@ -366,7 +367,7 @@ public class ParallelIteratorsSplitTest extends BaseConnectionlessQueryTest {
             }
 
             @Override
-            public Set<TableRef> getTableRefs() {
+            public Set<TableRef> getSourceRefs() {
                 return tableRefs;
             }
 
@@ -418,6 +419,11 @@ public class ParallelIteratorsSplitTest extends BaseConnectionlessQueryTest {
             @Override
             public List<List<Scan>> getScans() {
                 return null;
+            }
+
+            @Override
+            public Operation getOperation() {
+                return Operation.QUERY;
             }
             
         }, null, new SpoolingResultIterator.SpoolingResultIteratorFactory(context.getConnection().getQueryServices()));

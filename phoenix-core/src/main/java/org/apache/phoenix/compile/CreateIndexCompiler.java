@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.compile;
 
-import java.sql.ParameterMetaData;
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
@@ -31,17 +30,19 @@ import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.parse.CreateIndexStatement;
 import org.apache.phoenix.parse.ParseNode;
-import org.apache.phoenix.parse.PropertyName;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PTable.IndexType;
 
 public class CreateIndexCompiler {
     private final PhoenixStatement statement;
+    private final Operation operation;
 
-    public CreateIndexCompiler(PhoenixStatement statement) {
+    public CreateIndexCompiler(PhoenixStatement statement, Operation operation) {
         this.statement = statement;
+        this.operation = operation;
     }
 
     public MutationPlan compile(final CreateIndexStatement create) throws SQLException {
@@ -78,18 +79,7 @@ public class CreateIndexCompiler {
         }
         final MetaDataClient client = new MetaDataClient(connection);
         
-        return new MutationPlan() {
-
-            @Override
-            public ParameterMetaData getParameterMetaData() {
-                return context.getBindManager().getParameterMetaData();
-            }
-
-            @Override
-            public PhoenixConnection getConnection() {
-                return connection;
-            }
-
+        return new BaseMutationPlan(context, operation) {
             @Override
             public MutationState execute() throws SQLException {
                 return client.createIndex(create, splits);
@@ -99,11 +89,7 @@ public class CreateIndexCompiler {
             public ExplainPlan getExplainPlan() throws SQLException {
                 return new ExplainPlan(Collections.singletonList("CREATE INDEX"));
             }
-
-            @Override
-            public StatementContext getContext() {
-                return context;
-            }
+        	
         };
     }
 }

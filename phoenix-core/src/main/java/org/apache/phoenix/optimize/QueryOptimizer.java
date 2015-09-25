@@ -40,9 +40,9 @@ import org.apache.phoenix.parse.AliasedNode;
 import org.apache.phoenix.parse.AndParseNode;
 import org.apache.phoenix.parse.BooleanParseNodeVisitor;
 import org.apache.phoenix.parse.ColumnParseNode;
-import org.apache.phoenix.parse.IndexExpressionParseNodeRewriter;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.HintNode.Hint;
+import org.apache.phoenix.parse.IndexExpressionParseNodeRewriter;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.ParseNodeRewriter;
@@ -95,17 +95,11 @@ public class QueryOptimizer {
         return plans.get(0);
     }
     
-    public List<QueryPlan> getBestPlan(PhoenixStatement statement, SelectStatement select, ColumnResolver resolver, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory) throws SQLException {
-        return getApplicablePlans(statement, select, resolver, targetColumns, parallelIteratorFactory, true);
+    public List<QueryPlan> getBestPlan(QueryPlan dataPlan, PhoenixStatement statement, SelectStatement select, ColumnResolver resolver, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory) throws SQLException {
+        return getApplicablePlans(dataPlan, statement, targetColumns, parallelIteratorFactory, true);
     }
     
-    public List<QueryPlan> getApplicablePlans(PhoenixStatement statement, SelectStatement select, ColumnResolver resolver, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory) throws SQLException {
-        return getApplicablePlans(statement, select, resolver, targetColumns, parallelIteratorFactory, false);
-    }
-    
-    private List<QueryPlan> getApplicablePlans(PhoenixStatement statement, SelectStatement select, ColumnResolver resolver, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory, boolean stopAtBestPlan) throws SQLException {
-        QueryCompiler compiler = new QueryCompiler(statement, select, resolver, targetColumns, parallelIteratorFactory, new SequenceManager(statement));
-        QueryPlan dataPlan = compiler.compile();
+    public List<QueryPlan> getApplicablePlans(QueryPlan dataPlan, PhoenixStatement statement, SelectStatement select, ColumnResolver resolver, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory) throws SQLException {
         return getApplicablePlans(dataPlan, statement, targetColumns, parallelIteratorFactory, false);
     }
     

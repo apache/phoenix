@@ -155,13 +155,13 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     }
 
     public PhoenixConnection(PhoenixConnection connection) throws SQLException {
-        this(connection.getQueryServices(), connection.getURL(), connection.getClientInfo(), connection.metaData, connection.getMutationState().getTransaction());
+        this(connection.getQueryServices(), connection.getURL(), connection.getClientInfo(), connection.metaData, connection.getMutationState());
         this.isAutoCommit = connection.isAutoCommit;
         this.sampler = connection.sampler;
     }
     
     public PhoenixConnection(ConnectionQueryServices services, PhoenixConnection connection, long scn) throws SQLException {
-        this(services, connection.getURL(), newPropsWithSCN(scn,connection.getClientInfo()), connection.metaData, connection.getMutationState().getTransaction());
+        this(services, connection.getURL(), newPropsWithSCN(scn,connection.getClientInfo()), connection.metaData, connection.getMutationState());
         this.isAutoCommit = connection.isAutoCommit;
         this.sampler = connection.sampler;
     }
@@ -174,7 +174,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         this(services, connection.url, info, connection.metaData, null);
     }
     
-    public PhoenixConnection(ConnectionQueryServices services, String url, Properties info, PMetaData metaData, Transaction txn) throws SQLException {
+    public PhoenixConnection(ConnectionQueryServices services, String url, Properties info, PMetaData metaData, MutationState mutationState) throws SQLException {
         this.url = url;
         // Copy so client cannot change
         this.info = info == null ? new Properties() : PropertiesUtil.deepCopy(info);
@@ -244,7 +244,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
             }
             
         });
-        this.mutationState = new MutationState(maxSize, this, txn);
+        this.mutationState = mutationState == null ? new MutationState(maxSize, this) : new MutationState(mutationState);
         this.services.addConnection(this);
 
         // setup tracing, if its enabled

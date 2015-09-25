@@ -51,6 +51,7 @@ import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.filter.ColumnProjectionFilter;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.parse.FilterableStatement;
@@ -101,6 +102,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
     private final byte[] physicalTableName;
     private final QueryPlan plan;
     protected final String scanId;
+    protected final MutationState mutationState;
     // TODO: too much nesting here - breakup into new classes.
     private final List<List<List<Pair<Scan,Future<PeekingResultIterator>>>>> allFutures;
     
@@ -135,6 +137,9 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         super(plan.getContext(), plan.getTableRef(), plan.getGroupBy(), plan.getOrderBy(), plan.getStatement().getHint());
         this.plan = plan;
         StatementContext context = plan.getContext();
+        // Clone MutationState as the one on the connection will change if auto commit is on
+        // yet we need the original one with the original transaction from TableResultIterator.
+        this.mutationState = new MutationState(context.getConnection().getMutationState());
         TableRef tableRef = plan.getTableRef();
         PTable table = tableRef.getTable();
         FilterableStatement statement = plan.getStatement();

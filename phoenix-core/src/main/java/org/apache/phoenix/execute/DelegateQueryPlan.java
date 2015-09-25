@@ -27,6 +27,7 @@ import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.TableRef;
@@ -59,8 +60,8 @@ public abstract class DelegateQueryPlan implements QueryPlan {
     }
 
     @Override
-    public Set<TableRef> getTableRefs() {
-        return delegate.getTableRefs();
+    public Set<TableRef> getSourceRefs() {
+        return delegate.getSourceRefs();
     }
 
     @Override
@@ -108,4 +109,9 @@ public abstract class DelegateQueryPlan implements QueryPlan {
         return delegate.isRowKeyOrdered();
     }
 
+	@Override
+	public Operation getOperation() {
+		return delegate.getOperation();
+	}
+	
 }

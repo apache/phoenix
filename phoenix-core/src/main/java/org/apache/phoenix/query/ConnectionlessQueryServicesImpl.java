@@ -27,10 +27,6 @@ import java.util.Map.Entry;
 import java.util.Properties;
 import java.util.Set;
 
-import co.cask.tephra.TransactionManager;
-import co.cask.tephra.TransactionSystemClient;
-import co.cask.tephra.inmemory.InMemoryTxSystemClient;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
@@ -85,6 +81,10 @@ import org.apache.phoenix.util.SequenceUtil;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+
+import co.cask.tephra.TransactionManager;
+import co.cask.tephra.TransactionSystemClient;
+import co.cask.tephra.inmemory.InMemoryTxSystemClient;
 
 
 /**
@@ -338,7 +338,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
 
     @Override
     public MutationState updateData(MutationPlan plan) throws SQLException {
-        return new MutationState(0, plan.getConnection());
+        return new MutationState(0, plan.getContext().getConnection());
     }
 
     @Override

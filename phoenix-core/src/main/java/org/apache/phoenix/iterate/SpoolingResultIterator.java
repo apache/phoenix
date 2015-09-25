@@ -34,7 +34,6 @@ import org.apache.commons.io.output.DeferredFileOutputStream;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
-import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.memory.MemoryManager;
 import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
 import org.apache.phoenix.query.QueryServices;
@@ -64,7 +63,7 @@ public class SpoolingResultIterator implements PeekingResultIterator {
             this.services = services;
         }
         @Override
-        public PeekingResultIterator newIterator(StatementContext context, ResultIterator scanner, Scan scan) throws SQLException {
+        public PeekingResultIterator newIterator(ResultIterator scanner, Scan scan) throws SQLException {
             return new SpoolingResultIterator(scanner, services);
         }
 

@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.compile;
 
-import java.sql.ParameterMetaData;
 import java.sql.SQLException;
 import java.util.Collections;
 
@@ -27,26 +26,28 @@ import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.parse.BindParseNode;
 import org.apache.phoenix.parse.CreateSequenceStatement;
 import org.apache.phoenix.parse.ParseNode;
-import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.parse.TableName;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.MetaDataClient;
-import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.PDatum;
-import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.SortOrder;
-
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.SequenceUtil;
 
 public class CreateSequenceCompiler {
     private final PhoenixStatement statement;
+    private final Operation operation;
 
-    public CreateSequenceCompiler(PhoenixStatement statement) {
+    public CreateSequenceCompiler(PhoenixStatement statement, Operation operation) {
         this.statement = statement;
+        this.operation = operation;
     }
     
     private static class LongDatum implements PDatum {
@@ -231,7 +232,7 @@ public class CreateSequenceCompiler {
         final long cacheSize = Math.max(1L, cacheSizeValue);
 
         final MetaDataClient client = new MetaDataClient(connection);
-        return new MutationPlan() {
+        return new BaseMutationPlan(context, operation) {
 
             @Override
             public MutationState execute() throws SQLException {
@@ -241,21 +242,6 @@ public class CreateSequenceCompiler {
             @Override
             public ExplainPlan getExplainPlan() throws SQLException {
                 return new ExplainPlan(Collections.singletonList("CREATE SEQUENCE"));
-            }
-
-            @Override
-            public PhoenixConnection getConnection() {
-                return connection;
-            }
-
-            @Override
-            public ParameterMetaData getParameterMetaData() {
-                return context.getBindManager().getParameterMetaData();
-            }
-
-            @Override
-            public StatementContext getContext() {
-                return context;
             }
         };
     }

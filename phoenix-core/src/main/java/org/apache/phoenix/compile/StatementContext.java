@@ -26,8 +26,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TimeZone;
 
-import co.cask.tephra.Transaction;
-
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.io.TimeRange;
@@ -80,7 +78,6 @@ public class StatementContext {
     private TableRef currentTable;
     private List<Pair<byte[], byte[]>> whereConditionColumns;
     private TimeRange scanTimeRange = null;
-    private Transaction transaction;
 
     private Map<SelectStatement, Object> subqueryResults;
 
@@ -287,13 +284,5 @@ public class StatementContext {
 
     public void setSubqueryResult(SelectStatement select, Object result) {
         subqueryResults.put(select, result);
-    }
-
-    public Transaction getTransaction() {
-        return transaction;
-    }
-
-    public void setTransaction(Transaction transaction) {
-        this.transaction = transaction;
     }
 }

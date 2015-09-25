@@ -52,6 +52,7 @@ import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.optimize.QueryOptimizer;
 import org.apache.phoenix.parse.AliasedNode;
 import org.apache.phoenix.parse.BindParseNode;
@@ -89,7 +90,6 @@ import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.TransactionUtil;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -186,10 +186,7 @@ public class UpsertCompiler {
         }
 
         @Override
-        protected MutationState mutate(StatementContext context, ResultIterator iterator, PhoenixConnection connection) throws SQLException {
-            if (context.getSequenceManager().getSequenceCount() > 0) {
-                throw new IllegalStateException("Cannot pipeline upsert when sequence is referenced");
-            }
+        protected MutationState mutate(ResultIterator iterator, PhoenixConnection connection) throws SQLException {
             PhoenixStatement statement = new PhoenixStatement(connection);
             // Clone the row projector as it's not thread safe and would be used simultaneously by
             // multiple threads otherwise.
@@ -208,9 +205,11 @@ public class UpsertCompiler {
     }
     
     private final PhoenixStatement statement;
+    private final Operation operation;
     
-    public UpsertCompiler(PhoenixStatement statement) {
+    public UpsertCompiler(PhoenixStatement statement, Operation operation) {
         this.statement = statement;
+        this.operation = operation;
     }
     
     public MutationPlan compile(UpsertStatement upsert) throws SQLException {
@@ -397,7 +396,7 @@ public class UpsertCompiler {
                      *    puts for index tables.
                      * 5) no limit clause, as the limit clause requires client-side post processing
                      * 6) no sequences, as sequences imply that the order of upsert must match the order of
-                     *    selection.
+                     *    selection. TODO: change this and only force client side if there's a ORDER BY on the sequence value
                      * Otherwise, run the query to pull the data from the server
                      * and populate the MutationState (upto a limit).
                     */            
@@ -405,7 +404,7 @@ public class UpsertCompiler {
                         // We can pipeline the upsert select instead of spooling everything to disk first,
                         // if we don't have any post processing that's required.
                         parallelIteratorFactoryToBe = new UpsertingParallelIteratorFactory(connection, tableRefToBe);
-                        // If we're in the else, then it's not an aggregate, distinct, limted, or sequence using query,
+                        // If we're in the else, then it's not an aggregate, distinct, limited, or sequence using query,
                         // so we might be able to run it entirely on the server side.
                         // Can't run on same server for transactional data, as we need the row keys for the data
                         // that is being upserted for conflict detection purposes.
@@ -590,12 +589,6 @@ public class UpsertCompiler {
                     // Ignore order by - it has no impact
                     final QueryPlan aggPlan = new AggregatePlan(context, select, tableRef, aggProjector, null, OrderBy.EMPTY_ORDER_BY, null, GroupBy.EMPTY_GROUP_BY, null);
                     return new MutationPlan() {
-    
-                        @Override
-                        public PhoenixConnection getConnection() {
-                            return connection;
-                        }
-    
                         @Override
                         public ParameterMetaData getParameterMetaData() {
                             return queryPlan.getContext().getBindManager().getParameterMetaData();
@@ -607,11 +600,26 @@ public class UpsertCompiler {
                         }
 
                         @Override
+                        public TableRef getTargetRef() {
+                            return tableRef;
+                        }
+
+                        @Override
+                        public Set<TableRef> getSourceRefs() {
+                            return originalQueryPlan.getSourceRefs();
+                        }
+
+                		@Override
+                		public Operation getOperation() {
+                			return operation;
+                		}
+
+                        @Override
                         public MutationState execute() throws SQLException {
                             ImmutableBytesWritable ptr = context.getTempPtr();
                             PTable table = tableRef.getTable();
                             table.getIndexMaintainers(ptr, context.getConnection());
-                            byte[] txState = table.isTransactional() ? TransactionUtil.encodeTxnState(connection.getMutationState().getTransaction()) : ByteUtil.EMPTY_BYTE_ARRAY;
+                            byte[] txState = table.isTransactional() ? connection.getMutationState().encodeTransaction() : ByteUtil.EMPTY_BYTE_ARRAY;
 
                             ServerCache cache = null;
                             try {
@@ -657,12 +665,6 @@ public class UpsertCompiler {
             // UPSERT SELECT run client-side
             /////////////////////////////////////////////////////////////////////
             return new MutationPlan() {
-
-                @Override
-                public PhoenixConnection getConnection() {
-                    return connection;
-                }
-                
                 @Override
                 public ParameterMetaData getParameterMetaData() {
                     return queryPlan.getContext().getBindManager().getParameterMetaData();
@@ -674,15 +676,22 @@ public class UpsertCompiler {
                 }
 
                 @Override
+                public TableRef getTargetRef() {
+                    return tableRef;
+                }
+
+                @Override
+                public Set<TableRef> getSourceRefs() {
+                    return originalQueryPlan.getSourceRefs();
+                }
+
+        		@Override
+        		public Operation getOperation() {
+        			return operation;
+        		}
+
+                @Override
                 public MutationState execute() throws SQLException {
-                    // Repeated from PhoenixStatement.executeQuery which this call bypasses.
-                    // Send mutations to hbase, so they are visible to subsequent reads.
-                    // Use original plan for data table so that data and immutable indexes will be sent.
-                    boolean isTransactional = connection.getMutationState().sendMutations(originalQueryPlan.getContext().getResolver().getTables().iterator());
-                    if (isTransactional) {
-                        // Use real query plan  so that we have the right context object.
-                        queryPlan.getContext().setTransaction(connection.getMutationState().getTransaction());
-                    }
                     ResultIterator iterator = queryPlan.iterator();
                     if (parallelIteratorFactory == null) {
                         return upsertSelect(statement, tableRef, projector, iterator, columnIndexes, pkSlotIndexes);
@@ -756,12 +765,6 @@ public class UpsertCompiler {
             nodeIndex++;
         }
         return new MutationPlan() {
-
-            @Override
-            public PhoenixConnection getConnection() {
-                return connection;
-            }
-
             @Override
             public ParameterMetaData getParameterMetaData() {
                 return context.getBindManager().getParameterMetaData();
@@ -771,6 +774,21 @@ public class UpsertCompiler {
             public StatementContext getContext() {
                 return context;
             }
+
+            @Override
+            public TableRef getTargetRef() {
+                return tableRef;
+            }
+
+            @Override
+            public Set<TableRef> getSourceRefs() {
+                return Collections.emptySet();
+            }
+
+    		@Override
+    		public Operation getOperation() {
+    			return operation;
+    		}
 
             @Override
             public MutationState execute() throws SQLException {
