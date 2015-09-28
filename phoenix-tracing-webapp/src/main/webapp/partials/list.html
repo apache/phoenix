@@ -1,0 +1,39 @@
+<!-- Main jumbotron for a primary marketing message or call to action -->
+<div class="jumbotron">
+  <h1>Phoenix Tracing List</h1>
+</div>
+
+
+<div class="page-header">
+  <label>Size:
+  <input type="number" name="input" ng-model="tracesLimit"
+         min="1" max="1500" required>
+  <a class="btn btn-default" ng-click="loadTrace()">Load</a>
+  </label>
+<div class="row">
+  <div class="col-md-12">
+  <table class="table table-striped">
+    <thead>
+      <tr>
+        <th>Parent ID</th>
+        <th>Span ID</th>
+        <th>Description</th>
+        <th>View Models</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr ng-repeat="trace in traces">
+        <td>{{trace.parent_id}}</td>
+        <td>{{trace.span_id}}</td>
+        <td>{{trace.description | limitTo:letterLimit}}</td>
+        <td>
+          <div class="btn-group " role="group" aria-label="...">
+             <a href="./#/dependency-tree?traceid={{trace.trace_id}}" class="btn btn-info" role="button"><i class="fa fa-sort-amount-asc"></i></a>
+             <a href="./#/trace-timeline?traceid={{trace.trace_id}}" class="btn btn-info" role="button"><i class="fa fa-sliders"></i></a>
+          </div>
+        </td>
+      </tr>
+     </tbody>
+  </table>
+</div></div>
+</div>

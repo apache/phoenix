@@ -46,18 +46,18 @@ localhost:2181:/hbase ../examples/stock_symbol.sql"
 sqlfile = ""
 
 if len(sys.argv) > 2:
-    sqlfile = "--run=" + sys.argv[2]
+    sqlfile = "--run=" + phoenix_utils.shell_quote([sys.argv[2]])
 
 colorSetting = "true"
 # disable color setting for windows OS
 if os.name == 'nt':
     colorSetting = "false"
 
-java_cmd = 'java -cp "' + phoenix_utils.hbase_conf_path + os.pathsep + phoenix_utils.phoenix_client_jar + \
+java_cmd = 'java -cp "' + phoenix_utils.hbase_conf_dir + os.pathsep + phoenix_utils.phoenix_client_jar + os.pathsep + phoenix_utils.hadoop_common_jar + os.pathsep + phoenix_utils.hadoop_hdfs_jar + \
     '" -Dlog4j.configuration=file:' + \
     os.path.join(phoenix_utils.current_dir, "log4j.properties") + \
     " sqlline.SqlLine -d org.apache.phoenix.jdbc.PhoenixDriver \
--u jdbc:phoenix:" + sys.argv[1] + \
+-u jdbc:phoenix:" + phoenix_utils.shell_quote([sys.argv[1]]) + \
     " -n none -p none --color=" + colorSetting + " --fastConnect=false --verbose=true \
 --isolation=TRANSACTION_READ_COMMITTED " + sqlfile
 

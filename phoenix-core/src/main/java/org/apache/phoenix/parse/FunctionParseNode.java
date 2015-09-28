@@ -31,21 +31,24 @@ import java.util.List;
 import java.util.Set;
 
 import org.apache.http.annotation.Immutable;
-
-import com.google.common.collect.ImmutableSet;
-
+import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.function.AggregateFunction;
 import org.apache.phoenix.expression.function.FunctionExpression;
+import org.apache.phoenix.expression.function.UDFExpression;
+import org.apache.phoenix.parse.PFunction.FunctionArgument;
 import org.apache.phoenix.schema.ArgumentTypeMismatchException;
+import org.apache.phoenix.schema.FunctionNotFoundException;
+import org.apache.phoenix.schema.ValueRangeExcpetion;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDataTypeFactory;
 import org.apache.phoenix.schema.types.PVarchar;
-import org.apache.phoenix.schema.ValueRangeExcpetion;
 import org.apache.phoenix.util.SchemaUtil;
+
+import com.google.common.collect.ImmutableSet;
 
 
 
@@ -58,7 +61,7 @@ import org.apache.phoenix.util.SchemaUtil;
  */
 public class FunctionParseNode extends CompoundParseNode {
     private final String name;
-    private final BuiltInFunctionInfo info;
+    private BuiltInFunctionInfo info;
 
     FunctionParseNode(String name, List<ParseNode> children, BuiltInFunctionInfo info) {
         super(children);
@@ -83,19 +86,8 @@ public class FunctionParseNode extends CompoundParseNode {
         return visitor.visitLeave(this, l);
     }
 
-    @Override
-    public String toString() {
-        StringBuilder buf = new StringBuilder(name + "(");
-        for (ParseNode child : getChildren()) {
-            buf.append(child.toString());
-            buf.append(',');
-        }
-        buf.setLength(buf.length()-1);
-        buf.append(')');
-        return buf.toString();
-    }
-
     public boolean isAggregate() {
+        if(getInfo()==null) return false;
         return getInfo().isAggregate();
     }
 
@@ -124,10 +116,14 @@ public class FunctionParseNode extends CompoundParseNode {
         return ctor;
     }
 
-    private static Constructor<? extends FunctionExpression> getExpressionCtor(Class<? extends FunctionExpression> clazz) {
+    private static Constructor<? extends FunctionExpression> getExpressionCtor(Class<? extends FunctionExpression> clazz, PFunction function) {
         Constructor<? extends FunctionExpression> ctor;
         try {
-            ctor = clazz.getDeclaredConstructor(List.class);
+            if(function == null) {
+                ctor = clazz.getDeclaredConstructor(List.class);
+            } else {
+                ctor = clazz.getDeclaredConstructor(List.class, PFunction.class);
+            }
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -138,6 +134,9 @@ public class FunctionParseNode extends CompoundParseNode {
     public List<Expression> validate(List<Expression> children, StatementContext context) throws SQLException {
         BuiltInFunctionInfo info = this.getInfo();
         BuiltInFunctionArgInfo[] args = info.getArgs();
+        if (args.length < children.size() || info.getRequiredArgCount() > children.size()) {
+            throw new FunctionNotFoundException(this.name);
+        }
         if (args.length > children.size()) {
             List<Expression> moreChildren = new ArrayList<Expression>(children);
             for (int i = children.size(); i < info.getArgs().length; i++) {
@@ -235,8 +234,24 @@ public class FunctionParseNode extends CompoundParseNode {
      * @throws SQLException
      */
     public Expression create(List<Expression> children, StatementContext context) throws SQLException {
+        return create(children, null, context);
+    }
+
+    /**
+     * Entry point for parser to instantiate compiled representation of built-in function
+     * @param children Compiled expressions for child nodes
+     * @param function
+     * @param context Query context for accessing state shared across the processing of multiple clauses
+     * @return compiled representation of built-in function
+     * @throws SQLException
+     */
+    public Expression create(List<Expression> children, PFunction function, StatementContext context) throws SQLException {
         try {
-            return info.getFuncCtor().newInstance(children);
+            if(function == null) {
+                return info.getFuncCtor().newInstance(children);
+            } else {
+                return info.getFuncCtor().newInstance(children, function);
+            }
         } catch (InstantiationException e) {
             throw new SQLException(e);
         } catch (IllegalAccessException e) {
@@ -287,9 +302,9 @@ public class FunctionParseNode extends CompoundParseNode {
         private final boolean isAggregate;
         private final int requiredArgCount;
 
-        BuiltInFunctionInfo(Class<? extends FunctionExpression> f, BuiltInFunction d) {
+        public BuiltInFunctionInfo(Class<? extends FunctionExpression> f, BuiltInFunction d) {
             this.name = SchemaUtil.normalizeIdentifier(d.name());
-            this.funcCtor = d.nodeClass() == FunctionParseNode.class ? getExpressionCtor(f) : null;
+            this.funcCtor = d.nodeClass() == FunctionParseNode.class ? getExpressionCtor(f, null) : null;
             this.nodeCtor = d.nodeClass() == FunctionParseNode.class ? null : getParseNodeCtor(d.nodeClass());
             this.args = new BuiltInFunctionArgInfo[d.args().length];
             int requiredArgCount = 0;
@@ -301,6 +316,22 @@ public class FunctionParseNode extends CompoundParseNode {
             }
             this.requiredArgCount = requiredArgCount;
             this.isAggregate = AggregateFunction.class.isAssignableFrom(f);
+        }
+
+        public BuiltInFunctionInfo(PFunction function) {
+            this.name = SchemaUtil.normalizeIdentifier(function.getFunctionName());
+            this.funcCtor = getExpressionCtor(UDFExpression.class, function);
+            this.nodeCtor = getParseNodeCtor(UDFParseNode.class);
+            this.args = new BuiltInFunctionArgInfo[function.getFunctionArguments().size()];
+            int requiredArgCount = 0;
+            for (int i = 0; i < args.length; i++) {
+                this.args[i] = new BuiltInFunctionArgInfo(function.getFunctionArguments().get(i));
+                if (this.args[i].getDefaultValue() == null) {
+                    requiredArgCount = i + 1;
+                }
+            }
+            this.requiredArgCount = requiredArgCount;
+            this.isAggregate = AggregateFunction.class.isAssignableFrom(UDFExpression.class);
         }
 
         public int getRequiredArgCount() {
@@ -377,6 +408,24 @@ public class FunctionParseNode extends CompoundParseNode {
             }
         }
 
+        @SuppressWarnings({ "unchecked", "rawtypes" })
+        BuiltInFunctionArgInfo(FunctionArgument arg) {
+            PDataType dataType =
+                    arg.isArrayType() ? PDataType.fromTypeId(PDataType.sqlArrayType(SchemaUtil
+                            .normalizeIdentifier(SchemaUtil.normalizeIdentifier(arg
+                                    .getArgumentType())))) : PDataType.fromSqlTypeName(SchemaUtil
+                            .normalizeIdentifier(arg.getArgumentType()));
+            this.allowedValues = Collections.emptySet();
+            this.allowedTypes = new Class[] { dataType.getClass() };
+            this.isConstant = arg.isConstant();
+            this.defaultValue =
+                    arg.getDefaultValue() == null ? null : arg.getDefaultValue();
+            this.minValue =
+                    arg.getMinValue() == null ? null : arg.getMinValue();
+            this.maxValue =
+                    arg.getMaxValue() == null ? null : arg.getMaxValue();
+        }
+        
         private LiteralExpression getExpFromConstant(String strValue) {
             LiteralExpression exp = null;
             if (strValue.length() > 0) {
@@ -427,5 +476,52 @@ public class FunctionParseNode extends CompoundParseNode {
         public Set<String> getAllowedValues() {
             return allowedValues;
         }
+    }
+
+	@Override
+	public int hashCode() {
+		final int prime = 31;
+		int result = super.hashCode();
+		result = prime * result + ((info == null) ? 0 : info.hashCode());
+		result = prime * result + ((name == null) ? 0 : name.hashCode());
+		return result;
+	}
+
+	@Override
+	public boolean equals(Object obj) {
+		if (this == obj)
+			return true;
+		if (!super.equals(obj))
+			return false;
+		if (getClass() != obj.getClass())
+			return false;
+		FunctionParseNode other = (FunctionParseNode) obj;
+		if (info == null) {
+			if (other.info != null)
+				return false;
+		} else if (!info.equals(other.info))
+			return false;
+		if (name == null) {
+			if (other.name != null)
+				return false;
+		} else if (!name.equals(other.name))
+			return false;
+		return true;
+	}
+
+    @Override
+    public void toSQL(ColumnResolver resolver, StringBuilder buf) {
+        buf.append(' ');
+        buf.append(name);
+        buf.append('(');
+        List<ParseNode> children = getChildren();
+        if (!children.isEmpty()) {
+            for (ParseNode child : children) {
+                child.toSQL(resolver, buf);
+                buf.append(',');
+            }
+            buf.setLength(buf.length()-1);
+        }
+        buf.append(')');
     }
 }

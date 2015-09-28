@@ -18,6 +18,7 @@
 package org.apache.phoenix.mapreduce;
 
 import static org.apache.phoenix.query.BaseTest.setUpConfigForMiniCluster;
+import static org.apache.phoenix.query.QueryServices.DATE_FORMAT_ATTRIB;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -36,7 +37,9 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.jdbc.PhoenixDriver;
+import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.QueryUtil;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -89,30 +92,33 @@ public class CsvBulkLoadToolIT {
     public void testBasicImport() throws Exception {
 
         Statement stmt = conn.createStatement();
-        stmt.execute("CREATE TABLE TABLE1 (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR)");
+        stmt.execute("CREATE TABLE TABLE1 (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, T DATE)");
 
         FileSystem fs = FileSystem.get(hbaseTestUtil.getConfiguration());
         FSDataOutputStream outputStream = fs.create(new Path("/tmp/input1.csv"));
         PrintWriter printWriter = new PrintWriter(outputStream);
-        printWriter.println("1,Name 1");
-        printWriter.println("2,Name 2");
+        printWriter.println("1,Name 1,1970/01/01");
+        printWriter.println("2,Name 2,1970/01/02");
         printWriter.close();
 
         CsvBulkLoadTool csvBulkLoadTool = new CsvBulkLoadTool();
-        csvBulkLoadTool.setConf(hbaseTestUtil.getConfiguration());
+        csvBulkLoadTool.setConf(new Configuration(hbaseTestUtil.getConfiguration()));
+        csvBulkLoadTool.getConf().set(DATE_FORMAT_ATTRIB,"yyyy/MM/dd");
         int exitCode = csvBulkLoadTool.run(new String[] {
                 "--input", "/tmp/input1.csv",
                 "--table", "table1",
                 "--zookeeper", zkQuorum});
         assertEquals(0, exitCode);
 
-        ResultSet rs = stmt.executeQuery("SELECT id, name FROM table1 ORDER BY id");
+        ResultSet rs = stmt.executeQuery("SELECT id, name, t FROM table1 ORDER BY id");
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
         assertEquals("Name 1", rs.getString(2));
+        assertEquals(DateUtil.parseDate("1970-01-01"), rs.getDate(3));
         assertTrue(rs.next());
         assertEquals(2, rs.getInt(1));
         assertEquals("Name 2", rs.getString(2));
+        assertEquals(DateUtil.parseDate("1970-01-02"), rs.getDate(3));
         assertFalse(rs.next());
 
         rs.close();
@@ -191,17 +197,80 @@ public class CsvBulkLoadToolIT {
         rs.close();
         stmt.close();
     }
-    
+
     @Test
-    public void testImportOneIndexTable() throws Exception {
+    public void testImportWithLocalIndex() throws Exception {
 
         Statement stmt = conn.createStatement();
-        stmt.execute("CREATE TABLE TABLE4 (ID INTEGER NOT NULL PRIMARY KEY, " +
-            "FIRST_NAME VARCHAR, LAST_NAME VARCHAR)");
-        String ddl = "CREATE INDEX TABLE4_IDX ON TABLE4 "
+        stmt.execute("CREATE TABLE TABLE6 (ID INTEGER NOT NULL PRIMARY KEY, " +
+                "FIRST_NAME VARCHAR, LAST_NAME VARCHAR)");
+        String ddl = "CREATE LOCAL INDEX TABLE6_IDX ON TABLE6 "
                 + " (FIRST_NAME ASC)";
         stmt.execute(ddl);
-        
+        ddl = "CREATE LOCAL INDEX TABLE6_IDX2 ON TABLE6 " + " (LAST_NAME ASC)";
+        stmt.execute(ddl);
+
+        FileSystem fs = FileSystem.get(hbaseTestUtil.getConfiguration());
+        FSDataOutputStream outputStream = fs.create(new Path("/tmp/input3.csv"));
+        PrintWriter printWriter = new PrintWriter(outputStream);
+        printWriter.println("1,FirstName 1,LastName 1");
+        printWriter.println("2,FirstName 2,LastName 2");
+        printWriter.close();
+
+        CsvBulkLoadTool csvBulkLoadTool = new CsvBulkLoadTool();
+        csvBulkLoadTool.setConf(hbaseTestUtil.getConfiguration());
+        int exitCode = csvBulkLoadTool.run(new String[] {
+                "--input", "/tmp/input3.csv",
+                "--table", "table6",
+                "--zookeeper", zkQuorum});
+        assertEquals(0, exitCode);
+
+        ResultSet rs = stmt.executeQuery("SELECT id, FIRST_NAME FROM TABLE6 where first_name='FirstName 2'");
+        assertTrue(rs.next());
+        assertEquals(2, rs.getInt(1));
+        assertEquals("FirstName 2", rs.getString(2));
+
+        rs.close();
+        rs =
+                stmt.executeQuery("EXPLAIN SELECT id, FIRST_NAME FROM TABLE6 where first_name='FirstName 2'");
+        assertEquals(
+            "CLIENT 1-CHUNK PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_TABLE6 [-32768,'FirstName 2']\n"
+                    + "    SERVER FILTER BY FIRST KEY ONLY", QueryUtil.getExplainPlan(rs));
+        rs.close();
+        rs = stmt.executeQuery("SELECT id, LAST_NAME FROM TABLE6 where last_name='LastName 2'");
+        assertTrue(rs.next());
+        assertEquals(2, rs.getInt(1));
+        assertEquals("LastName 2", rs.getString(2));
+        rs.close();
+        rs =
+                stmt.executeQuery("EXPLAIN SELECT id, LAST_NAME FROM TABLE6 where last_name='LastName 2'");
+        assertEquals(
+            "CLIENT 1-CHUNK PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_TABLE6 [-32767,'LastName 2']\n"
+                    + "    SERVER FILTER BY FIRST KEY ONLY", QueryUtil.getExplainPlan(rs));
+        stmt.close();
+    }
+
+    @Test
+    public void testImportOneIndexTable() throws Exception {
+        testImportOneIndexTable("TABLE4", false);
+    }
+
+    @Test
+    public void testImportOneLocalIndexTable() throws Exception {
+        testImportOneIndexTable("TABLE5", true);
+    }
+
+    public void testImportOneIndexTable(String tableName, boolean localIndex) throws Exception {
+
+        String indexTableName = String.format("%s_IDX", tableName);
+        Statement stmt = conn.createStatement();
+        stmt.execute("CREATE TABLE " + tableName + "(ID INTEGER NOT NULL PRIMARY KEY, "
+                + "FIRST_NAME VARCHAR, LAST_NAME VARCHAR)");
+        String ddl =
+                "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX " + indexTableName + " ON "
+                        + tableName + "(FIRST_NAME ASC)";
+        stmt.execute(ddl);
+
         FileSystem fs = FileSystem.get(hbaseTestUtil.getConfiguration());
         FSDataOutputStream outputStream = fs.create(new Path("/tmp/input4.csv"));
         PrintWriter printWriter = new PrintWriter(outputStream);
@@ -213,14 +282,14 @@ public class CsvBulkLoadToolIT {
         csvBulkLoadTool.setConf(hbaseTestUtil.getConfiguration());
         int exitCode = csvBulkLoadTool.run(new String[] {
                 "--input", "/tmp/input4.csv",
-                "--table", "table4",
-                "--index-table", "TABLE4_IDX",
-                "--zookeeper", zkQuorum});
+                "--table", tableName,
+                "--index-table", indexTableName,
+                "--zookeeper", zkQuorum });
         assertEquals(0, exitCode);
 
-        ResultSet rs = stmt.executeQuery("SELECT * FROM TABLE4");
+        ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName);
         assertFalse(rs.next());
-        rs = stmt.executeQuery("SELECT FIRST_NAME FROM TABLE4 where FIRST_NAME='FirstName 1'");
+        rs = stmt.executeQuery("SELECT FIRST_NAME FROM " + tableName + " where FIRST_NAME='FirstName 1'");
         assertTrue(rs.next());
         assertEquals("FirstName 1", rs.getString(1));
 

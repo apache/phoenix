@@ -18,6 +18,7 @@
 
 package org.apache.phoenix.expression.function;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
@@ -25,10 +26,12 @@ import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.phoenix.compile.KeyPart;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.StringUtil;
 
 abstract public class PrefixFunction extends ScalarFunction {
     public PrefixFunction() {
@@ -83,16 +86,36 @@ abstract public class PrefixFunction extends ScalarFunction {
                 default:
                     return childPart.getKeyRange(op, rhs);
                 }
-                Integer length = getColumn().getMaxLength();
-                if (type.isFixedWidth() && length != null) {
-                    if (lowerRange != KeyRange.UNBOUND) {
-                        lowerRange = StringUtil.padChar(lowerRange, length);
+                PColumn column = getColumn();
+                Integer length = column.getMaxLength();
+                if (type.isFixedWidth()) {
+                    if (length != null) { // Sanity check - shouldn't be necessary
+                        // Don't pad based on current sort order, but instead use our
+                        // minimum byte as otherwise we'll end up skipping rows in
+                        // the case of descending, since rows with more padding appear
+                        // *after* rows with no padding.
+                        if (lowerRange != KeyRange.UNBOUND) {
+                            lowerRange = type.pad(lowerRange, length, SortOrder.ASC);
+                        }
+                        if (upperRange != KeyRange.UNBOUND) {
+                            upperRange = type.pad(upperRange, length, SortOrder.ASC);
+                        }
                     }
-                    if (upperRange != KeyRange.UNBOUND) {
-                        upperRange = StringUtil.padChar(upperRange, length);
+                } else if (column.getSortOrder() == SortOrder.DESC && getTable().rowKeyOrderOptimizable()) {
+                    // Append a zero byte if descending since a \xFF byte will be appended to the lowerRange
+                    // causing rows to be skipped that should be included. For example, with rows 'ab', 'a',
+                    // a lowerRange of 'a\xFF' would skip 'ab', while 'a\x00\xFF' would not.
+                    if (lowerRange != KeyRange.UNBOUND) {
+                        lowerRange = Arrays.copyOf(lowerRange, lowerRange.length+1);
+                        lowerRange[lowerRange.length-1] = QueryConstants.SEPARATOR_BYTE;
                     }
                 }
                 return KeyRange.getKeyRange(lowerRange, lowerInclusive, upperRange, false);
+            }
+
+            @Override
+            public PTable getTable() {
+                return childPart.getTable();
             }
         };
     }

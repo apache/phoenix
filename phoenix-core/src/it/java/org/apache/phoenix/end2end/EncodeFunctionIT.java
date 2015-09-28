@@ -29,8 +29,7 @@ import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
 
-import org.apache.phoenix.expression.function.EncodeFunction;
-import org.apache.phoenix.schema.IllegalDataException;
+import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
@@ -117,12 +116,8 @@ public class EncodeFunctionIT extends BaseHBaseManagedTimeIT {
         String ddl = "CREATE TABLE TEST_TABLE ( pk VARCHAR(10) NOT NULL CONSTRAINT PK PRIMARY KEY (pk))";
         conn.createStatement().execute(ddl);
 
-        try {
-            conn.createStatement().executeQuery("SELECT * FROM TEST_TABLE WHERE pk = ENCODE(1, NULL)");
-            fail();
-        } catch (IllegalDataException e) {
-            assertEquals("Unexpected exception message", e.getMessage(), EncodeFunction.getMissingEncodeFormatMsg());
-        }
+        ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM TEST_TABLE WHERE pk = ENCODE(1, NULL)");
+        assertFalse(rs.next());
     }
 
     @Test
@@ -134,9 +129,8 @@ public class EncodeFunctionIT extends BaseHBaseManagedTimeIT {
         try {
             conn.createStatement().executeQuery("SELECT * FROM TEST_TABLE WHERE pk = ENCODE(1, 'HEX')");
             fail();
-        } catch (IllegalDataException e) {
-            assertEquals("Unexpected exception message", e.getMessage(),
-                EncodeFunction.getUnsupportedEncodeFormatMsg("HEX"));
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.ILLEGAL_DATA.getErrorCode(), e.getErrorCode());
         }
     }
 

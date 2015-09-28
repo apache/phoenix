@@ -33,9 +33,8 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.Time;
 import java.sql.Timestamp;
-import java.text.Format;
-import java.text.ParseException;
 import java.util.Properties;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -157,7 +156,41 @@ public class UpsertValuesIT extends BaseClientManagedTimeIT {
         ResultSet rs = conn.createStatement().executeQuery("select k,to_char(date) from UpsertDateTest");
         assertTrue(rs.next());
         assertEquals("a", rs.getString(1));
-        assertEquals("2013-06-08 00:00:00", rs.getString(2));
+        assertEquals("2013-06-08 00:00:00.000", rs.getString(2));
+    }
+
+    @Test
+    public void testUpsertRandomValues() throws Exception {
+        long ts = nextTimestamp();
+        Properties props = new Properties();
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute("create table UpsertRandomTest (k UNSIGNED_DOUBLE not null primary key, v1 UNSIGNED_DOUBLE, v2 UNSIGNED_DOUBLE, v3 UNSIGNED_DOUBLE, v4 UNSIGNED_DOUBLE)");
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+5));
+        conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute("upsert into UpsertRandomTest values (RAND(), RAND(), RAND(1), RAND(2), RAND(1))");
+        conn.createStatement().execute("upsert into UpsertRandomTest values (RAND(), RAND(), RAND(1), RAND(2), RAND(1))");
+        conn.commit();
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+10));
+        conn = DriverManager.getConnection(getUrl(), props);
+        ResultSet rs = conn.createStatement().executeQuery("select k,v1,v2,v3,v4 from UpsertRandomTest");
+        assertTrue(rs.next());
+        double rand0 = rs.getDouble(1);
+        double rand1 = rs.getDouble(3);
+        double rand2 = rs.getDouble(4);
+        assertTrue(rs.getDouble(1) != rs.getDouble(2));
+        assertTrue(rs.getDouble(2) != rs.getDouble(3));
+        assertTrue(rand1 == rs.getDouble(5));
+        assertTrue(rs.getDouble(4) != rs.getDouble(5));
+        assertTrue(rs.next());
+        assertTrue(rand0 != rs.getDouble(1));
+        assertTrue(rand1 == rs.getDouble(3) && rand1 == rs.getDouble(5));
+        assertTrue(rand2 == rs.getDouble(4));
+        conn.close();
     }
 
     @Test
@@ -514,14 +547,8 @@ public class UpsertValuesIT extends BaseClientManagedTimeIT {
         }
     }
     
-    private static Format DATE_FORMAT = DateUtil.getDateParser(DateUtil.DEFAULT_DATE_FORMAT);
-    
     private static Date toDate(String dateString) {
-        try {
-            return (Date)DATE_FORMAT.parseObject(dateString);
-        } catch (ParseException e) {
-            throw new RuntimeException(e);
-        }
+        return DateUtil.parseDate(dateString);
     }
     
     @Test
@@ -565,6 +592,56 @@ public class UpsertValuesIT extends BaseClientManagedTimeIT {
              closeStmtAndConn(stmt, conn);
         }
     }
-        
+
+    @Test
+    public void testUpsertDateString() throws Exception {
+        long ts = nextTimestamp();
+        Properties props = new Properties();
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        Connection conn = null;
+        PreparedStatement stmt = null;
+        try {
+            conn = DriverManager.getConnection(getUrl(), props);
+            stmt = conn.prepareStatement("create table UpsertDateVal (k varchar, v date not null, t timestamp" +
+                    ", tt time constraint pk primary key (k,v desc))");
+            stmt.execute();
+        } finally {
+            closeStmtAndConn(stmt, conn);
+        }
+
+        String dateStr = "2013-01-01";
+        String timeStampStr = "2013-01-01 04:00:00.123456";
+        String timeStr = "2013-01-01 04:00:00";
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2));
+        try {
+            conn = DriverManager.getConnection(getUrl(), props);
+            stmt = conn.prepareStatement("upsert into UpsertDateVal(k,v,t,tt) values ('a', ?, ?, ?)");
+            stmt.setString(1, dateStr);
+            stmt.setString(2, timeStampStr);
+            stmt.setString(3, timeStr);
+            stmt.executeUpdate();
+            conn.commit();
+        } finally {
+            closeStmtAndConn(stmt, conn);
+        }
+
+        Date date = toDate(dateStr);
+        Timestamp timeStamp = new Timestamp(toDate(timeStampStr).getTime());
+        Time time = new Time(toDate(timeStr).getTime());
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 4));
+        try {
+            conn = DriverManager.getConnection(getUrl(), props);
+            stmt = conn.prepareStatement("select * from UpsertDateVal");
+            ResultSet rs = stmt.executeQuery();
+            assertTrue(rs.next());
+            assertEquals("a", rs.getString(1));
+            assertEquals(date, rs.getDate(2));
+            assertEquals(timeStamp, rs.getTimestamp(3));
+            assertEquals(time, rs.getTime(4));
+            assertFalse(rs.next());
+        } finally {
+            closeStmtAndConn(stmt, conn);
+        }
+    }
     
 }

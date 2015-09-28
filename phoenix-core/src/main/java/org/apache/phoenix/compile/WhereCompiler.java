@@ -49,12 +49,12 @@ import org.apache.phoenix.parse.SubqueryParseNode;
 import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
-import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.TypeMismatchException;
+import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -145,7 +145,7 @@ public class WhereCompiler {
             expression = AndExpression.create(filters);
         }
         
-        if (context.getCurrentTable().getTable().getType() != PTableType.JOIN && context.getCurrentTable().getTable().getType() != PTableType.SUBQUERY) {
+        if (context.getCurrentTable().getTable().getType() != PTableType.PROJECTED && context.getCurrentTable().getTable().getType() != PTableType.SUBQUERY) {
             expression = WhereOptimizer.pushKeyExpressionsToScan(context, statement, expression, extractedNodes);
         }
         setScanFilter(context, statement, expression, whereCompiler.disambiguateWithFamily, hashJoinOptimization);
@@ -173,7 +173,7 @@ public class WhereCompiler {
                 context.addWhereCoditionColumn(ref.getColumn().getFamilyName().getBytes(), ref.getColumn().getName()
                         .getBytes());
             }
-            return ref.newColumnExpression();
+            return ref.newColumnExpression(node.isTableNameCaseSensitive(), node.isCaseSensitive());
         }
 
         @Override
@@ -235,7 +235,7 @@ public class WhereCompiler {
     private static void setScanFilter(StatementContext context, FilterableStatement statement, Expression whereClause, boolean disambiguateWithFamily, boolean hashJoinOptimization) {
         Scan scan = context.getScan();
 
-        if (LiteralExpression.isFalse(whereClause)) {
+        if (LiteralExpression.isBooleanFalseOrNull(whereClause)) {
             context.setScanRanges(ScanRanges.NOTHING);
         } else if (whereClause != null && !LiteralExpression.isTrue(whereClause) && !hashJoinOptimization) {
             Filter filter = null;

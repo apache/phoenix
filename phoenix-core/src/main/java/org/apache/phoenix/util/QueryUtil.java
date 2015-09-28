@@ -34,11 +34,15 @@ import javax.annotation.Nullable;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.util.Addressing;
 import org.apache.hadoop.hbase.zookeeper.ZKConfig;
-import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixDriver;
+import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
+import org.apache.phoenix.parse.HintNode;
+import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.parse.WildcardParseNode;
 import org.apache.phoenix.query.QueryServices;
 
@@ -55,7 +59,7 @@ public final class QueryUtil {
     /**
      *  Column family name index within ResultSet resulting from {@link DatabaseMetaData#getColumns(String, String, String, String)}
      */
-    public static final int COLUMN_FAMILY_POSITION = 24;
+    public static final int COLUMN_FAMILY_POSITION = 25;
 
     /**
      *  Column name index within ResultSet resulting from {@link DatabaseMetaData#getColumns(String, String, String, String)}
@@ -76,6 +80,19 @@ public final class QueryUtil {
     private static final String SELECT = "SELECT";
     private static final String FROM = "FROM";
     private static final String WHERE = "WHERE";
+    private static final String[] CompareOpString = new String[CompareOp.values().length];
+    static {
+        CompareOpString[CompareOp.EQUAL.ordinal()] = "=";
+        CompareOpString[CompareOp.NOT_EQUAL.ordinal()] = "!=";
+        CompareOpString[CompareOp.GREATER.ordinal()] = ">";
+        CompareOpString[CompareOp.LESS.ordinal()] = "<";
+        CompareOpString[CompareOp.GREATER_OR_EQUAL.ordinal()] = ">=";
+        CompareOpString[CompareOp.LESS_OR_EQUAL.ordinal()] = "<=";
+    }
+
+    public static String toSQL(CompareOp op) {
+        return CompareOpString[op.ordinal()];
+    }
     
     /**
      * Private constructor
@@ -96,21 +113,53 @@ public final class QueryUtil {
             throw new IllegalArgumentException("At least one column must be provided for upserts");
         }
 
+        final List<String> columnNames = Lists.transform(columnInfos, new Function<ColumnInfo,String>() {
+            @Override
+            public String apply(ColumnInfo columnInfo) {
+                return columnInfo.getColumnName();
+            }
+        });
+        return constructUpsertStatement(tableName, columnNames, null);
+
+    }
+    
+    /**
+     * Generate an upsert statement based on a list of {@code ColumnInfo}s with parameter markers. The list of
+     * {@code ColumnInfo}s must contain at least one element.
+     *
+     * @param tableName name of the table for which the upsert statement is to be created
+     * @param columns list of columns to be included in the upsert statement
+     * @param hint hint to be added to the UPSERT statement.
+     * @return the created {@code UPSERT} statement
+     */
+    public static String constructUpsertStatement(String tableName, List<String> columns, Hint hint) {
+
+        if (columns.isEmpty()) {
+            throw new IllegalArgumentException("At least one column must be provided for upserts");
+        }
+        
+        String hintStr = "";
+        if(hint != null) {
+           final HintNode node = new HintNode(hint.name());
+           hintStr = node.toString();
+        }
+        
         List<String> parameterList = Lists.newArrayList();
-        for (int i = 0; i < columnInfos.size(); i++) {
+        for (int i = 0; i < columns.size(); i++) {
             parameterList.add("?");
         }
         return String.format(
-                "UPSERT INTO %s (%s) VALUES (%s)",
+                "UPSERT %s INTO %s (%s) VALUES (%s)",
+                hintStr,
                 tableName,
                 Joiner.on(", ").join(
                         Iterables.transform(
-                                columnInfos,
-                                new Function<ColumnInfo, String>() {
+                               columns,
+                                new Function<String, String>() {
                                     @Nullable
                                     @Override
-                                    public String apply(@Nullable ColumnInfo columnInfo) {
-                                        return getEscapedFullColumnName(columnInfo.getColumnName());
+                                    public String apply(@Nullable String columnName) {
+                                        return getEscapedFullColumnName(columnName);
                                     }
                                 })),
                 Joiner.on(", ").join(parameterList));
@@ -152,8 +201,6 @@ public final class QueryUtil {
         if(columnInfos == null || columnInfos.isEmpty()) {
              throw new IllegalArgumentException("At least one column must be provided");
         }
-        // escape the table name to ensure it is case sensitive.
-        final String escapedFullTableName = SchemaUtil.getEscapedFullTableName(fullTableName);
         StringBuilder query = new StringBuilder();
         query.append("SELECT ");
         for (ColumnInfo cinfo : columnInfos) {
@@ -166,20 +213,43 @@ public final class QueryUtil {
         // Remove the trailing comma
         query.setLength(query.length() - 1);
         query.append(" FROM ");
-        query.append(escapedFullTableName);
+        query.append(fullTableName);
         if(conditions != null && conditions.length() > 0) {
             query.append(" WHERE (").append(conditions).append(")");
         }
         return query.toString();
     }
 
-    public static String getUrl(String server) {
-        return PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + server;
+    /**
+     * Create the Phoenix JDBC connection URL from the provided cluster connection details.
+     */
+    public static String getUrl(String zkQuorum) {
+        return getUrlInternal(zkQuorum, null, null);
     }
 
-    public static String getUrl(String server, long port) {
-        String serverUrl = getUrl(server);
-        return serverUrl + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + port
+    /**
+     * Create the Phoenix JDBC connection URL from the provided cluster connection details.
+     */
+    public static String getUrl(String zkQuorum, int clientPort) {
+        return getUrlInternal(zkQuorum, clientPort, null);
+    }
+
+    /**
+     * Create the Phoenix JDBC connection URL from the provided cluster connection details.
+     */
+    public static String getUrl(String zkQuorum, String znodeParent) {
+        return getUrlInternal(zkQuorum, null, znodeParent);
+    }
+
+    /**
+     * Create the Phoenix JDBC connection URL from the provided cluster connection details.
+     */
+    public static String getUrl(String zkQuorum, int port, String znodeParent) {
+        return getUrlInternal(zkQuorum, port, znodeParent);
+    }
+
+    private static String getUrlInternal(String zkQuorum, Integer port, String znodeParent) {
+        return new PhoenixEmbeddedDriver.ConnectionInfo(zkQuorum, port, znodeParent).toUrl()
                 + PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
     }
 
@@ -218,12 +288,14 @@ public final class QueryUtil {
             throws ClassNotFoundException,
             SQLException {
         String url = getConnectionUrl(props, conf);
-        LOG.info("Creating connection with the jdbc url:" + url);
+        LOG.info("Creating connection with the jdbc url: " + url);
+        PropertiesUtil.extractProperties(props, conf);
         return DriverManager.getConnection(url, props);
     }
 
     public static String getConnectionUrl(Properties props, Configuration conf)
             throws ClassNotFoundException, SQLException {
+        // TODO: props is ignored!
         // make sure we load the phoenix driver
         Class.forName(PhoenixDriver.class.getName());
 
@@ -254,19 +326,23 @@ public final class QueryUtil {
         if (port == -1) {
             port = conf.getInt(QueryServices.ZOOKEEPER_PORT_ATTRIB, -1);
             if (port == -1) {
+                // TODO: fall back to the default in HConstants#DEFAULT_ZOOKEPER_CLIENT_PORT
                 throw new RuntimeException("Client zk port was not set!");
             }
         }
         server = Joiner.on(',').join(servers);
+        String znodeParent = conf.get(HConstants.ZOOKEEPER_ZNODE_PARENT,
+                HConstants.DEFAULT_ZOOKEEPER_ZNODE_PARENT);
 
-        return getUrl(server, port);
+        return getUrl(server, port, znodeParent);
     }
     
-    public static String getViewStatement(String schemaName, String tableName, Expression whereClause) {
+    public static String getViewStatement(String schemaName, String tableName, String where) {
         // Only form we currently support for VIEWs: SELECT * FROM t WHERE ...
         return SELECT + " " + WildcardParseNode.NAME + " " + FROM + " " +
                 (schemaName == null || schemaName.length() == 0 ? "" : ("\"" + schemaName + "\".")) +
                 ("\"" + tableName + "\" ") +
-                (WHERE + " " + whereClause.toString());
+                (WHERE + " " + where);
     }
+    
 }

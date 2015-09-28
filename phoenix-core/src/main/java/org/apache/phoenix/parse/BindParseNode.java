@@ -19,6 +19,8 @@ package org.apache.phoenix.parse;
 
 import java.sql.SQLException;
 
+import org.apache.phoenix.compile.ColumnResolver;
+
 
 
 /**
@@ -51,9 +53,31 @@ public class BindParseNode extends NamedParseNode {
         return true;
     }
     
-    @Override
-    public String toString() {
-        return ":" + index;
-    }
+	@Override
+	public int hashCode() {
+		final int prime = 31;
+		int result = super.hashCode();
+		result = prime * result + index;
+		return result;
+	}
 
+	@Override
+	public boolean equals(Object obj) {
+		if (this == obj)
+			return true;
+		if (!super.equals(obj))
+			return false;
+		if (getClass() != obj.getClass())
+			return false;
+		BindParseNode other = (BindParseNode) obj;
+		if (index != other.index)
+			return false;
+		return true;
+	}
+
+    @Override
+    public void toSQL(ColumnResolver resolver, StringBuilder buf) {
+        buf.append(':');
+        buf.append(index);
+    }
 }

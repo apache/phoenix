@@ -23,10 +23,16 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Properties;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.google.common.base.Objects;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Maps;
 
 /**
  * 
@@ -37,6 +43,7 @@ import com.google.common.collect.ImmutableMap;
  * @since 1.2.2
  */
 public class ReadOnlyProps implements Iterable<Entry<String, String>> {
+    private static final Logger logger = LoggerFactory.getLogger(ReadOnlyProps.class);
     public static final ReadOnlyProps EMPTY_PROPS = new ReadOnlyProps();
     private final Map<String, String> props;
     
@@ -59,6 +66,17 @@ public class ReadOnlyProps implements Iterable<Entry<String, String>> {
 
     public ReadOnlyProps(Map<String, String> props) {
         this.props = ImmutableMap.copyOf(props);
+    }
+
+    private ReadOnlyProps(ReadOnlyProps defaultProps, Properties overrides) {
+        Map<String,String> combinedProps = Maps.newHashMapWithExpectedSize(defaultProps.props.size() + overrides.size());
+        combinedProps.putAll(defaultProps.props);
+        for (Entry<Object, Object> entry : overrides.entrySet()) {
+            String key = entry.getKey().toString();
+            String value = entry.getValue().toString();
+            combinedProps.put(key, value);
+        }
+        this.props = ImmutableMap.copyOf(combinedProps);
     }
 
     private static Pattern varPat = Pattern.compile("\\$\\{[^\\}\\$\u0020]+\\}");
@@ -268,5 +286,24 @@ public class ReadOnlyProps implements Iterable<Entry<String, String>> {
     
     public boolean isEmpty() {
         return props.isEmpty();
+    }
+
+    /**
+     * Constructs new map only if necessary for adding the override properties.
+     * @param overrides Map of properties to override current properties.
+     * @return new ReadOnlyProps if in applying the overrides there are
+     * modifications to the current underlying Map, otherwise returns this.
+     */
+    public ReadOnlyProps addAll(Properties overrides) {
+        for (Entry<Object, Object> entry : overrides.entrySet()) {
+            String key = entry.getKey().toString();
+            String value = entry.getValue().toString();
+            String oldValue = props.get(key);
+            if (!Objects.equal(oldValue, value)) {
+                if (logger.isDebugEnabled()) logger.debug("Creating new ReadOnlyProps due to " + key + " with " + oldValue + "!=" + value);
+                return new ReadOnlyProps(this, overrides);
+            }
+        }
+        return this;
     }
 }

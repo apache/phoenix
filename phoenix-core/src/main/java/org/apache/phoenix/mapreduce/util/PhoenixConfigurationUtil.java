@@ -17,27 +17,38 @@
  */
 package org.apache.phoenix.mapreduce.util;
 
-import static org.apache.commons.lang.StringUtils.isNotEmpty;
-
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Map;
+
+import com.google.common.base.Function;
+import com.google.common.base.Joiner;
+import com.google.common.base.Preconditions;
+import com.google.common.base.Splitter;
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Lists;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HBaseConfiguration;
+import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.mapreduce.TableMapReduceUtil;
+import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.lib.db.DBInputFormat.NullDBWritable;
 import org.apache.hadoop.mapreduce.lib.db.DBWritable;
+import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.mapreduce.CsvToKeyValueMapper.DefaultImportPreUpsertKeyValueProcessor;
+import org.apache.phoenix.mapreduce.ImportPreUpsertKeyValueProcessor;
 import org.apache.phoenix.mapreduce.PhoenixInputFormat;
 import org.apache.phoenix.util.ColumnInfo;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 
-import com.google.common.base.Joiner;
-import com.google.common.base.Preconditions;
-import com.google.common.base.Splitter;
-import com.google.common.collect.Lists;
+import static org.apache.commons.lang.StringUtils.isNotEmpty;
 
 /**
  * A utility class to set properties on the {#link Configuration} instance.
@@ -48,36 +59,46 @@ public final class PhoenixConfigurationUtil {
 
     private static final Log LOG = LogFactory.getLog(PhoenixInputFormat.class);
     
-    public static final String UPSERT_COLUMNS = "phoenix.upsert.columns";
-    
     public static final String UPSERT_STATEMENT = "phoenix.upsert.stmt";
-    
-    public static final String UPSERT_COLUMN_INFO_KEY  = "phoenix.upsert.columninfos.list";
     
     public static final String SELECT_STATEMENT = "phoenix.select.stmt";
     
     public static final String UPSERT_BATCH_SIZE = "phoenix.upsert.batch.size";
     
-    public static final String SELECT_COLUMNS = "phoneix.select.query.columns";
-    
-    public static final String SELECT_COLUMN_INFO_KEY  = "phoenix.select.columninfos.list";
-    
     public static final String SCHEMA_TYPE = "phoenix.select.schema.type";
     
-    public static final String COLUMN_NAMES_DELIMITER = "phoenix.column.names.delimiter";
+    public static final String MAPREDUCE_SELECT_COLUMN_VALUE_PREFIX = "phoenix.mr.select.column.value";
+    
+    public static final String MAPREDUCE_SELECT_COLUMN_COUNT = "phoenix.mr.select.column.count";
+    
+    public static final String MAPREDUCE_UPSERT_COLUMN_VALUE_PREFIX = "phoenix.mr.upsert.column.value";
+    
+    public static final String MAPREDUCE_UPSERT_COLUMN_COUNT = "phoenix.mr.upsert.column.count";
     
     public static final String INPUT_TABLE_NAME = "phoenix.input.table.name" ;
     
+    public static final String OUTPUT_TABLE_NAME = "phoenix.colinfo.table.name" ;
+    
     public static final String INPUT_TABLE_CONDITIONS = "phoenix.input.table.conditions" ;
     
-    public static final String OUTPUT_TABLE_NAME = "phoenix.output.table.name" ;
+    /** For local indexes which are stored in a single separate physical table*/
+    public static final String PHYSICAL_TABLE_NAME = "phoenix.output.table.name" ;
     
     public static final long DEFAULT_UPSERT_BATCH_SIZE = 1000;
     
-    public static final String DEFAULT_COLUMN_NAMES_DELIMITER = ",";
-
     public static final String INPUT_CLASS = "phoenix.input.class";
     
+    public static final String CURRENT_SCN_VALUE = "phoenix.mr.currentscn.value";
+    
+    /** Configuration key for the class name of an ImportPreUpsertKeyValueProcessor */
+    public static final String UPSERT_HOOK_CLASS_CONFKEY = "phoenix.mapreduce.import.kvprocessor";
+
+    public static final String MAPREDUCE_INPUT_CLUSTER_QUORUM = "phoenix.mapreduce.input.cluster.quorum";
+    
+    public static final String MAPREDUCE_OUTPUT_CLUSTER_QUORUM = "phoneix.mapreduce.output.cluster.quorum";
+    
+    public static final String HBASE_ZOOKEEPER_CLIENT_PORT = "hbase.zookeeper.property.clientPort";
+
     public enum SchemaType {
         TABLE,
         QUERY;
@@ -102,15 +123,30 @@ public final class PhoenixConfigurationUtil {
         configuration.set(INPUT_TABLE_CONDITIONS, conditions);
     }
     
-    public static void setSelectColumnNames(final Configuration configuration,final String[] columns) {
-        Preconditions.checkNotNull(configuration);
-        final String selectColumnNames = Joiner.on(DEFAULT_COLUMN_NAMES_DELIMITER).join(columns);
-        configuration.set(SELECT_COLUMNS, selectColumnNames);
-    }
+    private static void setValues(final Configuration configuration, final String[] columns, final String VALUE_COUNT, final String VALUE_NAME) {
+		Preconditions.checkNotNull(configuration);
+        configuration.setInt(VALUE_COUNT, columns.length);
+        for (int i=0; i<columns.length; ++i) {
+        	configuration.set(String.format("%s_%d", VALUE_NAME, i), columns[i]);
+        }
+	}
     
-    public static void setSelectColumnNames(final Configuration configuration,final String columns) {
-        Preconditions.checkNotNull(configuration);
-        configuration.set(SELECT_COLUMNS, columns);
+    private static List<String> getValues(final Configuration configuration, final String VALUE_COUNT, final String VALUE_NAME) {
+		Preconditions.checkNotNull(configuration);
+        int numCols = configuration.getInt(VALUE_COUNT, 0);
+        List<String> cols = Lists.newArrayListWithExpectedSize(numCols);
+        for (int i=0; i<numCols; ++i) {
+        	cols.add(configuration.get(String.format("%s_%d", VALUE_NAME, i)));
+        }
+        return cols;
+	}
+    
+    public static void setSelectColumnNames(final Configuration configuration, final String[] columns) {
+        setValues(configuration, columns, MAPREDUCE_SELECT_COLUMN_COUNT, MAPREDUCE_SELECT_COLUMN_VALUE_PREFIX);
+    }
+	   
+    public static List<String> getSelectColumnNames(final Configuration configuration) {
+        return getValues(configuration, MAPREDUCE_SELECT_COLUMN_COUNT, MAPREDUCE_SELECT_COLUMN_VALUE_PREFIX);
     }
     
     public static void setInputClass(final Configuration configuration, Class<? extends DBWritable> inputClass) {
@@ -129,6 +165,12 @@ public final class PhoenixConfigurationUtil {
         configuration.set(SCHEMA_TYPE, schemaType.name());
     }
     
+    public static void setPhysicalTableName(final Configuration configuration, final String tableName) {
+        Preconditions.checkNotNull(configuration);
+        Preconditions.checkNotNull(tableName);
+        configuration.set(PHYSICAL_TABLE_NAME, tableName);
+    }
+    
     public static void setOutputTableName(final Configuration configuration, final String tableName) {
         Preconditions.checkNotNull(configuration);
         Preconditions.checkNotNull(tableName);
@@ -136,22 +178,40 @@ public final class PhoenixConfigurationUtil {
     }
     
     public static void setUpsertColumnNames(final Configuration configuration,final String[] columns) {
-        Preconditions.checkNotNull(configuration);
-        final String upsertColumnNames = Joiner.on(DEFAULT_COLUMN_NAMES_DELIMITER).join(columns);
-        configuration.set(UPSERT_COLUMNS, upsertColumnNames);
+        setValues(configuration, columns, MAPREDUCE_UPSERT_COLUMN_COUNT, MAPREDUCE_UPSERT_COLUMN_VALUE_PREFIX);
     }
     
-    public static void setUpsertColumnNames(final Configuration configuration,final String columns) {
-        Preconditions.checkNotNull(configuration);
-        configuration.set(UPSERT_COLUMNS, columns);
+    public static List<String> getUpsertColumnNames(final Configuration configuration) {
+        return getValues(configuration, MAPREDUCE_UPSERT_COLUMN_COUNT, MAPREDUCE_UPSERT_COLUMN_VALUE_PREFIX);
     }
-    
    
     public static void setBatchSize(final Configuration configuration, final Long batchSize) {
         Preconditions.checkNotNull(configuration);
         configuration.setLong(UPSERT_BATCH_SIZE, batchSize);
     }
     
+    /**
+     * Sets which HBase cluster a Phoenix MapReduce job should read from
+     * @param configuration
+     * @param quorum ZooKeeper quorum string for HBase cluster the MapReduce job will read from
+     */
+    public static void setInputCluster(final Configuration configuration,
+            final String quorum) {
+        Preconditions.checkNotNull(configuration);
+        configuration.set(MAPREDUCE_INPUT_CLUSTER_QUORUM, quorum);
+    }
+
+    /**
+     * Sets which HBase cluster a Phoenix MapReduce job should write to
+     * @param configuration
+     * @param quorum ZooKeeper quorum string for HBase cluster the MapReduce job will write to
+     */
+    public static void setOutputCluster(final Configuration configuration,
+            final String quorum) {
+        Preconditions.checkNotNull(configuration);
+        configuration.set(MAPREDUCE_OUTPUT_CLUSTER_QUORUM, quorum);
+    }
+        
     public static Class<?> getInputClass(final Configuration configuration) {
         return configuration.getClass(INPUT_CLASS, NullDBWritable.class);
     }
@@ -163,41 +223,38 @@ public final class PhoenixConfigurationUtil {
     
     public static List<ColumnInfo> getUpsertColumnMetadataList(final Configuration configuration) throws SQLException {
         Preconditions.checkNotNull(configuration);
+        List<ColumnInfo> columnMetadataList = null;
+        columnMetadataList = ColumnInfoToStringEncoderDecoder.decode(configuration);
+        if (columnMetadataList!=null && !columnMetadataList.isEmpty()) {
+            return columnMetadataList;
+        }
         final String tableName = getOutputTableName(configuration);
         Preconditions.checkNotNull(tableName);
-        final String columnInfoStr = configuration.get(UPSERT_COLUMN_INFO_KEY);
-        if(isNotEmpty(columnInfoStr)) {
-            return ColumnInfoToStringEncoderDecoder.decode(columnInfoStr);
-        }
-        final Connection connection = ConnectionUtil.getConnection(configuration);
-        String upsertColumns = configuration.get(UPSERT_COLUMNS);
-        List<String> upsertColumnList = null;
-        if(isNotEmpty(upsertColumns)) {
-            final String columnNamesDelimiter = configuration.get(COLUMN_NAMES_DELIMITER, DEFAULT_COLUMN_NAMES_DELIMITER);
-            upsertColumnList = Lists.newArrayList(Splitter.on(columnNamesDelimiter).omitEmptyStrings().trimResults().split(upsertColumns));
-            LOG.info(String.format("UseUpsertColumns=%s, upsertColumns=%s, upsertColumnSet.size()=%s, parsedColumns=%s "
-                    ,!upsertColumnList.isEmpty(),upsertColumns, upsertColumnList.size(), Joiner.on(DEFAULT_COLUMN_NAMES_DELIMITER).join(upsertColumnList)
+        final Connection connection = ConnectionUtil.getOutputConnection(configuration);
+        List<String> upsertColumnList = PhoenixConfigurationUtil.getUpsertColumnNames(configuration);
+        if(!upsertColumnList.isEmpty()) {
+            LOG.info(String.format("UseUpsertColumns=%s, upsertColumnList.size()=%s, upsertColumnList=%s "
+                    ,!upsertColumnList.isEmpty(), upsertColumnList.size(), Joiner.on(",").join(upsertColumnList)
                     ));
         } 
-       List<ColumnInfo> columnMetadataList = PhoenixRuntime.generateColumnInfo(connection, tableName, upsertColumnList);
-       final String encodedColumnInfos = ColumnInfoToStringEncoderDecoder.encode(columnMetadataList);
-       // we put the encoded column infos in the Configuration for re usability. 
-       configuration.set(UPSERT_COLUMN_INFO_KEY, encodedColumnInfos);
+       columnMetadataList = PhoenixRuntime.generateColumnInfo(connection, tableName, upsertColumnList);
+       // we put the encoded column infos in the Configuration for re usability.
+       ColumnInfoToStringEncoderDecoder.encode(configuration, columnMetadataList); 
        connection.close();
        return columnMetadataList;
     }
     
      public static String getUpsertStatement(final Configuration configuration) throws SQLException {
         Preconditions.checkNotNull(configuration);
-        final String tableName = getOutputTableName(configuration);
-        Preconditions.checkNotNull(tableName);
         String upsertStmt = configuration.get(UPSERT_STATEMENT);
         if(isNotEmpty(upsertStmt)) {
             return upsertStmt;
         }
-        final boolean useUpsertColumns = isNotEmpty(configuration.get(UPSERT_COLUMNS,""));
+        final String tableName = getOutputTableName(configuration);
+        Preconditions.checkNotNull(tableName);
+        List<String> upsertColumnNames = PhoenixConfigurationUtil.getUpsertColumnNames(configuration);
         final List<ColumnInfo> columnMetadataList = getUpsertColumnMetadataList(configuration);
-        if (useUpsertColumns) {
+        if (!upsertColumnNames.isEmpty()) {
             // Generating UPSERT statement without column name information.
             upsertStmt = QueryUtil.constructUpsertStatement(tableName, columnMetadataList);
             LOG.info("Phoenix Custom Upsert Statement: "+ upsertStmt);
@@ -213,31 +270,28 @@ public final class PhoenixConfigurationUtil {
     
     public static List<ColumnInfo> getSelectColumnMetadataList(final Configuration configuration) throws SQLException {
         Preconditions.checkNotNull(configuration);
-        final String columnInfoStr = configuration.get(SELECT_COLUMN_INFO_KEY);
-        if(isNotEmpty(columnInfoStr)) {
-            return ColumnInfoToStringEncoderDecoder.decode(columnInfoStr);
+        List<ColumnInfo> columnMetadataList = null;
+        columnMetadataList = ColumnInfoToStringEncoderDecoder.decode(configuration);
+        if (columnMetadataList!=null && !columnMetadataList.isEmpty()) {
+            return columnMetadataList;
         }
         final String tableName = getInputTableName(configuration);
         Preconditions.checkNotNull(tableName);
-        final Connection connection = ConnectionUtil.getConnection(configuration);
+        final Connection connection = ConnectionUtil.getInputConnection(configuration);
         final List<String> selectColumnList = getSelectColumnList(configuration);
-        final List<ColumnInfo> columnMetadataList = PhoenixRuntime.generateColumnInfo(connection, tableName, selectColumnList);
-        final String encodedColumnInfos = ColumnInfoToStringEncoderDecoder.encode(columnMetadataList);
-        // we put the encoded column infos in the Configuration for re usability. 
-        configuration.set(SELECT_COLUMN_INFO_KEY, encodedColumnInfos);
+        columnMetadataList = PhoenixRuntime.generateColumnInfo(connection, tableName, selectColumnList);
+        // we put the encoded column infos in the Configuration for re usability.
+        ColumnInfoToStringEncoderDecoder.encode(configuration, columnMetadataList);
         connection.close();
         return columnMetadataList;
     }
 
     private static List<String> getSelectColumnList(
             final Configuration configuration) {
-        String selectColumns = configuration.get(SELECT_COLUMNS);
-        List<String> selectColumnList = null;
-        if(isNotEmpty(selectColumns)) {
-            final String columnNamesDelimiter = configuration.get(COLUMN_NAMES_DELIMITER, DEFAULT_COLUMN_NAMES_DELIMITER);
-            selectColumnList = Lists.newArrayList(Splitter.on(columnNamesDelimiter).omitEmptyStrings().trimResults().split(selectColumns));
-            LOG.info(String.format("UseSelectColumns=%s, selectColumns=%s, selectColumnSet.size()=%s, parsedColumns=%s "
-                    ,!selectColumnList.isEmpty(),selectColumns, selectColumnList.size(), Joiner.on(DEFAULT_COLUMN_NAMES_DELIMITER).join(selectColumnList)
+    	List<String> selectColumnList = PhoenixConfigurationUtil.getSelectColumnNames(configuration);
+        if(!selectColumnList.isEmpty()) {
+            LOG.info(String.format("UseSelectColumns=%s, selectColumnList.size()=%s, selectColumnList=%s "
+                    ,!selectColumnList.isEmpty(), selectColumnList.size(), Joiner.on(",").join(selectColumnList)
                     ));
         }
         return selectColumnList;
@@ -263,7 +317,7 @@ public final class PhoenixConfigurationUtil {
         Preconditions.checkNotNull(configuration);
         long batchSize = configuration.getLong(UPSERT_BATCH_SIZE, DEFAULT_UPSERT_BATCH_SIZE);
         if(batchSize <= 0) {
-           Connection conn = ConnectionUtil.getConnection(configuration);
+           Connection conn = ConnectionUtil.getOutputConnection(configuration);
            batchSize = ((PhoenixConnection) conn).getMutateBatchSize();
            conn.close();
         }
@@ -292,8 +346,77 @@ public final class PhoenixConfigurationUtil {
         return configuration.get(INPUT_TABLE_NAME);
     }
 
+    public static String getPhysicalTableName(Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        return configuration.get(PHYSICAL_TABLE_NAME);
+    }
+    
     public static String getOutputTableName(Configuration configuration) {
         Preconditions.checkNotNull(configuration);
         return configuration.get(OUTPUT_TABLE_NAME);
+    }
+    
+    /**
+     * Returns the ZooKeeper quorum string for the HBase cluster a Phoenix MapReduce job will read from
+     * @param configuration
+     * @return ZooKeeper quorum string
+     */
+    public static String getInputCluster(final Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        String quorum = configuration.get(MAPREDUCE_INPUT_CLUSTER_QUORUM);
+        if (quorum == null) {
+            quorum = configuration.get(HConstants.ZOOKEEPER_QUORUM);
+        }
+        return quorum;
+    }
+
+    /**
+     * Returns the ZooKeeper quorum string for the HBase cluster a Phoenix MapReduce job will write to
+     * @param configuration
+     * @return ZooKeeper quorum string
+     */
+    public static String getOutputCluster(final Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        String quorum = configuration.get(MAPREDUCE_OUTPUT_CLUSTER_QUORUM);
+        if (quorum == null) {
+            quorum = configuration.get(HConstants.ZOOKEEPER_QUORUM);
+        }
+        return quorum;
+    }
+    
+    /**
+     * Returns the HBase Client Port
+     * @param configuration
+     * @return
+     */
+    public static Integer getClientPort(final Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        String clientPortString = configuration.get(HBASE_ZOOKEEPER_CLIENT_PORT);
+        return clientPortString==null ? null : Integer.parseInt(clientPortString);
+    }
+
+    public static void loadHBaseConfiguration(Job job) throws IOException {
+        // load hbase-site.xml
+        Configuration hbaseConf = HBaseConfiguration.create();
+        for (Map.Entry<String, String> entry : hbaseConf) {
+            if (job.getConfiguration().get(entry.getKey()) == null) {
+                job.getConfiguration().set(entry.getKey(), entry.getValue());
+            }
+        }
+        //In order to have phoenix working on a secured cluster
+        TableMapReduceUtil.initCredentials(job);
+    }
+    
+    public static ImportPreUpsertKeyValueProcessor loadPreUpsertProcessor(Configuration conf) {
+        Class<? extends ImportPreUpsertKeyValueProcessor> processorClass = null;
+        try {
+            processorClass = conf.getClass(
+                    UPSERT_HOOK_CLASS_CONFKEY, DefaultImportPreUpsertKeyValueProcessor.class,
+                    ImportPreUpsertKeyValueProcessor.class);
+        } catch (Exception e) {
+            throw new IllegalStateException("Couldn't load upsert hook class", e);
+        }
+    
+        return ReflectionUtils.newInstance(processorClass, conf);
     }
 }

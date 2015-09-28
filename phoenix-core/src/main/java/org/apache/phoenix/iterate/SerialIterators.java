@@ -17,9 +17,12 @@
  */
 package org.apache.phoenix.iterate;
 
+import static org.apache.phoenix.monitoring.MetricType.SCAN_BYTES;
+
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
+import java.util.Queue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 
@@ -28,11 +31,9 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.iterate.TableResultIterator.ScannerCreation;
 import org.apache.phoenix.job.JobManager.JobCallable;
+import org.apache.phoenix.monitoring.TaskExecutionMetricsHolder;
 import org.apache.phoenix.trace.util.Tracing;
-import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.ScanUtil;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
@@ -47,20 +48,19 @@ import com.google.common.collect.Lists;
  * @since 0.1
  */
 public class SerialIterators extends BaseResultIterators {
-	private static final Logger logger = LoggerFactory.getLogger(SerialIterators.class);
 	private static final String NAME = "SERIAL";
     private final ParallelIteratorFactory iteratorFactory;
     
-    public SerialIterators(QueryPlan plan, Integer perScanLimit, ParallelIteratorFactory iteratorFactory)
+    public SerialIterators(QueryPlan plan, Integer perScanLimit, ParallelIteratorFactory iteratorFactory, ParallelScanGrouper scanGrouper)
             throws SQLException {
-        super(plan, perScanLimit);
+        super(plan, perScanLimit, scanGrouper);
         Preconditions.checkArgument(perScanLimit != null); // must be a limit specified
         this.iteratorFactory = iteratorFactory;
     }
 
     @Override
     protected void submitWork(List<List<Scan>> nestedScans, List<List<Pair<Scan,Future<PeekingResultIterator>>>> nestedFutures,
-            final List<PeekingResultIterator> allIterators, int estFlattenedSize) {
+            final Queue<PeekingResultIterator> allIterators, int estFlattenedSize) {
         // Pre-populate nestedFutures lists so that we can shuffle the scans
         // and add the future to the right nested list. By shuffling the scans
         // we get better utilization of the cluster since our thread executor
@@ -73,18 +73,15 @@ public class SerialIterators extends BaseResultIterators {
             Scan lastScan = scans.get(scans.size()-1);
             final Scan overallScan = ScanUtil.newScan(firstScan);
             overallScan.setStopRow(lastScan.getStopRow());
+            final String tableName = tableRef.getTable().getPhysicalName().getString();
+            final TaskExecutionMetricsHolder taskMetrics = new TaskExecutionMetricsHolder(context.getReadMetricsQueue(), tableName);
             Future<PeekingResultIterator> future = executor.submit(Tracing.wrap(new JobCallable<PeekingResultIterator>() {
-
                 @Override
                 public PeekingResultIterator call() throws Exception {
                 	List<PeekingResultIterator> concatIterators = Lists.newArrayListWithExpectedSize(scans.size());
                 	for (final Scan scan : scans) {
-	                    long startTime = System.currentTimeMillis();
-	                    ResultIterator scanner = new TableResultIterator(context, tableRef, scan, ScannerCreation.DELAYED);
-	                    if (logger.isDebugEnabled()) {
-	                        logger.debug(LogUtil.addCustomAnnotations("Id: " + scanId + ", Time: " + (System.currentTimeMillis() - startTime) + "ms, Scan: " + scan, ScanUtil.getCustomAnnotations(scan)));
-	                    }
-	                    concatIterators.add(iteratorFactory.newIterator(context, scanner, scan));
+                	    ResultIterator scanner = new TableResultIterator(context, tableRef, scan, context.getReadMetricsQueue().allotMetric(SCAN_BYTES, tableName), ScannerCreation.DELAYED);
+                	    concatIterators.add(iteratorFactory.newIterator(context, scanner, scan, tableName));
                 	}
                 	PeekingResultIterator concatIterator = ConcatResultIterator.newIterator(concatIterators);
                     allIterators.add(concatIterator);
@@ -99,6 +96,11 @@ public class SerialIterators extends BaseResultIterators {
                 @Override
                 public Object getJobId() {
                     return SerialIterators.this;
+                }
+
+                @Override
+                public TaskExecutionMetricsHolder getTaskExecutionMetric() {
+                    return taskMetrics;
                 }
             }, "Serial scanner for table: " + tableRef.getTable().getName().getString()));
             // Add our singleton Future which will execute serially

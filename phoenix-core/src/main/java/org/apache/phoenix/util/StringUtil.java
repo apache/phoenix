@@ -19,6 +19,7 @@ package org.apache.phoenix.util;
 
 import java.util.Arrays;
 
+import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.UndecodableByteException;
 import org.apache.phoenix.schema.SortOrder;
@@ -114,7 +115,13 @@ public class StringUtil {
     }
 
     public static int getBytesInChar(byte b, SortOrder sortOrder) {
-    	Preconditions.checkNotNull(sortOrder);
+        int ret = getBytesInCharNoException(b, sortOrder);
+        if (ret == -1) throw new UndecodableByteException(b);
+        return ret;
+    }
+
+    private static int getBytesInCharNoException(byte b, SortOrder sortOrder) {
+        Preconditions.checkNotNull(sortOrder);
         if (sortOrder == SortOrder.DESC) {
             b = SortOrder.invert(b);
         }
@@ -127,8 +134,7 @@ public class StringUtil {
             return 3;
         if ((c & BYTES_4_MASK) == 0xF0)
             return 4;
-        // Any thing else in the first byte is invalid
-        throw new UndecodableByteException(b);
+        return -1;
     }
 
     public static int calculateUTF8Length(byte[] bytes, int offset, int length, SortOrder sortOrder) {
@@ -140,6 +146,63 @@ public class StringUtil {
             length++;
         }
         return length;
+    }
+
+    // given an array of bytes containing utf-8 encoded strings, starting from curPos, ending before
+    // range, and return the next character offset, -1 if no next character available or
+    // UndecodableByteException
+    private static int calculateNextCharOffset(byte[] bytes, int curPos, int range,
+            SortOrder sortOrder) {
+        int ret = getBytesInCharNoException(bytes[curPos], sortOrder);
+        if (ret == -1) return -1;
+        ret += curPos;
+        if (ret >= range) return -1;
+        return ret;
+    }
+
+    // given an array of bytes containing utf-8 encoded strings, starting from offset, and return
+    // the previous character offset , -1 if UndecodableByteException. curPos points to current
+    // character starting offset.
+    private static int calculatePreCharOffset(byte[] bytes, int curPos, int offset,
+            SortOrder sortOrder) {
+        --curPos;
+        for (int i = 1, pos = curPos - i + 1; i <= 4 && offset <= pos; ++i, --pos) {
+            int ret = getBytesInCharNoException(bytes[pos], sortOrder);
+            if (ret == i) return pos;
+        }
+        return -1;
+    }
+
+    // return actural offsetInBytes corresponding to offsetInStr in utf-8 encoded strings bytes
+    // containing
+    // @param bytes an array of bytes containing utf-8 encoded strings
+    // @param offset
+    // @param length
+    // @param sortOrder
+    // @param offsetInStr offset for utf-8 encoded strings bytes array containing. Can be negative
+    // meaning counting from the end of encoded strings
+    // @return actural offsetInBytes corresponding to offsetInStr. -1 if offsetInStr is out of index
+    public static int calculateUTF8Offset(byte[] bytes, int offset, int length,
+            SortOrder sortOrder, int offsetInStr) {
+        if (offsetInStr == 0) return offset;
+        int ret, range = offset + length;
+        if (offsetInStr > 0) {
+            ret = offset;
+            while (offsetInStr > 0) {
+                ret = calculateNextCharOffset(bytes, ret, range, sortOrder);
+                if (ret == -1) return -1;
+                --offsetInStr;
+            }
+        } else {
+            ret = offset + length;
+            while (offsetInStr < 0) {
+                ret = calculatePreCharOffset(bytes, ret, offset, sortOrder);
+                // if calculateCurCharOffset returns -1, ret must be smaller than offset
+                if (ret < offset) return -1;
+                ++offsetInStr;
+            }
+        }
+        return ret;
     }
 
     // Given an array of bytes containing encoding utf-8 encoded strings, the offset and a length
@@ -203,13 +266,6 @@ public class StringUtil {
 
     public static int getUnpaddedCharLength(byte[] b, int offset, int length, SortOrder sortOrder) {
         return getFirstNonBlankCharIdxFromEnd(b, offset, length, sortOrder) - offset + 1;
-    }
-
-    public static byte[] padChar(byte[] value, int offset, int length, int paddedLength) {
-        byte[] key = new byte[paddedLength];
-        System.arraycopy(value,offset, key, 0, length);
-        Arrays.fill(key, length, paddedLength, SPACE_UTF8);
-        return key;
     }
 
     public static byte[] padChar(byte[] value, Integer byteSize) {
@@ -325,5 +381,14 @@ public class StringUtil {
         if (toIndex > length) {
             throw new ArrayIndexOutOfBoundsException(toIndex);
         }
+    }
+
+    public static String escapeStringConstant(String pattern) {
+        return StringEscapeUtils.escapeSql(pattern); // Need to escape double quotes
     }   
+    
+    public static String escapeBackslash(String input) {
+    	// see http://stackoverflow.com/questions/4653831/regex-how-to-escape-backslashes-and-special-characters
+    	return input.replaceAll("\\\\","\\\\\\\\");
+    }
 }

@@ -20,10 +20,8 @@ package org.apache.phoenix.end2end;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.getAllSplits;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
 import java.io.IOException;
 import java.sql.Array;
@@ -37,27 +35,22 @@ import java.util.Map;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.HColumnDescriptor;
-import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
-import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import com.google.common.collect.Maps;
 
 
-public class StatsCollectorIT extends BaseOwnClusterHBaseManagedTimeIT {
+public class StatsCollectorIT extends StatsCollectorAbstractIT {
     private static final String STATS_TEST_TABLE_NAME = "S";
-    private static final byte[] STATS_TEST_TABLE_BYTES = Bytes.toBytes(STATS_TEST_TABLE_NAME);
         
     @BeforeClass
     public static void doSetup() throws Exception {
@@ -65,6 +58,7 @@ public class StatsCollectorIT extends BaseOwnClusterHBaseManagedTimeIT {
         // Must update config before starting server
         props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20));
         props.put(QueryServices.EXPLAIN_CHUNK_COUNT_ATTRIB, Boolean.TRUE.toString());
+        props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(1024));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 
@@ -307,104 +301,5 @@ public class StatsCollectorIT extends BaseOwnClusterHBaseManagedTimeIT {
         }
         assertEquals(nRows/2+1, keyRanges.size());
         
-    }
-
-
-    private void splitTable(Connection conn, byte[] splitPoint) throws IOException, InterruptedException, SQLException {
-        ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
-        int nRegionsNow = services.getAllTableRegions(STATS_TEST_TABLE_BYTES).size();
-        HBaseAdmin admin = services.getAdmin();
-        try {
-            admin.split(STATS_TEST_TABLE_BYTES, splitPoint);
-            int nTries = 0;
-            int nRegions;
-            do {
-                Thread.sleep(2000);
-                services.clearTableRegionCache(STATS_TEST_TABLE_BYTES);
-                nRegions = services.getAllTableRegions(STATS_TEST_TABLE_BYTES).size();
-                nTries++;
-            } while (nRegions == nRegionsNow && nTries < 10);
-            if (nRegions == nRegionsNow) {
-                fail();
-            }
-            // FIXME: I see the commit of the stats finishing before this with a lower timestamp that the scan timestamp,
-            // yet without this sleep, the query finds the old data. Seems like an HBase bug and a potentially serious one.
-            Thread.sleep(8000);
-        } finally {
-            admin.close();
-        }
-    }
-    
-    @Test
-    public void testSplitUpdatesStats() throws Exception {
-        int nRows = 10;
-        Connection conn;
-        PreparedStatement stmt;
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        conn = DriverManager.getConnection(getUrl(), props);
-        conn.createStatement().execute("CREATE TABLE " + STATS_TEST_TABLE_NAME + "(k VARCHAR PRIMARY KEY, v INTEGER) " + HColumnDescriptor.KEEP_DELETED_CELLS + "=" + Boolean.FALSE);
-        stmt = conn.prepareStatement("UPSERT INTO " + STATS_TEST_TABLE_NAME + " VALUES(?,?)");
-        for (int i = 0; i < nRows; i++) {
-            stmt.setString(1, Character.toString((char) ('a' + i)));
-            stmt.setInt(2, i);
-            stmt.executeUpdate();
-        }
-        conn.commit();
-        
-        ResultSet rs;
-        TestUtil.analyzeTable(conn, STATS_TEST_TABLE_NAME);
-        List<KeyRange>keyRanges = getAllSplits(conn, STATS_TEST_TABLE_NAME);
-        assertEquals(nRows+1, keyRanges.size());
-        rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + STATS_TEST_TABLE_NAME);
-        assertEquals("CLIENT " + (nRows+1) + "-CHUNK " + "PARALLEL 1-WAY FULL SCAN OVER " + STATS_TEST_TABLE_NAME, QueryUtil.getExplainPlan(rs));
-
-        ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
-        List<HRegionLocation> regions = services.getAllTableRegions(STATS_TEST_TABLE_BYTES);
-        assertEquals(1, regions.size());
- 
-        rs = conn.createStatement().executeQuery("SELECT GUIDE_POSTS_COUNT, REGION_NAME FROM SYSTEM.STATS WHERE PHYSICAL_NAME='"+STATS_TEST_TABLE_NAME+"' AND REGION_NAME IS NOT NULL");
-        assertTrue(rs.next());
-        assertEquals(nRows, rs.getLong(1));
-        assertEquals(regions.get(0).getRegionInfo().getRegionNameAsString(), rs.getString(2));
-        assertFalse(rs.next());
-
-        byte[] midPoint = Bytes.toBytes(Character.toString((char) ('a' + (nRows/2))));
-        splitTable(conn, midPoint);
-        
-        keyRanges = getAllSplits(conn, STATS_TEST_TABLE_NAME);
-        assertEquals(nRows+1, keyRanges.size()); // Same number as before because split was at guidepost
-        
-        regions = services.getAllTableRegions(STATS_TEST_TABLE_BYTES);
-        assertEquals(2, regions.size());
-        rs = conn.createStatement().executeQuery("SELECT GUIDE_POSTS_COUNT, REGION_NAME FROM SYSTEM.STATS WHERE PHYSICAL_NAME='"+STATS_TEST_TABLE_NAME+"' AND REGION_NAME IS NOT NULL");
-        assertTrue(rs.next());
-        assertEquals(nRows/2, rs.getLong(1));
-        assertEquals(regions.get(0).getRegionInfo().getRegionNameAsString(), rs.getString(2));
-        assertTrue(rs.next());
-        assertEquals(nRows/2 - 1, rs.getLong(1));
-        assertEquals(regions.get(1).getRegionInfo().getRegionNameAsString(), rs.getString(2));
-        assertFalse(rs.next());
-
-        byte[] midPoint2 = Bytes.toBytes("cj");
-        splitTable(conn, midPoint2);
-        
-        keyRanges = getAllSplits(conn, STATS_TEST_TABLE_NAME);
-        assertEquals(nRows+2, keyRanges.size()); // One extra due to split between guideposts
-        
-        regions = services.getAllTableRegions(STATS_TEST_TABLE_BYTES);
-        assertEquals(3, regions.size());
-        rs = conn.createStatement().executeQuery("SELECT GUIDE_POSTS_COUNT, REGION_NAME FROM SYSTEM.STATS WHERE PHYSICAL_NAME='"+STATS_TEST_TABLE_NAME+"' AND REGION_NAME IS NOT NULL");
-        assertTrue(rs.next());
-        assertEquals(3, rs.getLong(1));
-        assertEquals(regions.get(0).getRegionInfo().getRegionNameAsString(), rs.getString(2));
-        assertTrue(rs.next());
-        assertEquals(2, rs.getLong(1));
-        assertEquals(regions.get(1).getRegionInfo().getRegionNameAsString(), rs.getString(2));
-        assertTrue(rs.next());
-        assertEquals(nRows/2 - 1, rs.getLong(1));
-        assertEquals(regions.get(2).getRegionInfo().getRegionNameAsString(), rs.getString(2));
-        assertFalse(rs.next());
-        
-        conn.close();
     }
 }

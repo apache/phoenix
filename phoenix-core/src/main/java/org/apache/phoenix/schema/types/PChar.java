@@ -17,16 +17,18 @@
  */
 package org.apache.phoenix.schema.types;
 
-import com.google.common.base.Strings;
-import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.exception.ValueTypeIncompatibleException;
-import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.util.StringUtil;
-
 import java.sql.Types;
 import java.text.Format;
 import java.util.Arrays;
+
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.exception.DataExceedsCapacityException;
+import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.StringUtil;
+
+import com.google.common.base.Strings;
 
 /**
  * Fixed length single byte characters
@@ -40,27 +42,38 @@ public class PChar extends PDataType<String> {
   }
 
     @Override
-    public void pad(ImmutableBytesWritable ptr, Integer maxLength) {
+    public void pad(ImmutableBytesWritable ptr, Integer maxLength, SortOrder sortOrder) {
       if (ptr.getLength() >= maxLength) {
         return;
       }
       byte[] newBytes = new byte[maxLength];
       System.arraycopy(ptr.get(), ptr.getOffset(), newBytes, 0, ptr.getLength());
-      Arrays.fill(newBytes, ptr.getLength(), maxLength, StringUtil.SPACE_UTF8);
+      Arrays.fill(newBytes, ptr.getLength(), maxLength, sortOrder == SortOrder.ASC ? StringUtil.SPACE_UTF8 : StringUtil.INVERTED_SPACE_UTF8);
       ptr.set(newBytes);
+    }
+
+    @Override
+    public byte[] pad(byte[] b, Integer maxLength, SortOrder sortOrder) {
+      if (b == null || b.length >= maxLength) {
+        return b;
+      }
+      byte[] newBytes = new byte[maxLength];
+      System.arraycopy(b, 0, newBytes, 0, b.length);
+      Arrays.fill(newBytes, b.length, maxLength, sortOrder == SortOrder.ASC ? StringUtil.SPACE_UTF8 : StringUtil.INVERTED_SPACE_UTF8);
+      return newBytes;
     }
 
     @Override
     public Object pad(Object object, Integer maxLength) {
       String s = (String) object;
       if (s == null) {
-        return s;
+        return Strings.padEnd("", maxLength, ' ');
       }
       if (s.length() == maxLength) {
         return object;
       }
       if (s.length() > maxLength) {
-        throw new ValueTypeIncompatibleException(this,maxLength,null);
+        throw new DataExceedsCapacityException(this,maxLength,null);
       }
       return Strings.padEnd(s, maxLength, ' ');
     }
@@ -68,7 +81,7 @@ public class PChar extends PDataType<String> {
     @Override
     public byte[] toBytes(Object object) {
       if (object == null) {
-        throw newIllegalDataException(this + " may not be null");
+        return ByteUtil.EMPTY_BYTE_ARRAY;
       }
       byte[] b = PVarchar.INSTANCE.toBytes(object);
       if (b.length != ((String) object).length()) {
@@ -172,9 +185,6 @@ public class PChar extends PDataType<String> {
 
     @Override
     public Object toObject(String value) {
-      if (value == null || value.length() == 0) {
-        throw newIllegalDataException(this + " may not be null");
-      }
       if (StringUtil.hasMultiByteChars(value)) {
         throw newIllegalDataException("CHAR types may only contain single byte characters (" + value + ")");
       }
@@ -194,6 +204,11 @@ public class PChar extends PDataType<String> {
     @Override
     public String toStringLiteral(byte[] b, int offset, int length, Format formatter) {
       return PVarchar.INSTANCE.toStringLiteral(b, offset, length, formatter);
+    }
+
+    @Override
+    public String toStringLiteral(Object o, Format formatter) {
+      return PVarchar.INSTANCE.toStringLiteral(o, formatter);
     }
 
     @Override

@@ -28,6 +28,7 @@ import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.coprocessor.GroupedAggregateRegionObserver;
 import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.OrderByExpression;
@@ -44,6 +45,7 @@ import org.apache.phoenix.iterate.OrderedAggregatingResultIterator;
 import org.apache.phoenix.iterate.OrderedResultIterator;
 import org.apache.phoenix.iterate.ParallelIteratorFactory;
 import org.apache.phoenix.iterate.ParallelIterators;
+import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.PeekingResultIterator;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.iterate.SequenceResultIterator;
@@ -53,8 +55,8 @@ import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.types.PInteger;
 
 
 
@@ -75,7 +77,14 @@ public class AggregatePlan extends BaseQueryPlan {
             StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector,
             Integer limit, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory, GroupBy groupBy,
             Expression having) {
-        super(context, statement, table, projector, context.getBindManager().getParameterMetaData(), limit, orderBy, groupBy, parallelIteratorFactory);
+        this(context, statement, table, projector, limit, orderBy, parallelIteratorFactory, groupBy, having, null);
+    }
+    
+    private AggregatePlan(
+            StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector,
+            Integer limit, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory, GroupBy groupBy,
+            Expression having, Expression dynamicFilter) {
+        super(context, statement, table, projector, context.getBindManager().getParameterMetaData(), limit, orderBy, groupBy, parallelIteratorFactory, dynamicFilter);
         this.having = having;
         this.aggregators = context.getAggregationManager().getAggregators();
     }
@@ -101,7 +110,7 @@ public class AggregatePlan extends BaseQueryPlan {
             this.services = services;
         }
         @Override
-        public PeekingResultIterator newIterator(StatementContext context, ResultIterator scanner, Scan scan) throws SQLException {
+        public PeekingResultIterator newIterator(StatementContext context, ResultIterator scanner, Scan scan, String tableName) throws SQLException {
             Expression expression = RowKeyExpression.INSTANCE;
             OrderByExpression orderByExpression = new OrderByExpression(expression, false, true);
             int threshold = services.getProps().getInt(QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB, QueryServicesOptions.DEFAULT_SPOOL_THRESHOLD_BYTES);
@@ -118,9 +127,9 @@ public class AggregatePlan extends BaseQueryPlan {
             this.outerFactory = outerFactory;
         }
         @Override
-        public PeekingResultIterator newIterator(StatementContext context, ResultIterator scanner, Scan scan) throws SQLException {
-            PeekingResultIterator iterator = innerFactory.newIterator(context, scanner, scan);
-            return outerFactory.newIterator(context, iterator, scan);
+        public PeekingResultIterator newIterator(StatementContext context, ResultIterator scanner, Scan scan, String tableName) throws SQLException {
+            PeekingResultIterator iterator = innerFactory.newIterator(context, scanner, scan, tableName);
+            return outerFactory.newIterator(context, iterator, scan, tableName);
         }
     }
 
@@ -140,38 +149,43 @@ public class AggregatePlan extends BaseQueryPlan {
     }
     
     @Override
-    protected ResultIterator newIterator() throws SQLException {
+    protected ResultIterator newIterator(ParallelScanGrouper scanGrouper) throws SQLException {
         if (groupBy.isEmpty()) {
             UngroupedAggregateRegionObserver.serializeIntoScan(context.getScan());
-        } else if (limit != null && orderBy.getOrderByExpressions().isEmpty() && having == null
-                && (  (   statement.isDistinct() && ! statement.isAggregate() )
-                   || ( ! statement.isDistinct() && (   context.getAggregationManager().isEmpty()
-                                                     || BaseScannerRegionObserver.KEY_ORDERED_GROUP_BY_EXPRESSIONS.equals(groupBy.getScanAttribName()) ) ) ) ) {
-            /*
-             * Optimization to early exit from the scan for a GROUP BY or DISTINCT with a LIMIT.
-             * We may exit early according to the LIMIT specified if the query has:
-             * 1) No ORDER BY clause (or the ORDER BY was optimized out). We cannot exit
-             *    early if there's an ORDER BY because the first group may be found last
-             *    in the scan.
-             * 2) No HAVING clause, since we execute the HAVING on the client side. The LIMIT
-             *    needs to be evaluated *after* the HAVING.
-             * 3) DISTINCT clause with no GROUP BY. We cannot exit early if there's a
-             *    GROUP BY, as the GROUP BY is processed on the client-side post aggregation
-             *    if a DISTNCT has a GROUP BY. Otherwise, since there are no aggregate
-             *    functions in a DISTINCT, we can exit early regardless of if the
-             *    groups are in row key order or unordered.
-             * 4) GROUP BY clause with no aggregate functions. This is in the same category
-             *    as (3). If we're using aggregate functions, we need to look at all the
-             *    rows, as otherwise we'd exit early with incorrect aggregate function
-             *    calculations.
-             * 5) GROUP BY clause along the pk axis, as the rows are processed in row key
-             *    order, so we can early exit, even when aggregate functions are used, as
-             *    the rows in the group are contiguous.
-             */
-            context.getScan().setAttribute(BaseScannerRegionObserver.GROUP_BY_LIMIT, PInteger.INSTANCE.toBytes(limit));
+        } else {
+            // Set attribute with serialized expressions for coprocessor
+            GroupedAggregateRegionObserver.serializeIntoScan(context.getScan(), groupBy.getScanAttribName(), groupBy.getKeyExpressions());
+            if (limit != null && orderBy.getOrderByExpressions().isEmpty() && having == null
+                    && (  (   statement.isDistinct() && ! statement.isAggregate() )
+                            || ( ! statement.isDistinct() && (   context.getAggregationManager().isEmpty()
+                                                              || BaseScannerRegionObserver.KEY_ORDERED_GROUP_BY_EXPRESSIONS.equals(groupBy.getScanAttribName()) ) ) ) ) {
+                /*
+                 * Optimization to early exit from the scan for a GROUP BY or DISTINCT with a LIMIT.
+                 * We may exit early according to the LIMIT specified if the query has:
+                 * 1) No ORDER BY clause (or the ORDER BY was optimized out). We cannot exit
+                 *    early if there's an ORDER BY because the first group may be found last
+                 *    in the scan.
+                 * 2) No HAVING clause, since we execute the HAVING on the client side. The LIMIT
+                 *    needs to be evaluated *after* the HAVING.
+                 * 3) DISTINCT clause with no GROUP BY. We cannot exit early if there's a
+                 *    GROUP BY, as the GROUP BY is processed on the client-side post aggregation
+                 *    if a DISTNCT has a GROUP BY. Otherwise, since there are no aggregate
+                 *    functions in a DISTINCT, we can exit early regardless of if the
+                 *    groups are in row key order or unordered.
+                 * 4) GROUP BY clause with no aggregate functions. This is in the same category
+                 *    as (3). If we're using aggregate functions, we need to look at all the
+                 *    rows, as otherwise we'd exit early with incorrect aggregate function
+                 *    calculations.
+                 * 5) GROUP BY clause along the pk axis, as the rows are processed in row key
+                 *    order, so we can early exit, even when aggregate functions are used, as
+                 *    the rows in the group are contiguous.
+                 */
+                context.getScan().setAttribute(BaseScannerRegionObserver.GROUP_BY_LIMIT, PInteger.INSTANCE.toBytes(limit));
+            }
         }
         ParallelIterators parallelIterators = new ParallelIterators(this, null, wrapParallelIteratorFactory());
         splits = parallelIterators.getSplits();
+        scans = parallelIterators.getScans();
 
         AggregatingResultIterator aggResultIterator;
         // No need to merge sort for ungrouped aggregation
@@ -203,5 +217,10 @@ public class AggregatePlan extends BaseQueryPlan {
             resultScanner = new SequenceResultIterator(resultScanner, context.getSequenceManager());
         }
         return resultScanner;
+    }
+
+    @Override
+    public boolean useRoundRobinIterator() throws SQLException {
+        return false;
     }
 }

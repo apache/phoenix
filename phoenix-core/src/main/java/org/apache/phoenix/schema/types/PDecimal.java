@@ -17,7 +17,11 @@
  */
 package org.apache.phoenix.schema.types;
 
-import com.google.common.base.Preconditions;
+import java.math.BigDecimal;
+import java.sql.Timestamp;
+import java.sql.Types;
+import java.text.Format;
+
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.query.QueryConstants;
@@ -25,12 +29,9 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.NumberUtil;
 
-import java.math.BigDecimal;
-import java.sql.Timestamp;
-import java.sql.Types;
-import java.text.Format;
+import com.google.common.base.Preconditions;
 
-public class PDecimal extends PDataType<BigDecimal> {
+public class PDecimal extends PRealNumber<BigDecimal> {
 
   public static final PDecimal INSTANCE = new PDecimal();
 
@@ -390,7 +391,45 @@ public class PDecimal extends PDataType<BigDecimal> {
   }
 
   @Override
+  public String toStringLiteral(Object o, Format formatter) {
+      if (formatter == null) {
+          if(o == null) {
+              return String.valueOf(o);
+          }
+          return ((BigDecimal)o).toPlainString();
+        }
+        return super.toStringLiteral(o, formatter);
+  }
+
+  @Override
   public Object getSampleValue(Integer maxLength, Integer arrayLength) {
     return new BigDecimal((Long) PLong.INSTANCE.getSampleValue(maxLength, arrayLength));
   }
+
+    // take details from org.apache.phoenix.schema.types.PDataType#toBigDecimal(byte[], int, int)
+    @Override
+    public int signum(byte[] bytes, int offset, int length, SortOrder sortOrder, Integer maxLength,
+            Integer scale) {
+        byte signByte;
+        if (sortOrder == SortOrder.DESC) {
+            signByte = SortOrder.invert(bytes[offset]);
+        } else {
+            signByte = bytes[offset];
+        }
+        if (length == 1 && signByte == ZERO_BYTE) {
+            return 0;
+        }
+        return ((signByte & 0x80) == 0) ? -1 : 1;
+    }
+
+    @Override
+    public void abs(byte[] bytes, int offset, int length, SortOrder sortOrder,
+            ImmutableBytesWritable outPtr) {
+        if (sortOrder == SortOrder.DESC) {
+            bytes = SortOrder.invert(bytes, offset, new byte[length], 0, length);
+            offset = 0;
+        }
+        BigDecimal bigDecimal = toBigDecimal(bytes, offset, length);
+        outPtr.set(toBytes(bigDecimal.abs()));
+    }
 }

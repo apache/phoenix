@@ -17,14 +17,15 @@
  */
 package org.apache.phoenix.schema.types;
 
-import com.google.common.base.Preconditions;
-import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.schema.SortOrder;
-
 import java.math.BigDecimal;
 import java.sql.Types;
 
-public class PTinyint extends PDataType<Byte> {
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.schema.SortOrder;
+
+import com.google.common.base.Preconditions;
+
+public class PTinyint extends PWholeNumber<Byte> {
 
   public static final PTinyint INSTANCE = new PTinyint();
 
@@ -126,7 +127,7 @@ public class PTinyint extends PDataType<Byte> {
   @Override
   public boolean isCoercibleTo(PDataType targetType, Object value) {
     if (value != null) {
-      if (equalsAny(targetType, this, PUnsignedDouble.INSTANCE, PUnsignedFloat.INSTANCE,
+      if (equalsAny(targetType, PUnsignedDouble.INSTANCE, PUnsignedFloat.INSTANCE,
           PUnsignedLong.INSTANCE, PUnsignedInt.INSTANCE, PUnsignedSmallint.INSTANCE,
           PUnsignedTinyint.INSTANCE)) {
         byte i = (Byte) value;

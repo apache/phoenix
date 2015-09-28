@@ -30,7 +30,7 @@ import org.apache.phoenix.expression.KeyValueColumnExpression;
  * 
  * @since 0.1
  */
-public abstract class KeyValueExpressionVisitor extends TraverseAllExpressionVisitor<Void> {
+public abstract class KeyValueExpressionVisitor extends StatelessTraverseAllExpressionVisitor<Void> {
     @Override
     abstract public Void visit(KeyValueColumnExpression node);
 }

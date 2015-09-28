@@ -18,7 +18,11 @@
 package org.apache.phoenix.parse;
 
 import java.sql.SQLException;
-import java.util.*;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+
+import org.apache.phoenix.compile.ColumnResolver;
 
 
 
@@ -48,5 +52,39 @@ public class BetweenParseNode extends CompoundParseNode {
             l = acceptChildren(visitor);
         }
         return visitor.visitLeave(this, l);
+    }
+
+	@Override
+	public int hashCode() {
+		final int prime = 31;
+		int result = super.hashCode();
+		result = prime * result + (negate ? 1231 : 1237);
+		return result;
+	}
+
+	@Override
+	public boolean equals(Object obj) {
+		if (this == obj)
+			return true;
+		if (!super.equals(obj))
+			return false;
+		if (getClass() != obj.getClass())
+			return false;
+		BetweenParseNode other = (BetweenParseNode) obj;
+		if (negate != other.negate)
+			return false;
+		return true;
+	}
+
+    
+    @Override
+    public void toSQL(ColumnResolver resolver, StringBuilder buf) {
+        List<ParseNode> children = getChildren();
+        children.get(0).toSQL(resolver, buf);
+        if (negate) buf.append(" NOT");
+        buf.append(" BETWEEN ");
+        children.get(1).toSQL(resolver, buf);
+        buf.append(" AND ");
+        children.get(2).toSQL(resolver, buf);
     }
 }

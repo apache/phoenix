@@ -30,6 +30,7 @@ import org.apache.phoenix.parse.ComparisonParseNode;
 import org.apache.phoenix.parse.DerivedTableNode;
 import org.apache.phoenix.parse.FamilyWildcardParseNode;
 import org.apache.phoenix.parse.JoinTableNode;
+import org.apache.phoenix.parse.NamedNode;
 import org.apache.phoenix.parse.JoinTableNode.JoinType;
 import org.apache.phoenix.parse.LessThanOrEqualParseNode;
 import org.apache.phoenix.parse.NamedTableNode;
@@ -99,7 +100,7 @@ public class StatementNormalizer extends ParseNodeRewriter {
             if (selectNodes != normSelectNodes) {
                 statement = NODE_FACTORY.select(statement.getFrom(), statement.getHint(), statement.isDistinct(),
                         normSelectNodes, statement.getWhere(), statement.getGroupBy(), statement.getHaving(), statement.getOrderBy(),
-                        statement.getLimit(), statement.getBindCount(), statement.isAggregate(), statement.hasSequence());
+                        statement.getLimit(), statement.getBindCount(), statement.isAggregate(), statement.hasSequence(), statement.getSelects(), statement.getUdfParseNodes());
             }
         }
         
@@ -151,7 +152,7 @@ public class StatementNormalizer extends ParseNodeRewriter {
          }
          return super.visitLeave(node, nodes);
     }
-    
+
     @Override
     public ParseNode visitLeave(final BetweenParseNode node, List<ParseNode> nodes) throws SQLException {
        

@@ -50,8 +50,8 @@ import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.protobuf.ProtobufUtil;
-import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.HRegionServer;
+import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.wal.HLogKey;
 import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -201,7 +201,7 @@ public class TestWALRecoveryCaching {
 
     // kill the server where the tables live - this should trigger distributed log splitting
     // find the regionserver that matches the passed server
-    List<HRegion> online = new ArrayList<HRegion>();
+    List<Region> online = new ArrayList<Region>();
     online.addAll(getRegionsFromServerForTable(util.getMiniHBaseCluster(), shared,
       testTable.getTableName()));
     online.addAll(getRegionsFromServerForTable(util.getMiniHBaseCluster(), shared,
@@ -216,7 +216,7 @@ public class TestWALRecoveryCaching {
         LOG.info("\t== Offline: " + server.getServerName());
         continue;
       }
-      List<HRegionInfo> regions = ProtobufUtil.getOnlineRegions(server);
+      List<HRegionInfo> regions = ProtobufUtil.getOnlineRegions(server.getRSRpcServices());
       LOG.info("\t" + server.getServerName() + " regions: " + regions);
     }
 
@@ -262,14 +262,14 @@ public class TestWALRecoveryCaching {
   }
 
   /**
-   * @param miniHBaseCluster
+   * @param cluster
    * @param server
-   * @param bs
+   * @param table
    * @return
    */
-  private List<HRegion> getRegionsFromServerForTable(MiniHBaseCluster cluster, ServerName server,
+  private List<Region> getRegionsFromServerForTable(MiniHBaseCluster cluster, ServerName server,
       byte[] table) {
-    List<HRegion> online = Collections.emptyList();
+    List<Region> online = Collections.emptyList();
     for (RegionServerThread rst : cluster.getRegionServerThreads()) {
       // if its the server we are going to kill, get the regions we want to reassign
       if (rst.getRegionServer().getServerName().equals(server)) {
@@ -281,9 +281,9 @@ public class TestWALRecoveryCaching {
   }
 
   /**
-   * @param miniHBaseCluster
-   * @param indexedTableName
-   * @param tableNameString
+   * @param cluster
+   * @param indexTable
+   * @param primaryTable
    */
   private ServerName ensureTablesLiveOnSameServer(MiniHBaseCluster cluster, byte[] indexTable,
       byte[] primaryTable) throws Exception {
@@ -305,21 +305,21 @@ public class TestWALRecoveryCaching {
       tryIndex = !tryIndex;
       for (ServerName server : servers) {
         // find the regionserver that matches the passed server
-        List<HRegion> online = getRegionsFromServerForTable(cluster, server, table);
+        List<Region> online = getRegionsFromServerForTable(cluster, server, table);
 
         LOG.info("Shutting down and reassigning regions from " + server);
         cluster.stopRegionServer(server);
         cluster.waitForRegionServerToStop(server, TIMEOUT);
 
         // force reassign the regions from the table
-        for (HRegion region : online) {
+        for (Region region : online) {
           cluster.getMaster().assignRegion(region.getRegionInfo());
         }
 
         LOG.info("Starting region server:" + server.getHostname());
-        cluster.startRegionServer(server.getHostname());
+        cluster.startRegionServer(server.getHostname(), server.getPort());
 
-        cluster.waitForRegionServerToStart(server.getHostname(), TIMEOUT);
+        cluster.waitForRegionServerToStart(server.getHostname(), server.getPort(), TIMEOUT);
 
         // start a server to get back to the base number of servers
         LOG.info("STarting server to replace " + server);
@@ -363,10 +363,9 @@ public class TestWALRecoveryCaching {
 
   private Set<ServerName> getServersForTable(MiniHBaseCluster cluster, byte[] table)
       throws Exception {
-    List<HRegion> indexRegions = cluster.getRegions(table);
     Set<ServerName> indexServers = new HashSet<ServerName>();
-    for (HRegion region : indexRegions) {
-      indexServers.add(cluster.getServerHoldingRegion(region.getRegionName()));
+    for (Region region : cluster.getRegions(table)) {
+      indexServers.add(cluster.getServerHoldingRegion(null, region.getRegionInfo().getRegionName()));
     }
     return indexServers;
   }

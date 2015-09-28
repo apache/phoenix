@@ -27,15 +27,17 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.phoenix.execute.DescVarLengthFastByteComparisons;
+import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.OrderByExpression;
+import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.util.SizedUtil;
 
 import com.google.common.base.Function;
 import com.google.common.collect.Collections2;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Ordering;
-import org.apache.phoenix.expression.Expression;
-import org.apache.phoenix.expression.OrderByExpression;
-import org.apache.phoenix.schema.tuple.Tuple;
-import org.apache.phoenix.util.SizedUtil;
 
 /**
  * Result scanner that sorts aggregated rows by columns specified in the ORDER BY clause.
@@ -155,7 +157,12 @@ public class OrderedResultIterator implements PeekingResultIterator {
         Ordering<ResultEntry> ordering = null;
         int pos = 0;
         for (OrderByExpression col : orderByExpressions) {
-            Ordering<ImmutableBytesWritable> o = Ordering.from(new ImmutableBytesWritable.Comparator());
+            Expression e = col.getExpression();
+            Comparator<ImmutableBytesWritable> comparator = 
+                    e.getSortOrder() == SortOrder.DESC && !e.getDataType().isFixedWidth() 
+                    ? buildDescVarLengthComparator() 
+                    : new ImmutableBytesWritable.Comparator();
+            Ordering<ImmutableBytesWritable> o = Ordering.from(comparator);
             if(!col.isAscending()) o = o.reverse();
             o = col.isNullsLast() ? o.nullsLast() : o.nullsFirst();
             Ordering<ResultEntry> entryOrdering = o.onResultOf(new NthKey(pos++));
@@ -164,6 +171,23 @@ public class OrderedResultIterator implements PeekingResultIterator {
         return ordering;
     }
 
+    /*
+     * Same as regular comparator, but if all the bytes match and the length is
+     * different, returns the longer length as bigger.
+     */
+    private static Comparator<ImmutableBytesWritable> buildDescVarLengthComparator() {
+        return new Comparator<ImmutableBytesWritable>() {
+
+            @Override
+            public int compare(ImmutableBytesWritable o1, ImmutableBytesWritable o2) {
+                return DescVarLengthFastByteComparisons.compareTo(
+                        o1.get(), o1.getOffset(), o1.getLength(),
+                        o2.get(), o2.getOffset(), o2.getLength());
+            }
+            
+        };
+    }
+    
     @Override
     public Tuple next() throws SQLException {
         return getResultIterator().next();
@@ -185,6 +209,7 @@ public class OrderedResultIterator implements PeekingResultIterator {
                 public Tuple next() throws SQLException {
                     ResultEntry entry = queueEntries.poll();
                     if (entry == null || (limit != null && ++count > limit)) {
+                        resultIterator.close();
                         resultIterator = PeekingResultIterator.EMPTY_ITERATOR;
                         return null;
                     }
@@ -239,7 +264,8 @@ public class OrderedResultIterator implements PeekingResultIterator {
     }
 
     @Override
-    public void close()  {
+    public void close() throws SQLException {
+        resultIterator.close();
         resultIterator = PeekingResultIterator.EMPTY_ITERATOR;
     }
 
@@ -250,13 +276,13 @@ public class OrderedResultIterator implements PeekingResultIterator {
         planSteps.add("CLIENT" + (limit == null ? "" : " TOP " + limit + " ROW"  + (limit == 1 ? "" : "S"))  + " SORTED BY " + orderByExpressions.toString());
     }
 
-	@Override
-	public String toString() {
-		return "OrderedResultIterator [thresholdBytes=" + thresholdBytes
-				+ ", limit=" + limit + ", delegate=" + delegate
-				+ ", orderByExpressions=" + orderByExpressions
-				+ ", estimatedByteSize=" + estimatedByteSize
-				+ ", resultIterator=" + resultIterator + ", byteSize="
-				+ byteSize + "]";
-	}
+    @Override
+    public String toString() {
+        return "OrderedResultIterator [thresholdBytes=" + thresholdBytes
+                + ", limit=" + limit + ", delegate=" + delegate
+                + ", orderByExpressions=" + orderByExpressions
+                + ", estimatedByteSize=" + estimatedByteSize
+                + ", resultIterator=" + resultIterator + ", byteSize="
+                + byteSize + "]";
+    }
 }

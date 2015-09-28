@@ -17,14 +17,15 @@
  */
 package org.apache.phoenix.schema.types;
 
-import com.google.common.base.Preconditions;
-import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.schema.SortOrder;
-
 import java.math.BigDecimal;
 import java.sql.Types;
 
-public class PSmallint extends PDataType<Short> {
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.schema.SortOrder;
+
+import com.google.common.base.Preconditions;
+
+public class PSmallint extends PWholeNumber<Short> {
 
   public static final PSmallint INSTANCE = new PSmallint();
 

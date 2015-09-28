@@ -25,18 +25,19 @@ import java.util.Map.Entry;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.Type;
+import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.FSDataInputStreamWrapper;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.io.Reference;
 import org.apache.hadoop.hbase.io.hfile.CacheConfig;
 import org.apache.hadoop.hbase.io.hfile.HFileScanner;
-import org.apache.hadoop.hbase.regionserver.StoreFile;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.index.IndexMaintainer;
 
@@ -46,11 +47,11 @@ import org.apache.phoenix.index.IndexMaintainer;
  * that sort lowest and 'top' is the second half of the file with keys that sort greater than those
  * of the bottom half. The top includes the split files midkey, of the key that follows if it does
  * not exist in the file.
- * 
+ *
  * <p>
  * This type works in tandem with the {@link Reference} type. This class is used reading while
  * Reference is used writing.
- * 
+ *
  * <p>
  * This file is not splitable. Calls to {@link #midkey()} return null.
  */
@@ -63,60 +64,72 @@ public class IndexHalfStoreFileReader extends StoreFile.Reader {
     private final byte[] splitkey;
     private final byte[] splitRow;
     private final Map<ImmutableBytesWritable, IndexMaintainer> indexMaintainers;
-    private final byte[][] viewConstants; 
+    private final byte[][] viewConstants;
     private final int offset;
     private final HRegionInfo regionInfo;
-    private final HRegionInfo parent;
+    private final byte[] regionStartKeyInHFile;
 
     /**
+     * @param fs
      * @param p
      * @param cacheConf
      * @param r
+     * @param conf
+     * @param indexMaintainers
+     * @param viewConstants
+     * @param regionInfo
+     * @param regionStartKeyInHFile
+     * @param splitKey
      * @throws IOException
      */
     public IndexHalfStoreFileReader(final FileSystem fs, final Path p, final CacheConfig cacheConf,
             final Reference r, final Configuration conf,
             final Map<ImmutableBytesWritable, IndexMaintainer> indexMaintainers,
             final byte[][] viewConstants, final HRegionInfo regionInfo,
-            final HRegionInfo parent) throws IOException {
+            final byte[] regionStartKeyInHFile, byte[] splitKey) throws IOException {
         super(fs, p, cacheConf, conf);
-        this.splitkey = r.getSplitKey();
+        this.splitkey = splitKey == null ? r.getSplitKey() : splitKey;
         // Is it top or bottom half?
         this.top = Reference.isTopFileRegion(r.getFileRegion());
         this.splitRow = CellUtil.cloneRow(KeyValue.createKeyValueFromKey(splitkey));
         this.indexMaintainers = indexMaintainers;
         this.viewConstants = viewConstants;
         this.regionInfo = regionInfo;
-        this.parent = parent;
-        this.offset =
-                parent.getStartKey().length != 0 ? parent.getStartKey().length
-                        : parent.getEndKey().length;
+        this.regionStartKeyInHFile = regionStartKeyInHFile;
+        this.offset = regionStartKeyInHFile.length;
     }
 
     /**
+     * @param fs
      * @param p
      * @param cacheConf
+     * @param in
+     * @param size
      * @param r
+     * @param conf
+     * @param indexMaintainers
+     * @param viewConstants
+     * @param regionInfo
+     * @param regionStartKeyInHFile
+     * @param splitKey
      * @throws IOException
      */
     public IndexHalfStoreFileReader(final FileSystem fs, final Path p, final CacheConfig cacheConf,
             final FSDataInputStreamWrapper in, long size, final Reference r,
             final Configuration conf,
             final Map<ImmutableBytesWritable, IndexMaintainer> indexMaintainers,
-            final byte[][] viewConstants, final HRegionInfo regionInfo, final HRegionInfo parent)
-            throws IOException {
+            final byte[][] viewConstants, final HRegionInfo regionInfo,
+            byte[] regionStartKeyInHFile, byte[] splitKey) throws IOException {
         super(fs, p, in, size, cacheConf, conf);
-        this.splitkey = r.getSplitKey();
+        this.splitkey = splitKey == null ? r.getSplitKey() : splitKey;
         // Is it top or bottom half?
         this.top = Reference.isTopFileRegion(r.getFileRegion());
         this.splitRow = CellUtil.cloneRow(KeyValue.createKeyValueFromKey(splitkey));
         this.indexMaintainers = indexMaintainers;
         this.viewConstants = viewConstants;
         this.regionInfo = regionInfo;
-        this.parent = parent;
-        this.offset =
-                parent.getStartKey().length != 0 ? parent.getStartKey().length
-                        : parent.getEndKey().length;
+        this.regionStartKeyInHFile = regionStartKeyInHFile;
+        this.offset = regionStartKeyInHFile.length;
     }
 
     protected boolean isTop() {
@@ -131,6 +144,7 @@ public class IndexHalfStoreFileReader extends StoreFile.Reader {
             final HFileScanner delegate = s;
             public boolean atEnd = false;
 
+            @Override
             public ByteBuffer getKey() {
                 if (atEnd) {
                     return null;
@@ -147,8 +161,8 @@ public class IndexHalfStoreFileReader extends StoreFile.Reader {
                 // If it is top store file replace the StartKey of the Key with SplitKey
                 return getChangedKey(delegate.getKeyValue(), changeBottomKeys);
             }
-            
-            private ByteBuffer getChangedKey(KeyValue kv, boolean changeBottomKeys) {
+
+            private ByteBuffer getChangedKey(Cell kv, boolean changeBottomKeys) {
                 // new KeyValue(row, family, qualifier, timestamp, type, value)
                 byte[] newRowkey = getNewRowkeyByRegionStartKeyReplacedWithSplitKey(kv, changeBottomKeys);
                 KeyValue newKv =
@@ -160,7 +174,7 @@ public class IndexHalfStoreFileReader extends StoreFile.Reader {
                 return keyBuffer;
             }
 
-            private byte[] getNewRowkeyByRegionStartKeyReplacedWithSplitKey(KeyValue kv, boolean changeBottomKeys) {
+            private byte[] getNewRowkeyByRegionStartKeyReplacedWithSplitKey(Cell kv, boolean changeBottomKeys) {
                 int lenOfRemainingKey = kv.getRowLength() - offset;
                 byte[] keyReplacedStartKey = new byte[lenOfRemainingKey + splitRow.length];
                 System.arraycopy(changeBottomKeys ? new byte[splitRow.length] : splitRow, 0,
@@ -170,6 +184,7 @@ public class IndexHalfStoreFileReader extends StoreFile.Reader {
                 return keyReplacedStartKey;
             }
 
+            @Override
             public String getKeyString() {
                 if (atEnd) {
                     return null;
@@ -177,6 +192,7 @@ public class IndexHalfStoreFileReader extends StoreFile.Reader {
                 return Bytes.toStringBinary(getKey());
             }
 
+            @Override
             public ByteBuffer getValue() {
                 if (atEnd) {
                     return null;
@@ -184,6 +200,7 @@ public class IndexHalfStoreFileReader extends StoreFile.Reader {
                 return delegate.getValue();
             }
 
+            @Override
             public String getValueString() {
                 if (atEnd) {
                     return null;
@@ -191,11 +208,12 @@ public class IndexHalfStoreFileReader extends StoreFile.Reader {
                 return Bytes.toStringBinary(getValue());
             }
 
-            public KeyValue getKeyValue() {
+            @Override
+            public Cell getKeyValue() {
                 if (atEnd) {
                     return null;
                 }
-                KeyValue kv = delegate.getKeyValue();
+                Cell kv = delegate.getKeyValue();
                 boolean changeBottomKeys =
                         regionInfo.getStartKey().length == 0 && splitRow.length != offset;
                 if (!top) {
@@ -210,10 +228,11 @@ public class IndexHalfStoreFileReader extends StoreFile.Reader {
                                 kv.getQualifierOffset(), kv.getQualifierLength(),
                                 kv.getTimestamp(), Type.codeToType(kv.getTypeByte()),
                                 kv.getValueArray(), kv.getValueOffset(), kv.getValueLength(),
-                                kv.getTags());
+                                kv.getTagsArray(), kv.getTagsOffset(), kv.getTagsLength());
                 return changedKv;
             }
 
+            @Override
             public boolean next() throws IOException {
                 if (atEnd) {
                     return false;
@@ -235,11 +254,14 @@ public class IndexHalfStoreFileReader extends StoreFile.Reader {
                 }
             }
 
+            @Override
             public boolean seekBefore(byte[] key) throws IOException {
                 return seekBefore(key, 0, key.length);
             }
 
+            @Override
             public boolean seekBefore(byte[] key, int offset, int length) throws IOException {
+
                 if (top) {
                     byte[] fk = getFirstKey();
                     // This will be null when the file is empty in which we can not seekBefore to
@@ -251,8 +273,7 @@ public class IndexHalfStoreFileReader extends StoreFile.Reader {
                         return false;
                     }
                     KeyValue replacedKey = getKeyPresentInHFiles(key);
-                    return this.delegate.seekBefore(replacedKey.getBuffer(),
-                        replacedKey.getKeyOffset(), replacedKey.getKeyLength());
+                    return this.delegate.seekBefore(replacedKey);
                 } else {
                     // The equals sign isn't strictly necessary just here to be consistent with
                     // seekTo
@@ -263,6 +284,13 @@ public class IndexHalfStoreFileReader extends StoreFile.Reader {
                 return this.delegate.seekBefore(key, offset, length);
             }
 
+            @Override
+            public boolean seekBefore(Cell cell) throws IOException {
+                KeyValue kv = KeyValueUtil.ensureKeyValue(cell);
+                return seekBefore(kv.getBuffer(), kv.getKeyOffset(), kv.getKeyLength());
+            }
+
+            @Override
             public boolean seekTo() throws IOException {
                 boolean b = delegate.seekTo();
                 if (!b) {
@@ -283,10 +311,12 @@ public class IndexHalfStoreFileReader extends StoreFile.Reader {
                 }
             }
 
+            @Override
             public int seekTo(byte[] key) throws IOException {
                 return seekTo(key, 0, key.length);
             }
 
+            @Override
             public int seekTo(byte[] key, int offset, int length) throws IOException {
                 if (top) {
                     if (getComparator().compare(key, offset, length, splitkey, 0, splitkey.length) < 0) {
@@ -317,10 +347,18 @@ public class IndexHalfStoreFileReader extends StoreFile.Reader {
                 return delegate.seekTo(key, offset, length);
             }
 
+            @Override
+            public int seekTo(Cell cell) throws IOException {
+                KeyValue kv = KeyValueUtil.ensureKeyValue(cell);
+                return seekTo(kv.getBuffer(), kv.getKeyOffset(), kv.getKeyLength());
+            }
+
+            @Override
             public int reseekTo(byte[] key) throws IOException {
                 return reseekTo(key, 0, key.length);
             }
 
+            @Override
             public int reseekTo(byte[] key, int offset, int length) throws IOException {
                 if (top) {
                     if (getComparator().compare(key, offset, length, splitkey, 0, splitkey.length) < 0) {
@@ -344,18 +382,33 @@ public class IndexHalfStoreFileReader extends StoreFile.Reader {
                 return delegate.reseekTo(key, offset, length);
             }
 
+            @Override
+            public int reseekTo(Cell cell) throws IOException {
+                KeyValue kv = KeyValueUtil.ensureKeyValue(cell);
+                return reseekTo(kv.getBuffer(), kv.getKeyOffset(), kv.getKeyLength());
+            }
+
+            @Override
             public org.apache.hadoop.hbase.io.hfile.HFile.Reader getReader() {
                 return this.delegate.getReader();
             }
 
             // TODO: Need to change as per IndexHalfStoreFileReader
+            @Override
             public boolean isSeeked() {
                 return this.delegate.isSeeked();
+            }
+
+            // Added for compatibility with HBASE-13109
+            // Once we drop support for older versions, add an @override annotation here
+            // and figure out how to get the next indexed key
+            public Cell getNextIndexedKey() {
+                return null; // indicate that we cannot use the optimization
             }
         };
     }
 
-    private boolean isSatisfiedMidKeyCondition(KeyValue kv) {
+    private boolean isSatisfiedMidKeyCondition(Cell kv) {
         if (CellUtil.isDelete(kv) && kv.getValueLength() == 0) {
             // In case of a Delete type KV, let it be going to both the daughter regions.
             // No problems in doing so. In the correct daughter region where it belongs to, this delete
@@ -387,21 +440,19 @@ public class IndexHalfStoreFileReader extends StoreFile.Reader {
     /**
      * In case of top half store, the passed key will be with the start key of the daughter region.
      * But in the actual HFiles, the key will be with the start key of the old parent region. In
-     * order to make the real seek in the HFiles, we need to build the old key. 
-     * 
+     * order to make the real seek in the HFiles, we need to build the old key.
+     *
      * The logic here is just replace daughter region start key with parent region start key
      * in the key part.
-     * 
+     *
      * @param key
-     * 
+     *
      */
     private KeyValue getKeyPresentInHFiles(byte[] key) {
         KeyValue keyValue = new KeyValue(key);
         int rowLength = keyValue.getRowLength();
         int rowOffset = keyValue.getRowOffset();
-        byte[] parentStartKey =
-                parent.getStartKey().length == 0 ? new byte[parent.getEndKey().length] : parent
-                        .getStartKey();
+
         int daughterStartKeyLength =
                 regionInfo.getStartKey().length == 0 ? regionInfo.getEndKey().length : regionInfo
                         .getStartKey().length;
@@ -412,22 +463,23 @@ public class IndexHalfStoreFileReader extends StoreFile.Reader {
                 && keyValue.getTimestamp() == HConstants.LATEST_TIMESTAMP
                 && Bytes.compareTo(keyValue.getRowArray(), keyValue.getRowOffset(),
                     keyValue.getRowLength(), splitRow, 0, splitRow.length) == 0
-                && keyValue.isDeleteFamily()) {
+                && CellUtil.isDeleteFamily(keyValue)) {
             KeyValue createFirstDeleteFamilyOnRow =
-                    KeyValue.createFirstDeleteFamilyOnRow(parentStartKey, keyValue.getFamily());
+                    KeyValueUtil.createFirstDeleteFamilyOnRow(regionStartKeyInHFile,
+                            keyValue.getFamily());
             return createFirstDeleteFamilyOnRow;
         }
 
-        short length = (short) (keyValue.getRowLength() - daughterStartKeyLength + parentStartKey.length);
+        short length = (short) (keyValue.getRowLength() - daughterStartKeyLength + offset);
         byte[] replacedKey =
                 new byte[length + key.length - (rowOffset + rowLength) + ROW_KEY_LENGTH];
         System.arraycopy(Bytes.toBytes(length), 0, replacedKey, 0, ROW_KEY_LENGTH);
-        System.arraycopy(parentStartKey, 0, replacedKey, ROW_KEY_LENGTH, parentStartKey.length);
+        System.arraycopy(regionStartKeyInHFile, 0, replacedKey, ROW_KEY_LENGTH, offset);
         System.arraycopy(keyValue.getRowArray(), keyValue.getRowOffset() + daughterStartKeyLength,
-            replacedKey, parentStartKey.length + ROW_KEY_LENGTH, keyValue.getRowLength()
+            replacedKey, offset + ROW_KEY_LENGTH, keyValue.getRowLength()
                     - daughterStartKeyLength);
         System.arraycopy(key, rowOffset + rowLength, replacedKey,
-            parentStartKey.length + keyValue.getRowLength() - daughterStartKeyLength
+            offset + keyValue.getRowLength() - daughterStartKeyLength
                     + ROW_KEY_LENGTH, key.length - (rowOffset + rowLength));
         return KeyValue.createKeyValueFromKey(replacedKey);
     }

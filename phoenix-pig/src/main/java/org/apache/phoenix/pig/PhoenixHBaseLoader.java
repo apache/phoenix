@@ -106,12 +106,13 @@ public final class PhoenixHBaseLoader extends LoadFunc implements LoadMetadata {
     }
     
     @Override
-    public void setLocation(String location, Job job) throws IOException {        
+    public void setLocation(String location, Job job) throws IOException {
+        PhoenixConfigurationUtil.loadHBaseConfiguration(job);
+
         final Configuration configuration = job.getConfiguration();
         //explicitly turning off combining splits. 
         configuration.setBoolean("pig.noSplitCombination", true);
-        //to have phoenix working on a secured cluster
-        TableMapReduceUtil.initCredentials(job);
+
         this.initializePhoenixPigConfiguration(location, configuration);
     }
 
@@ -150,7 +151,7 @@ public final class PhoenixHBaseLoader extends LoadFunc implements LoadMetadata {
             }
             PhoenixConfigurationUtil.setInputTableName(this.config, this.tableName);
             if(!isEmpty(selectedColumns)) {
-                PhoenixConfigurationUtil.setSelectColumnNames(this.config, selectedColumns);   
+                PhoenixConfigurationUtil.setSelectColumnNames(this.config, selectedColumns.split(","));   
             }
         } catch(IllegalArgumentException iae) {
             printUsage(location);
@@ -222,6 +223,8 @@ public final class PhoenixHBaseLoader extends LoadFunc implements LoadMetadata {
         if(schema != null) {
             return schema;
         }
+
+        PhoenixConfigurationUtil.loadHBaseConfiguration(job);
         final Configuration configuration = job.getConfiguration();
         this.initializePhoenixPigConfiguration(location, configuration);
         this.schema = PhoenixPigSchemaUtil.getResourceSchema(this.config);

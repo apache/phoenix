@@ -25,6 +25,7 @@ import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
+import org.apache.phoenix.expression.visitor.StatelessTraverseAllExpressionVisitor;
 import org.apache.phoenix.expression.visitor.TraverseAllExpressionVisitor;
 import org.apache.phoenix.schema.tuple.SingleKeyValueTuple;
 
@@ -56,7 +57,7 @@ public abstract class SingleKeyValueComparisonFilter extends BooleanExpressionFi
     protected abstract int compare(byte[] cfBuf, int cfOffset, int cfLength, byte[] cqBuf, int cqOffset, int cqLength);
 
     private void init() {
-        TraverseAllExpressionVisitor<Void> visitor = new TraverseAllExpressionVisitor<Void>() {
+        TraverseAllExpressionVisitor<Void> visitor = new StatelessTraverseAllExpressionVisitor<Void>() {
             @Override
             public Void visit(KeyValueColumnExpression expression) {
                 cf = expression.getColumnFamily();
@@ -82,8 +83,8 @@ public abstract class SingleKeyValueComparisonFilter extends BooleanExpressionFi
           // We found all the columns, but did not match the expression, so skip to next row
           return ReturnCode.NEXT_ROW;
         }
-        byte[] buf = keyValue.getValueArray();
-        if (compare(buf, keyValue.getFamilyOffset(), keyValue.getFamilyLength(), buf, keyValue.getQualifierOffset(), keyValue.getQualifierLength()) != 0) {
+        if (compare(keyValue.getFamilyArray(), keyValue.getFamilyOffset(), keyValue.getFamilyLength(),
+                keyValue.getQualifierArray(), keyValue.getQualifierOffset(), keyValue.getQualifierLength()) != 0) {
             // Remember the key in case this is the only key value we see.
             // We'll need it if we have row key columns too.
             inputTuple.setKey(KeyValueUtil.ensureKeyValue(keyValue));

@@ -36,15 +36,14 @@ DIR_REL_BIN_PATH=$DIR_REL_ROOT/$DIR_REL_BIN
 REL_SRC=phoenix-$PHOENIX-src
 DIR_REL_SRC_TAR_PATH=$DIR_REL_ROOT/src
 DIR_REL_BIN_TAR_PATH=$DIR_REL_ROOT/bin
-DIR_BIN=bin
+DIR_BIN=$DIR_REL_BIN_PATH/bin
 DIR_EXAMPLES=$DIR_REL_BIN_PATH/examples
-DIR_COMMON=$DIR_REL_BIN_PATH/common
-DIR_HADOOP=$DIR_REL_BIN_PATH/hadoop
 DIR_DOCS=dev/release_files
 
 # Verify no target exists
 mvn clean; mvn clean -Dhadoop.profile=2; rm -rf $DIR_REL_BASE;
 RESULT=$(find -iname target)
+
 if [ -z "$RESULT" ]
 then
   echo "Verified target directory does not exist.";
@@ -63,7 +62,7 @@ mkdir $DIR_REL_BIN_PATH;
 mkdir $DIR_REL_BIN_TAR_PATH;
 mkdir $DIR_REL_SRC_TAR_PATH;
 mkdir $DIR_EXAMPLES;
-mkdir $DIR_COMMON;
+mkdir $DIR_BIN;
 
 # Move src tar
 mv $REL_SRC.tar.gz $DIR_REL_SRC_TAR_PATH;
@@ -71,44 +70,19 @@ mv $REL_SRC.tar.gz $DIR_REL_SRC_TAR_PATH;
 # Copy common jars
 mvn clean apache-rat:check package -DskipTests;
 rm -rf $(find . -type d -name archive-tmp);
-cp $(find -iname phoenix-$PHOENIX-client-minimal.jar) $DIR_COMMON;
-cp $(find -iname phoenix-$PHOENIX-client-without-hbase.jar) $DIR_COMMON;
-cp $(find -iname phoenix-core-$PHOENIX.jar) $DIR_COMMON;
+
+# Copy all phoenix-*.jars to release dir
+phx_jars=$(find -iname phoenix-*.jar)
+cp $phx_jars $DIR_REL_BIN_PATH;
+
+# Copy bin
+cp bin/* $DIR_BIN;
 
 # Copy release docs
-function_copy() {
-  if [ ! -f $1 ];
-   then
-    echo ""; echo "ERROR!! Please check-in $1 file before running make_rc.sh"; 
-    exit -1; 
-  fi
-  cp $1 $DIR_REL_BIN_PATH;
-}
-
-function_copy CHANGES;
-function_copy DISCLAIMER;
-function_copy README;
 cp $DIR_DOCS/* $DIR_REL_BIN_PATH;
 
 # Copy examples
 cp -r examples/* $DIR_EXAMPLES
-
-# Copy hadoop specific jars
-function_copy_hadoop_specific_jars() {
-  mkdir $DIR_HADOOP$1;
-  mkdir $DIR_HADOOP$1/$DIR_BIN;
-  cp $DIR_BIN/* $DIR_HADOOP$1/$DIR_BIN;
-  cp $(find -iname phoenix-$PHOENIX-client.jar) $DIR_HADOOP$1/phoenix-$PHOENIX-client-hadoop$1.jar;
-  cp $(find -iname phoenix-$PHOENIX-server.jar) $DIR_HADOOP$1/phoenix-$PHOENIX-server-hadoop$1.jar;
-  cp $(find -iname phoenix-core-$PHOENIX-tests.jar) $DIR_HADOOP$1/phoenix-core-$PHOENIX-tests-hadoop$1.jar;
-  cp $(find -iname phoenix-flume-$PHOENIX.jar) $DIR_HADOOP$1/phoenix-flume-$PHOENIX-hadoop$1.jar;
-  cp $(find -iname phoenix-flume-$PHOENIX-tests.jar) $DIR_HADOOP$1/phoenix-flume-$PHOENIX-tests-hadoop$1.jar;
-  cp $(find -iname phoenix-pig-$PHOENIX.jar) $DIR_HADOOP$1/phoenix-pig-$PHOENIX-hadoop$1.jar;
-  cp $(find -iname phoenix-pig-$PHOENIX-tests.jar) $DIR_HADOOP$1/phoenix-pig-$PHOENIX-tests-hadoop$1.jar;
-}
-function_copy_hadoop_specific_jars 1;
-mvn clean package -Dhadoop.profile=2 -DskipTests;
-function_copy_hadoop_specific_jars 2;
 
 # Generate bin tar
 tar cvzf $DIR_REL_BIN_TAR_PATH/$DIR_REL_BIN.tar.gz -C $DIR_REL_ROOT phoenix-$PHOENIX-bin;

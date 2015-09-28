@@ -35,4 +35,33 @@ public class LimitNode {
     public ParseNode getLimitParseNode() {
         return bindNode == null ? limitNode : bindNode;
     }
+    
+    @Override
+    public String toString() {
+        return bindNode == null ? limitNode.toString() : bindNode.toString();
+    }
+
+    @Override
+    public int hashCode() {
+        final int prime = 31;
+        int result = 1;
+        result = prime * result + ((bindNode == null) ? 0 : bindNode.hashCode());
+        result = prime * result + ((limitNode == null) ? 0 : limitNode.hashCode());
+        return result;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) return true;
+        if (obj == null) return false;
+        if (getClass() != obj.getClass()) return false;
+        LimitNode other = (LimitNode)obj;
+        if (bindNode == null) {
+            if (other.bindNode != null) return false;
+        } else if (!bindNode.equals(other.bindNode)) return false;
+        if (limitNode == null) {
+            if (other.limitNode != null) return false;
+        } else if (!limitNode.equals(other.limitNode)) return false;
+        return true;
+    }
 }

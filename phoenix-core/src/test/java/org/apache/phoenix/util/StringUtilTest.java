@@ -17,7 +17,9 @@
 package org.apache.phoenix.util;
 
 import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
 
+import org.apache.phoenix.schema.SortOrder;
 import org.junit.Test;
 
 public class StringUtilTest {
@@ -48,5 +50,33 @@ public class StringUtilTest {
     public void testLpadZeroPadding() throws Exception {
         testLpad("ABCD", 4, "1234", "ABCD");
     }
-    
+
+    @Test
+    public void testCalculateUTF8Offset() throws Exception {
+        String tmp, padding = "padding", data = "零一二三四五六七八九", trailing = "trailing";
+        byte[] bytes = (padding + data + trailing).getBytes();
+        int ret, offset = padding.getBytes().length, length = data.getBytes().length;
+
+        tmp = padding;
+        for (int i = 0; i < data.length(); ++i) {
+            ret = StringUtil.calculateUTF8Offset(bytes, offset, length, SortOrder.ASC, i);
+            assertEquals(tmp.getBytes().length, ret);
+            tmp = tmp + data.charAt(i);
+        }
+        for (int i = data.length(); i < data.length() + 10; ++i) {
+            ret = StringUtil.calculateUTF8Offset(bytes, offset, length, SortOrder.ASC, i);
+            assertEquals(-1, ret);
+        }
+
+        for (int i = -data.length() - 10; i < -data.length(); ++i) {
+            ret = StringUtil.calculateUTF8Offset(bytes, offset, length, SortOrder.ASC, i);
+            assertEquals(-1, ret);
+        }
+        tmp = padding;
+        for (int i = -data.length(); i <= -1; ++i) {
+            ret = StringUtil.calculateUTF8Offset(bytes, offset, length, SortOrder.ASC, i);
+            assertEquals("i=" + i, tmp.getBytes().length, ret);
+            tmp = tmp + data.charAt(i + data.length());
+        }
+    }
 }

@@ -19,15 +19,18 @@ package org.apache.phoenix.parse;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
-public class UpsertStatement extends DMLStatement { 
+public class UpsertStatement extends DMLStatement {
     private final List<ColumnName> columns;
     private final List<ParseNode> values;
     private final SelectStatement select;
     private final HintNode hint;
 
-    public UpsertStatement(NamedTableNode table, HintNode hint, List<ColumnName> columns, List<ParseNode> values, SelectStatement select, int bindCount) {
-        super(table, bindCount);
+    public UpsertStatement(NamedTableNode table, HintNode hint, List<ColumnName> columns,
+            List<ParseNode> values, SelectStatement select, int bindCount,
+            Map<String, UDFParseNode> udfParseNodes) {
+        super(table, bindCount, udfParseNodes);
         this.columns = columns == null ? Collections.<ColumnName>emptyList() : columns;
         this.values = values;
         this.select = select;

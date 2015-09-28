@@ -22,6 +22,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.io.IOException;
 import java.io.StringReader;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
@@ -29,24 +30,43 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.schema.SortOrder;
 import org.junit.Test;
 
 
 public class QueryParserTest {
+    private void parseQuery(String sql) throws IOException, SQLException {
+        SQLParser parser = new SQLParser(new StringReader(sql));
+        BindableStatement stmt = null;
+        stmt = parser.parseStatement();
+        if (stmt.getOperation() != Operation.QUERY) {
+            return;
+        }
+        String newSQL = stmt.toString();
+        SQLParser newParser = new SQLParser(new StringReader(newSQL));
+        BindableStatement newStmt = null;
+        try {
+            newStmt = newParser.parseStatement();
+        } catch (SQLException e) {
+            fail("Unable to parse new:\n" + newSQL);
+        }
+        assertEquals("Expected equality:\n" + sql + "\n" + newSQL, stmt, newStmt);
+    }
+    
     @Test
     public void testParsePreQuery0() throws Exception {
-        SQLParser parser = new SQLParser(new StringReader(
+        String sql = ((
             "select a from b\n" +
             "where ((ind.name = 'X')" +
             "and rownum <= (1000 + 1000))\n"
             ));
-        parser.parseStatement();
+        parseQuery(sql);
     }
 
     @Test
     public void testParsePreQuery1() throws Exception {
-        SQLParser parser = new SQLParser(new StringReader(
+        String sql = ((
             "select /*gatherSlowStats*/ count(1) from core.search_name_lookup ind\n" +
             "where( (ind.name = 'X'\n" +
             "and rownum <= 1 + 2)\n" +
@@ -54,12 +74,12 @@ public class QueryParserTest {
             "and (ind.key_prefix = '00T')\n" +
             "and (ind.name_type = 't'))"
             ));
-        parser.parseStatement();
+        parseQuery(sql);
     }
 
     @Test
     public void testParsePreQuery2() throws Exception {
-        SQLParser parser = new SQLParser(new StringReader(
+        String sql = ((
             "select /*gatherSlowStats*/ count(1) from core.custom_index_value ind\n" + 
             "where (ind.string_value in ('a', 'b', 'c', 'd'))\n" + 
             "and rownum <= ( 3 + 1 )\n" + 
@@ -68,12 +88,12 @@ public class QueryParserTest {
             "and (ind.deleted = '0')\n" + 
             "and (ind.index_num = 1)"
             ));
-        parser.parseStatement();
+        parseQuery(sql);
     }
 
     @Test
     public void testParsePreQuery3() throws Exception {
-        SQLParser parser = new SQLParser(new StringReader(
+        String sql = ((
             "select /*gatherSlowStats*/ count(1) from core.custom_index_value ind\n" + 
             "where (ind.number_value > 3)\n" + 
             "and rownum <= 1000\n" + 
@@ -82,54 +102,54 @@ public class QueryParserTest {
             "and (ind.deleted = '0'))\n" + 
             "and (ind.index_num = 2)"
             ));
-        parser.parseStatement();
+        parseQuery(sql);
     }
 
     @Test
     public void testParsePreQuery4() throws Exception {
-        SQLParser parser = new SQLParser(new StringReader(
+        String sql = ((
             "select /*+ index(t iecustom_entity_data_created) */ /*gatherSlowStats*/ count(1) from core.custom_entity_data t\n" + 
             "where (t.created_date > to_date('01/01/2001'))\n" + 
             "and rownum <= 4500\n" + 
             "and (t.organization_id = '000000000000000')\n" + 
             "and (t.key_prefix = '001')"
             ));
-        parser.parseStatement();
+        parseQuery(sql);
     }
 
     @Test
     public void testCountDistinctQuery() throws Exception {
-        SQLParser parser = new SQLParser(new StringReader(
+        String sql = ((
                 "select count(distinct foo) from core.custom_entity_data t\n"
                         + "where (t.created_date > to_date('01/01/2001'))\n"
                         + "and (t.organization_id = '000000000000000')\n"
                         + "and (t.key_prefix = '001')\n" + "limit 4500"));
-        parser.parseStatement();
+        parseQuery(sql);
     }
 
     @Test
     public void testIsNullQuery() throws Exception {
-        SQLParser parser = new SQLParser(new StringReader(
+        String sql = ((
             "select count(foo) from core.custom_entity_data t\n" + 
             "where (t.created_date is null)\n" + 
             "and (t.organization_id is not null)\n"
             ));
-        parser.parseStatement();
+        parseQuery(sql);
     }
 
     @Test
     public void testAsInColumnAlias() throws Exception {
-        SQLParser parser = new SQLParser(new StringReader(
+        String sql = ((
             "select count(foo) AS c from core.custom_entity_data t\n" + 
             "where (t.created_date is null)\n" + 
             "and (t.organization_id is not null)\n"
             ));
-        parser.parseStatement();
+        parseQuery(sql);
     }
 
     @Test
     public void testParseJoin1() throws Exception {
-        SQLParser parser = new SQLParser(new StringReader(
+        String sql = ((
             "select /*SOQL*/ \"Id\"\n" + 
             "from (select /*+ ordered index(cft) */\n" + 
             "cft.val188 \"Marketing_Offer_Code__c\",\n" + 
@@ -143,12 +163,12 @@ public class QueryParserTest {
             "and (t.account_id != '000000000000000'))\n" + 
             "where (\"Marketing_Offer_Code__c\" = 'FSCR')"
             ));
-        parser.parseStatement();
+        parseQuery(sql);
     }
 
     @Test
     public void testParseJoin2() throws Exception {
-        SQLParser parser = new SQLParser(new StringReader(
+        String sql = ((
             "select /*rptacctlist 00O40000002C3of*/ \"00N40000001M8VK\",\n" + 
             "\"00N40000001M8VK.ID\",\n" + 
             "\"00N30000000r0K2\",\n" + 
@@ -175,12 +195,12 @@ public class QueryParserTest {
             "AND (\"00N40000001M8VK\" is null or \"00N40000001M8VK\" in ('BRIAN IRWIN', 'BRIAN MILLER', 'COLLEEN HORNYAK', 'ERNIE ZAVORAL JR', 'JAMIE TRIMBUR', 'JOE ANTESBERGER', 'MICHAEL HYTLA', 'NATHAN DELSIGNORE', 'SANJAY GANDHI', 'TOM BASHIOUM'))\n" + 
             "AND (\"LAST_UPDATE\" >= to_date('2009-08-01 07:00:00'))"
             ));
-        parser.parseStatement();
+        parseQuery(sql);
     }
     
     @Test
     public void testNegative1() throws Exception {
-        SQLParser parser = new SQLParser(new StringReader(
+        String sql = ((
             "select /*gatherSlowStats*/ count(1) core.search_name_lookup ind\n" +
             "where (ind.name = 'X')\n" +
             "and rownum <= 2000\n" +
@@ -189,16 +209,16 @@ public class QueryParserTest {
             "and (ind.name_type = 't')"
             ));
         try {
-            parser.parseStatement();
+            parseQuery(sql);
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.MISMATCHED_TOKEN.getErrorCode(), e.getErrorCode());
+            assertEquals(SQLExceptionCode.MISSING_TOKEN.getErrorCode(), e.getErrorCode());
         }
     }
 
     @Test
     public void testNegative2() throws Exception {
-        SQLParser parser = new SQLParser(new StringReader(
+        String sql = ((
             "seelect /*gatherSlowStats*/ count(1) from core.search_name_lookup ind\n" +
             "where (ind.name = 'X')\n" +
             "and rownum <= 2000\n" +
@@ -207,7 +227,7 @@ public class QueryParserTest {
             "and (ind.name_type = 't')"
             ));
         try {
-            parser.parseStatement();
+            parseQuery(sql);
             fail();
         } catch (SQLException e) {
             assertTrue(e.getMessage(), e.getMessage().contains("ERROR 601 (42P00): Syntax error. Encountered \"seelect\" at line 1, column 1."));
@@ -216,7 +236,7 @@ public class QueryParserTest {
 
     @Test
     public void testNegative3() throws Exception {
-        SQLParser parser = new SQLParser(new StringReader(
+        String sql = ((
             "select /*gatherSlowStats*/ count(1) from core.search_name_lookup ind\n" +
             "where (ind.name = 'X')\n" +
             "and rownum <= 2000\n" +
@@ -225,7 +245,7 @@ public class QueryParserTest {
             "and (ind.name_type = 't'))"
             ));
         try {
-            parser.parseStatement();
+            parseQuery(sql);
             fail();
         } catch (SQLException e) {
             assertTrue(e.getMessage(), e.getMessage().contains("ERROR 603 (42P00): Syntax error. Unexpected input. Expecting \"EOF\", got \")\" at line 6, column 26."));
@@ -234,7 +254,7 @@ public class QueryParserTest {
 
     @Test
     public void testNegativeCountDistinct() throws Exception {
-        SQLParser parser = new SQLParser(new StringReader(
+        String sql = ((
             "select /*gatherSlowStats*/ max( distinct 1) from core.search_name_lookup ind\n" +
             "where (ind.name = 'X')\n" +
             "and rownum <= 2000\n" +
@@ -243,7 +263,7 @@ public class QueryParserTest {
             "and (ind.name_type = 't')"
             ));
         try {
-            parser.parseStatement();
+            parseQuery(sql);
             fail();
         } catch (SQLFeatureNotSupportedException e) {
             // expected
@@ -252,7 +272,7 @@ public class QueryParserTest {
 
     @Test
     public void testNegativeCountStar() throws Exception {
-        SQLParser parser = new SQLParser(new StringReader(
+        String sql = ((
             "select /*gatherSlowStats*/ max(*) from core.search_name_lookup ind\n" +
             "where (ind.name = 'X')\n" +
             "and rownum <= 2000\n" +
@@ -261,7 +281,7 @@ public class QueryParserTest {
             "and (ind.name_type = 't')"
             ));
         try {
-            parser.parseStatement();
+            parseQuery(sql);
             fail();
         } catch (SQLException e) {
             assertTrue(e.getMessage(), e.getMessage().contains("ERROR 601 (42P00): Syntax error. Encountered \"*\" at line 1, column 32."));
@@ -269,31 +289,13 @@ public class QueryParserTest {
     }
 
     @Test
-    public void testUnknownFunction() throws Exception {
-        SQLParser parser = new SQLParser(new StringReader(
-            "select /*gatherSlowStats*/ bogus_function(ind.key_prefix) from core.search_name_lookup ind\n" +
-            "where (ind.name = 'X')\n" +
-            "and rownum <= 2000\n" +
-            "and (ind.organization_id = '000000000000000')\n" +
-            "and (ind.key_prefix = '00T')\n" +
-            "and (ind.name_type = 't')"
-            ));
-        try {
-            parser.parseStatement();
-            fail();
-        } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.UNKNOWN_FUNCTION.getErrorCode(), e.getErrorCode());
-        }
-    }
-
-    @Test
     public void testNegativeNonBooleanWhere() throws Exception {
-        SQLParser parser = new SQLParser(new StringReader(
+        String sql = ((
             "select /*gatherSlowStats*/ max( distinct 1) from core.search_name_lookup ind\n" +
             "where 1"
             ));
         try {
-            parser.parseStatement();
+            parseQuery(sql);
             fail();
         } catch (SQLFeatureNotSupportedException e) {
             // expected
@@ -302,70 +304,70 @@ public class QueryParserTest {
     
     @Test
     public void testCommentQuery() throws Exception {
-        SQLParser parser = new SQLParser(new StringReader(
+        String sql = ((
             "select a from b -- here we come\n" +
             "where ((ind.name = 'X') // to save the day\n" +
             "and rownum /* won't run */ <= (1000 + 1000))\n"
             ));
-        parser.parseStatement();
+        parseQuery(sql);
     }
 
     @Test
     public void testQuoteEscapeQuery() throws Exception {
-        SQLParser parser = new SQLParser(new StringReader(
+        String sql = ((
             "select a from b\n" +
             "where ind.name = 'X''Y'\n"
             ));
-        parser.parseStatement();
+        parseQuery(sql);
     }
 
     @Test
     public void testSubtractionInSelect() throws Exception {
-        SQLParser parser = new SQLParser(new StringReader(
+        String sql = ((
             "select a, 3-1-2, -4- -1-1 from b\n" +
             "where d = c - 1\n"
             ));
-        parser.parseStatement();
+        parseQuery(sql);
     }
 
     @Test
     public void testParsingStatementWithMispellToken() throws Exception {
         try {
-            SQLParser parser = new SQLParser(new StringReader(
+            String sql = ((
                     "selects a from b\n" +
                     "where e = d\n"));
-            parser.parseStatement();
+            parseQuery(sql);
             fail("Should have caught exception.");
         } catch (SQLException e) {
             assertTrue(e.getMessage(), e.getMessage().contains("ERROR 601 (42P00): Syntax error. Encountered \"selects\" at line 1, column 1."));
         }
         try {
-            SQLParser parser = new SQLParser(new StringReader(
+            String sql = ((
                     "select a froms b\n" +
                     "where e = d\n"));
-            parser.parseStatement();
+            parseQuery(sql);
             fail("Should have caught exception.");
         } catch (SQLException e) {
-            assertTrue(e.getMessage(), e.getMessage().contains("ERROR 602 (42P00): Syntax error. Missing \"FROM\" at line 1, column 16."));
+            assertTrue(e.getMessage(), e.getMessage().contains("ERROR 602 (42P00): Syntax error. Missing \"EOF\" at line 1, column 16."));
         }
     }
 
     @Test
     public void testParsingStatementWithExtraToken() throws Exception {
         try {
-            SQLParser parser = new SQLParser(new StringReader(
+            String sql = ((
                     "select a,, from b\n" +
                     "where e = d\n"));
-            parser.parseStatement();
+            parseQuery(sql);
             fail("Should have caught exception.");
         } catch (SQLException e) {
             assertTrue(e.getMessage(), e.getMessage().contains("ERROR 601 (42P00): Syntax error. Encountered \",\" at line 1, column 10."));
         }
         try {
-            SQLParser parser = new SQLParser(new StringReader(
+            String sql = ((
                     "select a from from b\n" +
                     "where e = d\n"));
-            parser.parseStatement();
+            parseQuery(sql);
             fail("Should have caught exception.");
         } catch (SQLException e) {
             assertTrue(e.getMessage(), e.getMessage().contains("ERROR 601 (42P00): Syntax error. Encountered \"from\" at line 1, column 15."));
@@ -373,23 +375,10 @@ public class QueryParserTest {
     }
 
     @Test
-    public void testParsingStatementWithMissingToken() throws Exception {
-        try {
-            SQLParser parser = new SQLParser(new StringReader(
-                    "select a b\n" +
-                    "where e = d\n"));
-            parser.parseStatement();
-            fail("Should have caught exception.");
-        } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.MISMATCHED_TOKEN.getErrorCode(), e.getErrorCode());
-        }
-    }
-
-    @Test
     public void testParseCreateTableInlinePrimaryKeyWithOrder() throws Exception {
     	for (String order : new String[]{"asc", "desc"}) {
             String s = "create table core.entity_history_archive (id char(15) primary key ${o})".replace("${o}", order);
-    		CreateTableStatement stmt = (CreateTableStatement)new SQLParser(new StringReader(s)).parseStatement();
+    		CreateTableStatement stmt = (CreateTableStatement)new SQLParser((s)).parseStatement();
     		List<ColumnDef> columnDefs = stmt.getColumnDefs();
     		assertEquals(1, columnDefs.size());
     		assertEquals(SortOrder.fromDDLValue(order), columnDefs.iterator().next().getSortOrder()); 
@@ -401,7 +390,7 @@ public class QueryParserTest {
     	for (String order : new String[]{"asc", "desc"}) {
     		String stmt = "create table core.entity_history_archive (id varchar(20) ${o})".replace("${o}", order);
     		try {
-    			new SQLParser(new StringReader(stmt)).parseStatement();
+    			new SQLParser((stmt)).parseStatement();
     			fail("Expected parse exception to be thrown");
     		} catch (SQLException e) {
     			String errorMsg = "ERROR 603 (42P00): Syntax error. Unexpected input. Expecting \"RPAREN\", got \"${o}\"".replace("${o}", order);
@@ -414,7 +403,7 @@ public class QueryParserTest {
     public void testParseCreateTablePrimaryKeyConstraintWithOrder() throws Exception {
     	for (String order : new String[]{"asc", "desc"}) {
     		String s = "create table core.entity_history_archive (id CHAR(15), name VARCHAR(150), constraint pk primary key (id ${o}, name ${o}))".replace("${o}", order);
-    		CreateTableStatement stmt = (CreateTableStatement)new SQLParser(new StringReader(s)).parseStatement();
+    		CreateTableStatement stmt = (CreateTableStatement)new SQLParser((s)).parseStatement();
     		PrimaryKeyConstraint pkConstraint = stmt.getPrimaryKeyConstraint();
     		List<Pair<ColumnName,SortOrder>> columns = pkConstraint.getColumnNames();
     		assertEquals(2, columns.size());
@@ -429,7 +418,7 @@ public class QueryParserTest {
         for (String leadingComma : new String[]{",", ""}) {
             String s = "create table core.entity_history_archive (id CHAR(15), name VARCHAR(150)${o} constraint pk primary key (id))".replace("${o}", leadingComma);
 
-            CreateTableStatement stmt = (CreateTableStatement)new SQLParser(new StringReader(s)).parseStatement();
+            CreateTableStatement stmt = (CreateTableStatement)new SQLParser((s)).parseStatement();
 
             assertEquals(2, stmt.getColumnDefs().size());
             assertNotNull(stmt.getPrimaryKeyConstraint());
@@ -438,11 +427,11 @@ public class QueryParserTest {
 
     @Test
     public void testInvalidTrailingCommaOnCreateTable() throws Exception {
-        SQLParser parser = new SQLParser(
-                new StringReader(
+        String sql = (
+                (
                         "create table foo (c1 varchar primary key, c2 varchar,)"));
         try {
-            parser.parseStatement();
+            parseQuery(sql);
             fail();
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.MISMATCHED_TOKEN.getErrorCode(), e.getErrorCode());
@@ -451,42 +440,42 @@ public class QueryParserTest {
 
     @Test
 	public void testCreateSequence() throws Exception {
-		SQLParser parser = new SQLParser(new StringReader(
+		String sql = ((
 				"create sequence foo.bar\n" + 
 						"start with 0\n"	+ 
 						"increment by 1\n"));
-		parser.parseStatement();
+		parseQuery(sql);
 	}
 	
 	@Test
 	public void testNextValueForSelect() throws Exception {
-		SQLParser parser = new SQLParser(new StringReader(
+		String sql = ((
 				"select next value for foo.bar \n" + 
 						"from core.custom_entity_data\n"));						
-		parser.parseStatement();
+		parseQuery(sql);
 	}
 	
 	@Test
     public void testNextValueForWhere() throws Exception {
-        SQLParser parser = new SQLParser(new StringReader(
+        String sql = ((
                 "upsert into core.custom_entity_data\n" + 
                         "select next value for foo.bar from core.custom_entity_data\n"));                    
-        parser.parseStatement();
+        parseQuery(sql);
     }
 	
     public void testBadCharDef() throws Exception {
         try {
-            SQLParser parser = new SQLParser("CREATE TABLE IF NOT EXISTS testBadVarcharDef" + 
+            String sql = ("CREATE TABLE IF NOT EXISTS testBadVarcharDef" + 
                     "  (pk VARCHAR NOT NULL PRIMARY KEY, col CHAR(0))");
-            parser.parseStatement();
+            parseQuery(sql);
             fail("Should have caught bad char definition.");
         } catch (SQLException e) {
             assertTrue(e.getMessage(), e.getMessage().contains("ERROR 208 (22003): CHAR or VARCHAR must have a positive length. columnName=COL"));
         }
         try {
-            SQLParser parser = new SQLParser("CREATE TABLE IF NOT EXISTS testBadVarcharDef" + 
+            String sql = ("CREATE TABLE IF NOT EXISTS testBadVarcharDef" + 
                     "  (pk VARCHAR NOT NULL PRIMARY KEY, col CHAR)");
-            parser.parseStatement();
+            parseQuery(sql);
             fail("Should have caught bad char definition.");
         } catch (SQLException e) {
             assertTrue(e.getMessage(), e.getMessage().contains("ERROR 207 (22003): Missing length for CHAR. columnName=COL"));
@@ -496,9 +485,9 @@ public class QueryParserTest {
     @Test
     public void testBadVarcharDef() throws Exception {
         try {
-            SQLParser parser = new SQLParser("CREATE TABLE IF NOT EXISTS testBadVarcharDef" + 
+            String sql = ("CREATE TABLE IF NOT EXISTS testBadVarcharDef" + 
                     "  (pk VARCHAR NOT NULL PRIMARY KEY, col VARCHAR(0))");
-            parser.parseStatement();
+            parseQuery(sql);
             fail("Should have caught bad varchar definition.");
         } catch (SQLException e) {
             assertTrue(e.getMessage(), e.getMessage().contains("ERROR 208 (22003): CHAR or VARCHAR must have a positive length. columnName=COL"));
@@ -508,17 +497,17 @@ public class QueryParserTest {
     @Test
     public void testBadDecimalDef() throws Exception {
         try {
-            SQLParser parser = new SQLParser("CREATE TABLE IF NOT EXISTS testBadDecimalDef" + 
+            String sql = ("CREATE TABLE IF NOT EXISTS testBadDecimalDef" + 
                     "  (pk VARCHAR NOT NULL PRIMARY KEY, col DECIMAL(0, 5))");
-            parser.parseStatement();
+            parseQuery(sql);
             fail("Should have caught bad decimal definition.");
         } catch (SQLException e) {
             assertTrue(e.getMessage(), e.getMessage().contains("ERROR 209 (22003): Decimal precision outside of range. Should be within 1 and 38. columnName=COL"));
         }
         try {
-            SQLParser parser = new SQLParser("CREATE TABLE IF NOT EXISTS testBadDecimalDef" + 
+            String sql = ("CREATE TABLE IF NOT EXISTS testBadDecimalDef" + 
                     "  (pk VARCHAR NOT NULL PRIMARY KEY, col DECIMAL(40, 5))");
-            parser.parseStatement();
+            parseQuery(sql);
             fail("Should have caught bad decimal definition.");
         } catch (SQLException e) {
             assertTrue(e.getMessage(), e.getMessage().contains("ERROR 209 (22003): Decimal precision outside of range. Should be within 1 and 38. columnName=COL"));
@@ -528,17 +517,17 @@ public class QueryParserTest {
     @Test
     public void testBadBinaryDef() throws Exception {
         try {
-            SQLParser parser = new SQLParser("CREATE TABLE IF NOT EXISTS testBadBinaryDef" + 
+            String sql = ("CREATE TABLE IF NOT EXISTS testBadBinaryDef" + 
                     "  (pk VARCHAR NOT NULL PRIMARY KEY, col BINARY(0))");
-            parser.parseStatement();
+            parseQuery(sql);
             fail("Should have caught bad binary definition.");
         } catch (SQLException e) {
             assertTrue(e.getMessage(), e.getMessage().contains("ERROR 211 (22003): BINARY must have a positive length. columnName=COL"));
         }
         try {
-            SQLParser parser = new SQLParser("CREATE TABLE IF NOT EXISTS testBadVarcharDef" + 
+            String sql = ("CREATE TABLE IF NOT EXISTS testBadVarcharDef" + 
                     "  (pk VARCHAR NOT NULL PRIMARY KEY, col BINARY)");
-            parser.parseStatement();
+            parseQuery(sql);
             fail("Should have caught bad char definition.");
         } catch (SQLException e) {
             assertTrue(e.getMessage(), e.getMessage().contains("ERROR 210 (22003): Missing length for BINARY. columnName=COL"));
@@ -547,93 +536,80 @@ public class QueryParserTest {
 
     @Test
     public void testPercentileQuery1() throws Exception {
-        SQLParser parser = new SQLParser(
-                new StringReader(
+        String sql = (
+                (
                         "select PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY salary DESC) from core.custom_index_value ind"));
-        parser.parseStatement();
+        parseQuery(sql);
     }
 
     @Test
     public void testPercentileQuery2() throws Exception {
-        SQLParser parser = new SQLParser(
-                new StringReader(
+        String sql = (
+                (
                         "select PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY mark ASC) from core.custom_index_value ind"));
-        parser.parseStatement();
+        parseQuery(sql);
     }
     
     @Test
     public void testRowValueConstructorQuery() throws Exception {
-        SQLParser parser = new SQLParser(
-                new StringReader(
+        String sql = (
+                (
                         "select a_integer FROM aTable where (x_integer, y_integer) > (3, 4)"));
-        parser.parseStatement();
+        parseQuery(sql);
     }
 
     @Test
     public void testSingleTopLevelNot() throws Exception {
-        SQLParser parser = new SQLParser(
-                new StringReader(
+        String sql = (
+                (
                         "select * from t where not c = 5"));
-        parser.parseStatement();
+        parseQuery(sql);
     }
 
     @Test
     public void testTopLevelNot() throws Exception {
-        SQLParser parser = new SQLParser(
-                new StringReader(
+        String sql = (
+                (
                         "select * from t where not c"));
-        parser.parseStatement();
+        parseQuery(sql);
     }
 
     @Test
     public void testRVCInList() throws Exception {
-        SQLParser parser = new SQLParser(
-                new StringReader(
+        String sql = (
+                (
                         "select * from t where k in ( (1,2), (3,4) )"));
-        parser.parseStatement();
+        parseQuery(sql);
     }
 
     @Test
     public void testInList() throws Exception {
-        SQLParser parser = new SQLParser(
-                new StringReader(
+        String sql = (
+                (
                         "select * from t where k in ( 1,2 )"));
-        parser.parseStatement();
+        parseQuery(sql);
     }
 
     @Test
     public void testInvalidSelectStar() throws Exception {
-        SQLParser parser = new SQLParser(
-                new StringReader(
+        String sql = (
+                (
                         "select *,k from t where k in ( 1,2 )"));
         try {
-            parser.parseStatement();
+            parseQuery(sql);
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.MISMATCHED_TOKEN.getErrorCode(), e.getErrorCode());
-        }
-    }
-
-    @Test
-    public void testInvalidUpsertSelectHint() throws Exception {
-        SQLParser parser = new SQLParser(
-                new StringReader(
-                        "upsert into t select /*+ NO_INDEX */ k from t where k in ( 1,2 )"));
-        try {
-            parser.parseStatement();
-            fail();
-        } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.PARSER_ERROR.getErrorCode(), e.getErrorCode());
+            assertEquals(SQLExceptionCode.MISSING_TOKEN.getErrorCode(), e.getErrorCode());
         }
     }
 
     @Test
     public void testTableNameStartsWithUnderscore() throws Exception {
-        SQLParser parser = new SQLParser(
-                new StringReader(
+        String sql = (
+                (
                         "select* from _t where k in ( 1,2 )"));
         try {
-            parser.parseStatement();
+            parseQuery(sql);
             fail();
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.PARSER_ERROR.getErrorCode(), e.getErrorCode());
@@ -642,16 +618,16 @@ public class QueryParserTest {
 
     @Test
     public void testValidUpsertSelectHint() throws Exception {
-        SQLParser parser = new SQLParser(
-                new StringReader(
+        String sql = (
+                (
                         "upsert /*+ NO_INDEX */ into t select k from t where k in ( 1,2 )"));
-            parser.parseStatement();
+            parseQuery(sql);
     }
 
     @Test
     public void testHavingWithNot() throws Exception {
-        SQLParser parser = new SQLParser(
-                new StringReader(
+        String sql = (
+                (
                         "select\n" + 
                         "\"WEB_STAT_ALIAS\".\"DOMAIN\" as \"c0\"\n" + 
                         "from \"WEB_STAT\" \"WEB_STAT_ALIAS\"\n" + 
@@ -668,13 +644,125 @@ public class QueryParserTest {
                         ")\n" + 
                         "order by CASE WHEN \"WEB_STAT_ALIAS\".\"DOMAIN\" IS NULL THEN 1 ELSE 0 END,\n" + 
                         "\"WEB_STAT_ALIAS\".\"DOMAIN\" ASC"));
-        parser.parseStatement();
+        parseQuery(sql);
     }
 
     @Test
     public void testToDateInList() throws Exception {
-        SQLParser parser = new SQLParser(
-                new StringReader("select * from date_test where d in (to_date('2013-11-04 09:12:00'))"));
+        String sql = (
+                ("select * from date_test where d in (to_date('2013-11-04 09:12:00'))"));
+        parseQuery(sql);
+    }
+    
+    @Test
+    public void testDateLiteral() throws Exception {
+        String sql = (
+                (
+                        "select * from t where d = DATE '2013-11-04 09:12:00'"));
+        parseQuery(sql);
+    }
+
+    @Test
+    public void testTimeLiteral() throws Exception {
+        String sql = (
+                (
+                        "select * from t where d = TIME '2013-11-04 09:12:00'"));
+        parseQuery(sql);
+    }
+
+
+    @Test
+    public void testTimestampLiteral() throws Exception {
+        String sql = (
+                (
+                        "select * from t where d = TIMESTAMP '2013-11-04 09:12:00'"));
+        parseQuery(sql);
+    }
+    
+    @Test
+    public void testUnsignedDateLiteral() throws Exception {
+        String sql = (
+                (
+                        "select * from t where d = UNSIGNED_DATE '2013-11-04 09:12:00'"));
+        parseQuery(sql);
+    }
+
+    @Test
+    public void testUnsignedTimeLiteral() throws Exception {
+        String sql = (
+                (
+                        "select * from t where d = UNSIGNED_TIME '2013-11-04 09:12:00'"));
+        parseQuery(sql);
+    }
+
+
+    @Test
+    public void testUnsignedTimestampLiteral() throws Exception {
+        String sql = (
+                (
+                        "select * from t where d = UNSIGNED_TIMESTAMP '2013-11-04 09:12:00'"));
+        parseQuery(sql);
+    }
+    
+    @Test
+    public void testParseDateEquality() throws Exception {
+        SQLParser parser = new SQLParser(new StringReader(
+            "select a from b\n" +
+            "where date '2014-01-04' = date '2014-01-04'"
+            ));
         parser.parseStatement();
+    }
+
+    @Test
+    public void testParseDateIn() throws Exception {
+        SQLParser parser = new SQLParser(new StringReader(
+            "select a from b\n" +
+            "where date '2014-01-04' in (date '2014-01-04')"
+            ));
+        parser.parseStatement();
+    }
+    
+    @Test
+    public void testUnknownLiteral() throws Exception {
+        String sql = (
+                (
+                        "select * from t where d = FOO '2013-11-04 09:12:00'"));
+        try {
+            parseQuery(sql);
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.ILLEGAL_DATA.getErrorCode(), e.getErrorCode());
+        }
+    }
+    
+    @Test
+    public void testUnsupportedLiteral() throws Exception {
+        String sql = (
+                (
+                        "select * from t where d = DECIMAL '2013-11-04 09:12:00'"));
+        try {
+            parseQuery(sql);
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.TYPE_MISMATCH.getErrorCode(), e.getErrorCode());
+        }
+    }
+    
+    @Test
+    public void testAnyElementExpression1() throws Exception {
+        String sql = "select * from t where 'a' = ANY(a)";
+        parseQuery(sql);
+    }
+
+    @Test
+    public void testAnyElementExpression2() throws Exception {
+        String sql = "select * from t where 'a' <= ANY(a-b+1)";
+        parseQuery(sql);
+    }
+
+    @Test
+    public void testAllElementExpression() throws Exception {
+        String sql = "select * from t where 'a' <= ALL(a-b+1)";
+        parseQuery(sql);
     }
 }

@@ -41,6 +41,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
 import java.util.Collection;
@@ -117,7 +118,6 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
                 "    SERVER AGGREGATE INTO DISTINCT ROWS BY [I.NAME]\n" +
                 "CLIENT MERGE SORT\n" +
-                "CLIENT SORTED BY [I.NAME]\n" +
                 "    PARALLEL LEFT-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_DISPLAY_NAME,
                 /* 
@@ -127,7 +127,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                  *     GROUP BY i.item_id ORDER BY q DESC"
                  */     
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
-                "    SERVER AGGREGATE INTO DISTINCT ROWS BY [I.item_id]\n" +
+                "    SERVER AGGREGATE INTO DISTINCT ROWS BY [\"I.item_id\"]\n" +
                 "CLIENT MERGE SORT\n" +
                 "CLIENT SORTED BY [SUM(O.QUANTITY) DESC]\n" +
                 "    PARALLEL LEFT-JOIN TABLE 0\n" +
@@ -141,9 +141,9 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                  */     
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
                 "    SERVER FILTER BY FIRST KEY ONLY\n" +
-                "    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [I.item_id]\n" +
+                "    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [\"I.item_id\"]\n" +
                 "CLIENT MERGE SORT\n" +
-                "CLIENT SORTED BY [SUM(O.QUANTITY) DESC NULLS LAST, I.item_id]\n" +
+                "CLIENT SORTED BY [SUM(O.QUANTITY) DESC NULLS LAST, \"I.item_id\"]\n" +
                 "    PARALLEL LEFT-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME,
                 /* 
@@ -155,7 +155,6 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
                 "    SERVER AGGREGATE INTO DISTINCT ROWS BY [I.NAME]\n" +
                 "CLIENT MERGE SORT\n" +
-                "CLIENT SORTED BY [I.NAME]\n" +
                 "    PARALLEL LEFT-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME,
                 /*
@@ -166,9 +165,9 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                  */
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
                 "    SERVER FILTER BY FIRST KEY ONLY\n" +
-                "    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [I.item_id]\n" +
+                "    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [\"I.item_id\"]\n" +
                 "CLIENT MERGE SORT\n" +
-                "CLIENT SORTED BY [SUM(O.QUANTITY) DESC NULLS LAST, I.item_id]\n" +
+                "CLIENT SORTED BY [SUM(O.QUANTITY) DESC NULLS LAST, \"I.item_id\"]\n" +
                 "    PARALLEL LEFT-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME,
                 /*
@@ -218,7 +217,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "            SERVER FILTER BY QUANTITY < 5000\n" +
                 "    PARALLEL INNER-JOIN TABLE 1\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_DISPLAY_NAME + "\n" +
-                "    DYNAMIC SERVER FILTER BY item_id IN (O.item_id)",
+                "    DYNAMIC SERVER FILTER BY \"I.item_id\" IN (\"O.item_id\")",
                 /*
                  * testSelfJoin()
                  *     SELECT i2.item_id, i1.name FROM joinItemTable i1 
@@ -229,7 +228,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "    PARALLEL INNER-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
                 "            SERVER FILTER BY FIRST KEY ONLY\n" +
-                "    DYNAMIC SERVER FILTER BY item_id BETWEEN MIN/MAX OF (I2.item_id)",
+                "    DYNAMIC SERVER FILTER BY \"I1.item_id\" IN (\"I2.item_id\")",
                 /*
                  * testSelfJoin()
                  *     SELECT i1.name, i2.name FROM joinItemTable i1 
@@ -241,7 +240,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "CLIENT MERGE SORT\n" +
                 "    PARALLEL INNER-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
-                "    DYNAMIC SERVER FILTER BY item_id BETWEEN MIN/MAX OF (I2.supplier_id)",
+                "    DYNAMIC SERVER FILTER BY \"I1.item_id\" IN (\"I2.supplier_id\")",
                 /*
                  * testStarJoin()
                  *     SELECT order_id, c.name, i.name iname, quantity, o.date 
@@ -264,13 +263,13 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                  *     ORDER BY order_id
                  */
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
-                "    SERVER SORTED BY [O.order_id]\n" +
+                "    SERVER SORTED BY [\"O.order_id\"]\n" +
                 "CLIENT MERGE SORT\n" +
                 "    PARALLEL INNER-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
                 "            PARALLEL INNER-JOIN TABLE 0\n" +
                 "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_CUSTOMER_TABLE_DISPLAY_NAME + "\n" +
-                "    DYNAMIC SERVER FILTER BY item_id BETWEEN MIN/MAX OF (O.item_id)",
+                "    DYNAMIC SERVER FILTER BY \"I.item_id\" IN (\"O.item_id\")",
                 /*
                  * testSubJoin()
                  *     SELECT * FROM joinCustomerTable c 
@@ -285,17 +284,17 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                  *     ORDER BY c.customer_id, i.name
                  */
                 "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_CUSTOMER_TABLE_DISPLAY_NAME + " [*] - ['0000000005']\n" +
-                "    SERVER SORTED BY [C.customer_id, I.NAME]\n" +
+                "    SERVER SORTED BY [\"C.customer_id\", I.NAME]\n" +
                 "CLIENT MERGE SORT\n" +
                 "    PARALLEL INNER-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
-                "            SERVER FILTER BY order_id != '000000000000003'\n" +
+                "            SERVER FILTER BY \"order_id\" != '000000000000003'\n" +
                 "            PARALLEL INNER-JOIN TABLE 0\n" +
                 "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
                 "                    SERVER FILTER BY NAME != 'T3'\n" +
                 "                    PARALLEL LEFT-JOIN TABLE 0\n" +
                 "                        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_DISPLAY_NAME + "\n" +
-                "    DYNAMIC SERVER FILTER BY customer_id IN (O.customer_id)",
+                "    DYNAMIC SERVER FILTER BY \"C.customer_id\" IN (\"O.customer_id\")",
                 /* 
                  * testJoinWithSubqueryAndAggregation()
                  *     SELECT i.name, sum(quantity) FROM joinOrderTable o 
@@ -306,7 +305,6 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
                 "    SERVER AGGREGATE INTO DISTINCT ROWS BY [I.NAME]\n" +
                 "CLIENT MERGE SORT\n" +
-                "CLIENT SORTED BY [I.NAME]\n" +
                 "    PARALLEL LEFT-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_DISPLAY_NAME,
                 /* 
@@ -338,7 +336,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "CLIENT MERGE SORT\n" +
                 "    PARALLEL LEFT-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
-                "            SERVER AGGREGATE INTO DISTINCT ROWS BY [item_id]\n" +
+                "            SERVER AGGREGATE INTO DISTINCT ROWS BY [\"item_id\"]\n" +
                 "        CLIENT MERGE SORT",
                 /* 
                  * testJoinWithSubqueryAndAggregation()
@@ -354,7 +352,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "CLIENT MERGE SORT\n" +
                 "    PARALLEL INNER-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
-                "            SERVER AGGREGATE INTO DISTINCT ROWS BY [item_id]\n" +
+                "            SERVER AGGREGATE INTO DISTINCT ROWS BY [\"item_id\"]\n" +
                 "        CLIENT MERGE SORT",
                 /*
                  * testNestedSubqueries()
@@ -380,7 +378,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "CLIENT MERGE SORT\n" +
                 "    PARALLEL INNER-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
-                "            SERVER FILTER BY order_id != '000000000000003'\n" +
+                "            SERVER FILTER BY \"order_id\" != '000000000000003'\n" +
                 "            PARALLEL INNER-JOIN TABLE 0\n" +
                 "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
                 "                    SERVER FILTER BY NAME != 'T3'\n" +
@@ -394,7 +392,6 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                  *     LEFT JOIN joinOrderTable o ON o.item_id = i.item_id LIMIT 4
                  */
                 "CLIENT SERIAL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_DISPLAY_NAME + "\n" +
-                "    SERVER FILTER BY PageFilter 4\n" +
                 "    SERVER 4 ROW LIMIT\n" +
                 "CLIENT 4 ROW LIMIT\n" +
                 "    PARALLEL LEFT-JOIN TABLE 0\n" +
@@ -415,11 +412,11 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER "+ JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
                 "    PARALLEL INNER-JOIN TABLE 1(DELAYED EVALUATION)\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER "+ JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
-                "    DYNAMIC SERVER FILTER BY supplier_id BETWEEN MIN/MAX OF (I.supplier_id)\n" +
+                "    DYNAMIC SERVER FILTER BY \"S.supplier_id\" IN (\"I.supplier_id\")\n" +
                 "    JOIN-SCANNER 4 ROW LIMIT",
                 /*
                  * testJoinWithKeyRangeOptimization()
-                 *     SELECT (*SKIP_SCAN_HASH_JOIN*) lhs.col0, lhs.col1, lhs.col2, rhs.col0, rhs.col1, rhs.col2 
+                 *     SELECT lhs.col0, lhs.col1, lhs.col2, rhs.col0, rhs.col1, rhs.col2 
                  *     FROM TEMP_TABLE_COMPOSITE_PK lhs 
                  *     JOIN TEMP_TABLE_COMPOSITE_PK rhs ON lhs.col1 = rhs.col2
                  */
@@ -430,7 +427,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "        CLIENT MERGE SORT",
                 /*
                  * testJoinWithKeyRangeOptimization()
-                 *     SELECT (*SKIP_SCAN_HASH_JOIN*) lhs.col0, lhs.col1, lhs.col2, rhs.col0, rhs.col1, rhs.col2 
+                 *     SELECT lhs.col0, lhs.col1, lhs.col2, rhs.col0, rhs.col1, rhs.col2 
                  *     FROM TEMP_TABLE_COMPOSITE_PK lhs 
                  *     JOIN TEMP_TABLE_COMPOSITE_PK rhs ON lhs.col0 = rhs.col2
                  */
@@ -439,10 +436,10 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "    PARALLEL INNER-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 4-WAY FULL SCAN OVER TEMP_TABLE_COMPOSITE_PK\n" +
                 "        CLIENT MERGE SORT\n" +
-                "    DYNAMIC SERVER FILTER BY COL0 IN (RHS.COL2)",
+                "    DYNAMIC SERVER FILTER BY LHS.COL0 IN (RHS.COL2)",
                 /*
                  * testJoinWithKeyRangeOptimization()
-                 *     SELECT (*SKIP_SCAN_HASH_JOIN*) lhs.col0, lhs.col1, lhs.col2, rhs.col0, rhs.col1, rhs.col2 
+                 *     SELECT lhs.col0, lhs.col1, lhs.col2, rhs.col0, rhs.col1, rhs.col2 
                  *     FROM TEMP_TABLE_COMPOSITE_PK lhs 
                  *     JOIN TEMP_TABLE_COMPOSITE_PK rhs ON lhs.col0 = rhs.col1 AND lhs.col1 = rhs.col2
                  */
@@ -451,10 +448,10 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "    PARALLEL INNER-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 4-WAY FULL SCAN OVER TEMP_TABLE_COMPOSITE_PK\n" +
                 "        CLIENT MERGE SORT\n" +
-                "    DYNAMIC SERVER FILTER BY (COL0, COL1) IN ((RHS.COL1, RHS.COL2))",
+                "    DYNAMIC SERVER FILTER BY (LHS.COL0, LHS.COL1) IN ((RHS.COL1, RHS.COL2))",
                 /*
                  * testJoinWithKeyRangeOptimization()
-                 *     SELECT (*SKIP_SCAN_HASH_JOIN*) lhs.col0, lhs.col1, lhs.col2, rhs.col0, rhs.col1, rhs.col2 
+                 *     SELECT lhs.col0, lhs.col1, lhs.col2, rhs.col0, rhs.col1, rhs.col2 
                  *     FROM TEMP_TABLE_COMPOSITE_PK lhs 
                  *     JOIN TEMP_TABLE_COMPOSITE_PK rhs ON lhs.col0 = rhs.col1 AND lhs.col2 = rhs.col3 - 1 AND lhs.col1 = rhs.col2
                  */
@@ -463,7 +460,22 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "    PARALLEL INNER-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 4-WAY FULL SCAN OVER TEMP_TABLE_COMPOSITE_PK\n" +
                 "        CLIENT MERGE SORT\n" +
-                "    DYNAMIC SERVER FILTER BY (COL0, COL1, COL2) IN ((RHS.COL1, RHS.COL2, TO_INTEGER((RHS.COL3 - 1))))",
+                "    DYNAMIC SERVER FILTER BY (LHS.COL0, LHS.COL1, LHS.COL2) IN ((RHS.COL1, RHS.COL2, TO_INTEGER((RHS.COL3 - 1))))",
+                /*
+                 * testJoinWithSetMaxRows()
+                 *     statement.setMaxRows(4);
+                 *     SELECT order_id, i.name, quantity FROM joinItemTable i
+                 *     JOIN joinOrderTable o ON o.item_id = i.item_id;
+                 *     SELECT o.order_id, i.name, o.quantity FROM joinItemTable i
+                 *     JOIN (SELECT order_id, item_id, quantity FROM joinOrderTable) o
+                 *     ON o.item_id = i.item_id;
+                 */
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
+                "CLIENT 4 ROW LIMIT\n" +
+                "    PARALLEL INNER-JOIN TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER "+ JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
+                "    DYNAMIC SERVER FILTER BY \"I.item_id\" IN (\"O.item_id\")\n" +
+                "    JOIN-SCANNER 4 ROW LIMIT",
                 }});
         testCases.add(new String[][] {
                 {
@@ -478,9 +490,8 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                  *     GROUP BY i.name ORDER BY i.name
                  */     
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
-                "    SERVER AGGREGATE INTO DISTINCT ROWS BY [I.0:NAME]\n" +
+                "    SERVER AGGREGATE INTO DISTINCT ROWS BY [\"I.0:NAME\"]\n" +
                 "CLIENT MERGE SORT\n" +
-                "CLIENT SORTED BY [I.0:NAME]\n" +
                 "    PARALLEL LEFT-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_item\n" +
                 "            SERVER FILTER BY FIRST KEY ONLY",
@@ -491,7 +502,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                  *     GROUP BY i.item_id ORDER BY q DESC"
                  */     
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
-                "    SERVER AGGREGATE INTO DISTINCT ROWS BY [I.:item_id]\n" +
+                "    SERVER AGGREGATE INTO DISTINCT ROWS BY [\"I.:item_id\"]\n" +
                 "CLIENT MERGE SORT\n" +
                 "CLIENT SORTED BY [SUM(O.QUANTITY) DESC]\n" +
                 "    PARALLEL LEFT-JOIN TABLE 0\n" +
@@ -505,9 +516,9 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                  */     
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
                 "    SERVER FILTER BY FIRST KEY ONLY\n" +
-                "    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [I.item_id]\n" +
+                "    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [\"I.item_id\"]\n" +
                 "CLIENT MERGE SORT\n" +
-                "CLIENT SORTED BY [SUM(O.QUANTITY) DESC NULLS LAST, I.item_id]\n" +
+                "CLIENT SORTED BY [SUM(O.QUANTITY) DESC NULLS LAST, \"I.item_id\"]\n" +
                 "    PARALLEL LEFT-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME,
                 /* 
@@ -518,7 +529,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                  */
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_item\n" +
                 "    SERVER FILTER BY FIRST KEY ONLY\n" +
-                "    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [I.0:NAME]\n" +
+                "    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [\"I.0:NAME\"]\n" +
                 "CLIENT MERGE SORT\n" +
                 "    PARALLEL LEFT-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME,
@@ -530,9 +541,9 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                  */
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
                 "    SERVER FILTER BY FIRST KEY ONLY\n" +
-                "    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [I.item_id]\n" +
+                "    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [\"I.item_id\"]\n" +
                 "CLIENT MERGE SORT\n" +
-                "CLIENT SORTED BY [SUM(O.QUANTITY) DESC NULLS LAST, I.item_id]\n" +
+                "CLIENT SORTED BY [SUM(O.QUANTITY) DESC NULLS LAST, \"I.item_id\"]\n" +
                 "    PARALLEL LEFT-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME,
                 /*
@@ -555,7 +566,8 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_SCHEMA + ".idx_item ['T1'] - ['T5']\n" +
                 "    SERVER FILTER BY FIRST KEY ONLY\n" +
                 "    PARALLEL LEFT-JOIN TABLE 0\n" +
-                "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_SCHEMA + ".idx_supplier ['S1'] - ['S5']",
+                "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_SCHEMA + ".idx_supplier ['S1'] - ['S5']\n" +
+                "            SERVER FILTER BY FIRST KEY ONLY",
                 /*
                  * testJoinPlanWithIndex()
                  *     SELECT item.item_id, item.name, supp.supplier_id, supp.name 
@@ -566,7 +578,8 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                  */
                 "CLIENT PARALLEL 1-WAY SKIP SCAN ON 2 KEYS OVER " + JOIN_SCHEMA + ".idx_item ['T1'] - ['T5']\n" +
                 "    PARALLEL INNER-JOIN TABLE 0\n" +
-                "        CLIENT PARALLEL 1-WAY SKIP SCAN ON 2 KEYS OVER " + JOIN_SCHEMA + ".idx_supplier ['S1'] - ['S5']",
+                "        CLIENT PARALLEL 1-WAY SKIP SCAN ON 2 KEYS OVER " + JOIN_SCHEMA + ".idx_supplier ['S1'] - ['S5']\n" +
+                "            SERVER FILTER BY FIRST KEY ONLY",
                 /*
                  * testJoinWithSkipMergeOptimization()
                  *     SELECT s.name FROM joinItemTable i 
@@ -578,7 +591,8 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
                 "            SERVER FILTER BY QUANTITY < 5000\n" +
                 "    PARALLEL INNER-JOIN TABLE 1\n" +
-                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_supplier",
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_supplier\n" +
+                "            SERVER FILTER BY FIRST KEY ONLY",
                 /*
                  * testSelfJoin()
                  *     SELECT i2.item_id, i1.name FROM joinItemTable i1 
@@ -589,7 +603,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "    PARALLEL INNER-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_item\n" +
                 "            SERVER FILTER BY FIRST KEY ONLY\n" +
-                "    DYNAMIC SERVER FILTER BY item_id BETWEEN MIN/MAX OF (I2.:item_id)",
+                "    DYNAMIC SERVER FILTER BY \"I1.item_id\" IN (\"I2.:item_id\")",
                 /*
                  * testSelfJoin()
                  *     SELECT i1.name, i2.name FROM joinItemTable i1 
@@ -598,7 +612,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                  */
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_item\n" +
                 "    SERVER FILTER BY FIRST KEY ONLY\n" +
-                "    SERVER SORTED BY [I1.0:NAME, I2.0:NAME]\n" +
+                "    SERVER SORTED BY [\"I1.0:NAME\", \"I2.0:NAME\"]\n" +
                 "CLIENT MERGE SORT\n" +
                 "    PARALLEL INNER-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_item",
@@ -613,6 +627,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
                 "    PARALLEL INNER-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_customer\n" +
+                "            SERVER FILTER BY FIRST KEY ONLY\n" + 
                 "    PARALLEL INNER-JOIN TABLE 1\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_item\n" +
                 "            SERVER FILTER BY FIRST KEY ONLY",
@@ -626,12 +641,13 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                  */
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_item\n" +
                 "    SERVER FILTER BY FIRST KEY ONLY\n" +
-                "    SERVER SORTED BY [O.order_id]\n" +
+                "    SERVER SORTED BY [\"O.order_id\"]\n" +
                 "CLIENT MERGE SORT\n" +
                 "    PARALLEL INNER-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
                 "            PARALLEL INNER-JOIN TABLE 0\n" +
-                "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_customer",
+                "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_customer\n" +
+                "                    SERVER FILTER BY FIRST KEY ONLY",
                 /*
                  * testSubJoin()
                  *     SELECT * FROM joinCustomerTable c 
@@ -646,17 +662,17 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                  *     ORDER BY c.customer_id, i.name
                  */
                 "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_CUSTOMER_TABLE_DISPLAY_NAME + " [*] - ['0000000005']\n" +
-                "    SERVER SORTED BY [C.customer_id, I.0:NAME]\n" +
+                "    SERVER SORTED BY [\"C.customer_id\", \"I.0:NAME\"]\n" +
                 "CLIENT MERGE SORT\n" +
                 "    PARALLEL INNER-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
-                "            SERVER FILTER BY order_id != '000000000000003'\n" +
+                "            SERVER FILTER BY \"order_id\" != '000000000000003'\n" +
                 "            PARALLEL INNER-JOIN TABLE 0\n" +
                 "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_item\n" +
-                "                    SERVER FILTER BY NAME != 'T3'\n" +
+                "                    SERVER FILTER BY \"NAME\" != 'T3'\n" +
                 "                    PARALLEL LEFT-JOIN TABLE 0\n" +
                 "                        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_DISPLAY_NAME + "\n" +
-                "    DYNAMIC SERVER FILTER BY customer_id IN (O.customer_id)",
+                "    DYNAMIC SERVER FILTER BY \"C.customer_id\" IN (\"O.customer_id\")",
                 /* 
                  * testJoinWithSubqueryAndAggregation()
                  *     SELECT i.name, sum(quantity) FROM joinOrderTable o 
@@ -667,7 +683,6 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
                 "    SERVER AGGREGATE INTO DISTINCT ROWS BY [I.NAME]\n" +
                 "CLIENT MERGE SORT\n" +
-                "CLIENT SORTED BY [I.NAME]\n" +
                 "    PARALLEL LEFT-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_item\n" +
                 "            SERVER FILTER BY FIRST KEY ONLY",
@@ -700,7 +715,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "CLIENT MERGE SORT\n" +
                 "    PARALLEL LEFT-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
-                "            SERVER AGGREGATE INTO DISTINCT ROWS BY [item_id]\n" +
+                "            SERVER AGGREGATE INTO DISTINCT ROWS BY [\"item_id\"]\n" +
                 "        CLIENT MERGE SORT",
                 /* 
                  * testJoinWithSubqueryAndAggregation()
@@ -716,7 +731,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "CLIENT MERGE SORT\n" +
                 "    PARALLEL INNER-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
-                "            SERVER AGGREGATE INTO DISTINCT ROWS BY [item_id]\n" +
+                "            SERVER AGGREGATE INTO DISTINCT ROWS BY [\"item_id\"]\n" +
                 "        CLIENT MERGE SORT",
                 /*
                  * testNestedSubqueries()
@@ -742,10 +757,10 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "CLIENT MERGE SORT\n" +
                 "    PARALLEL INNER-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
-                "            SERVER FILTER BY order_id != '000000000000003'\n" +
+                "            SERVER FILTER BY \"order_id\" != '000000000000003'\n" +
                 "            PARALLEL INNER-JOIN TABLE 0\n" +
                 "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_item\n" +
-                "                    SERVER FILTER BY NAME != 'T3'\n" +
+                "                    SERVER FILTER BY \"NAME\" != 'T3'\n" +
                 "                    PARALLEL LEFT-JOIN TABLE 0\n" +
                 "                        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_DISPLAY_NAME,
                 /*
@@ -756,7 +771,6 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                  *     LEFT JOIN joinOrderTable o ON o.item_id = i.item_id LIMIT 4
                  */
                 "CLIENT SERIAL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_DISPLAY_NAME + "\n" +
-                "    SERVER FILTER BY PageFilter 4\n" +
                 "    SERVER 4 ROW LIMIT\n" +
                 "CLIENT 4 ROW LIMIT\n" +
                 "    PARALLEL LEFT-JOIN TABLE 0\n" +
@@ -777,11 +791,11 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER "+ JOIN_SCHEMA + ".idx_item\n" +
                 "    PARALLEL INNER-JOIN TABLE 1(DELAYED EVALUATION)\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER "+ JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
-                "    DYNAMIC SERVER FILTER BY supplier_id BETWEEN MIN/MAX OF (I.0:supplier_id)\n" +
+                "    DYNAMIC SERVER FILTER BY \"S.supplier_id\" IN (\"I.0:supplier_id\")\n" +
                 "    JOIN-SCANNER 4 ROW LIMIT",
                 /*
                  * testJoinWithKeyRangeOptimization()
-                 *     SELECT (*SKIP_SCAN_HASH_JOIN*) lhs.col0, lhs.col1, lhs.col2, rhs.col0, rhs.col1, rhs.col2 
+                 *     SELECT lhs.col0, lhs.col1, lhs.col2, rhs.col0, rhs.col1, rhs.col2 
                  *     FROM TEMP_TABLE_COMPOSITE_PK lhs 
                  *     JOIN TEMP_TABLE_COMPOSITE_PK rhs ON lhs.col1 = rhs.col2
                  */
@@ -792,7 +806,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "        CLIENT MERGE SORT",
                 /*
                  * testJoinWithKeyRangeOptimization()
-                 *     SELECT (*SKIP_SCAN_HASH_JOIN*) lhs.col0, lhs.col1, lhs.col2, rhs.col0, rhs.col1, rhs.col2 
+                 *     SELECT lhs.col0, lhs.col1, lhs.col2, rhs.col0, rhs.col1, rhs.col2 
                  *     FROM TEMP_TABLE_COMPOSITE_PK lhs 
                  *     JOIN TEMP_TABLE_COMPOSITE_PK rhs ON lhs.col0 = rhs.col2
                  */
@@ -801,10 +815,10 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "    PARALLEL INNER-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 4-WAY FULL SCAN OVER TEMP_TABLE_COMPOSITE_PK\n" +
                 "        CLIENT MERGE SORT\n" +
-                "    DYNAMIC SERVER FILTER BY COL0 IN (RHS.COL2)",
+                "    DYNAMIC SERVER FILTER BY LHS.COL0 IN (RHS.COL2)",
                 /*
                  * testJoinWithKeyRangeOptimization()
-                 *     SELECT (*SKIP_SCAN_HASH_JOIN*) lhs.col0, lhs.col1, lhs.col2, rhs.col0, rhs.col1, rhs.col2 
+                 *     SELECT lhs.col0, lhs.col1, lhs.col2, rhs.col0, rhs.col1, rhs.col2 
                  *     FROM TEMP_TABLE_COMPOSITE_PK lhs 
                  *     JOIN TEMP_TABLE_COMPOSITE_PK rhs ON lhs.col0 = rhs.col1 AND lhs.col1 = rhs.col2
                  */
@@ -813,10 +827,10 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "    PARALLEL INNER-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 4-WAY FULL SCAN OVER TEMP_TABLE_COMPOSITE_PK\n" +
                 "        CLIENT MERGE SORT\n" +
-                "    DYNAMIC SERVER FILTER BY (COL0, COL1) IN ((RHS.COL1, RHS.COL2))",
+                "    DYNAMIC SERVER FILTER BY (LHS.COL0, LHS.COL1) IN ((RHS.COL1, RHS.COL2))",
                 /*
                  * testJoinWithKeyRangeOptimization()
-                 *     SELECT (*SKIP_SCAN_HASH_JOIN*) lhs.col0, lhs.col1, lhs.col2, rhs.col0, rhs.col1, rhs.col2 
+                 *     SELECT lhs.col0, lhs.col1, lhs.col2, rhs.col0, rhs.col1, rhs.col2 
                  *     FROM TEMP_TABLE_COMPOSITE_PK lhs 
                  *     JOIN TEMP_TABLE_COMPOSITE_PK rhs ON lhs.col0 = rhs.col1 AND lhs.col2 = rhs.col3 - 1 AND lhs.col1 = rhs.col2
                  */
@@ -825,7 +839,22 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "    PARALLEL INNER-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 4-WAY FULL SCAN OVER TEMP_TABLE_COMPOSITE_PK\n" +
                 "        CLIENT MERGE SORT\n" +
-                "    DYNAMIC SERVER FILTER BY (COL0, COL1, COL2) IN ((RHS.COL1, RHS.COL2, TO_INTEGER((RHS.COL3 - 1))))",
+                "    DYNAMIC SERVER FILTER BY (LHS.COL0, LHS.COL1, LHS.COL2) IN ((RHS.COL1, RHS.COL2, TO_INTEGER((RHS.COL3 - 1))))",
+                /*
+                 * testJoinWithSetMaxRows()
+                 *     statement.setMaxRows(4);
+                 *     SELECT order_id, i.name, quantity FROM joinItemTable i
+                 *     JOIN joinOrderTable o ON o.item_id = i.item_id;
+                 *     SELECT o.order_id, i.name, o.quantity FROM joinItemTable i
+                 *     JOIN (SELECT order_id, item_id, quantity FROM joinOrderTable) o
+                 *     ON o.item_id = i.item_id;
+                 */
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER "+ JOIN_SCHEMA + ".idx_item\n" +
+                "    SERVER FILTER BY FIRST KEY ONLY\n" +
+                "CLIENT 4 ROW LIMIT\n" +
+                "    PARALLEL INNER-JOIN TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER "+ JOIN_SCHEMA + ".OrderTable\n" +
+                "    JOIN-SCANNER 4 ROW LIMIT",
                 }});
         testCases.add(new String[][] {
                 {
@@ -840,9 +869,8 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                  *     GROUP BY i.name ORDER BY i.name
                  */     
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
-                "    SERVER AGGREGATE INTO DISTINCT ROWS BY [I.0:NAME]\n" +
+                "    SERVER AGGREGATE INTO DISTINCT ROWS BY [\"I.0:NAME\"]\n" +
                 "CLIENT MERGE SORT\n" +
-                "CLIENT SORTED BY [I.0:NAME]\n" +
                 "    PARALLEL LEFT-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + "" + JOIN_ITEM_TABLE_DISPLAY_NAME +" [-32768]\n" +
                 "            SERVER FILTER BY FIRST KEY ONLY\n" +
@@ -854,7 +882,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                  *     GROUP BY i.item_id ORDER BY q DESC"
                  */     
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
-                "    SERVER AGGREGATE INTO DISTINCT ROWS BY [I.:item_id]\n" +
+                "    SERVER AGGREGATE INTO DISTINCT ROWS BY [\"I.:item_id\"]\n" +
                 "CLIENT MERGE SORT\n" +
                 "CLIENT SORTED BY [SUM(O.QUANTITY) DESC]\n" +
                 "    PARALLEL LEFT-JOIN TABLE 0\n" +
@@ -869,9 +897,9 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                  */     
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
                 "    SERVER FILTER BY FIRST KEY ONLY\n" +
-                "    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [I.item_id]\n" +
+                "    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [\"I.item_id\"]\n" +
                 "CLIENT MERGE SORT\n" +
-                "CLIENT SORTED BY [SUM(O.QUANTITY) DESC NULLS LAST, I.item_id]\n" +
+                "CLIENT SORTED BY [SUM(O.QUANTITY) DESC NULLS LAST, \"I.item_id\"]\n" +
                 "    PARALLEL LEFT-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME,
                 /* 
@@ -882,9 +910,8 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                  */
                 "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + "" + JOIN_ITEM_TABLE_DISPLAY_NAME+" [-32768]\n" +
                 "    SERVER FILTER BY FIRST KEY ONLY\n" +
-                "    SERVER AGGREGATE INTO DISTINCT ROWS BY [I.0:NAME]\n" +
+                "    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [\"I.0:NAME\"]\n" +
                 "CLIENT MERGE SORT\n" +
-                "CLIENT SORTED BY [I.0:NAME]\n" +
                 "    PARALLEL LEFT-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME,
                 /*
@@ -895,9 +922,9 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                  */
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
                 "    SERVER FILTER BY FIRST KEY ONLY\n" +
-                "    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [I.item_id]\n" +
+                "    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [\"I.item_id\"]\n" +
                 "CLIENT MERGE SORT\n" +
-                "CLIENT SORTED BY [SUM(O.QUANTITY) DESC NULLS LAST, I.item_id]\n" +
+                "CLIENT SORTED BY [SUM(O.QUANTITY) DESC NULLS LAST, \"I.item_id\"]\n" +
                 "    PARALLEL LEFT-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME,
                 /*
@@ -922,6 +949,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "CLIENT MERGE SORT\n" +
                 "    PARALLEL LEFT-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + "" + JOIN_SUPPLIER_TABLE_DISPLAY_NAME +" [-32768,'S1'] - [-32768,'S5']\n" +
+                "            SERVER FILTER BY FIRST KEY ONLY\n" + 
                 "        CLIENT MERGE SORT",
                 /*
                  * testJoinPlanWithIndex()
@@ -935,6 +963,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "CLIENT MERGE SORT\n" + 
                 "    PARALLEL INNER-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY SKIP SCAN ON 2 KEYS OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + "" + JOIN_SUPPLIER_TABLE_DISPLAY_NAME +" [-32768,'S1'] - [-32768,'S5']\n" + 
+                "            SERVER FILTER BY FIRST KEY ONLY\n" + 
                 "        CLIENT MERGE SORT",
                 /*
                  * testJoinWithSkipMergeOptimization()
@@ -949,8 +978,9 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "            SERVER FILTER BY QUANTITY < 5000\n" +
                 "    PARALLEL INNER-JOIN TABLE 1\n" +
                 "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + "" + JOIN_SUPPLIER_TABLE_DISPLAY_NAME + " [-32768]\n" +
+                "            SERVER FILTER BY FIRST KEY ONLY\n" + 
                 "        CLIENT MERGE SORT\n" +
-                "    DYNAMIC SERVER FILTER BY item_id IN (O.item_id)",
+                "    DYNAMIC SERVER FILTER BY \"I.:item_id\" IN (\"O.item_id\")",
                 /*
                  * testSelfJoin()
                  *     SELECT i2.item_id, i1.name FROM joinItemTable i1 
@@ -962,7 +992,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER "+ MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX +""+ JOIN_ITEM_TABLE_DISPLAY_NAME +" [-32768]\n"  +
                 "            SERVER FILTER BY FIRST KEY ONLY\n" +
                 "        CLIENT MERGE SORT\n" +
-                "    DYNAMIC SERVER FILTER BY item_id BETWEEN MIN/MAX OF (I2.:item_id)",
+                "    DYNAMIC SERVER FILTER BY \"I1.item_id\" IN (\"I2.:item_id\")",
                 /*
                  * testSelfJoin()
                  *     SELECT i1.name, i2.name FROM joinItemTable i1 
@@ -971,12 +1001,12 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                  */
                 "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX +""+ JOIN_ITEM_TABLE_DISPLAY_NAME +" [-32768]\n"  +
                 "    SERVER FILTER BY FIRST KEY ONLY\n" +
-                "    SERVER SORTED BY [I1.0:NAME, I2.0:NAME]\n" +
+                "    SERVER SORTED BY [\"I1.0:NAME\", \"I2.0:NAME\"]\n" +
                 "CLIENT MERGE SORT\n" +
                 "    PARALLEL INNER-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX +""+ JOIN_ITEM_TABLE_DISPLAY_NAME +" [-32768]\n" +
                 "        CLIENT MERGE SORT\n" +
-                "    DYNAMIC SERVER FILTER BY item_id BETWEEN MIN/MAX OF (I2.0:supplier_id)",
+                "    DYNAMIC SERVER FILTER BY \"I1.:item_id\" IN (\"I2.0:supplier_id\")",
                 /*
                  * testStarJoin()
                  *     SELECT order_id, c.name, i.name iname, quantity, o.date 
@@ -988,6 +1018,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
                 "    PARALLEL INNER-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + "" + JOIN_CUSTOMER_TABLE_DISPLAY_NAME + " [-32768]\n" +
+                "            SERVER FILTER BY FIRST KEY ONLY\n" + 
                 "        CLIENT MERGE SORT\n" +
                 "    PARALLEL INNER-JOIN TABLE 1\n" +
                 "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + "" + JOIN_ITEM_TABLE_DISPLAY_NAME + " [-32768]\n" +
@@ -1003,14 +1034,15 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                  */
                 "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + "" + JOIN_ITEM_TABLE_DISPLAY_NAME + " [-32768]\n" +
                 "    SERVER FILTER BY FIRST KEY ONLY\n" +
-                "    SERVER SORTED BY [O.order_id]\n"+
+                "    SERVER SORTED BY [\"O.order_id\"]\n"+
                 "CLIENT MERGE SORT\n" +
                 "    PARALLEL INNER-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
                 "            PARALLEL INNER-JOIN TABLE 0\n" +
                 "                CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + "" + JOIN_CUSTOMER_TABLE_DISPLAY_NAME+" [-32768]\n"+
+                "                    SERVER FILTER BY FIRST KEY ONLY\n" + 
                 "                CLIENT MERGE SORT\n" +
-                "    DYNAMIC SERVER FILTER BY item_id BETWEEN MIN/MAX OF (O.item_id)",
+                "    DYNAMIC SERVER FILTER BY \"I.:item_id\" IN (\"O.item_id\")",
                 /*
                  * testSubJoin()
                  *     SELECT * FROM joinCustomerTable c 
@@ -1025,18 +1057,18 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                  *     ORDER BY c.customer_id, i.name
                  */
                 "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_CUSTOMER_TABLE_DISPLAY_NAME + " [*] - ['0000000005']\n" +
-                "    SERVER SORTED BY [C.customer_id, I.0:NAME]\n"+
+                "    SERVER SORTED BY [\"C.customer_id\", \"I.0:NAME\"]\n"+
                 "CLIENT MERGE SORT\n" +
                 "    PARALLEL INNER-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
-                "            SERVER FILTER BY order_id != '000000000000003'\n" +
+                "            SERVER FILTER BY \"order_id\" != '000000000000003'\n" +
                 "            PARALLEL INNER-JOIN TABLE 0\n" +
                 "                CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX +""+ JOIN_ITEM_TABLE_DISPLAY_NAME +" [-32768]\n" +
-                "                    SERVER FILTER BY NAME != 'T3'\n" +
+                "                    SERVER FILTER BY \"NAME\" != 'T3'\n" +
                 "                CLIENT MERGE SORT\n" +
                 "                    PARALLEL LEFT-JOIN TABLE 0\n" +
                 "                        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_DISPLAY_NAME + "\n" +
-                "    DYNAMIC SERVER FILTER BY customer_id IN (O.customer_id)",
+                "    DYNAMIC SERVER FILTER BY \"C.customer_id\" IN (\"O.customer_id\")",
                 /* 
                  * testJoinWithSubqueryAndAggregation()
                  *     SELECT i.name, sum(quantity) FROM joinOrderTable o 
@@ -1047,7 +1079,6 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
                 "    SERVER AGGREGATE INTO DISTINCT ROWS BY [I.NAME]\n" +
                 "CLIENT MERGE SORT\n" +
-                "CLIENT SORTED BY [I.NAME]\n" +
                 "    PARALLEL LEFT-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX +""+JOIN_ITEM_TABLE_DISPLAY_NAME+" [-32768]\n"+
                 "            SERVER FILTER BY FIRST KEY ONLY\n" +
@@ -1082,7 +1113,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "CLIENT MERGE SORT\n" +
                 "    PARALLEL LEFT-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
-                "            SERVER AGGREGATE INTO DISTINCT ROWS BY [item_id]\n" +
+                "            SERVER AGGREGATE INTO DISTINCT ROWS BY [\"item_id\"]\n" +
                 "        CLIENT MERGE SORT",
                 /* 
                  * testJoinWithSubqueryAndAggregation()
@@ -1098,7 +1129,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "CLIENT MERGE SORT\n" +
                 "    PARALLEL INNER-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
-                "            SERVER AGGREGATE INTO DISTINCT ROWS BY [item_id]\n" +
+                "            SERVER AGGREGATE INTO DISTINCT ROWS BY [\"item_id\"]\n" +
                 "        CLIENT MERGE SORT",
                 /*
                  * testNestedSubqueries()
@@ -1124,10 +1155,10 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "CLIENT MERGE SORT\n" +
                 "    PARALLEL INNER-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
-                "            SERVER FILTER BY order_id != '000000000000003'\n" +
+                "            SERVER FILTER BY \"order_id\" != '000000000000003'\n" +
                 "            PARALLEL INNER-JOIN TABLE 0\n" +
                 "                CLIENT PARALLEL 1-WAY RANGE SCAN OVER " +  MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX +""+JOIN_ITEM_TABLE_DISPLAY_NAME + " [-32768]\n" +
-                "                    SERVER FILTER BY NAME != 'T3'\n" +
+                "                    SERVER FILTER BY \"NAME\" != 'T3'\n" +
                 "                CLIENT MERGE SORT\n" +      
                 "                    PARALLEL LEFT-JOIN TABLE 0\n" +
                 "                        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_DISPLAY_NAME,
@@ -1139,7 +1170,6 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                  *     LEFT JOIN joinOrderTable o ON o.item_id = i.item_id LIMIT 4
                  */
                 "CLIENT SERIAL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_DISPLAY_NAME + "\n" +
-                "    SERVER FILTER BY PageFilter 4\n" +
                 "    SERVER 4 ROW LIMIT\n" +
                 "CLIENT 4 ROW LIMIT\n" +
                 "    PARALLEL LEFT-JOIN TABLE 0\n" +
@@ -1162,11 +1192,11 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "        CLIENT MERGE SORT\n" +
                 "    PARALLEL INNER-JOIN TABLE 1(DELAYED EVALUATION)\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER "+ JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
-                "    DYNAMIC SERVER FILTER BY supplier_id BETWEEN MIN/MAX OF (I.0:supplier_id)\n" +
+                "    DYNAMIC SERVER FILTER BY \"S.supplier_id\" IN (\"I.0:supplier_id\")\n" +
                 "    JOIN-SCANNER 4 ROW LIMIT",
                 /*
                  * testJoinWithKeyRangeOptimization()
-                 *     SELECT (*SKIP_SCAN_HASH_JOIN*) lhs.col0, lhs.col1, lhs.col2, rhs.col0, rhs.col1, rhs.col2 
+                 *     SELECT lhs.col0, lhs.col1, lhs.col2, rhs.col0, rhs.col1, rhs.col2 
                  *     FROM TEMP_TABLE_COMPOSITE_PK lhs 
                  *     JOIN TEMP_TABLE_COMPOSITE_PK rhs ON lhs.col1 = rhs.col2
                  */
@@ -1177,7 +1207,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "        CLIENT MERGE SORT",
                 /*
                  * testJoinWithKeyRangeOptimization()
-                 *     SELECT (*SKIP_SCAN_HASH_JOIN*) lhs.col0, lhs.col1, lhs.col2, rhs.col0, rhs.col1, rhs.col2 
+                 *     SELECT lhs.col0, lhs.col1, lhs.col2, rhs.col0, rhs.col1, rhs.col2 
                  *     FROM TEMP_TABLE_COMPOSITE_PK lhs 
                  *     JOIN TEMP_TABLE_COMPOSITE_PK rhs ON lhs.col0 = rhs.col2
                  */
@@ -1186,10 +1216,10 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "    PARALLEL INNER-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 4-WAY FULL SCAN OVER TEMP_TABLE_COMPOSITE_PK\n" +
                 "        CLIENT MERGE SORT\n" +
-                "    DYNAMIC SERVER FILTER BY COL0 IN (RHS.COL2)",
+                "    DYNAMIC SERVER FILTER BY LHS.COL0 IN (RHS.COL2)",
                 /*
                  * testJoinWithKeyRangeOptimization()
-                 *     SELECT (*SKIP_SCAN_HASH_JOIN*) lhs.col0, lhs.col1, lhs.col2, rhs.col0, rhs.col1, rhs.col2 
+                 *     SELECT lhs.col0, lhs.col1, lhs.col2, rhs.col0, rhs.col1, rhs.col2 
                  *     FROM TEMP_TABLE_COMPOSITE_PK lhs 
                  *     JOIN TEMP_TABLE_COMPOSITE_PK rhs ON lhs.col0 = rhs.col1 AND lhs.col1 = rhs.col2
                  */
@@ -1198,10 +1228,10 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "    PARALLEL INNER-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 4-WAY FULL SCAN OVER TEMP_TABLE_COMPOSITE_PK\n" +
                 "        CLIENT MERGE SORT\n" +
-                "    DYNAMIC SERVER FILTER BY (COL0, COL1) IN ((RHS.COL1, RHS.COL2))",
+                "    DYNAMIC SERVER FILTER BY (LHS.COL0, LHS.COL1) IN ((RHS.COL1, RHS.COL2))",
                 /*
                  * testJoinWithKeyRangeOptimization()
-                 *     SELECT (*SKIP_SCAN_HASH_JOIN*) lhs.col0, lhs.col1, lhs.col2, rhs.col0, rhs.col1, rhs.col2 
+                 *     SELECT lhs.col0, lhs.col1, lhs.col2, rhs.col0, rhs.col1, rhs.col2 
                  *     FROM TEMP_TABLE_COMPOSITE_PK lhs 
                  *     JOIN TEMP_TABLE_COMPOSITE_PK rhs ON lhs.col0 = rhs.col1 AND lhs.col2 = rhs.col3 - 1 AND lhs.col1 = rhs.col2
                  */
@@ -1210,7 +1240,24 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "    PARALLEL INNER-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 4-WAY FULL SCAN OVER TEMP_TABLE_COMPOSITE_PK\n" +
                 "        CLIENT MERGE SORT\n" +
-                "    DYNAMIC SERVER FILTER BY (COL0, COL1, COL2) IN ((RHS.COL1, RHS.COL2, TO_INTEGER((RHS.COL3 - 1))))",
+                "    DYNAMIC SERVER FILTER BY (LHS.COL0, LHS.COL1, LHS.COL2) IN ((RHS.COL1, RHS.COL2, TO_INTEGER((RHS.COL3 - 1))))",
+                /*
+                 * testJoinWithSetMaxRows()
+                 *     statement.setMaxRows(4);
+                 *     SELECT order_id, i.name, quantity FROM joinItemTable i
+                 *     JOIN joinOrderTable o ON o.item_id = i.item_id;
+                 *     SELECT o.order_id, i.name, o.quantity FROM joinItemTable i
+                 *     JOIN (SELECT order_id, item_id, quantity FROM joinOrderTable) o
+                 *     ON o.item_id = i.item_id;
+                 */
+                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + JOIN_ITEM_TABLE_DISPLAY_NAME + " [-32768]\n" +
+                "    SERVER FILTER BY FIRST KEY ONLY\n" +
+                "CLIENT MERGE SORT\n" +
+                "CLIENT 4 ROW LIMIT\n" +
+                "    PARALLEL INNER-JOIN TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
+                "    DYNAMIC SERVER FILTER BY \"I.:item_id\" IN (\"O.item_id\")\n" +
+                "    JOIN-SCANNER 4 ROW LIMIT",
                 }});
         return testCases;
     }
@@ -2775,6 +2822,20 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                             + "GROUP BY t1.TID, t1.A, t2.A");
             upsertStmt.execute();
             conn.commit();            
+
+            rs = statement.executeQuery("SELECT * FROM " + joinTable);
+            assertTrue(rs.next());
+            assertEquals(rs.getString(1), "1");
+            assertEquals(rs.getInt(2), 1);
+            assertEquals(rs.getInt(3), 2);
+            assertEquals(rs.getInt(4), 2);
+            assertTrue(rs.next());
+            assertEquals(rs.getString(1), "1");
+            assertEquals(rs.getInt(2), 2);
+            assertEquals(rs.getInt(3), 1);
+            assertEquals(rs.getInt(4), 2);
+
+            assertFalse(rs.next());
         } finally {
             conn.close();
         }
@@ -3539,7 +3600,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
             conn.commit();
             
             // No leading part of PK
-            String query = "SELECT /*+ SKIP_SCAN_HASH_JOIN*/ lhs.col0, lhs.col1, lhs.col2, lhs.col3, rhs.col0, rhs.col1, rhs.col2, rhs.col3 FROM " 
+            String query = "SELECT lhs.col0, lhs.col1, lhs.col2, lhs.col3, rhs.col0, rhs.col1, rhs.col2, rhs.col3 FROM " 
                     + tempTableWithCompositePK + " lhs JOIN "
                     + tempTableWithCompositePK + " rhs ON lhs.col1 = rhs.col2";
             PreparedStatement statement = conn.prepareStatement(query);
@@ -3569,7 +3630,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
             assertEquals(plans[21], QueryUtil.getExplainPlan(rs));
             
             // Two parts of PK but only one leading part
-            query = "SELECT /*+ SKIP_SCAN_HASH_JOIN*/ lhs.col0, lhs.col1, lhs.col2, lhs.col3, rhs.col0, rhs.col1, rhs.col2, rhs.col3 FROM " 
+            query = "SELECT lhs.col0, lhs.col1, lhs.col2, lhs.col3, rhs.col0, rhs.col1, rhs.col2, rhs.col3 FROM " 
                     + tempTableWithCompositePK + " lhs JOIN "
                     + tempTableWithCompositePK + " rhs ON lhs.col2 = rhs.col3 AND lhs.col0 = rhs.col2";
             statement = conn.prepareStatement(query);
@@ -3590,7 +3651,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
             assertEquals(plans[22], QueryUtil.getExplainPlan(rs));
             
             // Two leading parts of PK
-            query = "SELECT /*+ SKIP_SCAN_HASH_JOIN*/ lhs.col0, lhs.col1, lhs.col2, lhs.col3, rhs.col0, rhs.col1, rhs.col2, rhs.col3 FROM " 
+            query = "SELECT lhs.col0, lhs.col1, lhs.col2, lhs.col3, rhs.col0, rhs.col1, rhs.col2, rhs.col3 FROM " 
                     + tempTableWithCompositePK + " lhs JOIN "
                     + tempTableWithCompositePK + " rhs ON lhs.col1 = rhs.col2 AND lhs.col0 = rhs.col1";
             statement = conn.prepareStatement(query);
@@ -3620,7 +3681,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
             assertEquals(plans[23], QueryUtil.getExplainPlan(rs));
             
             // All parts of PK
-            query = "SELECT /*+ SKIP_SCAN_HASH_JOIN*/ lhs.col0, lhs.col1, lhs.col2, lhs.col3, rhs.col0, rhs.col1, rhs.col2, rhs.col3 FROM " 
+            query = "SELECT lhs.col0, lhs.col1, lhs.col2, lhs.col3, rhs.col0, rhs.col1, rhs.col2, rhs.col3 FROM " 
                     + tempTableWithCompositePK + " lhs JOIN "
                     + tempTableWithCompositePK + " rhs ON lhs.col1 = rhs.col2 AND lhs.col2 = rhs.col3 - 1 AND lhs.col0 = rhs.col1";
             statement = conn.prepareStatement(query);
@@ -3710,6 +3771,102 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
         }
     }
 
+    @Test
+    public void testJoinWithSetMaxRows() throws Exception {
+        String [] queries = new String[2];
+        queries[0] = "SELECT \"order_id\", i.name, quantity FROM " + JOIN_ITEM_TABLE_FULL_NAME + " i JOIN "
+                + JOIN_ORDER_TABLE_FULL_NAME + " o ON o.\"item_id\" = i.\"item_id\"";
+        queries[1] = "SELECT o.\"order_id\", i.name, o.quantity FROM " + JOIN_ITEM_TABLE_FULL_NAME + " i JOIN " 
+                + "(SELECT \"order_id\", \"item_id\", quantity FROM " + JOIN_ORDER_TABLE_FULL_NAME + ") o " 
+                + "ON o.\"item_id\" = i.\"item_id\"";
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            for (String query : queries) {
+                Statement statement = conn.createStatement();
+                statement.setMaxRows(4);
+                ResultSet rs = statement.executeQuery(query);
+                assertTrue (rs.next());
+                assertEquals(rs.getString(1), "000000000000001");
+                assertEquals(rs.getString(2), "T1");
+                assertEquals(rs.getInt(3), 1000);
+                assertTrue (rs.next());
+                assertEquals(rs.getString(1), "000000000000003");
+                assertEquals(rs.getString(2), "T2");
+                assertEquals(rs.getInt(3), 3000);
+                assertTrue (rs.next());
+                assertEquals(rs.getString(1), "000000000000005");
+                assertEquals(rs.getString(2), "T3");
+                assertEquals(rs.getInt(3), 5000);
+                assertTrue (rs.next());
+                assertEquals(rs.getString(1), "000000000000002");
+                assertEquals(rs.getString(2), "T6");
+                assertEquals(rs.getInt(3), 2000);
+
+                assertFalse(rs.next());
+                
+                rs = statement.executeQuery("EXPLAIN " + query);
+                assertEquals(plans[25], QueryUtil.getExplainPlan(rs));
+            }
+        } finally {
+            conn.close();
+        }
+    }
+
+    @Test
+    public void testSubqueryWithoutData() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(false);
+
+        try {
+            String GRAMMAR_TABLE = "CREATE TABLE IF NOT EXISTS GRAMMAR_TABLE (ID INTEGER PRIMARY KEY, " +
+                    "unsig_id UNSIGNED_INT, big_id BIGINT, unsig_long_id UNSIGNED_LONG, tiny_id TINYINT," +
+                    "unsig_tiny_id UNSIGNED_TINYINT, small_id SMALLINT, unsig_small_id UNSIGNED_SMALLINT," + 
+                    "float_id FLOAT, unsig_float_id UNSIGNED_FLOAT, double_id DOUBLE, unsig_double_id UNSIGNED_DOUBLE," + 
+                    "decimal_id DECIMAL, boolean_id BOOLEAN, time_id TIME, date_id DATE, timestamp_id TIMESTAMP," + 
+                    "unsig_time_id TIME, unsig_date_id DATE, unsig_timestamp_id TIMESTAMP, varchar_id VARCHAR (30)," + 
+                    "char_id CHAR (30), binary_id BINARY (100), varbinary_id VARBINARY (100))";
+
+            String LARGE_TABLE = "CREATE TABLE IF NOT EXISTS LARGE_TABLE (ID INTEGER PRIMARY KEY, " +
+                    "unsig_id UNSIGNED_INT, big_id BIGINT, unsig_long_id UNSIGNED_LONG, tiny_id TINYINT," +
+                    "unsig_tiny_id UNSIGNED_TINYINT, small_id SMALLINT, unsig_small_id UNSIGNED_SMALLINT," + 
+                    "float_id FLOAT, unsig_float_id UNSIGNED_FLOAT, double_id DOUBLE, unsig_double_id UNSIGNED_DOUBLE," + 
+                    "decimal_id DECIMAL, boolean_id BOOLEAN, time_id TIME, date_id DATE, timestamp_id TIMESTAMP," + 
+                    "unsig_time_id TIME, unsig_date_id DATE, unsig_timestamp_id TIMESTAMP, varchar_id VARCHAR (30)," + 
+                    "char_id CHAR (30), binary_id BINARY (100), varbinary_id VARBINARY (100))";
+
+            String SECONDARY_LARGE_TABLE = "CREATE TABLE IF NOT EXISTS SECONDARY_LARGE_TABLE (SEC_ID INTEGER PRIMARY KEY," +
+                    "sec_unsig_id UNSIGNED_INT, sec_big_id BIGINT, sec_usnig_long_id UNSIGNED_LONG, sec_tiny_id TINYINT," + 
+                    "sec_unsig_tiny_id UNSIGNED_TINYINT, sec_small_id SMALLINT, sec_unsig_small_id UNSIGNED_SMALLINT," + 
+                    "sec_float_id FLOAT, sec_unsig_float_id UNSIGNED_FLOAT, sec_double_id DOUBLE, sec_unsig_double_id UNSIGNED_DOUBLE," +
+                    "sec_decimal_id DECIMAL, sec_boolean_id BOOLEAN, sec_time_id TIME, sec_date_id DATE," +
+                    "sec_timestamp_id TIMESTAMP, sec_unsig_time_id TIME, sec_unsig_date_id DATE, sec_unsig_timestamp_id TIMESTAMP," +
+                    "sec_varchar_id VARCHAR (30), sec_char_id CHAR (30), sec_binary_id BINARY (100), sec_varbinary_id VARBINARY (100))";
+            createTestTable(getUrl(), GRAMMAR_TABLE);
+            createTestTable(getUrl(), LARGE_TABLE);
+            createTestTable(getUrl(), SECONDARY_LARGE_TABLE);
+
+            String ddl = "SELECT * FROM (SELECT ID, BIG_ID, DATE_ID FROM LARGE_TABLE AS A WHERE (A.ID % 5) = 0) AS A " +
+                    "INNER JOIN (SELECT SEC_ID, SEC_TINY_ID, SEC_UNSIG_FLOAT_ID FROM SECONDARY_LARGE_TABLE AS B WHERE (B.SEC_ID % 5) = 0) AS B " +     
+                    "ON A.ID=B.SEC_ID WHERE A.DATE_ID > ALL (SELECT SEC_DATE_ID FROM SECONDARY_LARGE_TABLE LIMIT 100) " +      
+                    "AND B.SEC_UNSIG_FLOAT_ID = ANY (SELECT sec_unsig_float_id FROM SECONDARY_LARGE_TABLE " +                                       
+                    "WHERE SEC_ID > ALL (SELECT MIN (ID) FROM GRAMMAR_TABLE WHERE UNSIG_ID IS NULL) AND " +
+                    "SEC_UNSIG_ID < ANY (SELECT DISTINCT(UNSIG_ID) FROM LARGE_TABLE WHERE UNSIG_ID<2500) LIMIT 1000) " +
+                    "AND A.ID < 10000";
+            ResultSet rs = conn.createStatement().executeQuery(ddl);
+            assertFalse(rs.next());  
+        } finally {
+            Statement statement = conn.createStatement();
+            String query = "drop table GRAMMAR_TABLE";
+            statement.executeUpdate(query);
+            query = "drop table LARGE_TABLE";
+            statement.executeUpdate(query);
+            query = "drop table SECONDARY_LARGE_TABLE";
+            statement.executeUpdate(query);
+            conn.close();
+        }
+    }
 }
 
 

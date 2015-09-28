@@ -19,6 +19,7 @@ package org.apache.hadoop.hbase.ipc;
 
 import static org.junit.Assert.assertEquals;
 
+import java.net.InetSocketAddress;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -26,6 +27,7 @@ import java.util.concurrent.TimeUnit;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.ipc.RpcScheduler.Context;
+import org.apache.hadoop.hbase.ipc.RpcServer.Connection;
 import org.apache.hadoop.hbase.protobuf.generated.RPCProtos.RequestHeader;
 import org.junit.Test;
 import org.mockito.Mockito;
@@ -37,14 +39,15 @@ import org.mockito.Mockito;
 public class PhoenixIndexRpcSchedulerTest {
 
     private static final Configuration conf = HBaseConfiguration.create();
+    private static final InetSocketAddress isa = new InetSocketAddress("localhost", 0);
 
     @Test
     public void testIndexPriorityWritesToIndexHandler() throws Exception {
         RpcScheduler mock = Mockito.mock(RpcScheduler.class);
 
-        PhoenixIndexRpcScheduler scheduler = new PhoenixIndexRpcScheduler(10, conf, mock, 200, 250);
+        PhoenixRpcScheduler scheduler = new PhoenixRpcScheduler(conf, mock, 200, 250);
         BalancedQueueRpcExecutor executor = new BalancedQueueRpcExecutor("test-queue", 1, 1, 1);
-        scheduler.setExecutorForTesting(executor);
+        scheduler.setIndexExecutorForTesting(executor);
         dispatchCallWithPriority(scheduler, 200);
         List<BlockingQueue<CallRunner>> queues = executor.getQueues();
         assertEquals(1, queues.size());
@@ -52,8 +55,8 @@ public class PhoenixIndexRpcSchedulerTest {
         queue.poll(20, TimeUnit.SECONDS);
 
         // try again, this time we tweak the ranges we support
-        scheduler = new PhoenixIndexRpcScheduler(10, conf, mock, 101, 110);
-        scheduler.setExecutorForTesting(executor);
+        scheduler = new PhoenixRpcScheduler(conf, mock, 101, 110);
+        scheduler.setIndexExecutorForTesting(executor);
         dispatchCallWithPriority(scheduler, 101);
         queue.poll(20, TimeUnit.SECONDS);
 
@@ -69,14 +72,14 @@ public class PhoenixIndexRpcSchedulerTest {
     @Test
     public void testDelegateWhenOutsideRange() throws Exception {
         RpcScheduler mock = Mockito.mock(RpcScheduler.class);
-        PhoenixIndexRpcScheduler scheduler = new PhoenixIndexRpcScheduler(10, conf, mock, 200, 250);
+        PhoenixRpcScheduler scheduler = new PhoenixRpcScheduler(conf, mock, 200, 250);
         dispatchCallWithPriority(scheduler, 100);
-        dispatchCallWithPriority(scheduler, 250);
+        dispatchCallWithPriority(scheduler, 251);
 
         // try again, this time we tweak the ranges we support
-        scheduler = new PhoenixIndexRpcScheduler(10, conf, mock, 101, 110);
+        scheduler = new PhoenixRpcScheduler(conf, mock, 101, 110);
         dispatchCallWithPriority(scheduler, 200);
-        dispatchCallWithPriority(scheduler, 110);
+        dispatchCallWithPriority(scheduler, 111);
 
         Mockito.verify(mock, Mockito.times(4)).init(Mockito.any(Context.class));
         Mockito.verify(mock, Mockito.times(4)).dispatch(Mockito.any(CallRunner.class));
@@ -84,11 +87,12 @@ public class PhoenixIndexRpcSchedulerTest {
     }
 
     private void dispatchCallWithPriority(RpcScheduler scheduler, int priority) throws Exception {
+        Connection connection = Mockito.mock(Connection.class);
         CallRunner task = Mockito.mock(CallRunner.class);
         RequestHeader header = RequestHeader.newBuilder().setPriority(priority).build();
-        RpcServer server = new RpcServer(null, "test-rpcserver", null, null, conf, scheduler);
+        RpcServer server = new RpcServer(null, "test-rpcserver", null, isa, conf, scheduler);
         RpcServer.Call call =
-                server.new Call(0, null, null, header, null, null, null, null, 10, null);
+                server.new Call(0, null, null, header, null, null, connection, null, 10, null, null);
         Mockito.when(task.getCall()).thenReturn(call);
 
         scheduler.dispatch(task);

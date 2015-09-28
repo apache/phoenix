@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Strings.isNullOrEmpty;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_FUNCTION_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES;
 
 import java.sql.SQLException;
@@ -38,6 +39,7 @@ import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -48,18 +50,18 @@ import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
-import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PMetaData;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.types.PVarbinary;
-import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
 import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.ValueSchema.Field;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.schema.types.PVarchar;
 
 import com.google.common.base.Preconditions;
 
@@ -172,9 +174,24 @@ public class SchemaUtil {
         }
         return name.toUpperCase();
     }
+    
+    /**
+     * Normalizes the fulltableName . Uses {@linkplain normalizeIdentifier}
+     * @param fullTableName
+     * @return
+     */
+    public static String normalizeFullTableName(String fullTableName) {
+        String schemaName = SchemaUtil.getSchemaNameFromFullName(fullTableName);
+        String tableName = SchemaUtil.getTableNameFromFullName(fullTableName);
+        String normalizedTableName = StringUtil.EMPTY_STRING;
+        if(!schemaName.isEmpty()) {
+            normalizedTableName =  normalizeIdentifier(schemaName) + QueryConstants.NAME_SEPARATOR;
+        }
+        return normalizedTableName + normalizeIdentifier(tableName);
+    }
 
     public static boolean isCaseSensitive(String name) {
-        return name.length() > 0 && name.charAt(0)=='"';
+        return name!=null && name.length() > 0 && name.charAt(0)=='"';
     }
     
     public static <T> List<T> concat(List<T> l1, List<T> l2) {
@@ -201,19 +218,30 @@ public class SchemaUtil {
         return ByteUtil.concat(tenantId, QueryConstants.SEPARATOR_BYTE_ARRAY, schemaName, QueryConstants.SEPARATOR_BYTE_ARRAY, tableName);
     }
 
+    /**
+     * Get the key used in the Phoenix function data row for a function definition
+     * @param tenantId
+     * @param functionName
+     */
+    public static byte[] getFunctionKey(byte[] tenantId, byte[] functionName) {
+        return ByteUtil.concat(tenantId, QueryConstants.SEPARATOR_BYTE_ARRAY, functionName);
+    }
+
     public static byte[] getTableKey(String tenantId, String schemaName, String tableName) {
         return ByteUtil.concat(tenantId == null  ? ByteUtil.EMPTY_BYTE_ARRAY : Bytes.toBytes(tenantId), QueryConstants.SEPARATOR_BYTE_ARRAY, schemaName == null ? ByteUtil.EMPTY_BYTE_ARRAY : Bytes.toBytes(schemaName), QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes(tableName));
     }
 
     public static String getTableName(String schemaName, String tableName) {
-        return getName(schemaName,tableName);
+        return getName(schemaName,tableName, false);
     }
 
-    private static String getName(String optionalQualifier, String name) {
+    private static String getName(String optionalQualifier, String name, boolean caseSensitive) {
+        String cq = caseSensitive ? "\"" + name + "\"" : name;
         if (optionalQualifier == null || optionalQualifier.isEmpty()) {
-            return name;
+            return cq;
         }
-        return optionalQualifier + QueryConstants.NAME_SEPARATOR + name;
+        String cf = caseSensitive ? "\"" + optionalQualifier + "\"" : optionalQualifier;
+        return cf + QueryConstants.NAME_SEPARATOR + cq;
     }
 
     public static String getTableName(byte[] schemaName, byte[] tableName) {
@@ -225,21 +253,25 @@ public class SchemaUtil {
     }
 
     public static String getColumnDisplayName(String cf, String cq) {
-        return getName(cf == null || cf.isEmpty() ? null : cf, cq);
+        return getName(cf == null || cf.isEmpty() ? null : cf, cq, false);
+    }
+    
+    public static String getCaseSensitiveColumnDisplayName(String cf, String cq) {
+        return getName(cf == null || cf.isEmpty() ? null : cf, cq, true);
     }
 
     public static String getMetaDataEntityName(String schemaName, String tableName, String familyName, String columnName) {
         if ((schemaName == null || schemaName.isEmpty()) && (tableName == null || tableName.isEmpty())) {
-            return getName(familyName, columnName);
+            return getName(familyName, columnName, false);
         }
         if ((familyName == null || familyName.isEmpty()) && (columnName == null || columnName.isEmpty())) {
-            return getName(schemaName, tableName);
+            return getName(schemaName, tableName, false);
         }
-        return getName(getName(schemaName, tableName), getName(familyName, columnName));
+        return getName(getName(schemaName, tableName, false), getName(familyName, columnName, false), false);
     }
 
     public static String getColumnName(String familyName, String columnName) {
-        return getName(familyName, columnName);
+        return getName(familyName, columnName, false);
     }
 
     public static byte[] getTableNameAsBytes(String schemaName, String tableName) {
@@ -367,13 +399,21 @@ public class SchemaUtil {
     public static boolean isMetaTable(byte[] tableName) {
         return Bytes.compareTo(tableName, SYSTEM_CATALOG_NAME_BYTES) == 0;
     }
-    
+
+    public static boolean isFunctionTable(byte[] tableName) {
+        return Bytes.compareTo(tableName, SYSTEM_FUNCTION_NAME_BYTES) == 0;
+    }
+
     public static boolean isStatsTable(byte[] tableName) {
         return Bytes.compareTo(tableName, SYSTEM_STATS_NAME_BYTES) == 0;
     }
     
     public static boolean isSequenceTable(byte[] tableName) {
         return Bytes.compareTo(tableName, PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_BYTES) == 0;
+    }
+
+    public static boolean isSequenceTable(PTable table) {
+        return PhoenixDatabaseMetaData.SEQUENCE_FULLNAME.equals(table.getName().getString());
     }
 
     public static boolean isMetaTable(PTable table) {
@@ -388,6 +428,12 @@ public class SchemaUtil {
         return PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA.equals(schemaName) && PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE.equals(tableName);
     }
 
+    public static boolean isSystemTable(byte[] fullTableName) {
+        String schemaName = SchemaUtil.getSchemaNameFromFullName(fullTableName);
+        if (QueryConstants.SYSTEM_SCHEMA_NAME.equals(schemaName)) return true;
+        return false;
+    }
+    
     // Given the splits and the rowKeySchema, find out the keys that 
     public static byte[][] processSplits(byte[][] splits, LinkedHashSet<PColumn> pkColumns, Integer saltBucketNum, boolean defaultRowKeyOrder) throws SQLException {
         // FIXME: shouldn't this return if splits.length == 0?
@@ -579,7 +625,7 @@ public class SchemaUtil {
     }
 
     public static int getMaxKeyLength(RowKeySchema schema, List<List<KeyRange>> slots) {
-        int maxKeyLength = getTerminatorCount(schema);
+        int maxKeyLength = getTerminatorCount(schema) * 2;
         for (List<KeyRange> slot : slots) {
             int maxSlotLength = 0;
             for (KeyRange range : slot) {
@@ -616,6 +662,9 @@ public class SchemaUtil {
     }
     
     public static String getEscapedFullColumnName(String fullColumnName) {
+        if(fullColumnName.startsWith(ESCAPE_CHARACTER)) {
+            return fullColumnName;
+        }
         int index = fullColumnName.indexOf(QueryConstants.NAME_SEPARATOR);
         if (index < 0) {
             return getEscapedArgument(fullColumnName); 
@@ -661,5 +710,38 @@ public class SchemaUtil {
     public static String getQuotedFullColumnName(@Nullable String columnFamilyName, String columnName) {
         checkArgument(!isNullOrEmpty(columnName), "Column name cannot be null or empty");
         return columnFamilyName == null ? ("\"" + columnName + "\"") : ("\"" + columnFamilyName + "\"" + QueryConstants.NAME_SEPARATOR + "\"" + columnName + "\"");
+    }
+    
+    /**
+     * Replaces all occurrences of {@link #ESCAPE_CHARACTER} with an empty character. 
+     * @param fullColumnName
+     * @return 
+     */
+    public static String getUnEscapedFullColumnName(String fullColumnName) {
+        checkArgument(!isNullOrEmpty(fullColumnName), "Column name cannot be null or empty");
+        fullColumnName = fullColumnName.replaceAll(ESCAPE_CHARACTER, "");
+       	return fullColumnName.trim();
+    }
+    
+    /**
+     * Return the separator byte to use based on:
+     * @param rowKeyOrderOptimizable whether or not the table may optimize descending row keys. If the
+     *  table has no descending row keys, this will be true. Also, if the table has been upgraded (using
+     *  a new -u option for psql.py), then it'll be true
+     * @param isNullValue whether or not the value is null. We use a null byte still if the value is null
+     * regardless of sort order since nulls will always sort first this way.
+     * @param sortOrder whether the value sorts ascending or descending.
+     * @return the byte to use as the separator
+     */
+    public static byte getSeparatorByte(boolean rowKeyOrderOptimizable, boolean isNullValue, SortOrder sortOrder) {
+        return !rowKeyOrderOptimizable || isNullValue || sortOrder == SortOrder.ASC ? QueryConstants.SEPARATOR_BYTE : QueryConstants.DESC_SEPARATOR_BYTE;
+    }
+    
+    public static byte getSeparatorByte(boolean rowKeyOrderOptimizable, boolean isNullValue, Field f) {
+        return getSeparatorByte(rowKeyOrderOptimizable, isNullValue, f.getSortOrder());
+    }
+    
+    public static byte getSeparatorByte(boolean rowKeyOrderOptimizable, boolean isNullValue, Expression e) {
+        return getSeparatorByte(rowKeyOrderOptimizable, isNullValue, e.getSortOrder());
     }
 }

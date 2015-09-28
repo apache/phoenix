@@ -21,6 +21,8 @@ import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
 
+import org.apache.phoenix.compile.ColumnResolver;
+
 
 
 /**
@@ -32,14 +34,20 @@ import java.util.List;
  */
 public class InParseNode extends BinaryParseNode {
     private final boolean negate;
+    private final boolean isSubqueryDistinct;
 
-    InParseNode(ParseNode l, ParseNode r, boolean negate) {
+    InParseNode(ParseNode l, ParseNode r, boolean negate, boolean isSubqueryDistinct) {
         super(l, r);
         this.negate = negate;
+        this.isSubqueryDistinct = isSubqueryDistinct;
     }
     
     public boolean isNegate() {
         return negate;
+    }
+    
+    public boolean isSubqueryDistinct() {
+        return isSubqueryDistinct;
     }
 
     @Override
@@ -49,5 +57,39 @@ public class InParseNode extends BinaryParseNode {
             l = acceptChildren(visitor);
         }
         return visitor.visitLeave(this, l);
+    }
+
+	@Override
+	public int hashCode() {
+		final int prime = 31;
+		int result = super.hashCode();
+		result = prime * result + (isSubqueryDistinct ? 1231 : 1237);
+		result = prime * result + (negate ? 1231 : 1237);
+		return result;
+	}
+
+	@Override
+	public boolean equals(Object obj) {
+		if (this == obj)
+			return true;
+		if (!super.equals(obj))
+			return false;
+		if (getClass() != obj.getClass())
+			return false;
+		InParseNode other = (InParseNode) obj;
+		if (isSubqueryDistinct != other.isSubqueryDistinct)
+			return false;
+		if (negate != other.negate)
+			return false;
+		return true;
+	}
+
+    @Override
+    public void toSQL(ColumnResolver resolver, StringBuilder buf) {
+        getChildren().get(0).toSQL(resolver, buf);
+        if (negate) buf.append(" NOT");
+        buf.append(" IN (");
+        getChildren().get(1).toSQL(resolver, buf);
+        buf.append(')');
     }
 }

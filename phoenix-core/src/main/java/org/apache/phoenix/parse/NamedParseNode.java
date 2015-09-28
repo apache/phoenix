@@ -18,6 +18,7 @@
 package org.apache.phoenix.parse;
 
 
+
 /**
  * 
  * Abstract node representing named nodes such as binds and column expressions in SQL
@@ -35,6 +36,10 @@ public abstract class NamedParseNode extends TerminalParseNode{
     NamedParseNode(String name) {
         this.namedNode = new NamedNode(name);
     }
+    
+    NamedParseNode(String name, boolean isCaseSensitive) {
+        this.namedNode = new NamedNode(name, isCaseSensitive);
+    }
 
     public String getName() {
         return namedNode.getName();
@@ -44,8 +49,40 @@ public abstract class NamedParseNode extends TerminalParseNode{
         return namedNode.isCaseSensitive();
     }
     
-    @Override
-    public String toString() {
-        return getName();
+	@Override
+	public int hashCode() {
+		final int prime = 31;
+		int result = 1;
+		result = prime * result
+				+ ((namedNode == null) ? 0 : namedNode.hashCode());
+		return result;
+	}
+
+	@Override
+	public boolean equals(Object obj) {
+		if (this == obj)
+			return true;
+		if (obj == null)
+			return false;
+		if (getClass() != obj.getClass())
+			return false;
+		NamedParseNode other = (NamedParseNode) obj;
+		if (namedNode == null) {
+			if (other.namedNode != null)
+				return false;
+		} else if (!namedNode.equals(other.namedNode))
+			return false;
+		return true;
+	}
+
+    
+    public void toSQL(StringBuilder buf) {
+        if (isCaseSensitive()) {
+            buf.append('"');
+            buf.append(getName());
+            buf.append('"');
+        } else {
+            buf.append(getName());
+        }
     }
 }

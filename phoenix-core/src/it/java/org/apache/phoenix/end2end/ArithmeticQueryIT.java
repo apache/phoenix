@@ -295,6 +295,106 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
     }
 
     @Test
+    public void testRandomFunction() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(false);
+        try {
+            String ddl = "CREATE TABLE testRandomFunction (pk VARCHAR NOT NULL PRIMARY KEY)";
+            createTestTable(getUrl(), ddl);
+            conn.createStatement().execute("upsert into testRandomFunction values ('x')");
+            conn.createStatement().execute("upsert into testRandomFunction values ('y')");
+            conn.createStatement().execute("upsert into testRandomFunction values ('z')");
+            conn.commit();
+
+            ResultSet rs = conn.createStatement().executeQuery("select rand(), rand(), rand(1), rand(2), rand(1) from testRandomFunction");
+            assertTrue(rs.next());
+            double rand0 = rs.getDouble(1);
+            double rand1 = rs.getDouble(3);
+            double rand2 = rs.getDouble(4);
+            assertTrue(rs.getDouble(1) != rs.getDouble(2));
+            assertTrue(rs.getDouble(2) != rs.getDouble(3));
+            assertTrue(rs.getDouble(3) == rs.getDouble(5));
+            assertTrue(rs.getDouble(4) != rs.getDouble(5));
+            assertTrue(rs.next());
+            assertTrue(rand0 != rs.getDouble(1));
+            assertTrue(rand1 != rs.getDouble(3));
+            assertTrue(rand2 != rs.getDouble(4));
+            double rand01 = rs.getDouble(1);
+            double rand11 = rs.getDouble(3);
+            double rand21 = rs.getDouble(4);
+            assertTrue(rs.getDouble(1) != rs.getDouble(2));
+            assertTrue(rs.getDouble(2) != rs.getDouble(3));
+            assertTrue(rs.getDouble(3) == rs.getDouble(5));
+            assertTrue(rs.getDouble(4) != rs.getDouble(5));
+            assertTrue(rs.next());
+            assertTrue(rand01 != rs.getDouble(1));
+            assertTrue(rand11 != rs.getDouble(3));
+            assertTrue(rand21 != rs.getDouble(4));
+            assertTrue(rs.getDouble(1) != rs.getDouble(2));
+            assertTrue(rs.getDouble(2) != rs.getDouble(3));
+            assertTrue(rs.getDouble(3) == rs.getDouble(5));
+            assertTrue(rs.getDouble(4) != rs.getDouble(5));
+            double rand12 = rs.getDouble(3);
+
+            rs = conn.createStatement().executeQuery("select rand(), rand(), rand(1), rand(2), rand(1) from testRandomFunction");
+            assertTrue(rs.next());
+            assertTrue(rs.getDouble(1) != rs.getDouble(2));
+            assertTrue(rs.getDouble(2) != rs.getDouble(3));
+            assertTrue(rs.getDouble(3) == rs.getDouble(5));
+            assertTrue(rs.getDouble(4) != rs.getDouble(5));
+            assertTrue(rand0 != rs.getDouble(1));
+            assertTrue(rand1 == rs.getDouble(3));
+            assertTrue(rand2 == rs.getDouble(4));
+            assertTrue(rs.next());
+            assertTrue(rand01 != rs.getDouble(1));
+            assertTrue(rand11 == rs.getDouble(3));
+            assertTrue(rand21 == rs.getDouble(4));
+            assertTrue(rs.next());
+            assertTrue(rand12 == rs.getDouble(3));
+
+            ddl = "CREATE TABLE testRandomFunction1 (pk VARCHAR NOT NULL PRIMARY KEY, v1 UNSIGNED_DOUBLE)";
+            createTestTable(getUrl(), ddl);
+            conn.createStatement().execute("upsert into testRandomFunction1 select pk, rand(1) from testRandomFunction");
+            conn.commit();
+
+            rs = conn.createStatement().executeQuery("select count(*) from testRandomFunction1 where v1 = rand(1)");
+            assertTrue(rs.next());
+            assertEquals(3, rs.getInt(1));
+
+            rs = conn.createStatement().executeQuery("select count(*) from testRandomFunction1 where v1 = rand(2)");
+            assertTrue(rs.next());
+            assertEquals(0, rs.getInt(1));
+
+            conn.createStatement().execute("delete from testRandomFunction1 where v1 = rand(2)");
+            conn.commit();
+
+            rs = conn.createStatement().executeQuery("select count(*) from testRandomFunction1 where v1 = rand(1)");
+            assertTrue(rs.next());
+            assertEquals(3, rs.getInt(1));
+
+            conn.setAutoCommit(true);
+            conn.createStatement().execute("upsert into testRandomFunction1 select pk, rand(2) from testRandomFunction1");
+
+            rs = conn.createStatement().executeQuery("select count(*) from testRandomFunction1 where v1 = rand(1)");
+            assertTrue(rs.next());
+            assertEquals(0, rs.getInt(1));
+
+            rs = conn.createStatement().executeQuery("select count(*) from testRandomFunction1 where v1 = rand(2)");
+            assertTrue(rs.next());
+            assertEquals(3, rs.getInt(1));
+
+            conn.createStatement().execute("delete from testRandomFunction1 where v1 = rand(2)");
+
+            rs = conn.createStatement().executeQuery("select count(*) from testRandomFunction1 where v1 = rand(2)");
+            assertTrue(rs.next());
+            assertEquals(0, rs.getInt(1));
+        } finally {
+            conn.close();
+        }
+    }
+
+    @Test
     public void testDecimalArithmeticWithIntAndLong() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -856,5 +956,93 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
         ResultSet rs = conn.createStatement().executeQuery("SELECT k1 / (v1 - 0.5) FROM test_table");
         assertTrue(rs.next());
         assertEquals(1.333333333, rs.getDouble(1), 0.001);
+    }
+
+    @Test
+    public void testFloatingPointUpsert() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String ddl = "CREATE TABLE test (id VARCHAR not null primary key, name VARCHAR, lat FLOAT)";
+        conn.createStatement().execute(ddl);
+        String dml = "UPSERT INTO test(id,name,lat) VALUES ('testid', 'testname', -1.00)";
+        conn.createStatement().execute(dml);
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery("SELECT lat FROM test");
+        assertTrue(rs.next());
+        assertEquals(-1.0f, rs.getFloat(1), 0.001);
+    }
+
+    @Test
+    public void testFloatingPointMultiplicationUpsert() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String ddl = "CREATE TABLE test (id VARCHAR not null primary key, name VARCHAR, lat FLOAT)";
+        conn.createStatement().execute(ddl);
+        String dml = "UPSERT INTO test(id,name,lat) VALUES ('testid', 'testname', -1.00 * 1)";
+        conn.createStatement().execute(dml);
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery("SELECT lat FROM test");
+        assertTrue(rs.next());
+        assertEquals(-1.0f, rs.getFloat(1), 0.001);
+    }
+    
+    @Test
+    public void testSystemTableHasDoubleForExponentialNumber() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String ddl = "CREATE TABLE test (id VARCHAR not null primary key, num FLOAT)";
+        conn.createStatement().execute(ddl);
+        String dml = "UPSERT INTO test(id,num) VALUES ('testid', 1.2E3)";
+        conn.createStatement().execute(dml);
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery("SELECT 1.2E3 FROM SYSTEM.CATALOG LIMIT 1");
+        assertTrue(rs.next());
+        assertTrue(rs.getObject(1) instanceof Double);
+    }
+    
+    @Test
+    public void testFloatingPointWithExponentialNotation() throws Exception {
+    	Float[] expected = {1.5E7f, 1.5E-7f, -1.5E-7f, 12E-5f, -.12E+34f};
+    	String[] values = {"1.5e7", "1.5e-7", "-1.5e-7", "12E-5", "-.12E+34"};
+        ResultSet rs = createTableWithValues(values, "FLOAT");
+        for (int i = 0; i < expected.length; i++) {
+        	assertEquals(expected[i], rs.getFloat(i+1), 0.001);
+        }
+    }
+    
+    @Test
+    public void testDoubleWithExponentialNotation() throws Exception {
+    	Double[] expected = {1.5E7d, 1.5E-7d, -1.5E-7d, 12E-5d, -.654E-321d, .1234E+56d};
+    	String[] values = {"1.5e7", "1.5e-7", "-1.5e-7", "12E-5", "-.654E-321", ".1234E+56"};
+    	ResultSet rs = createTableWithValues(values, "DOUBLE");
+        for (int i = 0; i < expected.length; i++) {
+        	assertEquals(expected[i], rs.getDouble(i+1), 0.001);
+        }
+    }
+    
+    private ResultSet createTableWithValues(String[] values, String valueType) throws SQLException {
+    	Connection conn = DriverManager.getConnection(getUrl());
+        StringBuilder ddl = new StringBuilder("CREATE TABLE test (id VARCHAR not null primary key");
+        StringBuilder dmll = new StringBuilder("UPSERT INTO test(id,");
+        StringBuilder dmlr = new StringBuilder(") VALUES ('testid'");
+        StringBuilder select = new StringBuilder("SELECT");
+        for(int i = 0; i < values.length; i++) {
+        	ddl.append(", num").append(i).append(" ").append(valueType);
+        	dmll.append("num").append(i).append(",");
+        	dmlr.append(", ").append(values[i]);
+        	select.append(" num").append(i).append(",");
+        }
+        ddl.append(")");
+        dmlr.append(")");
+        dmll.deleteCharAt(dmll.length()-1);
+        select.deleteCharAt(select.length()-1);
+        select.append(" FROM test");
+        conn.createStatement().execute(ddl.toString());
+        conn.createStatement().execute(dmll.toString() + dmlr.toString());
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery(select.toString());
+        rs.next();
+        return rs;
     }
 }

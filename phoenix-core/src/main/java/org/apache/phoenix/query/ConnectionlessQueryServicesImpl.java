@@ -20,10 +20,12 @@ package org.apache.phoenix.query;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_STATE_BYTES;
 
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
@@ -50,6 +52,8 @@ import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
+import org.apache.phoenix.parse.PFunction;
+import org.apache.phoenix.schema.FunctionNotFoundException;
 import org.apache.phoenix.schema.NewerTableAlreadyExistsException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PIndexState;
@@ -62,6 +66,7 @@ import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.Sequence;
+import org.apache.phoenix.schema.SequenceAllocation;
 import org.apache.phoenix.schema.SequenceAlreadyExistsException;
 import org.apache.phoenix.schema.SequenceInfo;
 import org.apache.phoenix.schema.SequenceKey;
@@ -103,6 +108,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
         super(queryServices);
         userName = connInfo.getPrincipal();
         metaData = newEmptyMetaData();
+        
         // Use KeyValueBuilder that builds real KeyValues, as our test utils require this
         this.kvBuilder = GenericKeyValueBuilder.INSTANCE;
     }
@@ -141,8 +147,8 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
 
     @Override
     public PMetaData addColumn(PName tenantId, String tableName, List<PColumn> columns, long tableTimeStamp,
-            long tableSeqNum, boolean isImmutableRows) throws SQLException {
-        return metaData = metaData.addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows);
+            long tableSeqNum, boolean isImmutableRows, boolean isWalDisabled, boolean isMultitenant, boolean storeNulls) throws SQLException {
+        return metaData = metaData.addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows, isWalDisabled, isMultitenant, storeNulls);
     }
 
     @Override
@@ -221,7 +227,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
 
     @Override
-    public MetaDataMutationResult addColumn(List<Mutation> tableMetaData, List<Pair<byte[],Map<String,Object>>> families, PTable table) throws SQLException {
+    public MetaDataMutationResult addColumn(List<Mutation> tableMetaData, PTable table, Map<String, List<Pair<String,Object>>> properties, Set<String> colFamiliesForPColumnsToBeAdded) throws SQLException {
         return new MetaDataMutationResult(MutationCode.TABLE_ALREADY_EXISTS, 0, null);
     }
 
@@ -272,13 +278,17 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
                     // A TableAlreadyExistsException is not thrown, since the table only exists *after* this fixed timestamp.
                 }
                 try {
-                    // TODO : Get this from a configuration
                     metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_STATS_TABLE_METADATA);
                 } catch (NewerTableAlreadyExistsException ignore) {
                     // Ignore, as this will happen if the SYSTEM.SEQUENCE already exists at this fixed
                     // timestamp.
                     // A TableAlreadyExistsException is not thrown, since the table only exists *after* this
                     // fixed timestamp.
+                }
+                
+                try {
+                   metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_FUNCTION_METADATA);
+                } catch (NewerTableAlreadyExistsException ignore) {
                 }
             } catch (SQLException e) {
                 sqlE = e;
@@ -376,13 +386,13 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
 
     @Override
-    public void validateSequences(List<SequenceKey> sequenceKeys, long timestamp, long[] values,
-            SQLException[] exceptions, Sequence.ValueOp action) throws SQLException {
+    public void validateSequences(List<SequenceAllocation> sequenceAllocations, long timestamp,
+            long[] values, SQLException[] exceptions, Sequence.ValueOp action) throws SQLException {
         int i = 0;
-        for (SequenceKey key : sequenceKeys) {
-            SequenceInfo info = sequenceMap.get(key);
+        for (SequenceAllocation sequenceAllocation : sequenceAllocations) {
+            SequenceInfo info = sequenceMap.get(sequenceAllocation.getSequenceKey());
             if (info == null) {
-                exceptions[i] = new SequenceNotFoundException(key.getSchemaName(), key.getSequenceName());
+                exceptions[i] = new SequenceNotFoundException(sequenceAllocation.getSequenceKey().getSchemaName(), sequenceAllocation.getSequenceKey().getSequenceName());
             } else {
                 values[i] = info.sequenceValue;          
             }
@@ -391,10 +401,11 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
 
     @Override
-    public void incrementSequences(List<SequenceKey> sequenceKeys, long timestamp, long[] values,
-            SQLException[] exceptions) throws SQLException {
+    public void incrementSequences(List<SequenceAllocation> sequenceAllocations, long timestamp,
+            long[] values, SQLException[] exceptions) throws SQLException {
         int i = 0;
-		for (SequenceKey key : sequenceKeys) {
+		for (SequenceAllocation sequenceAllocation : sequenceAllocations) {
+		    SequenceKey key = sequenceAllocation.getSequenceKey();
 			SequenceInfo info = sequenceMap.get(key);
 			if (info == null) {
 				exceptions[i] = new SequenceNotFoundException(
@@ -420,7 +431,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
         i = 0;
         for (SQLException e : exceptions) {
             if (e != null) {
-                sequenceMap.remove(sequenceKeys.get(i));
+                sequenceMap.remove(sequenceAllocations.get(i).getSequenceKey());
             }
             i++;
         }
@@ -457,7 +468,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
 
     @Override
     public boolean supportsFeature(Feature feature) {
-        return false;
+        return true;
     }
 
     @Override
@@ -478,5 +489,47 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     public int getSequenceSaltBuckets() {
         return getProps().getInt(QueryServices.SEQUENCE_SALT_BUCKETS_ATTRIB,
                 QueryServicesOptions.DEFAULT_SEQUENCE_TABLE_SALT_BUCKETS);
+    }
+
+    @Override
+    public MetaDataMutationResult createFunction(List<Mutation> functionData, PFunction function, boolean temporary)
+            throws SQLException {
+        return new MetaDataMutationResult(MutationCode.FUNCTION_NOT_FOUND, 0l, null);
+    }
+
+    @Override
+    public PMetaData addFunction(PFunction function) throws SQLException {
+        return metaData = this.metaData.addFunction(function);
+    }
+
+    @Override
+    public PMetaData removeFunction(PName tenantId, String function, long functionTimeStamp)
+            throws SQLException {
+        return metaData = this.metaData.removeFunction(tenantId, function, functionTimeStamp);
+    }
+
+    @Override
+    public MetaDataMutationResult getFunctions(PName tenantId,
+            List<Pair<byte[], Long>> functionNameAndTimeStampPairs, long clientTimestamp)
+            throws SQLException {
+        List<PFunction> functions = new ArrayList<PFunction>(functionNameAndTimeStampPairs.size());
+        for(Pair<byte[], Long> functionInfo: functionNameAndTimeStampPairs) {
+            try {
+                PFunction function2 = metaData.getFunction(new PTableKey(tenantId, Bytes.toString(functionInfo.getFirst())));
+                functions.add(function2);
+            } catch (FunctionNotFoundException e) {
+                return new MetaDataMutationResult(MutationCode.FUNCTION_NOT_FOUND, 0, null);
+            }
+        }
+        if(functions.isEmpty()) {
+            return null;
+        }
+        return new MetaDataMutationResult(MutationCode.FUNCTION_ALREADY_EXISTS, 0, functions, true);
+    }
+
+    @Override
+    public MetaDataMutationResult dropFunction(List<Mutation> tableMetadata, boolean ifExists)
+            throws SQLException {
+        return new MetaDataMutationResult(MutationCode.FUNCTION_ALREADY_EXISTS, 0, null);
     }
 }

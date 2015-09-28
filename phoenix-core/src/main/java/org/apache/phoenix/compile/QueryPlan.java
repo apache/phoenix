@@ -20,9 +20,11 @@ package org.apache.phoenix.compile;
 import java.sql.SQLException;
 import java.util.List;
 
+import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
+import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.query.KeyRange;
@@ -44,6 +46,8 @@ public interface QueryPlan extends StatementPlan {
      * @throws SQLException
      */
     public ResultIterator iterator() throws SQLException;
+    
+    public ResultIterator iterator(ParallelScanGrouper scanGrouper) throws SQLException;
     
     public long getEstimatedSize();
     
@@ -69,4 +73,14 @@ public interface QueryPlan extends StatementPlan {
     public boolean isDegenerate();
     
     public boolean isRowKeyOrdered();
+    
+    /**
+     * 
+     * @return whether underlying {@link ResultScanner} can be picked up in a round-robin 
+     * fashion. Generally, selecting scanners in such a fashion is possible if rows don't
+     * have to be returned back in a certain order.
+     * @throws SQLException 
+     */
+    public boolean useRoundRobinIterator() throws SQLException;
+    
 }

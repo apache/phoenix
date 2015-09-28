@@ -19,6 +19,7 @@ package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_FUNCTION_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE_SEQUENCE;
 import static org.apache.phoenix.util.TestUtil.ATABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.ATABLE_SCHEMA_NAME;
@@ -122,6 +123,10 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         assertTrue(rs.next());
         assertEquals(rs.getString("TABLE_SCHEM"),SYSTEM_CATALOG_SCHEMA);
         assertEquals(rs.getString("TABLE_NAME"),SYSTEM_CATALOG_TABLE);
+        assertEquals(PTableType.SYSTEM.toString(), rs.getString("TABLE_TYPE"));
+        assertTrue(rs.next());
+        assertEquals(rs.getString("TABLE_SCHEM"),SYSTEM_CATALOG_SCHEMA);
+        assertEquals(rs.getString("TABLE_NAME"),SYSTEM_FUNCTION_TABLE);
         assertEquals(PTableType.SYSTEM.toString(), rs.getString("TABLE_TYPE"));
         assertTrue(rs.next());
         assertEquals(rs.getString("TABLE_SCHEM"),SYSTEM_CATALOG_SCHEMA);
@@ -673,10 +678,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         try {
             admin.disableTable(htableName);
             admin.deleteTable(htableName);
-            admin.enableTable(htableName);
         } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
-        } finally {
-            admin.close();
         }
         
         HTableDescriptor descriptor = new HTableDescriptor(htableName);
@@ -685,6 +687,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
             descriptor.addFamily(columnDescriptor);
         }
         admin.createTable(descriptor);
+        admin.close();
             
         long ts = nextTimestamp();
         Properties props = new Properties();
@@ -748,122 +751,115 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         } catch (ReadOnlyTableException e) {
             // expected to fail b/c table is read-only
         }
+
+        String upsert = "UPSERT INTO " + MDTEST_NAME + "(id,col1,col2) VALUES(?,?,?)";
+        ps = conn2.prepareStatement(upsert);
         try {
-            String upsert = "UPSERT INTO " + MDTEST_NAME + "(id,col1,col2) VALUES(?,?,?)";
-            ps = conn2.prepareStatement(upsert);
-            try {
-                ps.setString(1, Integer.toString(0));
-                ps.setInt(2, 1);
-                ps.setInt(3, 2);
-                ps.execute();
-                fail();
-            } catch (ReadOnlyTableException e) {
-                // expected to fail b/c table is read-only
-            }
-            conn2.createStatement().execute("ALTER VIEW " + MDTEST_NAME + " SET IMMUTABLE_ROWS=TRUE");
-            
-            HTableInterface htable = conn2.getQueryServices().getTable(SchemaUtil.getTableNameAsBytes(MDTEST_SCHEMA_NAME,MDTEST_NAME));
-            Put put = new Put(Bytes.toBytes("0"));
-            put.add(cfB, Bytes.toBytes("COL1"), ts+6, PInteger.INSTANCE.toBytes(1));
-            put.add(cfC, Bytes.toBytes("COL2"), ts+6, PLong.INSTANCE.toBytes(2));
-            htable.put(put);
-            conn2.close();
-            
-            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
-            Connection conn7 = DriverManager.getConnection(getUrl(), props);
-            // Should be ok b/c we've marked the view with IMMUTABLE_ROWS=true
-            conn7.createStatement().execute("CREATE INDEX idx ON " + MDTEST_NAME + "(B.COL1)");
-            String select = "SELECT col1 FROM " + MDTEST_NAME + " WHERE col2=?";
-            ps = conn7.prepareStatement(select);
-            ps.setInt(1, 2);
-            rs = ps.executeQuery();
-            assertTrue(rs.next());
-            assertEquals(1, rs.getInt(1));
-            assertFalse(rs.next());
-            
-            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 12));
-            Connection conn75 = DriverManager.getConnection(getUrl(), props);
-            String dropTable = "DROP TABLE " + MDTEST_NAME ;
-            ps = conn75.prepareStatement(dropTable);
-            try {
-                ps.execute();
-                fail();
-            } catch (TableNotFoundException e) {
-                // expected to fail b/c it is a view
-            }
-    
-            String dropView = "DROP VIEW " + MDTEST_NAME ;
-            ps = conn75.prepareStatement(dropView);
+            ps.setString(1, Integer.toString(0));
+            ps.setInt(2, 1);
+            ps.setInt(3, 2);
             ps.execute();
-            conn75.close();
-            
-            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 15));
-            Connection conn8 = DriverManager.getConnection(getUrl(), props);
-            createStmt = "create view " + MDTEST_NAME + 
-                    "   (id char(1) not null primary key,\n" + 
-                    "    b.col1 integer,\n" +
-                    "    \"c\".col2 bigint) IMMUTABLE_ROWS=true\n";
-            // should be ok to create a view with IMMUTABLE_ROWS = true
-            conn8.createStatement().execute(createStmt);
-            conn8.close();
-            
-            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
-            Connection conn9 = DriverManager.getConnection(getUrl(), props);
-            conn9.createStatement().execute("CREATE INDEX idx ON " + MDTEST_NAME + "(B.COL1)");
-            
-            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
-            Connection conn91 = DriverManager.getConnection(getUrl(), props);
-            ps = conn91.prepareStatement(dropView);
-            ps.execute();
-            conn91.close();
-            
-            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 35));
-            Connection conn92 = DriverManager.getConnection(getUrl(), props);
-            createStmt = "create view " + MDTEST_NAME + 
-                    "   (id char(1) not null primary key,\n" + 
-                    "    b.col1 integer,\n" +
-                    "    \"c\".col2 bigint) as\n" +
-                    " select * from " + MDTEST_NAME + 
-                    " where b.col1 = 1";
-            conn92.createStatement().execute(createStmt);
-            conn92.close();
-            
-            put = new Put(Bytes.toBytes("1"));
-            put.add(cfB, Bytes.toBytes("COL1"), ts+39, PInteger.INSTANCE.toBytes(3));
-            put.add(cfC, Bytes.toBytes("COL2"), ts+39, PLong.INSTANCE.toBytes(4));
-            htable.put(put);
-
-            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
-            Connection conn92a = DriverManager.getConnection(getUrl(), props);
-            rs = conn92a.createStatement().executeQuery("select count(*) from " + MDTEST_NAME);
-            assertTrue(rs.next());
-            assertEquals(1,rs.getInt(1));
-            conn92a.close();
-
-            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 45));
-            Connection conn93 = DriverManager.getConnection(getUrl(), props);
-            try {
-                String alterView = "alter view " + MDTEST_NAME + " drop column b.col1";
-                conn93.createStatement().execute(alterView);
-                fail();
-            } catch (SQLException e) {
-                assertEquals(SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
-            }
-            conn93.close();
-            
-            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 50));
-            Connection conn94 = DriverManager.getConnection(getUrl(), props);
-            String alterView = "alter view " + MDTEST_NAME + " drop column \"c\".col2";
-            conn94.createStatement().execute(alterView);
-            conn94.close();
-            
-        } finally {
-            HTableInterface htable = pconn.getQueryServices().getTable(SchemaUtil.getTableNameAsBytes(MDTEST_SCHEMA_NAME,MDTEST_NAME));
-            Delete delete1 = new Delete(Bytes.toBytes("0"));
-            Delete delete2 = new Delete(Bytes.toBytes("1"));
-            htable.batch(Arrays.asList(delete1, delete2));
+            fail();
+        } catch (ReadOnlyTableException e) {
+            // expected to fail b/c table is read-only
         }
-        
+        conn2.createStatement().execute("ALTER VIEW " + MDTEST_NAME + " SET IMMUTABLE_ROWS=TRUE");
+
+        HTableInterface htable = conn2.getQueryServices().getTable(SchemaUtil.getTableNameAsBytes(MDTEST_SCHEMA_NAME,MDTEST_NAME));
+        Put put = new Put(Bytes.toBytes("0"));
+        put.add(cfB, Bytes.toBytes("COL1"), ts+6, PInteger.INSTANCE.toBytes(1));
+        put.add(cfC, Bytes.toBytes("COL2"), ts+6, PLong.INSTANCE.toBytes(2));
+        htable.put(put);
+        conn2.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        Connection conn7 = DriverManager.getConnection(getUrl(), props);
+        // Should be ok b/c we've marked the view with IMMUTABLE_ROWS=true
+        conn7.createStatement().execute("CREATE INDEX idx ON " + MDTEST_NAME + "(B.COL1)");
+        String select = "SELECT col1 FROM " + MDTEST_NAME + " WHERE col2=?";
+        ps = conn7.prepareStatement(select);
+        ps.setInt(1, 2);
+        rs = ps.executeQuery();
+        assertTrue(rs.next());
+        assertEquals(1, rs.getInt(1));
+        assertFalse(rs.next());
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 12));
+        Connection conn75 = DriverManager.getConnection(getUrl(), props);
+        String dropTable = "DROP TABLE " + MDTEST_NAME ;
+        ps = conn75.prepareStatement(dropTable);
+        try {
+            ps.execute();
+            fail();
+        } catch (TableNotFoundException e) {
+            // expected to fail b/c it is a view
+        }
+
+        String dropView = "DROP VIEW " + MDTEST_NAME ;
+        ps = conn75.prepareStatement(dropView);
+        ps.execute();
+        conn75.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 15));
+        Connection conn8 = DriverManager.getConnection(getUrl(), props);
+        createStmt = "create view " + MDTEST_NAME +
+                "   (id char(1) not null primary key,\n" +
+                "    b.col1 integer,\n" +
+                "    \"c\".col2 bigint) IMMUTABLE_ROWS=true\n";
+        // should be ok to create a view with IMMUTABLE_ROWS = true
+        conn8.createStatement().execute(createStmt);
+        conn8.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
+        Connection conn9 = DriverManager.getConnection(getUrl(), props);
+        conn9.createStatement().execute("CREATE INDEX idx ON " + MDTEST_NAME + "(B.COL1)");
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
+        Connection conn91 = DriverManager.getConnection(getUrl(), props);
+        ps = conn91.prepareStatement(dropView);
+        ps.execute();
+        conn91.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 35));
+        Connection conn92 = DriverManager.getConnection(getUrl(), props);
+        createStmt = "create view " + MDTEST_NAME +
+                "   (id char(1) not null primary key,\n" +
+                "    b.col1 integer,\n" +
+                "    \"c\".col2 bigint) as\n" +
+                " select * from " + MDTEST_NAME +
+                " where b.col1 = 1";
+        conn92.createStatement().execute(createStmt);
+        conn92.close();
+
+        put = new Put(Bytes.toBytes("1"));
+        put.add(cfB, Bytes.toBytes("COL1"), ts+39, PInteger.INSTANCE.toBytes(3));
+        put.add(cfC, Bytes.toBytes("COL2"), ts+39, PLong.INSTANCE.toBytes(4));
+        htable.put(put);
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
+        Connection conn92a = DriverManager.getConnection(getUrl(), props);
+        rs = conn92a.createStatement().executeQuery("select count(*) from " + MDTEST_NAME);
+        assertTrue(rs.next());
+        assertEquals(1,rs.getInt(1));
+        conn92a.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 45));
+        Connection conn93 = DriverManager.getConnection(getUrl(), props);
+        try {
+            String alterView = "alter view " + MDTEST_NAME + " drop column b.col1";
+            conn93.createStatement().execute(alterView);
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
+        }
+        conn93.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 50));
+        Connection conn94 = DriverManager.getConnection(getUrl(), props);
+        String alterView = "alter view " + MDTEST_NAME + " drop column \"c\".col2";
+        conn94.createStatement().execute(alterView);
+        conn94.close();
+
     }
     
     @Test
@@ -1122,4 +1118,35 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         assertFalse(rs.next());
     }
 
+    @Test
+    public void testRemarkColumn() throws SQLException {
+        long ts = nextTimestamp();
+        Properties props = new Properties();
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+
+        // Retrieve the database metadata
+        DatabaseMetaData dbmd = conn.getMetaData();
+        ResultSet rs = dbmd.getColumns(null, null, null, null);
+        rs.next();
+
+        // Lookup column by name, this should return null but not throw an exception
+        String remarks = rs.getString("REMARKS");
+        assertNull(remarks);
+
+        // Same as above, but lookup by position
+        remarks = rs.getString(12);
+        assertNull(remarks);
+
+        // Iterate through metadata columns to find 'COLUMN_NAME' == 'REMARKS'
+        boolean foundRemarksColumn = false;
+        while(rs.next()) {
+            String colName = rs.getString("COLUMN_NAME");
+            if(PhoenixDatabaseMetaData.REMARKS.equals(colName)) {
+                foundRemarksColumn = true;
+                break;
+            }
+        }
+        assertTrue("Could not find REMARKS column", foundRemarksColumn);
+    }
 }

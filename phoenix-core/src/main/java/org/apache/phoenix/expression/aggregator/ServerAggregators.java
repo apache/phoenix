@@ -59,6 +59,7 @@ public class ServerAggregators extends Aggregators {
             if (expressions[i].evaluate(result, ptr) && ptr.getLength() != 0) {
                 aggregators[i].aggregate(result, ptr);
             }
+            expressions[i].reset();
         }
     }
     

@@ -17,93 +17,77 @@
  */
 package org.apache.phoenix.schema.types;
 
-import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.schema.SortOrder;
-
-import java.sql.Types;
 
 public class PUnsignedFloatArray extends PArrayDataType<float[]> {
 
-  public static final PUnsignedFloatArray INSTANCE = new PUnsignedFloatArray();
+    public static final PUnsignedFloatArray INSTANCE = new PUnsignedFloatArray();
 
-  private PUnsignedFloatArray() {
-    super("UNSIGNED_FLOAT ARRAY", PDataType.ARRAY_TYPE_BASE + PUnsignedFloat.INSTANCE.getSqlType(),
-        PhoenixArray.class, null, 46);
-  }
-
-  @Override
-  public boolean isArrayType() {
-    return true;
-  }
-
-  @Override
-  public boolean isFixedWidth() {
-    return false;
-  }
-
-  @Override
-  public int compareTo(Object lhs, Object rhs, PDataType rhsType) {
-    return compareTo(lhs, rhs);
-  }
-
-  @Override
-  public Integer getByteSize() {
-    return null;
-  }
-
-  @Override
-  public byte[] toBytes(Object object) {
-    return toBytes(object, SortOrder.ASC);
-  }
-
-  @Override
-  public byte[] toBytes(Object object, SortOrder sortOrder) {
-    return toBytes(object, PUnsignedFloat.INSTANCE, sortOrder);
-  }
-
-  @Override
-  public Object toObject(byte[] bytes, int offset, int length,
-      PDataType actualType, SortOrder sortOrder, Integer maxLength,
-      Integer scale) {
-    return toObject(bytes, offset, length, PUnsignedFloat.INSTANCE, sortOrder, maxLength,
-        scale, PUnsignedFloat.INSTANCE);
-  }
-
-  @Override
-  public boolean isCoercibleTo(PDataType targetType) {
-    return isCoercibleTo(targetType, this);
-  }
-
-  @Override
-  public boolean isCoercibleTo(PDataType targetType, Object value) {
-    if (value == null) {
-      return true;
+    private PUnsignedFloatArray() {
+        super("UNSIGNED_FLOAT ARRAY", PDataType.ARRAY_TYPE_BASE + PUnsignedFloat.INSTANCE.getSqlType(),
+                PhoenixArray.class, null, 46);
     }
-    PhoenixArray pArr = (PhoenixArray) value;
-    Object[] floatArr = (Object[]) pArr.array;
-    for (Object i : floatArr) {
-      if (!super.isCoercibleTo(PUnsignedFloat.INSTANCE, i)) {
+
+    @Override
+    public boolean isArrayType() {
+        return true;
+    }
+
+    @Override
+    public boolean isFixedWidth() {
         return false;
-      }
     }
-    return true;
-  }
 
-  @Override
-  public int getResultSetSqlType() {
-    return Types.ARRAY;
-  }
+    @Override
+    public int compareTo(Object lhs, Object rhs, PDataType rhsType) {
+        return compareTo(lhs, rhs);
+    }
 
-  @Override
-  public void coerceBytes(ImmutableBytesWritable ptr, Object object, PDataType actualType,
-      Integer maxLength, Integer scale, SortOrder actualModifer, Integer desiredMaxLength,
-      Integer desiredScale, SortOrder desiredModifier) {
-    coerceBytes(ptr, object, actualType, maxLength, scale, desiredMaxLength, desiredScale,
-        this, actualModifer, desiredModifier);
-  }
+    @Override
+    public Integer getByteSize() {
+        return null;
+    }
 
-  @Override
-  public Object getSampleValue(Integer maxLength, Integer arrayLength) {
-    return getSampleValue(PUnsignedFloat.INSTANCE, arrayLength, maxLength);
-  }
+    @Override
+    public byte[] toBytes(Object object) {
+        return toBytes(object, SortOrder.ASC);
+    }
+
+    @Override
+    public byte[] toBytes(Object object, SortOrder sortOrder) {
+        return toBytes(object, PUnsignedFloat.INSTANCE, sortOrder);
+    }
+
+    @Override
+    public Object toObject(byte[] bytes, int offset, int length,
+            PDataType actualType, SortOrder sortOrder, Integer maxLength,
+            Integer scale) {
+        return toObject(bytes, offset, length, PUnsignedFloat.INSTANCE, sortOrder, maxLength,
+                scale, PUnsignedFloat.INSTANCE);
+    }
+
+    @Override
+    public boolean isCoercibleTo(PDataType targetType) {
+        return isCoercibleTo(targetType, this);
+    }
+
+    @Override
+    public boolean isCoercibleTo(PDataType targetType, Object value) {
+        if (value == null) {
+            return true;
+        }
+        PhoenixArray pArr = (PhoenixArray) value;
+        Object[] floatArr = (Object[]) pArr.array;
+        for (Object i : floatArr) {
+            if (!super.isCoercibleTo(PUnsignedFloat.INSTANCE, i)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    @Override
+    public Object getSampleValue(Integer maxLength, Integer arrayLength) {
+        return getSampleValue(PUnsignedFloat.INSTANCE, arrayLength, maxLength);
+    }
 }

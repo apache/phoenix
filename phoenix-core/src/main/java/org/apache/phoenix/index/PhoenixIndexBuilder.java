@@ -19,7 +19,6 @@ package org.apache.phoenix.index;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,16 +27,14 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
+import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.hbase.index.covered.CoveredColumnsIndexBuilder;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.types.PVarbinary;
-import org.apache.phoenix.util.ScanUtil;
-import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.collect.Lists;
 
@@ -59,33 +56,35 @@ public class PhoenixIndexBuilder extends CoveredColumnsIndexBuilder {
             Mutation m = miniBatchOp.getOperation(i);
             keys.add(PVarbinary.INSTANCE.getKeyRange(m.getRow()));
             List<IndexMaintainer> indexMaintainers = getCodec().getIndexMaintainers(m.getAttributesMap());
-            
+
             for(IndexMaintainer indexMaintainer: indexMaintainers) {
                 if (indexMaintainer.isImmutableRows() && indexMaintainer.isLocalIndex()) continue;
                 indexTableName.set(indexMaintainer.getIndexTableName());
                 if (maintainers.get(indexTableName) != null) continue;
                 maintainers.put(indexTableName, indexMaintainer);
             }
-            
+
         }
         if (maintainers.isEmpty()) return;
         Scan scan = IndexManagementUtil.newLocalStateScan(new ArrayList<IndexMaintainer>(maintainers.values()));
-        ScanRanges scanRanges = ScanRanges.create(SchemaUtil.VAR_BINARY_SCHEMA, Collections.singletonList(keys), ScanUtil.SINGLE_COLUMN_SLOT_SPAN);
+        ScanRanges scanRanges = ScanRanges.createPointLookup(keys);
         scanRanges.initializeScan(scan);
         scan.setFilter(scanRanges.getSkipScanFilter());
-        HRegion region = this.env.getRegion();
+        Region region = this.env.getRegion();
         RegionScanner scanner = region.getScanner(scan);
         // Run through the scanner using internal nextRaw method
         region.startRegionOperation();
         try {
-            boolean hasMore;
-            do {
-                List<Cell> results = Lists.newArrayList();
-                // Results are potentially returned even when the return value of s.next is false
-                // since this is an indication of whether or not there are more values after the
-                // ones returned
-                hasMore = scanner.nextRaw(results);
-            } while (hasMore);
+            synchronized (scanner) {
+                boolean hasMore;
+                do {
+                    List<Cell> results = Lists.newArrayList();
+                    // Results are potentially returned even when the return value of s.next is
+                    // false since this is an indication of whether or not there are more values
+                    // after the ones returned
+                    hasMore = scanner.nextRaw(results);
+                } while (hasMore);
+            }
         } finally {
             try {
                 scanner.close();
@@ -98,7 +97,7 @@ public class PhoenixIndexBuilder extends CoveredColumnsIndexBuilder {
     private PhoenixIndexCodec getCodec() {
         return (PhoenixIndexCodec)this.codec;
     }
-    
+
     @Override
     public byte[] getBatchId(Mutation m){
         return this.codec.getBatchId(m);

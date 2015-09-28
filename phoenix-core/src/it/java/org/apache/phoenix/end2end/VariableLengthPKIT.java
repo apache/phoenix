@@ -38,7 +38,6 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Types;
 import java.text.Format;
-import java.text.ParseException;
 import java.util.Properties;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -51,16 +50,11 @@ import org.junit.Test;
 
 
 public class VariableLengthPKIT extends BaseClientManagedTimeIT {
-    private static Format format = DateUtil.getDateParser(DateUtil.DEFAULT_DATE_FORMAT);
     private static final String DS1 = "1970-01-01 00:58:00";
     private static final Date D1 = toDate(DS1);
 
     private static Date toDate(String dateString) {
-        try {
-            return (Date)format.parseObject(dateString);
-        } catch (ParseException e) {
-            throw new RuntimeException(e);
-        }
+        return DateUtil.parseDate(dateString);
     }
 
     protected static void initGroupByRowKeyColumns(long ts) throws Exception {
@@ -890,8 +884,8 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         try {
             stmt.execute("upsert into PTSDB(INST,HOST,VAL) VALUES ('abc', 'abc-def-ghi', 0.5)");
             fail();
-        } catch (ConstraintViolationException e) {
-            assertTrue(e.getMessage().contains("may not be null"));
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.CONSTRAINT_VIOLATION.getErrorCode(), e.getErrorCode());
         } finally {
             conn.close();
         }
@@ -1096,7 +1090,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
     @Test
     public void testMultiFixedLengthNull() throws Exception {
         long ts = nextTimestamp();
-        String query = "SELECT B_INTEGER,C_INTEGER,COUNT(1) FROM BTABLE GROUP BY C_INTEGER,B_INTEGER";
+        String query = "SELECT B_INTEGER,C_INTEGER,COUNT(1) FROM BTABLE GROUP BY B_INTEGER,C_INTEGER";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);

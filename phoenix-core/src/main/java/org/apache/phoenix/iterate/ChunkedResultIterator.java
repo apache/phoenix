@@ -18,6 +18,9 @@
 
 package org.apache.phoenix.iterate;
 
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.STARTKEY_OFFSET;
+import static org.apache.phoenix.monitoring.MetricType.SCAN_BYTES;
+
 import java.sql.SQLException;
 import java.util.List;
 
@@ -64,18 +67,17 @@ public class ChunkedResultIterator implements PeekingResultIterator {
         }
 
         @Override
-        public PeekingResultIterator newIterator(StatementContext context, ResultIterator scanner, Scan scan) throws SQLException {
-            scanner.close(); //close the iterator since we don't need it anymore.
+        public PeekingResultIterator newIterator(StatementContext context, ResultIterator scanner, Scan scan, String tableName) throws SQLException {
             if (logger.isDebugEnabled()) logger.debug(LogUtil.addCustomAnnotations("ChunkedResultIteratorFactory.newIterator over " + tableRef.getTable().getName().getString() + " with " + scan, ScanUtil.getCustomAnnotations(scan)));
             return new ChunkedResultIterator(delegateFactory, context, tableRef, scan,
                     context.getConnection().getQueryServices().getProps().getLong(
                                         QueryServices.SCAN_RESULT_CHUNK_SIZE,
-                                        QueryServicesOptions.DEFAULT_SCAN_RESULT_CHUNK_SIZE));
+                                        QueryServicesOptions.DEFAULT_SCAN_RESULT_CHUNK_SIZE), scanner);
         }
     }
 
-    public ChunkedResultIterator(ParallelIteratorFactory delegateIteratorFactory,
-            StatementContext context, TableRef tableRef, Scan scan, long chunkSize) throws SQLException {
+    private ChunkedResultIterator(ParallelIteratorFactory delegateIteratorFactory,
+            StatementContext context, TableRef tableRef, Scan scan, long chunkSize, ResultIterator scanner) throws SQLException {
         this.delegateIteratorFactory = delegateIteratorFactory;
         this.context = context;
         this.tableRef = tableRef;
@@ -85,9 +87,9 @@ public class ChunkedResultIterator implements PeekingResultIterator {
         // to get parallel scans kicked off in separate threads. If we delay this,
         // we'll get serialized behavior (see PHOENIX-
         if (logger.isDebugEnabled()) logger.debug(LogUtil.addCustomAnnotations("Get first chunked result iterator over " + tableRef.getTable().getName().getString() + " with " + scan, ScanUtil.getCustomAnnotations(scan)));
-        ResultIterator singleChunkResultIterator = new SingleChunkResultIterator(
-                new TableResultIterator(context, tableRef, scan), chunkSize);
-        resultIterator = delegateIteratorFactory.newIterator(context, singleChunkResultIterator, scan);
+        ResultIterator singleChunkResultIterator = new SingleChunkResultIterator(scanner, chunkSize);
+        String tableName = tableRef.getTable().getPhysicalName().getString();
+        resultIterator = delegateIteratorFactory.newIterator(context, singleChunkResultIterator, scan, tableName);
     }
 
     @Override
@@ -116,9 +118,10 @@ public class ChunkedResultIterator implements PeekingResultIterator {
             scan = ScanUtil.newScan(scan);
             scan.setStartRow(ByteUtil.copyKeyBytesIfNecessary(lastKey));
             if (logger.isDebugEnabled()) logger.debug(LogUtil.addCustomAnnotations("Get next chunked result iterator over " + tableRef.getTable().getName().getString() + " with " + scan, ScanUtil.getCustomAnnotations(scan)));
+            String tableName = tableRef.getTable().getPhysicalName().getString();
             ResultIterator singleChunkResultIterator = new SingleChunkResultIterator(
-                    new TableResultIterator(context, tableRef, scan), chunkSize);
-            resultIterator = delegateIteratorFactory.newIterator(context, singleChunkResultIterator, scan);
+                    new TableResultIterator(context, tableRef, scan, context.getReadMetricsQueue().allotMetric(SCAN_BYTES, tableName)), chunkSize);
+            resultIterator = delegateIteratorFactory.newIterator(context, singleChunkResultIterator, scan, tableName);
         }
         return resultIterator;
     }
@@ -152,6 +155,9 @@ public class ChunkedResultIterator implements PeekingResultIterator {
                 // be able to start the next chunk on the next row key
                 if (rowCount == chunkSize) {
                     next.getKey(lastKey);
+                    if (scan.getAttribute(STARTKEY_OFFSET) != null) {
+                        addRegionStartKeyToLaskKey();
+                    }
                 } else if (rowCount > chunkSize && rowKeyChanged(next)) {
                     chunkComplete = true;
                     return null;
@@ -178,8 +184,27 @@ public class ChunkedResultIterator implements PeekingResultIterator {
             int offset = lastKey.getOffset();
             int length = lastKey.getLength();
             newTuple.getKey(lastKey);
+            if (scan.getAttribute(STARTKEY_OFFSET) != null) {
+                addRegionStartKeyToLaskKey();
+            }
 
             return Bytes.compareTo(currentKey, offset, length, lastKey.get(), lastKey.getOffset(), lastKey.getLength()) != 0;
+        }
+
+        /**
+         * Prefix region start key to last key to form actual row key in case of local index scan.
+         */
+        private void addRegionStartKeyToLaskKey() {
+            byte[] offsetBytes = scan.getAttribute(STARTKEY_OFFSET);
+            if (offsetBytes != null) {
+                int startKeyOffset = Bytes.toInt(offsetBytes);
+                byte[] actualLastkey =
+                        new byte[startKeyOffset + lastKey.getLength() - lastKey.getOffset()];
+                System.arraycopy(scan.getStartRow(), 0, actualLastkey, 0, startKeyOffset);
+                System.arraycopy(lastKey.get(), lastKey.getOffset(), actualLastkey,
+                    startKeyOffset, lastKey.getLength());
+                lastKey.set(actualLastkey);
+            }
         }
 
 		@Override

@@ -29,21 +29,22 @@ import java.util.List;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
-import org.apache.phoenix.expression.function.InlineArrayElemRefExpression;
+import org.apache.phoenix.expression.function.ArrayElemRefExpression;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
-import org.apache.phoenix.schema.types.PDecimal;
-import org.apache.phoenix.schema.types.PBoolean;
-import org.apache.phoenix.schema.types.PChar;
-import org.apache.phoenix.schema.types.PInteger;
-import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PLong;
-import org.apache.phoenix.schema.types.PUnsignedInt;
-import org.apache.phoenix.schema.types.PUnsignedLong;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PBoolean;
+import org.apache.phoenix.schema.types.PChar;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.schema.types.PUnsignedInt;
+import org.apache.phoenix.schema.types.PUnsignedLong;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ExpressionUtil;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.StringUtil;
 
 import com.google.common.collect.Lists;
@@ -57,17 +58,8 @@ import com.google.common.collect.Lists;
  */
 public class ComparisonExpression extends BaseCompoundExpression {
     private CompareOp op;
-    private static final String[] CompareOpString = new String[CompareOp.values().length];
-    static {
-        CompareOpString[CompareOp.EQUAL.ordinal()] = " = ";
-        CompareOpString[CompareOp.NOT_EQUAL.ordinal()] = " != ";
-        CompareOpString[CompareOp.GREATER.ordinal()] = " > ";
-        CompareOpString[CompareOp.LESS.ordinal()] = " < ";
-        CompareOpString[CompareOp.GREATER_OR_EQUAL.ordinal()] = " >= ";
-        CompareOpString[CompareOp.LESS_OR_EQUAL.ordinal()] = " <= ";
-    }
     
-    private static void addEqualityExpression(Expression lhs, Expression rhs, List<Expression> andNodes, ImmutableBytesWritable ptr) throws SQLException {
+    private static void addEqualityExpression(Expression lhs, Expression rhs, List<Expression> andNodes, ImmutableBytesWritable ptr, boolean rowKeyOrderOptimizable) throws SQLException {
         boolean isLHSNull = ExpressionUtil.isNull(lhs, ptr);
         boolean isRHSNull = ExpressionUtil.isNull(rhs, ptr);
         if (isLHSNull && isRHSNull) { // null == null will end up making the query degenerate
@@ -77,7 +69,7 @@ public class ComparisonExpression extends BaseCompoundExpression {
         } else if (isRHSNull) { // AND lhs IS NULL
             andNodes.add(IsNullExpression.create(lhs, false, ptr));
         } else { // AND lhs = rhs
-            andNodes.add(ComparisonExpression.create(CompareOp.EQUAL, Arrays.asList(lhs, rhs), ptr));
+            andNodes.add(ComparisonExpression.create(CompareOp.EQUAL, Arrays.asList(lhs, rhs), ptr, rowKeyOrderOptimizable));
         }
     }
     
@@ -89,48 +81,48 @@ public class ComparisonExpression extends BaseCompoundExpression {
      * @param andNodes
      * @throws SQLException 
      */
-    private static void rewriteRVCAsEqualityExpression(Expression lhs, Expression rhs, List<Expression> andNodes, ImmutableBytesWritable ptr) throws SQLException {
+    private static void rewriteRVCAsEqualityExpression(Expression lhs, Expression rhs, List<Expression> andNodes, ImmutableBytesWritable ptr, boolean rowKeyOrderOptimizable) throws SQLException {
         if (lhs instanceof RowValueConstructorExpression && rhs instanceof RowValueConstructorExpression) {
             int i = 0;
             for (; i < Math.min(lhs.getChildren().size(),rhs.getChildren().size()); i++) {
-                addEqualityExpression(lhs.getChildren().get(i), rhs.getChildren().get(i), andNodes, ptr);
+                addEqualityExpression(lhs.getChildren().get(i), rhs.getChildren().get(i), andNodes, ptr, rowKeyOrderOptimizable);
             }
             for (; i < lhs.getChildren().size(); i++) {
-                addEqualityExpression(lhs.getChildren().get(i), LiteralExpression.newConstant(null, lhs.getChildren().get(i).getDataType()), andNodes, ptr);
+                addEqualityExpression(lhs.getChildren().get(i), LiteralExpression.newConstant(null, lhs.getChildren().get(i).getDataType()), andNodes, ptr, rowKeyOrderOptimizable);
             }
             for (; i < rhs.getChildren().size(); i++) {
-                addEqualityExpression(LiteralExpression.newConstant(null, rhs.getChildren().get(i).getDataType()), rhs.getChildren().get(i), andNodes, ptr);
+                addEqualityExpression(LiteralExpression.newConstant(null, rhs.getChildren().get(i).getDataType()), rhs.getChildren().get(i), andNodes, ptr, rowKeyOrderOptimizable);
             }
         } else if (lhs instanceof RowValueConstructorExpression) {
-            addEqualityExpression(lhs.getChildren().get(0), rhs, andNodes, ptr);
+            addEqualityExpression(lhs.getChildren().get(0), rhs, andNodes, ptr, rowKeyOrderOptimizable);
             for (int i = 1; i < lhs.getChildren().size(); i++) {
-                addEqualityExpression(lhs.getChildren().get(i), LiteralExpression.newConstant(null, lhs.getChildren().get(i).getDataType()), andNodes, ptr);
+                addEqualityExpression(lhs.getChildren().get(i), LiteralExpression.newConstant(null, lhs.getChildren().get(i).getDataType()), andNodes, ptr, rowKeyOrderOptimizable);
             }
         } else if (rhs instanceof RowValueConstructorExpression) {
-            addEqualityExpression(lhs, rhs.getChildren().get(0), andNodes, ptr);
+            addEqualityExpression(lhs, rhs.getChildren().get(0), andNodes, ptr, rowKeyOrderOptimizable);
             for (int i = 1; i < rhs.getChildren().size(); i++) {
-                addEqualityExpression(LiteralExpression.newConstant(null, rhs.getChildren().get(i).getDataType()), rhs.getChildren().get(i), andNodes, ptr);
+                addEqualityExpression(LiteralExpression.newConstant(null, rhs.getChildren().get(i).getDataType()), rhs.getChildren().get(i), andNodes, ptr, rowKeyOrderOptimizable);
             }
         }
     }
     
-    public static Expression create(CompareOp op, List<Expression> children, ImmutableBytesWritable ptr) throws SQLException {
+    public static Expression create(CompareOp op, List<Expression> children, ImmutableBytesWritable ptr, boolean rowKeyOrderOptimizable) throws SQLException {
         Expression lhsExpr = children.get(0);
         Expression rhsExpr = children.get(1);
         PDataType lhsExprDataType = lhsExpr.getDataType();
         PDataType rhsExprDataType = rhsExpr.getDataType();
         
-        if ((lhsExpr instanceof RowValueConstructorExpression || rhsExpr instanceof RowValueConstructorExpression) && !(lhsExpr instanceof InlineArrayElemRefExpression) && !(rhsExpr instanceof InlineArrayElemRefExpression)) {
+        if ((lhsExpr instanceof RowValueConstructorExpression || rhsExpr instanceof RowValueConstructorExpression) && !(lhsExpr instanceof ArrayElemRefExpression) && !(rhsExpr instanceof ArrayElemRefExpression)) {
             if (op == CompareOp.EQUAL || op == CompareOp.NOT_EQUAL) {
                 List<Expression> andNodes = Lists.<Expression>newArrayListWithExpectedSize(Math.max(lhsExpr.getChildren().size(), rhsExpr.getChildren().size()));
-                rewriteRVCAsEqualityExpression(lhsExpr, rhsExpr, andNodes, ptr);
+                rewriteRVCAsEqualityExpression(lhsExpr, rhsExpr, andNodes, ptr, rowKeyOrderOptimizable);
                 Expression expr = AndExpression.create(andNodes);
                 if (op == CompareOp.NOT_EQUAL) {
                     expr = NotExpression.create(expr, ptr);
                 }
                 return expr;
             }
-            rhsExpr = RowValueConstructorExpression.coerce(lhsExpr, rhsExpr, op);
+            rhsExpr = RowValueConstructorExpression.coerce(lhsExpr, rhsExpr, op, rowKeyOrderOptimizable);
             // Always wrap both sides in row value constructor, so we don't have to consider comparing
             // a non rvc with a rvc.
             if ( ! ( lhsExpr instanceof RowValueConstructorExpression ) ) {
@@ -150,7 +142,7 @@ public class ComparisonExpression extends BaseCompoundExpression {
         if (lhsExpr instanceof LiteralExpression) {
             lhsValue = ((LiteralExpression)lhsExpr).getValue();
             if (lhsValue == null) {
-                return LiteralExpression.newConstant(false, PBoolean.INSTANCE, lhsExpr.getDeterminism());
+                return LiteralExpression.newConstant(null, PBoolean.INSTANCE, lhsExpr.getDeterminism());
             }
         }
         Object rhsValue = null;
@@ -158,7 +150,7 @@ public class ComparisonExpression extends BaseCompoundExpression {
         if (rhsExpr instanceof LiteralExpression) {
             rhsValue = ((LiteralExpression)rhsExpr).getValue();
             if (rhsValue == null) {
-                return LiteralExpression.newConstant(false, PBoolean.INSTANCE, rhsExpr.getDeterminism());
+                return LiteralExpression.newConstant(null, PBoolean.INSTANCE, rhsExpr.getDeterminism());
             }
         }
         if (lhsValue != null && rhsValue != null) {
@@ -172,11 +164,13 @@ public class ComparisonExpression extends BaseCompoundExpression {
             // into account the comparison operator.
             if (rhsExprDataType != lhsExprDataType 
                     || rhsExpr.getSortOrder() != lhsExpr.getSortOrder()
-                    || (rhsExprDataType.isFixedWidth() && rhsExpr.getMaxLength() != null && lhsExprDataType.isFixedWidth() && lhsExpr.getMaxLength() != null && rhsExpr.getMaxLength() < lhsExpr.getMaxLength())) {
+                    || (rhsExprDataType.isFixedWidth() && rhsExpr.getMaxLength() != null && 
+                        lhsExprDataType.isFixedWidth() && lhsExpr.getMaxLength() != null && 
+                        rhsExpr.getMaxLength() < lhsExpr.getMaxLength())) {
                 // TODO: if lengths are unequal and fixed width?
                 if (rhsExprDataType.isCoercibleTo(lhsExprDataType, rhsValue)) { // will convert 2.0 -> 2
                     children = Arrays.asList(children.get(0), LiteralExpression.newConstant(rhsValue, lhsExprDataType, 
-                            lhsExpr.getMaxLength(), null, lhsExpr.getSortOrder(), determinism));
+                            lhsExpr.getMaxLength(), null, lhsExpr.getSortOrder(), determinism, rowKeyOrderOptimizable));
                 } else if (op == CompareOp.EQUAL) {
                     return LiteralExpression.newConstant(false, PBoolean.INSTANCE, Determinism.ALWAYS);
                 } else if (op == CompareOp.NOT_EQUAL) {
@@ -262,13 +256,13 @@ public class ComparisonExpression extends BaseCompoundExpression {
                 }
             }
         }
-        return new ComparisonExpression(op, children);
+        return new ComparisonExpression(children, op);
     }
     
     public ComparisonExpression() {
     }
 
-    public ComparisonExpression(CompareOp op, List<Expression> children) {
+    public ComparisonExpression(List<Expression> children, CompareOp op) {
         super(children);
         if (op == null) {
             throw new NullPointerException();
@@ -276,6 +270,10 @@ public class ComparisonExpression extends BaseCompoundExpression {
         this.op = op;
     }
 
+    public ComparisonExpression clone(List<Expression> children) {
+        return new ComparisonExpression(children, this.getFilterOp());
+    }
+    
     @Override
     public int hashCode() {
         final int prime = 31;
@@ -366,7 +364,7 @@ public class ComparisonExpression extends BaseCompoundExpression {
     }
     
     public static String toString(CompareOp op, List<Expression> children) {
-        return (children.get(0) + CompareOpString[op.ordinal()] + children.get(1));
+        return (children.get(0) + " " + QueryUtil.toSQL(op) + " " + children.get(1));
     }
     
     @Override

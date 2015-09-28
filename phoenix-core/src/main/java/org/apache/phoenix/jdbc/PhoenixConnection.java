@@ -48,36 +48,41 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Properties;
 import java.util.concurrent.Executor;
 
 import javax.annotation.Nullable;
 
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.client.Consistency;
+import org.apache.htrace.Sampler;
+import org.apache.htrace.TraceScope;
 import org.apache.phoenix.call.CallRunner;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.execute.CommitException;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.expression.function.FunctionArgumentType;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
+import org.apache.phoenix.iterate.ParallelIteratorFactory;
 import org.apache.phoenix.jdbc.PhoenixStatement.PhoenixStatementParser;
+import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.DelegateConnectionQueryServices;
 import org.apache.phoenix.query.MetaDataMutated;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.schema.types.PDate;
-import org.apache.phoenix.schema.types.PDecimal;
-import org.apache.phoenix.schema.types.PArrayDataType;
 import org.apache.phoenix.schema.PColumn;
-import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.PMetaData;
 import org.apache.phoenix.schema.PMetaData.Pruner;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.types.PArrayDataType;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PTime;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PUnsignedDate;
@@ -92,14 +97,12 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
-import org.cloudera.htrace.Sampler;
 
 import com.google.common.base.Objects;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableMap.Builder;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 
 
 /**
@@ -115,7 +118,7 @@ import com.google.common.collect.Maps;
  * 
  * @since 0.1
  */
-public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jdbc7Shim.Connection, MetaDataMutated  {
+public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jdbc7Shim.Connection, MetaDataMutated{
     private final String url;
     private final ConnectionQueryServices services;
     private final Properties info;
@@ -127,13 +130,21 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     private boolean isAutoCommit = false;
     private PMetaData metaData;
     private final PName tenantId;
-    private final String datePattern;
-    
+    private final String datePattern; 
+    private final String timePattern;
+    private final String timestampPattern;
+    private int statementExecutionCounter;
+    private TraceScope traceScope = null;
     private boolean isClosed = false;
     private Sampler<?> sampler;
     private boolean readOnly = false;
-    private Map<String, String> customTracingAnnotations = emptyMap(); 
- 
+    private Consistency consistency = Consistency.STRONG;
+    private Map<String, String> customTracingAnnotations = emptyMap();
+    private final boolean isRequestLevelMetricsEnabled;
+    private final boolean isDescVarLengthRowKeyUpgrade;
+    private ParallelIteratorFactory parallelIteratorFactory;
+    
+    
     static {
         Tracing.addTraceMetricsSource();
     }
@@ -144,25 +155,35 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         return props;
     }
 
-    public PhoenixConnection(PhoenixConnection connection) throws SQLException {
-        this(connection.getQueryServices(), connection.getURL(), connection.getClientInfo(), connection.getMetaDataCache());
+    public PhoenixConnection(PhoenixConnection connection, boolean isDescRowKeyOrderUpgrade) throws SQLException {
+        this(connection.getQueryServices(), connection.getURL(), connection.getClientInfo(), connection.getMetaDataCache(), isDescRowKeyOrderUpgrade);
         this.isAutoCommit = connection.isAutoCommit;
         this.sampler = connection.sampler;
+        this.statementExecutionCounter = connection.statementExecutionCounter;
+    }
+
+    public PhoenixConnection(PhoenixConnection connection) throws SQLException {
+        this(connection, connection.isDescVarLengthRowKeyUpgrade);
     }
     
     public PhoenixConnection(PhoenixConnection connection, long scn) throws SQLException {
         this(connection.getQueryServices(), connection, scn);
-        this.sampler = connection.sampler;
     }
     
     public PhoenixConnection(ConnectionQueryServices services, PhoenixConnection connection, long scn) throws SQLException {
-        this(services, connection.getURL(), newPropsWithSCN(scn,connection.getClientInfo()), connection.getMetaDataCache());
+        this(services, connection.getURL(), newPropsWithSCN(scn,connection.getClientInfo()), connection.getMetaDataCache(), connection.isDescVarLengthRowKeyUpgrade());
         this.isAutoCommit = connection.isAutoCommit;
         this.sampler = connection.sampler;
+        this.statementExecutionCounter = connection.statementExecutionCounter;
     }
     
     public PhoenixConnection(ConnectionQueryServices services, String url, Properties info, PMetaData metaData) throws SQLException {
+        this(services, url, info, metaData, false);
+    }
+
+    public PhoenixConnection(ConnectionQueryServices services, String url, Properties info, PMetaData metaData, boolean isDescVarLengthRowKeyUpgrade) throws SQLException {
         this.url = url;
+        this.isDescVarLengthRowKeyUpgrade = isDescVarLengthRowKeyUpgrade;
         // Copy so client cannot change
         this.info = info == null ? new Properties() : PropertiesUtil.deepCopy(info);
         final PName tenantId = JDBCUtil.getTenantId(url, info);
@@ -174,21 +195,9 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
             if (tenantId != null) {
                 services = services.getChildQueryServices(tenantId.getBytesPtr());
             }
-            // TODO: we could avoid creating another wrapper if the only property
-            // specified was for the tenant ID
-            Map<String, String> existingProps = services.getProps().asMap();
-            final Map<String, String> tmpAugmentedProps = Maps.newHashMapWithExpectedSize(existingProps.size() + info.size());
-            tmpAugmentedProps.putAll(existingProps);
-            boolean needsDelegate = false;
-            for (Entry<Object, Object> entry : this.info.entrySet()) {
-                String key = entry.getKey().toString();
-                String value = entry.getValue().toString();
-                String oldValue = tmpAugmentedProps.put(key, value);
-                needsDelegate |= !Objects.equal(oldValue, value);
-            }
-            this.services = !needsDelegate ? services : new DelegateConnectionQueryServices(services) {
-                final ReadOnlyProps augmentedProps = new ReadOnlyProps(tmpAugmentedProps);
-    
+            ReadOnlyProps currentProps = services.getProps();
+            final ReadOnlyProps augmentedProps = currentProps.addAll(filterKnownNonProperties(this.info));
+            this.services = augmentedProps == currentProps ? services : new DelegateConnectionQueryServices(services) {
                 @Override
                 public ReadOnlyProps getProps() {
                     return augmentedProps;
@@ -201,22 +210,29 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
                 this.services.getProps().getBoolean(
                         QueryServices.AUTO_COMMIT_ATTRIB,
                         QueryServicesOptions.DEFAULT_AUTO_COMMIT));
+        this.consistency = JDBCUtil.getConsistencyLevel(url, this.info, this.services.getProps()
+                 .get(QueryServices.CONSISTENCY_ATTRIB,
+                         QueryServicesOptions.DEFAULT_CONSISTENCY_LEVEL));
         this.tenantId = tenantId;
         this.mutateBatchSize = JDBCUtil.getMutateBatchSize(url, this.info, this.services.getProps());
         datePattern = this.services.getProps().get(QueryServices.DATE_FORMAT_ATTRIB, DateUtil.DEFAULT_DATE_FORMAT);
+        timePattern = this.services.getProps().get(QueryServices.TIME_FORMAT_ATTRIB, DateUtil.DEFAULT_TIME_FORMAT);
+        timestampPattern = this.services.getProps().get(QueryServices.TIMESTAMP_FORMAT_ATTRIB, DateUtil.DEFAULT_TIMESTAMP_FORMAT);
         String numberPattern = this.services.getProps().get(QueryServices.NUMBER_FORMAT_ATTRIB, NumberUtil.DEFAULT_NUMBER_FORMAT);
         int maxSize = this.services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_ATTRIB,QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE);
-        Format dateTimeFormat = DateUtil.getDateFormatter(datePattern);
-        formatters.put(PDate.INSTANCE, dateTimeFormat);
-        formatters.put(PTime.INSTANCE, dateTimeFormat);
-        formatters.put(PTimestamp.INSTANCE, dateTimeFormat);
-        formatters.put(PUnsignedDate.INSTANCE, dateTimeFormat);
-        formatters.put(PUnsignedTime.INSTANCE, dateTimeFormat);
-        formatters.put(PUnsignedTimestamp.INSTANCE, dateTimeFormat);
+        Format dateFormat = DateUtil.getDateFormatter(datePattern);
+        Format timeFormat = DateUtil.getDateFormatter(timePattern);
+        Format timestampFormat = DateUtil.getDateFormatter(timestampPattern);
+        formatters.put(PDate.INSTANCE, dateFormat);
+        formatters.put(PTime.INSTANCE, timeFormat);
+        formatters.put(PTimestamp.INSTANCE, timestampFormat);
+        formatters.put(PUnsignedDate.INSTANCE, dateFormat);
+        formatters.put(PUnsignedTime.INSTANCE, timeFormat);
+        formatters.put(PUnsignedTimestamp.INSTANCE, timestampFormat);
         formatters.put(PDecimal.INSTANCE, FunctionArgumentType.NUMERIC.getFormatter(numberPattern));
         // We do not limit the metaData on a connection less than the global one,
         // as there's not much that will be cached here.
-        this.metaData = metaData.pruneTables(new Pruner() {
+        Pruner pruner = new Pruner() {
 
             @Override
             public boolean prune(PTable table) {
@@ -226,8 +242,17 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
                          ! Objects.equal(tenantId, table.getTenantId())) );
             }
             
-        });
-        this.mutationState = new MutationState(maxSize, this);
+            @Override
+            public boolean prune(PFunction function) {
+                long maxTimestamp = scn == null ? HConstants.LATEST_TIMESTAMP : scn;
+                return ( function.getTimeStamp() >= maxTimestamp ||
+                         ! Objects.equal(tenantId, function.getTenantId()));
+            }
+        };
+        this.isRequestLevelMetricsEnabled = JDBCUtil.isCollectingRequestLevelMetricsEnabled(url, info, this.services.getProps());
+        this.mutationState = newMutationState(maxSize);
+        this.metaData = metaData.pruneTables(pruner);
+        this.metaData = metaData.pruneFunctions(pruner);
         this.services.addConnection(this);
 
         // setup tracing, if its enabled
@@ -235,6 +260,23 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         this.customTracingAnnotations = getImmutableCustomTracingAnnotations();
     }
     
+    private static Properties filterKnownNonProperties(Properties info) {
+        Properties prunedProperties = info;
+        if (info.contains(PhoenixRuntime.CURRENT_SCN_ATTRIB)) {
+            if (prunedProperties == info) {
+                prunedProperties = PropertiesUtil.deepCopy(info);
+            }
+            prunedProperties.remove(PhoenixRuntime.CURRENT_SCN_ATTRIB);
+        }
+        if (info.contains(PhoenixRuntime.TENANT_ID_ATTRIB)) {
+            if (prunedProperties == info) {
+                prunedProperties = PropertiesUtil.deepCopy(info);
+            }
+            prunedProperties.remove(PhoenixRuntime.TENANT_ID_ATTRIB);
+        }
+        return prunedProperties;
+    }
+
     private ImmutableMap<String, String> getImmutableCustomTracingAnnotations() {
     	Builder<String, String> result = ImmutableMap.builder();
     	result.putAll(JDBCUtil.getAnnotations(url, info));
@@ -251,6 +293,10 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         return this.sampler;
     }
     
+    public void setSampler(Sampler<?> sampler) throws SQLException {
+        this.sampler = sampler;
+    }
+
     public Map<String, String> getCustomTracingAnnotations() {
         return customTracingAnnotations;
     }
@@ -355,6 +401,10 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         return metaData;
     }
 
+    protected MutationState newMutationState(int maxSize) {
+        return new MutationState(maxSize, this); 
+    }
+    
     public MutationState getMutationState() {
         return mutationState;
     }
@@ -401,7 +451,11 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
             return;
         }
         try {
+            clearMetrics();
             try {
+                if (traceScope != null) {
+                    traceScope.close();
+                }
                 closeStatements();
             } finally {
                 services.removeConnection(this);
@@ -420,6 +474,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
                 return null;
             }
         }, Tracing.withTracing(this, "committing mutations"));
+        statementExecutionCounter = 0;
     }
 
     @Override
@@ -492,6 +547,10 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     @Override
     public boolean getAutoCommit() throws SQLException {
         return isAutoCommit;
+    }
+
+    public Consistency getConsistency() {
+        return this.consistency;
     }
 
     @Override
@@ -620,6 +679,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     @Override
     public void rollback() throws SQLException {
         mutationState.rollback(this);
+        statementExecutionCounter = 0;
     }
 
     @Override
@@ -632,9 +692,16 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         this.isAutoCommit = isAutoCommit;
     }
 
+    public void setConsistency(Consistency val) {
+        this.consistency = val;
+    }
+
     @Override
     public void setCatalog(String catalog) throws SQLException {
-        throw new SQLFeatureNotSupportedException();
+        if (!this.getCatalog().equalsIgnoreCase(catalog)) {
+            // allow noop calls to pass through.
+            throw new SQLFeatureNotSupportedException();
+        }
     }
 
     @Override
@@ -736,13 +803,25 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         getQueryServices().addTable(table);
         return metaData;
     }
+    
+    @Override
+    public PMetaData addFunction(PFunction function) throws SQLException {
+        // TODO: since a connection is only used by one thread at a time,
+        // we could modify this metadata in place since it's not shared.
+        if (scn == null || scn > function.getTimeStamp()) {
+            metaData = metaData.addFunction(function);
+        }
+        //Cascade through to connectionQueryServices too
+        getQueryServices().addFunction(function);
+        return metaData;
+    }
 
     @Override
-    public PMetaData addColumn(PName tenantId, String tableName, List<PColumn> columns, long tableTimeStamp, long tableSeqNum, boolean isImmutableRows)
+    public PMetaData addColumn(PName tenantId, String tableName, List<PColumn> columns, long tableTimeStamp, long tableSeqNum, boolean isImmutableRows, boolean isWalDisabled, boolean isMultitenant, boolean storeNulls)
             throws SQLException {
-        metaData = metaData.addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows);
+        metaData = metaData.addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows, isWalDisabled, isMultitenant, storeNulls);
         //Cascade through to connectionQueryServices too
-        getQueryServices().addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows);
+        getQueryServices().addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows, isWalDisabled, isMultitenant, storeNulls);
         return metaData;
     }
 
@@ -751,6 +830,14 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         metaData = metaData.removeTable(tenantId, tableName, parentTableName, tableTimeStamp);
         //Cascade through to connectionQueryServices too
         getQueryServices().removeTable(tenantId, tableName, parentTableName, tableTimeStamp);
+        return metaData;
+    }
+
+    @Override
+    public PMetaData removeFunction(PName tenantId, String functionName, long tableTimeStamp) throws SQLException {
+        metaData = metaData.removeFunction(tenantId, functionName, tableTimeStamp);
+        //Cascade through to connectionQueryServices too
+        getQueryServices().removeFunction(tenantId, functionName, tableTimeStamp);
         return metaData;
     }
 
@@ -769,5 +856,70 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
 
     public KeyValueBuilder getKeyValueBuilder() {
         return this.services.getKeyValueBuilder();
+    }
+    
+    /**
+     * Used to track executions of {@link Statement}s and {@link PreparedStatement}s that were created from this connection before
+     * commit or rollback. 0-based. Used to associate partial save errors with SQL statements
+     * invoked by users.
+     * @see CommitException
+     * @see #incrementStatementExecutionCounter()
+     */
+    public int getStatementExecutionCounter() {
+		return statementExecutionCounter;
+	}
+    
+    public void incrementStatementExecutionCounter() {
+        statementExecutionCounter++;
+    }
+
+    public TraceScope getTraceScope() {
+        return traceScope;
+    }
+
+    public void setTraceScope(TraceScope traceScope) {
+        this.traceScope = traceScope;
+    }
+    
+    public Map<String, Map<String, Long>> getMutationMetrics() {
+        return mutationState.getMutationMetricQueue().aggregate();
+    }
+    
+    public Map<String, Map<String, Long>> getReadMetrics() {
+        return mutationState.getReadMetricQueue() != null ? mutationState.getReadMetricQueue().aggregate() : Collections.<String, Map<String, Long>>emptyMap();
+    }
+    
+    public boolean isRequestLevelMetricsEnabled() {
+        return isRequestLevelMetricsEnabled;
+    }
+    
+    public void clearMetrics() {
+        mutationState.getMutationMetricQueue().clearMetrics();
+        if (mutationState.getReadMetricQueue() != null) {
+            mutationState.getReadMetricQueue().clearMetrics();
+        }
+    }
+
+    /**
+     * Returns true if this connection is being used to upgrade the
+     * data due to PHOENIX-2067 and false otherwise.
+     * @return
+     */
+    public boolean isDescVarLengthRowKeyUpgrade() {
+        return isDescVarLengthRowKeyUpgrade;
+    }
+    
+    /**
+     * Added for tests only. Do not use this elsewhere.
+     */
+    public ParallelIteratorFactory getIteratorFactory() {
+        return parallelIteratorFactory;
+    }
+    
+    /**
+     * Added for testing purposes. Do not use this elsewhere.
+     */
+    public void setIteratorFactory(ParallelIteratorFactory parallelIteratorFactory) {
+        this.parallelIteratorFactory = parallelIteratorFactory;
     }
 }

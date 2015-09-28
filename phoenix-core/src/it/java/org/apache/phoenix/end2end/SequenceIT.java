@@ -54,6 +54,7 @@ import com.google.common.collect.Lists;
 
 public class SequenceIT extends BaseClientManagedTimeIT {
     private static final String NEXT_VAL_SQL = "SELECT NEXT VALUE FOR foo.bar FROM SYSTEM.\"SEQUENCE\"";
+    private static final String SELECT_NEXT_VALUE_SQL = "SELECT NEXT VALUE FOR %s FROM SYSTEM.\"SEQUENCE\"";
     private static final long BATCH_SIZE = 3;
    
     private Connection conn;
@@ -653,6 +654,7 @@ public class SequenceIT extends BaseClientManagedTimeIT {
         conn = null; // So that call to nextConnection doesn't close it
         ResultSet rs = conn2.createStatement().executeQuery("EXPLAIN SELECT NEXT VALUE FOR bar FROM foo");
         assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER FOO\n" + 
+                "    SERVER FILTER BY FIRST KEY ONLY\n" +
         		"CLIENT RESERVE VALUES FROM 1 SEQUENCE", QueryUtil.getExplainPlan(rs));
         
         nextConnection();
@@ -1146,6 +1148,38 @@ public class SequenceIT extends BaseClientManagedTimeIT {
         assertEquals(1, rs.getLong("metric_val"));
         assertFalse(rs.next());
     }
+    
+    @Test
+    /**
+     * Test to validate that the bug discovered in PHOENIX-2149 has been fixed. There was an issue
+     * whereby, when closing connections and returning sequences we were not setting the limit
+     * reached flag correctly and this was causing the max value to be ignored as the LIMIT_REACHED_FLAG
+     * value was being unset from true to false.
+     */
+    public void testNextValuesForSequenceClosingConnections() throws Exception {
+
+        // Create Sequence
+        nextConnection();
+        conn.createStatement().execute("CREATE SEQUENCE seqtest.closeconn START WITH 4990 MINVALUE 4990 MAXVALUE 5000 CACHE 10");
+        nextConnection();
+        
+        // Call NEXT VALUE FOR 1 time more than available values in the Sequence. We expected the final time
+        // to throw an error as we will have reached the max value
+        try {
+            long val = 0L;
+            for (int i = 0; i <= 11; i++) {
+                ResultSet rs = conn.createStatement().executeQuery(String.format(SELECT_NEXT_VALUE_SQL, "seqtest.closeconn"));
+                rs.next();
+                val = rs.getLong(1);
+                nextConnection();
+            }
+            fail("Expect to fail as we have arrived at the max sequence value " + val);
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.SEQUENCE_VAL_REACHED_MAX_VALUE.getErrorCode(),
+                e.getErrorCode());
+            assertTrue(e.getNextException() == null);
+        }
+    }
 
     private void insertEvent(long id, String userId, long val) throws SQLException {
         PreparedStatement stmt = conn.prepareStatement("UPSERT INTO events VALUES(?,?,?)");
@@ -1240,6 +1274,33 @@ public class SequenceIT extends BaseClientManagedTimeIT {
         assertTrue(rs.next());
         assertEquals(4, rs.getLong(1));
         assertFalse(rs.next());
+    }
+    
+    @Test
+    public void testNoFromClause() throws Exception {
+        ResultSet rs;
+        nextConnection();
+        conn.createStatement().execute("CREATE SEQUENCE myseq START WITH 1 INCREMENT BY 1");
+        conn.createStatement().execute("CREATE SEQUENCE anotherseq START WITH 2 INCREMENT BY 3");
+        nextConnection();
+        rs = conn.createStatement().executeQuery("EXPLAIN SELECT NEXT VALUE FOR myseq");
+        assertEquals("CLIENT RESERVE VALUES FROM 1 SEQUENCE", QueryUtil.getExplainPlan(rs));
+        rs = conn.createStatement().executeQuery("SELECT NEXT VALUE FOR myseq");
+        assertTrue(rs.next());
+        assertEquals(1, rs.getInt(1));
+        rs = conn.createStatement().executeQuery("EXPLAIN SELECT CURRENT VALUE FOR myseq");
+        assertEquals("CLIENT RESERVE VALUES FROM 1 SEQUENCE", QueryUtil.getExplainPlan(rs));
+        rs = conn.createStatement().executeQuery("SELECT CURRENT VALUE FOR myseq");
+        assertTrue(rs.next());
+        assertEquals(1, rs.getInt(1));
+        rs = conn.createStatement().executeQuery("SELECT NEXT VALUE FOR myseq, NEXT VALUE FOR anotherseq");
+        assertTrue(rs.next());
+        assertEquals(2, rs.getInt(1));
+        assertEquals(2, rs.getInt(2));
+        rs = conn.createStatement().executeQuery("SELECT CURRENT VALUE FOR myseq, NEXT VALUE FOR anotherseq");
+        assertTrue(rs.next());
+        assertEquals(2, rs.getInt(1));
+        assertEquals(5, rs.getInt(2));        
     }
 
 }

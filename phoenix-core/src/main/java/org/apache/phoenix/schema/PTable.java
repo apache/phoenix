@@ -23,52 +23,53 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.IndexMaintainer;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.stats.PTableStats;
 
 
 /**
  * Definition of a Phoenix table
  *
- * 
+ *
  * @since 0.1
  */
-public interface PTable {
+public interface PTable extends PMetaDataEntity {
     public static final long INITIAL_SEQ_NUM = 0;
     public static final String IS_IMMUTABLE_ROWS_PROP_NAME = "IMMUTABLE_ROWS";
     public static final boolean DEFAULT_DISABLE_WAL = false;
-    
-    public enum ViewType { 
+
+    public enum ViewType {
         MAPPED((byte)1),
         READ_ONLY((byte)2),
         UPDATABLE((byte)3);
 
         private final byte[] byteValue;
         private final byte serializedValue;
-        
+
         ViewType(byte serializedValue) {
             this.serializedValue = serializedValue;
             this.byteValue = Bytes.toBytes(this.name());
         }
-        
+
         public byte[] getBytes() {
             return byteValue;
         }
-        
+
         public boolean isReadOnly() {
             return this != UPDATABLE;
         }
-        
+
         public byte getSerializedValue() {
             return this.serializedValue;
         }
-        
+
         public static ViewType fromSerializedValue(byte serializedValue) {
             if (serializedValue < 1 || serializedValue > ViewType.values().length) {
                 throw new IllegalArgumentException("Invalid ViewType " + serializedValue);
             }
             return ViewType.values()[serializedValue-1];
         }
-        
+
         public ViewType combine(ViewType otherType) {
             if (otherType == null) {
                 return this;
@@ -80,34 +81,34 @@ public interface PTable {
         }
     }
 
-    public enum IndexType { 
+    public enum IndexType {
         GLOBAL((byte)1),
         LOCAL((byte)2);
 
         private final byte[] byteValue;
         private final byte serializedValue;
-        
+
         IndexType(byte serializedValue) {
             this.serializedValue = serializedValue;
             this.byteValue = Bytes.toBytes(this.name());
         }
-        
+
         public byte[] getBytes() {
             return byteValue;
         }
-        
+
         public byte getSerializedValue() {
             return this.serializedValue;
         }
-        
+
         public static IndexType getDefault() {
             return GLOBAL;
         }
-        
+
         public static IndexType fromToken(String token) {
             return IndexType.valueOf(token.trim().toUpperCase());
         }
-        
+
         public static IndexType fromSerializedValue(byte serializedValue) {
             if (serializedValue < 1 || serializedValue > IndexType.values().length) {
                 throw new IllegalArgumentException("Invalid IndexType " + serializedValue);
@@ -132,20 +133,20 @@ public interface PTable {
 
         private final byte[] byteValue;
         private final byte serializedValue;
-        
+
         LinkType(byte serializedValue) {
             this.serializedValue = serializedValue;
             this.byteValue = Bytes.toBytes(this.name());
         }
-        
+
         public byte[] getBytes() {
             return byteValue;
         }
-        
+
         public byte getSerializedValue() {
             return this.serializedValue;
         }
-        
+
         public static LinkType fromSerializedValue(byte serializedValue) {
             if (serializedValue < 1 || serializedValue > LinkType.values().length) {
                 return null;
@@ -160,7 +161,7 @@ public interface PTable {
      * @return table name
      */
     PName getName();
-    PName getSchemaName(); 
+    PName getSchemaName();
     PName getTableName();
     PName getTenantId();
 
@@ -208,14 +209,14 @@ public interface PTable {
      * @throws AmbiguousColumnException if multiple columns are found with the given name
      */
     PColumn getColumn(String name) throws ColumnNotFoundException, AmbiguousColumnException;
-
+    
     /**
      * Get the PK column with the given name.
      * @param name the column name
      * @return the PColumn with the given name
      * @throws ColumnNotFoundException if no PK column with the given name
      * can be found
-     * @throws ColumnNotFoundException 
+     * @throws ColumnNotFoundException
      */
     PColumn getPKColumn(String name) throws ColumnNotFoundException;
 
@@ -295,7 +296,7 @@ public interface PTable {
      * on or null if not an index.
      */
     PName getParentSchemaName();
-    
+
     /**
      * For a view, return the name of table in Phoenix that physically stores data.
      * Currently a single name, but when views are allowed over multiple tables, will become multi-valued.
@@ -306,19 +307,29 @@ public interface PTable {
     PName getPhysicalName();
     boolean isImmutableRows();
 
-    void getIndexMaintainers(ImmutableBytesWritable ptr);
-    IndexMaintainer getIndexMaintainer(PTable dataTable);
+    void getIndexMaintainers(ImmutableBytesWritable ptr, PhoenixConnection connection);
+    IndexMaintainer getIndexMaintainer(PTable dataTable, PhoenixConnection connection);
     PName getDefaultFamilyName();
-    
+
     boolean isWALDisabled();
     boolean isMultiTenant();
+    boolean getStoreNulls();
 
     ViewType getViewType();
     String getViewStatement();
     Short getViewIndexId();
     PTableKey getKey();
-    
-    int getEstimatedSize();
+
     IndexType getIndexType();
     PTableStats getTableStats();
+    int getBaseColumnCount();
+
+    /**
+     * Determines whether or not we may optimize out an ORDER BY or do a GROUP BY
+     * in-place when the optimizer tells us it's possible. This is due to PHOENIX-2067
+     * and only applicable for tables using DESC primary key column(s) which have
+     * not been upgraded.
+     * @return true if optimizations row key order optimizations are possible
+     */
+    boolean rowKeyOrderOptimizable();
 }

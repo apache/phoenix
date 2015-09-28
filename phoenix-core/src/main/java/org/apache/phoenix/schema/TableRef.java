@@ -18,7 +18,7 @@
 package org.apache.phoenix.schema;
 
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compile.TupleProjectionCompiler;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -26,6 +26,8 @@ import org.apache.phoenix.util.SchemaUtil;
 
 
 public class TableRef {
+    public static final TableRef EMPTY_TABLE_REF = new TableRef(new PTableImpl());
+    
     private PTable table;
     private final String alias;
     private final long upperBoundTimeStamp;
@@ -69,31 +71,30 @@ public class TableRef {
         return alias;
     }
 
-    public String getColumnDisplayName(ColumnRef ref) {
+    public String getColumnDisplayName(ColumnRef ref, boolean cfCaseSensitive, boolean cqCaseSensitive) {
+        String cf = null;
+        String cq = null;       
         PColumn column = ref.getColumn();
-        if (table.getType() == PTableType.JOIN || table.getType() == PTableType.SUBQUERY) {
-            return column.getName().getString();
+        String name = column.getName().getString();
+        boolean isIndex = IndexUtil.isIndexColumn(name);
+        if ((table.getType() == PTableType.PROJECTED && TupleProjectionCompiler.PROJECTED_TABLE_SCHEMA.equals(table.getSchemaName()))
+                || table.getType() == PTableType.SUBQUERY) {
+            cq = name;
         }
-        boolean isIndex = table.getType() == PTableType.INDEX;
-        if (SchemaUtil.isPKColumn(column)) {
-            String name = column.getName().getString();
-            if (isIndex) {
-                return IndexUtil.getDataColumnName(name);
-            }
-            return name;
+        else if (SchemaUtil.isPKColumn(column)) {
+            cq = isIndex ? IndexUtil.getDataColumnName(name) : name;
+        }
+        else {
+            String defaultFamilyName = table.getDefaultFamilyName() == null ? QueryConstants.DEFAULT_COLUMN_FAMILY : table.getDefaultFamilyName().getString();
+            // Translate to the data table column name
+            String dataFamilyName = isIndex ? IndexUtil.getDataColumnFamilyName(name) : column.getFamilyName().getString() ;
+            cf = defaultFamilyName.equals(dataFamilyName) ? null : dataFamilyName;
+            cq = isIndex ? IndexUtil.getDataColumnName(name) : name;
         }
         
-        if (isIndex) {
-            // Translate to the data table column name
-            String indexColumnName = column.getName().getString();
-            String dataFamilyName = IndexUtil.getDataColumnFamilyName(indexColumnName);
-            String dataColumnName = IndexUtil.getDataColumnName(indexColumnName);
-            String defaultFamilyName = table.getDefaultFamilyName() == null ? QueryConstants.DEFAULT_COLUMN_FAMILY : table.getDefaultFamilyName().getString();
-            return SchemaUtil.getColumnDisplayName(defaultFamilyName.equals(dataFamilyName) ? null : dataFamilyName, dataColumnName);
-        }
-        byte[] defaultFamily = table.getDefaultFamilyName() == null ? QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES : table.getDefaultFamilyName().getBytes();
-        String displayName = SchemaUtil.getColumnDisplayName(Bytes.compareTo(defaultFamily, column.getFamilyName().getBytes()) == 0  ? null : column.getFamilyName().getBytes(), column.getName().getBytes());
-        return displayName;
+        cf = (cf!=null && cfCaseSensitive) ? "\"" + cf + "\"" : cf;
+        cq = cqCaseSensitive ? "\"" + cq + "\"" : cq;
+        return SchemaUtil.getColumnDisplayName(cf, cq);
     }
     
     @Override

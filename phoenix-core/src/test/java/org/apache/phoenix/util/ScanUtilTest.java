@@ -26,13 +26,13 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.KeyRange.Bound;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.types.PChar;
-import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.PDatum;
-import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.types.PChar;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -239,7 +239,7 @@ public class ScanUtilTest {
                     PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("2"), false),},{
                     PChar.INSTANCE.getKeyRange(Bytes.toBytes("A"), true, Bytes.toBytes("B"), false),}},
                 new int[] {1,1,1},
-                PChar.INSTANCE.toBytes("b2B"),
+                PChar.INSTANCE.toBytes("b"),
                 Bound.UPPER
                 ));
         // 13, Upper bound, single inclusive, range inclusive, increment at end.
@@ -257,7 +257,7 @@ public class ScanUtilTest {
                     PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("b"), false),},{
                     PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),}},
                 new int[] {1,1},
-                PChar.INSTANCE.toBytes("b2"),
+                PChar.INSTANCE.toBytes("b"),
                 Bound.UPPER
                 ));
         // 15, Upper bound, range inclusive, single inclusive, increment at end.

@@ -37,6 +37,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
 
@@ -55,15 +56,16 @@ import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheRequest
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataService;
 import org.apache.phoenix.expression.AndExpression;
+import org.apache.phoenix.expression.ByteBasedLikeExpression;
 import org.apache.phoenix.expression.ComparisonExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.InListExpression;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
-import org.apache.phoenix.expression.LikeExpression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.NotExpression;
 import org.apache.phoenix.expression.OrExpression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
+import org.apache.phoenix.expression.StringBasedLikeExpression;
 import org.apache.phoenix.expression.function.SubstrFunction;
 import org.apache.phoenix.filter.MultiCQKeyValueComparisonFilter;
 import org.apache.phoenix.filter.MultiKeyValueComparisonFilter;
@@ -76,10 +78,15 @@ import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.parse.LikeParseNode.LikeType;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PColumn;
-import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
+import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.stats.GuidePostsInfo;
+import org.apache.phoenix.schema.stats.PTableStats;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PDataType;
 
 import com.google.common.collect.Lists;
 
@@ -200,6 +207,7 @@ public class TestUtil {
     public static final String JOIN_ITEM_TABLE_DISPLAY_NAME = JOIN_SCHEMA + "." + JOIN_ITEM_TABLE;
     public static final String JOIN_SUPPLIER_TABLE_DISPLAY_NAME = JOIN_SCHEMA + "." + JOIN_SUPPLIER_TABLE;
     public static final String JOIN_COITEM_TABLE_DISPLAY_NAME = JOIN_SCHEMA + "." + JOIN_COITEM_TABLE;
+    public static final String BINARY_NAME = "BinaryTable";
 
     /**
      * Read-only properties used by all tests
@@ -245,7 +253,7 @@ public class TestUtil {
     }
 
     public static Expression constantComparison(CompareOp op, PColumn c, Object o) {
-        return  new ComparisonExpression(op, Arrays.<Expression>asList(new KeyValueColumnExpression(c), LiteralExpression.newConstant(o)));
+        return  new ComparisonExpression(Arrays.<Expression>asList(new KeyValueColumnExpression(c), LiteralExpression.newConstant(o)), op);
     }
 
     public static Expression kvColumn(PColumn c) {
@@ -257,23 +265,36 @@ public class TestUtil {
     }
 
     public static Expression constantComparison(CompareOp op, Expression e, Object o) {
-        return  new ComparisonExpression(op, Arrays.asList(e, LiteralExpression.newConstant(o)));
+        return  new ComparisonExpression(Arrays.asList(e, LiteralExpression.newConstant(o)), op);
     }
 
-    public static Expression like(Expression e, Object o) {
-        return  new LikeExpression(Arrays.asList(e, LiteralExpression.newConstant(o)), LikeType.CASE_SENSITIVE);
+    private static boolean useByteBasedRegex(StatementContext context) {
+        return context
+                .getConnection()
+                .getQueryServices()
+                .getProps()
+                .getBoolean(QueryServices.USE_BYTE_BASED_REGEX_ATTRIB,
+                    QueryServicesOptions.DEFAULT_USE_BYTE_BASED_REGEX);
     }
 
-    public static Expression ilike(Expression e, Object o) {
-      return  new LikeExpression(Arrays.asList(e, LiteralExpression.newConstant(o)), LikeType.CASE_INSENSITIVE);
-  }
+    public static Expression like(Expression e, Object o, StatementContext context) {
+        return useByteBasedRegex(context)?
+               ByteBasedLikeExpression.create(Arrays.asList(e, LiteralExpression.newConstant(o)), LikeType.CASE_SENSITIVE):
+               StringBasedLikeExpression.create(Arrays.asList(e, LiteralExpression.newConstant(o)), LikeType.CASE_SENSITIVE);
+    }
+
+    public static Expression ilike(Expression e, Object o, StatementContext context) {
+        return useByteBasedRegex(context)?
+                ByteBasedLikeExpression.create(Arrays.asList(e, LiteralExpression.newConstant(o)), LikeType.CASE_INSENSITIVE):
+                StringBasedLikeExpression.create(Arrays.asList(e, LiteralExpression.newConstant(o)), LikeType.CASE_INSENSITIVE);
+    }
 
     public static Expression substr(Expression e, Object offset, Object length) {
         return  new SubstrFunction(Arrays.asList(e, LiteralExpression.newConstant(offset), LiteralExpression.newConstant(length)));
     }
 
     public static Expression columnComparison(CompareOp op, Expression c1, Expression c2) {
-        return  new ComparisonExpression(op, Arrays.<Expression>asList(c1, c2));
+        return  new ComparisonExpression(Arrays.<Expression>asList(c1, c2), op);
     }
 
     public static SingleKeyValueComparisonFilter singleKVFilter(Expression e) {
@@ -301,7 +322,7 @@ public class TestUtil {
     }
 
     public static Expression in(Expression... expressions) throws SQLException {
-        return InListExpression.create(Arrays.asList(expressions), false, new ImmutableBytesWritable());
+        return InListExpression.create(Arrays.asList(expressions), false, new ImmutableBytesWritable(), true);
     }
 
     public static Expression in(Expression e, Object... literals) throws SQLException {
@@ -311,7 +332,7 @@ public class TestUtil {
         for (Object o : literals) {
             expressions.add(LiteralExpression.newConstant(o, childType));
         }
-        return InListExpression.create(expressions, false, new ImmutableBytesWritable());
+        return InListExpression.create(expressions, false, new ImmutableBytesWritable(), true);
     }
 
     public static void assertDegenerate(StatementContext context) {
@@ -489,7 +510,38 @@ public class TestUtil {
         List<KeyRange> keyRanges = pstmt.getQueryPlan().getSplits();
         return keyRanges;
     }
-    
+
+    public static Collection<GuidePostsInfo> getGuidePostsList(Connection conn, String tableName) throws SQLException {
+        return getGuidePostsList(conn, tableName, null, null, null, null);
+    }
+
+    public static Collection<GuidePostsInfo> getGuidePostsList(Connection conn, String tableName, String where)
+            throws SQLException {
+        return getGuidePostsList(conn, tableName, null, null, null, where);
+    }
+
+    public static Collection<GuidePostsInfo> getGuidePostsList(Connection conn, String tableName, String pkCol,
+            byte[] lowerRange, byte[] upperRange, String whereClauseSuffix) throws SQLException {
+        String whereClauseStart = (lowerRange == null && upperRange == null ? ""
+                : " WHERE "
+                        + ((lowerRange != null ? (pkCol + " >= ? " + (upperRange != null ? " AND " : "")) : "") + (upperRange != null ? (pkCol + " < ?")
+                                : "")));
+        String whereClause = whereClauseSuffix == null ? whereClauseStart
+                : whereClauseStart.length() == 0 ? (" WHERE " + whereClauseSuffix) : (" AND " + whereClauseSuffix);
+        String query = "SELECT /*+ NO_INDEX */ COUNT(*) FROM " + tableName + whereClause;
+        PhoenixPreparedStatement pstmt = conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class);
+        if (lowerRange != null) {
+            pstmt.setBytes(1, lowerRange);
+        }
+        if (upperRange != null) {
+            pstmt.setBytes(lowerRange != null ? 2 : 1, upperRange);
+        }
+        pstmt.execute();
+        TableRef tableRef = pstmt.getQueryPlan().getTableRef();
+        PTableStats tableStats = tableRef.getTable().getTableStats();
+        return tableStats.getGuidePosts().values();
+    }
+
     public static List<KeyRange> getSplits(Connection conn, byte[] lowerRange, byte[] upperRange) throws SQLException {
         return getSplits(conn, STABLE_NAME, STABLE_PK_NAME, lowerRange, upperRange, null);
     }

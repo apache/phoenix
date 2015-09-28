@@ -24,9 +24,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
-import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Pair;
@@ -154,7 +152,7 @@ public class PhoenixIndexCodec extends BaseIndexCodec {
                 } else {
                     indexUpdate.setTable(maintainer.getIndexTableName());
                 }
-                valueGetter = maintainer.createGetterFromKeyValues(state.getPendingUpdate());
+                valueGetter = maintainer.createGetterFromKeyValues(dataRowKey, state.getPendingUpdate());
             } else {
                 // TODO: if more efficient, I could do this just once with all columns in all indexes
                 Pair<Scanner,IndexUpdate> statePair = state.getIndexedColumnsTableState(maintainer.getAllColumns());
@@ -166,14 +164,14 @@ public class PhoenixIndexCodec extends BaseIndexCodec {
             Mutation mutation = null;
             if (upsert) {
                 mutation =
-                        maintainer.buildUpdateMutation(kvBuilder, valueGetter, ptr, state
-                                .getCurrentTimestamp(), env.getRegion().getStartKey(), env
-                                .getRegion().getEndKey());
+                        maintainer.buildUpdateMutation(kvBuilder, valueGetter, ptr, state.getCurrentTimestamp(),
+                            env.getRegion().getRegionInfo().getStartKey(),
+                            env.getRegion().getRegionInfo().getEndKey());
             } else {
                 mutation =
-                        maintainer.buildDeleteMutation(kvBuilder, valueGetter, ptr, state
-                                .getPendingUpdate(), state.getCurrentTimestamp(), env.getRegion()
-                                .getStartKey(), env.getRegion().getEndKey());
+                        maintainer.buildDeleteMutation(kvBuilder, valueGetter, ptr, state.getPendingUpdate(),
+                            state.getCurrentTimestamp(), env.getRegion().getRegionInfo().getStartKey(),
+                            env.getRegion().getRegionInfo().getEndKey());
             }
             indexUpdate.setUpdate(mutation);
             if (scanner != null) {

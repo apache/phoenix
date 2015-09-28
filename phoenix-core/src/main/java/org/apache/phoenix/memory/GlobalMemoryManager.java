@@ -20,8 +20,6 @@ package org.apache.phoenix.memory;
 import org.apache.http.annotation.GuardedBy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-
 /**
  * 
  * Global memory manager to track course grained memory usage across all requests.
@@ -37,7 +35,6 @@ public class GlobalMemoryManager implements MemoryManager {
     private final int maxWaitMs;
     @GuardedBy("sync")
     private volatile long usedMemoryBytes;
-    
     public GlobalMemoryManager(long maxBytes, int maxWaitMs) {
         if (maxBytes <= 0) {
             throw new IllegalStateException("Total number of available bytes (" + maxBytes + ") must be greater than zero");

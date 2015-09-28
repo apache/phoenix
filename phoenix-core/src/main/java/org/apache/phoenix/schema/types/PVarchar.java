@@ -17,14 +17,16 @@
  */
 package org.apache.phoenix.schema.types;
 
-import com.google.common.base.Preconditions;
+import java.sql.Types;
+import java.text.Format;
+
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.StringUtil;
 
-import java.sql.Types;
-import java.text.Format;
+import com.google.common.base.Preconditions;
 
 public class PVarchar extends PDataType<String> {
 
@@ -137,15 +139,11 @@ public class PVarchar extends PDataType<String> {
   }
 
   @Override
-  public String toStringLiteral(byte[] b, int offset, int length, Format formatter) {
-    while (b[length - 1] == 0) {
-      length--;
-    }
+  public String toStringLiteral(Object o, Format formatter) {
     if (formatter != null) {
-      Object o = toObject(b, offset, length);
       return "'" + formatter.format(o) + "'";
     }
-    return "'" + Bytes.toStringBinary(b, offset, length) + "'";
+    return null == o ? String.valueOf(o) : "'" + StringUtil.escapeStringConstant(o.toString()) + "'";
   }
 
   private char[] sampleChars = new char[1];

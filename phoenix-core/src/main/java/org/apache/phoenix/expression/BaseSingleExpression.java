@@ -43,7 +43,11 @@ public abstract class BaseSingleExpression extends BaseExpression {
     }
 
     public BaseSingleExpression(Expression expression) {
-        this.children = ImmutableList.of(expression);
+        this(ImmutableList.of(expression));
+    }
+
+    public BaseSingleExpression(List<Expression> children) {
+        this.children = children;
     }
 
     @Override

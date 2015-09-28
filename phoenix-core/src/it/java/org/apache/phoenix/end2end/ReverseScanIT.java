@@ -19,6 +19,9 @@ package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.util.TestUtil.ROW2;
 import static org.apache.phoenix.util.TestUtil.ROW3;
+import static org.apache.phoenix.util.TestUtil.ROW4;
+import static org.apache.phoenix.util.TestUtil.ROW5;
+import static org.apache.phoenix.util.TestUtil.ROW6;
 import static org.apache.phoenix.util.TestUtil.ROW7;
 import static org.apache.phoenix.util.TestUtil.ROW8;
 import static org.apache.phoenix.util.TestUtil.ROW9;
@@ -31,6 +34,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.Statement;
 import java.util.Map;
 import java.util.Properties;
 
@@ -39,6 +43,7 @@ import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
@@ -48,6 +53,8 @@ import com.google.common.collect.Maps;
 
 
 public class ReverseScanIT extends BaseHBaseManagedTimeIT {
+    protected static final String ATABLE_INDEX_NAME = "ATABLE_IDX";
+
     @BeforeClass
     @Shadower(classBeingShadowed = BaseHBaseManagedTimeIT.class)
     public static void doSetup() throws Exception {
@@ -81,11 +88,11 @@ public class ReverseScanIT extends BaseHBaseManagedTimeIT {
         initATableValues(tenantId, getSplitsAtRowKeys(tenantId), getUrl());
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String query = "SELECT entity_id FROM aTable WHERE entity_id >= ? ORDER BY organization_id DESC, entity_id DESC";
+        String query = "SELECT entity_id FROM aTable WHERE entity_id >= '" + ROW3 + "' ORDER BY organization_id DESC, entity_id DESC";
         try {
-            PreparedStatement statement = conn.prepareStatement(query);
-            statement.setString(1, ROW7);
-            ResultSet rs = statement.executeQuery();
+            Statement stmt = conn.createStatement();
+            stmt.setFetchSize(2);
+            ResultSet rs = stmt.executeQuery(query);
 
             assertTrue (rs.next());
             assertEquals(ROW9,rs.getString(1));
@@ -93,10 +100,24 @@ public class ReverseScanIT extends BaseHBaseManagedTimeIT {
             assertEquals(ROW8,rs.getString(1));
             assertTrue (rs.next());
             assertEquals(ROW7,rs.getString(1));
+            assertTrue (rs.next());
+            assertEquals(ROW6,rs.getString(1));
+            assertTrue (rs.next());
+            assertEquals(ROW5,rs.getString(1));
+            assertTrue (rs.next());
+            assertEquals(ROW4,rs.getString(1));
+            assertTrue (rs.next());
+            assertEquals(ROW3,rs.getString(1));
 
             assertFalse(rs.next());
             
-            statement = conn.prepareStatement("SELECT entity_id FROM aTable WHERE organization_id = ? AND entity_id >= ? ORDER BY organization_id DESC, entity_id DESC");
+            rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+            assertEquals(
+                    "CLIENT PARALLEL 1-WAY REVERSE FULL SCAN OVER ATABLE\n" + 
+                    "    SERVER FILTER BY FIRST KEY ONLY AND ENTITY_ID >= '00A323122312312'",
+                    QueryUtil.getExplainPlan(rs));
+            
+            PreparedStatement statement = conn.prepareStatement("SELECT entity_id FROM aTable WHERE organization_id = ? AND entity_id >= ? ORDER BY organization_id DESC, entity_id DESC");
             statement.setString(1, tenantId);
             statement.setString(2, ROW7);
             rs = statement.executeQuery();
@@ -146,4 +167,32 @@ public class ReverseScanIT extends BaseHBaseManagedTimeIT {
         }
     }
 
+    @Test
+    public void testReverseScanIndex() throws Exception {
+        String tenantId = getOrganizationId();
+        initATableValues(tenantId, getSplitsAtRowKeys(tenantId), getUrl());
+        
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String ddl = "CREATE INDEX " + ATABLE_INDEX_NAME + " ON aTable (a_integer DESC) INCLUDE ("
+        + "    A_STRING, " + "    B_STRING, " + "    A_DATE)";
+        conn.createStatement().execute(ddl);
+        
+        String query = 
+                "SELECT a_integer FROM atable where a_integer is not null order by a_integer nulls last limit 1";
+
+        PreparedStatement statement = conn.prepareStatement(query);
+        ResultSet rs=statement.executeQuery();
+        assertTrue(rs.next());
+        assertEquals(1,rs.getInt(1));
+        assertFalse(rs.next());
+        
+        rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+        assertEquals(
+                "CLIENT SERIAL 1-WAY REVERSE RANGE SCAN OVER ATABLE_IDX [not null]\n" + 
+                "    SERVER FILTER BY FIRST KEY ONLY\n" + 
+                "    SERVER 1 ROW LIMIT\n" + 
+                "CLIENT 1 ROW LIMIT",QueryUtil.getExplainPlan(rs));
+    }
+    
 }

@@ -1,0 +1,11 @@
+<div class="jumbotron">
+  <h1>{{page.title}}</h1>
+</div>
+
+<label>Trace ID:
+  <input type="text" ng-model="traceId"/>
+  <a class="btn btn-default" ng-click="drawTree()">Draw</i></a>
+  <a class="btn btn-default" ng-click="clearTree()">Clear</i></a>
+</label>
+<div class="alert {{page.alertType}}" role="alert">{{reqStatus}}</div>
+<div google-chart chart="chartObject" style="height: 70%;"></div>

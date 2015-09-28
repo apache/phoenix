@@ -35,8 +35,8 @@ import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.SelectStatementRewriter;
 import org.apache.phoenix.schema.ColumnRef;
-import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.TypeMismatchException;
+import org.apache.phoenix.schema.types.PBoolean;
 
 
 public class HavingCompiler {
@@ -54,7 +54,7 @@ public class HavingCompiler {
         if (expression.getDataType() != PBoolean.INSTANCE) {
             throw TypeMismatchException.newException(PBoolean.INSTANCE, expression.getDataType(), expression.toString());
         }
-        if (LiteralExpression.isFalse(expression)) {
+        if (LiteralExpression.isBooleanFalseOrNull(expression)) {
             context.setScanRanges(ScanRanges.NOTHING);
             return null;
         } else if (LiteralExpression.isTrue(expression)) {
@@ -171,7 +171,7 @@ public class HavingCompiler {
         @Override
         public Void visit(ColumnParseNode node) throws SQLException {
             ColumnRef ref = context.getResolver().resolveColumn(node.getSchemaName(), node.getTableName(), node.getName());
-            boolean isAggregateColumn = groupBy.getExpressions().indexOf(ref.newColumnExpression()) >= 0;
+            boolean isAggregateColumn = groupBy.getExpressions().indexOf(ref.newColumnExpression(node.isTableNameCaseSensitive(), node.isCaseSensitive())) >= 0;
             if (hasOnlyAggregateColumns == null) {
                 hasOnlyAggregateColumns = isAggregateColumn;
             } else {

@@ -19,6 +19,8 @@ package org.apache.phoenix.parse;
 
 import java.sql.SQLException;
 
+import org.apache.phoenix.compile.ColumnResolver;
+
 public class TableWildcardParseNode extends NamedParseNode {
     private final TableName tableName;
     private final boolean isRewrite;
@@ -46,5 +48,39 @@ public class TableWildcardParseNode extends NamedParseNode {
         return visitor.visit(this);
     }
 
+	@Override
+	public int hashCode() {
+		final int prime = 31;
+		int result = super.hashCode();
+		result = prime * result + (isRewrite ? 1231 : 1237);
+		result = prime * result
+				+ ((tableName == null) ? 0 : tableName.hashCode());
+		return result;
+	}
+
+	@Override
+	public boolean equals(Object obj) {
+		if (this == obj)
+			return true;
+		if (!super.equals(obj))
+			return false;
+		if (getClass() != obj.getClass())
+			return false;
+		TableWildcardParseNode other = (TableWildcardParseNode) obj;
+		if (isRewrite != other.isRewrite)
+			return false;
+		if (tableName == null) {
+			if (other.tableName != null)
+				return false;
+		} else if (!tableName.equals(other.tableName))
+			return false;
+		return true;
+	}
+
+    @Override
+    public void toSQL(ColumnResolver resolver, StringBuilder buf) {
+        toSQL(buf);
+        buf.append(".*");
+    }
 }
 

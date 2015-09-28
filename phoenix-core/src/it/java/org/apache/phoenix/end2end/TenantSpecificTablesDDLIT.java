@@ -17,15 +17,14 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_DEFINE_PK_FOR_VIEW;
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_DROP_PK;
-import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_MODIFY_VIEW_PK;
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_MUTATE_TABLE;
 import static org.apache.phoenix.exception.SQLExceptionCode.TABLE_UNDEFINED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.KEY_SEQ;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ORDINAL_POSITION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_FUNCTION_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE_SEQUENCE;
 import static org.apache.phoenix.schema.PTableType.SYSTEM;
 import static org.apache.phoenix.schema.PTableType.TABLE;
@@ -89,14 +88,49 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
     }
 
     @Test
-    public void testAlterMultiTenantWithViewsToGlobal() throws Exception {
+    public void testAlteringMultiTenancyForTableWithViewsNotAllowed() throws Exception {
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(nextTimestamp()));
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        try {
-            conn.createStatement().execute("alter table " + PARENT_TABLE_NAME + " set MULTI_TENANT=false");
-        } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
+        String multiTenantTable = "BASE_MULTI_TENANT_SWITCH";
+        String globalTable = "GLOBAL_TABLE_SWITCH";
+        // create the two base tables
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String ddl = "CREATE TABLE " + multiTenantTable + " (TENANT_ID VARCHAR NOT NULL, PK1 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR, V3 VARCHAR CONSTRAINT NAME_PK PRIMARY KEY(TENANT_ID, PK1)) MULTI_TENANT = true "; 
+            conn.createStatement().execute(ddl);
+            ddl = "CREATE TABLE " + globalTable + " (TENANT_ID VARCHAR NOT NULL, PK1 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR, V3 VARCHAR CONSTRAINT NAME_PK PRIMARY KEY(TENANT_ID, PK1)) ";
+            conn.createStatement().execute(ddl);
+        }
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(nextTimestamp()));
+        props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, "tenant1");
+        // create view on multi-tenant table
+        try (Connection tenantConn = DriverManager.getConnection(getUrl(), props)) {
+            String viewName = "tenantview";
+            String viewDDL = "CREATE VIEW " + viewName + " AS SELECT * FROM " + multiTenantTable;
+            tenantConn.createStatement().execute(viewDDL);
+        }
+        props = new Properties();
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(nextTimestamp()));
+        // create view on global table
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String viewName = "globalView";
+            conn.createStatement().execute("CREATE VIEW " + viewName + " AS SELECT * FROM " + globalTable);
+        }
+        props = new Properties();
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(nextTimestamp()));
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            try {
+                conn.createStatement().execute("ALTER TABLE " + globalTable + " SET MULTI_TENANT = " + true);
+                fail();
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
+            }
+            
+            try {
+                conn.createStatement().execute("ALTER TABLE " + multiTenantTable + " SET MULTI_TENANT = " + false);
+                fail();
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
+            }
         }
     }
     
@@ -157,16 +191,10 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
     }
     
     @Test
-    public void testTenantSpecificTableCannotDeclarePK() throws SQLException {
-        try {
+    public void testTenantSpecificTableCanDeclarePK() throws SQLException {
             createTestTable(PHOENIX_JDBC_TENANT_SPECIFIC_URL, "CREATE VIEW TENANT_TABLE2 ( \n" + 
                     "                tenant_col VARCHAR PRIMARY KEY) AS SELECT *\n" + 
                     "                FROM PARENT_TABLE", null, nextTimestamp());
-            fail();
-        }
-        catch (SQLException expected) {
-            assertEquals(CANNOT_DEFINE_PK_FOR_VIEW.getErrorCode(), expected.getErrorCode());
-        }
     }
     
     @Test(expected=ColumnAlreadyExistsException.class)
@@ -181,18 +209,6 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
         // only two PK columns for multi_tenant, multi_type
         try {
             createTestTable(getUrl(), "CREATE TABLE BASE_TABLE2 (TENANT_ID VARCHAR NOT NULL PRIMARY KEY, ID VARCHAR, A INTEGER) MULTI_TENANT=true", null, nextTimestamp());
-            fail();
-        }
-        catch (SQLException expected) {
-            assertEquals(SQLExceptionCode.INSUFFICIENT_MULTI_TENANT_COLUMNS.getErrorCode(), expected.getErrorCode());
-        }
-    }
-    
-    @Test
-    public void testBaseTableWrongFormatWithNoTenantTypeId() throws Exception {
-        // tenantId column of wrong type
-        try {
-            createTestTable(getUrl(), "CREATE TABLE BASE_TABLE5 (TENANT_ID INTEGER NOT NULL, ID VARCHAR, A INTEGER CONSTRAINT PK PRIMARY KEY (TENANT_ID, ID)) MULTI_TENANT=true", null, nextTimestamp());
             fail();
         }
         catch (SQLException expected) {
@@ -258,19 +274,12 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
     }
     
     @Test
-    public void testMutationOfPKInTenantTablesNotAllowed() throws Exception {
+    public void testDropOfPKInTenantTablesNotAllowed() throws Exception {
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(nextTimestamp()));
         Connection conn = DriverManager.getConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL, props);
         try {
-            try {
-                conn.createStatement().execute("alter table " + TENANT_TABLE_NAME + " add new_tenant_pk char(1) primary key");
-                fail();
-            }
-            catch (SQLException expected) {
-                assertEquals(CANNOT_MODIFY_VIEW_PK.getErrorCode(), expected.getErrorCode());
-            }
-            
+            // try removing a PK col
             try {
                 conn.createStatement().execute("alter table " + TENANT_TABLE_NAME + " drop column id");
                 fail();
@@ -290,25 +299,6 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(nextTimestamp()));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
-            // try adding a PK col
-            try {
-                conn.createStatement().execute("alter table " + PARENT_TABLE_NAME + " add new_pk varchar primary key");
-                fail();
-            }
-            catch (SQLException expected) {
-                assertEquals(CANNOT_MUTATE_TABLE.getErrorCode(), expected.getErrorCode());
-            }
-            
-            // try adding a non-PK col
-            try {
-                conn.createStatement().execute("alter table " + PARENT_TABLE_NAME + " add new_col char(1)");
-                fail();
-            }
-            catch (SQLException expected) {
-                assertEquals(CANNOT_MUTATE_TABLE.getErrorCode(), expected.getErrorCode());
-            }
-            
-            // try removing a PK col
             try {
                 conn.createStatement().execute("alter table " + PARENT_TABLE_NAME + " drop column id");
                 fail();
@@ -473,6 +463,8 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
             assertTrue(rs.next());
             assertTableMetaData(rs, SYSTEM_CATALOG_SCHEMA, SYSTEM_CATALOG_TABLE, SYSTEM);
             assertTrue(rs.next());
+            assertTableMetaData(rs, SYSTEM_CATALOG_SCHEMA, SYSTEM_FUNCTION_TABLE, SYSTEM);
+            assertTrue(rs.next());
             assertTableMetaData(rs, SYSTEM_CATALOG_SCHEMA, TYPE_SEQUENCE, SYSTEM);
             assertTrue(rs.next());
             assertTableMetaData(rs, SYSTEM_CATALOG_SCHEMA, PhoenixDatabaseMetaData.SYSTEM_STATS_TABLE, SYSTEM);
@@ -538,6 +530,8 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
             ResultSet rs = meta.getTables(null, null, null, null);
             assertTrue(rs.next());
             assertTableMetaData(rs, PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA, PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE, PTableType.SYSTEM);
+            assertTrue(rs.next());
+            assertTableMetaData(rs, SYSTEM_CATALOG_SCHEMA, SYSTEM_FUNCTION_TABLE, SYSTEM);
             assertTrue(rs.next());
             assertTableMetaData(rs, PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA, PhoenixDatabaseMetaData.TYPE_SEQUENCE, PTableType.SYSTEM);
             assertTrue(rs.next());

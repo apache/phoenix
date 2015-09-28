@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.compile;
 
+
 import java.math.BigDecimal;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
@@ -32,6 +33,7 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.AndExpression;
 import org.apache.phoenix.expression.ArrayConstructorExpression;
+import org.apache.phoenix.expression.ByteBasedLikeExpression;
 import org.apache.phoenix.expression.CaseExpression;
 import org.apache.phoenix.expression.CoerceExpression;
 import org.apache.phoenix.expression.ComparisonExpression;
@@ -60,12 +62,15 @@ import org.apache.phoenix.expression.NotExpression;
 import org.apache.phoenix.expression.OrExpression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.expression.RowValueConstructorExpression;
+import org.apache.phoenix.expression.StringBasedLikeExpression;
 import org.apache.phoenix.expression.StringConcatExpression;
 import org.apache.phoenix.expression.TimestampAddExpression;
 import org.apache.phoenix.expression.TimestampSubtractExpression;
 import org.apache.phoenix.expression.function.ArrayAllComparisonExpression;
 import org.apache.phoenix.expression.function.ArrayAnyComparisonExpression;
-import org.apache.phoenix.expression.function.InlineArrayElemRefExpression;
+import org.apache.phoenix.expression.function.ArrayElemRefExpression;
+import org.apache.phoenix.expression.function.RoundDecimalExpression;
+import org.apache.phoenix.expression.function.RoundTimestampExpression;
 import org.apache.phoenix.parse.AddParseNode;
 import org.apache.phoenix.parse.AndParseNode;
 import org.apache.phoenix.parse.ArithmeticParseNode;
@@ -91,39 +96,43 @@ import org.apache.phoenix.parse.ModulusParseNode;
 import org.apache.phoenix.parse.MultiplyParseNode;
 import org.apache.phoenix.parse.NotParseNode;
 import org.apache.phoenix.parse.OrParseNode;
+import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.RowValueConstructorParseNode;
 import org.apache.phoenix.parse.SequenceValueParseNode;
 import org.apache.phoenix.parse.StringConcatParseNode;
 import org.apache.phoenix.parse.SubqueryParseNode;
 import org.apache.phoenix.parse.SubtractParseNode;
+import org.apache.phoenix.parse.UDFParseNode;
 import org.apache.phoenix.parse.UnsupportedAllParseNodeVisitor;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
-import org.apache.phoenix.schema.types.PChar;
-import org.apache.phoenix.schema.types.PDate;
-import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.DelegateDatum;
 import org.apache.phoenix.schema.LocalIndexDataColumnRef;
-import org.apache.phoenix.schema.types.PArrayDataType;
-import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.PColumn;
-import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.PDatum;
-import org.apache.phoenix.schema.types.PDouble;
-import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.schema.types.PTimestamp;
-import org.apache.phoenix.schema.types.PUnsignedTimestamp;
-import org.apache.phoenix.schema.types.PVarbinary;
-import org.apache.phoenix.schema.types.PhoenixArray;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.TypeMismatchException;
+import org.apache.phoenix.schema.types.PArrayDataType;
+import org.apache.phoenix.schema.types.PBoolean;
+import org.apache.phoenix.schema.types.PChar;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.schema.types.PDouble;
+import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.schema.types.PTimestamp;
+import org.apache.phoenix.schema.types.PUnsignedTimestamp;
+import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.schema.types.PhoenixArray;
 import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -135,9 +144,10 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     protected final StatementContext context;
     protected final GroupBy groupBy;
     private int nodeCount;
+    private int totalNodeCount;
     private final boolean resolveViewConstants;
 
-    ExpressionCompiler(StatementContext context) {
+    public ExpressionCompiler(StatementContext context) {
         this(context,GroupBy.EMPTY_GROUP_BY, false);
     }
 
@@ -166,6 +176,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     public void reset() {
         this.isAggregate = false;
         this.nodeCount = 0;
+        this.totalNodeCount = 0;
     }
 
     @Override
@@ -214,7 +225,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         } else {
             addBindParamMetaData(lhsNode, rhsNode, lhsExpr, rhsExpr);
         }
-        return wrapGroupByExpression(ComparisonExpression.create(op, children, context.getTempPtr()));
+        return wrapGroupByExpression(ComparisonExpression.create(op, children, context.getTempPtr(), context.getCurrentTable().getTable().rowKeyOrderOptimizable()));
     }
 
     @Override
@@ -249,7 +260,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
             determinism = determinism.combine(child.getDeterminism());
         }
         if (children.size() == 0) {
-            return LiteralExpression.newConstant(true, determinism);
+            return LiteralExpression.newConstant(false, determinism);
         }
         if (children.size() == 1) {
             return children.get(0);
@@ -305,12 +316,20 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
      * @param children the child expression arguments to the function expression node.
      */
     public Expression visitLeave(FunctionParseNode node, List<Expression> children) throws SQLException {
-        children = node.validate(children, context);
-        Expression expression = node.create(children, context);
-        ImmutableBytesWritable ptr = context.getTempPtr();
-        if (ExpressionUtil.isConstant(expression)) {
-            return ExpressionUtil.getConstantExpression(expression, ptr);
+        PFunction function = null;
+        if(node instanceof UDFParseNode) {
+            function = context.getResolver().resolveFunction(node.getName());
+            BuiltInFunctionInfo info = new BuiltInFunctionInfo(function);
+            node = new UDFParseNode(node.getName(), node.getChildren(), info);
         }
+        children = node.validate(children, context);
+        Expression expression = null;
+        if (function == null) {
+            expression = node.create(children, context);
+        } else {
+            expression = node.create(children, function, context);
+        }
+        ImmutableBytesWritable ptr = context.getTempPtr();
         BuiltInFunctionInfo info = node.getInfo();
         for (int i = 0; i < info.getRequiredArgCount(); i++) { 
             // Optimization to catch cases where a required argument is null resulting in the function
@@ -322,6 +341,9 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                     return ExpressionUtil.getNullExpression(expression);
                 }
             }
+        }
+        if (ExpressionUtil.isConstant(expression)) {
+            return ExpressionUtil.getConstantExpression(expression, ptr);
         }
         expression = addExpression(expression);
         expression = wrapGroupByExpression(expression);
@@ -387,7 +409,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         if (tableRef.equals(context.getCurrentTable()) && !SchemaUtil.isPKColumn(column)) { // project only kv columns
             context.getScan().addColumn(column.getFamilyName().getBytes(), column.getName().getBytes());
         }
-        Expression expression = ref.newColumnExpression();
+        Expression expression = ref.newColumnExpression(node.isTableNameCaseSensitive(), node.isCaseSensitive());
         Expression wrappedExpression = wrapGroupByExpression(expression);
         // If we're in an aggregate expression
         // and we're not in the context of an aggregate function
@@ -420,6 +442,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     @Override
     public void addElement(List<Expression> l, Expression element) {
         nodeCount--;
+        totalNodeCount++;
         l.add(element);
     }
 
@@ -428,32 +451,16 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         return true;
     }
 
-    private static Determinism getDeterminism(List<Expression> l) {
-    	Determinism determinism = Determinism.ALWAYS;
-        for (Expression e : l) {
-        	determinism.combine(e.getDeterminism());
-        }
-        return determinism;
-    }
-
     @Override
     public Expression visitLeave(CaseParseNode node, List<Expression> l) throws SQLException {
-        final CaseExpression caseExpression = new CaseExpression(l);
+        final Expression caseExpression = CaseExpression.create(l);
         for (int i = 0; i < node.getChildren().size(); i+=2) {
             ParseNode childNode = node.getChildren().get(i);
             if (childNode instanceof BindParseNode) {
                 context.getBindManager().addParamMetaData((BindParseNode)childNode, new DelegateDatum(caseExpression));
             }
         }
-        if (ExpressionUtil.isConstant(caseExpression)) {
-            ImmutableBytesWritable ptr = context.getTempPtr();
-            int index = caseExpression.evaluateIndexOf(null, ptr);
-            if (index < 0) {
-                return LiteralExpression.newConstant(null, getDeterminism(l));
-            }
-            return caseExpression.getChildren().get(index);
-        }
-        return wrapGroupByExpression(caseExpression);
+         return wrapGroupByExpression(caseExpression);
     }
 
     @Override
@@ -500,15 +507,26 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                 if (node.getLikeType() == LikeType.CASE_SENSITIVE) {
                   CompareOp op = node.isNegate() ? CompareOp.NOT_EQUAL : CompareOp.EQUAL;
                   if (pattern.equals(rhsLiteral)) {
-                      return new ComparisonExpression(op, children);
+                      return new ComparisonExpression(children, op);
                   } else {
                       rhs = LiteralExpression.newConstant(rhsLiteral, PChar.INSTANCE, rhs.getDeterminism());
-                      return new ComparisonExpression(op, Arrays.asList(lhs,rhs));
+                      return new ComparisonExpression(Arrays.asList(lhs,rhs), op);
                   }
                 }
+            } else if (index == 0 && pattern.length() == 1) {
+                return IsNullExpression.create(lhs, true, context.getTempPtr());
             }
         }
-        Expression expression = new LikeExpression(children, node.getLikeType());
+        QueryServices services = context.getConnection().getQueryServices();
+        boolean useByteBasedRegex =
+                services.getProps().getBoolean(QueryServices.USE_BYTE_BASED_REGEX_ATTRIB,
+                    QueryServicesOptions.DEFAULT_USE_BYTE_BASED_REGEX);
+        Expression expression;
+        if (useByteBasedRegex) {
+            expression = ByteBasedLikeExpression.create(children, node.getLikeType());
+        } else {
+            expression = StringBasedLikeExpression.create(children, node.getLikeType());
+        }
         if (ExpressionUtil.isConstant(expression)) {
             ImmutableBytesWritable ptr = context.getTempPtr();
             if (!expression.evaluate(null, ptr)) {
@@ -547,6 +565,24 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         return true;
     }
 
+    // TODO: don't repeat this ugly cast logic (maybe use isCastable in the last else block.
+    private static Expression convertToRoundExpressionIfNeeded(PDataType fromDataType, PDataType targetDataType, List<Expression> expressions) throws SQLException {
+        Expression firstChildExpr = expressions.get(0);
+        if(fromDataType == targetDataType) {
+            return firstChildExpr;
+        } else if((fromDataType == PDecimal.INSTANCE || fromDataType == PTimestamp.INSTANCE || fromDataType == PUnsignedTimestamp.INSTANCE) && targetDataType.isCoercibleTo(
+          PLong.INSTANCE)) {
+            return RoundDecimalExpression.create(expressions);
+        } else if((fromDataType == PDecimal.INSTANCE || fromDataType == PTimestamp.INSTANCE || fromDataType == PUnsignedTimestamp.INSTANCE) && targetDataType.isCoercibleTo(
+          PDate.INSTANCE)) {
+            return RoundTimestampExpression.create(expressions);
+        } else if(fromDataType.isCastableTo(targetDataType)) {
+            return firstChildExpr;
+        } else {
+            throw TypeMismatchException.newException(fromDataType, targetDataType, firstChildExpr.toString());
+        }
+    }
+
     @Override
     public Expression visitLeave(CastParseNode node, List<Expression> children) throws SQLException {
         ParseNode childNode = node.getChildren().get(0);
@@ -565,11 +601,12 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
              * indexed columns. Without this check present we wrongly and unnecessarily
              * end up creating a RoundExpression. 
              */
-            if (context.getResolver().getTables().get(0).getTable().getType() != PTableType.INDEX) {
-                expr =  CastParseNode.convertToRoundExpressionIfNeeded(fromDataType, targetDataType, children);
+            if (context.getCurrentTable().getTable().getType() != PTableType.INDEX) {
+                expr =  convertToRoundExpressionIfNeeded(fromDataType, targetDataType, children);
             }
         }
-        return CoerceExpression.create(expr, targetDataType, SortOrder.getDefault(), expr.getMaxLength());  
+        boolean rowKeyOrderOptimizable = context.getCurrentTable().getTable().rowKeyOrderOptimizable();
+        return wrapGroupByExpression(CoerceExpression.create(expr, targetDataType, SortOrder.getDefault(), expr.getMaxLength(), rowKeyOrderOptimizable));  
     }
     
    @Override
@@ -598,7 +635,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                 context.getBindManager().addParamMetaData((BindParseNode)childNode, firstChild);
             }
         }
-        return wrapGroupByExpression(InListExpression.create(inChildren, node.isNegate(), ptr));
+        return wrapGroupByExpression(InListExpression.create(inChildren, node.isNegate(), ptr, context.getCurrentTable().getTable().rowKeyOrderOptimizable()));
     }
 
     private static final PDatum DECIMAL_DATUM = new PDatum() {
@@ -1122,7 +1159,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     
     @Override
     public Expression visitLeave(ArrayElemRefNode node, List<Expression> l) throws SQLException {
-        return new InlineArrayElemRefExpression(l);
+        return new ArrayElemRefExpression(l);
     }
     
     @Override
@@ -1232,17 +1269,23 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         // the value object array type should match the java known type
         Object[] elements = (Object[]) java.lang.reflect.Array.newInstance(theArrayElemDataType.getJavaClass(), children.size());
 
-        ArrayConstructorExpression arrayExpression = new ArrayConstructorExpression(children, arrayElemDataType);
+        boolean rowKeyOrderOptimizable = context.getCurrentTable().getTable().rowKeyOrderOptimizable();
+        ArrayConstructorExpression arrayExpression = new ArrayConstructorExpression(children, arrayElemDataType, rowKeyOrderOptimizable);
         if (ExpressionUtil.isConstant(arrayExpression)) {
             for (int i = 0; i < children.size(); i++) {
                 Expression child = children.get(i);
                 child.evaluate(null, ptr);
-                Object value = arrayElemDataType.toObject(ptr, child.getDataType(), child.getSortOrder());
-                elements[i] = LiteralExpression.newConstant(value, child.getDataType(), child.getDeterminism()).getValue();
+                Object value = null;
+                if (child.getDataType() == null) {
+                    value = arrayElemDataType.toObject(ptr, theArrayElemDataType, child.getSortOrder());
+                } else {
+                    value = arrayElemDataType.toObject(ptr, child.getDataType(), child.getSortOrder());
+                }
+                elements[i] = LiteralExpression.newConstant(value, theArrayElemDataType, child.getDeterminism()).getValue();
             }
             Object value = PArrayDataType.instantiatePhoenixArray(arrayElemDataType, elements);
             return LiteralExpression.newConstant(value,
-                    PDataType.fromTypeId(arrayElemDataType.getSqlType() + PDataType.ARRAY_TYPE_BASE), Determinism.ALWAYS);
+                    PDataType.fromTypeId(arrayElemDataType.getSqlType() + PDataType.ARRAY_TYPE_BASE), null, null, arrayExpression.getSortOrder(), Determinism.ALWAYS, rowKeyOrderOptimizable);
         }
         
         return wrapGroupByExpression(arrayExpression);
@@ -1269,5 +1312,9 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     public Expression visit(SubqueryParseNode node) throws SQLException {
         Object result = context.getSubqueryResult(node.getSelectNode());
         return LiteralExpression.newConstant(result);
+    }
+    
+    public int getTotalNodeCount() {
+        return totalNodeCount;
     }
 }

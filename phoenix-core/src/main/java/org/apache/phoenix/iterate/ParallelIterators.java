@@ -17,9 +17,12 @@
  */
 package org.apache.phoenix.iterate;
 
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_NUM_PARALLEL_SCANS;
+
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
+import java.util.Queue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 
@@ -27,6 +30,10 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.job.JobManager.JobCallable;
+import org.apache.phoenix.monitoring.MetricType;
+import org.apache.phoenix.monitoring.CombinableMetric;
+import org.apache.phoenix.monitoring.ReadMetricQueue;
+import org.apache.phoenix.monitoring.TaskExecutionMetricsHolder;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.ScanUtil;
@@ -34,8 +41,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.Lists;
-
-
 /**
  *
  * Class that parallelizes the scan over a table using the ExecutorService provided.  Each region of the table will be scanned in parallel with
@@ -49,15 +54,20 @@ public class ParallelIterators extends BaseResultIterators {
 	private static final String NAME = "PARALLEL";
     private final ParallelIteratorFactory iteratorFactory;
     
+    public ParallelIterators(QueryPlan plan, Integer perScanLimit, ParallelIteratorFactory iteratorFactory, ParallelScanGrouper scanGrouper)
+            throws SQLException {
+        super(plan, perScanLimit, scanGrouper);
+        this.iteratorFactory = iteratorFactory;
+    }   
+    
     public ParallelIterators(QueryPlan plan, Integer perScanLimit, ParallelIteratorFactory iteratorFactory)
             throws SQLException {
-        super(plan, perScanLimit);
-        this.iteratorFactory = iteratorFactory;
-    }
+        this(plan, perScanLimit, iteratorFactory, DefaultParallelScanGrouper.getInstance());
+    }  
 
     @Override
     protected void submitWork(List<List<Scan>> nestedScans, List<List<Pair<Scan,Future<PeekingResultIterator>>>> nestedFutures,
-            final List<PeekingResultIterator> allIterators, int estFlattenedSize) {
+            final Queue<PeekingResultIterator> allIterators, int estFlattenedSize) {
         // Pre-populate nestedFutures lists so that we can shuffle the scans
         // and add the future to the right nested list. By shuffling the scans
         // we get better utilization of the cluster since our thread executor
@@ -78,18 +88,29 @@ public class ParallelIterators extends BaseResultIterators {
         // Shuffle so that we start execution across many machines
         // before we fill up the thread pool
         Collections.shuffle(scanLocations);
+        ReadMetricQueue readMetrics = context.getReadMetricsQueue();
+        final String physicalTableName = tableRef.getTable().getPhysicalName().getString();
+        int numScans = scanLocations.size();
+        context.getOverallQueryMetrics().updateNumParallelScans(numScans);
+        GLOBAL_NUM_PARALLEL_SCANS.update(numScans);
         for (ScanLocator scanLocation : scanLocations) {
             final Scan scan = scanLocation.getScan();
+            final CombinableMetric scanMetrics = readMetrics.allotMetric(MetricType.SCAN_BYTES, physicalTableName);
+            final TaskExecutionMetricsHolder taskMetrics = new TaskExecutionMetricsHolder(readMetrics, physicalTableName);
             Future<PeekingResultIterator> future = executor.submit(Tracing.wrap(new JobCallable<PeekingResultIterator>() {
-
+                
                 @Override
                 public PeekingResultIterator call() throws Exception {
                     long startTime = System.currentTimeMillis();
-                    ResultIterator scanner = new TableResultIterator(context, tableRef, scan);
+                    ResultIterator scanner = new TableResultIterator(context, tableRef, scan, scanMetrics);
                     if (logger.isDebugEnabled()) {
                         logger.debug(LogUtil.addCustomAnnotations("Id: " + scanId + ", Time: " + (System.currentTimeMillis() - startTime) + "ms, Scan: " + scan, ScanUtil.getCustomAnnotations(scan)));
                     }
-                    PeekingResultIterator iterator = iteratorFactory.newIterator(context, scanner, scan);
+                    PeekingResultIterator iterator = iteratorFactory.newIterator(context, scanner, scan, physicalTableName);
+                    
+                    // Fill the scanner's cache. This helps reduce latency since we are parallelizing the I/O needed.
+                    iterator.peek();
+                    
                     allIterators.add(iterator);
                     return iterator;
                 }
@@ -102,6 +123,11 @@ public class ParallelIterators extends BaseResultIterators {
                 @Override
                 public Object getJobId() {
                     return ParallelIterators.this;
+                }
+
+                @Override
+                public TaskExecutionMetricsHolder getTaskExecutionMetric() {
+                    return taskMetrics;
                 }
             }, "Parallel scanner for table: " + tableRef.getTable().getName().getString()));
             // Add our future in the right place so that we can concatenate the

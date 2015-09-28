@@ -26,17 +26,19 @@ import java.util.List;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
-import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PDataType;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 
 
 public class CoerceExpression extends BaseSingleExpression {
     private PDataType toType;
     private SortOrder toSortOrder;
     private Integer maxLength;
+    private boolean rowKeyOrderOptimizable;
     
     public CoerceExpression() {
     }
@@ -48,26 +50,35 @@ public class CoerceExpression extends BaseSingleExpression {
         return new CoerceExpression(expression, toType);
     }
     
-    public static Expression create(Expression expression, PDataType toType, SortOrder toSortOrder, Integer maxLength) throws SQLException {
+    public static Expression create(Expression expression, PDataType toType, SortOrder toSortOrder, Integer maxLength, boolean rowKeyOrderOptimizable) throws SQLException {
         if (toType == expression.getDataType() && toSortOrder == expression.getSortOrder()) {
             return expression;
         }
-        return new CoerceExpression(expression, toType, toSortOrder, maxLength);
+        return new CoerceExpression(expression, toType, toSortOrder, maxLength, rowKeyOrderOptimizable);
     }
     
     //Package protected for tests
     CoerceExpression(Expression expression, PDataType toType) {
-        this(expression, toType, SortOrder.getDefault(), null);
+        this(expression, toType, SortOrder.getDefault(), null, true);
     }
     
-    CoerceExpression(Expression expression, PDataType toType, SortOrder toSortOrder, Integer maxLength) {
-        super(expression);
+    CoerceExpression(Expression expression, PDataType toType, SortOrder toSortOrder, Integer maxLength, boolean rowKeyOrderOptimizable) {
+        this(ImmutableList.of(expression), toType, toSortOrder, maxLength, rowKeyOrderOptimizable);
+    }
+
+    public CoerceExpression(List<Expression> children, PDataType toType, SortOrder toSortOrder, Integer maxLength, boolean rowKeyOrderOptimizable) {
+        super(children);
         Preconditions.checkNotNull(toSortOrder);
         this.toType = toType;
         this.toSortOrder = toSortOrder;
         this.maxLength = maxLength;
+        this.rowKeyOrderOptimizable = rowKeyOrderOptimizable;
     }
-
+    
+    public CoerceExpression clone(List<Expression> children) {
+        return new CoerceExpression(children, this.getDataType(), this.getSortOrder(), this.getMaxLength(), this.rowKeyOrderOptimizable);
+    }
+    
     @Override
     public Integer getMaxLength() {
         return maxLength;
@@ -76,7 +87,7 @@ public class CoerceExpression extends BaseSingleExpression {
     @Override
     public int hashCode() {
         final int prime = 31;
-        int result = 1;
+        int result = super.hashCode();
         result = prime * result + ((maxLength == null) ? 0 : maxLength.hashCode());
         result = prime * result + ((toSortOrder == null) ? 0 : toSortOrder.hashCode());
         result = prime * result + ((toType == null) ? 0 : toType.hashCode());
@@ -86,21 +97,29 @@ public class CoerceExpression extends BaseSingleExpression {
     @Override
     public boolean equals(Object obj) {
         if (this == obj) return true;
-        if (obj == null) return false;
+        if (!super.equals(obj)) return false;
         if (getClass() != obj.getClass()) return false;
         CoerceExpression other = (CoerceExpression)obj;
         if (maxLength == null) {
             if (other.maxLength != null) return false;
         } else if (!maxLength.equals(other.maxLength)) return false;
         if (toSortOrder != other.toSortOrder) return false;
-        if (toType != other.toType) return false;
-        return true;
+        if (toType == null) {
+            if (other.toType != null) return false;
+        } else if (!toType.equals(other.toType)) return false;
+        return rowKeyOrderOptimizable == other.rowKeyOrderOptimizable;
     }
 
     @Override
     public void readFields(DataInput input) throws IOException {
         super.readFields(input);
-        toType = PDataType.values()[WritableUtils.readVInt(input)];
+        int ordinal = WritableUtils.readVInt(input);
+        rowKeyOrderOptimizable = false;
+        if (ordinal < 0) {
+            rowKeyOrderOptimizable = true;
+            ordinal = -(ordinal+1);
+        }
+        toType = PDataType.values()[ordinal];
         toSortOrder = SortOrder.fromSystemValue(WritableUtils.readVInt(input));
         int byteSize = WritableUtils.readVInt(input);
         this.maxLength = byteSize == -1 ? null : byteSize;
@@ -109,7 +128,11 @@ public class CoerceExpression extends BaseSingleExpression {
     @Override
     public void write(DataOutput output) throws IOException {
         super.write(output);
-        WritableUtils.writeVInt(output, toType.ordinal());
+        if (rowKeyOrderOptimizable) {
+            WritableUtils.writeVInt(output, -(toType.ordinal()+1));
+        } else {
+            WritableUtils.writeVInt(output, toType.ordinal());
+        }
         WritableUtils.writeVInt(output, toSortOrder.getSystemValue());
         WritableUtils.writeVInt(output, maxLength == null ? -1 : maxLength);
     }
@@ -117,8 +140,9 @@ public class CoerceExpression extends BaseSingleExpression {
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
         if (getChild().evaluate(tuple, ptr)) {
-            getDataType().coerceBytes(ptr, getChild().getDataType(), getChild().getSortOrder(), getSortOrder(),
-                    getChild().getMaxLength());
+            getDataType().coerceBytes(ptr, null, getChild().getDataType(),
+                    getChild().getMaxLength(), null, getChild().getSortOrder(), 
+                    maxLength, null, getSortOrder(), rowKeyOrderOptimizable);
             return true;
         }
         return false;

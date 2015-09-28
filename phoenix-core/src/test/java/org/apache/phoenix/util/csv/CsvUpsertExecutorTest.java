@@ -40,6 +40,7 @@ import java.sql.SQLException;
 import java.sql.Types;
 import java.util.List;
 
+import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyString;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.mock;
@@ -94,7 +95,7 @@ public class CsvUpsertExecutorTest extends BaseConnectionlessQueryTest {
         CSVRecord csvRecordWithTooFewFields = createCsvRecord("123,NameValue");
         upsertExecutor.execute(csvRecordWithTooFewFields);
 
-        verify(upsertListener).errorOnRecord(eq(csvRecordWithTooFewFields), anyString());
+        verify(upsertListener).errorOnRecord(eq(csvRecordWithTooFewFields), any(Throwable.class));
         verifyNoMoreInteractions(upsertListener);
     }
 
@@ -134,7 +135,7 @@ public class CsvUpsertExecutorTest extends BaseConnectionlessQueryTest {
         CSVRecord csvRecordWithInvalidType = createCsvRecord("123,NameValue,ThisIsNotANumber,1:2:3");
         upsertExecutor.execute(csvRecordWithInvalidType);
 
-        verify(upsertListener).errorOnRecord(eq(csvRecordWithInvalidType), anyString());
+        verify(upsertListener).errorOnRecord(eq(csvRecordWithInvalidType), any(Throwable.class));
         verifyNoMoreInteractions(upsertListener);
     }
 

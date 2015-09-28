@@ -25,20 +25,23 @@ import java.util.Map;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
+import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.Store;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.TimeKeeper;
 import org.slf4j.Logger;
@@ -62,21 +65,31 @@ public class StatisticsCollector {
     private long guidepostDepth;
     private long maxTimeStamp = MetaDataProtocol.MIN_TABLE_TIMESTAMP;
     private Map<ImmutableBytesPtr, Pair<Long,GuidePostsInfo>> guidePostsMap = Maps.newHashMap();
-    // Tracks the bytecount per family if it has reached the guidePostsDepth
-    private Map<ImmutableBytesPtr, Boolean> familyMap = Maps.newHashMap();
     protected StatisticsWriter statsTable;
     private Pair<Long,GuidePostsInfo> cachedGps = null;
+    // Store minKey and maxKey at the tracker level itself so that we don't need to do 
+    // any comparison for the min/max values for every next() call
+    private byte[] minKey;
+    private int minKeyOffset, minKeyLength;
 
     public StatisticsCollector(RegionCoprocessorEnvironment env, String tableName, long clientTimeStamp) throws IOException {
-        this(env, tableName, clientTimeStamp, null);
+        this(env, tableName, clientTimeStamp, null, null, null);
+    }
+
+    public StatisticsCollector(RegionCoprocessorEnvironment env, String tableName, long clientTimeStamp, byte[] gp_width_bytes, byte[] gp_per_region_bytes) throws IOException {
+        this(env, tableName, clientTimeStamp, null, gp_width_bytes, gp_per_region_bytes);
     }
 
     public StatisticsCollector(RegionCoprocessorEnvironment env, String tableName, long clientTimeStamp, byte[] family) throws IOException {
+        this(env, tableName, clientTimeStamp, family, null, null);
+    }
+
+    public StatisticsCollector(RegionCoprocessorEnvironment env, String tableName, long clientTimeStamp, byte[] family, byte[] gp_width_bytes, byte[] gp_per_region_bytes) throws IOException {
         Configuration config = env.getConfiguration();
-        int guidepostPerRegion = config.getInt(QueryServices.STATS_GUIDEPOST_PER_REGION_ATTRIB, 
-                QueryServicesOptions.DEFAULT_STATS_GUIDEPOST_PER_REGION);
-        long guidepostWidth = config.getLong(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB,
-                QueryServicesOptions.DEFAULT_STATS_GUIDEPOST_WIDTH_BYTES);
+        int guidepostPerRegion = gp_per_region_bytes == null ? config.getInt(QueryServices.STATS_GUIDEPOST_PER_REGION_ATTRIB, 
+                QueryServicesOptions.DEFAULT_STATS_GUIDEPOST_PER_REGION) : PInteger.INSTANCE.getCodec().decodeInt(gp_per_region_bytes, 0, SortOrder.getDefault());
+        long guidepostWidth = gp_width_bytes == null ? config.getLong(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB,
+                QueryServicesOptions.DEFAULT_STATS_GUIDEPOST_WIDTH_BYTES) : PLong.INSTANCE.getCodec().decodeInt(gp_width_bytes, 0, SortOrder.getDefault());
         this.guidepostDepth = StatisticsUtil.getGuidePostDepth(guidepostPerRegion, guidepostWidth, env.getRegion().getTableDesc());
         // Get the stats table associated with the current table on which the CP is
         // triggered
@@ -84,8 +97,8 @@ public class StatisticsCollector {
         // in a compaction we know the one family ahead of time
         if (family != null) {
             ImmutableBytesPtr cfKey = new ImmutableBytesPtr(family);
-            familyMap.put(cfKey, true);
-            cachedGps = new Pair<Long,GuidePostsInfo>(0L,new GuidePostsInfo(0, Collections.<byte[]>emptyList()));
+            cachedGps = new Pair<Long, GuidePostsInfo>(0l, new GuidePostsInfo(0,
+                    Collections.<byte[]> emptyList(), 0l));
             guidePostsMap.put(cfKey, cachedGps);
         }
     }
@@ -98,7 +111,7 @@ public class StatisticsCollector {
         this.statsTable.close();
     }
 
-    public void updateStatistic(HRegion region) {
+    public void updateStatistic(Region region) {
         try {
             ArrayList<Mutation> mutations = new ArrayList<Mutation>();
             writeStatsToStatsTable(region, true, mutations, TimeKeeper.SYSTEM.getCurrentTime());
@@ -113,11 +126,11 @@ public class StatisticsCollector {
         }
     }
     
-    private void writeStatsToStatsTable(final HRegion region,
+    private void writeStatsToStatsTable(final Region region,
             boolean delete, List<Mutation> mutations, long currentTime) throws IOException {
         try {
             // update the statistics table
-            for (ImmutableBytesPtr fam : familyMap.keySet()) {
+            for (ImmutableBytesPtr fam : guidePostsMap.keySet()) {
                 if (delete) {
                     if(logger.isDebugEnabled()) {
                         logger.debug("Deleting the stats for the region "+region.getRegionInfo());
@@ -131,6 +144,8 @@ public class StatisticsCollector {
                 statsTable.addStats((region.getRegionInfo().getRegionName()), this, fam,
                         mutations);
             }
+            // Clear minKey and maxKey
+            clearMinKeys();
         } catch (IOException e) {
             logger.error("Failed to update statistics table!", e);
             throw e;
@@ -148,13 +163,59 @@ public class StatisticsCollector {
      *            next batch of {@link KeyValue}s
      */
     public void collectStatistics(final List<Cell> results) {
-        for (Cell c : results) {
-            KeyValue kv = KeyValueUtil.ensureKeyValue(c);
-            updateStatistic(kv);
+        Map<ImmutableBytesPtr, Boolean> famMap = Maps.newHashMap();
+        List<GuidePostsInfo> rowTracker = null;
+        if(cachedGps == null) {
+            rowTracker = 
+                    new ArrayList<GuidePostsInfo>();
+        }
+        if (minKey == null && !results.isEmpty()) {
+            Cell minCell = results.get(0);
+            minKey = minCell.getRowArray();
+            minKeyOffset =  minCell.getRowOffset();
+            minKeyLength = minCell.getRowLength();
+        }
+        for (Cell cell : results) {
+            KeyValue kv = KeyValueUtil.ensureKeyValue(cell);
+            maxTimeStamp = Math.max(maxTimeStamp, kv.getTimestamp());
+            Pair<Long, GuidePostsInfo> gps;
+            if (cachedGps == null) {
+                ImmutableBytesPtr cfKey = new ImmutableBytesPtr(kv.getFamilyArray(), kv.getFamilyOffset(),
+                        kv.getFamilyLength());
+                gps = guidePostsMap.get(cfKey);
+                if (gps == null) {
+                    gps = new Pair<Long, GuidePostsInfo>(0l, new GuidePostsInfo(0,
+                            Collections.<byte[]> emptyList(), 0l));
+                    guidePostsMap.put(cfKey, gps);
+                }
+                if (famMap.get(cfKey) == null) {
+                    famMap.put(cfKey, true);
+                    rowTracker.add(gps.getSecond());
+                }
+            } else {
+                gps = cachedGps;
+            }
+            int kvLength = kv.getLength();
+            long byteCount = gps.getFirst() + kvLength;
+            gps.setFirst(byteCount);
+            if (byteCount >= guidepostDepth) {
+                byte[] row = ByteUtil.copyKeyBytesIfNecessary(new ImmutableBytesWritable(kv.getRowArray(), kv
+                        .getRowOffset(), kv.getRowLength()));
+                if (gps.getSecond().addGuidePost(row, byteCount)) {
+                    gps.setFirst(0l);
+                }
+            }
+        }
+        if(cachedGps == null) {
+            for (GuidePostsInfo s : rowTracker) {
+                s.incrementRowCount();
+            }
+        } else {
+            cachedGps.getSecond().incrementRowCount();
         }
     }
 
-    public InternalScanner createCompactionScanner(HRegion region, Store store, InternalScanner s) throws IOException {
+    public InternalScanner createCompactionScanner(Region region, Store store, InternalScanner s) throws IOException {
         // See if this is for Major compaction
         if (logger.isDebugEnabled()) {
             logger.debug("Compaction scanner created for stats");
@@ -163,13 +224,13 @@ public class StatisticsCollector {
         return getInternalScanner(region, store, s, cfKey);
     }
 
-    public void splitStats(HRegion parent, HRegion left, HRegion right) {
+    public void splitStats(Region parent, Region left, Region right) {
         try {
             if (logger.isDebugEnabled()) {
                 logger.debug("Collecting stats for split of " + parent.getRegionInfo() + " into " + left.getRegionInfo() + " and " + right.getRegionInfo());
             }
             List<Mutation> mutations = Lists.newArrayListWithExpectedSize(3);
-            for (byte[] fam : parent.getStores().keySet()) {
+            for (byte[] fam : parent.getTableDesc().getFamiliesKeys()) {
             	statsTable.splitStats(parent, left, right, this, new ImmutableBytesPtr(fam), mutations);
             }
             if (logger.isDebugEnabled()) {
@@ -182,54 +243,34 @@ public class StatisticsCollector {
         }
     }
 
-    protected InternalScanner getInternalScanner(HRegion region, Store store,
+    protected InternalScanner getInternalScanner(Region region, Store store,
             InternalScanner internalScan, ImmutableBytesPtr family) {
         return new StatisticsScanner(this, statsTable, region, internalScan, family);
     }
 
     public void clear() {
         this.guidePostsMap.clear();
-        this.familyMap.clear();
         maxTimeStamp = MetaDataProtocol.MIN_TABLE_TIMESTAMP;
+        clearMinKeys();
     }
 
-    public void addGuidePost(ImmutableBytesPtr cfKey, GuidePostsInfo info, long byteSize, long timestamp) {
-    	Pair<Long,GuidePostsInfo> newInfo = new Pair<Long,GuidePostsInfo>(byteSize,info);
-    	Pair<Long,GuidePostsInfo> oldInfo = guidePostsMap.put(cfKey, newInfo);
-    	if (oldInfo != null) {
-    		info.combine(oldInfo.getSecond());
-    		newInfo.setFirst(oldInfo.getFirst() + newInfo.getFirst());
-    	}
+    private void clearMinKeys() {
+        minKey = null;
+        minKeyOffset = minKeyLength = 0;
+    }
+
+    public void addGuidePost(ImmutableBytesPtr cfKey, GuidePostsInfo info, long byteSize,
+            long timestamp, byte[] minKey) {
+        Pair<Long, GuidePostsInfo> newInfo = new Pair<Long, GuidePostsInfo>(byteSize, info);
+        Pair<Long, GuidePostsInfo> oldInfo = guidePostsMap.put(cfKey, newInfo);
+        if (oldInfo != null) {
+            info.combine(oldInfo.getSecond());
+            newInfo.setFirst(oldInfo.getFirst() + newInfo.getFirst());
+        }
         maxTimeStamp = Math.max(maxTimeStamp, timestamp);
-    }
-    
-    public void updateStatistic(KeyValue kv) {
-        maxTimeStamp = Math.max(maxTimeStamp, kv.getTimestamp());
-
-        Pair<Long,GuidePostsInfo> gps;
-        if (cachedGps == null) {
-            ImmutableBytesPtr cfKey = new ImmutableBytesPtr(kv.getFamilyArray(), kv.getFamilyOffset(), kv.getFamilyLength());
-            familyMap.put(cfKey, true);
-
-            // TODO : This can be moved to an interface so that we could collect guide posts in different ways
-            gps = guidePostsMap.get(cfKey);
-            if (gps == null) {
-                gps = new Pair<Long,GuidePostsInfo>(0L,new GuidePostsInfo(0, Collections.<byte[]>emptyList()));
-                guidePostsMap.put(cfKey, gps);
-            }
-        } else {
-            gps = cachedGps;
-        }
-        int kvLength = kv.getLength();
-        long byteCount = gps.getFirst() + kvLength;
-        gps.setFirst(byteCount);
-        if (byteCount >= guidepostDepth) {
-            byte[] row = ByteUtil.copyKeyBytesIfNecessary(
-                    new ImmutableBytesWritable(kv.getRowArray(), kv.getRowOffset(), kv.getRowLength()));
-            if (gps.getSecond().addGuidePost(row, byteCount)) {
-                gps.setFirst(0L);
-            }
-        }
+        this.minKey = minKey;
+        this.minKeyOffset = 0;
+        this.minKeyLength = this.minKey.length;
     }
 
     public GuidePostsInfo getGuidePosts(ImmutableBytesPtr fam) {
@@ -238,5 +279,13 @@ public class StatisticsCollector {
             return pair.getSecond();
         }
         return null;
+    }
+
+    public void getMinKey(ImmutableBytesWritable ptr) {
+        if (minKey != null) {
+            ptr.set(minKey, minKeyOffset, minKeyLength);
+        } else {
+            ptr.set(HConstants.EMPTY_BYTE_ARRAY);
+        }
     }
 }

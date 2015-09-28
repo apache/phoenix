@@ -22,6 +22,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.sql.SQLException;
 import java.util.List;
 import java.util.Set;
 
@@ -33,7 +34,7 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.regionserver.HRegion;
+import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.cache.GlobalCache;
@@ -175,8 +176,9 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
              * For local indexes, we need to set an offset on row key expressions to skip
              * the region start key.
              */
-            HRegion region = c.getEnvironment().getRegion();
-            offset = region.getStartKey().length != 0 ? region.getStartKey().length:region.getEndKey().length;
+            Region region = c.getEnvironment().getRegion();
+            offset = region.getRegionInfo().getStartKey().length != 0 ? region.getRegionInfo().getStartKey().length :
+                region.getRegionInfo().getEndKey().length;
             ScanUtil.setRowKeyOffset(scan, offset);
         }
 
@@ -186,7 +188,7 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
         Expression[] arrayFuncRefs = deserializeArrayPostionalExpressionInfoFromScan(
                 scan, innerScanner, arrayKVRefs);
         TupleProjector tupleProjector = null;
-        HRegion dataRegion = null;
+        Region dataRegion = null;
         IndexMaintainer indexMaintainer = null;
         byte[][] viewConstants = null;
         ColumnReference[] dataColumns = IndexUtil.deserializeDataTableColumnsToJoin(scan);
@@ -198,15 +200,16 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
             indexMaintainer = indexMaintainers.get(0);
             viewConstants = IndexUtil.deserializeViewConstantsFromScan(scan);
         }
-        innerScanner =
-                getWrappedScanner(c, innerScanner, arrayKVRefs, arrayFuncRefs, offset, scan,
-                    dataColumns, tupleProjector, dataRegion, indexMaintainer, viewConstants,
-                    kvSchema, kvSchemaBitSet, ptr);
 
         final TupleProjector p = TupleProjector.deserializeProjectorFromScan(scan);
         final HashJoinInfo j = HashJoinInfo.deserializeHashJoinFromScan(scan);
+        innerScanner =
+                getWrappedScanner(c, innerScanner, arrayKVRefs, arrayFuncRefs, offset, scan,
+                    dataColumns, tupleProjector, dataRegion, indexMaintainer, viewConstants,
+                    kvSchema, kvSchemaBitSet, j == null ? p : null, ptr);
+
         final ImmutableBytesWritable tenantId = ScanUtil.getTenantId(scan);
-        if (p != null || j != null) {
+        if (j != null) {
             innerScanner = new HashJoinRegionScanner(innerScanner, p, j, tenantId, c.getEnvironment());
         }
 
@@ -229,7 +232,7 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
         TenantCache tenantCache = GlobalCache.getTenantCache(c.getEnvironment(), tenantId);
         long estSize = iterator.getEstimatedByteSize();
         final MemoryChunk chunk = tenantCache.getMemoryManager().allocate(estSize);
-        final HRegion region = c.getEnvironment().getRegion();
+        final Region region = c.getEnvironment().getRegion();
         region.startRegionOperation();
         try {
             // Once we return from the first call to next, we've run through and cached
@@ -239,7 +242,7 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
             long actualSize = iterator.getByteSize();
             chunk.resize(actualSize);
         } catch (Throwable t) {
-            ServerUtil.throwIOException(region.getRegionNameAsString(), t);
+            ServerUtil.throwIOException(region.getRegionInfo().getRegionNameAsString(), t);
             return null;
         } finally {
             region.closeRegionOperation();
@@ -271,7 +274,7 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
                     tuple = iterator.next();
                     return !isFilterDone();
                 } catch (Throwable t) {
-                    ServerUtil.throwIOException(region.getRegionNameAsString(), t);
+                    ServerUtil.throwIOException(region.getRegionInfo().getRegionNameAsString(), t);
                     return false;
                 }
             }
@@ -281,12 +284,26 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
                 try {
                     s.close();
                 } finally {
-                    chunk.close();                }
+                    try {
+                        if(iterator != null) {
+                            iterator.close();
+                        }
+                    } catch (SQLException e) {
+                        ServerUtil.throwIOException(region.getRegionInfo().getRegionNameAsString(), e);
+                    } finally {
+                        chunk.close();
+                    }
+                }
             }
 
             @Override
             public long getMaxResultSize() {
                 return s.getMaxResultSize();
+            }
+
+            @Override
+            public int getBatch() {
+              return s.getBatch();
             }
         };
     }

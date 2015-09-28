@@ -32,18 +32,22 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.compile.ColumnProjector;
-import org.apache.phoenix.compile.JoinCompiler.ProjectedPTableWrapper;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.ExpressionType;
 import org.apache.phoenix.schema.KeyValueSchema;
 import org.apache.phoenix.schema.KeyValueSchema.KeyValueSchemaBuilder;
 import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.ProjectedColumn;
 import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.tuple.BaseTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.SchemaUtil;
+
+import com.google.common.base.Preconditions;
 
 public class TupleProjector {    
     public static final byte[] VALUE_COLUMN_FAMILY = Bytes.toBytes("_v");
@@ -69,17 +73,27 @@ public class TupleProjector {
         schema = builder.build();
         valueSet = ValueBitSet.newInstance(schema);
     }
+
+    public TupleProjector(Expression[] expressions) {
+        this.expressions = expressions;
+        KeyValueSchemaBuilder builder = new KeyValueSchemaBuilder(0);
+        for (int i = 0; i < expressions.length; i++) {
+            builder.addField(expressions[i]);
+        }
+        schema = builder.build();
+        valueSet = ValueBitSet.newInstance(schema);
+    }
     
-    public TupleProjector(ProjectedPTableWrapper projected) {
-    	List<PColumn> columns = projected.getTable().getColumns();
-    	expressions = new Expression[columns.size() - projected.getTable().getPKColumns().size()];
-    	// we do not count minNullableIndex for we might do later merge.
+    public TupleProjector(PTable projectedTable) {
+        Preconditions.checkArgument(projectedTable.getType() == PTableType.PROJECTED);
+    	List<PColumn> columns = projectedTable.getColumns();
+    	this.expressions = new Expression[columns.size() - projectedTable.getPKColumns().size()];
     	KeyValueSchemaBuilder builder = new KeyValueSchemaBuilder(0);
     	int i = 0;
-        for (PColumn column : projected.getTable().getColumns()) {
+        for (PColumn column : columns) {
         	if (!SchemaUtil.isPKColumn(column)) {
         		builder.addField(column);
-        		expressions[i++] = projected.getSourceExpression(column);
+        		expressions[i++] = ((ProjectedColumn) column).getSourceColumnRef().newColumnExpression();
         	}
         }
         schema = builder.build();

@@ -21,8 +21,11 @@ package org.apache.phoenix.mapreduce.util;
 
 import static org.junit.Assert.assertEquals;
 
+import java.util.ArrayList;
 import java.util.List;
 
+import org.apache.hadoop.conf.Configuration;
+import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ColumnInfo;
 import org.junit.Test;
@@ -35,26 +38,35 @@ import com.google.common.collect.Lists;
 public class ColumnInfoToStringEncoderDecoderTest {
 
     @Test
-    public void testEncode() {
-        final ColumnInfo columnInfo = new ColumnInfo("col1", PVarchar.INSTANCE.getSqlType());
-        final String encodedColumnInfo = ColumnInfoToStringEncoderDecoder.encode(Lists.newArrayList(columnInfo));
-        assertEquals(columnInfo.toString(),encodedColumnInfo);
-    }
-    
-    @Test
-    public void testDecode() {
-        final ColumnInfo columnInfo = new ColumnInfo("col1", PVarchar.INSTANCE.getSqlType());
-        final String encodedColumnInfo = ColumnInfoToStringEncoderDecoder.encode(Lists.newArrayList(columnInfo));
-        assertEquals(columnInfo.toString(),encodedColumnInfo);
+    public void testEncodeDecode() {
+    	final Configuration configuration = new Configuration ();
+        final ColumnInfo columnInfo1 = new ColumnInfo("col1", PVarchar.INSTANCE.getSqlType());
+        final ColumnInfo columnInfo2 = new ColumnInfo("col2", PDate.INSTANCE.getSqlType());
+        ArrayList<ColumnInfo> expectedColInfos = Lists.newArrayList(columnInfo1,columnInfo2);
+		ColumnInfoToStringEncoderDecoder.encode(configuration, expectedColInfos);
+        
+		//verify the configuration has the correct values
+        assertEquals(2, configuration.getInt(ColumnInfoToStringEncoderDecoder.CONFIGURATION_COUNT, 0));
+        assertEquals(columnInfo1.toString(), configuration.get(String.format("%s_%d", ColumnInfoToStringEncoderDecoder.CONFIGURATION_VALUE_PREFIX, 0)));
+        assertEquals(columnInfo2.toString(), configuration.get(String.format("%s_%d", ColumnInfoToStringEncoderDecoder.CONFIGURATION_VALUE_PREFIX, 1)));
+        
+        List<ColumnInfo> actualColInfos = ColumnInfoToStringEncoderDecoder.decode(configuration);
+        assertEquals(expectedColInfos, actualColInfos);
     }
     
     @Test
     public void testEncodeDecodeWithNulls() {
+    	final Configuration configuration = new Configuration ();
         final ColumnInfo columnInfo1 = new ColumnInfo("col1", PVarchar.INSTANCE.getSqlType());
-        final ColumnInfo columnInfo2 = null;
-        final String columnInfoStr = ColumnInfoToStringEncoderDecoder.encode(Lists.newArrayList(columnInfo1,columnInfo2));
-        final List<ColumnInfo> decodedColumnInfo = ColumnInfoToStringEncoderDecoder.decode(columnInfoStr);
-        assertEquals(1,decodedColumnInfo.size()); 
+        ArrayList<ColumnInfo> expectedColInfos = Lists.newArrayList(columnInfo1);
+		ColumnInfoToStringEncoderDecoder.encode(configuration, Lists.newArrayList(columnInfo1, null));
+        
+		//verify the configuration has the correct values
+        assertEquals(1, configuration.getInt(ColumnInfoToStringEncoderDecoder.CONFIGURATION_COUNT, 0));
+        assertEquals(columnInfo1.toString(), configuration.get(String.format("%s_%d", ColumnInfoToStringEncoderDecoder.CONFIGURATION_VALUE_PREFIX, 0)));
+        
+        List<ColumnInfo> actualColInfos = ColumnInfoToStringEncoderDecoder.decode(configuration);
+        assertEquals(expectedColInfos, actualColInfos);
     }
 
 }

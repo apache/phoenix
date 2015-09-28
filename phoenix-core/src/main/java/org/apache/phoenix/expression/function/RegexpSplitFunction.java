@@ -22,18 +22,17 @@ import java.io.IOException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
-import org.apache.phoenix.expression.LiteralExpression;
+import org.apache.phoenix.expression.util.regex.AbstractBaseSplitter;
 import org.apache.phoenix.parse.FunctionParseNode;
+import org.apache.phoenix.parse.RegexpSplitParseNode;
+import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.schema.types.PVarcharArray;
-import org.apache.phoenix.schema.types.PhoenixArray;
-import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
-
-import com.google.common.base.Splitter;
-import com.google.common.collect.Lists;
 
 /**
  * Function to split a string value into a {@code VARCHAR_ARRAY}.
@@ -46,14 +45,17 @@ import com.google.common.collect.Lists;
  *
  * The function returns a {@link org.apache.phoenix.schema.types.PVarcharArray}
  */
- @FunctionParseNode.BuiltInFunction(name=RegexpSplitFunction.NAME, args= {
+ @FunctionParseNode.BuiltInFunction(name=RegexpSplitFunction.NAME,
+        nodeClass = RegexpSplitParseNode.class, args= {
         @FunctionParseNode.Argument(allowedTypes={PVarchar.class}),
         @FunctionParseNode.Argument(allowedTypes={PVarchar.class})})
-public class RegexpSplitFunction extends ScalarFunction {
+public abstract class RegexpSplitFunction extends ScalarFunction {
 
     public static final String NAME = "REGEXP_SPLIT";
 
-    private Splitter initializedSplitter = null;
+    private static final PVarchar TYPE = PVarchar.INSTANCE;
+
+    private AbstractBaseSplitter initializedSplitter = null;
 
     public RegexpSplitFunction() {}
 
@@ -63,14 +65,17 @@ public class RegexpSplitFunction extends ScalarFunction {
     }
 
     private void init() {
-        Expression patternExpression = children.get(1);
-        if (patternExpression instanceof LiteralExpression) {
-            Object patternValue = ((LiteralExpression) patternExpression).getValue();
-            if (patternValue != null) {
-                initializedSplitter = Splitter.onPattern(patternValue.toString());
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+        Expression e = getPatternStrExpression();
+        if (e.isStateless() && e.getDeterminism() == Determinism.ALWAYS && e.evaluate(null, ptr)) {
+            String pattern = (String) TYPE.toObject(ptr, TYPE, e.getSortOrder());
+            if (pattern != null) {
+                initializedSplitter = compilePatternSpec(pattern);
             }
         }
     }
+
+    protected abstract AbstractBaseSplitter compilePatternSpec(String value);
 
     @Override
     public void readFields(DataInput input) throws IOException {
@@ -85,42 +90,38 @@ public class RegexpSplitFunction extends ScalarFunction {
 
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-        if (!children.get(0).evaluate(tuple, ptr)) {
-            return false;
-        }
-
-        Expression sourceStrExpression = children.get(0);
-        String sourceStr = (String) PVarchar.INSTANCE.toObject(ptr, sourceStrExpression.getSortOrder());
-        if (sourceStr == null) { // sourceStr evaluated to null
-            ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
-            return true;
-        }
-
-        return split(tuple, ptr, sourceStr);
-    }
-
-    private boolean split(Tuple tuple, ImmutableBytesWritable ptr, String sourceStr) {
-        Splitter splitter = initializedSplitter;
+        AbstractBaseSplitter splitter = initializedSplitter;
         if (splitter == null) {
-            Expression patternExpression = children.get(1);
-            if (!patternExpression.evaluate(tuple, ptr)) {
+            Expression e = getPatternStrExpression();
+            if (e.evaluate(tuple, ptr)) {
+                String pattern = (String) TYPE.toObject(ptr, TYPE, e.getSortOrder());
+                if (pattern != null) {
+                    splitter = compilePatternSpec(pattern);
+                } else {
+                    ptr.set(ByteUtil.EMPTY_BYTE_ARRAY); // set ptr to null
+                    return true;
+                }
+            } else {
                 return false;
             }
-            if (ptr.getLength() == 0) {
-                return true; // ptr is already set to null
-            }
-
-            String patternStr = (String) PVarchar.INSTANCE.toObject(
-                    ptr, patternExpression.getSortOrder());
-            splitter = Splitter.onPattern(patternStr);
         }
 
-        List<String> splitStrings = Lists.newArrayList(splitter.split(sourceStr));
-        PhoenixArray splitArray = new PhoenixArray(PVarchar.INSTANCE, splitStrings.toArray());
-        ptr.set(PVarcharArray.INSTANCE.toBytes(splitArray));
-        return true;
+        Expression e = getSourceStrExpression();
+        if (!e.evaluate(tuple, ptr)) {
+            return false;
+        }
+        TYPE.coerceBytes(ptr, TYPE, e.getSortOrder(), SortOrder.ASC);
+
+        return splitter.split(ptr);
     }
 
+    private Expression getSourceStrExpression() {
+        return children.get(0);
+    }
+
+    private Expression getPatternStrExpression() {
+        return children.get(1);
+    }
 
     @Override
     public PDataType getDataType() {

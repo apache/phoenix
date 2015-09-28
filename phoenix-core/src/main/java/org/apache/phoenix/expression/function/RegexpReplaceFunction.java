@@ -20,17 +20,18 @@ package org.apache.phoenix.expression.function;
 import java.io.DataInput;
 import java.io.IOException;
 import java.util.List;
-import java.util.regex.Pattern;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
+import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
-import org.apache.phoenix.expression.LiteralExpression;
+import org.apache.phoenix.expression.util.regex.AbstractBasePattern;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
+import org.apache.phoenix.parse.RegexpReplaceParseNode;
+import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarchar;
-import org.apache.phoenix.schema.tuple.Tuple;
 
 
 /**
@@ -48,16 +49,19 @@ import org.apache.phoenix.schema.tuple.Tuple;
  * 
  * @since 0.1
  */
-@BuiltInFunction(name=RegexpReplaceFunction.NAME, args= {
+@BuiltInFunction(name=RegexpReplaceFunction.NAME,
+    nodeClass = RegexpReplaceParseNode.class, args= {
     @Argument(allowedTypes={PVarchar.class}),
     @Argument(allowedTypes={PVarchar.class}),
     @Argument(allowedTypes={PVarchar.class},defaultValue="null")} )
-public class RegexpReplaceFunction extends ScalarFunction {
+public abstract class RegexpReplaceFunction extends ScalarFunction {
     public static final String NAME = "REGEXP_REPLACE";
 
-    private boolean hasReplaceStr;
-    private Pattern pattern;
-    
+    private static final PVarchar TYPE = PVarchar.INSTANCE;
+    private byte [] rStrBytes;
+    private int rStrOffset, rStrLen;
+    private AbstractBasePattern pattern;
+
     public RegexpReplaceFunction() { }
 
     // Expect 1 arguments, the pattern. 
@@ -66,45 +70,71 @@ public class RegexpReplaceFunction extends ScalarFunction {
         init();
     }
 
+    protected abstract AbstractBasePattern compilePatternSpec(String value);
+
     private void init() {
-        hasReplaceStr = ((LiteralExpression)getReplaceStrExpression()).getValue() != null;
-        Object patternString = ((LiteralExpression)children.get(1)).getValue();
-        if (patternString != null) {
-            pattern = Pattern.compile((String)patternString);
+        ImmutableBytesWritable tmpPtr = new ImmutableBytesWritable();
+        Expression e = getPatternStrExpression();
+        if (e.isStateless() && e.getDeterminism() == Determinism.ALWAYS && e.evaluate(null, tmpPtr)) {
+            String patternStr = (String) TYPE.toObject(tmpPtr, e.getDataType(), e.getSortOrder());
+            if (patternStr != null) pattern = compilePatternSpec(patternStr);
+        }
+        e = getReplaceStrExpression();
+        if (e.isStateless() && e.getDeterminism() == Determinism.ALWAYS && e.evaluate(null, tmpPtr)) {
+            TYPE.coerceBytes(tmpPtr, TYPE, e.getSortOrder(), SortOrder.ASC);
+            rStrBytes = tmpPtr.get();
+            rStrOffset = tmpPtr.getOffset();
+            rStrLen = tmpPtr.getLength();
+        } else {
+            rStrBytes = null;
         }
     }
 
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-        // Can't parse if there is no replacement pattern.
+        AbstractBasePattern pattern = this.pattern;
         if (pattern == null) {
-            return false;
+            Expression e = getPatternStrExpression();
+            if (!e.evaluate(tuple, ptr)) {
+                return false;
+            }
+            String patternStr = (String) TYPE.toObject(ptr, e.getDataType(), e.getSortOrder());
+            if (patternStr == null) {
+                return false;
+            } else {
+                pattern = compilePatternSpec(patternStr);
+            }
         }
+
+        byte[] rStrBytes = this.rStrBytes;
+        int rStrOffset = this.rStrOffset, rStrLen = this.rStrLen;
+        if (rStrBytes == null) {
+            Expression replaceStrExpression = getReplaceStrExpression();
+            if (!replaceStrExpression.evaluate(tuple, ptr)) {
+                return false;
+            }
+            TYPE.coerceBytes(ptr, TYPE, replaceStrExpression.getSortOrder(), SortOrder.ASC);
+            rStrBytes = ptr.get();
+            rStrOffset = ptr.getOffset();
+            rStrLen = ptr.getLength();
+        }
+
         Expression sourceStrExpression = getSourceStrExpression();
         if (!sourceStrExpression.evaluate(tuple, ptr)) {
             return false;
         }
-        String sourceStr = (String) PVarchar.INSTANCE.toObject(ptr, sourceStrExpression.getSortOrder());
-        if (sourceStr == null) {
-            return false;
-        }
-        String replaceStr;
-        if (hasReplaceStr) {
-            Expression replaceStrExpression = this.getReplaceStrExpression();
-            if (!replaceStrExpression.evaluate(tuple, ptr)) {
-                return false;
-            }
-            replaceStr = (String) PVarchar.INSTANCE.toObject(ptr, replaceStrExpression.getSortOrder());
-        } else {
-            replaceStr = "";
-        }
-        String replacedStr = pattern.matcher(sourceStr).replaceAll(replaceStr);
-        ptr.set(PVarchar.INSTANCE.toBytes(replacedStr));
+        TYPE.coerceBytes(ptr, TYPE, sourceStrExpression.getSortOrder(), SortOrder.ASC);
+
+        pattern.replaceAll(ptr, rStrBytes, rStrOffset, rStrLen);
         return true;
     }
 
     private Expression getSourceStrExpression() {
         return children.get(0);
+    }
+
+    private Expression getPatternStrExpression() {
+        return children.get(1);
     }
 
     private Expression getReplaceStrExpression() {

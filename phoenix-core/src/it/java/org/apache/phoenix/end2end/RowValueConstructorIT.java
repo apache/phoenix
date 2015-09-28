@@ -1232,8 +1232,7 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
     @Test
     public void testForceSkipScan() throws Exception {
         String tempTableWithCompositePK = "TEMP_TABLE_COMPOSITE_PK";
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
+        Connection conn = nextConnection(getUrl());
         try {
             conn.createStatement().execute("CREATE TABLE " + tempTableWithCompositePK
                     + "   (col0 INTEGER NOT NULL, "
@@ -1242,7 +1241,9 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
                     + "    col3 INTEGER "
                     + "   CONSTRAINT pk PRIMARY KEY (col0, col1, col2)) "
                     + "   SALT_BUCKETS=4");
+            conn.close();
 
+            conn = nextConnection(getUrl());
             PreparedStatement upsertStmt = conn.prepareStatement(
                     "upsert into " + tempTableWithCompositePK + "(col0, col1, col2, col3) " + "values (?, ?, ?, ?)");
             for (int i = 0; i < 3; i++) {
@@ -1253,7 +1254,9 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
                 upsertStmt.execute();
             }
             conn.commit();
+            conn.close();
 
+            conn = nextConnection(getUrl());
             String query = "SELECT * FROM " + tempTableWithCompositePK + " WHERE (col0, col1) in ((2, 3), (3, 4), (4, 5))";
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -1362,6 +1365,230 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
         conn.close();
     }
 
+    @Test
+    public void testRVCWithRowKeyNotLeading() throws Exception {
+        String ddl = "CREATE TABLE sorttest4 (rownum BIGINT primary key, name varchar(16), age integer)";
+        Connection conn = nextConnection(getUrl());
+        conn.createStatement().execute(ddl);
+        conn.close();
+        conn = nextConnection(getUrl());
+        String dml = "UPSERT INTO sorttest4 (rownum, name, age) values (?, ?, ?)";
+        PreparedStatement stmt = conn.prepareStatement(dml);
+        stmt.setInt(1, 1);
+        stmt.setString(2, "A");
+        stmt.setInt(3, 1);
+        stmt.executeUpdate();
+        stmt.setInt(1, 2);
+        stmt.setString(2, "B");
+        stmt.setInt(3, 2);
+        stmt.executeUpdate();
+        conn.commit();
+        conn.close();
+        // the below query should only return one record -> (1, "A", 1)
+        String query = "SELECT rownum, name, age FROM sorttest4 where (age, rownum) < (2, 2)";
+        conn = nextConnection(getUrl());
+        ResultSet rs = conn.createStatement().executeQuery(query);
+        int numRecords = 0;
+        while (rs.next()) {
+            assertEquals(1, rs.getInt(1));
+            assertEquals("A", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            numRecords++;
+        }
+        assertEquals(1, numRecords);
+    }
 
+    @Test
+    public void testRVCInView() throws Exception {
+        Connection conn = nextConnection(getUrl());
+        conn.createStatement().execute("CREATE TABLE TEST_TABLE.TEST1 (\n" + 
+                "PK1 CHAR(3) NOT NULL, \n" + 
+                "PK2 CHAR(3) NOT NULL,\n" + 
+                "DATA1 CHAR(10)\n" + 
+                "CONSTRAINT PK PRIMARY KEY (PK1, PK2))");
+        conn.close();
+        conn = nextConnection(getUrl());
+        conn.createStatement().execute("CREATE VIEW TEST_TABLE.FOO AS SELECT * FROM TEST_TABLE.TEST1 WHERE PK1 = 'FOO'");
+        conn.close();
+        conn = nextConnection(getUrl());
+        conn.createStatement().execute("UPSERT INTO TEST_TABLE.TEST1 VALUES('FOO','001','SOMEDATA')");
+        conn.createStatement().execute("UPSERT INTO TEST_TABLE.TEST1 VALUES('FOO','002','SOMEDATA')");
+        conn.createStatement().execute("UPSERT INTO TEST_TABLE.TEST1 VALUES('FOO','003','SOMEDATA')");
+        conn.createStatement().execute("UPSERT INTO TEST_TABLE.TEST1 VALUES('FOO','004','SOMEDATA')");
+        conn.createStatement().execute("UPSERT INTO TEST_TABLE.TEST1 VALUES('FOO','005','SOMEDATA')");
+        conn.commit();
+        conn.close();
+        
+        conn = nextConnection(getUrl());        
+        ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM TEST_TABLE.FOO WHERE PK2 < '004' AND (PK1,PK2) > ('FOO','002') LIMIT 2");
+        assertTrue(rs.next());
+        assertEquals("003", rs.getString("PK2"));
+        assertFalse(rs.next());
+        conn.close();
+    }
 
+    @Test
+    public void testCountDistinct1() throws Exception {
+        Connection conn = nextConnection(getUrl());
+        String tableName = "testCountDistinct1rvc";
+        String ddl = "CREATE TABLE " + tableName + " (region_name VARCHAR PRIMARY KEY, a INTEGER, b INTEGER)";
+        conn.createStatement().execute(ddl);
+        
+        conn = nextConnection(getUrl());
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " (region_name, a, b) VALUES('a', 6,3)");
+        stmt.execute();
+        stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " (region_name, a, b) VALUES('b', 2,4)");
+        stmt.execute();
+        stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " (region_name, a, b) VALUES('c', 6,3)");
+        stmt.execute();
+        conn.commit();
+
+        conn = nextConnection(getUrl());
+        ResultSet rs;
+        rs = conn.createStatement().executeQuery("SELECT COUNT(DISTINCT (a,b)) from " + tableName);
+        assertTrue(rs.next());
+        assertEquals(2, rs.getInt(1));
+        conn.close();
+    }
+
+    @Test
+    public void testCountDistinct2() throws Exception {
+        Connection conn = nextConnection(getUrl());
+        String tableName = "testCountDistinct2rvc";
+        String ddl = "CREATE TABLE  " + tableName + "  (region_name VARCHAR PRIMARY KEY, a VARCHAR, b VARCHAR)";
+        conn.createStatement().execute(ddl);
+        conn.commit();
+        
+        conn = nextConnection(getUrl());
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " (region_name, a, b) VALUES('a', 'fooo','abc')");
+        stmt.execute();
+        stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " (region_name, a, b) VALUES('b', 'off','bac')");
+        stmt.execute();
+        stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " (region_name, a, b) VALUES('c', 'fooo', 'abc')");
+        stmt.execute();
+        conn.commit();
+
+        conn = nextConnection(getUrl());
+        ResultSet rs;
+        rs = conn.createStatement().executeQuery("SELECT COUNT(DISTINCT (a,b)) from  " + tableName);
+        assertTrue(rs.next());
+        assertEquals(2, rs.getInt(1));
+    }
+
+    @Test
+    public void testCountDistinct3() throws Exception {
+        Connection conn = nextConnection(getUrl());
+        String tableName = "testCountDistinct3rvc";
+        String ddl = "CREATE TABLE  " + tableName + "  (region_name VARCHAR PRIMARY KEY, a Boolean, b Boolean)";
+        conn.createStatement().execute(ddl);
+        
+        conn = nextConnection(getUrl());
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " (region_name, a, b) VALUES('a', true, true)");
+        stmt.execute();
+        stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " (region_name, a, b) VALUES('b', true, False)");
+        stmt.execute();
+        stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " (region_name, a, b) VALUES('c', true, true)");
+        stmt.execute();
+        stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " (region_name, a, b) VALUES('d', true, false)");
+        stmt.execute();
+        conn.commit();
+
+        conn = nextConnection(getUrl());
+        ResultSet rs;
+        rs = conn.createStatement().executeQuery("SELECT COUNT(DISTINCT (a,b)) from  " + tableName);
+        assertTrue(rs.next());
+        assertEquals(2, rs.getInt(1));
+    }
+
+    @Test
+    public void testCountDistinct4() throws Exception {
+        Connection conn = nextConnection(getUrl());
+        String tableName = "testCountDistinct4rvc";
+        String ddl = "CREATE TABLE  " + tableName + "  (region_name VARCHAR PRIMARY KEY, a VARCHAR, b VARCHAR)";
+        conn.createStatement().execute(ddl);
+        
+        conn = nextConnection(getUrl());
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " (region_name, a, b) VALUES('a', 'fooo','abc')");
+        stmt.execute();
+        stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " (region_name, a, b) VALUES('b', 'off','bac')");
+        stmt.execute();
+        stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " (region_name, a, b) VALUES('c', 'foo', 'abc')");
+        stmt.execute();
+        conn.commit();
+        
+        conn = nextConnection(getUrl());
+        ResultSet rs;
+        rs = conn.createStatement().executeQuery("SELECT COUNT(DISTINCT (a,b)) from  " + tableName);
+        assertTrue(rs.next());
+        assertEquals(3, rs.getInt(1));
+    }
+
+    @Test
+    public void testRVCRequiringExtractNodeClear() throws Exception {
+        Connection conn = nextConnection(getUrl());
+        String tableName = "testRVCWithTrailingGT";
+        String ddl = "CREATE TABLE  " + tableName + "  (k1 VARCHAR, k2 VARCHAR, k3 VARCHAR, k4 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1,k2,k3,k4))";
+        conn.createStatement().execute(ddl);
+        
+        conn = nextConnection(getUrl());
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " VALUES('a','b','c','d')");
+        stmt.execute();
+        stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " VALUES('b', 'b', 'c', 'e')");
+        stmt.execute();
+        stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " VALUES('c', 'b','c','f')");
+        stmt.execute();
+        conn.commit();
+        
+        conn = nextConnection(getUrl());
+        ResultSet rs;
+        rs = conn.createStatement().executeQuery("SELECT k1 from  " + tableName + " WHERE k1 IN ('a','c') AND (k2,k3) IN (('b','c'),('f','g')) AND k4 > 'c'");
+        assertTrue(rs.next());
+        assertEquals("a", rs.getString(1));
+        assertTrue(rs.next());
+        assertEquals("c", rs.getString(1));
+        assertFalse(rs.next());
+    }
+
+    @Test
+    public void testRVCRequiringNoSkipScan() throws Exception {
+        Connection conn = nextConnection(getUrl());
+        String tableName = "testRVCWithTrailingGT";
+        String ddl = "CREATE TABLE  " + tableName + "  (k1 VARCHAR, k2 VARCHAR, k3 VARCHAR, k4 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1,k2,k3,k4))";
+        conn.createStatement().execute(ddl);
+        
+        conn = nextConnection(getUrl());
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " VALUES('','','a')");
+        stmt.execute();
+        stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " VALUES('', '', 'a', 'a')");
+        stmt.execute();
+        stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " VALUES('', '','b')");
+        stmt.execute();
+        stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " VALUES('', '','b','a')");
+        stmt.execute();
+        stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " VALUES('a', '','c')");
+        stmt.execute();
+        stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " VALUES('a', '','c', 'a')");
+        stmt.execute();
+        conn.commit();
+        
+        conn = nextConnection(getUrl());
+        ResultSet rs;
+        rs = conn.createStatement().executeQuery("SELECT k1,k3,k4 from  " + tableName + " WHERE (k1,k2,k3) IN (('','','a'),('','','b'),('a','','c')) AND k4 is not null");
+        assertTrue(rs.next());
+        assertEquals(null, rs.getString(1));
+        assertEquals("a", rs.getString(2));
+        assertEquals("a", rs.getString(3));
+        
+        assertTrue(rs.next());
+        assertEquals(null, rs.getString(1));
+        assertEquals("b", rs.getString(2));
+        assertEquals("a", rs.getString(3));
+        
+        assertTrue(rs.next());
+        assertEquals("a", rs.getString(1));
+        assertEquals("c", rs.getString(2));
+        assertEquals("a", rs.getString(3));
+        
+        assertFalse(rs.next());
+    }
 }

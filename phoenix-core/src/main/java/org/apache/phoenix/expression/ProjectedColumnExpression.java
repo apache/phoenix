@@ -21,6 +21,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Collection;
+import java.util.Collections;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.execute.TupleProjector;
@@ -38,28 +39,23 @@ public class ProjectedColumnExpression extends ColumnExpression {
 	ValueBitSet bitSet;
 	private int position;
 	private String displayName;
+	private final Collection<PColumn> columns;
+    private PColumn column;
 	
 	public ProjectedColumnExpression() {
+        this.columns = Collections.emptyList();
 	}
 
 	public ProjectedColumnExpression(PColumn column, PTable table, String displayName) {
-		super(column);
-		this.schema = buildSchema(table);
-		this.bitSet = ValueBitSet.newInstance(schema);
-		this.position = column.getPosition() - table.getPKColumns().size();
-		this.displayName = displayName;
+		this(column, table.getColumns(), column.getPosition() - table.getPKColumns().size(), displayName);
 	}
-    
+
     public ProjectedColumnExpression(PColumn column, Collection<PColumn> columns, int position, String displayName) {
         super(column);
-        this.schema = buildSchema(columns);
-        this.bitSet = ValueBitSet.newInstance(schema);
+        this.column = column;
+        this.columns = columns;
         this.position = position;
         this.displayName = displayName;
-    }
-
-	private static KeyValueSchema buildSchema(PTable table) {
-        return buildSchema(table.getColumns());
     }
     
     public static KeyValueSchema buildSchema(Collection<PColumn> columns) {
@@ -73,6 +69,10 @@ public class ProjectedColumnExpression extends ColumnExpression {
     }
     
     public KeyValueSchema getSchema() {
+        if (this.schema == null) {
+            this.schema = buildSchema(columns);
+            this.bitSet = ValueBitSet.newInstance(schema);            
+        }
     	return schema;
     }
     
@@ -80,11 +80,15 @@ public class ProjectedColumnExpression extends ColumnExpression {
     	return position;
     }
     
-   @Override
+    @Override
+    public String toString() {
+        return displayName;
+    }
+	
+	@Override
     public int hashCode() {
         final int prime = 31;
-        int result = 1;
-        result = prime * result + schema.hashCode();
+        int result = super.hashCode();
         result = prime * result + position;
         return result;
     }
@@ -92,26 +96,21 @@ public class ProjectedColumnExpression extends ColumnExpression {
     @Override
     public boolean equals(Object obj) {
         if (this == obj) return true;
-        if (obj == null) return false;
+        if (!super.equals(obj)) return false;
         if (getClass() != obj.getClass()) return false;
         ProjectedColumnExpression other = (ProjectedColumnExpression)obj;
-        if (!schema.equals(other.schema)) return false;
         if (position != other.position) return false;
         return true;
     }
 
     @Override
-    public String toString() {
-        return displayName;
-    }
-	
-	@Override
 	public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
         try {
+            KeyValueSchema schema = getSchema();
             TupleProjector.decodeProjectedValue(tuple, ptr);
-            int maxOffset = ptr.getOffset() + ptr.getLength();
             bitSet.clear();
             bitSet.or(ptr);
+            int maxOffset = ptr.getOffset() + ptr.getLength() - bitSet.getEstimatedLength();
             schema.iterator(ptr, position, bitSet);
             Boolean hasValue = schema.next(ptr, position, maxOffset, bitSet);
             if (hasValue == null || !hasValue.booleanValue())
@@ -136,7 +135,7 @@ public class ProjectedColumnExpression extends ColumnExpression {
     @Override
     public void write(DataOutput output) throws IOException {
         super.write(output);
-        schema.write(output);
+        getSchema().write(output);
         output.writeInt(position);
         output.writeUTF(displayName);
     }
@@ -146,4 +145,7 @@ public class ProjectedColumnExpression extends ColumnExpression {
         return visitor.visit(this);
     }
 
+    public PColumn getColumn() {
+        return column;
+    }
 }

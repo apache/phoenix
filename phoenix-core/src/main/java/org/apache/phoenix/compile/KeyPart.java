@@ -20,10 +20,10 @@ package org.apache.phoenix.compile;
 import java.util.List;
 
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
-
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PTable;
 
 /**
  * 
@@ -74,4 +74,10 @@ public interface KeyPart {
      * @return the primary key column for this key part
      */
     public PColumn getColumn();
+    
+    /**
+     * Gets the table metadata object associated with this key part
+     * @return the table for this key part
+     */
+    public PTable getTable();
 }

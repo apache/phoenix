@@ -23,6 +23,7 @@ import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
 import static org.apache.phoenix.util.PhoenixRuntime.PHOENIX_TEST_DRIVER_URL_PARAM;
 import static org.apache.phoenix.util.TestUtil.ATABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.A_VALUE;
+import static org.apache.phoenix.util.TestUtil.BINARY_NAME;
 import static org.apache.phoenix.util.TestUtil.BTABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.B_VALUE;
 import static org.apache.phoenix.util.TestUtil.CUSTOM_ENTITY_DATA_FULL_NAME;
@@ -115,8 +116,15 @@ import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.IntegrationTestingUtility;
+import org.apache.hadoop.hbase.TableNotEnabledException;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.coprocessor.RegionServerObserver;
 import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
+import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
+import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
+import org.apache.hadoop.hbase.ipc.controller.ServerRpcControllerFactory;
+import org.apache.hadoop.hbase.regionserver.LocalIndexMerger;
+import org.apache.hadoop.hbase.regionserver.RSRpcServices;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.BaseClientManagedTimeIT;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
@@ -374,39 +382,45 @@ public abstract class BaseTest {
                 "    kv bigint)\n");
         builder.put(INDEX_DATA_TABLE, "create table " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE + "(" +
                 "   varchar_pk VARCHAR NOT NULL, " +
-                "   char_pk CHAR(5) NOT NULL, " +
+                "   char_pk CHAR(6) NOT NULL, " +
                 "   int_pk INTEGER NOT NULL, "+ 
                 "   long_pk BIGINT NOT NULL, " +
                 "   decimal_pk DECIMAL(31, 10) NOT NULL, " +
+                "   date_pk DATE NOT NULL, " +
                 "   a.varchar_col1 VARCHAR, " +
-                "   a.char_col1 CHAR(5), " +
+                "   a.char_col1 CHAR(10), " +
                 "   a.int_col1 INTEGER, " +
                 "   a.long_col1 BIGINT, " +
                 "   a.decimal_col1 DECIMAL(31, 10), " +
+                "   a.date1 DATE, " +
                 "   b.varchar_col2 VARCHAR, " +
-                "   b.char_col2 CHAR(5), " +
+                "   b.char_col2 CHAR(10), " +
                 "   b.int_col2 INTEGER, " +
                 "   b.long_col2 BIGINT, " +
-                "   b.decimal_col2 DECIMAL(31, 10) " +
-                "   CONSTRAINT pk PRIMARY KEY (varchar_pk, char_pk, int_pk, long_pk DESC, decimal_pk)) " +
+                "   b.decimal_col2 DECIMAL(31, 10), " +
+                "   b.date2 DATE " +
+                "   CONSTRAINT pk PRIMARY KEY (varchar_pk, char_pk, int_pk, long_pk DESC, decimal_pk, date_pk)) " +
                 "IMMUTABLE_ROWS=true");
         builder.put(MUTABLE_INDEX_DATA_TABLE, "create table " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + MUTABLE_INDEX_DATA_TABLE + "(" +
                 "   varchar_pk VARCHAR NOT NULL, " +
-                "   char_pk CHAR(5) NOT NULL, " +
+                "   char_pk CHAR(6) NOT NULL, " +
                 "   int_pk INTEGER NOT NULL, "+ 
                 "   long_pk BIGINT NOT NULL, " +
                 "   decimal_pk DECIMAL(31, 10) NOT NULL, " +
+                "   date_pk DATE NOT NULL, " +
                 "   a.varchar_col1 VARCHAR, " +
-                "   a.char_col1 CHAR(5), " +
+                "   a.char_col1 CHAR(10), " +
                 "   a.int_col1 INTEGER, " +
                 "   a.long_col1 BIGINT, " +
                 "   a.decimal_col1 DECIMAL(31, 10), " +
+                "   a.date1 DATE, " +
                 "   b.varchar_col2 VARCHAR, " +
-                "   b.char_col2 CHAR(5), " +
+                "   b.char_col2 CHAR(10), " +
                 "   b.int_col2 INTEGER, " +
                 "   b.long_col2 BIGINT, " +
-                "   b.decimal_col2 DECIMAL(31, 10) " +
-                "   CONSTRAINT pk PRIMARY KEY (varchar_pk, char_pk, int_pk, long_pk DESC, decimal_pk)) "
+                "   b.decimal_col2 DECIMAL(31, 10), " +
+                "   b.date2 DATE " +
+                "   CONSTRAINT pk PRIMARY KEY (varchar_pk, char_pk, int_pk, long_pk DESC, decimal_pk, date_pk)) "
                 );
         builder.put("SumDoubleTest","create table SumDoubleTest" +
                 "   (id varchar not null primary key, d DOUBLE, f FLOAT, ud UNSIGNED_DOUBLE, uf UNSIGNED_FLOAT, i integer, de decimal)");
@@ -445,11 +459,20 @@ public abstract class BaseTest {
                 "    co_item_name varchar " +
                 "   CONSTRAINT pk PRIMARY KEY (item_id, item_name)) " +
                 "   SALT_BUCKETS=4");
+        builder.put(BINARY_NAME,"create table " + BINARY_NAME +
+            "   (a_binary BINARY(16) not null, \n" +
+            "    b_binary BINARY(16), \n" +
+            "    a_varbinary VARBINARY, \n" +
+            "    b_varbinary VARBINARY, \n" +
+            "    CONSTRAINT pk PRIMARY KEY (a_binary)\n" +
+            ") ");
         tableDDLMap = builder.build();
     }
     
     private static final String ORG_ID = "00D300000000XHP";
-    private static final int NUM_SLAVES_BASE = 1;
+    protected static int NUM_SLAVES_BASE = 1;
+    private static final String DEFAULT_SERVER_RPC_CONTROLLER_FACTORY = ServerRpcControllerFactory.class.getName();
+    private static final String DEFAULT_RPC_SCHEDULER_FACTORY = PhoenixRpcSchedulerFactory.class.getName();
     
     protected static String getZKClientPort(Configuration conf) {
         return conf.get(QueryServices.ZOOKEEPER_PORT_ATTRIB);
@@ -477,8 +500,7 @@ public abstract class BaseTest {
     }
     
     /**
-     * Set up the test hbase cluster. 
-     * @param props TODO
+     * Set up the test hbase cluster.
      * @return url to be used by clients to connect to the cluster.
      */
     protected static String setUpTestCluster(@Nonnull Configuration conf, ReadOnlyProps overrideProps) {
@@ -524,9 +546,13 @@ public abstract class BaseTest {
     }
             
     protected static void setUpTestDriver(ReadOnlyProps props) throws Exception {
-        String url = checkClusterInitialized(props);
+        setUpTestDriver(props, props);
+    }
+    
+    protected static void setUpTestDriver(ReadOnlyProps serverProps, ReadOnlyProps clientProps) throws Exception {
+        String url = checkClusterInitialized(serverProps);
         if (driver == null) {
-            driver = initAndRegisterDriver(url, props);
+            driver = initAndRegisterDriver(url, clientProps);
         }
     }
 
@@ -550,7 +576,7 @@ public abstract class BaseTest {
         setUpConfigForMiniCluster(conf, overrideProps);
         utility = new HBaseTestingUtility(conf);
         try {
-            utility.startMiniCluster();
+            utility.startMiniCluster(NUM_SLAVES_BASE);
             // add shutdown hook to kill the mini cluster
             Runtime.getRuntime().addShutdownHook(new Thread() {
                 @Override
@@ -602,6 +628,9 @@ public abstract class BaseTest {
         }
         //no point doing sanity checks when running tests.
         conf.setBoolean("hbase.table.sanity.checks", false);
+        // set the server rpc controller and rpc scheduler factory, used to configure the cluster
+        conf.set(RpcControllerFactory.CUSTOM_CONTROLLER_CONF_KEY, DEFAULT_SERVER_RPC_CONTROLLER_FACTORY);
+        conf.set(RSRpcServices.REGION_SERVER_RPC_SCHEDULER_FACTORY_CLASS, DEFAULT_RPC_SCHEDULER_FACTORY);
         
         // override any defaults based on overrideProps
         for (Entry<String,String> entry : overrideProps) {
@@ -623,8 +652,10 @@ public abstract class BaseTest {
          * the threads limit imposed by the OS. 
          */
         conf.setInt(HConstants.REGION_SERVER_HANDLER_COUNT, 5);
-        conf.setInt(HConstants.REGION_SERVER_META_HANDLER_COUNT, 2);
+        conf.setInt("hbase.regionserver.metahandler.count", 2);
         conf.setInt(HConstants.MASTER_HANDLER_COUNT, 2);
+        conf.setClass("hbase.coprocessor.regionserver.classes", LocalIndexMerger.class,
+            RegionServerObserver.class);
         conf.setInt("dfs.namenode.handler.count", 2);
         conf.setInt("dfs.namenode.service.handler.count", 2);
         conf.setInt("dfs.datanode.handler.count", 2);
@@ -645,7 +676,7 @@ public abstract class BaseTest {
      * Create a {@link PhoenixTestDriver} and register it.
      * @return an initialized and registered {@link PhoenixTestDriver} 
      */
-    protected static PhoenixTestDriver initAndRegisterDriver(String url, ReadOnlyProps props) throws Exception {
+    public static PhoenixTestDriver initAndRegisterDriver(String url, ReadOnlyProps props) throws Exception {
         PhoenixTestDriver newDriver = new PhoenixTestDriver(props);
         DriverManager.registerDriver(newDriver);
         Driver oldDriver = DriverManager.getDriver(url); 
@@ -759,6 +790,7 @@ public abstract class BaseTest {
     
     protected static void deletePriorTables(long ts, String tenantId, String url) throws Exception {
         Properties props = new Properties();
+        props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(1024));
         if (ts != HConstants.LATEST_TIMESTAMP) {
             props.setProperty(CURRENT_SCN_ATTRIB, Long.toString(ts));
         }
@@ -805,21 +837,39 @@ public abstract class BaseTest {
                     logger.info("Table " + fullTableName + " is already deleted.");
                 }
             }
+            rs.close();
             if (lastTenantId != null) {
                 conn.close();
             }
         }
     }
     
-    private static void deletePriorSequences(long ts, Connection conn) throws Exception {
+    private static void deletePriorSequences(long ts, Connection globalConn) throws Exception {
         // TODO: drop tenant-specific sequences too
-        ResultSet rs = conn.createStatement().executeQuery("SELECT " 
+        ResultSet rs = globalConn.createStatement().executeQuery("SELECT " 
+                + PhoenixDatabaseMetaData.TENANT_ID + ","
                 + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + "," 
                 + PhoenixDatabaseMetaData.SEQUENCE_NAME 
                 + " FROM " + PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_ESCAPED);
+        String lastTenantId = null;
+        Connection conn = globalConn;
         while (rs.next()) {
-            conn.createStatement().execute("DROP SEQUENCE " + SchemaUtil.getEscapedTableName(rs.getString(1), rs.getString(2)));
+            String tenantId = rs.getString(1);
+            if (tenantId != null && !tenantId.equals(lastTenantId))  {
+                if (lastTenantId != null) {
+                    conn.close();
+                }
+                // Open tenant-specific connection when we find a new one
+                Properties props = new Properties(globalConn.getClientInfo());
+                props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+                conn = DriverManager.getConnection(url, props);
+                lastTenantId = tenantId;
+            }
+
+            logger.info("DROP SEQUENCE STATEMENT: DROP SEQUENCE " + SchemaUtil.getEscapedTableName(rs.getString(2), rs.getString(3)));
+            conn.createStatement().execute("DROP SEQUENCE " + SchemaUtil.getEscapedTableName(rs.getString(2), rs.getString(3)));
         }
+        rs.close();
     }
     
     protected static void initSumDoubleValues(byte[][] splits, String url) throws Exception {
@@ -1586,13 +1636,16 @@ public abstract class BaseTest {
      * Disable and drop all the tables except SYSTEM.CATALOG and SYSTEM.SEQUENCE
      */
     private static void disableAndDropNonSystemTables() throws Exception {
+        if (driver == null) return;
         HBaseAdmin admin = driver.getConnectionQueryServices(null, null).getAdmin();
         try {
             HTableDescriptor[] tables = admin.listTables();
             for (HTableDescriptor table : tables) {
                 String schemaName = SchemaUtil.getSchemaNameFromFullName(table.getName());
                 if (!QueryConstants.SYSTEM_SCHEMA_NAME.equals(schemaName)) {
-                    admin.disableTable(table.getName());
+                    try{
+                        admin.disableTable(table.getName());
+                    } catch (TableNotEnabledException ignored){}
                     admin.deleteTable(table.getName());
                 }
             }
@@ -1622,6 +1675,14 @@ public abstract class BaseTest {
         }
         if (results.isEmpty()) return;
         fail("Unable to find " + results + " in " + Arrays.asList(expectedResultsArray));
+    }
+
+    protected void assertValueEqualsResultSet(ResultSet rs, List<Object> expectedResults) throws SQLException {
+        List<List<Object>> nestedExpectedResults = Lists.newArrayListWithExpectedSize(expectedResults.size());
+        for (Object expectedResult : expectedResults) {
+            nestedExpectedResults.add(Arrays.asList(expectedResult));
+        }
+        assertValuesEqualsResultSet(rs, nestedExpectedResults); 
     }
 
     /**

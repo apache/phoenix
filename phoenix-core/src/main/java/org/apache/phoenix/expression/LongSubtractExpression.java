@@ -20,12 +20,11 @@ package org.apache.phoenix.expression;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.types.PDate;
-import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.schema.types.PLong;
 
 
 
@@ -79,5 +78,10 @@ public class LongSubtractExpression extends SubtractExpression {
 	public final PDataType getDataType() {
 		return PLong.INSTANCE;
 	}
+
+    @Override
+    public ArithmeticExpression clone(List<Expression> children) {
+        return new LongSubtractExpression(children);
+    }
 	
 }

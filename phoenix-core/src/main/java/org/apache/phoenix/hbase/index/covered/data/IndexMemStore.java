@@ -24,8 +24,10 @@ import java.util.SortedSet;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.KVComparator;
+import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.regionserver.IndexKeyValueSkipListSet;
 import org.apache.hadoop.hbase.regionserver.KeyValueScanner;
@@ -213,7 +215,7 @@ public class IndexMemStore implements KeyValueStore {
      * @return false if the key is null or if there is no data
      */
     @Override
-    public synchronized boolean seek(KeyValue key) {
+    public synchronized boolean seek(Cell key) {
       if (key == null) {
         close();
         return false;
@@ -221,16 +223,16 @@ public class IndexMemStore implements KeyValueStore {
 
       // kvset and snapshot will never be null.
       // if tailSet can't find anything, SortedSet is empty (not null).
-      kvsetIt = kvsetAtCreation.tailSet(key).iterator();
+      kvsetIt = kvsetAtCreation.tailSet(KeyValueUtil.ensureKeyValue(key)).iterator();
       kvsetItRow = null;
 
-      return seekInSubLists(key);
+      return seekInSubLists();
     }
 
     /**
      * (Re)initialize the iterators after a seek or a reseek.
      */
-    private synchronized boolean seekInSubLists(KeyValue key) {
+    private synchronized boolean seekInSubLists() {
       nextRow = getNext(kvsetIt);
       return nextRow != null;
     }
@@ -241,7 +243,7 @@ public class IndexMemStore implements KeyValueStore {
      * @return true if there is at least one KV to read, false otherwise
      */
     @Override
-    public synchronized boolean reseek(KeyValue key) {
+    public synchronized boolean reseek(Cell key) {
       /*
        * See HBASE-4195 & HBASE-3855 & HBASE-6591 for the background on this implementation. This
        * code is executed concurrently with flush and puts, without locks. Two points must be known
@@ -252,8 +254,9 @@ public class IndexMemStore implements KeyValueStore {
        * we iterated to and restore the reseeked set to at least that point.
        */
 
-      kvsetIt = kvsetAtCreation.tailSet(getHighest(key, kvsetItRow)).iterator();
-      return seekInSubLists(key);
+      KeyValue kv = KeyValueUtil.ensureKeyValue(key);
+      kvsetIt = kvsetAtCreation.tailSet(getHighest(kv, kvsetItRow)).iterator();
+      return seekInSubLists();
     }
 
     /*
@@ -272,18 +275,18 @@ public class IndexMemStore implements KeyValueStore {
     }
 
     @Override
-    public synchronized KeyValue peek() {
+    public synchronized Cell peek() {
       // DebugPrint.println(" MS@" + hashCode() + " peek = " + getLowest());
       return nextRow;
     }
 
     @Override
-    public synchronized KeyValue next() {
+    public synchronized Cell next() {
       if (nextRow == null) {
         return null;
       }
 
-      final KeyValue ret = nextRow;
+      final Cell ret = nextRow;
 
       // Advance the iterators
       nextRow = getNext(kvsetIt);
@@ -314,7 +317,7 @@ public class IndexMemStore implements KeyValueStore {
     }
 
     @Override
-    public boolean backwardSeek(KeyValue arg0) throws IOException {
+    public boolean backwardSeek(Cell arg0) throws IOException {
         throw new UnsupportedOperationException();
     }
 
@@ -324,7 +327,7 @@ public class IndexMemStore implements KeyValueStore {
     }
 
     @Override
-    public boolean seekToPreviousRow(KeyValue arg0) throws IOException {
+    public boolean seekToPreviousRow(Cell arg0) throws IOException {
         throw new UnsupportedOperationException();
     }
   }

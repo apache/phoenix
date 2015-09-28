@@ -50,10 +50,10 @@ public class HashJoinInfo {
     private int[] fieldPositions;
     private Expression postJoinFilterExpression;
     private Integer limit;
-    private boolean forceProjection;
-
-    public HashJoinInfo(PTable joinedTable, ImmutableBytesPtr[] joinIds, List<Expression>[] joinExpressions, JoinType[] joinTypes, boolean[] earlyEvaluation, PTable[] tables, int[] fieldPositions, Expression postJoinFilterExpression, Integer limit, boolean forceProjection) {
-    	this(buildSchema(joinedTable), joinIds, joinExpressions, joinTypes, earlyEvaluation, buildSchemas(tables), fieldPositions, postJoinFilterExpression, limit, forceProjection);
+    private boolean forceProjection; // always true now, but for backward compatibility.
+    
+    public HashJoinInfo(PTable joinedTable, ImmutableBytesPtr[] joinIds, List<Expression>[] joinExpressions, JoinType[] joinTypes, boolean[] earlyEvaluation, PTable[] tables, int[] fieldPositions, Expression postJoinFilterExpression, Integer limit) {
+    	this(buildSchema(joinedTable), joinIds, joinExpressions, joinTypes, earlyEvaluation, buildSchemas(tables), fieldPositions, postJoinFilterExpression, limit, true);
     }
 
     private static KeyValueSchema[] buildSchemas(PTable[] tables) {
@@ -124,15 +124,11 @@ public class HashJoinInfo {
     public Integer getLimit() {
         return limit;
     }
-
-    /*
-     * If the LHS table is a sub-select, we always do projection, since
-     * the ON expressions reference only projected columns.
-     */
+    
     public boolean forceProjection() {
         return forceProjection;
     }
-
+ 
     public static void serializeHashJoinIntoScan(Scan scan, HashJoinInfo joinInfo) {
         ByteArrayOutputStream stream = new ByteArrayOutputStream();
         try {

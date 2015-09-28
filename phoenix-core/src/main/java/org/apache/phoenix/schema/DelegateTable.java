@@ -22,6 +22,7 @@ import java.util.List;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.IndexMaintainer;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.stats.PTableStats;
 
 public class DelegateTable implements PTable {
@@ -161,13 +162,13 @@ public class DelegateTable implements PTable {
     }
 
     @Override
-    public void getIndexMaintainers(ImmutableBytesWritable ptr) {
-        delegate.getIndexMaintainers(ptr);
+    public void getIndexMaintainers(ImmutableBytesWritable ptr, PhoenixConnection connection) {
+        delegate.getIndexMaintainers(ptr, connection);
     }
 
     @Override
-    public IndexMaintainer getIndexMaintainer(PTable dataTable) {
-        return delegate.getIndexMaintainer(dataTable);
+    public IndexMaintainer getIndexMaintainer(PTable dataTable, PhoenixConnection connection) {
+        return delegate.getIndexMaintainer(dataTable, connection);
     }
 
     @Override
@@ -183,6 +184,11 @@ public class DelegateTable implements PTable {
     @Override
     public boolean isMultiTenant() {
         return delegate.isMultiTenant();
+    }
+
+    @Override
+    public boolean getStoreNulls() {
+        return delegate.getStoreNulls();
     }
 
     @Override
@@ -221,7 +227,7 @@ public class DelegateTable implements PTable {
     }
 
     private final PTable delegate;
-    
+
     public DelegateTable(PTable delegate) {
         this.delegate = delegate;
     }
@@ -229,5 +235,15 @@ public class DelegateTable implements PTable {
     @Override
     public PName getParentSchemaName() {
         return delegate.getParentSchemaName();
+    }
+
+    @Override
+    public int getBaseColumnCount() {
+        return delegate.getBaseColumnCount();
+    }
+
+    @Override
+    public boolean rowKeyOrderOptimizable() {
+        return delegate.rowKeyOrderOptimizable();
     }
 }

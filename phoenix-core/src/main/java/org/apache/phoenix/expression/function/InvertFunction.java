@@ -28,9 +28,10 @@ import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.PColumn;
-import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PDataType;
 
 @BuiltInFunction(name = InvertFunction.NAME, args = { @Argument() })
 public class InvertFunction extends ScalarFunction {
@@ -46,9 +47,9 @@ public class InvertFunction extends ScalarFunction {
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
         if (!getChildExpression().evaluate(tuple, ptr)) { return false; }
         if (ptr.getLength() == 0) { return true; }
-        byte[] buf = new byte[ptr.getLength()];
-        SortOrder.invert(ptr.get(), ptr.getOffset(), buf, 0, ptr.getLength());
-        ptr.set(buf);
+        PDataType type = getDataType();
+        // FIXME: losing rowKeyOrderOptimizable here
+        type.coerceBytes(ptr, type, getChildExpression().getSortOrder(), getSortOrder());
         return true;
     }
 
@@ -106,6 +107,11 @@ public class InvertFunction extends ScalarFunction {
             @Override
             public PColumn getColumn() {
                 return childPart.getColumn();
+            }
+
+            @Override
+            public PTable getTable() {
+                return childPart.getTable();
             }
         };
     }

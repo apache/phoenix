@@ -48,29 +48,30 @@ import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.expression.RowValueConstructorExpression;
 import org.apache.phoenix.expression.function.FunctionExpression.OrderPreserving;
 import org.apache.phoenix.expression.function.ScalarFunction;
-import org.apache.phoenix.expression.visitor.TraverseNoExpressionVisitor;
+import org.apache.phoenix.expression.visitor.ExpressionVisitor;
+import org.apache.phoenix.expression.visitor.StatelessTraverseNoExpressionVisitor;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.parse.LikeParseNode.LikeType;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.PColumn;
-import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PChar;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.StringUtil;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
@@ -98,28 +99,30 @@ public class WhereOptimizer {
      * @param whereClause the where clause expression
      * @return the new where clause with the key expressions removed
      */
-    public static Expression pushKeyExpressionsToScan(StatementContext context, FilterableStatement statement, Expression whereClause) {
+    public static Expression pushKeyExpressionsToScan(StatementContext context, FilterableStatement statement, Expression whereClause)
+            throws SQLException{
         return pushKeyExpressionsToScan(context, statement, whereClause, null);
     }
 
     // For testing so that the extractedNodes can be verified
     public static Expression pushKeyExpressionsToScan(StatementContext context, FilterableStatement statement,
-            Expression whereClause, Set<Expression> extractNodes) {
+            Expression whereClause, Set<Expression> extractNodes) throws SQLException {
         PName tenantId = context.getConnection().getTenantId();
+        byte[] tenantIdBytes = null;
         PTable table = context.getCurrentTable().getTable();
     	Integer nBuckets = table.getBucketNum();
     	boolean isSalted = nBuckets != null;
     	RowKeySchema schema = table.getRowKeySchema();
     	boolean isMultiTenant = tenantId != null && table.isMultiTenant();
     	if (isMultiTenant) {
-    		tenantId = ScanUtil.padTenantIdIfNecessary(schema, isSalted, tenantId);
+            tenantIdBytes = ScanUtil.getTenantIdBytes(schema, isSalted, tenantId);
     	}
 
         if (whereClause == null && (tenantId == null || !table.isMultiTenant()) && table.getViewIndexId() == null) {
             context.setScanRanges(ScanRanges.EVERYTHING);
             return whereClause;
         }
-        if (LiteralExpression.isFalse(whereClause)) {
+        if (LiteralExpression.isBooleanFalseOrNull(whereClause)) {
             context.setScanRanges(ScanRanges.NOTHING);
             return null;
         }
@@ -154,7 +157,6 @@ public class WhereOptimizer {
         int pkPos = 0;
         int nPKColumns = table.getPKColumns().size();
         int[] slotSpan = new int[nPKColumns];
-        List<Expression> removeFromExtractNodes = null;
         List<List<KeyRange>> cnf = Lists.newArrayListWithExpectedSize(schema.getMaxFields());
         KeyRange minMaxRange = keySlots.getMinMaxRange();
         if (minMaxRange == null) {
@@ -166,7 +168,7 @@ public class WhereOptimizer {
         boolean hasViewIndex = table.getViewIndexId() != null;
         if (hasMinMaxRange) {
             int minMaxRangeSize = (isSalted ? SaltingUtil.NUM_SALTING_BYTES : 0)
-                    + (isMultiTenant ? tenantId.getBytes().length + 1 : 0) 
+                    + (isMultiTenant ? tenantIdBytes.length + 1 : 0)
                     + (hasViewIndex ? MetaDataUtil.getViewIndexIdDataType().getByteSize() : 0);
             minMaxRangePrefix = new byte[minMaxRangeSize];
         }
@@ -187,14 +189,14 @@ public class WhereOptimizer {
         
         // Add tenant data isolation for tenant-specific tables
         if (isMultiTenant) {
-            byte[] tenantIdBytes = tenantId.getBytes();
             KeyRange tenantIdKeyRange = KeyRange.getKeyRange(tenantIdBytes);
             cnf.add(singletonList(tenantIdKeyRange));
             if (hasMinMaxRange) {
                 System.arraycopy(tenantIdBytes, 0, minMaxRangePrefix, minMaxRangeOffset, tenantIdBytes.length);
                 minMaxRangeOffset += tenantIdBytes.length;
-                if (!schema.getField(pkPos).getDataType().isFixedWidth()) {
-                    minMaxRangePrefix[minMaxRangeOffset] = QueryConstants.SEPARATOR_BYTE;
+                Field f = schema.getField(pkPos);
+                if (!f.getDataType().isFixedWidth()) {
+                    minMaxRangePrefix[minMaxRangeOffset] = SchemaUtil.getSeparatorByte(schema.rowKeyOrderOptimizable(), tenantIdBytes.length==0, f);
                     minMaxRangeOffset++;
                 }
             }
@@ -222,9 +224,10 @@ public class WhereOptimizer {
         boolean forcedRangeScan = statement.getHint().hasHint(Hint.RANGE_SCAN);
         boolean hasUnboundedRange = false;
         boolean hasMultiRanges = false;
-        boolean hasMultiColumnSpan = false;
-        boolean hasNonPointKey = false;
+        boolean hasRangeKey = false;
         boolean stopExtracting = false;
+        boolean useSkipScan = false;
+        //boolean useSkipScan = !forcedRangeScan && nBuckets != null;
         // Concat byte arrays of literals to form scan start key
         while (iterator.hasNext()) {
             KeyExpressionVisitor.KeySlot slot = iterator.next();
@@ -232,11 +235,14 @@ public class WhereOptimizer {
             // then we have to handle in the next phase through a key filter.
             // If the slot is null this means we have no entry for this pk position.
             if (slot == null || slot.getKeyRanges().isEmpty())  {
-                if (!forcedSkipScan || hasMultiColumnSpan) break;
                 continue;
             }
             if (slot.getPKPosition() != pkPos) {
-                if (!forcedSkipScan || hasMultiColumnSpan) break;
+                if (!forcedSkipScan) {
+                    stopExtracting = true;
+                } else {
+                    useSkipScan |= !stopExtracting && !forcedRangeScan && forcedSkipScan;
+                }
                 for (int i=pkPos; i < slot.getPKPosition(); i++) {
                     cnf.add(Collections.singletonList(KeyRange.EVERYTHING_RANGE));
                 }
@@ -244,28 +250,36 @@ public class WhereOptimizer {
             KeyPart keyPart = slot.getKeyPart();
             slotSpan[cnf.size()] = slot.getPKSpan() - 1;
             pkPos = slot.getPKPosition() + slot.getPKSpan();
-            hasMultiColumnSpan |= slot.getPKSpan() > 1;
             // Skip span-1 slots as we skip one at the top of the loop
             for (int i = 1; i < slot.getPKSpan() && iterator.hasNext(); i++) {
                 iterator.next();
             }
             List<KeyRange> keyRanges = slot.getKeyRanges();
-            for (int i = 0; (!hasUnboundedRange || !hasNonPointKey) && i < keyRanges.size(); i++) {
+            cnf.add(keyRanges);
+            
+            // TODO: when stats are available, we may want to use a skip scan if the
+            // cardinality of this slot is low.
+            /*
+             *  Stop extracting nodes once we encounter:
+             *  1) An unbound range unless we're forcing a skip scan and havn't encountered
+             *     a multi-column span. Even if we're trying to force a skip scan, we can't
+             *     execute it over a multi-column span.
+             *  2) A non range key as we can extract the first one, but further ones need
+             *     to be evaluated in a filter.
+             */
+            stopExtracting |= (hasUnboundedRange && !forcedSkipScan) || (hasRangeKey && forcedRangeScan);
+            useSkipScan |= !stopExtracting && !forcedRangeScan && (keyRanges.size() > 1 || hasRangeKey);
+            
+            for (int i = 0; (!hasUnboundedRange || !hasRangeKey) && i < keyRanges.size(); i++) {
                 KeyRange range  = keyRanges.get(i);
                 if (range.isUnbound()) {
-                    hasUnboundedRange = hasNonPointKey = true;
+                    hasUnboundedRange = hasRangeKey = true;
                 } else if (!range.isSingleKey()) {
-                    hasNonPointKey = true;
+                    hasRangeKey = true;
                 }
             }
+            
             hasMultiRanges |= keyRanges.size() > 1;
-            // Force a range scan if we've encountered a multi-span slot (i.e. RVC)
-            // and a non point key, as our skip scan only handles fully qualified
-            // RVC in our skip scan. This will force us to not extract nodes any
-            // longer as well.
-            // TODO: consider ending loop here if true.
-            forcedRangeScan |= (hasMultiColumnSpan && hasNonPointKey);
-            cnf.add(keyRanges);
             
             // We cannot extract if we have multiple ranges and are forcing a range scan.
             stopExtracting |= forcedRangeScan && hasMultiRanges;
@@ -278,36 +292,14 @@ public class WhereOptimizer {
             // that, so must filter on the remaining conditions (see issue #467).
             if (!stopExtracting) {
                 List<Expression> nodesToExtract = keyPart.getExtractNodes();
-                // Detect case of a RVC used in a range. We do not want to
-                // remove these from the extract nodes.
-                if (hasMultiColumnSpan && !hasUnboundedRange) {
-                    if (removeFromExtractNodes == null) {
-                        removeFromExtractNodes = Lists.newArrayListWithExpectedSize(nodesToExtract.size() + table.getPKColumns().size() - pkPos);
-                    }
-                    removeFromExtractNodes.addAll(nodesToExtract);
-                }
                 extractNodes.addAll(nodesToExtract);
             }
-            /*
-             *  Stop building start/stop key once we encounter An unbound range unless we're
-             *  forcing a skip scan and havn't encountered a multi-column span. Even if we're
-             *  trying to force a skip scan, we can't execute it over a multi-column span.
-             */
-            if (hasUnboundedRange && (!forcedSkipScan || hasMultiColumnSpan)) {
-                // TODO: when stats are available, we may want to continue this loop if the
-                // cardinality of this slot is low. We could potentially even continue this
-                // loop in the absence of a range for a key slot.
-                break;
-            }
-            // Set stopExtracting if we're forcing a range scan and have anything other than
-            // an equality constraint. We can extract the first one, but no future ones.
-            stopExtracting |= forcedRangeScan && hasNonPointKey;
         }
         // If we have fully qualified point keys with multi-column spans (i.e. RVC),
         // we can still use our skip scan. The ScanRanges.create() call will explode
         // out the keys.
         slotSpan = Arrays.copyOf(slotSpan, cnf.size());
-        ScanRanges scanRanges = ScanRanges.create(schema, cnf, slotSpan, minMaxRange, forcedRangeScan, nBuckets);
+        ScanRanges scanRanges = ScanRanges.create(schema, cnf, slotSpan, minMaxRange, nBuckets, useSkipScan);
         context.setScanRanges(scanRanges);
         if (whereClause == null) {
             return null;
@@ -328,8 +320,9 @@ public class WhereOptimizer {
     public static boolean getKeyExpressionCombination(List<Expression> result, StatementContext context, FilterableStatement statement, List<Expression> expressions) throws SQLException {
         List<Integer> candidateIndexes = Lists.newArrayList();
         final List<Integer> pkPositions = Lists.newArrayList();
+        PTable table = context.getCurrentTable().getTable();
         for (int i = 0; i < expressions.size(); i++) {
-            KeyExpressionVisitor visitor = new KeyExpressionVisitor(context, context.getCurrentTable().getTable());
+            KeyExpressionVisitor visitor = new KeyExpressionVisitor(context, table);
             KeyExpressionVisitor.KeySlots keySlots = expressions.get(i).accept(visitor);
             int minPkPos = Integer.MAX_VALUE; 
             if (keySlots != null) {
@@ -372,19 +365,20 @@ public class WhereOptimizer {
         }
         
         int count = 0;
+        int offset = table.getBucketNum() == null ? 0 : SaltingUtil.NUM_SALTING_BYTES;
         int maxPkSpan = 0;
         Expression remaining = null;
         while (count < candidates.size()) {
             Expression lhs = count == 0 ? candidates.get(0) : new RowValueConstructorExpression(candidates.subList(0, count + 1), false);
             Expression firstRhs = count == 0 ? sampleValues.get(0).get(0) : new RowValueConstructorExpression(sampleValues.get(0).subList(0, count + 1), true);
             Expression secondRhs = count == 0 ? sampleValues.get(1).get(0) : new RowValueConstructorExpression(sampleValues.get(1).subList(0, count + 1), true);
-            Expression testExpression = InListExpression.create(Lists.newArrayList(lhs, firstRhs, secondRhs), false, context.getTempPtr());
+            Expression testExpression = InListExpression.create(Lists.newArrayList(lhs, firstRhs, secondRhs), false, context.getTempPtr(), context.getCurrentTable().getTable().rowKeyOrderOptimizable());
             remaining = pushKeyExpressionsToScan(context, statement, testExpression);
             if (context.getScanRanges().isPointLookup()) {
                 count++;
                 break; // found the best match
             }
-            int pkSpan = context.getScanRanges().getPkColumnSpan();
+            int pkSpan = context.getScanRanges().getBoundPkColumnCount() - offset;
             if (pkSpan <= maxPkSpan) {
                 break;
             }
@@ -399,7 +393,7 @@ public class WhereOptimizer {
                 && (remaining == null || remaining.equals(LiteralExpression.newConstant(true, Determinism.ALWAYS)));
     }
 
-    private static class RemoveExtractedNodesVisitor extends TraverseNoExpressionVisitor<Expression> {
+    private static class RemoveExtractedNodesVisitor extends StatelessTraverseNoExpressionVisitor<Expression> {
         private final Set<Expression> nodesToRemove;
 
         private RemoveExtractedNodesVisitor(Set<Expression> nodesToRemove) {
@@ -419,6 +413,11 @@ public class WhereOptimizer {
         @Override
         public Iterator<Expression> visitEnter(AndExpression node) {
             return node.getChildren().iterator();
+        }
+        
+        @Override
+        public Expression visit(LiteralExpression node) {
+            return nodesToRemove.contains(node) ? null : node;            
         }
 
         @Override
@@ -446,7 +445,7 @@ public class WhereOptimizer {
      * Currently the first case would not be optimized. This includes other arithmetic
      * operators, CASE statements, and string concatenation.
      */
-    public static class KeyExpressionVisitor extends TraverseNoExpressionVisitor<KeyExpressionVisitor.KeySlots> {
+    public static class KeyExpressionVisitor extends StatelessTraverseNoExpressionVisitor<KeyExpressionVisitor.KeySlots> {
         private static final KeySlots EMPTY_KEY_SLOTS = new KeySlots() {
             @Override
             public Iterator<KeySlot> iterator() {
@@ -487,7 +486,7 @@ public class WhereOptimizer {
             List<Expression> extractNodes = extractNode == null || slot.getKeyPart().getExtractNodes().isEmpty()
                   ? Collections.<Expression>emptyList()
                   : Collections.<Expression>singletonList(extractNode);
-            return new SingleKeySlot(new BaseKeyPart(slot.getKeyPart().getColumn(), extractNodes), slot.getPKPosition(), slot.getPKSpan(), keyRanges, minMaxRange, slot.getOrderPreserving());
+            return new SingleKeySlot(new BaseKeyPart(table, slot.getKeyPart().getColumn(), extractNodes), slot.getPKPosition(), slot.getPKSpan(), keyRanges, minMaxRange, slot.getOrderPreserving());
         }
 
         private KeySlots newKeyParts(KeySlot slot, List<Expression> extractNodes, List<KeyRange> keyRanges, KeyRange minMaxRange) {
@@ -495,7 +494,7 @@ public class WhereOptimizer {
                 return EMPTY_KEY_SLOTS;
             }
             
-            return new SingleKeySlot(new BaseKeyPart(slot.getKeyPart().getColumn(), extractNodes), slot.getPKPosition(), slot.getPKSpan(), keyRanges, minMaxRange, slot.getOrderPreserving());
+            return new SingleKeySlot(new BaseKeyPart(table, slot.getKeyPart().getColumn(), extractNodes), slot.getPKPosition(), slot.getPKSpan(), keyRanges, minMaxRange, slot.getOrderPreserving());
         }
 
         private KeySlots newRowValueConstructorKeyParts(RowValueConstructorExpression rvc, List<KeySlots> childSlots) {
@@ -542,6 +541,10 @@ public class WhereOptimizer {
                 int span = position - initialPosition;
                 return new SingleKeySlot(new RowValueConstructorKeyPart(table.getPKColumns().get(initialPosition), rvc, span, childSlots), initialPosition, span, EVERYTHING_RANGES);
             }
+            // If we don't clear the child list, we end up passing some of
+            // the child expressions of previous matches up the tree, causing
+            // those expressions to form the scan start/stop key. PHOENIX-1753
+            childSlots.clear();
             return null;
         }
 
@@ -599,6 +602,11 @@ public class WhereOptimizer {
                 public PColumn getColumn() {
                     return childPart.getColumn();
                 }
+
+                @Override
+                public PTable getTable() {
+                    return childPart.getTable();
+                }
             }, slot.getPKPosition(), slot.getKeyRanges());
         }
 
@@ -643,23 +651,30 @@ public class WhereOptimizer {
                 if (childSlot == EMPTY_KEY_SLOTS) {
                     return EMPTY_KEY_SLOTS;
                 }
-                // FIXME: get rid of this min/max range BS now that a key range can span multiple columns
+                // FIXME: get rid of this special-cased min/max range now that a key range can span multiple columns
                 if (childSlot.getMinMaxRange() != null) { // Only set if in initial pk position
-                    // TODO: potentially use KeySlot.intersect here. However, we can't intersect the key ranges in the slot
-                    // with our minMaxRange, since it spans columns and this would mess up our skip scan.
+                    // TODO: fix intersectSlots so that it works with RVCs. We'd just need to fill in the leading parts
+                    // of the key with the minMaxRange and then intersect the key parts that overlap.
                     minMaxRange = minMaxRange.intersect(childSlot.getMinMaxRange());
                     for (KeySlot slot : childSlot) {
                         if (slot != null) {
-                    	    minMaxExtractNodes.addAll(slot.getKeyPart().getExtractNodes());
+                            // We can only definitely extract the expression nodes that start from the
+                            // leading PK column. They may get extracted at the end if we end up having
+                            // expressions matching the leading PK columns, but otherwise we'll be forced
+                            // to execute the expression in a filter.
+                            if (slot.getPKPosition() == initPosition) {
+                                minMaxExtractNodes.addAll(slot.getKeyPart().getExtractNodes());
+                            } else {
+                                if (!intersectSlots(keySlot, slot)) {
+                                    return EMPTY_KEY_SLOTS;
+                                }
+                            }
                         }
                     }
                 } else {
                     for (KeySlot slot : childSlot) {
-                        // We have a nested AND with nothing for this slot, so continue
-                        if (slot == null) {
-                            continue;
-                        }
-                        if (!intersectSlots(keySlot, slot)) {
+                        // The slot will be null if we have no condition for this slot
+                        if (slot != null && !intersectSlots(keySlot, slot)) {
                             return EMPTY_KEY_SLOTS;
                         }
                     }
@@ -668,7 +683,7 @@ public class WhereOptimizer {
 
             if (!minMaxExtractNodes.isEmpty()) {
                 if (keySlot[initPosition] == null) {
-                    keySlot[initPosition] = new KeySlot(new BaseKeyPart(table.getPKColumns().get(initPosition), minMaxExtractNodes), initPosition, 1, EVERYTHING_RANGES, null);
+                    keySlot[initPosition] = new KeySlot(new BaseKeyPart(table, table.getPKColumns().get(initPosition), minMaxExtractNodes), initPosition, 1, EVERYTHING_RANGES, null);
                 } else {
                     keySlot[initPosition] = keySlot[initPosition].concatExtractNodes(minMaxExtractNodes);
                 }
@@ -785,7 +800,7 @@ public class WhereOptimizer {
                 slotRanges = Collections.emptyList();
             }
             if (theSlot == null) {
-                theSlot = new KeySlot(new BaseKeyPart(table.getPKColumns().get(initialPos), slotExtractNodes), initialPos, 1, EVERYTHING_RANGES, null);
+                theSlot = new KeySlot(new BaseKeyPart(table, table.getPKColumns().get(initialPos), slotExtractNodes), initialPos, 1, EVERYTHING_RANGES, null);
             } else if (minMaxRange != KeyRange.EMPTY_RANGE && !slotExtractNodes.isEmpty()) {
                 theSlot = theSlot.concatExtractNodes(slotExtractNodes);
             }
@@ -803,17 +818,6 @@ public class WhereOptimizer {
             this.context = context;
             this.table = table;
         }
-
-//        private boolean isFullyQualified(int pkSpan) {
-//            int nPKColumns = table.getPKColumns().size();
-//            return table.getBucketNum() == null ? pkSpan == nPKColumns : pkSpan == nPKColumns-1;
-//        }
-        @Override
-        public KeySlots defaultReturn(Expression node, List<KeySlots> l) {
-            // Passes the CompositeKeyExpression up the tree
-            return l.size() == 1 ? l.get(0) : null;
-        }
-
 
         @Override
         public Iterator<Expression> visitEnter(CoerceExpression node) {
@@ -848,10 +852,6 @@ public class WhereOptimizer {
         public KeySlots visitLeave(OrExpression node, List<KeySlots> l) {
             KeySlots keySlots = orKeySlots(node, l);
             if (keySlots == null) {
-                // If we don't clear the child list, we end up passing some of
-                // the child expressions of the OR up the tree, causing only
-                // those expressions to form the scan start/stop key.
-                l.clear();
                 return null;
             }
             return keySlots;
@@ -870,7 +870,7 @@ public class WhereOptimizer {
         @Override
         public KeySlots visit(RowKeyColumnExpression node) {
             PColumn column = table.getPKColumns().get(node.getPosition());
-            return new SingleKeySlot(new BaseKeyPart(column, Collections.<Expression>singletonList(node)), node.getPosition(), 1, EVERYTHING_RANGES);
+            return new SingleKeySlot(new BaseKeyPart(table, column, Collections.<Expression>singletonList(node)), node.getPosition(), 1, EVERYTHING_RANGES);
         }
 
         @Override
@@ -941,7 +941,8 @@ public class WhereOptimizer {
             KeySlots childSlots = childParts.get(0);
             KeySlot childSlot = childSlots.iterator().next();
             final String startsWith = node.getLiteralPrefix();
-            byte[] key = PChar.INSTANCE.toBytes(startsWith, node.getChildren().get(0).getSortOrder());
+            SortOrder sortOrder = node.getChildren().get(0).getSortOrder();
+            byte[] key = PVarchar.INSTANCE.toBytes(startsWith, sortOrder);
             // If the expression is an equality expression against a fixed length column
             // and the key length doesn't match the column length, the expression can
             // never be true.
@@ -957,9 +958,19 @@ public class WhereOptimizer {
             byte[] lowerRange = key;
             byte[] upperRange = ByteUtil.nextKey(key);
             Integer columnFixedLength = column.getMaxLength();
-            if (type.isFixedWidth() && columnFixedLength != null) {
-                lowerRange = StringUtil.padChar(lowerRange, columnFixedLength);
-                upperRange = StringUtil.padChar(upperRange, columnFixedLength);
+            if (type.isFixedWidth()) {
+                if (columnFixedLength != null) { // Sanity check - should always be non null
+                    // Always use minimum byte to fill as otherwise our key is bigger
+                    // that it should be when the sort order is descending.
+                    lowerRange = type.pad(lowerRange, columnFixedLength, SortOrder.ASC);
+                    upperRange = type.pad(upperRange, columnFixedLength, SortOrder.ASC);
+                }
+            } else if (column.getSortOrder() == SortOrder.DESC && table.rowKeyOrderOptimizable()) {
+                // Append a zero byte if descending since a \xFF byte will be appended to the lowerRange
+                // causing rows to be skipped that should be included. For example, with rows 'ab', 'a',
+                // a lowerRange of 'a\xFF' would skip 'ab', while 'a\x00\xFF' would not.
+                lowerRange = Arrays.copyOf(lowerRange, lowerRange.length+1);
+                lowerRange[lowerRange.length-1] = QueryConstants.SEPARATOR_BYTE;
             }
             KeyRange keyRange = type.getKeyRange(lowerRange, true, upperRange, false);
             // Only extract LIKE expression if pattern ends with a wildcard and everything else was extracted
@@ -984,6 +995,9 @@ public class WhereOptimizer {
             // Handles cases like WHERE substr(foo,1,3) IN ('aaa','bbb')
             for (Expression key : keyExpressions) {
                 KeyRange range = childPart.getKeyRange(CompareOp.EQUAL, key);
+                if (range == null) {
+                    return null;
+                }
                 if (range != KeyRange.EMPTY_RANGE) { // null means it can't possibly be in range
                     ranges.add(range);
                 }
@@ -1058,7 +1072,7 @@ public class WhereOptimizer {
 
             public final KeySlot concatExtractNodes(List<Expression> extractNodes) {
                 return new KeySlot(
-                        new BaseKeyPart(this.getKeyPart().getColumn(),
+                        new BaseKeyPart(this.getKeyPart().getTable(), this.getKeyPart().getColumn(),
                                     SchemaUtil.concat(this.getKeyPart().getExtractNodes(),extractNodes)),
                         this.getPKPosition(),
                         this.getPKSpan(),
@@ -1067,9 +1081,6 @@ public class WhereOptimizer {
             }
             
             public final KeySlot intersect(KeySlot that) {
-                Preconditions.checkArgument(!this.keyRanges.isEmpty());
-                Preconditions.checkArgument(!that.keyRanges.isEmpty());
-
                 if (this.getPKSpan() == 1 && that.getPKSpan() == 1) {
                     if (this.getPKPosition() != that.getPKPosition()) {
                         throw new IllegalArgumentException("Position must be equal for intersect");
@@ -1079,7 +1090,7 @@ public class WhereOptimizer {
                         return null;
                     }
                     return new KeySlot(
-                            new BaseKeyPart(this.getKeyPart().getColumn(),
+                            new BaseKeyPart(this.getKeyPart().getTable(), this.getKeyPart().getColumn(),
                                         SchemaUtil.concat(this.getKeyPart().getExtractNodes(),
                                                           that.getKeyPart().getExtractNodes())),
                             this.getPKPosition(),
@@ -1101,8 +1112,6 @@ public class WhereOptimizer {
                     } else {
                         assert(this.getPKSpan() > 1);
                         assert(this.getPKPosition() <= that.getPKPosition());
-                        int position = this.getPKPosition();
-                        int thatPosition = that.getPKPosition();
                         List<KeyRange> newKeyRanges = Lists.newArrayListWithExpectedSize(this.getKeyRanges().size());
                         // We know we have a set of RVCs (i.e. multi-span key ranges)
                         // Get the PK slot value in the RVC for the position of the other KeySlot
@@ -1111,19 +1120,23 @@ public class WhereOptimizer {
                         for (KeyRange keyRange : this.getKeyRanges()) {
                             assert(keyRange.isSingleKey());
                             byte[] key = keyRange.getLowerRange();
-                            schema.iterator(key, ptr); // initialize for iteration
-                            while (position < thatPosition) { // skip to part of RVC that overlaps
-                                schema.next(ptr, position++, key.length);
-                            }
-                            // Create a range just for the overlapping column
-                            List<KeyRange> slotKeyRanges = Collections.singletonList(KeyRange.getKeyRange(ByteUtil.copyKeyBytesIfNecessary(ptr)));
-                            // Intersect with other ranges and add to list if it overlaps
-                            if (!isDegenerate(KeyRange.intersect(slotKeyRanges, that.getKeyRanges()))) {
-                                newKeyRanges.add(keyRange);
+                            int position = this.getPKPosition();
+                            int thatPosition = that.getPKPosition();
+                            ptr.set(key);
+                            if (schema.position(ptr, position, thatPosition)) {
+                                // Create a range just for the overlapping column
+                                List<KeyRange> slotKeyRanges = Collections.singletonList(KeyRange.getKeyRange(ByteUtil.copyKeyBytesIfNecessary(ptr)));
+                                // Intersect with other ranges and add to list if it overlaps
+                                if (!isDegenerate(KeyRange.intersect(slotKeyRanges, that.getKeyRanges()))) {
+                                    newKeyRanges.add(keyRange);
+                                }
                             }
                         }
+                        if (isDegenerate(newKeyRanges)) {
+                            return null;
+                        }
                         return new KeySlot(
-                                new BaseKeyPart(this.getKeyPart().getColumn(),
+                                new BaseKeyPart(this.getKeyPart().getTable(), this.getKeyPart().getColumn(),
                                             SchemaUtil.concat(this.getKeyPart().getExtractNodes(),
                                                               that.getKeyPart().getExtractNodes())),
                                 this.getPKPosition(),
@@ -1207,17 +1220,19 @@ public class WhereOptimizer {
                     Integer length = getColumn().getMaxLength();
                     if (length != null) {
                         // Go through type to pad as the fill character depends on the type.
-                        type.pad(ptr, length);
+                        type.pad(ptr, length, getColumn().getSortOrder());
                     }
                 }
                 byte[] key = ByteUtil.copyKeyBytesIfNecessary(ptr);
                 return ByteUtil.getKeyRange(key, op, type);
             }
 
+            private final PTable table;
             private final PColumn column;
             private final List<Expression> nodes;
 
-            private BaseKeyPart(PColumn column, List<Expression> nodes) {
+            private BaseKeyPart(PTable table, PColumn column, List<Expression> nodes) {
+                this.table = table;
                 this.column = column;
                 this.nodes = nodes;
             }
@@ -1231,9 +1246,14 @@ public class WhereOptimizer {
             public PColumn getColumn() {
                 return column;
             }
+
+            @Override
+            public PTable getTable() {
+                return table;
+            }
         }
         
-        private  class RowValueConstructorKeyPart implements KeyPart {
+        private class RowValueConstructorKeyPart implements KeyPart {
             private final RowValueConstructorExpression rvc;
             private final PColumn column;
             private final List<Expression> nodes;
@@ -1261,7 +1281,13 @@ public class WhereOptimizer {
             public PColumn getColumn() {
                 return column;
             }
-           @Override
+
+            @Override
+            public PTable getTable() {
+                return table;
+            }
+
+            @Override
             public KeyRange getKeyRange(CompareOp op, Expression rhs) {
                // With row value constructors, we need to convert the operator for any transformation we do on individual values
                // to prevent keys from being increased to the next key as would be done for fixed width values. The next key is
@@ -1305,7 +1331,7 @@ public class WhereOptimizer {
                     rhs = BaseExpression.coerce(rvc, rhs, new ExpressionComparabilityWrapper() {
 
                         @Override
-                        public Expression wrap(final Expression lhs, final Expression rhs) throws SQLException {
+                        public Expression wrap(final Expression lhs, final Expression rhs, boolean rowKeyOrderOptimizable) throws SQLException {
                             final KeyPart childPart = keySlotsIterator.next().iterator().next().getKeyPart();
                             // TODO: DelegateExpression
                             return new BaseTerminalExpression() {
@@ -1369,21 +1395,25 @@ public class WhereOptimizer {
                                 public SortOrder getSortOrder() {
                                     return childPart.getColumn().getSortOrder();
                                 }
+
+                                @Override
+                                public <T> T accept(ExpressionVisitor<T> visitor) {
+                                    return null;
+                                }
                             };
                         }
                         
-                    });
+                    }, table.rowKeyOrderOptimizable());
                 } catch (SQLException e) {
                     return null; // Shouldn't happen
                 }
                 ImmutableBytesWritable ptr = context.getTempPtr();
-                if (!rhs.evaluate(null, ptr) || ptr.getLength()==0) {
+                if (!rhs.evaluate(null, ptr)) { // Don't return if evaluated to null
                     return null; 
                 }
                 byte[] key = ByteUtil.copyKeyBytesIfNecessary(ptr);
                 return ByteUtil.getKeyRange(key, op, PVarbinary.INSTANCE);
             }
-
         }
     }
 }

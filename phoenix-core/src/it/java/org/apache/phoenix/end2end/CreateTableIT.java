@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.apache.hadoop.hbase.HColumnDescriptor.DEFAULT_TTL;
+import static org.apache.hadoop.hbase.HColumnDescriptor.DEFAULT_REPLICATION_SCOPE;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -104,6 +104,31 @@ public class CreateTableIT extends BaseClientManagedTimeIT {
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
         conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute("DROP TABLE m_interface_job");
+    }
+
+    @Test
+    public void testCreateMultiTenantTable() throws Exception {
+        long ts = nextTimestamp();
+        Properties props = new Properties();
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String ddl = "CREATE TABLE m_multi_tenant_test(                TenantId UNSIGNED_INT NOT NULL ,\n" +
+                "                Id UNSIGNED_INT NOT NULL ,\n" +
+                "                val VARCHAR ,\n" +
+                "                CONSTRAINT pk PRIMARY KEY(TenantId, Id) \n" +
+                "                ) MULTI_TENANT=true";
+        conn.createStatement().execute(ddl);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            conn.createStatement().execute(ddl);
+            fail();
+        } catch (TableAlreadyExistsException e) {
+            // expected
+        }
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
+        conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute("DROP TABLE m_multi_tenant_test");
     }
     
     /**
@@ -198,12 +223,12 @@ public class CreateTableIT extends BaseClientManagedTimeIT {
      * Tests that when:
      * 1) DDL has both pk as well as key value columns
      * 2) Key value columns have both default and explicit column family names
-     * 3) TTL specifier has the explicit column family name.
+     * 3) Replication scope specifier has the explicit column family name.
      * 
      * Then:
-     * 1)TTL is set.
-     * 2)The default column family has DEFAULT_TTL.
-     * 3)The explicit column family has the TTL specified in DDL.  
+     * 1)REPLICATION_SCOPE is set.
+     * 2)The default column family has DEFAULT_REPLICATION_SCOPE.
+     * 3)The explicit column family has the REPLICATION_SCOPE specified in DDL.  
      */
     @Test
     public void testCreateTableColumnFamilyHBaseAttribs4() throws Exception {
@@ -213,7 +238,7 @@ public class CreateTableIT extends BaseClientManagedTimeIT {
     			+ " b.col2 bigint,"
     			+ " col3 bigint, "
     			+ " CONSTRAINT NAME_PK PRIMARY KEY (id, col1)"
-    			+ " ) b.TTL=86400, SALT_BUCKETS = 4";
+    			+ " ) b.REPLICATION_SCOPE=1, SALT_BUCKETS = 4";
     	long ts = nextTimestamp();
     	Properties props = new Properties();
     	props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
@@ -223,20 +248,20 @@ public class CreateTableIT extends BaseClientManagedTimeIT {
     	HColumnDescriptor[] columnFamilies = admin.getTableDescriptor(Bytes.toBytes("TEST4")).getColumnFamilies();
     	assertEquals(2, columnFamilies.length);
     	assertEquals("0", columnFamilies[0].getNameAsString());
-    	assertEquals(DEFAULT_TTL, columnFamilies[0].getTimeToLive());
+    	assertEquals(DEFAULT_REPLICATION_SCOPE, columnFamilies[0].getScope());
     	assertEquals("B", columnFamilies[1].getNameAsString());
-    	assertEquals(86400, columnFamilies[1].getTimeToLive());
+    	assertEquals(1, columnFamilies[1].getScope());
     }
     
     /**
      * Tests that when:
      * 1) DDL has both pk as well as key value columns
      * 2) Key value columns have explicit column family names
-     * 3) Different TTL specifiers for different column family names.
+     * 3) Different REPLICATION_SCOPE specifiers for different column family names.
      * 
      * Then:
-     * 1)TTL is set.
-     * 2)Each explicit column family has the TTL as specified in DDL.  
+     * 1)REPLICATION_SCOPE is set.
+     * 2)Each explicit column family has the REPLICATION_SCOPE as specified in DDL.  
      */
     @Test
     public void testCreateTableColumnFamilyHBaseAttribs5() throws Exception {
@@ -246,7 +271,7 @@ public class CreateTableIT extends BaseClientManagedTimeIT {
     			+ " b.col2 bigint,"
     			+ " c.col3 bigint, "
     			+ " CONSTRAINT NAME_PK PRIMARY KEY (id, col1)"
-    			+ " ) b.TTL=86400, c.TTL=10000, SALT_BUCKETS = 4";
+    			+ " ) b.REPLICATION_SCOPE=0, c.REPLICATION_SCOPE=1, SALT_BUCKETS = 4";
     	long ts = nextTimestamp();
     	Properties props = new Properties();
     	props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
@@ -256,9 +281,9 @@ public class CreateTableIT extends BaseClientManagedTimeIT {
     	HColumnDescriptor[] columnFamilies = admin.getTableDescriptor(Bytes.toBytes("TEST5")).getColumnFamilies();
     	assertEquals(2, columnFamilies.length);
     	assertEquals("B", columnFamilies[0].getNameAsString());
-    	assertEquals(86400, columnFamilies[0].getTimeToLive());
+    	assertEquals(0, columnFamilies[0].getScope());
     	assertEquals("C", columnFamilies[1].getNameAsString());
-    	assertEquals(10000, columnFamilies[1].getTimeToLive());
+    	assertEquals(1, columnFamilies[1].getScope());
     }
     
     /**
@@ -363,4 +388,23 @@ public class CreateTableIT extends BaseClientManagedTimeIT {
             assertEquals(SQLExceptionCode.INVALID_NOT_NULL_CONSTRAINT.getErrorCode(),sqle.getErrorCode());
         }
    }
+    
+    @Test
+    public void testSpecifyingColumnFamilyForTTLFails() throws Exception {
+        String ddl = "create table IF NOT EXISTS TESTXYZ ("
+                + " id char(1) NOT NULL,"
+                + " col1 integer NOT NULL,"
+                + " CF.col2 integer,"
+                + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1)"
+                + " ) DEFAULT_COLUMN_FAMILY='a', CF.TTL=10000, SALT_BUCKETS = 4";
+        long ts = nextTimestamp();
+        Properties props = new Properties();
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            conn.createStatement().execute(ddl);
+        } catch (SQLException sqle) {
+            assertEquals(SQLExceptionCode.COLUMN_FAMILY_NOT_ALLOWED_FOR_TTL.getErrorCode(),sqle.getErrorCode());
+        }
+    }
 }

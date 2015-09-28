@@ -133,9 +133,12 @@ public abstract class BaseMutableIndexIT extends BaseHBaseManagedTimeIT {
             String query = "SELECT d.char_col1, int_col1 from " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME + " as d";
             ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + query);
             if (localIndex) {
-                assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.getLocalIndexTableName(TestUtil.DEFAULT_DATA_TABLE_FULL_NAME)+" [-32768]\nCLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
+                assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.getLocalIndexTableName(TestUtil.DEFAULT_DATA_TABLE_FULL_NAME)+" [-32768]\n"
+                           + "    SERVER FILTER BY FIRST KEY ONLY\n"
+                           + "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
             } else {
-                assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + TestUtil.DEFAULT_INDEX_TABLE_FULL_NAME, QueryUtil.getExplainPlan(rs));
+                assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + TestUtil.DEFAULT_INDEX_TABLE_FULL_NAME + "\n" +
+                             "    SERVER FILTER BY FIRST KEY ONLY", QueryUtil.getExplainPlan(rs));
             }
             
             rs = conn.createStatement().executeQuery(query);
@@ -177,9 +180,12 @@ public abstract class BaseMutableIndexIT extends BaseHBaseManagedTimeIT {
             String query = "SELECT int_pk from " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME ;
             ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + query);
             if (localIndex) {
-                assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_" + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME +" [-32768]\nCLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
+                assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_" + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME +" [-32768]\n"
+                           + "    SERVER FILTER BY FIRST KEY ONLY\n"
+                           + "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
             } else {
-                assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + TestUtil.DEFAULT_INDEX_TABLE_FULL_NAME, QueryUtil.getExplainPlan(rs));
+                assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + TestUtil.DEFAULT_INDEX_TABLE_FULL_NAME + "\n"
+                        + "    SERVER FILTER BY FIRST KEY ONLY", QueryUtil.getExplainPlan(rs));
             }
             
             rs = conn.createStatement().executeQuery(query);
@@ -194,9 +200,12 @@ public abstract class BaseMutableIndexIT extends BaseHBaseManagedTimeIT {
             query = "SELECT date_col from " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME + " order by date_col" ;
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
             if (localIndex) {
-                assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_" + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME + " [-32768]\nCLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
+                assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_" + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME + " [-32768]\n"
+                        + "    SERVER FILTER BY FIRST KEY ONLY\n"
+                        + "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
             } else {
-                assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + TestUtil.DEFAULT_INDEX_TABLE_FULL_NAME, QueryUtil.getExplainPlan(rs));
+                assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + TestUtil.DEFAULT_INDEX_TABLE_FULL_NAME + "\n"
+                        + "    SERVER FILTER BY FIRST KEY ONLY", QueryUtil.getExplainPlan(rs));
             }
             
             rs = conn.createStatement().executeQuery(query);
@@ -305,7 +314,7 @@ public abstract class BaseMutableIndexIT extends BaseHBaseManagedTimeIT {
                 query = "SELECT b.* from " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME + " where int_col1 = 4";
                 rs = conn.createStatement().executeQuery("EXPLAIN " + query);
                 assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_" + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME +" [-32768]\n" +
-                		"    SERVER FILTER BY TO_INTEGER(INT_COL1) = 4\nCLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
+                		"    SERVER FILTER BY TO_INTEGER(\"INT_COL1\") = 4\nCLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
                 rs = conn.createStatement().executeQuery(query);
                 assertTrue(rs.next());
                 assertEquals("varchar_b", rs.getString(1));
@@ -382,11 +391,11 @@ public abstract class BaseMutableIndexIT extends BaseHBaseManagedTimeIT {
         rs = conn.createStatement().executeQuery("EXPLAIN " + query);
         if(localIndex){
             assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_" +TestUtil.DEFAULT_DATA_TABLE_FULL_NAME + " [-32768,~'1']\n" + 
-                    "    SERVER SORTED BY [V1]\n" + 
+                    "    SERVER SORTED BY [\"V1\"]\n" + 
                     "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
         } else {
             assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " +TestUtil.DEFAULT_INDEX_TABLE_FULL_NAME + " [~'1']\n" + 
-                    "    SERVER SORTED BY [V1]\n" + 
+                    "    SERVER SORTED BY [\"V1\"]\n" + 
                     "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
         }
 
@@ -622,9 +631,12 @@ public abstract class BaseMutableIndexIT extends BaseHBaseManagedTimeIT {
         query = "SELECT * FROM " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME;
         rs = conn.createStatement().executeQuery("EXPLAIN " + query);
         if (localIndex) {
-            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_" + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME+" [-32768]\nCLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
+            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_" + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME+" [-32768]\n"
+                    + "    SERVER FILTER BY FIRST KEY ONLY\n"
+                    + "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
         } else {
-            assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + TestUtil.DEFAULT_INDEX_TABLE_FULL_NAME, QueryUtil.getExplainPlan(rs));
+            assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + TestUtil.DEFAULT_INDEX_TABLE_FULL_NAME + "\n"
+                       + "    SERVER FILTER BY FIRST KEY ONLY", QueryUtil.getExplainPlan(rs));
         }
         //make sure the data table looks like what we expect
         rs = conn.createStatement().executeQuery(query);
@@ -750,10 +762,13 @@ public abstract class BaseMutableIndexIT extends BaseHBaseManagedTimeIT {
         query = "SELECT * FROM " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME;
         rs = conn.createStatement().executeQuery("EXPLAIN " + query);
         if(localIndex) {
-            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_" + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME+" [-32768]\nCLIENT MERGE SORT",
+            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_" + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME+" [-32768]\n"
+                    + "    SERVER FILTER BY FIRST KEY ONLY\n"
+                    + "CLIENT MERGE SORT",
                 QueryUtil.getExplainPlan(rs));
         } else {
-            assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + TestUtil.DEFAULT_INDEX_TABLE_FULL_NAME,
+            assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + TestUtil.DEFAULT_INDEX_TABLE_FULL_NAME + "\n"
+                    + "    SERVER FILTER BY FIRST KEY ONLY",
                 QueryUtil.getExplainPlan(rs));
         }
     
@@ -893,10 +908,13 @@ public abstract class BaseMutableIndexIT extends BaseHBaseManagedTimeIT {
         query = "SELECT * FROM " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME;
         rs = conn.createStatement().executeQuery("EXPLAIN " + query);
         if (localIndex) {
-            assertEquals("CLIENT PARALLEL 2-WAY RANGE SCAN OVER _LOCAL_IDX_" + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME+" [-32768]\nCLIENT MERGE SORT",
+            assertEquals("CLIENT PARALLEL 2-WAY RANGE SCAN OVER _LOCAL_IDX_" + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME+" [-32768]\n"
+                       + "    SERVER FILTER BY FIRST KEY ONLY\n"
+                       + "CLIENT MERGE SORT",
                 QueryUtil.getExplainPlan(rs));
         } else {
-            assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + TestUtil.DEFAULT_INDEX_TABLE_FULL_NAME,
+            assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + TestUtil.DEFAULT_INDEX_TABLE_FULL_NAME + "\n"
+                    + "    SERVER FILTER BY FIRST KEY ONLY",
                 QueryUtil.getExplainPlan(rs));
         }
     
@@ -953,7 +971,8 @@ public abstract class BaseMutableIndexIT extends BaseHBaseManagedTimeIT {
             query = "SELECT * FROM cs WHERE \"v2\" = '1'";
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
             if(localIndex){
-                assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_CS [-32768,'1']\nCLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
+                assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_CS [-32768,'1']\n"
+                           + "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
             } else {
                 assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER ICS ['1']", QueryUtil.getExplainPlan(rs));
             }

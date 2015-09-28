@@ -1,10 +1,19 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one or more contributor license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership. The ASF licenses this file to you under the Apache License, Version
- * 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at
- * http://www.apache.org/licenses/LICENSE-2.0 Unless required by applicable law or agreed to in writing, software distributed under the
- * License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for
- * the specific language governing permissions and limitations under the License.
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 package org.apache.phoenix.schema.stats;
 
@@ -16,10 +25,10 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Mutation;
-import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
+import org.apache.hadoop.hbase.regionserver.ScannerContext;
+import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 
 /**
@@ -29,11 +38,11 @@ public class StatisticsScanner implements InternalScanner {
     private static final Log LOG = LogFactory.getLog(StatisticsScanner.class);
     private InternalScanner delegate;
     private StatisticsWriter stats;
-    private HRegion region;
+    private Region region;
     private StatisticsCollector tracker;
     private ImmutableBytesPtr family;
 
-    public StatisticsScanner(StatisticsCollector tracker, StatisticsWriter stats, HRegion region,
+    public StatisticsScanner(StatisticsCollector tracker, StatisticsWriter stats, Region region,
             InternalScanner delegate, ImmutableBytesPtr family) {
         this.tracker = tracker;
         this.stats = stats;
@@ -50,24 +59,21 @@ public class StatisticsScanner implements InternalScanner {
     }
 
     @Override
-    public boolean next(List<Cell> result, int limit) throws IOException {
-        boolean ret = delegate.next(result, limit);
+    public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
+        boolean ret = delegate.next(result, scannerContext);
         updateStat(result);
         return ret;
     }
 
     /**
      * Update the current statistics based on the lastest batch of key-values from the underlying scanner
-     * 
+     *
      * @param results
      *            next batch of {@link KeyValue}s
      */
     protected void updateStat(final List<Cell> results) {
-        for (Cell c : results) {
-            KeyValue kv = KeyValueUtil.ensureKeyValue(c);
-            if (c.getTypeByte() == KeyValue.Type.Put.getCode()) {
-                tracker.updateStatistic(kv);
-            }
+        if (!results.isEmpty()) {
+            tracker.collectStatistics(results);
         }
     }
 
@@ -79,17 +85,17 @@ public class StatisticsScanner implements InternalScanner {
             // Just verify if this if fine
             ArrayList<Mutation> mutations = new ArrayList<Mutation>();
             if (LOG.isDebugEnabled()) {
-                LOG.debug("Deleting the stats for the region " + region.getRegionNameAsString()
+                LOG.debug("Deleting the stats for the region " + region.getRegionInfo().getRegionNameAsString()
                         + " as part of major compaction");
             }
-            stats.deleteStats(region.getRegionName(), this.tracker, family, mutations);
+            stats.deleteStats(region.getRegionInfo().getRegionName(), this.tracker, family, mutations);
             if (LOG.isDebugEnabled()) {
-                LOG.debug("Adding new stats for the region " + region.getRegionNameAsString()
+                LOG.debug("Adding new stats for the region " + region.getRegionInfo().getRegionNameAsString()
                         + " as part of major compaction");
             }
-            stats.addStats(region.getRegionName(), this.tracker, family, mutations);
+            stats.addStats(region.getRegionInfo().getRegionName(), this.tracker, family, mutations);
             if (LOG.isDebugEnabled()) {
-                LOG.debug("Committing new stats for the region " + region.getRegionNameAsString()
+                LOG.debug("Committing new stats for the region " + region.getRegionInfo().getRegionNameAsString()
                         + " as part of major compaction");
             }
             stats.commitStats(mutations);
@@ -117,4 +123,5 @@ public class StatisticsScanner implements InternalScanner {
             }
         }
     }
+
 }

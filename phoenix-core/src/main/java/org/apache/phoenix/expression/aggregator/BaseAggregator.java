@@ -20,6 +20,7 @@ package org.apache.phoenix.expression.aggregator;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.BaseTerminalExpression;
+import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.SizedUtil;
 
@@ -56,4 +57,10 @@ public abstract class BaseAggregator extends BaseTerminalExpression implements A
         ca.evaluate(null, ptr);
         return ptr;
     }
+    
+    @Override
+    public <T> T accept(ExpressionVisitor<T> visitor) {
+        return null;
+    }
+
 }

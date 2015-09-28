@@ -17,16 +17,17 @@
  */
 package org.apache.phoenix.schema.types;
 
-import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.util.DateUtil;
-
 import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.sql.Types;
 import java.text.Format;
+
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.DateUtil;
 
 public class PTimestamp extends PDataType<Timestamp> {
 
@@ -39,9 +40,6 @@ public class PTimestamp extends PDataType<Timestamp> {
 
   @Override
   public byte[] toBytes(Object object) {
-    if (object == null) {
-      throw newIllegalDataException(this + " may not be null");
-    }
     byte[] bytes = new byte[getByteSize()];
     toBytes(object, bytes, 0);
     return bytes;
@@ -50,16 +48,22 @@ public class PTimestamp extends PDataType<Timestamp> {
   @Override
   public int toBytes(Object object, byte[] bytes, int offset) {
     if (object == null) {
-      throw newIllegalDataException(this + " may not be null");
+      // Create the byte[] of size MAX_TIMESTAMP_BYTES
+      if(bytes.length != getByteSize()) {
+          bytes = Bytes.padTail(bytes, (getByteSize() - bytes.length));
+      }
+      PDate.INSTANCE.getCodec().encodeLong(0l, bytes, offset);
+      Bytes.putInt(bytes, offset + Bytes.SIZEOF_LONG, 0);
+      return getByteSize();
     }
     java.sql.Timestamp value = (java.sql.Timestamp) object;
     PDate.INSTANCE.getCodec().encodeLong(value.getTime(), bytes, offset);
 
-            /*
-             * By not getting the stuff that got spilled over from the millis part,
-             * it leaves the timestamp's byte representation saner - 8 bytes of millis | 4 bytes of nanos.
-             * Also, it enables timestamp bytes to be directly compared with date/time bytes.
-             */
+    /*
+     * By not getting the stuff that got spilled over from the millis part,
+     * it leaves the timestamp's byte representation saner - 8 bytes of millis | 4 bytes of nanos.
+     * Also, it enables timestamp bytes to be directly compared with date/time bytes.
+     */
     Bytes.putInt(bytes, offset + Bytes.SIZEOF_LONG, value.getNanos() % 1000000);
     return getByteSize();
   }
@@ -83,6 +87,8 @@ public class PTimestamp extends PDataType<Timestamp> {
           (bd.remainder(BigDecimal.ONE).multiply(QueryConstants.BD_MILLIS_NANOS_CONVERSION))
               .intValue();
       return DateUtil.getTimestamp(ms, nanos);
+    } else if (actualType == PVarchar.INSTANCE) {
+      return DateUtil.parseTimestamp((String) object);
     }
     return throwConstraintViolationException(actualType, this);
   }
@@ -178,15 +184,13 @@ public class PTimestamp extends PDataType<Timestamp> {
   }
 
   @Override
-  public String toStringLiteral(byte[] b, int offset, int length, Format formatter) {
-    java.sql.Timestamp value = (java.sql.Timestamp) toObject(b, offset, length);
-    if (formatter == null || formatter == DateUtil.DEFAULT_DATE_FORMATTER) {
-      // If default formatter has not been overridden,
-      // use one that displays milliseconds.
-      formatter = DateUtil.DEFAULT_MS_DATE_FORMATTER;
-    }
-    return "'" + super.toStringLiteral(b, offset, length, formatter) + "." + value.getNanos() + "'";
+  public String toStringLiteral(Object o, Format formatter) {
+      if (formatter == null) {
+          formatter = DateUtil.DEFAULT_TIMESTAMP_FORMATTER;
+        }
+        return "'" + super.toStringLiteral(o, formatter) + "'";
   }
+
 
   @Override
   public int getNanos(ImmutableBytesWritable ptr, SortOrder sortOrder) {

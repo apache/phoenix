@@ -31,30 +31,35 @@ import org.apache.phoenix.util.ServerUtil;
 
 public class RegionScannerResultIterator extends BaseResultIterator {
     private final RegionScanner scanner;
-    
+
     public RegionScannerResultIterator(RegionScanner scanner) {
         this.scanner = scanner;
     }
-    
+
     @Override
     public Tuple next() throws SQLException {
-        try {
-            // TODO: size
-            List<Cell> results = new ArrayList<Cell>();
-            // Results are potentially returned even when the return value of s.next is false
-            // since this is an indication of whether or not there are more values after the
-            // ones returned
-            boolean hasMore = scanner.nextRaw(results);
-            if (!hasMore && results.isEmpty()) {
-                return null;
+        // XXX: No access here to the region instance to enclose this with startRegionOperation /
+        // stopRegionOperation
+        synchronized (scanner) {
+            try {
+                // TODO: size
+                List<Cell> results = new ArrayList<Cell>();
+                // Results are potentially returned even when the return value of s.next is false
+                // since this is an indication of whether or not there are more values after the
+                // ones returned
+                boolean hasMore = scanner.nextRaw(results);
+
+                if (!hasMore && results.isEmpty()) {
+                    return null;
+                }
+                // We instantiate a new tuple because in all cases currently we hang on to it
+                // (i.e. to compute and hold onto the TopN).
+                MultiKeyValueTuple tuple = new MultiKeyValueTuple();
+                tuple.setKeyValues(results);
+                return tuple;
+            } catch (IOException e) {
+                throw ServerUtil.parseServerException(e);
             }
-            // We instantiate a new tuple because in all cases currently we hang on to it (i.e.
-            // to compute and hold onto the TopN).
-            MultiKeyValueTuple tuple = new MultiKeyValueTuple();
-            tuple.setKeyValues(results);
-            return tuple;
-        } catch (IOException e) {
-            throw ServerUtil.parseServerException(e);
         }
     }
 

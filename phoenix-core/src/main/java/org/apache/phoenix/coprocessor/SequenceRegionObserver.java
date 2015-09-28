@@ -38,20 +38,20 @@ import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.TimeRange;
-import org.apache.hadoop.hbase.regionserver.HRegion;
-import org.apache.hadoop.hbase.regionserver.HRegion.RowLock;
+import org.apache.hadoop.hbase.regionserver.Region;
+import org.apache.hadoop.hbase.regionserver.Region.RowLock;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.types.PBoolean;
-import org.apache.phoenix.schema.types.PInteger;
-import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.types.PBoolean;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.SequenceUtil;
@@ -77,6 +77,7 @@ public class SequenceRegionObserver extends BaseRegionObserver {
     public static final String OPERATION_ATTRIB = "SEQUENCE_OPERATION";
     public static final String MAX_TIMERANGE_ATTRIB = "MAX_TIMERANGE";
     public static final String CURRENT_VALUE_ATTRIB = "CURRENT_VALUE";
+    public static final String NUM_TO_ALLOCATE = "NUM_TO_ALLOCATE";
     private static final byte[] SUCCESS_VALUE = PInteger.INSTANCE.toBytes(Integer.valueOf(Sequence.SUCCESS));
     
     private static Result getErrorResult(byte[] row, long timestamp, int errorCode) {
@@ -88,9 +89,9 @@ public class SequenceRegionObserver extends BaseRegionObserver {
                         QueryConstants.EMPTY_COLUMN_BYTES, timestamp, errorCodeBuf)));
     }
     
-    private static void acquireLock(HRegion region, byte[] key, List<RowLock> locks)
+    private static void acquireLock(Region region, byte[] key, List<RowLock> locks)
         throws IOException {
-        RowLock rowLock = region.getRowLock(key);
+        RowLock rowLock = region.getRowLock(key, true);
         if (rowLock == null) {
             throw new IOException("Failed to acquire lock on " + Bytes.toStringBinary(key));
         }
@@ -114,7 +115,7 @@ public class SequenceRegionObserver extends BaseRegionObserver {
         // We need to set this to prevent region.increment from being called
         e.bypass();
         e.complete();
-        HRegion region = env.getRegion();
+        Region region = env.getRegion();
         byte[] row = increment.getRow();
         List<RowLock> locks = Lists.newArrayList();
         TimeRange tr = increment.getTimeRange();
@@ -138,10 +139,8 @@ public class SequenceRegionObserver extends BaseRegionObserver {
                 if (result.isEmpty()) {
                     return getErrorResult(row, maxTimestamp, SQLExceptionCode.SEQUENCE_UNDEFINED.getErrorCode());
                 }
-                if (validateOnly) {
-                    return result;
-                }
                 
+                 
                 KeyValue currentValueKV = Sequence.getCurrentValueKV(result);
                 KeyValue incrementByKV = Sequence.getIncrementByKV(result);
                 KeyValue cacheSizeKV = Sequence.getCacheSizeKV(result);
@@ -224,6 +223,28 @@ public class SequenceRegionObserver extends BaseRegionObserver {
 	                            cycleKV.getValueOffset(), cycleKV.getValueLength());
 	                }
 	                
+	                long numSlotsToAllocate = calculateNumSlotsToAllocate(increment);
+
+                    // We don't support Bulk Allocations on sequences that have the CYCLE flag set to true
+	                if (cycle && !SequenceUtil.isCycleAllowed(numSlotsToAllocate)) {
+                        return getErrorResult(row, maxTimestamp, SQLExceptionCode.NUM_SEQ_TO_ALLOCATE_NOT_SUPPORTED.getErrorCode());
+	                }
+	                
+	                // Bulk Allocations are expressed by NEXT <n> VALUES FOR
+	                if (SequenceUtil.isBulkAllocation(numSlotsToAllocate)) {
+	                    if (SequenceUtil.checkIfLimitReached(currentValue, minValue, maxValue, incrementBy, cacheSize, numSlotsToAllocate)) {
+	                        // If we try to allocate more slots than the limit we return an error.
+	                        // Allocating sequence values in bulk should be an all or nothing operation.
+	                        // If the operation succeeds clients are guaranteed that they have reserved 
+	                        // all the slots requested.
+	                        return getErrorResult(row, maxTimestamp, SequenceUtil.getLimitReachedErrorCode(increasingSeq).getErrorCode());
+	                    }
+	                }
+	                
+	                if (validateOnly) {
+	                    return result;
+	                }
+	                
 	                // return if we have run out of sequence values 
 					if (limitReached) {
 						if (cycle) {
@@ -231,16 +252,15 @@ public class SequenceRegionObserver extends BaseRegionObserver {
 							currentValue = increasingSeq ? minValue : maxValue;
 						}
 						else {
-							SQLExceptionCode code = increasingSeq ? SQLExceptionCode.SEQUENCE_VAL_REACHED_MAX_VALUE
-									: SQLExceptionCode.SEQUENCE_VAL_REACHED_MIN_VALUE;
-							return getErrorResult(row, maxTimestamp, code.getErrorCode());
+							return getErrorResult(row, maxTimestamp, SequenceUtil.getLimitReachedErrorCode(increasingSeq).getErrorCode());
 						}
 					}
-	                
+						                
 	                // check if the limit was reached
-					limitReached = SequenceUtil.checkIfLimitReached(currentValue, minValue, maxValue, incrementBy, cacheSize);
-	                // update currentValue
-					currentValue += incrementBy * cacheSize;
+					limitReached = SequenceUtil.checkIfLimitReached(currentValue, minValue, maxValue, incrementBy, cacheSize, numSlotsToAllocate);
+					
+                    // update currentValue
+					currentValue += incrementBy * (SequenceUtil.isBulkAllocation(numSlotsToAllocate) ? numSlotsToAllocate : cacheSize);
 					// update the currentValue of the Result row
 					KeyValue newCurrentValueKV = createKeyValue(row, PhoenixDatabaseMetaData.CURRENT_VALUE_BYTES, currentValue, timestamp);
 		            Sequence.replaceCurrentValueKV(cells, newCurrentValueKV);
@@ -251,7 +271,7 @@ public class SequenceRegionObserver extends BaseRegionObserver {
                 }
                 // update the KeyValues on the server
                 Mutation[] mutations = new Mutation[]{put};
-                region.batchMutate(mutations);
+                region.batchMutate(mutations, HConstants.NO_NONCE, HConstants.NO_NONCE);
                 // return a Result with the updated KeyValues
                 return Result.create(cells);
             } finally {
@@ -264,6 +284,7 @@ public class SequenceRegionObserver extends BaseRegionObserver {
             region.closeRegionOperation();
         }
     }
+
     
 	/**
 	 * Creates a new KeyValue for a long value
@@ -345,7 +366,7 @@ public class SequenceRegionObserver extends BaseRegionObserver {
         // We need to set this to prevent region.append from being called
         e.bypass();
         e.complete();
-        HRegion region = env.getRegion();
+        Region region = env.getRegion();
         byte[] row = append.getRow();
         List<RowLock> locks = Lists.newArrayList();
         region.startRegionOperation();
@@ -400,7 +421,7 @@ public class SequenceRegionObserver extends BaseRegionObserver {
                     }
                 }
                 Mutation[] mutations = new Mutation[]{m};
-                region.batchMutate(mutations);
+                region.batchMutate(mutations, HConstants.NO_NONCE, HConstants.NO_NONCE);
                 long serverTimestamp = MetaDataUtil.getClientTimeStamp(m);
                 // Return result with single KeyValue. The only piece of information
                 // the client cares about is the timestamp, which is the timestamp of
@@ -416,6 +437,21 @@ public class SequenceRegionObserver extends BaseRegionObserver {
         } finally {
             region.closeRegionOperation();
         }
+    }
+    
+    /**
+     * Determines whether a request for incrementing the sequence was a bulk allocation and if so
+     * what the number of slots to allocate is. This is triggered by the NEXT <n> VALUES FOR expression.
+     * For backwards compatibility with older clients, we default the value to 1 which preserves
+     * existing behavior when invoking NEXT VALUE FOR. 
+     */
+    private long calculateNumSlotsToAllocate(final Increment increment) {
+        long numToAllocate = 1;
+        byte[] numToAllocateBytes = increment.getAttribute(SequenceRegionObserver.NUM_TO_ALLOCATE);
+        if (numToAllocateBytes != null) {
+            numToAllocate = Bytes.toLong(numToAllocateBytes);
+        }
+        return numToAllocate;
     }
 
 }

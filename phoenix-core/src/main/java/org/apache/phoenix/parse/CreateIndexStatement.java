@@ -19,6 +19,7 @@ package org.apache.phoenix.parse;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.schema.PTable.IndexType;
@@ -29,28 +30,32 @@ import com.google.common.collect.ListMultimap;
 
 public class CreateIndexStatement extends SingleTableStatement {
     private final TableName indexTableName;
-    private final PrimaryKeyConstraint indexConstraint;
+    private final IndexKeyConstraint indexKeyConstraint;
     private final List<ColumnName> includeColumns;
     private final List<ParseNode> splitNodes;
     private final ListMultimap<String,Pair<String,Object>> props;
     private final boolean ifNotExists;
     private final IndexType indexType;
+    private final boolean async;
+    private final Map<String, UDFParseNode> udfParseNodes;
 
     public CreateIndexStatement(NamedNode indexTableName, NamedTableNode dataTable, 
-            PrimaryKeyConstraint indexConstraint, List<ColumnName> includeColumns, List<ParseNode> splits,
-            ListMultimap<String,Pair<String,Object>> props, boolean ifNotExists, IndexType indexType, int bindCount) {
+            IndexKeyConstraint indexKeyConstraint, List<ColumnName> includeColumns, List<ParseNode> splits,
+            ListMultimap<String,Pair<String,Object>> props, boolean ifNotExists, IndexType indexType, boolean async, int bindCount, Map<String, UDFParseNode> udfParseNodes) {
         super(dataTable, bindCount);
         this.indexTableName =TableName.create(dataTable.getName().getSchemaName(),indexTableName.getName());
-        this.indexConstraint = indexConstraint == null ? PrimaryKeyConstraint.EMPTY : indexConstraint;
+        this.indexKeyConstraint = indexKeyConstraint == null ? IndexKeyConstraint.EMPTY : indexKeyConstraint;
         this.includeColumns = includeColumns == null ? Collections.<ColumnName>emptyList() : includeColumns;
         this.splitNodes = splits == null ? Collections.<ParseNode>emptyList() : splits;
         this.props = props == null ? ArrayListMultimap.<String,Pair<String,Object>>create() : props;
         this.ifNotExists = ifNotExists;
         this.indexType = indexType;
+        this.async = async;
+        this.udfParseNodes = udfParseNodes;
     }
 
-    public PrimaryKeyConstraint getIndexConstraint() {
-        return indexConstraint;
+    public IndexKeyConstraint getIndexConstraint() {
+        return indexKeyConstraint;
     }
 
     public List<ColumnName> getIncludeColumns() {
@@ -78,4 +83,11 @@ public class CreateIndexStatement extends SingleTableStatement {
         return indexType;
     }
 
+    public boolean isAsync() {
+        return async;
+    }
+
+    public Map<String, UDFParseNode> getUdfParseNodes() {
+        return udfParseNodes;
+    }
 }

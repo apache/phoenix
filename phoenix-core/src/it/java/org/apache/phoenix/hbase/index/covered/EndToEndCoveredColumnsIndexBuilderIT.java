@@ -41,10 +41,10 @@ import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Put;
-import org.apache.hadoop.hbase.regionserver.HRegion;
+import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.hbase.util.EnvironmentEdge;
-import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.EnvironmentEdge;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.hbase.index.IndexTestingUtils;
 import org.apache.phoenix.hbase.index.Indexer;
@@ -151,7 +151,7 @@ public class EndToEndCoveredColumnsIndexBuilderIT {
             ((LocalTableState) state).getIndexedColumnsTableState(Arrays.asList(columns)).getFirst();
 
         int count = 0;
-        KeyValue kv;
+        Cell kv;
         while ((kv = kvs.next()) != null) {
           Cell next = expectedKvs.get(count++);
           assertEquals(
@@ -312,7 +312,7 @@ public class EndToEndCoveredColumnsIndexBuilderIT {
     HTable primary = new HTable(UTIL.getConfiguration(), tableNameBytes);
 
     // overwrite the codec so we can verify the current state
-    HRegion region = UTIL.getMiniHBaseCluster().getRegions(tableNameBytes).get(0);
+    Region region = UTIL.getMiniHBaseCluster().getRegions(tableNameBytes).get(0);
     Indexer indexer =
         (Indexer) region.getCoprocessorHost().findCoprocessor(Indexer.class.getName());
     CoveredColumnsIndexBuilder builder =
@@ -325,7 +325,7 @@ public class EndToEndCoveredColumnsIndexBuilderIT {
     EnvironmentEdge edge = new EnvironmentEdge() {
 
       @Override
-      public long currentTimeMillis() {
+      public long currentTime() {
         return ts;
       }
     };

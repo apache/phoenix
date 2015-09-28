@@ -19,11 +19,11 @@ package org.apache.phoenix.expression.visitor;
 
 import java.util.Iterator;
 
-
-import com.google.common.collect.Iterators;
 import org.apache.phoenix.expression.Expression;
 
-public class TraverseNoExpressionVisitor<E> extends BaseExpressionVisitor<E> {
+import com.google.common.collect.Iterators;
+
+public abstract class TraverseNoExpressionVisitor<E> extends BaseExpressionVisitor<E> {
 
     @Override
     public Iterator<Expression> defaultIterator(Expression node) {

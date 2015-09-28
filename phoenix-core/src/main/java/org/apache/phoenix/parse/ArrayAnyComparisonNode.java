@@ -25,12 +25,13 @@ import java.util.List;
  * The Expression a = ANY(b) where b is of type array is rewritten in this
  * node as ANY(a = b(n))
  */
-public class ArrayAnyComparisonNode extends CompoundParseNode {
+public class ArrayAnyComparisonNode extends ArrayAllAnyComparisonNode {
 
     ArrayAnyComparisonNode(ParseNode rhs, ComparisonParseNode compareNode) {
         super(Arrays.<ParseNode>asList(rhs, compareNode));
     }
     
+    @Override
     public String getType() {
         return "ANY";
     }

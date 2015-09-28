@@ -30,36 +30,21 @@ import org.apache.phoenix.expression.DivideExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.InListExpression;
 import org.apache.phoenix.expression.IsNullExpression;
-import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.LikeExpression;
-import org.apache.phoenix.expression.LiteralExpression;
+import org.apache.phoenix.expression.ModulusExpression;
 import org.apache.phoenix.expression.MultiplyExpression;
 import org.apache.phoenix.expression.NotExpression;
 import org.apache.phoenix.expression.OrExpression;
-import org.apache.phoenix.expression.ProjectedColumnExpression;
-import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.expression.RowValueConstructorExpression;
 import org.apache.phoenix.expression.StringConcatExpression;
 import org.apache.phoenix.expression.SubtractExpression;
+import org.apache.phoenix.expression.function.ArrayAnyComparisonExpression;
+import org.apache.phoenix.expression.function.ArrayElemRefExpression;
 import org.apache.phoenix.expression.function.ScalarFunction;
 import org.apache.phoenix.expression.function.SingleAggregateFunction;
 
 
 public abstract class BaseExpressionVisitor<E> implements ExpressionVisitor<E> {
-    @Override
-    public E visit(Expression node) {
-        return null;
-    }
-
-    @Override
-    public Iterator<Expression> visitEnter(Expression node) {
-        return null;
-    }
-
-    @Override
-    public E visitLeave(Expression node, List<E> l) {
-        return null;
-    }
 
     @Override
     public E defaultReturn(Expression node, List<E> l) {
@@ -72,17 +57,7 @@ public abstract class BaseExpressionVisitor<E> implements ExpressionVisitor<E> {
     }
 
     @Override
-    public E visitLeave(AndExpression node, List<E> l) {
-        return null;
-    }
-
-    @Override
     public Iterator<Expression> visitEnter(OrExpression node) {
-        return null;
-    }
-
-    @Override
-    public E visitLeave(OrExpression node, List<E> l) {
         return null;
     }
 
@@ -92,17 +67,7 @@ public abstract class BaseExpressionVisitor<E> implements ExpressionVisitor<E> {
     }
 
     @Override
-    public E visitLeave(ScalarFunction node, List<E> l) {
-        return null;
-    }
-
-    @Override
     public Iterator<Expression> visitEnter(ComparisonExpression node) {
-        return null;
-    }
-
-    @Override
-    public E visitLeave(ComparisonExpression node, List<E> l) {
         return null;
     }
 
@@ -112,17 +77,7 @@ public abstract class BaseExpressionVisitor<E> implements ExpressionVisitor<E> {
     }
 
     @Override
-    public E visitLeave(LikeExpression node, List<E> l) {
-        return null;
-    }
-
-    @Override
     public Iterator<Expression> visitEnter(SingleAggregateFunction node) {
-        return null;
-    }
-
-    @Override
-    public E visitLeave(SingleAggregateFunction node, List<E> l) {
         return null;
     }
 
@@ -132,17 +87,7 @@ public abstract class BaseExpressionVisitor<E> implements ExpressionVisitor<E> {
     }
 
     @Override
-    public E visitLeave(CaseExpression node, List<E> l) {
-        return null;
-    }
-
-    @Override
     public Iterator<Expression> visitEnter(NotExpression node) {
-        return null;
-    }
-
-    @Override
-    public E visitLeave(NotExpression node, List<E> l) {
         return null;
     }
 
@@ -152,37 +97,12 @@ public abstract class BaseExpressionVisitor<E> implements ExpressionVisitor<E> {
     }
 
     @Override
-    public E visitLeave(IsNullExpression node, List<E> l) {
-        return null;
-    }
-
-    @Override
     public Iterator<Expression> visitEnter(InListExpression node) {
         return null;
     }
 
     @Override
-    public E visitLeave(InListExpression node, List<E> l) {
-        return null;
-    }
-
-    @Override
-    public E visit(LiteralExpression node) {
-        return null;
-    }
-
-    @Override
-    public E visit(RowKeyColumnExpression node) {
-        return null;
-    }
-
-    @Override
-    public E visit(KeyValueColumnExpression node) {
-        return null;
-    }
-    
-    @Override
-    public E visit(ProjectedColumnExpression node) {
+    public Iterator<Expression> visitEnter(AddExpression node) {
         return null;
     }
 
@@ -192,25 +112,7 @@ public abstract class BaseExpressionVisitor<E> implements ExpressionVisitor<E> {
     }
 
     @Override
-    public E visitLeave(SubtractExpression node, List<E> l) {
-        return null;
-    }
-
-    @Override
-    public Iterator<Expression> visitEnter(AddExpression node) {
-        return null;
-    }
-    @Override
-    public E visitLeave(AddExpression node, List<E> l) {
-        return null;
-    }
-
-    @Override
     public Iterator<Expression> visitEnter(MultiplyExpression node) {
-        return null;
-    }
-    @Override
-    public E visitLeave(MultiplyExpression node, List<E> l) {
         return null;
     }
 
@@ -218,26 +120,14 @@ public abstract class BaseExpressionVisitor<E> implements ExpressionVisitor<E> {
     public Iterator<Expression> visitEnter(DivideExpression node) {
         return null;
     }
-    @Override
-    public E visitLeave(DivideExpression node, List<E> l) {
-        return null;
-    }
     
     @Override
     public Iterator<Expression> visitEnter(StringConcatExpression node) {
         return null;
     }
-    @Override
-    public E visitLeave(StringConcatExpression node, List<E> l) {
-        return null;
-    }
     
     @Override
     public Iterator<Expression> visitEnter(RowValueConstructorExpression node) {
-        return null;
-    }
-    @Override
-    public E visitLeave(RowValueConstructorExpression node, List<E> l) {
         return null;
     }
     
@@ -247,16 +137,23 @@ public abstract class BaseExpressionVisitor<E> implements ExpressionVisitor<E> {
     }
     
     @Override
-    public E visitLeave(CoerceExpression node, List<E> l) {
+    public Iterator<Expression> visitEnter(ArrayConstructorExpression node) {
+        return null;
+    }
+    
+    @Override
+    public Iterator<Expression> visitEnter(ModulusExpression modulusExpression) {
         return null;
     }
 
     @Override
-    public Iterator<Expression> visitEnter(ArrayConstructorExpression node) {
+    public Iterator<Expression> visitEnter(ArrayAnyComparisonExpression arrayAnyComparisonExpression) {
         return null;
     }
+
     @Override
-    public E visitLeave(ArrayConstructorExpression node, List<E> l) {
+    public Iterator<Expression> visitEnter(ArrayElemRefExpression arrayElemRefExpression) {
         return null;
     }
+
 }
