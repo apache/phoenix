@@ -466,4 +466,11 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
 
     df.saveToPhoenix("TABLE2", zkUrl = Some(quorumAddress))
   }
+
+  // We can load the type, but it defaults to Spark's default (precision 38, scale 10)
+  ignore("Can load decimal types with accurate precision and scale (PHOENIX-2288)") {
+    val sqlContext = new SQLContext(sc)
+    val df = sqlContext.load("org.apache.phoenix.spark", Map("table" -> "TEST_DECIMAL", "zkUrl" -> quorumAddress))
+    assert(df.select("COL1").first().getDecimal(0) == BigDecimal("123.456789"))
+  }
 }
