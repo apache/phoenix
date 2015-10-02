@@ -160,6 +160,9 @@ import org.slf4j.LoggerFactory;
 import com.google.common.base.Throwables;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
+import com.google.common.math.IntMath;
+
+import sun.jvmstat.monitor.IntegerMonitor;
 /**
  * 
  * JDBC Statement implementation of Phoenix.
@@ -214,17 +217,20 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
     private boolean isClosed = false;
     private int maxRows;
     private int fetchSize = -1;
-    private int queryTimeout;
+    private int queryTimeoutMillis;
     
     public PhoenixStatement(PhoenixConnection connection) {
         this.connection = connection;
-        this.queryTimeout = getDefaultQueryTimeout();
+        this.queryTimeoutMillis = getDefaultQueryTimeoutMillis();
     }
-    
-    private int getDefaultQueryTimeout() {
-        // Convert milliseconds to seconds by taking the CEIL up to the next second
-        return (connection.getQueryServices().getProps().getInt(QueryServices.THREAD_TIMEOUT_MS_ATTRIB, 
-            QueryServicesOptions.DEFAULT_THREAD_TIMEOUT_MS) + 999) / 1000;
+
+    /**
+     * Internally to Phoenix we allow callers to set the query timeout in millis
+     * via the phoenix.query.timeoutMs. Therefore we store the time in millis.
+     */
+    private int getDefaultQueryTimeoutMillis() {
+        return connection.getQueryServices().getProps().getInt(QueryServices.THREAD_TIMEOUT_MS_ATTRIB, 
+            QueryServicesOptions.DEFAULT_THREAD_TIMEOUT_MS);
     }
 
     protected List<PhoenixResultSet> getResultSets() {
@@ -1608,21 +1614,45 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
     }
 
     @Override
+    /**
+     * When setting the query timeout via JDBC timeouts must be expressed in seconds. Therefore
+     * we need to convert the default timeout to milliseconds for internal use. 
+     */
     public void setQueryTimeout(int seconds) throws SQLException {
         if (seconds < 0) {
-            this.queryTimeout = getDefaultQueryTimeout();
+            this.queryTimeoutMillis = getDefaultQueryTimeoutMillis();
         } else if (seconds == 0) {
-            this.queryTimeout = Integer.MAX_VALUE;
+            this.queryTimeoutMillis = Integer.MAX_VALUE;
         } else {
-            this.queryTimeout = seconds;
+            this.queryTimeoutMillis = seconds * 1000;
         }
     }
 
     @Override
+    /**
+     * When getting the query timeout via JDBC timeouts must be expressed in seconds. Therefore
+     * we need to convert the default millisecond timeout to seconds. 
+     */
     public int getQueryTimeout() throws SQLException {
-        return queryTimeout;
+        // Convert milliseconds to seconds by taking the CEIL up to the next second
+        int scaledValue;
+        try {
+            scaledValue = IntMath.checkedAdd(queryTimeoutMillis, 999);
+        } catch (ArithmeticException e) {
+            scaledValue = Integer.MAX_VALUE;
+        }
+        return scaledValue / 1000;
     }
-
+    
+    /**
+     * Returns the configured timeout in milliseconds. This
+     * internally enables the of use millisecond timeout granularity
+     * and honors the exact value configured by phoenix.query.timeoutMs.
+     */
+    public int getQueryTimeoutInMillis() {
+        return queryTimeoutMillis;
+    }
+    
     @Override
     public boolean isWrapperFor(Class<?> iface) throws SQLException {
         return iface.isInstance(this);
