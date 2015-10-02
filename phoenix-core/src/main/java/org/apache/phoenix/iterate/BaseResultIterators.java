@@ -531,8 +531,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         final List<List<Pair<Scan,Future<PeekingResultIterator>>>> futures = Lists.newArrayListWithExpectedSize(numScans);
         allFutures.add(futures);
         SQLException toThrow = null;
-        // Get query time out from Statement and convert from seconds back to milliseconds
-        int queryTimeOut = context.getStatement().getQueryTimeout() * 1000;
+        int queryTimeOut = context.getStatement().getQueryTimeoutInMillis();
         final long startTime = System.currentTimeMillis();
         final long maxQueryEndTime = startTime + queryTimeOut;
         try {
