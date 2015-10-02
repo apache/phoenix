@@ -104,6 +104,25 @@ public class PMetaDataImplTest {
         assertEquals(2, metaData.size());
         assertNames(metaData, "d","e");
     }
+
+    @Test
+    public void shouldNotEvictMoreEntriesThanNecessary() throws Exception {
+        long maxSize = 5;
+        PMetaData metaData = new PMetaDataImpl(5, maxSize, new TestTimeKeeper());
+        metaData = addToTable(metaData, "a", 1);
+        assertEquals(1, metaData.size());
+        metaData = addToTable(metaData, "b", 1);
+        assertEquals(2, metaData.size());
+        assertNames(metaData, "a", "b");
+        metaData = addToTable(metaData, "c", 3);
+        assertEquals(3, metaData.size());
+        assertNames(metaData, "a", "b", "c");
+        getFromTable(metaData, "a");
+        getFromTable(metaData, "b");
+        metaData = addToTable(metaData, "d", 3);
+        assertEquals(3, metaData.size());
+        assertNames(metaData, "a", "b", "d");
+    }
     
     private static class PSizedTable extends PTableImpl {
         private final int size;
