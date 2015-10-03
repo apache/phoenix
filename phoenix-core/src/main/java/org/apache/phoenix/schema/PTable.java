@@ -332,4 +332,10 @@ public interface PTable extends PMetaDataEntity {
      * @return true if optimizations row key order optimizations are possible
      */
     boolean rowKeyOrderOptimizable();
+    
+    /**
+     * @return Position of the column with {@link PColumn#isRowTimestamp()} as true. 
+     * -1 if there is no such column.
+     */
+    int getRowTimestampColPos();
 }

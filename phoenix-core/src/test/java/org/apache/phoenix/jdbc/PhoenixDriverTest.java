@@ -24,11 +24,15 @@ import java.sql.Connection;
 import java.sql.Driver;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
+import java.sql.SQLException;
 import java.util.Properties;
 
+import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
 public class PhoenixDriverTest extends BaseConnectionlessQueryTest {
@@ -70,5 +74,17 @@ public class PhoenixDriverTest extends BaseConnectionlessQueryTest {
             }
             fail("Upsert should have failed since the number of upserts (200) is greater than the MAX_MUTATION_SIZE_ATTRIB (100)");
         } catch (IllegalArgumentException expected) {}
+    }
+    
+    @Test
+    public void testDisallowNegativeScn() {
+        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, String.valueOf(-100));
+        try {
+            DriverManager.getConnection(getUrl(), props);
+            fail("Creating a phoenix connection with negative scn is not allowed");
+        } catch(SQLException e) {
+            assertEquals(SQLExceptionCode.INVALID_SCN.getErrorCode(), e.getErrorCode());
+        }
     }
 }

@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.execute;
 
+import static com.google.common.base.Preconditions.checkNotNull;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_BATCH_SIZE;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_BYTES;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_COMMIT_TIME;
@@ -28,6 +29,9 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+
+import javax.annotation.Nonnull;
+import javax.annotation.concurrent.Immutable;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.HTableInterface;
@@ -49,15 +53,30 @@ import org.apache.phoenix.monitoring.MutationMetricQueue.MutationMetric;
 import org.apache.phoenix.monitoring.MutationMetricQueue.NoOpMutationMetricsQueue;
 import org.apache.phoenix.monitoring.ReadMetricQueue;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.*;
+import org.apache.phoenix.schema.IllegalDataException;
+import org.apache.phoenix.schema.MetaDataClient;
+import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PName;
+import org.apache.phoenix.schema.PRow;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.RowKeySchema;
+import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.ValueSchema.Field;
+import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.trace.util.Tracing;
-import org.apache.phoenix.util.*;
+import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.LogUtil;
+import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.SQLCloseable;
+import org.apache.phoenix.util.ScanUtil;
+import org.apache.phoenix.util.ServerUtil;
 import org.cloudera.htrace.Span;
 import org.cloudera.htrace.TraceScope;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -184,18 +203,54 @@ public class MutationState implements SQLCloseable {
         throwIfTooBig();
     }
     
+    private static ImmutableBytesPtr getNewRowKeyWithRowTimestamp(ImmutableBytesPtr ptr, long rowTimestamp, PTable table) {
+        RowKeySchema schema = table.getRowKeySchema();
+        int rowTimestampColPos = table.getRowTimestampColPos();
+        Field rowTimestampField = schema.getField(rowTimestampColPos); 
+        byte[] rowTimestampBytes = PLong.INSTANCE.toBytes(rowTimestamp, rowTimestampField.getSortOrder());
+        int oldOffset = ptr.getOffset();
+        int oldLength = ptr.getLength();
+        // Move the pointer to the start byte of the row timestamp pk
+        schema.position(ptr, 0, rowTimestampColPos);
+        byte[] b  = ptr.get();
+        int newOffset = ptr.getOffset();
+        int length = ptr.getLength();
+        for (int i = newOffset; i < newOffset + length; i++) {
+            // modify the underlying bytes array with the bytes of the row timestamp
+            b[i] = rowTimestampBytes[i - newOffset];
+        }
+        // move the pointer back to where it was before.
+        ptr.set(ptr.get(), oldOffset, oldLength);
+        return ptr;
+    }
+    
     private Iterator<Pair<byte[],List<Mutation>>> addRowMutations(final TableRef tableRef, final Map<ImmutableBytesPtr, RowMutationState> values, long timestamp, boolean includeMutableIndexes) {
+        final PTable table = tableRef.getTable();
+        boolean tableWithRowTimestampCol = table.getRowTimestampColPos() != -1;
         final Iterator<PTable> indexes = // Only maintain tables with immutable rows through this client-side mechanism
-                (tableRef.getTable().isImmutableRows() || includeMutableIndexes) ? 
-                        IndexMaintainer.nonDisabledIndexIterator(tableRef.getTable().getIndexes().iterator()) : 
+                (table.isImmutableRows() || includeMutableIndexes) ? 
+                        IndexMaintainer.nonDisabledIndexIterator(table.getIndexes().iterator()) : 
                         Iterators.<PTable>emptyIterator();
         final List<Mutation> mutations = Lists.newArrayListWithExpectedSize(values.size());
         final List<Mutation> mutationsPertainingToIndex = indexes.hasNext() ? Lists.<Mutation>newArrayListWithExpectedSize(values.size()) : null;
         Iterator<Map.Entry<ImmutableBytesPtr,RowMutationState>> iterator = values.entrySet().iterator();
+        long timestampToUse = timestamp;
         while (iterator.hasNext()) {
             Map.Entry<ImmutableBytesPtr,RowMutationState> rowEntry = iterator.next();
             ImmutableBytesPtr key = rowEntry.getKey();
-            PRow row = tableRef.getTable().newRow(connection.getKeyValueBuilder(), timestamp, key);
+            RowMutationState state = rowEntry.getValue();
+            if (tableWithRowTimestampCol) {
+                RowTimestampColInfo rowTsColInfo = state.getRowTimestampColInfo();
+                if (rowTsColInfo.useServerTimestamp()) {
+                    // regenerate the key with this timestamp.
+                    key = getNewRowKeyWithRowTimestamp(key, timestampToUse, table);
+                } else {
+                    if (rowTsColInfo.getTimestamp() != null) {
+                        timestampToUse = rowTsColInfo.getTimestamp();
+                    }
+                }
+            }
+            PRow row = table.newRow(connection.getKeyValueBuilder(), timestampToUse, key);
             List<Mutation> rowMutations, rowMutationsPertainingToIndex;
             if (rowEntry.getValue().getColumnValues() == PRow.DELETE_MARKER) { // means delete
                 row.delete();
@@ -226,13 +281,13 @@ public class MutationState implements SQLCloseable {
             public Pair<byte[], List<Mutation>> next() {
                 if (isFirst) {
                     isFirst = false;
-                    return new Pair<byte[],List<Mutation>>(tableRef.getTable().getPhysicalName().getBytes(),mutations);
+                    return new Pair<byte[],List<Mutation>>(table.getPhysicalName().getBytes(),mutations);
                 }
                 PTable index = indexes.next();
                 List<Mutation> indexMutations;
                 try {
                     indexMutations =
-                            IndexUtil.generateIndexData(tableRef.getTable(), index, mutationsPertainingToIndex,
+                            IndexUtil.generateIndexData(table, index, mutationsPertainingToIndex,
                                 tempPtr, connection.getKeyValueBuilder(), connection);
                 } catch (SQLException e) {
                     throw new IllegalDataException(e);
@@ -538,15 +593,38 @@ public class MutationState implements SQLCloseable {
         return Arrays.copyOf(result, k);
     }
     
+    @Immutable
+    public static class RowTimestampColInfo {
+        private final boolean useServerTimestamp;
+        private final Long rowTimestamp; 
+        
+        public static final RowTimestampColInfo NULL_ROWTIMESTAMP_INFO = new RowTimestampColInfo(false, null);
+
+        public RowTimestampColInfo(boolean autoGenerate, Long value) {
+            this.useServerTimestamp = autoGenerate;
+            this.rowTimestamp = value;
+        }
+        
+        public boolean useServerTimestamp() {
+            return useServerTimestamp;
+        }
+        
+        public Long getTimestamp() {
+            return rowTimestamp;
+        }
+    }
+    
     public static class RowMutationState {
-        private Map<PColumn,byte[]> columnValues;
+        @Nonnull private Map<PColumn,byte[]> columnValues;
         private int[] statementIndexes;
-
-        public RowMutationState(@NotNull Map<PColumn,byte[]> columnValues, int statementIndex) {
-            Preconditions.checkNotNull(columnValues);
-
+        @Nonnull private final RowTimestampColInfo rowTsColInfo;
+        
+        public RowMutationState(@NotNull Map<PColumn,byte[]> columnValues, int statementIndex, RowTimestampColInfo rowTsColInfo) {
+            checkNotNull(columnValues);
+            checkNotNull(rowTsColInfo);
             this.columnValues = columnValues;
             this.statementIndexes = new int[] {statementIndex};
+            this.rowTsColInfo = rowTsColInfo;
         }
 
         Map<PColumn, byte[]> getColumnValues() {
@@ -561,6 +639,12 @@ public class MutationState implements SQLCloseable {
             getColumnValues().putAll(newRow.getColumnValues());
             statementIndexes = joinSortedIntArrays(statementIndexes, newRow.getStatementIndexes());
         }
+        
+        @Nonnull
+        RowTimestampColInfo getRowTimestampColInfo() {
+            return rowTsColInfo;
+        }
+       
     }
     
     public ReadMetricQueue getReadMetricQueue() {

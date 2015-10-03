@@ -408,7 +408,7 @@ public class QueryParserTest {
     		List<Pair<ColumnName,SortOrder>> columns = pkConstraint.getColumnNames();
     		assertEquals(2, columns.size());
     		for (Pair<ColumnName,SortOrder> pair : columns) {
-    			assertEquals(SortOrder.fromDDLValue(order), pkConstraint.getColumn(pair.getFirst()).getSecond());
+    			assertEquals(SortOrder.fromDDLValue(order), pkConstraint.getColumnWithSortOrder(pair.getFirst()).getSecond());
     		}    		
     	}
     }

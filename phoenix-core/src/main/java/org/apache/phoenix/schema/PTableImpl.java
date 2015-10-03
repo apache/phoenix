@@ -131,6 +131,7 @@ public class PTableImpl implements PTable {
     private int baseColumnCount;
     private boolean rowKeyOrderOptimizable; // TODO: remove when required that tables have been upgrade for PHOENIX-2067
     private boolean hasColumnsRequiringUpgrade; // TODO: remove when required that tables have been upgrade for PHOENIX-2067
+    private int rowTimestampColPos;
 
     public PTableImpl() {
         this.indexes = Collections.emptyList();
@@ -406,6 +407,7 @@ public class PTableImpl implements PTable {
         int maxExpectedSize = allColumns.length - numPKColumns;
         // Maintain iteration order so that column families are ordered as they are listed
         Map<PName, List<PColumn>> familyMap = Maps.newLinkedHashMap();
+        PColumn rowTimestampCol = null;
         for (PColumn column : allColumns) {
             PName familyName = column.getFamilyName();
             if (familyName == null) {
@@ -418,6 +420,9 @@ public class PTableImpl implements PTable {
                                 || column.getDataType() == PBinary.INSTANCE) )
                         || (column.getSortOrder() == SortOrder.ASC && column.getDataType() == PBinary.INSTANCE && column.getMaxLength() != null && column.getMaxLength() > 1);
             	pkColumns.add(column);
+            	if (column.isRowTimestamp()) {
+            	    rowTimestampCol = column;
+            	}
             }
             if (familyName == null) {
                 estimatedSize += column.getEstimatedSize(); // PK columns
@@ -432,6 +437,12 @@ public class PTableImpl implements PTable {
             }
         }
         this.pkColumns = ImmutableList.copyOf(pkColumns);
+        if (rowTimestampCol != null) {
+            this.rowTimestampColPos = this.pkColumns.indexOf(rowTimestampCol);
+        } else {
+            this.rowTimestampColPos = -1;
+        }
+        
         builder.rowKeyOrderOptimizable(this.rowKeyOrderOptimizable()); // after hasDescVarLengthColumns is calculated
         this.rowKeySchema = builder.build();
         estimatedSize += rowKeySchema.getEstimatedSize();
@@ -1151,5 +1162,10 @@ public class PTableImpl implements PTable {
     @Override
     public boolean rowKeyOrderOptimizable() {
         return rowKeyOrderOptimizable || !hasColumnsRequiringUpgrade;
+    }
+
+    @Override
+    public int getRowTimestampColPos() {
+        return rowTimestampColPos;
     }
 }

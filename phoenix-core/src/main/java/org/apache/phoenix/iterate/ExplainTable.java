@@ -28,6 +28,7 @@ import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
 import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
@@ -120,6 +121,12 @@ public abstract class ExplainTable {
             appendKeyRanges(buf);
         }
         planSteps.add(buf.toString());
+        System.out.println("Table row timestamp column position: " + tableRef.getTable().getRowTimestampColPos());
+        System.out.println("Table name:  " + tableRef.getTable().getName().getString());
+        if (context.getScan() != null && tableRef.getTable().getRowTimestampColPos() != -1) {
+            TimeRange range = context.getScan().getTimeRange();
+            planSteps.add("    ROW TIMESTAMP FILTER [" + range.getMin() + ", " + range.getMax() + ")");
+        }
         
         Iterator<Filter> filterIterator = ScanUtil.getFilterIterator(scan);
         if (filterIterator.hasNext()) {

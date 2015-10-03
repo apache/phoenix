@@ -47,6 +47,7 @@ message PColumn {
   optional bytes viewConstant = 10;
   optional bool viewReferenced = 11;
   optional string expression = 12;
+  optional bool isRowTimestamp = 13;
 }
 
 message PTableStats {
