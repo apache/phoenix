@@ -15,35 +15,30 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.schema;
+package org.apache.phoenix.parse;
 
-import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.SortOrder;
 
-public interface PDatum {
-    /**
-     * @return is this column nullable?
-     */
-    boolean isNullable();
-
-    /**
-     * @return data type of the column
-     */
-    PDataType getDataType();
-
-    /**
-     * @return the actual length of the column. For decimal, it would be its precision. For char or
-     * varchar, it would be the maximum length as specified during schema definition.
-     */
-    Integer getMaxLength();
-
-    /**
-     * @return scale of a decimal number.
-     */
-    Integer getScale();
+public class ColumnDefInPkConstraint {
+    private final ColumnName columnDefName;
+    private final SortOrder sortOrder;
+    private final boolean isRowTimestamp;
     
-    /**
-     * @return The SortOrder for this column, never null
-     */
-    SortOrder getSortOrder();
-    
+    public ColumnDefInPkConstraint(ColumnName columnDefName, SortOrder sortOrder, boolean isRowTimestamp) {
+        this.columnDefName = columnDefName;
+        this.sortOrder = sortOrder;
+        this.isRowTimestamp = isRowTimestamp;
+    }
+
+    public ColumnName getColumnName() {
+        return columnDefName;
+    }
+
+    public SortOrder getSortOrder() {
+        return sortOrder;
+    }
+
+    public boolean isRowTimestamp() {
+        return isRowTimestamp;
+    }
 }

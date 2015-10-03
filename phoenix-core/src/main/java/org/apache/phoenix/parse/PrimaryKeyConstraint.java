@@ -17,28 +17,48 @@
  */
 package org.apache.phoenix.parse;
 
+import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.schema.SortOrder;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
-import org.apache.phoenix.schema.SortOrder;
 
 public class PrimaryKeyConstraint extends NamedNode {
-    public static final PrimaryKeyConstraint EMPTY = new PrimaryKeyConstraint(null, Collections.<Pair<ColumnName, SortOrder>>emptyList());
+    public static final PrimaryKeyConstraint EMPTY = new PrimaryKeyConstraint(null, Collections.<ColumnDefInPkConstraint>emptyList());
 
     private final List<Pair<ColumnName, SortOrder>> columns;
-    private final HashMap<ColumnName, Pair<ColumnName, SortOrder>> columnNameToSortOrder;
+    private final Map<ColumnName, Pair<ColumnName, SortOrder>> columnNameToSortOrder;
+    private final Map<ColumnName, Pair<ColumnName, Boolean>> columnNameToRowTimestamp;
+    private final int numColumnsWithRowTimestamp;
     
-    PrimaryKeyConstraint(String name, List<Pair<ColumnName, SortOrder>> columns) {
+    PrimaryKeyConstraint(String name, List<ColumnDefInPkConstraint> columnDefs) {
         super(name);
-        this.columns = columns == null ? Collections.<Pair<ColumnName, SortOrder>>emptyList() : ImmutableList.copyOf(columns);
-        this.columnNameToSortOrder = Maps.newHashMapWithExpectedSize(this.columns.size());
-        for (Pair<ColumnName, SortOrder> p : this.columns) {
-            this.columnNameToSortOrder.put(p.getFirst(), p);
+        if (columnDefs == null) {
+            this.columns = Collections.<Pair<ColumnName, SortOrder>>emptyList();
+            this.columnNameToSortOrder = Collections.<ColumnName, Pair<ColumnName, SortOrder>>emptyMap();
+            this.columnNameToRowTimestamp = Collections.<ColumnName, Pair<ColumnName, Boolean>>emptyMap();
+            numColumnsWithRowTimestamp = 0;
+        } else {
+            int numRowTimestampCols = 0;
+            List<Pair<ColumnName, SortOrder>> l = new ArrayList<>(columnDefs.size());
+            this.columnNameToSortOrder = Maps.newHashMapWithExpectedSize(columnDefs.size());
+            this.columnNameToRowTimestamp = Maps.newHashMapWithExpectedSize(columnDefs.size());
+            for (ColumnDefInPkConstraint colDef : columnDefs) {
+                Pair<ColumnName, SortOrder> p = Pair.newPair(colDef.getColumnName(), colDef.getSortOrder());
+                l.add(p);
+                this.columnNameToSortOrder.put(colDef.getColumnName(), p);
+                this.columnNameToRowTimestamp.put(colDef.getColumnName(), Pair.newPair(colDef.getColumnName(), colDef.isRowTimestamp()));
+                if (colDef.isRowTimestamp()) {
+                    numRowTimestampCols++;
+                }
+            }
+            this.numColumnsWithRowTimestamp = numRowTimestampCols;
+            this.columns = ImmutableList.copyOf(l); 
         }
     }
 
@@ -46,12 +66,20 @@ public class PrimaryKeyConstraint extends NamedNode {
         return columns;
     }
     
-    public Pair<ColumnName, SortOrder> getColumn(ColumnName columnName) {
+    public Pair<ColumnName, SortOrder> getColumnWithSortOrder(ColumnName columnName) {
     	return columnNameToSortOrder.get(columnName);
+    }
+    
+    public boolean isColumnRowTimestamp(ColumnName columnName) {
+        return columnNameToRowTimestamp.get(columnName) != null && columnNameToRowTimestamp.get(columnName).getSecond() == Boolean.TRUE;
     }
     
     public boolean contains(ColumnName columnName) {
         return columnNameToSortOrder.containsKey(columnName);
+    }
+    
+    public int getNumColumnsWithRowTimestamp() {
+        return numColumnsWithRowTimestamp;
     }
     
     @Override

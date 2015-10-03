@@ -2068,4 +2068,47 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             conn.close();
         }
     }
+    
+    @Test
+    public void testAddingRowTimestampColumn() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        // Column of type VARCHAR cannot be declared as ROW_TIMESTAMP
+        try {
+            conn.createStatement().execute("CREATE TABLE T1 (PK1 VARCHAR NOT NULL, PK2 VARCHAR NOT NULL, KV1 VARCHAR CONSTRAINT PK PRIMARY KEY(PK1, PK2 ROW_TIMESTAMP)) ");
+            fail("Varchar column cannot be added as row_timestamp");
+        } catch(SQLException e) {
+            assertEquals(SQLExceptionCode.ROWTIMESTAMP_COL_INVALID_TYPE.getErrorCode(), e.getErrorCode());
+        }
+        // Column of type INTEGER cannot be declared as ROW_TIMESTAMP
+        try {
+            conn.createStatement().execute("CREATE TABLE T1 (PK1 VARCHAR NOT NULL, PK2 INTEGER NOT NULL, KV1 VARCHAR CONSTRAINT PK PRIMARY KEY(PK1, PK2 ROW_TIMESTAMP)) ");
+            fail("Integer column cannot be added as row_timestamp");
+        } catch(SQLException e) {
+            assertEquals(SQLExceptionCode.ROWTIMESTAMP_COL_INVALID_TYPE.getErrorCode(), e.getErrorCode());
+        }
+        // Column of type DOUBLE cannot be declared as ROW_TIMESTAMP
+        try {
+            conn.createStatement().execute("CREATE TABLE T1 (PK1 VARCHAR NOT NULL, PK2 DOUBLE NOT NULL, KV1 VARCHAR CONSTRAINT PK PRIMARY KEY(PK1, PK2 ROW_TIMESTAMP)) ");
+            fail("Double column cannot be added as row_timestamp");
+        } catch(SQLException e) {
+            assertEquals(SQLExceptionCode.ROWTIMESTAMP_COL_INVALID_TYPE.getErrorCode(), e.getErrorCode());
+        }
+        // Invalid - two columns declared as row_timestamp in pk constraint
+        try {
+            conn.createStatement().execute("CREATE TABLE T2 (PK1 DATE NOT NULL, PK2 DATE NOT NULL, KV1 VARCHAR CONSTRAINT PK PRIMARY KEY(PK1 ROW_TIMESTAMP , PK2 ROW_TIMESTAMP)) ");
+            fail("Creating table with two row_timestamp columns should fail");
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.ROWTIMESTAMP_ONE_PK_COL_ONLY.getErrorCode(), e.getErrorCode());
+        }
+        
+        // Invalid because only (unsigned)date, time, long, (unsigned)timestamp are valid data types for column to be declared as row_timestamp
+        try {
+            conn.createStatement().execute("CREATE TABLE T5 (PK1 VARCHAR PRIMARY KEY ROW_TIMESTAMP, PK2 VARCHAR, KV1 VARCHAR)");
+            fail("Creating table with a key value column as row_timestamp should fail");
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.ROWTIMESTAMP_COL_INVALID_TYPE.getErrorCode(), e.getErrorCode());
+        }
+        
+        
+    }
 }

@@ -1934,9 +1934,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 long currentServerSideTableTimeStamp = e.getTable().getTimeStamp();
 
                                 String columnsToAdd = "";
+                                if (currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_6_0) {
+                                    columnsToAdd += PhoenixDatabaseMetaData.IS_ROW_TIMESTAMP + " " + PBoolean.INSTANCE.getSqlTypeName();
+                                }
                                 if(currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_3_0) {
                                     // We know that we always need to add the STORE_NULLS column for 4.3 release
-                                    columnsToAdd = PhoenixDatabaseMetaData.STORE_NULLS + " " + PBoolean.INSTANCE.getSqlTypeName();
+                                    columnsToAdd = ", " + PhoenixDatabaseMetaData.STORE_NULLS + " " + PBoolean.INSTANCE.getSqlTypeName();
                                     HBaseAdmin admin = null;
                                     try {
                                         admin = getAdmin();
@@ -1969,7 +1972,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                     columnsToAdd += ", " + PhoenixDatabaseMetaData.INDEX_TYPE + " " + PUnsignedTinyint.INSTANCE.getSqlTypeName()
                                             + ", " + PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP + " " + PLong.INSTANCE.getSqlTypeName();
                                 }
-
+                                
                                 // If we have some new columns from 4.1-4.3 to add, add them now.
                                 if (!columnsToAdd.isEmpty()) {
                                     // Ugh..need to assign to another local variable to keep eclipse happy.

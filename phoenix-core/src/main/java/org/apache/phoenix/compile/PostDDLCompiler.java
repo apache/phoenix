@@ -125,6 +125,7 @@ public class PostDDLCompiler {
                                 return Collections.singletonList(tableRef);
                             }
                             
+                            @Override
                             public java.util.List<PFunction> getFunctions() {
                                 return Collections.emptyList();
                             };
@@ -142,10 +143,12 @@ public class PostDDLCompiler {
                                 return new ColumnRef(tableRef, column.getPosition());
                             }
                             
+                            @Override
                             public PFunction resolveFunction(String functionName) throws SQLException {
                                 throw new UnsupportedOperationException();
                             };
 
+                            @Override
                             public boolean hasUDFs() {
                                 return false;
                             };

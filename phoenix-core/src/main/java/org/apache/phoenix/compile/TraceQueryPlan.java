@@ -76,7 +76,7 @@ public class TraceQueryPlan implements QueryPlan {
         PColumn column =
                 new PColumnImpl(PNameFactory.newName(MetricInfo.TRACE.columnName), null,
                         PLong.INSTANCE, null, null, false, 0, SortOrder.getDefault(), 0, null,
-                        false, null);
+                        false, null, false);
         List<PColumn> columns = new ArrayList<PColumn>();
         columns.add(column);
         Expression expression =

@@ -37,9 +37,12 @@ import java.sql.Time;
 import java.sql.Timestamp;
 import java.util.Properties;
 
+import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
@@ -642,6 +645,287 @@ public class UpsertValuesIT extends BaseClientManagedTimeIT {
         } finally {
             closeStmtAndConn(stmt, conn);
         }
+    }
+    
+    @Test
+    public void testWithUpsertingRowTimestampColSpecified_desc() throws Exception {
+        testWithUpsertingRowTimestampColSpecified(true);
+    }
+    
+    @Test
+    public void testWithUpsertingRowTimestampColSpecified_asc() throws Exception {
+        testWithUpsertingRowTimestampColSpecified(false);
+    }
+    
+    private void testWithUpsertingRowTimestampColSpecified(boolean desc) throws Exception {
+        String tableName = "testUpsertingRowTimestampCol".toUpperCase();
+        String indexName = "testUpsertingRowTimestampCol_idx".toUpperCase();
+        long ts = nextTimestamp();
+        String sortOrder = desc ? "DESC" : "";
+        try (Connection conn = getConnection(ts)) {
+            conn.createStatement().execute("CREATE TABLE IF NOT EXISTS " + tableName + " (PK1 VARCHAR NOT NULL, PK2 DATE NOT NULL, KV1 VARCHAR, KV2 VARCHAR CONSTRAINT PK PRIMARY KEY(PK1, PK2 "+ sortOrder + " ROW_TIMESTAMP " + ")) ");
+        }
+        ts = nextTimestamp();
+        try (Connection conn = getConnection(ts)) {
+            conn.createStatement().execute("CREATE INDEX IF NOT EXISTS " + indexName + " ON  " + tableName + "  (PK2, KV1) INCLUDE (KV2)");
+        }
+        ts = nextTimestamp();
+        long rowTimestamp = ts + 10000;
+        Date rowTimestampDate = new Date(rowTimestamp);
+        try (Connection conn = getConnection(ts)) {
+            // Upsert data with scn set on the connection. However, the timestamp of the put will be the value of the row_timestamp column.
+            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO  " + tableName + "  (PK1, PK2, KV1, KV2) VALUES (?, ?, ?, ?)");
+            stmt.setString(1, "PK1");
+            stmt.setDate(2, rowTimestampDate);
+            stmt.setString(3, "KV1");
+            stmt.setString(4, "KV2");
+            stmt.executeUpdate();
+            conn.commit();
+        }
+        ts = nextTimestamp();
+        try (Connection conn = getConnection(ts)) {
+            // Verify that the connection with the next time stamp isn't able to see the data inserted above. This 
+            // is because the timestamp of the put was rowTimestamp and not connection scn.
+            PreparedStatement stmt = conn.prepareStatement("SELECT * FROM  " + tableName + "  WHERE PK1 = ? AND PK2 = ?");
+            stmt.setString(1, "PK1");
+            stmt.setDate(2, rowTimestampDate);
+            ResultSet rs = stmt.executeQuery();
+            assertFalse(rs.next());
+            
+            // Same holds when querying the index table too
+            stmt = conn.prepareStatement("SELECT KV1 FROM  " + tableName + "  WHERE PK2 = ?");
+            stmt.setDate(1, rowTimestampDate);
+            rs = stmt.executeQuery();
+            assertFalse(rs.next());
+        }
+
+        // Verify now that if the connection is at an SCN beyond the rowtimestamp then we can indeed see the
+        // data that we upserted above.
+        try (Connection conn = getConnection(rowTimestamp + 5)) {
+            PreparedStatement stmt = conn.prepareStatement("SELECT * FROM  " + tableName + "  WHERE PK1 = ? AND PK2 = ?");
+            stmt.setString(1, "PK1");
+            stmt.setDate(2, rowTimestampDate);
+            ResultSet rs = stmt.executeQuery();
+            assertTrue(rs.next());
+            assertEquals("PK1", rs.getString("PK1"));
+            assertEquals(rowTimestampDate, rs.getDate("PK2"));
+            assertEquals("KV1", rs.getString("KV1"));
+            
+            // Data visible when querying the index table too.
+            stmt = conn.prepareStatement("SELECT KV2 FROM  " + tableName + "  WHERE PK2 = ? AND KV1 = ?");
+            stmt.setDate(1, rowTimestampDate);
+            stmt.setString(2, "KV1");
+            rs = stmt.executeQuery();
+            QueryPlan plan = stmt.unwrap(PhoenixStatement.class).getQueryPlan();
+            assertTrue(plan.getTableRef().getTable().getName().getString().equals(indexName));
+            assertTrue(rs.next());
+            assertEquals("KV2", rs.getString("KV2"));
+        }
+    }
+    
+    @Test
+    public void testAutomaticallySettingRowtimestamp_desc() throws Exception {
+        testAutomaticallySettingRowtimestamp("DESC");
+    }
+    
+    @Test
+    public void testAutomaticallySettingRowtimestamp_asc() throws Exception {
+        testAutomaticallySettingRowtimestamp("ASC");
+    }
+    
+    private void testAutomaticallySettingRowtimestamp(String sortOrder) throws Exception {
+        String tableName = "testAutomaticallySettingRowtimestamp".toUpperCase();
+        String indexName = "testAutomaticallySettingRowtimestamp_index".toUpperCase();
+        long ts = nextTimestamp();
+        try (Connection conn = getConnection(ts)) {
+            conn.createStatement().execute("CREATE TABLE IF NOT EXISTS " + tableName + " (PK1 VARCHAR NOT NULL, PK2 DATE NOT NULL, KV1 VARCHAR, KV2 VARCHAR CONSTRAINT PK PRIMARY KEY(PK1, PK2 "+ sortOrder + " ROW_TIMESTAMP " + ")) ");
+        }
+        ts = nextTimestamp();
+        try (Connection conn = getConnection(ts)) {
+            conn.createStatement().execute("CREATE INDEX IF NOT EXISTS " + indexName + " ON  " + tableName + "  (PK2, KV1) INCLUDE (KV2)");
+        }
+        ts = nextTimestamp();
+        try (Connection conn = getConnection(ts)) {
+            // Upsert values where row_timestamp column PK2 is not set and the column names are specified
+            // This should upsert data with the value for PK2 as new Date(ts);
+            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " (PK1, KV1, KV2) VALUES (?, ?, ?)");
+            stmt.setString(1, "PK1");
+            stmt.setString(2, "KV1");
+            stmt.setString(3, "KV2");
+            stmt.executeUpdate();
+            conn.commit();
+        }
+        Date upsertedDate = new Date(ts);
+        ts = nextTimestamp();
+        try (Connection conn = getConnection(ts)) {
+            // Now query for data that was upserted above. If the row key was generated correctly then we should be able to see
+            // the data in this query.
+            PreparedStatement stmt = conn.prepareStatement("SELECT KV1, KV2 FROM " + tableName + " WHERE PK1 = ? AND PK2 = ?");
+            stmt.setString(1, "PK1");
+            stmt.setDate(2, upsertedDate);
+            ResultSet rs = stmt.executeQuery();
+            assertTrue(rs.next());
+            assertEquals("KV1", rs.getString(1));
+            assertEquals("KV2", rs.getString(2));
+            assertFalse(rs.next());
+            
+            // Verify now that the data was correctly added to the mutable index too.
+            stmt = conn.prepareStatement("SELECT KV2 FROM " + tableName + " WHERE PK2 = ? AND KV1 = ?");
+            stmt.setDate(1, upsertedDate);
+            stmt.setString(2, "KV1");
+            rs = stmt.executeQuery();
+            QueryPlan plan = stmt.unwrap(PhoenixStatement.class).getQueryPlan();
+            assertTrue(plan.getTableRef().getTable().getName().getString().equals(indexName));
+            assertTrue(rs.next());
+            assertEquals("KV2", rs.getString(1));
+            assertFalse(rs.next());
+        }
+    }
+    
+    @Test
+    public void testAutomaticallySettingRowTimestampForImmutableTableAndIndexes_desc() throws Exception {
+        testAutomaticallySettingRowTimestampForImmutableTableAndIndexes("DESC");
+    }
+    
+    @Test
+    public void testAutomaticallySettingRowTimestampForImmutableTableAndIndexes_asc() throws Exception {
+        testAutomaticallySettingRowTimestampForImmutableTableAndIndexes("ASC");
+    }
+    
+    private void testAutomaticallySettingRowTimestampForImmutableTableAndIndexes(String sortOrder) throws Exception {
+        String tableName = "testSettingRowTimestampForImmutableTableAndIndexes".toUpperCase();
+        String indexName = "testSettingRowTimestampForImmutableTableAndIndexes_index".toUpperCase();
+        long ts = nextTimestamp();
+        try (Connection conn = getConnection(ts)) {
+            conn.createStatement().execute("CREATE TABLE IF NOT EXISTS " + tableName + " (PK1 VARCHAR NOT NULL, PK2 DATE NOT NULL, KV1 VARCHAR, KV2 VARCHAR CONSTRAINT PK PRIMARY KEY(PK1, PK2 "+ sortOrder + " ROW_TIMESTAMP)) " + "  IMMUTABLE_ROWS=true");
+        }
+        ts = nextTimestamp();
+        try (Connection conn = getConnection(ts)) {
+            conn.createStatement().execute("CREATE INDEX IF NOT EXISTS " + indexName + " ON  " + tableName + "  (PK2, KV1) INCLUDE (KV2)");
+        }
+        ts = nextTimestamp();
+        try (Connection conn = getConnection(ts)) {
+            // Upsert values where row_timestamp column PK2 is not set and the column names are specified
+            // This should upsert data with the value for PK2 as new Date(ts);
+            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " (PK1, KV1, KV2) VALUES (?, ?, ?)");
+            stmt.setString(1, "PK1");
+            stmt.setString(2, "KV1");
+            stmt.setString(3, "KV2");
+            stmt.executeUpdate();
+            conn.commit();
+        }
+        Date upsertedDate = new Date(ts);
+        ts = nextTimestamp();
+        try (Connection conn = getConnection(ts)) {
+            // Now query for data that was upserted above. If the row key was generated correctly then we should be able to see
+            // the data in this query.
+            PreparedStatement stmt = conn.prepareStatement("SELECT KV1, KV2 FROM " + tableName + " WHERE PK1 = ? AND PK2 = ?");
+            stmt.setString(1, "PK1");
+            stmt.setDate(2, upsertedDate);
+            ResultSet rs = stmt.executeQuery();
+            assertTrue(rs.next());
+            assertEquals("KV1", rs.getString(1));
+            assertEquals("KV2", rs.getString(2));
+            assertFalse(rs.next());
+            
+            // Verify now that the data was correctly added to the mutable index too.
+            stmt = conn.prepareStatement("SELECT KV2 FROM " + tableName + " WHERE PK2 = ? AND KV1 = ?");
+            stmt.setDate(1, upsertedDate);
+            stmt.setString(2, "KV1");
+            rs = stmt.executeQuery();
+            QueryPlan plan = stmt.unwrap(PhoenixStatement.class).getQueryPlan();
+            assertTrue(plan.getTableRef().getTable().getName().getString().equals(indexName));
+            assertTrue(rs.next());
+            assertEquals("KV2", rs.getString(1));
+            assertFalse(rs.next());
+        }
+    }
+    
+    @Test
+    public void testComparisonOperatorsOnAscRowTimestampCol() throws Exception {
+        testComparisonOperatorsOnRowTimestampCol("ASC");
+    }
+    
+    @Test
+    public void testComparisonOperatorsOnDescRowTimestampCol() throws Exception {
+        testComparisonOperatorsOnRowTimestampCol("DESC");
+    }
+    
+    private void testComparisonOperatorsOnRowTimestampCol(String sortOrder) throws Exception {
+        String tableName = ("testComparisonOperatorsOnRowTimestampCol_" + sortOrder).toUpperCase();
+        long ts = nextTimestamp();
+        try (Connection conn = getConnection(ts)) {
+            conn.createStatement().execute("CREATE TABLE IF NOT EXISTS " + tableName + " (PK1 VARCHAR NOT NULL, PK2 DATE NOT NULL, KV1 VARCHAR CONSTRAINT PK PRIMARY KEY(PK1, PK2 "+ sortOrder + " ROW_TIMESTAMP)) " + "  IMMUTABLE_ROWS=true");
+        }
+        ts = nextTimestamp();
+        try (Connection conn = getConnection(ts)) {
+            String upsert = "UPSERT INTO " + tableName + " VALUES (?, ?, ?)";
+            PreparedStatement stmt = conn.prepareStatement(upsert);
+            stmt.setString(1, "a");
+            stmt.setDate(2, new Date(10));
+            stmt.setString(3, "KV");
+            stmt.executeUpdate();
+            stmt.setString(1, "b");
+            stmt.setDate(2, new Date(20));
+            stmt.setString(3, "KV");
+            stmt.executeUpdate();
+            stmt.setString(1, "c");
+            stmt.setDate(2, new Date(30));
+            stmt.setString(3, "KV");
+            stmt.executeUpdate();
+            stmt.setString(1, "d");
+            stmt.setDate(2, new Date(40));
+            stmt.setString(3, "KV");
+            stmt.executeUpdate();
+            conn.commit();
+        }
+        ts = nextTimestamp();
+        try (Connection conn = getConnection(ts)) {
+            assertNumRecords(3, "SELECT count(*) from " + tableName + " WHERE PK2 > ?", conn, new Date(10));
+            assertNumRecords(1, "SELECT count(*) from " + tableName + " WHERE PK2 < ? AND PK2 > ?", conn, new Date(30), new Date(10));
+            assertNumRecords(3, "SELECT count(*) from " + tableName + " WHERE PK2 <= ? AND PK2 >= ?", conn, new Date(30), new Date(10));
+            assertNumRecords(2, "SELECT count(*) from " + tableName + " WHERE PK2 <= ? AND PK2 > ?", conn,  new Date(30), new Date(10));
+            assertNumRecords(2, "SELECT count(*) from " + tableName + " WHERE PK2 < ? AND PK2 >= ?", conn, new Date(30), new Date(10));
+            assertNumRecords(0, "SELECT count(*) from " + tableName + " WHERE PK2 < ?", conn, new Date(10));
+            assertNumRecords(4, "SELECT count(*) from " + tableName, conn);
+        }
+    }
+    
+    private void assertNumRecords(int count, String sql, Connection conn, Date ... params) throws Exception {
+        PreparedStatement stmt = conn.prepareStatement(sql);
+        int counter = 1;
+        for (Date param : params) {
+            stmt.setDate(counter++, param);
+        }
+        ResultSet rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertEquals(count, rs.getInt(1));
+    }
+    
+    @Test
+    public void testDisallowNegativeValuesForRowTsColumn() throws Exception {
+        String tableName = "testDisallowNegativeValuesForRowTsColumn".toUpperCase();
+        long ts = nextTimestamp();
+        try (Connection conn = getConnection(ts)) {
+            conn.createStatement().execute("CREATE TABLE " + tableName + " (PK1 DATE NOT NULL PRIMARY KEY ROW_TIMESTAMP, KV1 VARCHAR)");
+        }
+        ts = nextTimestamp();
+        try (Connection conn = getConnection(ts)) {
+            Date d = new Date(-100);
+            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName +  " VALUES (?, ?)");
+            stmt.setDate(1, d);
+            stmt.setString(2, "KV1");
+            stmt.executeUpdate();
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.ILLEGAL_DATA.getErrorCode(), e.getErrorCode());
+        }
+    }
+    
+    private static Connection getConnection(long ts) throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        return DriverManager.getConnection(getUrl(), props);
     }
     
 }

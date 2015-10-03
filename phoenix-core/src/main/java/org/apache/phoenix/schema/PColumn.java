@@ -53,4 +53,9 @@ public interface PColumn extends PDatum {
     int getEstimatedSize();
     
     String getExpressionStr();
+    
+    /**
+     * @return whether this column represents/stores the hbase cell timestamp.
+     */
+    boolean isRowTimestamp();
 }

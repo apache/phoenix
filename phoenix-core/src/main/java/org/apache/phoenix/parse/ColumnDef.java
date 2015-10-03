@@ -51,9 +51,10 @@ public class ColumnDef {
     private final boolean isArray;
     private final Integer arrSize;
     private final String expressionStr;
+    private final boolean isRowTimestamp;
  
     ColumnDef(ColumnName columnDefName, String sqlTypeName, boolean isArray, Integer arrSize, Boolean isNull, Integer maxLength,
-    		            Integer scale, boolean isPK, SortOrder sortOrder, String expressionStr) {
+    		            Integer scale, boolean isPK, SortOrder sortOrder, String expressionStr, boolean isRowTimestamp) {
    	 try {
          Preconditions.checkNotNull(sortOrder);
    	     PDataType localType = null;
@@ -135,13 +136,14 @@ public class ColumnDef {
              this.dataType = localType;
          }
          this.expressionStr = expressionStr;
+         this.isRowTimestamp = isRowTimestamp;
      } catch (SQLException e) {
          throw new ParseException(e);
      }
     }
     ColumnDef(ColumnName columnDefName, String sqlTypeName, Boolean isNull, Integer maxLength,
-            Integer scale, boolean isPK, SortOrder sortOrder, String expressionStr) {
-    	this(columnDefName, sqlTypeName, false, 0, isNull, maxLength, scale, isPK, sortOrder, expressionStr);
+            Integer scale, boolean isPK, SortOrder sortOrder, String expressionStr, boolean isRowTimestamp) {
+    	this(columnDefName, sqlTypeName, false, 0, isNull, maxLength, scale, isPK, sortOrder, expressionStr, isRowTimestamp);
     }
 
     public ColumnName getColumnDefName() {
@@ -190,6 +192,9 @@ public class ColumnDef {
 		return expressionStr;
 	}
 	
+	public boolean isRowTimestamp() {
+	    return isRowTimestamp;
+	}
 	@Override
     public String toString() {
 	    StringBuilder buf = new StringBuilder(columnDefName.getColumnNode().toString());

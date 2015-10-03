@@ -204,7 +204,10 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
                 }
             };
         }
-        this.scn = JDBCUtil.getCurrentSCN(url, this.info);
+        
+        Long scnParam = JDBCUtil.getCurrentSCN(url, this.info);
+        checkScn(scnParam);
+        this.scn = scnParam;
         this.isAutoCommit = JDBCUtil.getAutoCommit(
                 url, this.info,
                 this.services.getProps().getBoolean(
@@ -260,6 +263,12 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         this.customTracingAnnotations = getImmutableCustomTracingAnnotations();
     }
     
+    private static void checkScn(Long scnParam) throws SQLException {
+        if (scnParam != null && scnParam < 0) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_SCN).build().buildException();
+        }
+    }
+
     private static Properties filterKnownNonProperties(Properties info) {
         Properties prunedProperties = info;
         if (info.contains(PhoenixRuntime.CURRENT_SCN_ATTRIB)) {

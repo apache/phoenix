@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.apache.phoenix.util.PhoenixRuntime.UPSERT_BATCH_SIZE_ATTRIB;
 import static org.apache.phoenix.util.TestUtil.A_VALUE;
 import static org.apache.phoenix.util.TestUtil.B_VALUE;
@@ -33,6 +34,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.math.BigDecimal;
 import java.sql.Connection;
@@ -40,9 +42,13 @@ import java.sql.Date;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.Map;
 import java.util.Properties;
 
+import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.types.PInteger;
@@ -800,4 +806,529 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         conn.close();
 
     }
+    
+    @Test
+    public void testUpsertSelectWithRowtimeStampColumn() throws Exception {
+        long ts = nextTimestamp();
+        try (Connection conn = getConnection(ts)) {
+            conn.createStatement().execute("CREATE TABLE T1 (PK1 VARCHAR NOT NULL, PK2 DATE NOT NULL, KV1 VARCHAR CONSTRAINT PK PRIMARY KEY(PK1, PK2 DESC ROW_TIMESTAMP " + ")) ");
+            conn.createStatement().execute("CREATE TABLE T2 (PK1 VARCHAR NOT NULL, PK2 DATE NOT NULL, KV1 VARCHAR CONSTRAINT PK PRIMARY KEY(PK1, PK2 ROW_TIMESTAMP)) ");
+            conn.createStatement().execute("CREATE TABLE T3 (PK1 VARCHAR NOT NULL, PK2 DATE NOT NULL, KV1 VARCHAR CONSTRAINT PK PRIMARY KEY(PK1, PK2 DESC ROW_TIMESTAMP " + ")) ");
+        }
+        
+        // Upsert data with scn set on the connection. However, the timestamp of the put will be the value of the row_timestamp column.
+        ts = nextTimestamp();
+        long rowTimestamp = 1000000;
+        Date rowTimestampDate = new Date(rowTimestamp);
+        try (Connection conn = getConnection(ts)) {
+            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO T1 (PK1, PK2, KV1) VALUES(?, ?, ?)");
+            stmt.setString(1, "PK1");
+            stmt.setDate(2, rowTimestampDate);
+            stmt.setString(3, "KV1");
+            stmt.executeUpdate();
+            conn.commit();
+        }
+        
+        // Upsert select data into table T2. The connection needs to be at a timestamp beyond the row timestamp. Otherwise 
+        // it won't see the data from table T1.
+        try (Connection conn = getConnection(rowTimestamp + 5)) {
+            conn.createStatement().executeUpdate("UPSERT INTO T2 SELECT * FROM T1");
+            conn.commit();
+            // Verify the data upserted in T2. Note that we can use the same connection here because the data was
+            // inserted with a timestamp of rowTimestamp and the connection is at rowTimestamp + 5.
+            PreparedStatement stmt = conn.prepareStatement("SELECT * FROM T2 WHERE PK1 = ? AND PK2 = ?");
+            stmt.setString(1, "PK1");
+            stmt.setDate(2, rowTimestampDate);
+            ResultSet rs = stmt.executeQuery();
+            assertTrue(rs.next());
+            assertEquals("PK1", rs.getString("PK1"));
+            assertEquals(rowTimestampDate, rs.getDate("PK2"));
+            assertEquals("KV1", rs.getString("KV1"));
+        }
+        
+        // Verify that you can't see the data in T2 if the connection is at next timestamp (which is lower than the row timestamp).
+        try (Connection conn = getConnection(nextTimestamp())) {
+            PreparedStatement stmt = conn.prepareStatement("SELECT * FROM T2 WHERE PK1 = ? AND PK2 = ?");
+            stmt.setString(1, "PK1");
+            stmt.setDate(2, rowTimestampDate);
+            ResultSet rs = stmt.executeQuery();
+            assertFalse(rs.next());
+        }
+        
+        // Upsert select data into table T3. The connection needs to be at a timestamp beyond the row timestamp. Otherwise 
+        // it won't see the data from table T1.
+        try (Connection conn = getConnection(rowTimestamp + 5)) {
+            conn.createStatement().executeUpdate("UPSERT INTO T3 SELECT * FROM T2");
+            conn.commit();
+            // Verify the data upserted in T3. Note that we can use the same connection here because the data was
+            // inserted with a timestamp of rowTimestamp and the connection is at rowTimestamp + 5.
+            PreparedStatement stmt = conn.prepareStatement("SELECT * FROM T3 WHERE PK1 = ? AND PK2 = ?");
+            stmt.setString(1, "PK1");
+            stmt.setDate(2, rowTimestampDate);
+            ResultSet rs = stmt.executeQuery();
+            assertTrue(rs.next());
+            assertEquals("PK1", rs.getString("PK1"));
+            assertEquals(rowTimestampDate, rs.getDate("PK2"));
+            assertEquals("KV1", rs.getString("KV1"));
+        }
+        
+        // Verify that you can't see the data in T2 if the connection is at next timestamp (which is lower than the row timestamp).
+        try (Connection conn = getConnection(nextTimestamp())) {
+            PreparedStatement stmt = conn.prepareStatement("SELECT * FROM T3 WHERE PK1 = ? AND PK2 = ?");
+            stmt.setString(1, "PK1");
+            stmt.setDate(2, rowTimestampDate);
+            ResultSet rs = stmt.executeQuery();
+            assertFalse(rs.next());
+        }
+    }
+    
+    @Test
+    public void testUpsertSelectSameTableWithRowTimestampColumn() throws Exception {
+        String tableName = "testUpsertSelectSameTableWithRowTimestampColumn".toUpperCase();
+        long ts = nextTimestamp();
+        try (Connection conn = getConnection(ts)) {
+            conn.createStatement().execute("CREATE TABLE " + tableName + " (PK1 INTEGER NOT NULL, PK2 DATE NOT NULL, KV1 VARCHAR CONSTRAINT PK PRIMARY KEY(PK1, PK2 ROW_TIMESTAMP)) ");
+        }
+
+        // Upsert data with scn set on the connection. The timestamp of the put will be the value of the row_timestamp column.
+        ts = nextTimestamp();
+        long rowTimestamp = ts + 100000;
+        Date rowTimestampDate = new Date(rowTimestamp);
+        try (Connection conn = getConnection(ts)) {
+            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " (PK1, PK2, KV1) VALUES(?, ?, ?)");
+            stmt.setInt(1, 1);
+            stmt.setDate(2, rowTimestampDate);
+            stmt.setString(3, "KV1");
+            stmt.executeUpdate();
+            conn.commit();
+        }
+
+        try (Connection conn = getConnection(nextTimestamp())) {
+            conn.createStatement().execute("CREATE SEQUENCE T_SEQ");
+        }
+        // Upsert select data into table. The connection needs to be at a timestamp beyond the row timestamp. Otherwise 
+        // it won't see the data from table.
+        try (Connection conn = getConnection(rowTimestamp + 5)) {
+            conn.createStatement().executeUpdate("UPSERT INTO  " + tableName + "  SELECT NEXT VALUE FOR T_SEQ, PK2 FROM  " + tableName);
+            conn.commit();
+        }
+        
+        // Upsert select using sequences.
+        try (Connection conn = getConnection(rowTimestamp + 5)) {
+            conn.setAutoCommit(true);
+            for (int i = 0; i < 10; i++) {
+                int count = conn.createStatement().executeUpdate("UPSERT INTO  " + tableName + "  SELECT NEXT VALUE FOR T_SEQ, PK2 FROM  " + tableName);
+                assertEquals((int)Math.pow(2, i), count);
+            }
+        }
+    }
+    
+    @Test
+    public void testAutomaticallySettingRowtimestamp() throws Exception {
+        String table1 = "testAutomaticallySettingRowtimestamp1".toUpperCase();
+        String table2 = "testAutomaticallySettingRowtimestamp2".toUpperCase();
+        String table3 = "testAutomaticallySettingRowtimestamp3".toUpperCase();
+        long ts = nextTimestamp();
+        try (Connection conn = getConnection(ts)) {
+            conn.createStatement().execute("CREATE TABLE " + table1 + " (T1PK1 VARCHAR NOT NULL, T1PK2 DATE NOT NULL, T1KV1 VARCHAR, T1KV2 VARCHAR CONSTRAINT PK PRIMARY KEY(T1PK1, T1PK2 DESC ROW_TIMESTAMP)) ");
+            conn.createStatement().execute("CREATE TABLE " + table2 + " (T2PK1 VARCHAR NOT NULL, T2PK2 DATE NOT NULL, T2KV1 VARCHAR, T2KV2 VARCHAR CONSTRAINT PK PRIMARY KEY(T2PK1, T2PK2 ROW_TIMESTAMP)) ");
+            conn.createStatement().execute("CREATE TABLE " + table3 + " (T3PK1 VARCHAR NOT NULL, T3PK2 DATE NOT NULL, T3KV1 VARCHAR, T3KV2 VARCHAR CONSTRAINT PK PRIMARY KEY(T3PK1, T3PK2 DESC ROW_TIMESTAMP)) ");
+        }
+        ts = nextTimestamp();
+        try (Connection conn = getConnection(ts)) {
+            // Upsert values where row_timestamp column PK2 is not set and the column names are specified
+            // This should upsert data with the value for PK2 as new Date(ts);
+            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO  " + table1 + " (T1PK1, T1KV1, T1KV2) VALUES (?, ?, ?)");
+            stmt.setString(1, "PK1");
+            stmt.setString(2, "KV1");
+            stmt.setString(3, "KV2");
+            stmt.executeUpdate();
+            conn.commit();
+        }
+        Date upsertedDate = new Date(ts);
+        ts = nextTimestamp();
+        try (Connection conn = getConnection(ts)) {
+            // Now query for data that was upserted above. If the row key was generated correctly then we should be able to see
+            // the data in this query.
+            PreparedStatement stmt = conn.prepareStatement("SELECT T1KV1, T1KV2 FROM " + table1 + " WHERE T1PK1 = ? AND T1PK2 = ?");
+            stmt.setString(1, "PK1");
+            stmt.setDate(2, upsertedDate);
+            ResultSet rs = stmt.executeQuery();
+            assertTrue(rs.next());
+            assertEquals("KV1", rs.getString(1));
+            assertEquals("KV2", rs.getString(2));
+            assertFalse(rs.next());
+        }
+        
+        ts = nextTimestamp();
+        try (Connection conn = getConnection(ts)) {
+            // Upsert select into table2 by not selecting the row timestamp column. In this case, the rowtimestamp column would end up being set to the scn of the connection
+            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO  " + table2 + " (T2PK1, T2KV1, T2KV2) SELECT T1PK1, T1KV1, T1KV2 FROM " + table1);
+            stmt.executeUpdate();
+            conn.commit();
+        }
+        
+        upsertedDate = new Date(ts);
+        ts = nextTimestamp();
+        try (Connection conn = getConnection(ts)) {
+            // Now query for data that was upserted above. If the row key was generated correctly then we should be able to see
+            // the data in this query.
+            PreparedStatement stmt = conn.prepareStatement("SELECT T2KV1, T2KV2 FROM " + table2 + " WHERE T2PK1 = ? AND T2PK2 = ?");
+            stmt.setString(1, "PK1");
+            stmt.setDate(2, upsertedDate);
+            ResultSet rs = stmt.executeQuery();
+            assertTrue(rs.next());
+            assertEquals("KV1", rs.getString(1));
+            assertEquals("KV2", rs.getString(2));
+            assertFalse(rs.next());
+        }
+        
+        ts = nextTimestamp();
+        try (Connection conn = getConnection(ts)) {
+            // Upsert select into table2 by not selecting the row timestamp column. In this case, the rowtimestamp column would end up being set to the scn of the connection
+            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO  " + table3 + " (T3PK1, T3KV1, T3KV2) SELECT T2PK1, T2KV1, T2KV2 FROM " + table2);
+            stmt.executeUpdate();
+            conn.commit();
+        }
+        
+        upsertedDate = new Date(ts);
+        ts = nextTimestamp();
+        try (Connection conn = getConnection(ts)) {
+            // Now query for data that was upserted above. If the row key was generated correctly then we should be able to see
+            // the data in this query.
+            PreparedStatement stmt = conn.prepareStatement("SELECT T3KV1, T3KV2 FROM " + table3 + " WHERE T3PK1 = ? AND T3PK2 = ?");
+            stmt.setString(1, "PK1");
+            stmt.setDate(2, upsertedDate);
+            ResultSet rs = stmt.executeQuery();
+            assertTrue(rs.next());
+            assertEquals("KV1", rs.getString(1));
+            assertEquals("KV2", rs.getString(2));
+            assertFalse(rs.next());
+        }
+    }
+    
+    @Test
+    public void testUpsertSelectAutoCommitWithRowTimestampColumn() throws Exception {
+        String tableName1 = "testUpsertSelectServerSideWithRowTimestampColumn".toUpperCase();
+        String tableName2 = "testUpsertSelectServerSideWithRowTimestampColumn2".toUpperCase();
+        long ts = 10;
+        try (Connection conn = getConnection(ts)) {
+            conn.createStatement().execute("CREATE TABLE " + tableName1 + " (PK1 INTEGER NOT NULL, PK2 DATE NOT NULL, PK3 INTEGER NOT NULL, KV1 VARCHAR CONSTRAINT PK PRIMARY KEY(PK1, PK2 ROW_TIMESTAMP, PK3)) ");
+            conn.createStatement().execute("CREATE TABLE " + tableName2 + " (PK1 INTEGER NOT NULL, PK2 DATE NOT NULL, PK3 INTEGER NOT NULL, KV1 VARCHAR CONSTRAINT PK PRIMARY KEY(PK1, PK2 DESC ROW_TIMESTAMP, PK3)) ");
+        }
+
+        String[] tableNames = {tableName1, tableName2};
+        for (String tableName : tableNames) {
+            // Upsert data with scn set on the connection. The timestamp of the put will be the value of the row_timestamp column.
+            long rowTimestamp1 = 100;
+            Date rowTimestampDate = new Date(rowTimestamp1);
+            try (Connection conn = getConnection(ts)) {
+                PreparedStatement stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " (PK1, PK2, PK3, KV1) VALUES(?, ?, ?, ?)");
+                stmt.setInt(1, 1);
+                stmt.setDate(2, rowTimestampDate);
+                stmt.setInt(3, 3);
+                stmt.setString(4, "KV1");
+                stmt.executeUpdate();
+                conn.commit();
+            }
+
+            long rowTimestamp2 = 2 * rowTimestamp1;
+            try (Connection conn = getConnection(rowTimestamp2)) {
+                conn.setAutoCommit(true);
+                // Upsert select in the same table with the row_timestamp column PK2 not specified. This will end up
+                // creating a new row whose timestamp is the SCN of the connection. The same SCN will be used
+                // for the row key too.
+                conn.createStatement().executeUpdate("UPSERT INTO  " + tableName + " (PK1, PK3, KV1) SELECT PK1, PK3, KV1 FROM  " + tableName);
+            }
+            try (Connection conn = getConnection(3 * rowTimestamp1)) {
+                // Verify the row that was upserted above
+                PreparedStatement stmt = conn.prepareStatement("SELECT * FROM  " + tableName + " WHERE PK1 = ? AND PK2 = ? AND PK3 = ?");
+                stmt.setInt(1, 1);
+                stmt.setDate(2, new Date(rowTimestamp2));
+                stmt.setInt(3, 3);
+                ResultSet rs = stmt.executeQuery();
+                assertTrue(rs.next());
+                assertEquals(1, rs.getInt("PK1"));
+                assertEquals(3, rs.getInt("PK3"));
+                assertEquals("KV1", rs.getString("KV1"));
+                assertEquals(new Date(rowTimestamp2), rs.getDate("PK2"));
+                assertFalse(rs.next());
+                // Number of rows in the table should be 2.
+                rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM " + tableName);
+                assertTrue(rs.next());
+                assertEquals(2, rs.getInt(1));
+
+            }
+            ts = 5 * rowTimestamp1;
+            try (Connection conn = getConnection(ts)) {
+                conn.setAutoCommit(true);
+                // Upsert select in the same table with the row_timestamp column PK2 specified. This will not end up creating a new row
+                // because the destination pk columns, including the row timestamp column PK2, are the same as the source column.
+                conn.createStatement().executeUpdate("UPSERT INTO  " + tableName + " (PK1, PK2, PK3, KV1) SELECT PK1, PK2, PK3, KV1 FROM  " + tableName);
+            }
+            ts = 6 * rowTimestamp1;
+            try (Connection conn = getConnection(ts)) {
+                // Verify that two rows were created. One with rowtimestamp1 and the other with rowtimestamp2
+                ResultSet rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM " + tableName);
+                assertTrue(rs.next());
+                assertEquals(2, rs.getInt(1));
+                assertFalse(rs.next());
+            }
+            
+        }
+    }
+    
+    @Test
+    public void testRowTimestampColWithViewsIndexesAndSaltedTables() throws Exception {
+        String baseTable = "testRowTimestampColWithViewsIndexesAndSaltedTables".toUpperCase();
+        String tenantView = "tenatView".toUpperCase();
+        String globalView = "globalView".toUpperCase();
+        String baseTableIdx = "table_idx".toUpperCase();
+        String tenantViewIdx = "tenantView_idx".toUpperCase();
+
+        long ts = nextTimestamp();
+        try (Connection conn = getConnection(ts)) {
+            conn.createStatement().execute("CREATE TABLE " + baseTable + " (TENANT_ID CHAR(15) NOT NULL, PK2 DATE NOT NULL, PK3 INTEGER NOT NULL, KV1 VARCHAR, KV2 VARCHAR, KV3 VARCHAR CONSTRAINT PK PRIMARY KEY(TENANT_ID, PK2 ROW_TIMESTAMP, PK3)) MULTI_TENANT = true, SALT_BUCKETS = 8");
+        }
+        ts = nextTimestamp();
+        try (Connection conn = getConnection(ts)) {
+            conn.createStatement().execute("CREATE INDEX " + baseTableIdx + " ON " + baseTable + " (PK2, KV3) INCLUDE (KV1)");
+        }
+        ts = nextTimestamp();
+        try (Connection conn = getConnection(ts)) {
+            conn.createStatement().execute("CREATE VIEW " + globalView + " AS SELECT * FROM " + baseTable + " WHERE KV1 = 'KV1'");
+        }
+        String tenantId = "tenant1";
+        ts = nextTimestamp();
+        try (Connection conn = getTenantConnection(tenantId, ts)) {
+            conn.createStatement().execute("CREATE VIEW " + tenantView + " AS SELECT * FROM " + baseTable);
+        }
+        ts = nextTimestamp();
+        try (Connection conn = getTenantConnection(tenantId, ts)) {
+            conn.createStatement().execute("CREATE INDEX " + tenantViewIdx + " ON " + tenantView + " (PK2, KV2) INCLUDE (KV1)");
+        }
+
+        // upsert data into base table without specifying the row timestamp column PK2
+        long upsertedTs = 5;
+        try (Connection conn = getConnection(upsertedTs)) {
+            // Upsert select in the same table with the row_timestamp column PK2 not specified. This will end up
+            // creating a new row whose timestamp is the SCN of the connection. The same SCN will be used
+            // for the row key too.
+            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO  " + baseTable + " (TENANT_ID, PK3, KV1, KV2, KV3) VALUES (?, ?, ?, ?, ?)");
+            stmt.setString(1, tenantId);
+            stmt.setInt(2, 3);
+            stmt.setString(3, "KV1");
+            stmt.setString(4, "KV2");
+            stmt.setString(5, "KV3");
+            stmt.executeUpdate();
+            conn.commit();
+        }
+
+        // Verify that we can see data when querying through base table, global view and index on the base table
+        try (Connection conn = getConnection(nextTimestamp())) {
+            // Query the base table
+            PreparedStatement stmt = conn.prepareStatement("SELECT * FROM  " + baseTable + " WHERE TENANT_ID = ? AND PK2 = ? AND PK3 = ?");
+            stmt.setString(1, tenantId);
+            stmt.setDate(2, new Date(upsertedTs));
+            stmt.setInt(3, 3);
+            ResultSet rs = stmt.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(tenantId, rs.getString("TENANT_ID"));
+            assertEquals("KV1", rs.getString("KV1"));
+            assertEquals("KV2", rs.getString("KV2"));
+            assertEquals("KV3", rs.getString("KV3"));
+            assertEquals(new Date(upsertedTs), rs.getDate("PK2"));
+            assertFalse(rs.next());
+
+            // Query the globalView
+            stmt = conn.prepareStatement("SELECT * FROM  " + globalView + " WHERE TENANT_ID = ? AND PK2 = ? AND PK3 = ?");
+            stmt.setString(1, tenantId);
+            stmt.setDate(2, new Date(upsertedTs));
+            stmt.setInt(3, 3);
+            rs = stmt.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(tenantId, rs.getString("TENANT_ID"));
+            assertEquals("KV1", rs.getString("KV1"));
+            assertEquals("KV2", rs.getString("KV2"));
+            assertEquals("KV3", rs.getString("KV3"));
+            assertEquals(new Date(upsertedTs), rs.getDate("PK2"));
+            assertFalse(rs.next());
+
+            // Query using the index on base table
+            stmt = conn.prepareStatement("SELECT KV1 FROM  " + baseTable + " WHERE PK2 = ? AND KV3 = ?");
+            stmt.setDate(1, new Date(upsertedTs));
+            stmt.setString(2, "KV3");
+            rs = stmt.executeQuery();
+            QueryPlan plan = stmt.unwrap(PhoenixStatement.class).getQueryPlan();
+            assertTrue(plan.getTableRef().getTable().getName().getString().equals(baseTableIdx));
+            assertTrue(rs.next());
+            assertEquals("KV1", rs.getString("KV1"));
+            assertFalse(rs.next());
+        }
+
+        // Verify that data can be queried using tenant view and tenant view index
+        try (Connection tenantConn = getTenantConnection(tenantId, nextTimestamp())) {
+            // Query the tenant view
+            PreparedStatement stmt = tenantConn.prepareStatement("SELECT * FROM  " + tenantView + " WHERE PK2 = ? AND PK3 = ?");
+            stmt.setDate(1, new Date(upsertedTs));
+            stmt.setInt(2, 3);
+            ResultSet rs = stmt.executeQuery();
+            assertTrue(rs.next());
+            assertEquals("KV1", rs.getString("KV1"));
+            assertEquals("KV2", rs.getString("KV2"));
+            assertEquals("KV3", rs.getString("KV3"));
+            assertEquals(new Date(upsertedTs), rs.getDate("PK2"));
+            assertFalse(rs.next());
+
+            // Query using the index on the tenantView
+            //TODO: uncomment the code after PHOENIX-2277 is fixed
+//            stmt = tenantConn.prepareStatement("SELECT KV1 FROM  " + tenantView + " WHERE PK2 = ? AND KV2 = ?");
+//            stmt.setDate(1, new Date(upsertedTs));
+//            stmt.setString(2, "KV2");
+//            rs = stmt.executeQuery();
+//            QueryPlan plan = stmt.unwrap(PhoenixStatement.class).getQueryPlan();
+//            assertTrue(plan.getTableRef().getTable().getName().getString().equals(tenantViewIdx));
+//            assertTrue(rs.next());
+//            assertEquals("KV1", rs.getString("KV1"));
+//            assertFalse(rs.next());
+        }
+
+        upsertedTs = nextTimestamp();
+        try (Connection tenantConn = getTenantConnection(tenantId, upsertedTs)) {
+            // Upsert into tenant view where the row_timestamp column PK2 is not specified
+            PreparedStatement stmt = tenantConn.prepareStatement("UPSERT INTO  " + tenantView + " (PK3, KV1, KV2, KV3) VALUES (?, ?, ?, ?)");
+            stmt.setInt(1, 33);
+            stmt.setString(2, "KV13");
+            stmt.setString(3, "KV23");
+            stmt.setString(4, "KV33");
+            stmt.executeUpdate();
+            tenantConn.commit();
+            // Upsert into tenant view where the row_timestamp column PK2 is specified
+            stmt = tenantConn.prepareStatement("UPSERT INTO  " + tenantView + " (PK2, PK3, KV1, KV2, KV3) VALUES (?, ?, ?, ?, ?)");
+            stmt.setDate(1, new Date(upsertedTs));
+            stmt.setInt(2, 44);
+            stmt.setString(3, "KV14");
+            stmt.setString(4, "KV24");
+            stmt.setString(5, "KV34");
+            stmt.executeUpdate();
+            tenantConn.commit();
+        }
+
+        // Verify that the data upserted using the tenant view can now be queried using base table and the base table index
+        try (Connection conn = getConnection(upsertedTs + 10000)) {
+            // Query the base table
+            PreparedStatement stmt = conn.prepareStatement("SELECT * FROM  " + baseTable + " WHERE TENANT_ID = ? AND PK2 = ? AND PK3 = ? ");
+            stmt.setString(1, tenantId);
+            stmt.setDate(2, new Date(upsertedTs));
+            stmt.setInt(3, 33);
+            ResultSet rs = stmt.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(tenantId, rs.getString("TENANT_ID"));
+            assertEquals("KV13", rs.getString("KV1"));
+            assertEquals("KV23", rs.getString("KV2"));
+            assertEquals("KV33", rs.getString("KV3"));
+            assertFalse(rs.next());
+            
+            stmt = conn.prepareStatement("SELECT * FROM  " + baseTable + " WHERE TENANT_ID = ? AND PK2 = ? AND PK3 = ? ");
+            stmt.setString(1, tenantId);
+            stmt.setDate(2, new Date(upsertedTs));
+            stmt.setInt(3, 44);
+            rs = stmt.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(tenantId, rs.getString("TENANT_ID"));
+            assertEquals("KV14", rs.getString("KV1"));
+            assertEquals("KV24", rs.getString("KV2"));
+            assertEquals("KV34", rs.getString("KV3"));
+            assertFalse(rs.next());
+
+            // Query using the index on base table
+            stmt = conn.prepareStatement("SELECT KV1 FROM  " + baseTable + " WHERE (PK2, KV3) IN ((?, ?), (?, ?)) ORDER BY KV1");
+            stmt.setDate(1, new Date(upsertedTs));
+            stmt.setString(2, "KV33");
+            stmt.setDate(3, new Date(upsertedTs));
+            stmt.setString(4, "KV34");
+            rs = stmt.executeQuery();
+            QueryPlan plan = stmt.unwrap(PhoenixStatement.class).getQueryPlan();
+            assertTrue(plan.getTableRef().getTable().getName().getString().equals(baseTableIdx));
+            assertTrue(rs.next());
+            assertEquals("KV13", rs.getString("KV1"));
+            assertTrue(rs.next());
+            assertEquals("KV14", rs.getString("KV1"));
+            assertFalse(rs.next());
+        }
+        
+        // Verify that the data upserted using the tenant view can now be queried using tenant view
+        try (Connection tenantConn = getTenantConnection(tenantId, upsertedTs + 10000)) {
+            // Query the base table
+            PreparedStatement stmt = tenantConn.prepareStatement("SELECT * FROM  " + tenantView + " WHERE (PK2, PK3) IN ((?, ?), (?, ?)) ORDER BY KV1");
+            stmt.setDate(1, new Date(upsertedTs));
+            stmt.setInt(2, 33);
+            stmt.setDate(3, new Date(upsertedTs));
+            stmt.setInt(4, 44);
+            ResultSet rs = stmt.executeQuery();
+            assertTrue(rs.next());
+            assertEquals("KV13", rs.getString("KV1"));
+            assertTrue(rs.next());
+            assertEquals("KV14", rs.getString("KV1"));
+            assertFalse(rs.next());
+            
+            //TODO: uncomment the code after PHOENIX-2277 is fixed
+//            // Query using the index on the tenantView
+//            stmt = tenantConn.prepareStatement("SELECT KV1 FROM  " + tenantView + " WHERE (PK2, KV2) IN (?, ?, ?, ?) ORDER BY KV1");
+//            stmt.setDate(1, new Date(upsertedTs));
+//            stmt.setString(2, "KV23");
+//            stmt.setDate(3, new Date(upsertedTs));
+//            stmt.setString(4, "KV24");
+//            rs = stmt.executeQuery();
+//            QueryPlan plan = stmt.unwrap(PhoenixStatement.class).getQueryPlan();
+//            assertTrue(plan.getTableRef().getTable().getName().getString().equals(tenantViewIdx));
+//            assertTrue(rs.next());
+//            assertEquals("KV13", rs.getString("KV1"));
+//            assertTrue(rs.next());
+//            assertEquals("KV14", rs.getString("KV1"));
+//            assertFalse(rs.next());
+        }
+    }
+        
+    @Test
+    public void testDisallowNegativeValuesForRowTsColumn() throws Exception {
+        String tableName = "testDisallowNegativeValuesForRowTsColumn".toUpperCase();
+        String tableName2 = "testDisallowNegativeValuesForRowTsColumn2".toUpperCase();
+        long ts = nextTimestamp();
+        try (Connection conn = getConnection(ts)) {
+            conn.createStatement().execute("CREATE TABLE " + tableName + " (PK1 BIGINT NOT NULL PRIMARY KEY ROW_TIMESTAMP, KV1 VARCHAR)");
+            conn.createStatement().execute("CREATE TABLE " + tableName2 + " (PK1 BIGINT NOT NULL PRIMARY KEY ROW_TIMESTAMP, KV1 VARCHAR)");
+        }
+        ts = nextTimestamp();
+        try (Connection conn = getConnection(ts)) {
+            long upsertedTs = 100;
+            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName +  " VALUES (?, ?)");
+            stmt.setLong(1, upsertedTs);
+            stmt.setString(2, "KV1");
+            stmt.executeUpdate();
+            conn.commit();
+        }
+        ts = nextTimestamp();
+        try (Connection conn = getConnection(ts)) {
+            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName2 +  " SELECT (PK1 - 500), KV1 FROM " + tableName);
+            stmt.executeUpdate();
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.ILLEGAL_DATA.getErrorCode(), e.getErrorCode());
+        }
+    }
+    
+    private static Connection getConnection(long ts) throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        return DriverManager.getConnection(getUrl(), props);
+    }
+    
+    private static Connection getTenantConnection(String tenantId, long ts) throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        props.setProperty(TENANT_ID_ATTRIB, tenantId);
+        return DriverManager.getConnection(getUrl(), props);
+    }
+    
 }
