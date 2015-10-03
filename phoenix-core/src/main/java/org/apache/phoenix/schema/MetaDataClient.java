@@ -44,6 +44,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_STATE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_ARRAY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_CONSTANT;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_ROW_TIMESTAMP;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_VIEW_REFERENCED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.JAR_PATH;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.KEY_SEQ;
@@ -80,6 +81,7 @@ import static org.apache.phoenix.query.QueryConstants.BASE_TABLE_BASE_COLUMN_COU
 import static org.apache.phoenix.query.QueryServices.DROP_METADATA_ATTRIB;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_DROP_METADATA;
 import static org.apache.phoenix.schema.PTable.ViewType.MAPPED;
+import static org.apache.phoenix.schema.PTableType.TABLE;
 import static org.apache.phoenix.schema.PTableType.VIEW;
 
 import java.io.IOException;
@@ -115,7 +117,6 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.ColumnResolver;
@@ -147,6 +148,7 @@ import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.AddColumnStatement;
 import org.apache.phoenix.parse.AlterIndexStatement;
 import org.apache.phoenix.parse.ColumnDef;
+import org.apache.phoenix.parse.ColumnDefInPkConstraint;
 import org.apache.phoenix.parse.ColumnName;
 import org.apache.phoenix.parse.CreateFunctionStatement;
 import org.apache.phoenix.parse.CreateIndexStatement;
@@ -179,6 +181,8 @@ import org.apache.phoenix.schema.stats.PTableStats;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.schema.types.PTimestamp;
+import org.apache.phoenix.schema.types.PUnsignedLong;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
@@ -187,6 +191,7 @@ import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.UpgradeUtil;
@@ -296,8 +301,9 @@ public class MetaDataClient {
         IS_VIEW_REFERENCED + "," +
         PK_NAME + "," +  // write this both in the column and table rows for access by metadata APIs
         KEY_SEQ + "," +
-        COLUMN_DEF +
-        ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        COLUMN_DEF + "," +
+        IS_ROW_TIMESTAMP + 
+        ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
     private static final String UPDATE_COLUMN_POSITION =
         "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\" ( " +
         TENANT_ID + "," +
@@ -675,6 +681,7 @@ public class MetaDataClient {
         } else {
             colUpsert.setString(18, column.getExpressionStr());
         }
+        colUpsert.setBoolean(19, column.isRowTimestamp());
         colUpsert.execute();
     }
 
@@ -697,11 +704,13 @@ public class MetaDataClient {
             ColumnName columnDefName = def.getColumnDefName();
             SortOrder sortOrder = def.getSortOrder();
             boolean isPK = def.isPK();
+            boolean isRowTimestamp = def.isRowTimestamp();
             if (pkConstraint != null) {
-                Pair<ColumnName, SortOrder> pkSortOrder = pkConstraint.getColumn(columnDefName);
+                Pair<ColumnName, SortOrder> pkSortOrder = pkConstraint.getColumnWithSortOrder(columnDefName);
                 if (pkSortOrder != null) {
                     isPK = true;
                     sortOrder = pkSortOrder.getSecond();
+                    isRowTimestamp = pkConstraint.isColumnRowTimestamp(columnDefName);
                 }
             }
             String columnName = columnDefName.getColumnName();
@@ -740,7 +749,7 @@ public class MetaDataClient {
             }
 
             PColumn column = new PColumnImpl(PNameFactory.newName(columnName), familyName, def.getDataType(),
-                    def.getMaxLength(), def.getScale(), isNull, position, sortOrder, def.getArraySize(), null, false, def.getExpression());
+                    def.getMaxLength(), def.getScale(), isNull, position, sortOrder, def.getArraySize(), null, false, def.getExpression(), isRowTimestamp);
             return column;
         } catch (IllegalArgumentException e) { // Based on precondition check in constructor
             throw new SQLException(e);
@@ -929,95 +938,95 @@ public class MetaDataClient {
             // the wire for the index rows, as we don't need to do that. Instead, we tap into our
             // region observer to generate the index rows based on the data rows as we scan
             if (index.getIndexType() == IndexType.LOCAL) {
-                final PhoenixStatement statement = new PhoenixStatement(connection);
-                String tableName = getFullTableName(dataTableRef);
-                String query = "SELECT count(*) FROM " + tableName;
-                final QueryPlan plan = statement.compileQuery(query);
-                TableRef tableRef = plan.getTableRef();
-                // Set attribute on scan that UngroupedAggregateRegionObserver will switch on.
-                // We'll detect that this attribute was set the server-side and write the index
-                // rows per region as a result. The value of the attribute will be our persisted
-                // index maintainers.
-                // Define the LOCAL_INDEX_BUILD as a new static in BaseScannerRegionObserver
-                Scan scan = plan.getContext().getScan();
-                try {
-                    if(plan.getContext().getScanTimeRange()==null) {
-                        Long scn = connection.getSCN();
-                        if (scn == null) {
-                            scn = plan.getContext().getCurrentTime();
-                            // Add one to server time since max of time range is exclusive
-                            // and we need to account of OSs with lower resolution clocks.
-                            if (scn < HConstants.LATEST_TIMESTAMP) {
-                                scn++;
+                try (final PhoenixStatement statement = new PhoenixStatement(connection)) {
+                    String tableName = getFullTableName(dataTableRef);
+                    String query = "SELECT count(*) FROM " + tableName;
+                    final QueryPlan plan = statement.compileQuery(query);
+                    TableRef tableRef = plan.getTableRef();
+                    // Set attribute on scan that UngroupedAggregateRegionObserver will switch on.
+                    // We'll detect that this attribute was set the server-side and write the index
+                    // rows per region as a result. The value of the attribute will be our persisted
+                    // index maintainers.
+                    // Define the LOCAL_INDEX_BUILD as a new static in BaseScannerRegionObserver
+                    Scan scan = plan.getContext().getScan();
+                    try {
+                        if(ScanUtil.isDefaultTimeRange(scan.getTimeRange())) {
+                            Long scn = connection.getSCN();
+                            if (scn == null) {
+                                scn = plan.getContext().getCurrentTime();
                             }
+                            scan.setTimeRange(dataTableRef.getLowerBoundTimeStamp(),scn);
                         }
-                        plan.getContext().setScanTimeRange(new TimeRange(dataTableRef.getLowerBoundTimeStamp(),scn));
+                    } catch (IOException e) {
+                        throw new SQLException(e);
                     }
-                } catch (IOException e) {
-                    throw new SQLException(e);
+                    ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+                    PTable dataTable = tableRef.getTable();
+                    for(PTable idx: dataTable.getIndexes()) {
+                        if(idx.getName().equals(index.getName())) {
+                            index = idx;
+                            break;
+                        }
+                    }
+                    List<PTable> indexes = Lists.newArrayListWithExpectedSize(1);
+                    // Only build newly created index.
+                    indexes.add(index);
+                    IndexMaintainer.serialize(dataTable, ptr, indexes, plan.getContext().getConnection());
+                    scan.setAttribute(BaseScannerRegionObserver.LOCAL_INDEX_BUILD, ByteUtil.copyKeyBytesIfNecessary(ptr));
+                    // By default, we'd use a FirstKeyOnly filter as nothing else needs to be projected for count(*).
+                    // However, in this case, we need to project all of the data columns that contribute to the index.
+                    IndexMaintainer indexMaintainer = index.getIndexMaintainer(dataTable, connection);
+                    for (ColumnReference columnRef : indexMaintainer.getAllColumns()) {
+                        scan.addColumn(columnRef.getFamily(), columnRef.getQualifier());
+                    }
+
+                    // Go through MutationPlan abstraction so that we can create local indexes
+                    // with a connectionless connection (which makes testing easier).
+                    mutationPlan = new MutationPlan() {
+
+                        @Override
+                        public StatementContext getContext() {
+                            return plan.getContext();
+                        }
+
+                        @Override
+                        public ParameterMetaData getParameterMetaData() {
+                            return PhoenixParameterMetaData.EMPTY_PARAMETER_META_DATA;
+                        }
+
+                        @Override
+                        public ExplainPlan getExplainPlan() throws SQLException {
+                            return ExplainPlan.EMPTY_PLAN;
+                        }
+
+                        @Override
+                        public PhoenixConnection getConnection() {
+                            return connection;
+                        }
+
+                        @Override
+                        public MutationState execute() throws SQLException {
+                            Cell kv = plan.iterator().next().getValue(0);
+                            ImmutableBytesWritable tmpPtr = new ImmutableBytesWritable(kv.getValueArray(), kv.getValueOffset(), kv.getValueLength());
+                            // A single Cell will be returned with the count(*) - we decode that here
+                            long rowCount = PLong.INSTANCE.getCodec().decodeLong(tmpPtr, SortOrder.getDefault());
+                            // The contract is to return a MutationState that contains the number of rows modified. In this
+                            // case, it's the number of rows in the data table which corresponds to the number of index
+                            // rows that were added.
+                            return new MutationState(0, connection, rowCount);
+                        }
+
+                    };
                 }
-                ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-                PTable dataTable = tableRef.getTable();
-                for(PTable idx: dataTable.getIndexes()) {
-                    if(idx.getName().equals(index.getName())) {
-                        index = idx;
-                        break;
-                    }
-                }
-                List<PTable> indexes = Lists.newArrayListWithExpectedSize(1);
-                // Only build newly created index.
-                indexes.add(index);
-                IndexMaintainer.serialize(dataTable, ptr, indexes, plan.getContext().getConnection());
-                scan.setAttribute(BaseScannerRegionObserver.LOCAL_INDEX_BUILD, ByteUtil.copyKeyBytesIfNecessary(ptr));
-                // By default, we'd use a FirstKeyOnly filter as nothing else needs to be projected for count(*).
-                // However, in this case, we need to project all of the data columns that contribute to the index.
-                IndexMaintainer indexMaintainer = index.getIndexMaintainer(dataTable, connection);
-                for (ColumnReference columnRef : indexMaintainer.getAllColumns()) {
-                    scan.addColumn(columnRef.getFamily(), columnRef.getQualifier());
-                }
-
-                // Go through MutationPlan abstraction so that we can create local indexes
-                // with a connectionless connection (which makes testing easier).
-                mutationPlan = new MutationPlan() {
-
-                    @Override
-                    public StatementContext getContext() {
-                        return plan.getContext();
-                    }
-
-                    @Override
-                    public ParameterMetaData getParameterMetaData() {
-                        return PhoenixParameterMetaData.EMPTY_PARAMETER_META_DATA;
-                    }
-
-                    @Override
-                    public ExplainPlan getExplainPlan() throws SQLException {
-                        return ExplainPlan.EMPTY_PLAN;
-                    }
-
-                    @Override
-                    public PhoenixConnection getConnection() {
-                        return connection;
-                    }
-
-                    @Override
-                    public MutationState execute() throws SQLException {
-                        Cell kv = plan.iterator().next().getValue(0);
-                        ImmutableBytesWritable tmpPtr = new ImmutableBytesWritable(kv.getValueArray(), kv.getValueOffset(), kv.getValueLength());
-                        // A single Cell will be returned with the count(*) - we decode that here
-                        long rowCount = PLong.INSTANCE.getCodec().decodeLong(tmpPtr, SortOrder.getDefault());
-                        // The contract is to return a MutationState that contains the number of rows modified. In this
-                        // case, it's the number of rows in the data table which corresponds to the number of index
-                        // rows that were added.
-                        return new MutationState(0, connection, rowCount);
-                    }
-
-                };
             } else {
                 PostIndexDDLCompiler compiler = new PostIndexDDLCompiler(connection, dataTableRef);
                 mutationPlan = compiler.compile(index);
                 try {
-                    mutationPlan.getContext().setScanTimeRange(new TimeRange(dataTableRef.getLowerBoundTimeStamp(), Long.MAX_VALUE));
+                    Long scn = connection.getSCN();
+                    if (scn == null) {
+                        scn = mutationPlan.getContext().getCurrentTime();
+                    }
+                    mutationPlan.getContext().getScan().setTimeRange(dataTableRef.getLowerBoundTimeStamp(), scn);
                 } catch (IOException e) {
                     throw new SQLException(e);
                 }
@@ -1141,7 +1150,7 @@ public class MetaDataClient {
                     PColumn column = pkColumns.get(i);
 					unusedPkColumns.add(new RowKeyColumnExpression(column, new RowKeyValueAccessor(pkColumns, i), "\""+column.getName().getString()+"\""));
                 }
-                List<Pair<ColumnName, SortOrder>> allPkColumns = Lists.newArrayListWithExpectedSize(unusedPkColumns.size());
+                List<ColumnDefInPkConstraint> allPkColumns = Lists.newArrayListWithExpectedSize(unusedPkColumns.size());
                 List<ColumnDef> columnDefs = Lists.newArrayListWithExpectedSize(includedColumns.size() + indexParseNodeAndSortOrderList.size());
                 
                 if (dataTable.isMultiTenant()) {
@@ -1151,8 +1160,8 @@ public class MetaDataClient {
 					unusedPkColumns.remove(columnExpression);
                     PDataType dataType = IndexUtil.getIndexColumnDataType(col);
                     ColumnName colName = ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(col));
-                    allPkColumns.add(new Pair<ColumnName, SortOrder>(colName, col.getSortOrder()));
-                    columnDefs.add(FACTORY.columnDef(colName, dataType.getSqlTypeName(), col.isNullable(), col.getMaxLength(), col.getScale(), false, SortOrder.getDefault(), col.getName().getString()));
+                    allPkColumns.add(new ColumnDefInPkConstraint(colName, col.getSortOrder(), false));
+                    columnDefs.add(FACTORY.columnDef(colName, dataType.getSqlTypeName(), col.isNullable(), col.getMaxLength(), col.getScale(), false, SortOrder.getDefault(), col.getName().getString(), col.isRowTimestamp()));
                 }
                 /*
                  * Allocate an index ID in two circumstances:
@@ -1164,8 +1173,8 @@ public class MetaDataClient {
                     // Next add index ID column
                     PDataType dataType = MetaDataUtil.getViewIndexIdDataType();
                     ColumnName colName = ColumnName.caseSensitiveColumnName(MetaDataUtil.getViewIndexIdColumnName());
-                    allPkColumns.add(new Pair<ColumnName, SortOrder>(colName, SortOrder.getDefault()));
-                    columnDefs.add(FACTORY.columnDef(colName, dataType.getSqlTypeName(), false, null, null, false, SortOrder.getDefault(), null));
+                    allPkColumns.add(new ColumnDefInPkConstraint(colName, SortOrder.getDefault(), false));
+                    columnDefs.add(FACTORY.columnDef(colName, dataType.getSqlTypeName(), false, null, null, false, SortOrder.getDefault(), null, false));
                 }
                 
                 PhoenixStatement phoenixStatment = new PhoenixStatement(connection);
@@ -1199,11 +1208,13 @@ public class MetaDataClient {
                     
                     ColumnName colName = null;
                     ColumnRef colRef = expressionIndexCompiler.getColumnRef();
-					if (colRef!=null) { 
+					boolean isRowTimestamp = false;
+                    if (colRef!=null) { 
 						// if this is a regular column
 					    PColumn column = colRef.getColumn();
 					    String columnFamilyName = column.getFamilyName()!=null ? column.getFamilyName().getString() : null;
 					    colName = ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(columnFamilyName, column.getName().getString()));
+					    isRowTimestamp = column.isRowTimestamp();
 					}
 					else { 
 						// if this is an expression
@@ -1213,8 +1224,8 @@ public class MetaDataClient {
 					}
 					indexedColumnNames.add(colName);
                 	PDataType dataType = IndexUtil.getIndexColumnDataType(expression.isNullable(), expression.getDataType());
-                    allPkColumns.add(new Pair<ColumnName, SortOrder>(colName, pair.getSecond()));
-                    columnDefs.add(FACTORY.columnDef(colName, dataType.getSqlTypeName(), expression.isNullable(), expression.getMaxLength(), expression.getScale(), false, pair.getSecond(), expressionStr));
+                    allPkColumns.add(new ColumnDefInPkConstraint(colName, pair.getSecond(), isRowTimestamp));
+                    columnDefs.add(FACTORY.columnDef(colName, dataType.getSqlTypeName(), expression.isNullable(), expression.getMaxLength(), expression.getScale(), false, pair.getSecond(), expressionStr, isRowTimestamp));
                 }
 
                 // Next all the PK columns from the data table that aren't indexed
@@ -1225,11 +1236,11 @@ public class MetaDataClient {
                         // we don't need these in the index
                         if (col.getViewConstant() == null) {
                             ColumnName colName = ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(col));
-                            allPkColumns.add(new Pair<ColumnName, SortOrder>(colName, colExpression.getSortOrder()));
+                            allPkColumns.add(new ColumnDefInPkConstraint(colName, colExpression.getSortOrder(), col.isRowTimestamp()));
                             PDataType dataType = IndexUtil.getIndexColumnDataType(colExpression.isNullable(), colExpression.getDataType());
                             columnDefs.add(FACTORY.columnDef(colName, dataType.getSqlTypeName(),
                                     colExpression.isNullable(), colExpression.getMaxLength(), colExpression.getScale(),
-                                    false, colExpression.getSortOrder(), colExpression.toString()));
+                                    false, colExpression.getSortOrder(), colExpression.toString(), col.isRowTimestamp()));
                         }
                     }
                 }
@@ -1245,7 +1256,7 @@ public class MetaDataClient {
                     if (!SchemaUtil.isPKColumn(col) && col.getViewConstant() == null) {
                         // Need to re-create ColumnName, since the above one won't have the column family name
                         colName = ColumnName.caseSensitiveColumnName(col.getFamilyName().getString(), IndexUtil.getIndexColumnName(col));
-                        columnDefs.add(FACTORY.columnDef(colName, col.getDataType().getSqlTypeName(), col.isNullable(), col.getMaxLength(), col.getScale(), false, col.getSortOrder(), null));
+                        columnDefs.add(FACTORY.columnDef(colName, col.getDataType().getSqlTypeName(), col.isNullable(), col.getMaxLength(), col.getScale(), false, col.getSortOrder(), null, col.isRowTimestamp()));
                     }
                 }
 
@@ -1424,7 +1435,47 @@ public class MetaDataClient {
         }
         return null;
     }
+    
+    private static boolean checkAndValidateRowTimestampCol(ColumnDef colDef, PrimaryKeyConstraint pkConstraint,
+            boolean rowTimeStampColAlreadyFound, PTableType tableType) throws SQLException {
 
+        ColumnName columnDefName = colDef.getColumnDefName();
+        if (tableType == VIEW && (pkConstraint.getNumColumnsWithRowTimestamp() > 0 || colDef.isRowTimestamp())) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.ROWTIMESTAMP_NOT_ALLOWED_ON_VIEW)
+            .setColumnName(columnDefName.getColumnName()).build().buildException();
+        }
+        /*
+         * For indexes we have already validated that the data table has the right kind and number of row_timestamp
+         * columns. So we don't need to perform any extra validations for them.
+         */
+        if (tableType == TABLE) {
+            boolean isColumnDeclaredRowTimestamp = colDef.isRowTimestamp() || pkConstraint.isColumnRowTimestamp(columnDefName);
+            if (isColumnDeclaredRowTimestamp) {
+                boolean isColumnPartOfPk = colDef.isPK() || pkConstraint.contains(columnDefName);
+                // A column can be declared as ROW_TIMESTAMP only if it is part of the primary key
+                if (isColumnDeclaredRowTimestamp && !isColumnPartOfPk) { 
+                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.ROWTIMESTAMP_PK_COL_ONLY)
+                    .setColumnName(columnDefName.getColumnName()).build().buildException(); 
+                }
+
+                // A column can be declared as ROW_TIMESTAMP only if it can be represented as a long
+                PDataType dataType = colDef.getDataType();
+                if (isColumnDeclaredRowTimestamp && (dataType != PLong.INSTANCE && dataType != PUnsignedLong.INSTANCE && !dataType.isCoercibleTo(PTimestamp.INSTANCE))) { 
+                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.ROWTIMESTAMP_COL_INVALID_TYPE)
+                    .setColumnName(columnDefName.getColumnName()).build().buildException(); 
+                }
+
+                // Only one column can be declared as a ROW_TIMESTAMP column
+                if (rowTimeStampColAlreadyFound && isColumnDeclaredRowTimestamp) {
+                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.ROWTIMESTAMP_ONE_PK_COL_ONLY)
+                    .setColumnName(columnDefName.getColumnName()).build().buildException();
+                }
+                return true;
+            }
+        }
+        return false;
+    }
+    
     private PTable createTableInternal(CreateTableStatement statement, byte[][] splits, final PTable parent, String viewStatement, ViewType viewType, final byte[][] viewColumnConstants, final BitSet isViewColumnReferenced, Short indexId, IndexType indexType) throws SQLException {
         final PTableType tableType = statement.getTableType();
         boolean wasAutoCommit = connection.getAutoCommit();
@@ -1665,7 +1716,7 @@ public class MetaDataClient {
             PreparedStatement colUpsert = connection.prepareStatement(INSERT_COLUMN);
             Map<String, PName> familyNames = Maps.newLinkedHashMap();
             boolean isPK = false;
-
+            boolean rowTimeStampColumnAlreadyFound = false;
             int positionOffset = columns.size();
             if (saltBucketNum != null) {
                 positionOffset++;
@@ -1675,9 +1726,10 @@ public class MetaDataClient {
             }
             int pkPositionOffset = pkColumns.size();
             int position = positionOffset;
-
+            
             for (ColumnDef colDef : colDefs) {
-                if (colDef.isPK()) {
+                rowTimeStampColumnAlreadyFound = checkAndValidateRowTimestampCol(colDef, pkConstraint, rowTimeStampColumnAlreadyFound, tableType);
+                if (colDef.isPK()) { // i.e. the column is declared as CREATE TABLE COLNAME DATATYPE PRIMARY KEY...
                     if (isPK) {
                         throw new SQLExceptionInfo.Builder(SQLExceptionCode.PRIMARY_KEY_ALREADY_EXISTS)
                             .setColumnName(colDef.getColumnDefName().getColumnName()).build().buildException();
@@ -1693,7 +1745,6 @@ public class MetaDataClient {
                                 .setColumnName(colDef.getColumnDefName().getColumnName()).build().buildException();
                     }
                 }
-
                 PColumn column = newColumn(position++, colDef, pkConstraint, defaultFamilyName, false);
                 if (SchemaUtil.isPKColumn(column)) {
                     // TODO: remove this constraint?
@@ -2454,6 +2505,10 @@ public class MetaDataClient {
                         if (colDef != null && colDef.isPK() && table.getType() == VIEW && table.getViewType() != MAPPED) {
                             throwIfLastPKOfParentIsFixedLength(getParentOfView(table), schemaName, tableName, colDef);
                         }
+                        if (colDef != null && colDef.isRowTimestamp()) {
+                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.ROWTIMESTAMP_CREATE_ONLY)
+                            .setColumnName(colDef.getColumnDefName().getColumnName()).build().buildException();
+                        }
                         PColumn column = newColumn(position++, colDef, PrimaryKeyConstraint.EMPTY, table.getDefaultFamilyName() == null ? null : table.getDefaultFamilyName().getString(), true);
                         columns.add(column);
                         String pkName = null;
@@ -2491,7 +2546,7 @@ public class MetaDataClient {
                                     PDataType indexColDataType = IndexUtil.getIndexColumnDataType(colDef.isNull(), colDef.getDataType());
                                     ColumnName indexColName = ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(null, colDef.getColumnDefName().getColumnName()));
                                     Expression expression = new RowKeyColumnExpression(columns.get(i), new RowKeyValueAccessor(pkColumns, ++pkSlotPosition));
-                                    ColumnDef indexColDef = FACTORY.columnDef(indexColName, indexColDataType.getSqlTypeName(), colDef.isNull(), colDef.getMaxLength(), colDef.getScale(), true, colDef.getSortOrder(), expression.toString());
+                                    ColumnDef indexColDef = FACTORY.columnDef(indexColName, indexColDataType.getSqlTypeName(), colDef.isNull(), colDef.getMaxLength(), colDef.getScale(), true, colDef.getSortOrder(), expression.toString(), colDef.isRowTimestamp());
                                     PColumn indexColumn = newColumn(indexPosition++, indexColDef, PrimaryKeyConstraint.EMPTY, null, true);
                                     addColumnMutation(schemaName, index.getTableName().getString(), indexColumn, colUpsert, index.getParentTableName().getString(), index.getPKName() == null ? null : index.getPKName().getString(), ++nextIndexKeySeq, index.getBucketNum() != null);
                                 }

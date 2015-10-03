@@ -30,6 +30,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.compile.ExplainPlan;
@@ -201,12 +202,6 @@ public abstract class BaseQueryPlan implements QueryPlan {
             scan.setSmall(true);
         }
         
-        // Set producer on scan so HBase server does round robin processing
-        //setProducer(scan);
-        // Set the time range on the scan so we don't get back rows newer than when the statement was compiled
-        // The time stamp comes from the server at compile time when the meta data
-        // is resolved.
-        // TODO: include time range in explain plan?
         PhoenixConnection connection = context.getConnection();
 
         // set read consistency
@@ -214,14 +209,22 @@ public abstract class BaseQueryPlan implements QueryPlan {
                 && context.getCurrentTable().getTable().getType() != PTableType.SYSTEM) {
             scan.setConsistency(connection.getConsistency());
         }
-        if (context.getScanTimeRange() == null) {
-          Long scn = connection.getSCN();
-          if (scn == null) {
+                // Get the time range of row_timestamp column
+        TimeRange rowTimestampRange = context.getScanRanges().getRowTimestampRange();
+        // Get the already existing time range on the scan.
+        TimeRange scanTimeRange = scan.getTimeRange();
+        Long scn = connection.getSCN();
+        if (scn == null) {
             scn = context.getCurrentTime();
-          }
-          ScanUtil.setTimeRange(scan, scn);
-        } else {
-            ScanUtil.setTimeRange(scan, context.getScanTimeRange());
+        }
+        try {
+            TimeRange timeRangeToUse = ScanUtil.intersectTimeRange(rowTimestampRange, scanTimeRange, scn);
+            if (timeRangeToUse == null) {
+                return ResultIterator.EMPTY_ITERATOR;
+            }
+            scan.setTimeRange(timeRangeToUse.getMin(), timeRangeToUse.getMax());
+        } catch (IOException e) {
+            throw new RuntimeException(e);
         }
         byte[] tenantIdBytes;
         if( table.isMultiTenant() == true ) {

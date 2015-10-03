@@ -114,8 +114,9 @@ public class PostIndexDDLCompiler {
         this.selectQuery = selectQueryBuilder.toString();
         updateStmtStr.append(this.selectQuery);
         
-        final PhoenixStatement statement = new PhoenixStatement(connection);
-        return statement.compileMutation(updateStmtStr.toString());
+        try (final PhoenixStatement statement = new PhoenixStatement(connection)) {
+            return statement.compileMutation(updateStmtStr.toString());
+        }
     }
 
     public List<String> getIndexColumnNames() {

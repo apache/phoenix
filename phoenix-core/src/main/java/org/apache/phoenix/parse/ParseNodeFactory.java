@@ -29,9 +29,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.util.Pair;
-import org.apache.phoenix.exception.SQLExceptionCode;
-import org.apache.phoenix.exception.SQLExceptionInfo;
-import org.apache.phoenix.exception.UnknownFunctionException;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.ExpressionType;
 import org.apache.phoenix.expression.function.AvgAggregateFunction;
@@ -265,17 +262,21 @@ public class ParseNodeFactory {
         return new PropertyName(familyName, propertyName);
     }
 
-    public ColumnDef columnDef(ColumnName columnDefName, String sqlTypeName, boolean isNull, Integer maxLength, Integer scale, boolean isPK, SortOrder sortOrder, String expressionStr) {
-        return new ColumnDef(columnDefName, sqlTypeName, isNull, maxLength, scale, isPK, sortOrder, expressionStr);
+    public ColumnDef columnDef(ColumnName columnDefName, String sqlTypeName, boolean isNull, Integer maxLength, Integer scale, boolean isPK, SortOrder sortOrder, String expressionStr, boolean isRowTimestamp) {
+        return new ColumnDef(columnDefName, sqlTypeName, isNull, maxLength, scale, isPK, sortOrder, expressionStr, isRowTimestamp);
     }
 
     public ColumnDef columnDef(ColumnName columnDefName, String sqlTypeName, boolean isArray, Integer arrSize, Boolean isNull, Integer maxLength, Integer scale, boolean isPK, 
-        	SortOrder sortOrder) {
-        return new ColumnDef(columnDefName, sqlTypeName, isArray, arrSize, isNull, maxLength, scale, isPK, sortOrder, null);
+        	SortOrder sortOrder, boolean isRowTimestamp) {
+        return new ColumnDef(columnDefName, sqlTypeName, isArray, arrSize, isNull, maxLength, scale, isPK, sortOrder, null, isRowTimestamp);
     }
-
-    public PrimaryKeyConstraint primaryKey(String name, List<Pair<ColumnName, SortOrder>> columnNameAndSortOrder) {
-        return new PrimaryKeyConstraint(name, columnNameAndSortOrder);
+    
+    public ColumnDefInPkConstraint columnDefInPkConstraint(ColumnName columnDefName, SortOrder sortOrder, boolean isRowTimestamp) {
+        return new ColumnDefInPkConstraint(columnDefName, sortOrder, isRowTimestamp);
+    }
+    
+    public PrimaryKeyConstraint primaryKey(String name, List<ColumnDefInPkConstraint> columnDefs) {
+        return new PrimaryKeyConstraint(name, columnDefs);
     }
     
     public IndexKeyConstraint indexKey( List<Pair<ParseNode, SortOrder>> parseNodeAndSortOrder) {
