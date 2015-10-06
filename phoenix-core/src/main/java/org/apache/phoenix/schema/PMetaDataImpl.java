@@ -160,7 +160,7 @@ public class PMetaDataImpl implements PMetaData {
                     newCache.put(tableRef.table.getKey(), new PTableRef(tableRef));
                     toRemove.add(tableRef);
                     toRemoveBytes += tableRef.estSize;
-                    if (toRemoveBytes - toRemove.peekLast().estSize > overage) {
+                    while (toRemoveBytes - toRemove.peekLast().estSize >= overage) {
                         PTableRef removedRef = toRemove.removeLast();
                         toRemoveBytes -= removedRef.estSize;
                     }
