@@ -17,16 +17,15 @@
  */
 package org.apache.phoenix.schema;
 
-import static org.junit.Assert.assertEquals;
-
-import java.sql.SQLException;
-import java.util.Set;
-
+import com.google.common.collect.Sets;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.util.TimeKeeper;
 import org.junit.Test;
 
-import com.google.common.collect.Sets;
+import java.sql.SQLException;
+import java.util.Set;
+
+import static org.junit.Assert.assertEquals;
 
 public class PMetaDataImplTest {
     
@@ -104,7 +103,66 @@ public class PMetaDataImplTest {
         assertEquals(2, metaData.size());
         assertNames(metaData, "d","e");
     }
-    
+
+    @Test
+    public void shouldNotEvictMoreEntriesThanNecessary() throws Exception {
+        long maxSize = 5;
+        PMetaData metaData = new PMetaDataImpl(5, maxSize, new TestTimeKeeper());
+        metaData = addToTable(metaData, "a", 1);
+        assertEquals(1, metaData.size());
+        metaData = addToTable(metaData, "b", 1);
+        assertEquals(2, metaData.size());
+        assertNames(metaData, "a", "b");
+        metaData = addToTable(metaData, "c", 3);
+        assertEquals(3, metaData.size());
+        assertNames(metaData, "a", "b", "c");
+        getFromTable(metaData, "a");
+        getFromTable(metaData, "b");
+        metaData = addToTable(metaData, "d", 3);
+        assertEquals(3, metaData.size());
+        assertNames(metaData, "a", "b", "d");
+    }
+
+    @Test
+    public void shouldAlwaysKeepAtLeastOneEntryEvenIfTooLarge() throws Exception {
+        long maxSize = 5;
+        PMetaData metaData = new PMetaDataImpl(5, maxSize, new TestTimeKeeper());
+        metaData = addToTable(metaData, "a", 1);
+        assertEquals(1, metaData.size());
+        metaData = addToTable(metaData, "b", 1);
+        assertEquals(2, metaData.size());
+        metaData = addToTable(metaData, "c", 5);
+        assertEquals(1, metaData.size());
+        metaData = addToTable(metaData, "d", 20);
+        assertEquals(1, metaData.size());
+        assertNames(metaData, "d");
+        metaData = addToTable(metaData, "e", 1);
+        assertEquals(1, metaData.size());
+        metaData = addToTable(metaData, "f", 2);
+        assertEquals(2, metaData.size());
+        assertNames(metaData, "e", "f");
+    }
+
+    @Test
+    public void shouldAlwaysKeepOneEntryIfMaxSizeIsZero() throws Exception {
+        long maxSize = 0;
+        PMetaData metaData = new PMetaDataImpl(0, maxSize, new TestTimeKeeper());
+        metaData = addToTable(metaData, "a", 1);
+        assertEquals(1, metaData.size());
+        metaData = addToTable(metaData, "b", 1);
+        assertEquals(1, metaData.size());
+        metaData = addToTable(metaData, "c", 5);
+        assertEquals(1, metaData.size());
+        metaData = addToTable(metaData, "d", 20);
+        assertEquals(1, metaData.size());
+        assertNames(metaData, "d");
+        metaData = addToTable(metaData, "e", 1);
+        assertEquals(1, metaData.size());
+        metaData = addToTable(metaData, "f", 2);
+        assertEquals(1, metaData.size());
+        assertNames(metaData, "f");
+    }
+
     private static class PSizedTable extends PTableImpl {
         private final int size;
         private final PTableKey key;
