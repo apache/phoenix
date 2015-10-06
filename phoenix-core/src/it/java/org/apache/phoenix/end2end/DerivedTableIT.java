@@ -18,33 +18,7 @@
 
 package org.apache.phoenix.end2end;
 
-import static org.apache.phoenix.util.TestUtil.A_VALUE;
-import static org.apache.phoenix.util.TestUtil.B_VALUE;
-import static org.apache.phoenix.util.TestUtil.C_VALUE;
-import static org.apache.phoenix.util.TestUtil.E_VALUE;
-import static org.apache.phoenix.util.TestUtil.ROW1;
-import static org.apache.phoenix.util.TestUtil.ROW2;
-import static org.apache.phoenix.util.TestUtil.ROW3;
-import static org.apache.phoenix.util.TestUtil.ROW4;
-import static org.apache.phoenix.util.TestUtil.ROW5;
-import static org.apache.phoenix.util.TestUtil.ROW6;
-import static org.apache.phoenix.util.TestUtil.ROW7;
-import static org.apache.phoenix.util.TestUtil.ROW8;
-import static org.apache.phoenix.util.TestUtil.ROW9;
-import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
-
-import java.sql.Array;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.util.Collection;
-import java.util.List;
-import java.util.Properties;
-
+import com.google.common.collect.Lists;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
@@ -54,14 +28,17 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
-import com.google.common.collect.Lists;
+import java.sql.*;
+import java.util.*;
+
+import static org.apache.phoenix.util.TestUtil.*;
+import static org.junit.Assert.*;
 
 
 @RunWith(Parameterized.class)
 public class DerivedTableIT extends BaseClientManagedTimeIT {
     private static final String tenantId = getOrganizationId();
-    
-    private long ts;
+
     private String[] indexDDL;
     private String[] plans;
     
@@ -72,7 +49,7 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
     
     @Before
     public void initTable() throws Exception {
-         ts = nextTimestamp();
+        long ts = nextTimestamp();
         initATableValues(tenantId, getDefaultSplits(tenantId), null, ts);
         if (indexDDL != null && indexDDL.length > 0) {
             Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -313,21 +290,25 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
             query = "SELECT DISTINCT COLLECTDISTINCT(t.b) FROM (SELECT b_string b, a_string a FROM aTable GROUP BY a_string, b_string) AS t GROUP BY t.a";
             statement = conn.prepareStatement(query);
             rs = statement.executeQuery();
-            assertTrue (rs.next());
+            Set<Array> queryResults = new HashSet<>();
+            for (int i=0; i<2; i++) {
+                assertTrue(rs.next());
+                queryResults.add(rs.getArray(1));
+            }
+            assertFalse(rs.next());
+
+            Set<Array> expectedResults = new HashSet<>();
             b = new String[1];
             b[0] = E_VALUE;
-            array = conn.createArrayOf("VARCHAR", b);
-            assertEquals(array,rs.getArray(1));
-            assertTrue (rs.next());
+            expectedResults.add(conn.createArrayOf("VARCHAR", b));
+
             b = new String[3];
             b[0] = B_VALUE;
             b[1] = C_VALUE;
             b[2] = E_VALUE;
-            array = conn.createArrayOf("VARCHAR", b);
-            assertEquals(array,rs.getArray(1));
+            expectedResults.add(conn.createArrayOf("VARCHAR", b));
+            assertEquals(expectedResults, queryResults);
 
-            assertFalse(rs.next());
-            
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
             assertEquals(plans[1], QueryUtil.getExplainPlan(rs));
         } finally {
