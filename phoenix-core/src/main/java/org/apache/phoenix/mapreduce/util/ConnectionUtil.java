@@ -54,8 +54,10 @@ public class ConnectionUtil {
      */
     public static Connection getInputConnection(final Configuration conf , final Properties props) throws SQLException {
         Preconditions.checkNotNull(conf);
-        return getConnection(PhoenixConfigurationUtil.getInputCluster(conf), PhoenixConfigurationUtil.getClientPort(conf),
-                PropertiesUtil.extractProperties(props, conf));
+		return getConnection(PhoenixConfigurationUtil.getInputCluster(conf),
+				PhoenixConfigurationUtil.getClientPort(conf),
+				PhoenixConfigurationUtil.getZNodeParent(conf),
+				PropertiesUtil.extractProperties(props, conf));
     }
 
     /**
@@ -77,8 +79,10 @@ public class ConnectionUtil {
      */
     public static Connection getOutputConnection(final Configuration conf, Properties props) throws SQLException {
         Preconditions.checkNotNull(conf);
-        return getConnection(PhoenixConfigurationUtil.getOutputCluster(conf), PhoenixConfigurationUtil.getClientPort(conf),
-                PropertiesUtil.extractProperties(props, conf));
+		return getConnection(PhoenixConfigurationUtil.getOutputCluster(conf),
+				PhoenixConfigurationUtil.getClientPort(conf),
+				PhoenixConfigurationUtil.getZNodeParent(conf),
+				PropertiesUtil.extractProperties(props, conf));
     }
 
     /**
@@ -86,11 +90,12 @@ public class ConnectionUtil {
      *
      * @param quorum a ZooKeeper quorum connection string
      * @param clientPort a ZooKeeper client port
+     * @param znodeParent a zookeeper znode parent
      * @return a Phoenix connection to the given connection string
      */
-    private static Connection getConnection(final String quorum, final Integer clientPort, Properties props) throws SQLException {
+    private static Connection getConnection(final String quorum, final Integer clientPort, final String znodeParent, Properties props) throws SQLException {
         Preconditions.checkNotNull(quorum);
-        return DriverManager.getConnection(clientPort!=null? QueryUtil.getUrl(quorum, clientPort) :  QueryUtil.getUrl(quorum), props);
+        return DriverManager.getConnection(QueryUtil.getUrl(quorum, clientPort, znodeParent), props);
     }
 
 }
