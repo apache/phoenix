@@ -26,14 +26,12 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
 import org.apache.phoenix.pherf.jmx.MonitorManager;
-
 import org.apache.phoenix.pherf.result.file.Extension;
 import org.apache.phoenix.pherf.result.file.ResultFileDetails;
 import org.apache.phoenix.pherf.result.impl.CSVFileResultHandler;
 import org.apache.phoenix.pherf.result.impl.XMLResultHandler;
 import org.apache.phoenix.pherf.result.*;
 import org.junit.Test;
-
 import org.apache.phoenix.pherf.configuration.Query;
 
 public class ResultTest extends ResultBaseTest {
@@ -110,8 +108,11 @@ public class ResultTest extends ResultBaseTest {
     @Test
     public void testResult() throws Exception {
         String filename = "testresult";
-        ResultHandler xmlResultHandler = null;
-        ResultManager resultManager = new ResultManager(filename);
+        ResultHandler xmlResultHandler = new XMLResultHandler();
+        xmlResultHandler.setResultFileDetails(ResultFileDetails.XML);
+        xmlResultHandler.setResultFileName(filename);
+
+        ResultManager resultManager = new ResultManager(filename, Arrays.asList(xmlResultHandler));
         assertTrue("Default Handlers were not initialized.", resultManager.getResultHandlers().size() > 0);
 
         // write result to file
@@ -125,10 +126,6 @@ public class ResultTest extends ResultBaseTest {
         resultManager.write(modelResults);
 
         // read result from file
-        xmlResultHandler = new XMLResultHandler();
-        xmlResultHandler.setResultFileDetails(ResultFileDetails.XML);
-        xmlResultHandler.setResultFileName(filename);
-
         List<Result> resultList = xmlResultHandler.read();
         ResultValue<DataModelResult> resultValue = resultList.get(0).getResultValues().get(0);
         DataModelResult dataModelResultFromFile = resultValue.getResultValue();
