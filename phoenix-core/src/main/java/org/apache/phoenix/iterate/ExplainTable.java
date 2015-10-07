@@ -121,8 +121,6 @@ public abstract class ExplainTable {
             appendKeyRanges(buf);
         }
         planSteps.add(buf.toString());
-        System.out.println("Table row timestamp column position: " + tableRef.getTable().getRowTimestampColPos());
-        System.out.println("Table name:  " + tableRef.getTable().getName().getString());
         if (context.getScan() != null && tableRef.getTable().getRowTimestampColPos() != -1) {
             TimeRange range = context.getScan().getTimeRange();
             planSteps.add("    ROW TIMESTAMP FILTER [" + range.getMin() + ", " + range.getMax() + ")");
