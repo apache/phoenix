@@ -249,6 +249,13 @@ public final class QueryUtil {
         return getUrlInternal(zkQuorum, port, znodeParent);
     }
 
+    /**
+     * Create the Phoenix JDBC connection URL from the provided cluster connection details.
+     */
+    public static String getUrl(String zkQuorum, Integer port, String znodeParent) {
+        return getUrlInternal(zkQuorum, port, znodeParent);
+    }
+
     private static String getUrlInternal(String zkQuorum, Integer port, String znodeParent) {
         return new PhoenixEmbeddedDriver.ConnectionInfo(zkQuorum, port, znodeParent).toUrl()
                 + PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
