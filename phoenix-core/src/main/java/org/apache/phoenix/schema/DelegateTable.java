@@ -246,4 +246,9 @@ public class DelegateTable implements PTable {
     public boolean rowKeyOrderOptimizable() {
         return delegate.rowKeyOrderOptimizable();
     }
+    
+    @Override
+    public String toString() {
+        return delegate.toString();
+    }
 }
