@@ -83,5 +83,10 @@ public class DelegateColumn extends DelegateDatum implements PColumn {
     @Override
     public boolean isRowTimestamp() {
         return getDelegate().isRowTimestamp();
+    }    
+    
+    @Override
+    public String toString() {
+        return getDelegate().toString();
     }
 }
