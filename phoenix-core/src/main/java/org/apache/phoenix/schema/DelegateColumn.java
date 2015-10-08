@@ -75,4 +75,9 @@ public class DelegateColumn extends DelegateDatum implements PColumn {
     public String getExpressionStr() {
         return getDelegate().getExpressionStr();
     }
+    
+    @Override
+    public String toString() {
+        return getDelegate().toString();
+    }
 }
