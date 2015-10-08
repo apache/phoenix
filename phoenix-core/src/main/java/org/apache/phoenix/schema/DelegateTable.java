@@ -251,4 +251,9 @@ public class DelegateTable implements PTable {
     public int getRowTimestampColPos() {
         return delegate.getRowTimestampColPos();
     }
+    
+    @Override
+    public String toString() {
+        return delegate.toString();
+    }
 }
