@@ -305,12 +305,18 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
 
     @Override
     public List<KeyRange> getSplits() {
-        return splits;
+        if (splits == null)
+            return Collections.emptyList();
+        else
+            return splits;
     }
 
     @Override
     public List<List<Scan>> getScans() {
-        return scans;
+        if (scans == null)
+            return Collections.emptyList();
+        else
+            return scans;
     }
 
     private static List<byte[]> toBoundaries(List<HRegionLocation> regionLocations) {
