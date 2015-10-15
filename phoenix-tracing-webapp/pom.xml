@@ -150,6 +150,17 @@
             <jsTestSrcDir>${basedir}/src/test/webapp/js/specs</jsTestSrcDir>
           </configuration>
         </plugin>
+	<plugin>
+		<groupId>org.apache.rat</groupId>
+		<artifactId>apache-rat-plugin</artifactId>
+		<configuration>
+			<excludes>
+				<exclude>**/webapp/**</exclude>
+				<exclude>**/*.xml</exclude>
+				<exclude>**/README.md</exclude>
+			</excludes>
+		</configuration>
+	</plugin>
       </plugins>
     </build>
 
