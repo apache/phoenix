@@ -64,4 +64,8 @@ java_cmd = 'java -cp "' + phoenix_utils.hbase_conf_dir + os.pathsep + phoenix_ut
 childProc = subprocess.Popen(java_cmd, shell=True)
 #Wait for child process exit
 (output, error) = childProc.communicate()
+returncode = childProc.returncode
 childProc = None
+# Propagate Java return code to this script
+if returncode is not None:
+    sys.exit(returncode)
