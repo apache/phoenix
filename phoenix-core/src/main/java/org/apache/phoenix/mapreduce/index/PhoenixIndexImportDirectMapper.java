@@ -33,10 +33,14 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapreduce.Mapper;
+import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.PhoenixJobCounters;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
+import org.apache.phoenix.query.ConnectionQueryServices;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.ColumnInfo;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.slf4j.Logger;
@@ -60,6 +64,10 @@ public class PhoenixIndexImportDirectMapper extends
 
     private DirectHTableWriter writer;
 
+    private int batchSize;
+
+    private MutationState mutationState;
+
     @Override
     protected void setup(final Context context) throws IOException, InterruptedException {
         super.setup(context);
@@ -68,8 +76,7 @@ public class PhoenixIndexImportDirectMapper extends
 
         try {
             indxTblColumnMetadata =
-                    PhoenixConfigurationUtil
-                            .getUpsertColumnMetadataList(configuration);
+                    PhoenixConfigurationUtil.getUpsertColumnMetadataList(configuration);
             indxWritable.setColumnMetadata(indxTblColumnMetadata);
 
             final Properties overrideProps = new Properties();
@@ -77,6 +84,14 @@ public class PhoenixIndexImportDirectMapper extends
                 configuration.get(PhoenixConfigurationUtil.CURRENT_SCN_VALUE));
             connection = ConnectionUtil.getOutputConnection(configuration, overrideProps);
             connection.setAutoCommit(false);
+            // Get BatchSize
+            ConnectionQueryServices services = ((PhoenixConnection) connection).getQueryServices();
+            int maxSize =
+                    services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_ATTRIB,
+                        QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE);
+            batchSize = Math.min(((PhoenixConnection) connection).getMutateBatchSize(), maxSize);
+            LOG.info("Mutation Batch Size = " + batchSize);
+
             final String upsertQuery = PhoenixConfigurationUtil.getUpsertStatement(configuration);
             this.pStatement = connection.prepareStatement(upsertQuery);
 
@@ -98,17 +113,22 @@ public class PhoenixIndexImportDirectMapper extends
             this.pStatement.execute();
 
             final PhoenixConnection pconn = connection.unwrap(PhoenixConnection.class);
-            final Iterator<Pair<byte[], List<Mutation>>> iterator =
-                    pconn.getMutationState().toMutations(true);
-
-            while (iterator.hasNext()) {
-                Pair<byte[], List<Mutation>> mutationPair = iterator.next();
-                for (Mutation mutation : mutationPair.getSecond()) {
-                    writer.write(mutation);
-                }
-                context.getCounter(PhoenixJobCounters.OUTPUT_RECORDS).increment(1);
+            MutationState currentMutationState = pconn.getMutationState();
+            if (mutationState == null) {
+                mutationState = currentMutationState;
+                return;
             }
-            connection.rollback();
+            // Keep accumulating Mutations till batch size
+            mutationState.join(currentMutationState);
+
+            // Write Mutation Batch
+            if (context.getCounter(PhoenixJobCounters.INPUT_RECORDS).getValue() % batchSize == 0) {
+                writeBatch(mutationState, context);
+                mutationState = null;
+            }
+
+            // Make sure progress is reported to Application Master.
+            context.progress();
         } catch (SQLException e) {
             LOG.error(" Error {}  while read/write of a record ", e.getMessage());
             context.getCounter(PhoenixJobCounters.FAILED_RECORDS).increment(1);
@@ -116,21 +136,47 @@ public class PhoenixIndexImportDirectMapper extends
         }
     }
 
+    private void writeBatch(MutationState mutationState, Context context) throws IOException,
+            SQLException, InterruptedException {
+        final Iterator<Pair<byte[], List<Mutation>>> iterator = mutationState.toMutations(true);
+        while (iterator.hasNext()) {
+            Pair<byte[], List<Mutation>> mutationPair = iterator.next();
+
+            writer.write(mutationPair.getSecond());
+            context.getCounter(PhoenixJobCounters.OUTPUT_RECORDS).increment(
+                mutationPair.getSecond().size());
+        }
+        connection.rollback();
+    }
+
     @Override
     protected void cleanup(Context context) throws IOException, InterruptedException {
-        // We are writing some dummy key-value as map output here so that we commit only one
-        // output to reducer.
-        context.write(new ImmutableBytesWritable(UUID.randomUUID().toString().getBytes()),
-            new IntWritable(0));
-        super.cleanup(context);
-        if (connection != null) {
-            try {
-                connection.close();
-            } catch (SQLException e) {
-                LOG.error("Error {} while closing connection in the PhoenixIndexMapper class ",
-                    e.getMessage());
+        try {
+            // Write the last & final Mutation Batch
+            if (mutationState != null) {
+                writeBatch(mutationState, context);
+            }
+            // We are writing some dummy key-value as map output here so that we commit only one
+            // output to reducer.
+            context.write(new ImmutableBytesWritable(UUID.randomUUID().toString().getBytes()),
+                new IntWritable(0));
+            super.cleanup(context);
+        } catch (SQLException e) {
+            LOG.error(" Error {}  while read/write of a record ", e.getMessage());
+            context.getCounter(PhoenixJobCounters.FAILED_RECORDS).increment(1);
+            throw new RuntimeException(e);
+        } finally {
+            if (connection != null) {
+                try {
+                    connection.close();
+                } catch (SQLException e) {
+                    LOG.error("Error {} while closing connection in the PhoenixIndexMapper class ",
+                        e.getMessage());
+                }
+            }
+            if (writer != null) {
+                writer.close();
             }
         }
-        writer.close();
     }
 }
