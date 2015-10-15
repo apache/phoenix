@@ -645,4 +645,38 @@ public class UnionAllIT extends BaseOwnClusterHBaseManagedTimeIT {
             conn.close();
         }
     } 
+
+    @Test
+    public void testBug2295() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(false);
+
+        try {
+            String ddl = "CREATE TABLE table1(" +
+                    "id BIGINT, col1 VARCHAR, col2 integer, CONSTRAINT pk PRIMARY KEY (id)) IMMUTABLE_ROWS=true";
+            createTestTable(getUrl(), ddl);
+
+            ddl = "CREATE TABLE table2(" +
+                    "id BIGINT, col1 VARCHAR, col2 integer, CONSTRAINT pk PRIMARY KEY (id)) IMMUTABLE_ROWS=true";
+            createTestTable(getUrl(), ddl);
+
+            ddl = "CREATE index idx_table1_col1 on table1(col1)";
+            createTestTable(getUrl(), ddl);
+
+            ddl = "CREATE index idx_table2_col1 on table2(col1)";
+            createTestTable(getUrl(), ddl);
+
+            ddl = "Explain SELECT /*+ INDEX(table1 idx_table1_col1) */ col1, col2 from table1 where col1='123' " +
+                    "union all SELECT /*+ INDEX(table2 idx_table2_col1) */ col1, col2 from table2 where col1='123'"; 
+            ResultSet rs = conn.createStatement().executeQuery(ddl);
+            assertTrue(rs.next());
+        } finally {
+            String ddl = "drop table table1";
+            conn.createStatement().execute(ddl);
+            ddl = "drop table table2";
+            conn.createStatement().execute(ddl);
+            conn.close();
+        }
+    }
 }
