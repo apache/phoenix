@@ -18,14 +18,13 @@
 package org.apache.phoenix.mapreduce.index;
 
 import java.io.IOException;
+import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Mutation;
-import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.zookeeper.ZKUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -95,10 +94,9 @@ public class DirectHTableWriter {
         }
     }
 
-    public void write(Mutation mutation) throws IOException {
-        if (mutation instanceof Put) this.table.put(new Put((Put) mutation));
-        else if (mutation instanceof Delete) this.table.delete(new Delete((Delete) mutation));
-        else throw new IOException("Pass a Delete or a Put");
+    public void write(List<Mutation> mutations) throws IOException, InterruptedException {
+        Object[] results = new Object[mutations.size()];
+        table.batch(mutations, results);
     }
 
     protected Configuration getConf() {
