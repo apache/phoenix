@@ -1343,4 +1343,72 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeIT {
 		}
 	}
 
+	@Test
+	public void testImmutableTableOnlyHasPrimaryKeyIndex() throws Exception {
+		helpTestTableOnlyHasPrimaryKeyIndex(false, false);
+	}
+
+	@Test
+	public void testImmutableLocalTableOnlyHasPrimaryKeyIndex() throws Exception {
+		helpTestTableOnlyHasPrimaryKeyIndex(false, true);
+	}
+
+	@Test
+	public void testMutableTableOnlyHasPrimaryKeyIndex() throws Exception {
+		helpTestTableOnlyHasPrimaryKeyIndex(true, false);
+	}
+
+	@Test
+	public void testMutableLocalTableOnlyHasPrimaryKeyIndex() throws Exception {
+		helpTestTableOnlyHasPrimaryKeyIndex(true, true);
+	}
+
+	private void helpTestTableOnlyHasPrimaryKeyIndex(boolean mutable,
+			boolean localIndex) throws Exception {
+		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+		Connection conn = DriverManager.getConnection(getUrl(), props);
+		String nameSuffix = "t" + (mutable ? "_mutable" : "_immutable") + (localIndex ? "_local" : "_global");
+		String tableName = "t" + nameSuffix;
+		String indexName = "idx" + nameSuffix;
+		try {
+			conn.createStatement().execute(
+				"CREATE TABLE " + tableName + " ("
+							+ "pk1 VARCHAR not null, "
+							+ "pk2 VARCHAR not null, "
+							+ "CONSTRAINT PK PRIMARY KEY (pk1, pk2))"
+							+ (!mutable ? "IMMUTABLE_ROWS=true" : ""));
+			String query = "SELECT * FROM " + tableName;
+			ResultSet rs = conn.createStatement().executeQuery(query);
+			assertFalse(rs.next());
+			conn.createStatement().execute(
+				"CREATE " + (localIndex ? "LOCAL" : "")
+					+ " INDEX " + indexName + " ON " + tableName + " (pk2, pk1)");
+			query = "SELECT * FROM " + indexName;
+			rs = conn.createStatement().executeQuery(query);
+			assertFalse(rs.next());
+
+			PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES(?,?)");
+			stmt.setString(1, "k11");
+			stmt.setString(2, "k21");
+			stmt.execute();
+			conn.commit();
+
+            query = "SELECT * FROM " + indexName;
+            rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals("k21", rs.getString(1));
+            assertEquals("k11", rs.getString(2));
+            assertFalse(rs.next());
+            
+			query = "SELECT * FROM " + tableName + " WHERE pk2='k21'";
+			rs = conn.createStatement().executeQuery(query);
+			assertTrue(rs.next());
+			assertEquals("k11", rs.getString(1));
+			assertEquals("k21", rs.getString(2));
+			assertFalse(rs.next());
+		} finally {
+			conn.close();
+		}
+	}
+
 }

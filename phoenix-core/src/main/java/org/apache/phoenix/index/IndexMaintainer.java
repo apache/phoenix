@@ -834,7 +834,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 nDeleteCF++;
             }
         }
-        return nDeleteCF == this.nDataCFs;
+        return nDeleteCF == this.nDataCFs && nDeleteCF > 0;
     }
     
     private boolean hasIndexedColumnChanged(ValueGetter oldState, Collection<KeyValue> pendingUpdates) throws IOException {
