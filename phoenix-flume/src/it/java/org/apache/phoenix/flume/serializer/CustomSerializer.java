@@ -17,16 +17,13 @@
  */
 package org.apache.phoenix.flume.serializer;
 
-import org.apache.flume.Context;
-import org.apache.flume.Event;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.sql.SQLException;
 import java.util.List;
 
+import org.apache.flume.Context;
+import org.apache.flume.Event;
+
 public class CustomSerializer extends BaseEventSerializer {
-    private static final Logger logger = LoggerFactory.getLogger(CustomSerializer.class);
     @Override
     public void doConfigure(Context context) {
 
