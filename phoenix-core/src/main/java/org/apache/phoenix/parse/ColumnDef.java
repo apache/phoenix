@@ -24,6 +24,7 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PBinary;
 import org.apache.phoenix.schema.types.PChar;
+import org.apache.phoenix.schema.types.PCharArray;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PVarbinary;
@@ -78,7 +79,7 @@ public class ColumnDef {
          }
          
          this.isNull = isNull;
-         if (this.dataType == PChar.INSTANCE) {
+         if (this.dataType == PChar.INSTANCE || this.dataType == PCharArray.INSTANCE) {
              if (maxLength == null) {
                  throw new SQLExceptionInfo.Builder(SQLExceptionCode.MISSING_CHAR_LENGTH)
                      .setColumnName(columnDefName.getColumnName()).build().buildException();
