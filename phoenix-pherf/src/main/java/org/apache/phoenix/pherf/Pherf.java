@@ -18,7 +18,18 @@
 
 package org.apache.phoenix.pherf;
 
-import org.apache.commons.cli.*;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+import java.util.Properties;
+
+import org.apache.commons.cli.CommandLine;
+import org.apache.commons.cli.CommandLineParser;
+import org.apache.commons.cli.HelpFormatter;
+import org.apache.commons.cli.Options;
+import org.apache.commons.cli.ParseException;
+import org.apache.commons.cli.PosixParser;
 import org.apache.phoenix.pherf.PherfConstants.GeneratePhoenixStats;
 import org.apache.phoenix.pherf.configuration.XMLConfigParser;
 import org.apache.phoenix.pherf.jmx.MonitorManager;
@@ -33,12 +44,6 @@ import org.apache.phoenix.pherf.workload.WorkloadExecutor;
 import org.apache.phoenix.pherf.workload.WriteWorkload;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-import java.util.Properties;
 
 public class Pherf {
     private static final Logger logger = LoggerFactory.getLogger(Pherf.class);
@@ -92,7 +97,6 @@ public class Pherf {
     private final boolean preLoadData;
     private final String dropPherfTablesRegEx;
     private final boolean executeQuerySets;
-    private final boolean exportCSV;
     private final boolean isFunctional;
     private final boolean monitor;
     private final int rowCountOverride;
@@ -131,7 +135,6 @@ public class Pherf {
         executeQuerySets = command.hasOption("q");
         zookeeper = command.getOptionValue("z", "localhost");
         queryHint = command.getOptionValue("hint", null);
-        exportCSV = command.hasOption("export");
         isFunctional = command.hasOption("diff");
         listFiles = command.hasOption("listFiles");
         applySchema = !command.hasOption("disableSchemaApply");

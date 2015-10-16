@@ -24,7 +24,6 @@ import org.apache.flume.Context;
 import org.apache.flume.Event;
 
 public class CustomSerializer extends BaseEventSerializer {
-    
     @Override
     public void doConfigure(Context context) {
 
