@@ -38,8 +38,7 @@ import org.junit.Test;
 public class QueryParserTest {
     private void parseQuery(String sql) throws IOException, SQLException {
         SQLParser parser = new SQLParser(new StringReader(sql));
-        BindableStatement stmt = null;
-        stmt = parser.parseStatement();
+        BindableStatement stmt = parser.parseStatement();
         if (stmt.getOperation() != Operation.QUERY) {
             return;
         }
@@ -462,7 +461,8 @@ public class QueryParserTest {
                         "select next value for foo.bar from core.custom_entity_data\n"));                    
         parseQuery(sql);
     }
-	
+
+    @Test
     public void testBadCharDef() throws Exception {
         try {
             String sql = ("CREATE TABLE IF NOT EXISTS testBadVarcharDef" + 
