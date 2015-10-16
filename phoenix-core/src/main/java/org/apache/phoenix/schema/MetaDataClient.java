@@ -282,7 +282,9 @@ public class MetaDataClient {
             INDEX_STATE + "," +
             INDEX_DISABLE_TIMESTAMP +
             ") VALUES (?, ?, ?, ?, ?)";
-    private static final String INSERT_COLUMN =
+    //TODO: merge INSERT_COLUMN_CREATE_TABLE and INSERT_COLUMN_ALTER_TABLE column when
+    // the new major release is out.
+    private static final String INSERT_COLUMN_CREATE_TABLE =
         "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " +
         TENANT_ID + "," +
         TABLE_SCHEM + "," +
@@ -304,6 +306,27 @@ public class MetaDataClient {
         COLUMN_DEF + "," +
         IS_ROW_TIMESTAMP + 
         ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+    private static final String INSERT_COLUMN_ALTER_TABLE =
+            "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " +
+            TENANT_ID + "," +
+            TABLE_SCHEM + "," +
+            TABLE_NAME + "," +
+            COLUMN_NAME + "," +
+            COLUMN_FAMILY + "," +
+            DATA_TYPE + "," +
+            NULLABLE + "," +
+            COLUMN_SIZE + "," +
+            DECIMAL_DIGITS + "," +
+            ORDINAL_POSITION + "," +
+            SORT_ORDER + "," +
+            DATA_TABLE_NAME + "," + // write this both in the column and table rows for access by metadata APIs
+            ARRAY_SIZE + "," +
+            VIEW_CONSTANT + "," +
+            IS_VIEW_REFERENCED + "," +
+            PK_NAME + "," +  // write this both in the column and table rows for access by metadata APIs
+            KEY_SEQ + "," +
+            COLUMN_DEF +
+            ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
     private static final String UPDATE_COLUMN_POSITION =
         "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\" ( " +
         TENANT_ID + "," +
@@ -681,7 +704,9 @@ public class MetaDataClient {
         } else {
             colUpsert.setString(18, column.getExpressionStr());
         }
-        colUpsert.setBoolean(19, column.isRowTimestamp());
+        if (colUpsert.getParameterMetaData().getParameterCount() > 18) {
+            colUpsert.setBoolean(19, column.isRowTimestamp());
+        }
         colUpsert.execute();
     }
 
@@ -1713,7 +1738,7 @@ public class MetaDataClient {
                 }
             }
 
-            PreparedStatement colUpsert = connection.prepareStatement(INSERT_COLUMN);
+            PreparedStatement colUpsert = connection.prepareStatement(INSERT_COLUMN_CREATE_TABLE);
             Map<String, PName> familyNames = Maps.newLinkedHashMap();
             boolean isPK = false;
             boolean rowTimeStampColumnAlreadyFound = false;
@@ -2485,7 +2510,7 @@ public class MetaDataClient {
                 }
 
                 int numPkColumnsAdded = 0;
-                PreparedStatement colUpsert = connection.prepareStatement(INSERT_COLUMN);
+                PreparedStatement colUpsert = connection.prepareStatement(INSERT_COLUMN_ALTER_TABLE);
 
                 List<PColumn> columns = Lists.newArrayListWithExpectedSize(columnDefs.size());
                 Set<String> colFamiliesForPColumnsToBeAdded = new LinkedHashSet<>();
