@@ -202,6 +202,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     @GuardedBy("connectionCountLock")
     private int connectionCount = 0;
     private final Object connectionCountLock = new Object();
+    private final boolean returnSequenceValues ;
 
     private HConnection connection;
     private volatile boolean initialized;
@@ -278,6 +279,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 .maximumSize(MAX_TABLE_STATS_CACHE_ENTRIES)
                 .expireAfterWrite(halfStatsUpdateFreq, TimeUnit.MILLISECONDS)
                 .build();
+        this.returnSequenceValues = config.getBoolean(QueryServices.RETURN_SEQUENCE_VALUES_ATTRIB, QueryServicesOptions.DEFAULT_RETURN_SEQUENCE_VALUES);
     }
 
     private void openConnection() throws SQLException {
@@ -2583,28 +2585,32 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     @Override
     public void addConnection(PhoenixConnection connection) throws SQLException {
-        synchronized (connectionCountLock) {
-            connectionCount++;
-        }
+    	if (returnSequenceValues) {
+	        synchronized (connectionCountLock) {
+	            connectionCount++;
+	        }
+    	}
     }
 
     @Override
     public void removeConnection(PhoenixConnection connection) throws SQLException {
-        ConcurrentMap<SequenceKey,Sequence> formerSequenceMap = null;
-        synchronized (connectionCountLock) {
-            if (--connectionCount == 0) {
-                if (!this.sequenceMap.isEmpty()) {
-                    formerSequenceMap = this.sequenceMap;
-                    this.sequenceMap = Maps.newConcurrentMap();
-                }
-            }
-        }
-        // Since we're using the former sequenceMap, we can do this outside
-        // the lock.
-        if (formerSequenceMap != null) {
-            // When there are no more connections, attempt to return any sequences
-            returnAllSequences(formerSequenceMap);
-        }
+    	if (returnSequenceValues) {
+	        ConcurrentMap<SequenceKey,Sequence> formerSequenceMap = null;
+	        synchronized (connectionCountLock) {
+	            if (--connectionCount == 0) {
+	                if (!this.sequenceMap.isEmpty()) {
+	                    formerSequenceMap = this.sequenceMap;
+	                    this.sequenceMap = Maps.newConcurrentMap();
+	                }
+	            }
+	        }
+	        // Since we're using the former sequenceMap, we can do this outside
+	        // the lock.
+	        if (formerSequenceMap != null) {
+	            // When there are no more connections, attempt to return any sequences
+	            returnAllSequences(formerSequenceMap);
+	        }
+    	}
     }
 
     @Override
