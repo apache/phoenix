@@ -167,6 +167,7 @@ public interface QueryServices extends SQLCloseable {
     public static final String ALLOW_USER_DEFINED_FUNCTIONS_ATTRIB = "phoenix.functions.allowUserDefinedFunctions";
     public static final String COLLECT_REQUEST_LEVEL_METRICS = "phoenix.query.request.metrics.enabled";
     public static final String ALLOW_VIEWS_ADD_NEW_CF_BASE_TABLE = "phoenix.schema.view.newcf";
+    public static final String RETURN_SEQUENCE_VALUES_ATTRIB = "phoenix.sequence.returnValues";
     
 
     /**
