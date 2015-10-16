@@ -41,7 +41,7 @@ DIR_EXAMPLES=$DIR_REL_BIN_PATH/examples
 DIR_DOCS=dev/release_files
 
 # Verify no target exists
-mvn clean; mvn clean -Dhadoop.profile=2; rm -rf $DIR_REL_BASE;
+mvn clean; rm -rf $DIR_REL_BASE;
 RESULT=$(find -iname target)
 
 if [ -z "$RESULT" ]
@@ -68,18 +68,21 @@ mkdir $DIR_BIN;
 mv $REL_SRC.tar.gz $DIR_REL_SRC_TAR_PATH;
 
 # Copy common jars
-mvn clean apache-rat:check package -DskipTests;
+mvn clean apache-rat:check package -DskipTests -Dcheckstyle.skip=true -q;
 rm -rf $(find . -type d -name archive-tmp);
 
 # Copy all phoenix-*.jars to release dir
 phx_jars=$(find -iname phoenix-*.jar)
 cp $phx_jars $DIR_REL_BIN_PATH;
 
+# Exclude uber jars as it exceeds max upload limit for Apache SVN until PHOENIX-2248 is fixed
+rm $DIR_REL_BIN_PATH/*webapp*runnable*
+rm $DIR_REL_BIN_PATH/*pherf*dependencies*
+
 # Copy bin
 cp bin/* $DIR_BIN;
 
 # Copy release docs
-cp CHANGES $DIR_REL_BIN_PATH;
 cp README $DIR_REL_BIN_PATH;
 cp $DIR_DOCS/* $DIR_REL_BIN_PATH;
 
