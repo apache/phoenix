@@ -541,10 +541,6 @@ public class WhereOptimizer {
                 int span = position - initialPosition;
                 return new SingleKeySlot(new RowValueConstructorKeyPart(table.getPKColumns().get(initialPosition), rvc, span, childSlots), initialPosition, span, EVERYTHING_RANGES);
             }
-            // If we don't clear the child list, we end up passing some of
-            // the child expressions of previous matches up the tree, causing
-            // those expressions to form the scan start/stop key. PHOENIX-1753
-            childSlots.clear();
             return null;
         }
 
@@ -1118,6 +1114,9 @@ public class WhereOptimizer {
                         // If they don't intersect, we cannot have a match for the RVC, so filter it out.
                         // Otherwise, we keep it.
                         for (KeyRange keyRange : this.getKeyRanges()) {
+                            if (keyRange == KeyRange.EVERYTHING_RANGE) {
+                                return this;
+                            }
                             assert(keyRange.isSingleKey());
                             byte[] key = keyRange.getLowerRange();
                             int position = this.getPKPosition();
