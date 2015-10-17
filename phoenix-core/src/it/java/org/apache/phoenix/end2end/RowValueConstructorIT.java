@@ -1591,4 +1591,65 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
         
         assertFalse(rs.next());
     }
+
+	/**
+	 * PHOENIX-2327
+	 * 
+	 * Table's pks are (pk1, pk2, ... , pkn), n >= 3
+	 * Index's pks are (pk2, ... , pkn, pk1), n >= 3
+	 * RVC is (pk2, ... , pkn, pk1), n >= 3
+	 * 
+	 * Expalin select * from t where (pk2, ... , pkn, pk1) > ('201', ..., 'n01', '101') and pk[2-n] = '[2-n]03'
+	 * 
+	 * You will Get "DEGENERATE SCAN OVER TABLE_NAME"
+	 * 
+	 * @throws java.lang.Exception
+	 */
+	@Test
+	public void testRVCLastPkIsTable1stPkIndex() throws Exception {
+		Connection conn = nextConnection(getUrl());
+		String tableName = "t";
+		String ddl = "CREATE TABLE " + tableName 
+				+ " (k1 VARCHAR, k2 VARCHAR, k3 VARCHAR, k4 VARCHAR,"
+				+ " CONSTRAINT pk PRIMARY KEY (k1,k2,k3,k4))";
+		conn.createStatement().execute(ddl);
+
+		conn = nextConnection(getUrl());
+		ddl = "CREATE INDEX  " + tableName + "_idx"
+				+ " ON " + tableName + " (k2, k3, k4, k1)";
+		conn.createStatement().execute(ddl);
+		
+		conn = nextConnection(getUrl());
+		String upsert = "UPSERT INTO " + tableName + " VALUES(?, ?, ?, ?)";
+		PreparedStatement stmt = conn.prepareStatement(upsert);
+		for (int i = 0; i < 5; i++) {
+			stmt.setString(1, "10" + i);
+			stmt.setString(2, "20" + i);
+			stmt.setString(3, "30" + i);
+			stmt.setString(4, "40" + i);
+			stmt.execute();
+		}
+		conn.commit();
+
+		conn = nextConnection(getUrl());
+		String query = "SELECT k1, k2, k3, k4 FROM " + tableName + " WHERE k2 = '203'";
+		ResultSet rs = conn.createStatement().executeQuery(query);
+		assertTrue(rs.next());
+		assertEquals("103", rs.getString(1));
+		assertEquals("203", rs.getString(2));
+		assertEquals("303", rs.getString(3));
+		assertEquals("403", rs.getString(4));
+
+		conn = nextConnection(getUrl());
+		query = "SELECT k1, k2, k3, k4 FROM " + tableName 
+				+ " WHERE (k2, k3, k4, k1) > ('201', '301', '401', '101')"
+				+ " AND k2 = '203'";
+		rs = conn.createStatement().executeQuery(query);
+		assertTrue(rs.next());
+		assertEquals("103", rs.getString(1));
+		assertEquals("203", rs.getString(2));
+		assertEquals("303", rs.getString(3));
+		assertEquals("403", rs.getString(4));
+	}
+
 }
