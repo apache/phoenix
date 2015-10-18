@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.mapreduce;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -24,10 +25,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Future;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -43,10 +41,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.HTable;
-import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.mapreduce.HFileOutputFormat;
 import org.apache.hadoop.hbase.mapreduce.LoadIncrementalHFiles;
-import org.apache.hadoop.hbase.mapreduce.TableMapReduceUtil;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
@@ -56,26 +51,27 @@ import org.apache.hadoop.util.ToolRunner;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixDriver;
-import org.apache.phoenix.job.JobManager;
-import org.apache.phoenix.monitoring.GlobalClientMetrics;
+import org.apache.phoenix.mapreduce.bulkload.CsvTableRowkeyPair;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.util.CSVCommonsLoader;
 import org.apache.phoenix.util.ColumnInfo;
-import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
+import org.codehaus.jackson.annotate.JsonCreator;
+import org.codehaus.jackson.annotate.JsonProperty;
+import org.codehaus.jackson.map.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Function;
 import com.google.common.base.Splitter;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 
 /**
  * Base tool for running MapReduce-based ingests of data.
@@ -255,36 +251,80 @@ public class CsvBulkLoadTool extends Configured implements Tool {
         	tablesToBeLoaded.add(targetIndexRef);
         }
         
-        List<Future<Boolean>> runningJobs = new ArrayList<Future<Boolean>>();
-        boolean useInstrumentedPool = GlobalClientMetrics.isMetricsEnabled()
-                || conn.unwrap(PhoenixConnection.class).isRequestLevelMetricsEnabled();
-                        
-        ExecutorService executor =
-                JobManager.createThreadPoolExec(Integer.MAX_VALUE, 5, 20, useInstrumentedPool);
-        try{
-	        for (TargetTableRef table : tablesToBeLoaded) {
-	            Path tablePath = new Path(outputPath, table.getLogicalName());
-	        	Configuration jobConf = new Configuration(conf);
-	        	jobConf.set(CsvToKeyValueMapper.TABLE_NAME_CONFKEY, qualifiedTableName);
-	        	if (qualifiedTableName.compareToIgnoreCase(table.getLogicalName()) != 0) {
-                    jobConf.set(CsvToKeyValueMapper.INDEX_TABLE_NAME_CONFKEY, table.getPhysicalName());
-	        	}
-	        	TableLoader tableLoader = new TableLoader(
-                        jobConf, table.getPhysicalName(), inputPath, tablePath);
-	        	runningJobs.add(executor.submit(tableLoader));
-	        }
-        } finally {
-        	executor.shutdown();
-        }
+        return submitJob(conf, tableName, inputPath, outputPath, tablesToBeLoaded);
+	}
+	
+	/**
+	 * Submits the jobs to the cluster. 
+	 * Loads the HFiles onto the respective tables.
+	 * @param configuration
+	 * @param qualifiedTableName
+	 * @param inputPath
+	 * @param outputPath
+	 * @param tablesToBeoaded
+	 * @return status 
+	 */
+	public int submitJob(final Configuration conf, final String qualifiedTableName, final Path inputPath,
+	                        final Path outputPath , List<TargetTableRef> tablesToBeLoaded) {
+	    try {
+	        Job job = new Job(conf, "Phoenix MapReduce import for " + qualifiedTableName);
+    
+            // Allow overriding the job jar setting by using a -D system property at startup
+            if (job.getJar() == null) {
+                job.setJarByClass(CsvToKeyValueMapper.class);
+            }
+            job.setInputFormatClass(TextInputFormat.class);
+            FileInputFormat.addInputPath(job, inputPath);
+            FileOutputFormat.setOutputPath(job, outputPath);
+            job.setMapperClass(CsvToKeyValueMapper.class);
+            job.setMapOutputKeyClass(CsvTableRowkeyPair.class);
+            job.setMapOutputValueClass(KeyValue.class);
+            job.setOutputKeyClass(CsvTableRowkeyPair.class);
+            job.setOutputValueClass(KeyValue.class);
+            job.setReducerClass(CsvToKeyValueReducer.class);
+          
+            MultiHfileOutputFormat.configureIncrementalLoad(job, tablesToBeLoaded);
+    
+            final String tableNamesAsJson = TargetTableRefFunctions.NAMES_TO_JSON.apply(tablesToBeLoaded);
+            job.getConfiguration().set(CsvToKeyValueMapper.TABLE_NAMES_CONFKEY,tableNamesAsJson);
+            
+            LOG.info("Running MapReduce import job from {} to {}", inputPath, outputPath);
+            boolean success = job.waitForCompletion(true);
+            
+            if (success) {
+               LOG.info("Loading HFiles from {}", outputPath);
+               completebulkload(conf,outputPath,tablesToBeLoaded);
+            }
         
-        // wait for all jobs to complete
-        int retCode = 0;
-        for(Future<Boolean> task : runningJobs){
-        	if(!task.get() && (retCode==0)){
-        		retCode = -1;
-        	}
+           LOG.info("Removing output directory {}", outputPath);
+           if (!FileSystem.get(conf).delete(outputPath, true)) {
+               LOG.error("Removing output directory {} failed", outputPath);
+           }
+           return 0;
+        } catch(Exception e) {
+            LOG.error("Error {} occurred submitting CSVBulkLoad ",e.getMessage());
+            return -1;
         }
-		return retCode;
+	    
+	}
+	
+	/**
+	 * bulkload HFiles .
+	 * @param conf
+	 * @param outputPath
+	 * @param tablesToBeLoaded
+	 * @throws Exception
+	 */
+	private void completebulkload(Configuration conf,Path outputPath , List<TargetTableRef> tablesToBeLoaded) throws Exception {
+	    for(TargetTableRef table : tablesToBeLoaded) {
+	        LoadIncrementalHFiles loader = new LoadIncrementalHFiles(conf);
+            String tableName = table.getPhysicalName();
+            Path tableOutputPath = new Path(outputPath,tableName);
+            HTable htable = new HTable(conf,tableName);
+            LOG.info("Loading HFiles for {} from {}", tableName , tableOutputPath);
+            loader.doBulkLoad(tableOutputPath, htable);
+            LOG.info("Incremental load complete for table=" + tableName);
+        }
 	}
 
     /**
@@ -416,10 +456,11 @@ public class CsvBulkLoadTool extends Configured implements Tool {
         List<TargetTableRef> indexTables = new ArrayList<TargetTableRef>();
         for(PTable indexTable : table.getIndexes()){
             if (indexTable.getIndexType() == IndexType.LOCAL) {
-                indexTables.add(
+                throw new UnsupportedOperationException("Local indexes not supported by CSV Bulk Loader");
+                /*indexTables.add(
                         new TargetTableRef(getQualifiedTableName(schemaName,
                                 indexTable.getTableName().getString()),
-                                MetaDataUtil.getLocalIndexTableName(qualifiedTableName)));
+                                MetaDataUtil.getLocalIndexTableName(qualifiedTableName))); */
             } else {
                 indexTables.add(new TargetTableRef(getQualifiedTableName(schemaName,
                         indexTable.getTableName().getString())));
@@ -434,16 +475,23 @@ public class CsvBulkLoadTool extends Configured implements Tool {
      * This class exists to allow for the difference between HBase physical table names and
      * Phoenix logical table names.
      */
-    private static class TargetTableRef {
+     static class TargetTableRef {
 
+        @JsonProperty 
         private final String logicalName;
+        
+        @JsonProperty
         private final String physicalName;
+        
+        @JsonProperty
+        private Map<String,String> configuration = Maps.newHashMap();
 
         private TargetTableRef(String name) {
             this(name, name);
         }
 
-        private TargetTableRef(String logicalName, String physicalName) {
+        @JsonCreator
+        private TargetTableRef(@JsonProperty("logicalName") String logicalName, @JsonProperty("physicalName") String physicalName) {
             this.logicalName = logicalName;
             this.physicalName = physicalName;
         }
@@ -455,80 +503,82 @@ public class CsvBulkLoadTool extends Configured implements Tool {
         public String getPhysicalName() {
             return physicalName;
         }
-    }
-
-    /**
-     * A runnable to load data into a single table
-     *
-     */
-    private static class TableLoader implements Callable<Boolean> {
-    	 
-    	private Configuration conf;
-        private String tableName;
-        private Path inputPath;
-        private Path outputPath;
-         
-        public TableLoader(Configuration conf, String qualifiedTableName, Path inputPath, 
-        		Path outputPath){
-        	this.conf = conf;
-            this.tableName = qualifiedTableName;
-            this.inputPath = inputPath;
-            this.outputPath = outputPath;
-        }
         
-        @Override
-        public Boolean call() {
-            LOG.info("Configuring HFile output path to {}", outputPath);
-            try{
-	            Job job = new Job(conf, "Phoenix MapReduce import for " + tableName);
-	
-	            // Allow overriding the job jar setting by using a -D system property at startup
-	            if (job.getJar() == null) {
-	                job.setJarByClass(CsvToKeyValueMapper.class);
-	            }
-	            job.setInputFormatClass(TextInputFormat.class);
-	            FileInputFormat.addInputPath(job, inputPath);
-	            FileOutputFormat.setOutputPath(job, outputPath);
-	
-	            job.setMapperClass(CsvToKeyValueMapper.class);
-	            job.setMapOutputKeyClass(ImmutableBytesWritable.class);
-	            job.setMapOutputValueClass(KeyValue.class);
-
-	            // initialize credentials to possibly run in a secure env
-	            TableMapReduceUtil.initCredentials(job);
-
-                HTable htable = new HTable(conf, tableName);
-
-	            // Auto configure partitioner and reducer according to the Main Data table
-	            HFileOutputFormat.configureIncrementalLoad(job, htable);
-	
-	            LOG.info("Running MapReduce import job from {} to {}", inputPath, outputPath);
-	            boolean success = job.waitForCompletion(true);
-	            if (!success) {
-	                LOG.error("Import job failed, check JobTracker for details");
-	                htable.close();
-	                return false;
-	            }
-	
-	            LOG.info("Loading HFiles from {}", outputPath);
-	            LoadIncrementalHFiles loader = new LoadIncrementalHFiles(conf);
-	            loader.doBulkLoad(outputPath, htable);
-	            htable.close();
-	
-	            LOG.info("Incremental load complete for table=" + tableName);
-	
-	            LOG.info("Removing output directory {}", outputPath);
-	            if (!FileSystem.get(conf).delete(outputPath, true)) {
-	                LOG.error("Removing output directory {} failed", outputPath);
-	            }
-	            
-	            return true;
-            } catch (Exception ex) {
-            	LOG.error("Import job on table=" + tableName + " failed due to exception.", ex);
-            	return false;
-            }
+        public Map<String, String> getConfiguration() {
+            return configuration;
         }
-     
+
+        public void setConfiguration(Map<String, String> configuration) {
+            this.configuration = configuration;
+        }
     }
+
+     /**
+      * Utility functions to get/put json.
+      * 
+      */
+     static class TargetTableRefFunctions {
+         
+         public static Function<TargetTableRef,String> TO_JSON =  new Function<TargetTableRef,String>() {
+
+             @Override
+             public String apply(TargetTableRef input) {
+                 try {
+                     ObjectMapper mapper = new ObjectMapper();
+                     return mapper.writeValueAsString(input);
+                 } catch (IOException e) {
+                     throw new RuntimeException(e);
+                 }
+                 
+             }
+         };
+         
+         public static Function<String,TargetTableRef> FROM_JSON =  new Function<String,TargetTableRef>() {
+
+             @Override
+             public TargetTableRef apply(String json) {
+                 try {
+                     ObjectMapper mapper = new ObjectMapper();
+                     return mapper.readValue(json, TargetTableRef.class);
+                 } catch (IOException e) {
+                     throw new RuntimeException(e);
+                 }
+                 
+             }
+         };
+         
+         public static Function<List<TargetTableRef>,String> NAMES_TO_JSON =  new Function<List<TargetTableRef>,String>() {
+
+             @Override
+             public String apply(List<TargetTableRef> input) {
+                 try {
+                     List<String> tableNames = Lists.newArrayListWithCapacity(input.size());
+                     for(TargetTableRef table : input) {
+                         tableNames.add(table.getPhysicalName());
+                     }
+                     ObjectMapper mapper = new ObjectMapper();
+                     return mapper.writeValueAsString(tableNames);
+                 } catch (IOException e) {
+                     throw new RuntimeException(e);
+                 }
+                 
+             }
+         };
+         
+         public static Function<String,List<String>> NAMES_FROM_JSON =  new Function<String,List<String>>() {
+
+             @SuppressWarnings("unchecked")
+             @Override
+             public List<String> apply(String json) {
+                 try {
+                     ObjectMapper mapper = new ObjectMapper();
+                     return mapper.readValue(json, ArrayList.class);
+                 } catch (IOException e) {
+                     throw new RuntimeException(e);
+                 }
+                 
+             }
+         };
+     }
     
 }
