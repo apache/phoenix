@@ -39,6 +39,8 @@ import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.mapreduce.CsvBulkLoadTool.TargetTableRefFunctions;
+import org.apache.phoenix.mapreduce.bulkload.CsvTableRowkeyPair;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.util.CSVCommonsLoader;
 import org.apache.phoenix.util.ColumnInfo;
@@ -53,10 +55,10 @@ import com.google.common.base.Function;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
+import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
-import com.google.common.base.Throwables;
 
 /**
  * MapReduce mapper that converts CSV input lines into KeyValues that can be written to HFiles.
@@ -65,7 +67,7 @@ import com.google.common.base.Throwables;
  * extracting the created KeyValues and rolling back the statement execution before it is
  * committed to HBase.
  */
-public class CsvToKeyValueMapper extends Mapper<LongWritable,Text,ImmutableBytesWritable,
+public class CsvToKeyValueMapper extends Mapper<LongWritable,Text,CsvTableRowkeyPair,
         KeyValue> {
 
     private static final Logger LOG = LoggerFactory.getLogger(CsvToKeyValueMapper.class);
@@ -95,13 +97,19 @@ public class CsvToKeyValueMapper extends Mapper<LongWritable,Text,ImmutableBytes
 
     /** Configuration key for the flag to ignore invalid rows */
     public static final String IGNORE_INVALID_ROW_CONFKEY = "phoenix.mapreduce.import.ignoreinvalidrow";
+    
+    /** Configuration key for the table names */
+    public static final String TABLE_NAMES_CONFKEY = "phoenix.mapreduce.import.tablenames";
+    
+    /** Configuration key for the table configurations */
+    public static final String TABLE_CONFIG_CONFKEY = "phoenix.mapreduce.import.table.config";
 
     private PhoenixConnection conn;
     private CsvUpsertExecutor csvUpsertExecutor;
     private MapperUpsertListener upsertListener;
     private CsvLineParser csvLineParser;
     private ImportPreUpsertKeyValueProcessor preUpdateProcessor;
-    private byte[] tableName;
+    private List<String> tableNames;
 
     @Override
     protected void setup(Context context) throws IOException, InterruptedException {
@@ -122,6 +130,9 @@ public class CsvToKeyValueMapper extends Mapper<LongWritable,Text,ImmutableBytes
             throw new RuntimeException(e);
         }
 
+        final String tableNamesConf = conf.get(TABLE_NAMES_CONFKEY);
+        tableNames = TargetTableRefFunctions.NAMES_FROM_JSON.apply(tableNamesConf);
+        
         upsertListener = new MapperUpsertListener(
                 context, conf.getBoolean(IGNORE_INVALID_ROW_CONFKEY, true));
         csvUpsertExecutor = buildUpsertExecutor(conf);
@@ -131,17 +142,11 @@ public class CsvToKeyValueMapper extends Mapper<LongWritable,Text,ImmutableBytes
                 CsvBulkImportUtil.getCharacter(conf, ESCAPE_CHAR_CONFKEY));
 
         preUpdateProcessor = PhoenixConfigurationUtil.loadPreUpsertProcessor(conf);
-        if(!conf.get(CsvToKeyValueMapper.INDEX_TABLE_NAME_CONFKEY, "").isEmpty()){
-        	tableName = Bytes.toBytes(conf.get(CsvToKeyValueMapper.INDEX_TABLE_NAME_CONFKEY));
-        } else {
-        	tableName = Bytes.toBytes(conf.get(CsvToKeyValueMapper.TABLE_NAME_CONFKEY, ""));
-        }
     }
 
     @SuppressWarnings("deprecation")
     @Override
     protected void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
-        ImmutableBytesWritable outputKey = new ImmutableBytesWritable();
         try {
             CSVRecord csvRecord = null;
             try {
@@ -160,15 +165,19 @@ public class CsvToKeyValueMapper extends Mapper<LongWritable,Text,ImmutableBytes
                     = PhoenixRuntime.getUncommittedDataIterator(conn, true);
             while (uncommittedDataIterator.hasNext()) {
                 Pair<byte[], List<KeyValue>> kvPair = uncommittedDataIterator.next();
-                if (Bytes.compareTo(tableName, kvPair.getFirst()) != 0) {
-                	// skip edits for other tables
-                	continue;
-                }
                 List<KeyValue> keyValueList = kvPair.getSecond();
                 keyValueList = preUpdateProcessor.preUpsert(kvPair.getFirst(), keyValueList);
-                for (KeyValue kv : keyValueList) {
-                    outputKey.set(kv.getRowArray(), kv.getRowOffset(), kv.getRowLength());
-                    context.write(outputKey, kv);
+                byte[] first = kvPair.getFirst();
+                for(String tableName : tableNames) {
+                    if (Bytes.compareTo(Bytes.toBytes(tableName), first) != 0) {
+                        // skip edits for other tables
+                        continue;
+                    }  
+                    for (KeyValue kv : keyValueList) {
+                        ImmutableBytesWritable outputKey = new ImmutableBytesWritable();
+                        outputKey.set(kv.getRowArray(), kv.getRowOffset(), kv.getRowLength());
+                        context.write(new CsvTableRowkeyPair(tableName, outputKey), kv);
+                    }
                 }
             }
             conn.rollback();
