@@ -71,6 +71,7 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 /**
@@ -131,11 +132,13 @@ public class MutableIndexFailureIT extends BaseTest {
         }
     }
 
+    @Ignore("See PHOENIX-2331")
     @Test(timeout=300000)
     public void testWriteFailureDisablesLocalIndex() throws Exception {
         testWriteFailureDisablesIndex(true);
     }
  
+    @Ignore("See PHOENIX-2332")
     @Test(timeout=300000)
     public void testWriteFailureDisablesIndex() throws Exception {
         testWriteFailureDisablesIndex(false);
