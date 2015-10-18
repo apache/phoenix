@@ -41,7 +41,6 @@ import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.HTable;
-import org.apache.hadoop.hbase.client.RegionLocator;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.io.compress.Compression;
 import org.apache.hadoop.hbase.io.compress.Compression.Algorithm;
@@ -662,7 +661,7 @@ public class MultiHfileOutputFormat extends FileOutputFormat<CsvTableRowkeyPair,
         for(TargetTableRef table : tablesToBeLoaded) {
            final String tableName = table.getPhysicalName();
            try(HTable htable = new HTable(conf,tableName);){
-               Set<CsvTableRowkeyPair> startKeys = getRegionStartKeys(tableName , htable.getRegionLocator());
+               Set<CsvTableRowkeyPair> startKeys = getRegionStartKeys(tableName , htable);
                tablesStartKeys.addAll(startKeys);
                String compressionConfig = configureCompression(htable.getTableDescriptor());
                String bloomTypeConfig = configureBloomType(htable.getTableDescriptor());
@@ -704,7 +703,7 @@ public class MultiHfileOutputFormat extends FileOutputFormat<CsvTableRowkeyPair,
      * Return the start keys of all of the regions in this table,
      * as a list of ImmutableBytesWritable.
      */
-    private static Set<CsvTableRowkeyPair> getRegionStartKeys(String tableName , RegionLocator table) throws IOException {
+    private static Set<CsvTableRowkeyPair> getRegionStartKeys(String tableName , HTable table) throws IOException {
       byte[][] byteKeys = table.getStartKeys();
       Set<CsvTableRowkeyPair> ret = new TreeSet<CsvTableRowkeyPair>();
       for (byte[] byteKey : byteKeys) {
