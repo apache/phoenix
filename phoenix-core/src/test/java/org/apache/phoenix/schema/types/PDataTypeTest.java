@@ -1799,4 +1799,37 @@ public class PDataTypeTest {
             assertTrue(Bytes.compareTo(array, QueryConstants.DESC_SEPARATOR_BYTE_ARRAY) <= 0);
         }
     }
+    
+    @Test
+    public void testBoolean() {
+        byte[] bytes = PBoolean.INSTANCE.toBytes(Boolean.TRUE);
+        assertEquals(1, bytes[0]);
+        bytes = PBoolean.INSTANCE.toBytes(Boolean.FALSE);
+        assertEquals(0, bytes[0]);
+        
+        bytes = PBoolean.INSTANCE.toBytes(Boolean.TRUE, SortOrder.DESC);
+        assertEquals(0, bytes[0]);
+        bytes = PBoolean.INSTANCE.toBytes(Boolean.FALSE, SortOrder.DESC);
+        assertEquals(1, bytes[0]);
+        
+        Object dec = PDecimal.INSTANCE.toObject(Boolean.TRUE, PBoolean.INSTANCE);
+        bytes = PDecimal.INSTANCE.toBytes(dec);
+        Object b = PBoolean.INSTANCE.toObject(bytes, 0, bytes.length, PDecimal.INSTANCE, SortOrder.ASC);
+        assertEquals(true, b);
+        
+        dec = PDecimal.INSTANCE.toObject(Boolean.FALSE, PBoolean.INSTANCE);
+        bytes = PDecimal.INSTANCE.toBytes(dec);
+        b = PBoolean.INSTANCE.toObject(bytes, 0, bytes.length, PDecimal.INSTANCE, SortOrder.ASC);
+        assertEquals(false, b);
+        
+        dec = PDecimal.INSTANCE.toObject(Boolean.TRUE, PBoolean.INSTANCE);
+        bytes = PDecimal.INSTANCE.toBytes(dec, SortOrder.DESC);
+        b = PBoolean.INSTANCE.toObject(bytes, 0, bytes.length, PDecimal.INSTANCE, SortOrder.DESC);
+        assertEquals(true, b);
+        
+        dec = PDecimal.INSTANCE.toObject(Boolean.FALSE, PBoolean.INSTANCE);
+        bytes = PDecimal.INSTANCE.toBytes(dec, SortOrder.DESC);
+        b = PBoolean.INSTANCE.toObject(bytes, 0, bytes.length, PDecimal.INSTANCE, SortOrder.DESC);
+        assertEquals(false, b);
+    }
 }
