@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.schema.types;
 
+import java.math.BigDecimal;
 import java.sql.Types;
 
 import org.apache.phoenix.schema.SortOrder;
@@ -131,6 +132,9 @@ public class PBoolean extends PDataType<Boolean> {
       byte[] bytes = (byte[]) object;
       return toObject(bytes, 0, bytes.length);
     }
+        if (actualType == PDecimal.INSTANCE) {
+            return ((BigDecimal) object).equals(BigDecimal.ONE) ? Boolean.TRUE : Boolean.FALSE;
+        }
     return throwConstraintViolationException(actualType, this);
   }
 
