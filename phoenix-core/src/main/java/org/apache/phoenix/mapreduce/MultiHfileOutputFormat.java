@@ -662,7 +662,7 @@ public class MultiHfileOutputFormat extends FileOutputFormat<CsvTableRowkeyPair,
         for(TargetTableRef table : tablesToBeLoaded) {
            final String tableName = table.getPhysicalName();
            try(HTable htable = new HTable(conf,tableName);){
-               Set<CsvTableRowkeyPair> startKeys = getRegionStartKeys(tableName , htable.getRegionLocator());
+               Set<CsvTableRowkeyPair> startKeys = getRegionStartKeys(tableName , htable);
                tablesStartKeys.addAll(startKeys);
                String compressionConfig = configureCompression(htable.getTableDescriptor());
                String bloomTypeConfig = configureBloomType(htable.getTableDescriptor());
