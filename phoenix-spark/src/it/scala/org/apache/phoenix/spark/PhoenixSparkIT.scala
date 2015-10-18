@@ -466,6 +466,51 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
 
     df.saveToPhoenix("TABLE2", zkUrl = Some(quorumAddress))
   }
+  
+  test("Ensure Dataframe supports LIKE and IN filters (PHOENIX-2328)") {
+    val sqlContext = new SQLContext(sc)
+    val df = sqlContext.load("org.apache.phoenix.spark", Map("table" -> "TABLE1",
+      "zkUrl" -> quorumAddress))
+
+    // Prefix match
+    val res1 = df.filter("COL1 like 'test_row_%'")
+    res1.count() shouldEqual 2
+
+    // Suffix match
+    val res2 = df.filter("COL1 like '%_1'")
+    res2.count() shouldEqual 1
+    res2.first.getString(1) shouldEqual "test_row_1"
+
+    // Infix match
+    val res3 = df.filter("COL1 like '%_row_%'")
+    res3.count() shouldEqual 2
+
+    // Not like, match none
+    val res4 = df.filter("COL1 not like '%_row_%'")
+    res4.count() shouldEqual 0
+
+    // Not like, match all
+    val res5 = df.filter("COL1 not like '%_wor_%'")
+    res5.count() shouldEqual 2
+
+    // "IN", match all
+    val res6 = df.filter("COL1 in ('test_row_1', 'test_row_2')")
+    res6.count() shouldEqual 2
+
+    // "IN", match none
+    val res7 = df.filter("COL1 in ('foo', 'bar')")
+    res7.count() shouldEqual 0
+
+    // AND (and not again)
+    val res8 = df.filter("COL1 like '%_row_%' AND COL1 not like '%_1'")
+    res8.count() shouldEqual 1
+    res8.first.getString(1) shouldEqual "test_row_2"
+
+    // OR
+    val res9 = df.filter("COL1 like '%_1' OR COL1 like '%_2'")
+    res9.count() shouldEqual 2
+  }
+
 
   // We can load the type, but it defaults to Spark's default (precision 38, scale 10)
   ignore("Can load decimal types with accurate precision and scale (PHOENIX-2288)") {

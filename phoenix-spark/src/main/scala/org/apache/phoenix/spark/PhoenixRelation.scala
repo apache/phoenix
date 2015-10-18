@@ -68,11 +68,16 @@ case class PhoenixRelation(tableName: String, zkUrl: String)(@transient val sqlC
     var i = 0
 
     filters.foreach(f => {
+      // Assume conjunction for multiple filters, unless otherwise specified
       if (i > 0) {
         filter.append(" AND")
       }
 
       f match {
+        // Spark 1.3.1+ supported filters
+        case And(leftFilter, rightFilter) => filter.append(buildFilter(Array(leftFilter, rightFilter)))
+        case Or(leftFilter, rightFilter) => filter.append(buildFilter(Array(leftFilter)) + " OR " + buildFilter(Array(rightFilter)))
+        case Not(aFilter) => filter.append(" NOT " + buildFilter(Array(aFilter)))
         case EqualTo(attr, value) => filter.append(s" $attr = ${compileValue(value)}")
         case GreaterThan(attr, value) => filter.append(s" $attr > ${compileValue(value)}")
         case GreaterThanOrEqual(attr, value) => filter.append(s" $attr >= ${compileValue(value)}")
@@ -80,7 +85,10 @@ case class PhoenixRelation(tableName: String, zkUrl: String)(@transient val sqlC
         case LessThanOrEqual(attr, value) => filter.append(s" $attr <= ${compileValue(value)}")
         case IsNull(attr) => filter.append(s" $attr IS NULL")
         case IsNotNull(attr) => filter.append(s" $attr IS NOT NULL")
-        case _ => throw new Exception("Unsupported filter")
+        case In(attr, values) => filter.append(s" $attr IN ${values.map(compileValue).mkString("(", ",", ")")}")
+        case StringStartsWith(attr, value) => filter.append(s" $attr LIKE ${compileValue(value + "%")}")
+        case StringEndsWith(attr, value) => filter.append(s" $attr LIKE ${compileValue("%" + value)}")
+        case StringContains(attr, value) => filter.append(s" $attr LIKE ${compileValue("%" + value + "%")}")
       }
 
       i = i + 1
