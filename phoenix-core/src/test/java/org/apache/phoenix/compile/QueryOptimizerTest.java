@@ -38,6 +38,7 @@ import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
@@ -388,6 +389,22 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
             "create index INDEX_TEST_TABLE_INDEX_F on INDEX_TEST_TABLE(A,F) include(B,C,D,E)");
         ResultSet rs = conn2.createStatement().executeQuery("explain select * from INDEX_TEST_TABLE where A in ('1','2','3','4','5') and F in ('1111','2222','3333')");
         assertEquals("CLIENT PARALLEL 1-WAY SKIP SCAN ON 15 KEYS OVER INDEX_TEST_TABLE_INDEX_F ['1','1111'] - ['5','3333']", QueryUtil.getExplainPlan(rs));
+    }
+
+    @Test
+    public void testCharArrayLength() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute(
+                "CREATE TABLE TEST.TEST (testInt INTEGER, testCharArray CHAR(3)[], testByteArray BINARY(7)[], " +
+                "CONSTRAINT test_pk PRIMARY KEY(testInt)) DEFAULT_COLUMN_FAMILY='T'");
+        conn.createStatement().execute("CREATE INDEX TEST_INDEX ON TEST.TEST (testInt) INCLUDE (testCharArray, testByteArray)");
+        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
+
+        QueryPlan plan = stmt.optimizeQuery("SELECT /*+ INDEX(TEST.TEST TEST_INDEX)*/ testCharArray,testByteArray FROM TEST.TEST");
+        List<PColumn> columns = plan.getTableRef().getTable().getColumns();
+        assertEquals(3, columns.size());
+        assertEquals(3, columns.get(1).getMaxLength().intValue());
+        assertEquals(7, columns.get(2).getMaxLength().intValue());
     }
 
     private void testAssertQueryPlanDetails(boolean multitenant, boolean useIndex, boolean salted) throws Exception {
