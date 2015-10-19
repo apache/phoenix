@@ -19,7 +19,7 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.query.BaseTest.setUpConfigForMiniCluster;
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -32,7 +32,6 @@ import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
-import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -77,13 +76,9 @@ public class ConnectionUtilIT {
 	@AfterClass
 	public static void tearDownAfterClass() throws Exception {
 		try {
-			PhoenixDriver.INSTANCE.close();
+            DriverManager.deregisterDriver(PhoenixDriver.INSTANCE);
 		} finally {
-			try {
-				DriverManager.deregisterDriver(PhoenixDriver.INSTANCE);
-			} finally {
-				hbaseTestUtil.shutdownMiniCluster();
-			}
+		    hbaseTestUtil.shutdownMiniCluster();
 		}
 	}
 }

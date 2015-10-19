@@ -62,6 +62,7 @@ public class CsvBulkLoadToolIT {
         hbaseTestUtil.startMiniMapReduceCluster();
 
         Class.forName(PhoenixDriver.class.getName());
+        DriverManager.registerDriver(PhoenixDriver.INSTANCE);
         zkQuorum = "localhost:" + hbaseTestUtil.getZkCluster().getClientPort();
         conn = DriverManager.getConnection(PhoenixRuntime.JDBC_PROTOCOL
                 + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum);
@@ -70,19 +71,15 @@ public class CsvBulkLoadToolIT {
     @AfterClass
     public static void tearDownAfterClass() throws Exception {
         try {
-            conn.close();
+            if (conn != null) conn.close();
         } finally {
             try {
-                PhoenixDriver.INSTANCE.close();
+                DriverManager.deregisterDriver(PhoenixDriver.INSTANCE);
             } finally {
                 try {
-                    DriverManager.deregisterDriver(PhoenixDriver.INSTANCE);
-                } finally {                    
-                    try {
-                        hbaseTestUtil.shutdownMiniMapReduceCluster();
-                    } finally {
-                        hbaseTestUtil.shutdownMiniCluster();
-                    }
+                    hbaseTestUtil.shutdownMiniMapReduceCluster();
+                } finally {
+                    hbaseTestUtil.shutdownMiniCluster();
                 }
             }
         }
