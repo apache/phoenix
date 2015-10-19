@@ -19,6 +19,7 @@ package org.apache.phoenix.exception;
 
 import java.sql.SQLException;
 import java.sql.SQLTimeoutException;
+import java.text.MessageFormat;
 import java.util.Map;
 
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
@@ -46,7 +47,7 @@ import com.google.common.collect.Maps;
 
 
 /**
- * Various SQLException Information. Including a vender-specific errorcode and a standard SQLState.
+ * Various SQLException Information. Including a vendor-specific errorcode and a standard SQLState.
  * 
  * 
  * @since 1.0
@@ -84,9 +85,11 @@ public enum SQLExceptionCode {
     VALUE_IN_LIST_NOT_CONSTANT(214, "22008", "Values in IN must evaluate to a constant."),
     SINGLE_ROW_SUBQUERY_RETURNS_MULTIPLE_ROWS(215, "22015", "Single-row sub-query returns more than one row."),
     SUBQUERY_RETURNS_DIFFERENT_NUMBER_OF_FIELDS(216, "22016", "Sub-query must return the same number of fields as the left-hand-side expression of 'IN'."),
-    AMBIGUOUS_JOIN_CONDITION(217, "22017", "Amibiguous or non-equi join condition specified. Consider using table list with where clause."),
-    CONSTRAINT_VIOLATION(218, "22018", "Constraint violatioin."),
-    
+    AMBIGUOUS_JOIN_CONDITION(217, "22017", "Ambiguous or non-equi join condition specified. Consider using table list with where clause."),
+    CONSTRAINT_VIOLATION(218, "22018", "Constraint violation."),
+    MISSING_LENGTH(219, "22003", "Missing length for {0}."),
+    NONPOSITIVE_LENGTH(220, "22003", "{0} must have a positive length."),
+
     /**
      * Constraint Violation (errorcode 03, sqlstate 23)
      */
@@ -158,7 +161,7 @@ public enum SQLExceptionCode {
      /**
       *  Expression Index exceptions.
       */
-     AGGREGATE_EXPRESSION_NOT_ALLOWED_IN_INDEX(520, "42897", "Aggreagaate expression not allowed in an index"),
+     AGGREGATE_EXPRESSION_NOT_ALLOWED_IN_INDEX(520, "42897", "Aggregate expression not allowed in an index"),
      NON_DETERMINISTIC_EXPRESSION_NOT_ALLOWED_IN_INDEX(521, "42898", "Non-deterministic expression not allowed in an index"),
      STATELESS_EXPRESSION_NOT_ALLOWED_IN_INDEX(522, "42899", "Stateless expression not allowed in an index"),
 
@@ -288,15 +291,15 @@ public enum SQLExceptionCode {
     SEQUENCE_VAL_REACHED_MAX_VALUE(1212, "42Z12", "Reached MAXVALUE of sequence"),
     SEQUENCE_VAL_REACHED_MIN_VALUE(1213, "42Z13", "Reached MINVALUE of sequence"),
     INCREMENT_BY_MUST_NOT_BE_ZERO(1214, "42Z14", "Sequence INCREMENT BY value cannot be zero"),
-    NUM_SEQ_TO_ALLOCATE_MUST_BE_CONSTANT(1215, "42Z15", "Sequence NEXT n VALUES FOR must be a postive integer or constant." ),
+    NUM_SEQ_TO_ALLOCATE_MUST_BE_CONSTANT(1215, "42Z15", "Sequence NEXT n VALUES FOR must be a positive integer or constant." ),
     NUM_SEQ_TO_ALLOCATE_NOT_SUPPORTED(1216, "42Z16", "Sequence NEXT n VALUES FOR is not supported for Sequences with the CYCLE flag" ),
                     
     /** Parser error. (errorcode 06, sqlState 42P) */
-    PARSER_ERROR(601, "42P00", "Syntax error.", Factory.SYTAX_ERROR),
-    MISSING_TOKEN(602, "42P00", "Syntax error.", Factory.SYTAX_ERROR),
-    UNWANTED_TOKEN(603, "42P00", "Syntax error.", Factory.SYTAX_ERROR),
-    MISMATCHED_TOKEN(604, "42P00", "Syntax error.", Factory.SYTAX_ERROR),
-    UNKNOWN_FUNCTION(605, "42P00", "Syntax error.", Factory.SYTAX_ERROR),
+    PARSER_ERROR(601, "42P00", "Syntax error.", Factory.SYNTAX_ERROR),
+    MISSING_TOKEN(602, "42P00", "Syntax error.", Factory.SYNTAX_ERROR),
+    UNWANTED_TOKEN(603, "42P00", "Syntax error.", Factory.SYNTAX_ERROR),
+    MISMATCHED_TOKEN(604, "42P00", "Syntax error.", Factory.SYNTAX_ERROR),
+    UNKNOWN_FUNCTION(605, "42P00", "Syntax error.", Factory.SYNTAX_ERROR),
     
     /**
      * Implementation defined class. Execution exceptions (errorcode 11, sqlstate XCL). 
@@ -359,7 +362,7 @@ public enum SQLExceptionCode {
     private final Factory factory;
 
     private SQLExceptionCode(int errorCode, String sqlState, String message) {
-        this(errorCode, sqlState, message, Factory.DEFAULTY);
+        this(errorCode, sqlState, message, Factory.DEFAULT);
     }
 
     private SQLExceptionCode(int errorCode, String sqlState, String message, Factory factory) {
@@ -381,6 +384,14 @@ public enum SQLExceptionCode {
         return errorCode;
     }
 
+    public String format(Object[] args) {
+        String errMsg = message;
+        if (args != null && args.length > 0) {
+            errMsg = MessageFormat.format(message, args);
+        }
+        return "ERROR " + errorCode + " (" + sqlState + "): " + errMsg;
+    }
+
     @Override
     public String toString() {
         return "ERROR " + errorCode + " (" + sqlState + "): " + message;
@@ -391,7 +402,7 @@ public enum SQLExceptionCode {
     }
 
     public static interface Factory {
-        public static final Factory DEFAULTY = new Factory() {
+        public static final Factory DEFAULT = new Factory() {
 
             @Override
             public SQLException newException(SQLExceptionInfo info) {
@@ -399,7 +410,7 @@ public enum SQLExceptionCode {
             }
             
         };
-        public static final Factory SYTAX_ERROR = new Factory() {
+        public static final Factory SYNTAX_ERROR = new Factory() {
 
             @Override
             public SQLException newException(SQLExceptionInfo info) {

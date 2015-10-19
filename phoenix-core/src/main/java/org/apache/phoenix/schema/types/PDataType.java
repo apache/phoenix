@@ -1028,6 +1028,14 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
         PhoenixArray newArray(PDataType type, Object[] elements);
     }
 
+    public static PDataType toArrayType(PDataType type) {
+        return fromTypeId(type.getSqlType() + PDataType.ARRAY_TYPE_BASE);
+    }
+
+    public static PDataType toBaseType(PDataType type) {
+        return fromTypeId(type.getSqlType() - PDataType.ARRAY_TYPE_BASE);
+    }
+
     public static PDataType fromTypeId(int typeId) {
         for (PDataType t : PDataTypeFactory.getInstance().getTypes()) {
             if (t.getSqlType() == typeId) return t;

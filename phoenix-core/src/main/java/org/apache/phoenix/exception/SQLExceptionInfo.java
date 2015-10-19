@@ -41,6 +41,7 @@ public class SQLExceptionInfo {
 
     private final Throwable rootCause;
     private final SQLExceptionCode code; // Should always have one.
+    private final Object[] args;
     private final String message;
     private final String schemaName;
     private final String tableName;
@@ -52,6 +53,7 @@ public class SQLExceptionInfo {
 
         private Throwable rootCause;
         private SQLExceptionCode code; // Should always have one.
+        private Object[] args;
         private String message;
         private String schemaName;
         private String tableName;
@@ -59,8 +61,9 @@ public class SQLExceptionInfo {
         private String columnName;
         private String functionName;
 
-        public Builder(SQLExceptionCode code) {
+        public Builder(SQLExceptionCode code, Object... args) {
             this.code = code;
+            this.args = args;
         }
 
         public Builder setRootCause(Throwable t) {
@@ -109,6 +112,7 @@ public class SQLExceptionInfo {
 
     private SQLExceptionInfo(Builder builder) {
         code = builder.code;
+        args = builder.args;
         rootCause = builder.rootCause;
         message = builder.message;
         schemaName = builder.schemaName;
@@ -120,7 +124,7 @@ public class SQLExceptionInfo {
 
     @Override
     public String toString() {
-        StringBuilder builder = new StringBuilder(code.toString());
+        StringBuilder builder = new StringBuilder(code.format(args));
         if (message != null) {
             builder.append(" ").append(message);
         }
