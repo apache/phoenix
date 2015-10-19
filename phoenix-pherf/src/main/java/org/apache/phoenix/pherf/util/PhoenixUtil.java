@@ -33,7 +33,6 @@ import java.util.Properties;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
 
-// TODO This class needs to be cleanup up a bit. I just wanted to get an initial placeholder in.
 public class PhoenixUtil {
     private static final Logger logger = LoggerFactory.getLogger(PhoenixUtil.class);
     private static String zookeeper;
@@ -111,7 +110,9 @@ public class PhoenixUtil {
             result = preparedStatement.execute();
             connection.commit();
         } finally {
-            preparedStatement.close();
+            if(preparedStatement != null) {
+                preparedStatement.close();
+            }
         }
         return result;
     }
@@ -125,9 +126,15 @@ public class PhoenixUtil {
             connection.commit();
         } catch (SQLException e) {
             e.printStackTrace();
+            if(preparedStatement != null) {
+                logger.error("Failed to apply schema. Statement (" + preparedStatement.toString() + ")",
+                        e.getMessage());
+            }
         } finally {
             try {
-                preparedStatement.close();
+                if (preparedStatement != null) {
+                    preparedStatement.close();
+                }
             } catch (SQLException e) {
                 e.printStackTrace();
             }
@@ -199,7 +206,7 @@ public class PhoenixUtil {
 
     public synchronized List<Column> getColumnsFromPhoenix(String schemaName, String tableName,
             Connection connection) throws SQLException {
-        List<Column> columnList = new ArrayList<Column>();
+        List<Column> columnList = new ArrayList<>();
         ResultSet resultSet = null;
         try {
             resultSet = getColumnsMetaData(schemaName, tableName, connection);
@@ -293,14 +300,6 @@ public class PhoenixUtil {
         executeStatement("UPDATE STATISTICS " + tableName, scenario);
     }
 
-    public MonitorManager loadCustomMonitors(MonitorManager manager) throws Exception {
-        Properties
-                properties =
-                PherfConstants.create().getProperties(PherfConstants.PHERF_PROPERTIES, false);
-
-        return manager;
-    }
-    
     /**
      * Get explain plan for a query
      *
