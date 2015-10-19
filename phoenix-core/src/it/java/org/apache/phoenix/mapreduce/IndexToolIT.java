@@ -67,6 +67,7 @@ public class IndexToolIT {
         hbaseTestUtil.startMiniCluster();
         hbaseTestUtil.startMiniMapReduceCluster();
         Class.forName(PhoenixDriver.class.getName());
+        DriverManager.registerDriver(PhoenixDriver.INSTANCE);
         zkQuorum = "localhost:" + hbaseTestUtil.getZkCluster().getClientPort();
     }
     
@@ -321,16 +322,12 @@ public class IndexToolIT {
     @AfterClass
     public static void tearDownAfterClass() throws Exception {
         try {
-            PhoenixDriver.INSTANCE.close();
+            DriverManager.deregisterDriver(PhoenixDriver.INSTANCE);
         } finally {
             try {
-                DriverManager.deregisterDriver(PhoenixDriver.INSTANCE);
-            } finally {                    
-                try {
-                    hbaseTestUtil.shutdownMiniMapReduceCluster();
-                } finally {
-                    hbaseTestUtil.shutdownMiniCluster();
-                }
+                hbaseTestUtil.shutdownMiniMapReduceCluster();
+            } finally {
+                hbaseTestUtil.shutdownMiniCluster();
             }
         }
     }
