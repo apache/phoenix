@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.schema.types;
 
+import java.sql.SQLException;
 import java.sql.Types;
 import java.text.Format;
 import java.util.Arrays;
@@ -24,6 +25,9 @@ import java.util.Arrays;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.DataExceedsCapacityException;
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.parse.ColumnName;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.StringUtil;
@@ -39,6 +43,19 @@ public class PChar extends PDataType<String> {
 
   private PChar() {
     super("CHAR", Types.CHAR, String.class, null, 1);
+  }
+
+  @Override
+  public Integer validateMaxLength(ColumnName columnDefName, Integer maxLength) throws SQLException {
+    if (maxLength == null) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.MISSING_CHAR_LENGTH)
+          .setColumnName(columnDefName.getColumnName()).build().buildException();
+    }
+    if (maxLength < 1) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.NONPOSITIVE_CHAR_LENGTH)
+          .setColumnName(columnDefName.getColumnName()).build().buildException();
+    }
+    return maxLength;
   }
 
     @Override

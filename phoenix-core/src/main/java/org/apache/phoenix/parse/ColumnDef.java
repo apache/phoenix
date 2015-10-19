@@ -22,27 +22,23 @@ import java.sql.SQLException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.schema.types.PBinary;
-import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PVarbinary;
-import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.base.Preconditions;
 
 
 /**
- * 
+ *
  * Represents a column definition during DDL
- * 
- * 
+ *
+ *
  * @since 0.1
  */
 public class ColumnDef {
     private final ColumnName columnDefName;
-    private PDataType dataType;
+    private final PDataType dataType;
     private final Boolean isNull;
     private final Integer maxLength;
     private final Integer scale;
@@ -52,98 +48,67 @@ public class ColumnDef {
     private final Integer arrSize;
     private final String expressionStr;
     private final boolean isRowTimestamp;
- 
+
     ColumnDef(ColumnName columnDefName, String sqlTypeName, boolean isArray, Integer arrSize, Boolean isNull, Integer maxLength,
     		            Integer scale, boolean isPK, SortOrder sortOrder, String expressionStr, boolean isRowTimestamp) {
    	 try {
          Preconditions.checkNotNull(sortOrder);
-   	     PDataType localType = null;
+         Preconditions.checkNotNull(sqlTypeName);
+
          this.columnDefName = columnDefName;
          this.isArray = isArray;
+
+         PDataType dataType = PDataType.fromSqlTypeName(SchemaUtil.normalizeIdentifier(sqlTypeName));
+         PDataType baseType;
          // TODO : Add correctness check for arrSize.  Should this be ignored as in postgres
          // Also add what is the limit that we would support.  Are we going to support a
-         //  fixed size or like postgres allow infinite.  May be the data types max limit can 
+         //  fixed size or like postgres allow infinite.  May be the data types max limit can
          // be used for the array size (May be too big)
-         if(this.isArray) {
-        	 localType = sqlTypeName == null ? null : PDataType.fromTypeId(PDataType.sqlArrayType(SchemaUtil.normalizeIdentifier(sqlTypeName)));
-        	 this.dataType = sqlTypeName == null ? null : PDataType.fromSqlTypeName(SchemaUtil.normalizeIdentifier(sqlTypeName));
-             this.arrSize = arrSize; // Can only be non negative based on parsing
-             if (this.dataType == PVarbinary.INSTANCE) {
+         if (isArray) {
+             if (dataType == PVarbinary.INSTANCE) {
                  throw new SQLExceptionInfo.Builder(SQLExceptionCode.VARBINARY_ARRAY_NOT_SUPPORTED)
                  .setColumnName(columnDefName.getColumnName()).build().buildException();
              }
+             baseType = dataType;
+             dataType = PDataType.toArrayType(dataType);
+             this.arrSize = arrSize; // Can only be non negative based on parsing
          } else {
-             this.dataType = sqlTypeName == null ? null : PDataType.fromSqlTypeName(SchemaUtil.normalizeIdentifier(sqlTypeName));
+             baseType = dataType.isArrayType() ? PDataType.toBaseType(dataType) : dataType;
              this.arrSize = null;
          }
-         
+         maxLength = baseType.validateMaxLength(columnDefName, maxLength);
+         scale = baseType.validateScale(columnDefName, maxLength, scale);
+
+         this.dataType = dataType;
          this.isNull = isNull;
-         if (this.dataType == PChar.INSTANCE) {
-             if (maxLength == null) {
-                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.MISSING_CHAR_LENGTH)
-                     .setColumnName(columnDefName.getColumnName()).build().buildException();
-             }
-             if (maxLength < 1) {
-                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.NONPOSITIVE_CHAR_LENGTH)
-                     .setColumnName(columnDefName.getColumnName()).build().buildException();
-             }
-             scale = null;
-         } else if (this.dataType == PVarchar.INSTANCE) {
-             if (maxLength != null && maxLength < 1) {
-                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.NONPOSITIVE_CHAR_LENGTH)
-                     .setColumnName(columnDefName.getColumnName()).build().buildException(); 
-             }
-             scale = null;
-         } else if (this.dataType == PDecimal.INSTANCE) {
-             // for deciaml, 1 <= maxLength <= PDataType.MAX_PRECISION;
-             if (maxLength != null) {
-                 if (maxLength < 1 || maxLength > PDataType.MAX_PRECISION) {
-                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.DECIMAL_PRECISION_OUT_OF_RANGE)
-                         .setColumnName(columnDefName.getColumnName()).build().buildException();
-                 }
-                 // When a precision is specified and a scale is not specified, it is set to 0. 
-                 // 
-                 // This is the standard as specified in
-                 // http://docs.oracle.com/cd/B28359_01/server.111/b28318/datatype.htm#CNCPT1832
-                 // and 
-                 // http://docs.oracle.com/javadb/10.6.2.1/ref/rrefsqlj15260.html.
-                 // Otherwise, if scale is bigger than maxLength, just set it to the maxLength;
-                 //
-                 // When neither a precision nor a scale is specified, the precision and scale is
-                 // ignored. All decimal are stored with as much decimal points as possible.
-                 scale = scale == null ? PDataType.DEFAULT_SCALE : scale > maxLength ? maxLength : scale; 
-             }
-         } else if (this.dataType == PBinary.INSTANCE) {
-             if (maxLength == null) {
-                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.MISSING_BINARY_LENGTH)
-                     .setColumnName(columnDefName.getColumnName()).build().buildException();
-             }
-             if (maxLength < 1) {
-                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.NONPOSITIVE_BINARY_LENGTH)
-                     .setColumnName(columnDefName.getColumnName()).build().buildException();
-             }
-             scale = null;
-         } else {
-             // ignore maxLength and scale for other types.
-             maxLength = null;
-             scale = null;
-         }
          this.maxLength = maxLength;
          this.scale = scale;
          this.isPK = isPK;
          this.sortOrder = sortOrder;
-         if(this.isArray) {
-             this.dataType = localType;
-         }
          this.expressionStr = expressionStr;
          this.isRowTimestamp = isRowTimestamp;
      } catch (SQLException e) {
          throw new ParseException(e);
      }
     }
+
     ColumnDef(ColumnName columnDefName, String sqlTypeName, Boolean isNull, Integer maxLength,
             Integer scale, boolean isPK, SortOrder sortOrder, String expressionStr, boolean isRowTimestamp) {
     	this(columnDefName, sqlTypeName, false, 0, isNull, maxLength, scale, isPK, sortOrder, expressionStr, isRowTimestamp);
+    }
+
+    ColumnDef(ColumnName columnDefName) {
+        this.columnDefName = columnDefName;
+        this.dataType = null;
+        this.isNull = true;
+        this.maxLength = null;
+        this.scale = null;
+        this.isPK = false;
+        this.sortOrder = SortOrder.getDefault();
+        this.expressionStr = null;
+        this.isRowTimestamp = false;
+        this.isArray = false;
+        this.arrSize = null;
     }
 
     public ColumnName getColumnDefName() {
@@ -175,11 +140,11 @@ public class ColumnDef {
     public boolean isPK() {
         return isPK;
     }
-    
+
     public SortOrder getSortOrder() {
     	return sortOrder;
     }
-        
+
 	public boolean isArray() {
 		return isArray;
 	}
@@ -191,7 +156,7 @@ public class ColumnDef {
 	public String getExpression() {
 		return expressionStr;
 	}
-	
+
 	public boolean isRowTimestamp() {
 	    return isRowTimestamp;
 	}
@@ -206,7 +171,7 @@ public class ColumnDef {
             if (scale != null) {
               buf.append(',');
               buf.append(scale); // has both max length and scale. For ex- decimal(10,2)
-            }       
+            }
             buf.append(')');
        }
         if (isArray) {

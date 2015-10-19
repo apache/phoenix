@@ -18,12 +18,16 @@
 package org.apache.phoenix.schema.types;
 
 import java.math.BigDecimal;
+import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.sql.Types;
 import java.text.Format;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.parse.ColumnName;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.ByteUtil;
@@ -46,6 +50,35 @@ public class PDecimal extends PRealNumber<BigDecimal> {
 
   private PDecimal() {
     super("DECIMAL", Types.DECIMAL, BigDecimal.class, null, 8);
+  }
+
+  @Override
+  public Integer validateMaxLength(ColumnName columnDefName, Integer maxLength) throws SQLException {
+    if (maxLength != null) {
+      if (maxLength < 1 || maxLength > PDataType.MAX_PRECISION) {
+         throw new SQLExceptionInfo.Builder(SQLExceptionCode.DECIMAL_PRECISION_OUT_OF_RANGE)
+             .setColumnName(columnDefName.getColumnName()).build().buildException();
+         }
+    }
+    return maxLength;
+  }
+
+  @Override
+  public Integer validateScale(ColumnName columnDefName, Integer maxLength, Integer scale) throws SQLException {
+    // When a precision is specified and a scale is not specified, it is set to 0.
+    //
+    // This is the standard as specified in
+    // http://docs.oracle.com/cd/B28359_01/server.111/b28318/datatype.htm#CNCPT1832
+    // and
+    // http://docs.oracle.com/javadb/10.6.2.1/ref/rrefsqlj15260.html.
+    // Otherwise, if scale is bigger than maxLength, just set it to the maxLength;
+    //
+    // When neither a precision nor a scale is specified, the precision and scale is
+    // ignored. All decimal are stored with as much decimal points as possible.
+    if (scale == null) {
+      scale = PDataType.DEFAULT_SCALE;
+    }
+    return maxLength != null ? Math.min(scale, maxLength) : scale;
   }
 
   @Override

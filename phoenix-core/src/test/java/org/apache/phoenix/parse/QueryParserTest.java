@@ -462,7 +462,8 @@ public class QueryParserTest {
                         "select next value for foo.bar from core.custom_entity_data\n"));                    
         parseQuery(sql);
     }
-	
+
+    @Test
     public void testBadCharDef() throws Exception {
         try {
             String sql = ("CREATE TABLE IF NOT EXISTS testBadVarcharDef" + 

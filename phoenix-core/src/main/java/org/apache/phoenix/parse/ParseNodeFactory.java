@@ -262,6 +262,10 @@ public class ParseNodeFactory {
         return new PropertyName(familyName, propertyName);
     }
 
+    public ColumnDef columnDef(ColumnName columnDefName) {
+        return new ColumnDef(columnDefName);
+    }
+
     public ColumnDef columnDef(ColumnName columnDefName, String sqlTypeName, boolean isNull, Integer maxLength, Integer scale, boolean isPK, SortOrder sortOrder, String expressionStr, boolean isRowTimestamp) {
         return new ColumnDef(columnDefName, sqlTypeName, isNull, maxLength, scale, isPK, sortOrder, expressionStr, isRowTimestamp);
     }

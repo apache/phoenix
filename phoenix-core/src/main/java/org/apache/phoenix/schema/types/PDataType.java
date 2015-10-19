@@ -21,6 +21,7 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.MathContext;
 import java.math.RoundingMode;
+import java.sql.SQLException;
 import java.text.Format;
 import java.util.Random;
 
@@ -31,6 +32,7 @@ import org.apache.hadoop.hbase.util.Order;
 import org.apache.hadoop.hbase.util.PositionedByteRange;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.parse.ColumnName;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.ConstraintViolationException;
 import org.apache.phoenix.schema.IllegalDataException;
@@ -141,6 +143,14 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
 
     public boolean isArrayType() {
         return false;
+    }
+
+    public Integer validateMaxLength(ColumnName columnDefName, Integer maxLength) throws SQLException {
+        return null;
+    }
+
+    public Integer validateScale(ColumnName columnDefName, Integer maxLength, Integer scale) throws SQLException {
+        return null;
     }
 
     public final int compareTo(byte[] lhs, int lhsOffset, int lhsLength, SortOrder lhsSortOrder, byte[] rhs,
@@ -1026,6 +1036,14 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
 
     protected static interface PhoenixArrayFactory {
         PhoenixArray newArray(PDataType type, Object[] elements);
+    }
+
+    public static PDataType toArrayType(PDataType type) {
+        return fromTypeId(type.getSqlType() + PDataType.ARRAY_TYPE_BASE);
+    }
+
+    public static PDataType toBaseType(PDataType type) {
+        return fromTypeId(type.getSqlType() - PDataType.ARRAY_TYPE_BASE);
     }
 
     public static PDataType fromTypeId(int typeId) {
