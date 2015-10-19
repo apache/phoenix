@@ -22,12 +22,8 @@ import java.sql.SQLException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.schema.types.PBinary;
-import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PVarbinary;
-import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.base.Preconditions;
@@ -74,52 +70,15 @@ public class ColumnDef {
                  .setColumnName(columnDefName.getColumnName()).build().buildException();
              }
              baseType = dataType;
-        	 dataType = PDataType.toArrayType(dataType);
+             dataType = PDataType.toArrayType(dataType);
              this.arrSize = arrSize; // Can only be non negative based on parsing
          } else {
              baseType = dataType.isArrayType() ? PDataType.toBaseType(dataType) : dataType;
              this.arrSize = null;
          }
-         if (baseType == PChar.INSTANCE || baseType == PBinary.INSTANCE) {
-             if (maxLength == null) {
-                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.MISSING_LENGTH, baseType.getSqlTypeName())
-                     .setColumnName(columnDefName.getColumnName()).build().buildException();
-             }
-             if (maxLength < 1) {
-                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.NONPOSITIVE_LENGTH, baseType.getSqlTypeName())
-                     .setColumnName(columnDefName.getColumnName()).build().buildException();
-             }
-             scale = null;
-         } else if (baseType == PVarchar.INSTANCE) {
-             if (maxLength != null && maxLength < 1) {
-                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.NONPOSITIVE_CHAR_LENGTH)
-                     .setColumnName(columnDefName.getColumnName()).build().buildException();
-             }
-             scale = null;
-         } else if (baseType == PDecimal.INSTANCE) {
-             // for decimal, 1 <= maxLength <= PDataType.MAX_PRECISION;
-             if (maxLength != null) {
-                 if (maxLength < 1 || maxLength > PDataType.MAX_PRECISION) {
-                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.DECIMAL_PRECISION_OUT_OF_RANGE)
-                         .setColumnName(columnDefName.getColumnName()).build().buildException();
-                 }
-                 // When a precision is specified and a scale is not specified, it is set to 0.
-                 //
-                 // This is the standard as specified in
-                 // http://docs.oracle.com/cd/B28359_01/server.111/b28318/datatype.htm#CNCPT1832
-                 // and
-                 // http://docs.oracle.com/javadb/10.6.2.1/ref/rrefsqlj15260.html.
-                 // Otherwise, if scale is bigger than maxLength, just set it to the maxLength;
-                 //
-                 // When neither a precision nor a scale is specified, the precision and scale is
-                 // ignored. All decimal are stored with as much decimal points as possible.
-                 scale = scale == null ? PDataType.DEFAULT_SCALE : scale > maxLength ? maxLength : scale;
-             }
-         } else {
-             // ignore maxLength and scale for other types.
-             maxLength = null;
-             scale = null;
-         }
+         maxLength = baseType.validateMaxLength(columnDefName, maxLength);
+         scale = baseType.validateScale(columnDefName, maxLength, scale);
+
          this.dataType = dataType;
          this.isNull = isNull;
          this.maxLength = maxLength;

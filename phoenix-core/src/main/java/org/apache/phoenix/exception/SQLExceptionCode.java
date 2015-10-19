@@ -19,7 +19,6 @@ package org.apache.phoenix.exception;
 
 import java.sql.SQLException;
 import java.sql.SQLTimeoutException;
-import java.text.MessageFormat;
 import java.util.Map;
 
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
@@ -48,8 +47,8 @@ import com.google.common.collect.Maps;
 
 /**
  * Various SQLException Information. Including a vendor-specific errorcode and a standard SQLState.
- * 
- * 
+ *
+ *
  * @since 1.0
  */
 public enum SQLExceptionCode {
@@ -60,7 +59,7 @@ public enum SQLExceptionCode {
     IO_EXCEPTION(101, "08000", "Unexpected IO exception."),
     MALFORMED_CONNECTION_URL(102, "08001", "Malformed connection url."),
     CANNOT_ESTABLISH_CONNECTION(103, "08004", "Unable to establish connection."),
-    
+
     /**
      * Data Exception (errorcode 02, sqlstate 22)
      */
@@ -87,8 +86,6 @@ public enum SQLExceptionCode {
     SUBQUERY_RETURNS_DIFFERENT_NUMBER_OF_FIELDS(216, "22016", "Sub-query must return the same number of fields as the left-hand-side expression of 'IN'."),
     AMBIGUOUS_JOIN_CONDITION(217, "22017", "Ambiguous or non-equi join condition specified. Consider using table list with where clause."),
     CONSTRAINT_VIOLATION(218, "22018", "Constraint violation."),
-    MISSING_LENGTH(219, "22003", "Missing length for {0}."),
-    NONPOSITIVE_LENGTH(220, "22003", "{0} must have a positive length."),
 
     /**
      * Constraint Violation (errorcode 03, sqlstate 23)
@@ -100,13 +97,13 @@ public enum SQLExceptionCode {
         }
     }),
     CANNOT_INDEX_COLUMN_ON_TYPE(302, "23100", "The column cannot be index due to its type."),
-    
+
     /**
      * Invalid Cursor State (errorcode 04, sqlstate 24)
      */
     CURSOR_BEFORE_FIRST_ROW(401, "24015","Cursor before first row."),
     CURSOR_PAST_LAST_ROW(402, "24016", "Cursor past last row."),
-    
+
     /**
      * Syntax Error or Access Rule Violation (errorcode 05, sqlstate 42)
      */
@@ -155,9 +152,9 @@ public enum SQLExceptionCode {
      *  Invalid Transaction State (errorcode 05, sqlstate 25)
      */
      READ_ONLY_CONNECTION(518,"25502","Mutations are not permitted for a read-only connection."),
- 
+
      VARBINARY_ARRAY_NOT_SUPPORTED(519, "42896", "VARBINARY ARRAY is not supported"),
-    
+
      /**
       *  Expression Index exceptions.
       */
@@ -165,12 +162,12 @@ public enum SQLExceptionCode {
      NON_DETERMINISTIC_EXPRESSION_NOT_ALLOWED_IN_INDEX(521, "42898", "Non-deterministic expression not allowed in an index"),
      STATELESS_EXPRESSION_NOT_ALLOWED_IN_INDEX(522, "42899", "Stateless expression not allowed in an index"),
 
-     /** 
+     /**
       * Union All related errors
       */
      SELECT_COLUMN_NUM_IN_UNIONALL_DIFFS(525, "42902", "SELECT column number differs in a Union All query is not allowed"),
      SELECT_COLUMN_TYPE_IN_UNIONALL_DIFFS(526, "42903", "SELECT column types differ in a Union All query is not allowed"),
-     
+
      /**
       * Row timestamp column related errors
       */
@@ -180,10 +177,10 @@ public enum SQLExceptionCode {
      ROWTIMESTAMP_COL_INVALID_TYPE(530, "42907", "A column can be added as ROW_TIMESTAMP only if it is of type DATE, BIGINT, TIME OR TIMESTAMP"),
      ROWTIMESTAMP_NOT_ALLOWED_ON_VIEW(531, "42908", "Declaring a column as row_timestamp is not allowed for views"),
      INVALID_SCN(532, "42909", "Value of SCN cannot be less than zero"),
-     /** 
+     /**
      * HBase and Phoenix specific implementation defined sub-classes.
      * Column family related exceptions.
-     * 
+     *
      * For the following exceptions, use errorcode 10.
      */
     SINGLE_PK_MAY_NOT_BE_NULL(1000, "42I00", "Single column primary key may not be NULL."),
@@ -240,11 +237,11 @@ public enum SQLExceptionCode {
     NO_MUTABLE_INDEXES(1026, "42Y85", "Mutable secondary indexes are only supported for HBase version " + MetaDataUtil.decodeHBaseVersionAsString(PhoenixDatabaseMetaData.MUTABLE_SI_VERSION_THRESHOLD) + " and above."),
     INVALID_FILTER_ON_IMMUTABLE_ROWS(1027, "42Y86", "All columns referenced in a WHERE clause must be available in every index for a table with immutable rows."),
     INVALID_INDEX_STATE_TRANSITION(1028, "42Y87", "Invalid index state transition."),
-    INVALID_MUTABLE_INDEX_CONFIG(1029, "42Y88", "Mutable secondary indexes must have the " 
-            + IndexManagementUtil.WAL_EDIT_CODEC_CLASS_KEY + " property set to " 
+    INVALID_MUTABLE_INDEX_CONFIG(1029, "42Y88", "Mutable secondary indexes must have the "
+            + IndexManagementUtil.WAL_EDIT_CODEC_CLASS_KEY + " property set to "
             +  IndexManagementUtil.INDEX_WAL_EDIT_CODEC_CLASS_NAME + " in the hbase-sites.xml of every region server"),
-            
-            
+
+
     CANNOT_CREATE_TENANT_SPECIFIC_TABLE(1030, "42Y89", "Cannot create table for tenant-specific connection"),
     DEFAULT_COLUMN_FAMILY_ONLY_ON_CREATE_TABLE(1034, "42Y93", "Default column family may only be specified when creating a table."),
     INSUFFICIENT_MULTI_TENANT_COLUMNS(1040, "42Y96", "A MULTI_TENANT table must have two or more PK columns with the first column being NOT NULL."),
@@ -258,8 +255,8 @@ public enum SQLExceptionCode {
     CANNOT_ALTER_PROPERTY(1051, "43A08", "Property can be specified or changed only when creating a table"),
     CANNOT_SET_PROPERTY_FOR_COLUMN_NOT_ADDED(1052, "43A09", "Property cannot be specified for a column family that is not being added or modified"),
     CANNOT_SET_TABLE_PROPERTY_ADD_COLUMN(1053, "43A10", "Table level property cannot be set when adding a column"),
-    
-    NO_LOCAL_INDEXES(1054, "43A11", "Local secondary indexes are not supported for HBase versions " + 
+
+    NO_LOCAL_INDEXES(1054, "43A11", "Local secondary indexes are not supported for HBase versions " +
         MetaDataUtil.decodeHBaseVersionAsString(PhoenixDatabaseMetaData.MIN_LOCAL_SI_VERSION_DISALLOW) + " through " + MetaDataUtil.decodeHBaseVersionAsString(PhoenixDatabaseMetaData.MAX_LOCAL_SI_VERSION_DISALLOW) + " inclusive."),
     UNALLOWED_LOCAL_INDEXES(1055, "43A12", "Local secondary indexes are configured to not be allowed."),
     DESC_VARBINARY_NOT_SUPPORTED(1056, "43A13", "Descending VARBINARY columns not supported"),
@@ -293,16 +290,16 @@ public enum SQLExceptionCode {
     INCREMENT_BY_MUST_NOT_BE_ZERO(1214, "42Z14", "Sequence INCREMENT BY value cannot be zero"),
     NUM_SEQ_TO_ALLOCATE_MUST_BE_CONSTANT(1215, "42Z15", "Sequence NEXT n VALUES FOR must be a positive integer or constant." ),
     NUM_SEQ_TO_ALLOCATE_NOT_SUPPORTED(1216, "42Z16", "Sequence NEXT n VALUES FOR is not supported for Sequences with the CYCLE flag" ),
-                    
+
     /** Parser error. (errorcode 06, sqlState 42P) */
     PARSER_ERROR(601, "42P00", "Syntax error.", Factory.SYNTAX_ERROR),
     MISSING_TOKEN(602, "42P00", "Syntax error.", Factory.SYNTAX_ERROR),
     UNWANTED_TOKEN(603, "42P00", "Syntax error.", Factory.SYNTAX_ERROR),
     MISMATCHED_TOKEN(604, "42P00", "Syntax error.", Factory.SYNTAX_ERROR),
     UNKNOWN_FUNCTION(605, "42P00", "Syntax error.", Factory.SYNTAX_ERROR),
-    
+
     /**
-     * Implementation defined class. Execution exceptions (errorcode 11, sqlstate XCL). 
+     * Implementation defined class. Execution exceptions (errorcode 11, sqlstate XCL).
      */
     RESULTSET_CLOSED(1101, "XCL01", "ResultSet is closed."),
     GET_TABLE_REGIONS_FAIL(1102, "XCL02", "Cannot get all table regions"),
@@ -319,7 +316,7 @@ public enum SQLExceptionCode {
     }),
     CANNOT_SPLIT_LOCAL_INDEX(1109,"XCL09", "Local index may not be pre-split"),
     CANNOT_SALT_LOCAL_INDEX(1110,"XCL10", "Local index may not be salted"),
-    
+
     /**
      * Implementation defined class. Phoenix internal error. (errorcode 20, sqlstate INT).
      */
@@ -382,14 +379,6 @@ public enum SQLExceptionCode {
 
     public int getErrorCode() {
         return errorCode;
-    }
-
-    public String format(Object[] args) {
-        String errMsg = message;
-        if (args != null && args.length > 0) {
-            errMsg = MessageFormat.format(message, args);
-        }
-        return "ERROR " + errorCode + " (" + sqlState + "): " + errMsg;
     }
 
     @Override

@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.schema.types;
 
+import java.sql.SQLException;
 import java.sql.Types;
 import java.text.Format;
 import java.util.Arrays;
@@ -25,6 +26,9 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Base64;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.DataExceedsCapacityException;
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.parse.ColumnName;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.SortOrder;
 
@@ -34,6 +38,19 @@ public class PBinary extends PBinaryBase {
 
   private PBinary() {
     super("BINARY", Types.BINARY, byte[].class, null, 23);
+  }
+
+  @Override
+  public Integer validateMaxLength(ColumnName columnDefName, Integer maxLength) throws SQLException {
+    if (maxLength == null) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.MISSING_BINARY_LENGTH)
+          .setColumnName(columnDefName.getColumnName()).build().buildException();
+    }
+    if (maxLength < 1) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.NONPOSITIVE_BINARY_LENGTH)
+          .setColumnName(columnDefName.getColumnName()).build().buildException();
+    }
+    return maxLength;
   }
 
   @Override

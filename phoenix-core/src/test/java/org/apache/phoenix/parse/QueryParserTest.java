@@ -471,7 +471,7 @@ public class QueryParserTest {
             parseQuery(sql);
             fail("Should have caught bad char definition.");
         } catch (SQLException e) {
-            assertTrue(e.getMessage(), e.getMessage().contains("ERROR 220 (22003): CHAR must have a positive length. columnName=COL"));
+            assertTrue(e.getMessage(), e.getMessage().contains("ERROR 208 (22003): CHAR or VARCHAR must have a positive length. columnName=COL"));
         }
         try {
             String sql = ("CREATE TABLE IF NOT EXISTS testBadVarcharDef" + 
@@ -479,7 +479,7 @@ public class QueryParserTest {
             parseQuery(sql);
             fail("Should have caught bad char definition.");
         } catch (SQLException e) {
-            assertTrue(e.getMessage(), e.getMessage().contains("ERROR 219 (22003): Missing length for CHAR. columnName=COL"));
+            assertTrue(e.getMessage(), e.getMessage().contains("ERROR 207 (22003): Missing length for CHAR. columnName=COL"));
         }
     }
 
@@ -523,7 +523,7 @@ public class QueryParserTest {
             parseQuery(sql);
             fail("Should have caught bad binary definition.");
         } catch (SQLException e) {
-            assertTrue(e.getMessage(), e.getMessage().contains("ERROR 220 (22003): BINARY must have a positive length. columnName=COL"));
+            assertTrue(e.getMessage(), e.getMessage().contains("ERROR 211 (22003): BINARY must have a positive length. columnName=COL"));
         }
         try {
             String sql = ("CREATE TABLE IF NOT EXISTS testBadVarcharDef" + 
@@ -531,7 +531,7 @@ public class QueryParserTest {
             parseQuery(sql);
             fail("Should have caught bad char definition.");
         } catch (SQLException e) {
-            assertTrue(e.getMessage(), e.getMessage().contains("ERROR 219 (22003): Missing length for BINARY. columnName=COL"));
+            assertTrue(e.getMessage(), e.getMessage().contains("ERROR 210 (22003): Missing length for BINARY. columnName=COL"));
         }
     }
 

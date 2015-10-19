@@ -17,11 +17,15 @@
  */
 package org.apache.phoenix.schema.types;
 
+import java.sql.SQLException;
 import java.sql.Types;
 import java.text.Format;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.parse.ColumnName;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.StringUtil;
@@ -34,6 +38,15 @@ public class PVarchar extends PDataType<String> {
 
   private PVarchar() {
     super("VARCHAR", Types.VARCHAR, String.class, null, 0);
+  }
+
+  @Override
+  public Integer validateMaxLength(ColumnName columnDefName, Integer maxLength) throws SQLException {
+    if (maxLength != null && maxLength < 1) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.NONPOSITIVE_CHAR_LENGTH)
+          .setColumnName(columnDefName.getColumnName()).build().buildException();
+    }
+    return maxLength;
   }
 
   @Override
