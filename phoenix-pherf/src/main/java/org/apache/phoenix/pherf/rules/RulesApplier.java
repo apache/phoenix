@@ -19,6 +19,7 @@
 package org.apache.phoenix.pherf.rules;
 
 import com.google.common.base.Preconditions;
+import org.apache.commons.lang.StringUtils;
 import org.apache.commons.math3.random.RandomDataGenerator;
 import org.apache.phoenix.pherf.PherfConstants;
 import org.apache.commons.lang.RandomStringUtils;
@@ -97,13 +98,6 @@ public class RulesApplier {
                 Column columnRule = getColumnForRule(ruleList, phxMetaColumn);
 
                 value = getDataValue(columnRule);
-                synchronized (value) {
-                    // Add the prefix to the value if it exists.
-                    if (columnRule.getPrefix() != null) {
-                        value.setValue(columnRule.getPrefix() + value.getValue());
-                    }
-                }
-
             } else {
                 logger.warn("Attempted to apply rule to data, but could not find a rule to match type:"
                                 + phxMetaColumn.getType()
@@ -122,46 +116,55 @@ public class RulesApplier {
      */
     public DataValue getDataValue(Column column) throws Exception{
         DataValue data = null;
+        String prefix = "";
         int length = column.getLength();
         int nullChance = column.getNullChance();
         List<DataValue> dataValues = column.getDataValues();
 
-        // Return an empty value if we we fall within the configured probability
+        // Return an empty value if we fall within the configured probability of null
         if ((nullChance != Integer.MIN_VALUE) && (isValueNull(nullChance))) {
             return new DataValue(column.getType(), "");
+        }
+
+        if (column.getPrefix() != null) {
+            prefix = column.getPrefix();
+        }
+
+        if (prefix.length() >= length) {
+            logger.warn("You are attempting to generate data with a prefix (" + prefix + ") "
+                    + "That is longer than expected overall field length (" + length + "). "
+                    + "This will certainly lead to unexpected data values.");
         }
 
         switch (column.getType()) {
             case VARCHAR:
                 // Use the specified data values from configs if they exist
                 if ((column.getDataValues() != null) && (column.getDataValues().size() > 0)) {
-                    data = generateDataValue(dataValues);
+                    data = pickDataValueFromList(dataValues);
                 } else {
                     Preconditions.checkArgument(length > 0, "length needs to be > 0");
                     if (column.getDataSequence() == DataSequence.SEQUENTIAL) {
                         data = getSequentialDataValue(column);
                     } else {
-                        String varchar = RandomStringUtils.randomAlphanumeric(length);
-                        data = new DataValue(column.getType(), varchar);
+                        data = getRandomDataValue(column);
                     }
                 }
                 break;
             case CHAR:
                 if ((column.getDataValues() != null) && (column.getDataValues().size() > 0)) {
-                    data = generateDataValue(dataValues);
+                    data = pickDataValueFromList(dataValues);
                 } else {
                     Preconditions.checkArgument(length > 0, "length needs to be > 0");
                     if (column.getDataSequence() == DataSequence.SEQUENTIAL) {
                         data = getSequentialDataValue(column);
                     } else {
-                        String varchar = RandomStringUtils.randomAlphanumeric(length);
-                        data = new DataValue(column.getType(), varchar);
+                        data = getRandomDataValue(column);
                     }
                 }
                 break;
             case DECIMAL:
                 if ((column.getDataValues() != null) && (column.getDataValues().size() > 0)) {
-                    data = generateDataValue(dataValues);
+                    data = pickDataValueFromList(dataValues);
                 } else {
                     int precision = column.getPrecision();
                     double minDbl = column.getMinValue();
@@ -181,7 +184,7 @@ public class RulesApplier {
                 break;
             case INTEGER:
                 if ((column.getDataValues() != null) && (column.getDataValues().size() > 0)) {
-                    data = generateDataValue(dataValues);
+                    data = pickDataValueFromList(dataValues);
                 } else {
                     int minInt = column.getMinValue();
                     int maxInt = column.getMaxValue();
@@ -192,7 +195,7 @@ public class RulesApplier {
                 break;
             case DATE:
                 if ((column.getDataValues() != null) && (column.getDataValues().size() > 0)) {
-                    data = generateDataValue(dataValues);
+                    data = pickDataValueFromList(dataValues);
                 } else {
                     int minYear = column.getMinValue();
                     int maxYear = column.getMaxValue();
@@ -205,7 +208,8 @@ public class RulesApplier {
             default:
                 break;
         }
-        Preconditions.checkArgument(data != null, "Data value could not be generated for some reason. Please check configs");
+        Preconditions.checkArgument(data != null,
+                "Data value could not be generated for some reason. Please check configs");
         return data;
     }
 
@@ -246,7 +250,7 @@ public class RulesApplier {
         return (rndNull.nextInt(100) < chance);
     }
 
-    private DataValue generateDataValue(List<DataValue> values) throws Exception{
+    private DataValue pickDataValueFromList(List<DataValue> values) throws Exception{
         DataValue generatedDataValue = null;
         int sum = 0, count = 0;
 
@@ -265,7 +269,7 @@ public class RulesApplier {
             int rndIndex = rndVal.nextInt(values.size());
             DataValue valueRule = values.get(rndIndex);
 
-            generatedDataValue = generateDataValue(valueRule);
+            generatedDataValue = pickDataValueFromList(valueRule);
 
             // While it's possible to get here if you have a bunch of really small distributions,
             // It's just really unlikely. This is just a safety just so we actually pick a value.
@@ -278,7 +282,7 @@ public class RulesApplier {
         return generatedDataValue;
     }
 
-    private DataValue generateDataValue(final DataValue valueRule) throws Exception{
+    private DataValue pickDataValueFromList(final DataValue valueRule) throws Exception{
         DataValue retValue = new DataValue(valueRule);
 
         // Path taken when configuration specifies a specific value to be taken with the <value> tag
@@ -339,6 +343,14 @@ public class RulesApplier {
         }
     }
 
+    public Column getRule(Column phxMetaColumn) {
+        // Assume the first rule map
+        Map<DataTypeMapping, List> ruleMap = modelList.get(0);
+
+        List<Column> ruleList = ruleMap.get(phxMetaColumn.getType());
+        return getColumnForRule(ruleList, phxMetaColumn);
+    }
+
     private Column getColumnForRule(List<Column> ruleList, Column phxMetaColumn) {
 
         // Column pointer to head of list
@@ -371,7 +383,21 @@ public class RulesApplier {
         long inc = COUNTER.getAndIncrement();
         String strInc = String.valueOf(inc);
         String varchar = RandomStringUtils.randomAlphanumeric(column.getLength() - strInc.length());
-        data = new DataValue(column.getType(), strInc + varchar);
+        varchar = (column.getPrefix() != null) ? column.getPrefix() + strInc + varchar :
+                strInc + varchar;
+
+        // Truncate string back down if it exceeds length
+        varchar = StringUtils.left(varchar,column.getLength());
+        data = new DataValue(column.getType(), varchar);
         return data;
+    }
+
+    private DataValue getRandomDataValue(Column column) {
+        String varchar = RandomStringUtils.randomAlphanumeric(column.getLength());
+        varchar = (column.getPrefix() != null) ? column.getPrefix() + varchar : varchar;
+
+        // Truncate string back down if it exceeds length
+        varchar = StringUtils.left(varchar, column.getLength());
+        return new DataValue(column.getType(), varchar);
     }
 }

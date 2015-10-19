@@ -112,7 +112,7 @@
         <column>
             <!-- This column type defines what will generally happen to VARCHAR fields unless they are explicitly defined or overridden elsewhere -->
             <type>VARCHAR</type>
-            <length>15</length>
+            <length>10</length>
             <userDefined>true</userDefined>
             <dataSequence>RANDOM</dataSequence>
             <name>OLDVAL_STRING</name>
@@ -123,7 +123,7 @@
             <type>VARCHAR</type>
             <length>15</length>
             <userDefined>true</userDefined>
-            <dataSequence>SEQUENTIAL</dataSequence>
+            <dataSequence>RANDOM</dataSequence>
             <name>NEWVAL_STRING</name>
             <prefix>TSTPRFX</prefix>
         </column>
@@ -145,7 +145,15 @@
                     <value>LMN</value>
                 </datavalue>
             </valuelist>            
-        </column>        
+        </column>
+        <column>
+            <type>CHAR</type>
+            <userDefined>true</userDefined>
+            <dataSequence>SEQUENTIAL</dataSequence>
+            <length>8</length>
+            <name>OTHER_ID</name>
+            <prefix>z0Oxx00</prefix>
+        </column>
     </datamapping>
     <scenarios>
         <scenario tableName="PHERF.TEST_TABLE" rowCount="100" name="testScenarioRW">

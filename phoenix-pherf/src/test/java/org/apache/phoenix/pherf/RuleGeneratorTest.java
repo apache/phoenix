@@ -18,17 +18,13 @@
 
 package org.apache.phoenix.pherf;
 
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
 
+import org.apache.commons.lang3.StringUtils;
 import org.apache.phoenix.pherf.configuration.Column;
 import org.apache.phoenix.pherf.configuration.DataModel;
 import org.apache.phoenix.pherf.configuration.DataSequence;
@@ -42,6 +38,8 @@ import org.joda.time.DateTime;
 import org.joda.time.format.DateTimeFormat;
 import org.joda.time.format.DateTimeFormatter;
 import org.junit.Test;
+
+import static org.junit.Assert.*;
 
 public class RuleGeneratorTest {
     private static final String matcherScenario = PherfConstants.SCENARIO_ROOT_PATTERN + ".xml";
@@ -179,7 +177,8 @@ public class RuleGeneratorTest {
             }
         }
 
-        assertTrue("Expected count in increments did not match expected", testSet.size() == (threadCount * increments));
+        assertTrue("Expected count in increments did not match expected",
+                testSet.size() == (threadCount * increments));
     }
 
     @Test
@@ -203,6 +202,46 @@ public class RuleGeneratorTest {
             DataValue value = rulesApplier.getDataForRule(scenario, simPhxCol);
             assertTrue("Got a value not in the list for the rule. :" + value.getValue(), expectedValues.contains(value.getValue()));
         }
+    }
+
+    @Test
+    public void testRuleOverrides() throws Exception {
+        XMLConfigParser parser = new XMLConfigParser(".*test_scenario.xml");
+        WriteWorkload loader = new WriteWorkload(parser);
+        RulesApplier rulesApplier = loader.getRulesApplier();
+        Scenario scenario = parser.getScenarios().get(0);
+
+        // We should be able to find the correct rule based only on Type and Name combination
+        // Test CHAR
+        Column simPhxCol = new Column();
+        simPhxCol.setName("OTHER_ID");
+        simPhxCol.setType(DataTypeMapping.CHAR);
+
+        // Get the rule we expect to match
+        Column rule = rulesApplier.getRule(simPhxCol);
+        assertEquals("Did not find the correct rule.", rule.getName(), simPhxCol.getName());
+        assertEquals("Did not find the matching rule type.", rule.getType(), simPhxCol.getType());
+        assertEquals("Rule contains incorrect length.", rule.getLength(), 8);
+        assertEquals("Rule contains incorrect prefix.", rule.getPrefix(), "z0Oxx00");
+
+        DataValue value = rulesApplier.getDataForRule(scenario, simPhxCol);
+        assertEquals("Value returned does not match rule.", value.getValue().length(), 8);
+
+        // Test VARCHAR with RANDOM and prefix
+        simPhxCol.setName("OLDVAL_STRING");
+        simPhxCol.setType(DataTypeMapping.VARCHAR);
+
+        // Get the rule we expect to match
+        rule = rulesApplier.getRule(simPhxCol);
+        assertEquals("Did not find the correct rule.", rule.getName(), simPhxCol.getName());
+        assertEquals("Did not find the matching rule type.", rule.getType(), simPhxCol.getType());
+        assertEquals("Rule contains incorrect length.", rule.getLength(), 10);
+        assertEquals("Rule contains incorrect prefix.", rule.getPrefix(), "MYPRFX");
+
+        value = rulesApplier.getDataForRule(scenario, simPhxCol);
+        assertEquals("Value returned does not match rule.", value.getValue().length(), 10);
+        assertTrue("Value returned start with prefix.",
+                StringUtils.startsWith(value.getValue(), rule.getPrefix()));
     }
 
     /**
