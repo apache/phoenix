@@ -466,7 +466,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                            "      PhoenixServerJoin(condition=[=($5, $7)], joinType=[inner])\n" +
                            "        PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
                            "        PhoenixToClientConverter\n" +
-                           "          PhoenixServerProject(supplier_id=[$0], NAME=[$1], PHONE=[$2], ADDRESS=[$3], LOC_ID=[$4], $f5=[CAST($1):VARCHAR(2) CHARACTER SET \"ISO-8859-1\" COLLATE \"ISO-8859-1$en_US$primary\"])\n" +
+                           "          PhoenixServerProject(supplier_id=[$0], NAME=[$1], PHONE=[$2], ADDRESS=[$3], LOC_ID=[$4], NAME5=[CAST($1):VARCHAR(2) CHARACTER SET \"ISO-8859-1\" COLLATE \"ISO-8859-1$en_US$primary\"])\n" +
                            "            PhoenixTableScan(table=[[phoenix, Join, SupplierTable]], filter=[=(CAST($1):VARCHAR(2) CHARACTER SET \"ISO-8859-1\" COLLATE \"ISO-8859-1$en_US$primary\", 'S5')])\n")
                 .resultIs(new Object[][] {
                           {"0000000005", "T5", 500, 8, 15, "0000000005", "Item T5", "0000000005", "S5", "888-888-5555", "505 YYY Street", "10005"}})
@@ -481,7 +481,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                            "        PhoenixServerProject(item_id=[$0], NAME=[$1], PRICE=[$2], DISCOUNT2=[$4], $f7=[/(*($2, -(100, $4)), 100.0)])\n" +
                            "          PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
                            "        PhoenixToClientConverter\n" +
-                           "          PhoenixServerProject(order_id=[$0], item_id=[$2], QUANTITY=[$4], $f7=[CAST($3):DECIMAL(17, 6)])\n" +
+                           "          PhoenixServerProject(order_id=[$0], item_id=[$2], QUANTITY=[$4], PRICE7=[CAST($3):DECIMAL(17, 6)])\n" +
                            "            PhoenixTableScan(table=[[phoenix, Join, OrderTable]], filter=[<($4, 5000)])\n")
                 .resultIs(new Object[][] {
                           {"000000000000004", "T6", 600, 15, 4000}})
@@ -1048,12 +1048,14 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                            "  PhoenixLimit(fetch=[3])\n" +
                            "    PhoenixClientSort(sort0=[$0], dir0=[DESC])\n" +
                            "      PhoenixUnion(all=[true])\n" +
-                           "        PhoenixToClientConverter\n" +
-                           "          PhoenixServerProject(ENTITY_ID=[$1], A_STRING=[$2])\n" +
-                           "            PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'a')])\n" +
-                           "        PhoenixToClientConverter\n" +
-                           "          PhoenixServerProject(ENTITY_ID=[$1], A_STRING=[$2])\n" +
-                           "            PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'c')])\n")
+                           "        PhoenixLimit(fetch=[3])\n" +
+                           "          PhoenixServerSort(sort0=[$0], dir0=[DESC])\n" +
+                           "            PhoenixServerProject(ENTITY_ID=[$1], A_STRING=[$2])\n" +
+                           "              PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'a')])\n" +
+                           "        PhoenixLimit(fetch=[3])\n" +
+                           "          PhoenixServerSort(sort0=[$0], dir0=[DESC])\n" +
+                           "            PhoenixServerProject(ENTITY_ID=[$1], A_STRING=[$2])\n" +
+                           "              PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'c')])\n")
                 .resultIs(new Object[][] {
                         {"00C923122312312", "c"},
                         {"00A423122312312", "a"},
@@ -1226,13 +1228,12 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                 {"0000000006", "T6"}};
         String p4Decorrelated = 
                 "PhoenixToEnumerableConverter\n" +
-                "  PhoenixClientProject(item_id=[$0], NAME=[$1])\n" +
-                "    PhoenixToClientConverter\n" +
-                "      PhoenixServerSemiJoin(condition=[=($2, $5)], joinType=[inner])\n" +
-                "        PhoenixServerProject($f0=[$0], $f1=[$1], $f7=[$0])\n" +
-                "          PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
-                "        PhoenixToClientConverter\n" +
-                "          PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n";
+                "  PhoenixToClientConverter\n" +
+                "    PhoenixServerSemiJoin(condition=[=($0, $4)], joinType=[inner])\n" +
+                "      PhoenixServerProject(item_id=[$0], NAME=[$1])\n" +
+                "        PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
+                "      PhoenixToClientConverter\n" +
+                "        PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n";
         start(decorrelProps).sql(q4).explainIs(p4Decorrelated).resultIs(r4).close();
         
         // CALCITE-864: switching orders and items in the first join wouldn't work.
@@ -1306,6 +1307,21 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                 "              PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'a')])\n";
         start(correlProps).sql(q6).explainIs(p6Correlate).resultIs(r6).close();
         start(decorrelProps).sql(q6).explainIs(p6Decorrelated).resultIs(r6).close();
+    }
+    
+    @Test public void testInValueList() {
+        start(false).sql("select entity_id from aTable where organization_id = '00D300000000XHP' and entity_id in ('00A123122312312', '00A223122312312', '00B523122312312', '00B623122312312', '00C923122312312')")
+            .explainIs("PhoenixToEnumerableConverter\n" +
+                       "  PhoenixToClientConverter\n" +
+                       "    PhoenixServerProject(ENTITY_ID=[$1])\n" +
+                       "      PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[AND(=($0, '00D300000000XHP'), OR(=($1, '00A123122312312'), =($1, '00A223122312312'), =($1, '00B523122312312'), =($1, '00B623122312312'), =($1, '00C923122312312')))])\n")
+            .resultIs(new Object[][] {
+                    {"00A123122312312"},
+                    {"00A223122312312"},
+                    {"00B523122312312"},
+                    {"00B623122312312"},
+                    {"00C923122312312"}})
+            .close();
     }
     
     @Test public void testSelectFromView() {
