@@ -35,9 +35,9 @@ def delfile(filename):
         os.remove(filename)
 
 def usage():
-    print "Performance script arguments not specified. Usage: performance.sh \
+    print "Performance script arguments not specified. Usage: performance.py \
 <zookeeper> <row count>"
-    print "Example: performance.sh localhost 100000"
+    print "Example: performance.py localhost 100000"
 
 
 def createFileWithContent(filename, content):
