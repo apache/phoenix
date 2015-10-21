@@ -24,7 +24,6 @@ import org.apache.phoenix.calcite.PhoenixSchema;
 import org.apache.phoenix.calcite.metadata.PhoenixRelMetadataProvider;
 import org.apache.phoenix.calcite.parse.SqlCreateView;
 import org.apache.phoenix.calcite.parser.PhoenixParserImpl;
-import org.apache.phoenix.calcite.rules.PhoenixAddScanLimitRule;
 import org.apache.phoenix.calcite.rules.PhoenixCompactClientSortRule;
 import org.apache.phoenix.calcite.rules.PhoenixFilterScanMergeRule;
 import org.apache.phoenix.calcite.rules.PhoenixInnerSortRemoveRule;
@@ -70,8 +69,6 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
             planner.addRule(rule);
         }
         planner.addRule(PhoenixFilterScanMergeRule.INSTANCE);
-        planner.addRule(PhoenixAddScanLimitRule.LIMIT_SCAN);
-        planner.addRule(PhoenixAddScanLimitRule.LIMIT_SERVERPROJECT_SCAN);
         planner.addRule(PhoenixCompactClientSortRule.SORT_SERVERAGGREGATE);
         planner.addRule(PhoenixJoinSingleValueAggregateMergeRule.INSTANCE);
         planner.addRule(PhoenixInnerSortRemoveRule.INSTANCE);

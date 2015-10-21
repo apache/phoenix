@@ -59,15 +59,9 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
     public final RexNode filter;
     
     private final ScanRanges scanRanges;
-    
-    /**
-     * This will not make a difference in implement(), but rather give a more accurate
-     * estimate of the row count.
-     */
-    public final Integer statelessFetch;
-    
+        
     public static PhoenixTableScan create(RelOptCluster cluster, final RelOptTable table, 
-            RexNode filter, Integer statelessFetch) {
+            RexNode filter) {
         final RelTraitSet traits =
                 cluster.traitSetOf(PhoenixRel.SERVER_CONVENTION)
                 .replaceIfs(RelCollationTraitDef.INSTANCE,
@@ -79,13 +73,12 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
                         return ImmutableList.of();
                     }
                 });
-        return new PhoenixTableScan(cluster, traits, table, filter, statelessFetch);
+        return new PhoenixTableScan(cluster, traits, table, filter);
     }
 
-    private PhoenixTableScan(RelOptCluster cluster, RelTraitSet traits, RelOptTable table, RexNode filter, Integer statelessFetch) {
+    private PhoenixTableScan(RelOptCluster cluster, RelTraitSet traits, RelOptTable table, RexNode filter) {
         super(cluster, traits, table);
         this.filter = filter;
-        this.statelessFetch = statelessFetch;
         
         ScanRanges scanRanges = null;
         if (filter != null) {
@@ -136,8 +129,7 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
     @Override
     public RelWriter explainTerms(RelWriter pw) {
         return super.explainTerms(pw)
-            .itemIf("filter", filter, filter != null)
-            .itemIf("statelessFetch", statelessFetch, statelessFetch != null);
+            .itemIf("filter", filter, filter != null);
     }
 
     @Override
@@ -168,11 +160,9 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
         double rows = super.getRows();
         if (filter != null && !filter.isAlwaysTrue()) {
             rows = rows * RelMetadataQuery.getSelectivity(this, filter);
-        }        
-        if (statelessFetch == null)
-            return rows;
+        }
         
-        return Math.min(statelessFetch, rows);
+        return rows;
     }
 
     @Override

@@ -40,7 +40,7 @@ public class PhoenixFilterScanMergeRule extends RelOptRule {
         Filter filter = call.rel(0);
         PhoenixTableScan scan = call.rel(1);
         assert scan.filter == null : "predicate should have ensured no filter";
-        call.transformTo(PhoenixTableScan.create(scan.getCluster(),
-                scan.getTable(), filter.getCondition(), scan.statelessFetch));
+        call.transformTo(PhoenixTableScan.create(
+                scan.getCluster(), scan.getTable(), filter.getCondition()));
     }
 }

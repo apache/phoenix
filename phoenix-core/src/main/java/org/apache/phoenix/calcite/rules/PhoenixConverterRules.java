@@ -983,10 +983,6 @@ public class PhoenixConverterRules {
         if (sort.offset != null)
             return false;
         
-        if (sort.fetch != null 
-                && CalciteUtils.evaluateStatelessExpression(sort.fetch) == null)
-            return false;
-        
         return true;
     }
     

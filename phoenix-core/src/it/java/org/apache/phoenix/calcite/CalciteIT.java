@@ -584,6 +584,22 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                            "        PhoenixServerProject(supplier_id=[$0], NAME=[$1])\n" +
                            "          PhoenixTableScan(table=[[phoenix, Join, SupplierTable]])\n")
                 .close();
+        
+        start(false).sql("SELECT \"order_id\", i.name, i.price, discount2, quantity FROM " + JOIN_ORDER_TABLE_FULL_NAME + " o LEFT JOIN " 
+                + JOIN_ITEM_TABLE_FULL_NAME + " i ON o.\"item_id\" = i.\"item_id\" limit 2")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                		   "  PhoenixClientProject(order_id=[$0], NAME=[$4], PRICE=[$5], DISCOUNT2=[$6], QUANTITY=[$2])\n" +
+                		   "    PhoenixLimit(fetch=[2])\n" +
+                		   "      PhoenixClientJoin(condition=[=($1, $3)], joinType=[left])\n" +
+                		   "        PhoenixClientSort(sort0=[$1], dir0=[ASC])\n" +
+                		   "          PhoenixLimit(fetch=[2])\n" +
+                		   "            PhoenixToClientConverter\n" +
+                		   "              PhoenixServerProject(order_id=[$0], item_id=[$2], QUANTITY=[$4])\n" +
+                		   "                PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n" +
+                		   "        PhoenixToClientConverter\n" +
+                		   "          PhoenixServerProject(item_id=[$0], NAME=[$1], PRICE=[$2], DISCOUNT2=[$4])\n" +
+                		   "            PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n")
+                .close();
     }
     
     @Test public void testMultiJoin() throws Exception {
