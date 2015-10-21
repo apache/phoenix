@@ -6,11 +6,16 @@ import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptCost;
 import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelTraitSet;
+import org.apache.calcite.rel.RelCollation;
+import org.apache.calcite.rel.RelCollationTraitDef;
+import org.apache.calcite.rel.RelFieldCollation;
 import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.rel.RelWriter;
 import org.apache.calcite.rel.core.Aggregate;
 import org.apache.calcite.rel.core.AggregateCall;
 import org.apache.calcite.util.ImmutableBitSet;
 import org.apache.calcite.util.ImmutableIntList;
+import org.apache.calcite.util.Util;
 import org.apache.phoenix.calcite.CalciteUtils;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
@@ -45,6 +50,26 @@ abstract public class PhoenixAbstractAggregate extends Aggregate implements Phoe
         return call.getAggregation().getName().equals("SINGLE_VALUE");
     }
     
+    public static boolean isOrderedGroupSet(ImmutableBitSet groupSet, RelNode child) {
+        List<Integer> ordinals = groupSet.asList();
+        List<RelCollation> collations = child.getTraitSet().getTraits(RelCollationTraitDef.INSTANCE);
+        boolean isOrderedGroupBy = ordinals.isEmpty();
+        for (int i = 0; i < collations.size() && !isOrderedGroupBy; i++) {
+            List<RelFieldCollation> fieldCollations = collations.get(i).getFieldCollations();
+            List<Integer> fields = Lists.newArrayListWithExpectedSize(fieldCollations.size());
+            for (RelFieldCollation fieldCollation : fieldCollations) {
+                fields.add(fieldCollation.getFieldIndex());
+            }
+            if (Util.startsWith(fields, ordinals)) {
+                isOrderedGroupBy = true;
+            }
+        }
+        
+        return isOrderedGroupBy;
+    }
+    
+    public final boolean isOrderedGroupBy;
+    
     protected PhoenixAbstractAggregate(RelOptCluster cluster, RelTraitSet traits, RelNode child, boolean indicator, ImmutableBitSet groupSet, List<ImmutableBitSet> groupSets, List<AggregateCall> aggCalls) {
         super(cluster, traits, child, indicator, groupSet, groupSets, aggCalls);
 
@@ -59,6 +84,8 @@ abstract public class PhoenixAbstractAggregate extends Aggregate implements Phoe
             default:
                 throw new UnsupportedOperationException("unsupported group type: " + getGroupType());
         }
+        
+        this.isOrderedGroupBy = isOrderedGroupSet(groupSet, child);
     }
     
     @Override
@@ -66,7 +93,14 @@ abstract public class PhoenixAbstractAggregate extends Aggregate implements Phoe
         if (isSingleValueCheckAggregate(this))
             return planner.getCostFactory().makeInfiniteCost();
         
-        return super.computeSelfCost(planner);
+        double orderedGroupByFactor = isOrderedGroupBy ? 0.8 : 1.0;
+        return super.computeSelfCost(planner).multiplyBy(orderedGroupByFactor);
+    }
+
+    @Override
+    public RelWriter explainTerms(RelWriter pw) {
+        return super.explainTerms(pw)
+            .itemIf("isOrdered", isOrderedGroupBy, !groupSet.isEmpty());
     }
     
     protected ImmutableIntList getColumnRefList() {
@@ -87,8 +121,13 @@ abstract public class PhoenixAbstractAggregate extends Aggregate implements Phoe
         }
         
         List<Integer> ordinals = groupSet.asList();
-        // TODO check order-preserving
-        String groupExprAttribName = BaseScannerRegionObserver.UNORDERED_GROUP_BY_EXPRESSIONS;
+        if (ordinals.isEmpty()) {
+            return GroupBy.EMPTY_GROUP_BY;
+        }
+        
+        String groupExprAttribName = isOrderedGroupBy?
+                BaseScannerRegionObserver.KEY_ORDERED_GROUP_BY_EXPRESSIONS
+              : BaseScannerRegionObserver.UNORDERED_GROUP_BY_EXPRESSIONS;
         // TODO sort group by keys. not sure if there is a way to avoid this sorting,
         //      otherwise we would have add an extra projection.
         // TODO convert key types. can be avoided?
