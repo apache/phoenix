@@ -32,9 +32,9 @@ abstract public class PhoenixAbstractSort extends Sort implements PhoenixRel {
         assert !getCollation().getFieldCollations().isEmpty();
     }
     
-    protected OrderBy getOrderBy(Implementor implementor, TupleProjector tupleProjector) {
+    protected static OrderBy getOrderBy(RelCollation collation, Implementor implementor, TupleProjector tupleProjector) {
         List<OrderByExpression> orderByExpressions = Lists.newArrayList();
-        for (RelFieldCollation fieldCollation : getCollation().getFieldCollations()) {
+        for (RelFieldCollation fieldCollation : collation.getFieldCollations()) {
             Expression expr = tupleProjector == null ? 
                       implementor.newColumnExpression(fieldCollation.getFieldIndex()) 
                     : tupleProjector.getExpressions()[fieldCollation.getFieldIndex()];

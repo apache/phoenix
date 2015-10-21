@@ -68,7 +68,7 @@ public class PhoenixServerSort extends PhoenixAbstractSort {
             basePlan = (ScanPlan) delegate;
         }
         
-        OrderBy orderBy = super.getOrderBy(implementor, null);
+        OrderBy orderBy = super.getOrderBy(getCollation(), implementor, null);
         QueryPlan newPlan;
         try {
             newPlan = ScanPlan.create((ScanPlan) basePlan, orderBy);

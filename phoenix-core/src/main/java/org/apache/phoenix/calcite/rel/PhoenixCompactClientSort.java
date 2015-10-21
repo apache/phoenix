@@ -75,7 +75,7 @@ public class PhoenixCompactClientSort extends PhoenixAbstractSort {
             basePlan = (AggregatePlan) delegate;
         }
         
-        OrderBy orderBy = super.getOrderBy(implementor, tupleProjector);
+        OrderBy orderBy = super.getOrderBy(getCollation(), implementor, tupleProjector);
         QueryPlan newPlan = AggregatePlan.create((AggregatePlan) basePlan, orderBy);
         
         if (hashJoinPlan != null) {        

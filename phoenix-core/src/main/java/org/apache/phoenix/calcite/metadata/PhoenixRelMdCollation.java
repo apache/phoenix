@@ -1,6 +1,7 @@
 package org.apache.phoenix.calcite.metadata;
 
 import java.util.List;
+import java.util.Set;
 
 import org.apache.calcite.rel.RelCollation;
 import org.apache.calcite.rel.RelCollations;
@@ -16,9 +17,11 @@ import org.apache.calcite.util.ImmutableIntList;
 import org.apache.phoenix.calcite.rel.PhoenixClientJoin;
 import org.apache.phoenix.calcite.rel.PhoenixCorrelate;
 import org.apache.phoenix.calcite.rel.PhoenixLimit;
+import org.apache.phoenix.calcite.rel.PhoenixMergeSortUnion;
 import org.apache.phoenix.calcite.rel.PhoenixServerJoin;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Sets;
 
 public class PhoenixRelMdCollation {
     public static final RelMetadataProvider SOURCE =
@@ -41,6 +44,10 @@ public class PhoenixRelMdCollation {
 
     public ImmutableList<RelCollation> collations(PhoenixClientJoin join) {
         return ImmutableList.copyOf(PhoenixRelMdCollation.mergeJoin(join.getLeft(), join.getRight(), join.joinInfo.leftKeys, join.joinInfo.rightKeys));
+    }
+
+    public ImmutableList<RelCollation> collations(PhoenixMergeSortUnion union) {
+        return ImmutableList.copyOf(PhoenixRelMdCollation.mergeSortUnion(union.getInputs(), union.all));
     }
     
     /** Helper method to determine a {@link PhoenixCorrelate}'s collation. */
@@ -74,6 +81,57 @@ public class PhoenixRelMdCollation {
             }
         }
         return builder.build();
+    }
+    
+    public static List<RelCollation> mergeSortUnion(List<RelNode> inputs, boolean all) {
+    	if (!all) {
+    		return ImmutableList.of(RelCollations.EMPTY);
+    	}
+    	
+    	Set<RelCollation> mergedCollations = null;
+    	for (RelNode input : inputs) {
+    		final ImmutableList<RelCollation> inputCollations = RelMetadataQuery.collations(input);
+    		Set<RelCollation> nonEmptyInputCollations = Sets.newHashSet();
+			for (RelCollation collation : inputCollations) {
+				if (!collation.getFieldCollations().isEmpty()) {
+					nonEmptyInputCollations.add(collation);
+				}
+			}
+    		
+			if (nonEmptyInputCollations.isEmpty() || mergedCollations == null) {
+    			mergedCollations = nonEmptyInputCollations;
+    		} else {
+    			Set<RelCollation> newCollations = Sets.newHashSet();
+    			for (RelCollation m : mergedCollations) {
+    				for (RelCollation n : nonEmptyInputCollations) {
+    					if (n.satisfies(m)) {
+    						newCollations.add(m);
+    						break;
+    					}
+    				}
+    			}
+    			for (RelCollation n : nonEmptyInputCollations) {
+    				for (RelCollation m : mergedCollations) {
+    					if (m.satisfies(n)) {
+    						newCollations.add(n);
+    						break;
+    					}
+    				}
+    			}
+    			mergedCollations = newCollations;
+    		}
+			
+    		if (mergedCollations.isEmpty()) {
+    			break;
+    		}
+    	}
+    	
+    	// We only return the simplified collation here because PhoenixMergeSortUnion
+    	// needs a definite way for implement().
+		if (mergedCollations.size() != 1) {
+			return ImmutableList.of(RelCollations.EMPTY);
+		}
+        return ImmutableList.of(mergedCollations.iterator().next());
     }
 
 }

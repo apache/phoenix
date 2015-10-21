@@ -1046,20 +1046,36 @@ public class CalciteIT extends BaseClientManagedTimeIT {
         start(false).sql("select entity_id, a_string from atable where a_string = 'a' union all select entity_id, a_string from atable where a_string = 'c' order by entity_id desc limit 3")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixLimit(fetch=[3])\n" +
-                           "    PhoenixClientSort(sort0=[$0], dir0=[DESC])\n" +
-                           "      PhoenixUnion(all=[true])\n" +
-                           "        PhoenixLimit(fetch=[3])\n" +
-                           "          PhoenixServerSort(sort0=[$0], dir0=[DESC])\n" +
-                           "            PhoenixServerProject(ENTITY_ID=[$1], A_STRING=[$2])\n" +
-                           "              PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'a')])\n" +
-                           "        PhoenixLimit(fetch=[3])\n" +
-                           "          PhoenixServerSort(sort0=[$0], dir0=[DESC])\n" +
-                           "            PhoenixServerProject(ENTITY_ID=[$1], A_STRING=[$2])\n" +
-                           "              PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'c')])\n")
+                           "    PhoenixMergeSortUnion(all=[true])\n" +
+                           "      PhoenixLimit(fetch=[3])\n" +
+                           "        PhoenixServerSort(sort0=[$0], dir0=[DESC])\n" +
+                           "          PhoenixServerProject(ENTITY_ID=[$1], A_STRING=[$2])\n" +
+                           "            PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'a')])\n" +
+                           "      PhoenixLimit(fetch=[3])\n" +
+                           "        PhoenixServerSort(sort0=[$0], dir0=[DESC])\n" +
+                           "          PhoenixServerProject(ENTITY_ID=[$1], A_STRING=[$2])\n" +
+                           "            PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'c')])\n")
                 .resultIs(new Object[][] {
                         {"00C923122312312", "c"},
                         {"00A423122312312", "a"},
                         {"00A323122312312", "a"}})
+                .close();
+        
+        start(false).sql("select entity_id, a_string from atable where a_string = 'a' union all select entity_id, a_string from atable where a_string = 'c' order by entity_id desc")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                           "  PhoenixMergeSortUnion(all=[true])\n" +
+                           "    PhoenixServerSort(sort0=[$0], dir0=[DESC])\n" +
+                           "      PhoenixServerProject(ENTITY_ID=[$1], A_STRING=[$2])\n" +
+                           "        PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'a')])\n" +
+                           "    PhoenixServerSort(sort0=[$0], dir0=[DESC])\n" +
+                           "      PhoenixServerProject(ENTITY_ID=[$1], A_STRING=[$2])\n" +
+                           "        PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'c')])\n")
+                .resultIs(new Object[][] {
+                        {"00C923122312312", "c"},
+                        {"00A423122312312", "a"},
+                        {"00A323122312312", "a"},
+                        {"00A223122312312", "a"},
+                        {"00A123122312312", "a"}})
                 .close();
     }
     
