@@ -55,4 +55,24 @@ public class ColumnInfoTest {
         ColumnInfo columnInfo = new ColumnInfo(":myColumn", Types.INTEGER);
         assertEquals(columnInfo, ColumnInfo.fromString(columnInfo.toString()));
     }
+    
+    @Test
+    public void testOptionalDescriptionType() {
+        testType(new ColumnInfo("a.myColumn", Types.CHAR), "CHAR:\"a\".\"myColumn\"");
+        testType(new ColumnInfo("a.myColumn", Types.CHAR, 100), "CHAR(100):\"a\".\"myColumn\"");
+        testType(new ColumnInfo("a.myColumn", Types.VARCHAR), "VARCHAR:\"a\".\"myColumn\"");
+        testType(new ColumnInfo("a.myColumn", Types.VARCHAR, 100), "VARCHAR(100):\"a\".\"myColumn\"");
+        testType(new ColumnInfo("a.myColumn", Types.DECIMAL), "DECIMAL:\"a\".\"myColumn\"");
+        testType(new ColumnInfo("a.myColumn", Types.DECIMAL, 100, 10), "DECIMAL(100,10):\"a\".\"myColumn\"");
+    }
+
+    private void testType(ColumnInfo columnInfo, String expected) {
+        assertEquals(expected, columnInfo.toString());
+        ColumnInfo reverted = ColumnInfo.fromString(columnInfo.toString());
+        assertEquals(reverted.getColumnName(), columnInfo.getColumnName());
+        assertEquals(reverted.getDisplayName(), columnInfo.getDisplayName());
+        assertEquals(reverted.getSqlType(), columnInfo.getSqlType());
+        assertEquals(reverted.getMaxLength(), columnInfo.getMaxLength());
+        assertEquals(reverted.getScale(), columnInfo.getScale());
+    }
 }

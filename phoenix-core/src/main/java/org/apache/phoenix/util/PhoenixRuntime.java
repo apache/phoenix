@@ -30,6 +30,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
+import java.sql.Types;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -389,8 +390,7 @@ public class PhoenixRuntime {
         	int offset = (table.getBucketNum() == null ? 0 : 1);
         	for (int i = offset; i < table.getColumns().size(); i++) {
         	   PColumn pColumn = table.getColumns().get(i);
-               int sqlType = pColumn.getDataType().getSqlType();
-               columnInfoList.add(new ColumnInfo(pColumn.toString(), sqlType)); 
+               columnInfoList.add(PhoenixRuntime.getColumnInfo(pColumn)); 
             }
         } else {
             // Leave "null" as indication to skip b/c it doesn't exist
@@ -459,19 +459,30 @@ public class PhoenixRuntime {
         return getColumnInfo(pColumn);
     }
 
-   /**
+    /**
      * Constructs a column info for the supplied pColumn
      * @param pColumn
      * @return columnInfo
      * @throws SQLException if the parameter is null.
      */
     public static ColumnInfo getColumnInfo(PColumn pColumn) throws SQLException {
-        if (pColumn==null) {
+        if (pColumn == null) {
             throw new SQLException("pColumn must not be null.");
         }
         int sqlType = pColumn.getDataType().getSqlType();
-        ColumnInfo columnInfo = new ColumnInfo(pColumn.toString(),sqlType);
-        return columnInfo;
+        if (pColumn.getMaxLength() != null) {
+            return new ColumnInfo(pColumn.toString(), sqlType);
+        }
+        if (sqlType == Types.CHAR || sqlType == Types.VARCHAR) {
+            int maxLength = pColumn.getMaxLength();
+            return new ColumnInfo(pColumn.toString(), sqlType, maxLength);
+        }
+        if (sqlType == Types.DECIMAL) {
+            int precision = pColumn.getMaxLength();
+            int scale = pColumn.getScale() == null ? 0 : Math.min(precision, pColumn.getScale());
+            return new ColumnInfo(pColumn.toString(), sqlType, precision, scale);
+        }
+        return new ColumnInfo(pColumn.toString(), sqlType);
     }
 
    /**

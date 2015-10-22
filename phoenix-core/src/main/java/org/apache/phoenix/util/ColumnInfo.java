@@ -10,10 +10,16 @@
 
 package org.apache.phoenix.util;
 
+import java.sql.Types;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.schema.types.PVarchar;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
@@ -28,8 +34,19 @@ public class ColumnInfo {
 
     private final String columnName;
     private final int sqlType;
-
+  
+    private final int precision;
+    private final int scale;
+    
     public ColumnInfo(String columnName, int sqlType) {
+        this(columnName, sqlType, -1);
+    }
+    
+    public ColumnInfo(String columnName, int sqlType, int maxLength) {
+        this(columnName, sqlType, maxLength, -1);
+    }
+
+    public ColumnInfo(String columnName, int sqlType, int precision, int scale) {
         Preconditions.checkNotNull(columnName, "columnName cannot be null");
         Preconditions.checkArgument(!columnName.isEmpty(), "columnName cannot be empty");
         if(!columnName.startsWith(SchemaUtil.ESCAPE_CHARACTER)) {
@@ -37,6 +54,8 @@ public class ColumnInfo {
         }
         this.columnName = columnName;
         this.sqlType = sqlType;
+        this.precision = precision;
+        this.scale = scale;
     }
 
     public String getColumnName() {
@@ -63,10 +82,31 @@ public class ColumnInfo {
         }
         return unescapedColumnName.substring(index+1).trim();
     }
+    
+    public String toTypeString() {
+        PDataType dataType = getPDataType();
+        if (precision < 0) {
+            return dataType.getSqlTypeName();
+        }
+        if (dataType == PDecimal.INSTANCE) {
+            StringBuilder builder = new StringBuilder();
+            builder.append(dataType.getSqlTypeName());
+            builder.append('(').append(precision).append(',');
+            builder.append(scale < 0 ? 0 : Math.min(precision, scale)).append(')');
+            return builder.toString();
+        }
+        if (dataType == PChar.INSTANCE || dataType == PVarchar.INSTANCE) {
+            StringBuilder builder = new StringBuilder();
+            builder.append(dataType.getSqlTypeName());
+            builder.append('(').append(precision).append(')');
+          return builder.toString();
+        }
+        return dataType.getSqlTypeName();
+    }
 
     @Override
     public String toString() {
-        return getPDataType().getSqlTypeName() + STR_SEPARATOR + columnName ;
+        return toTypeString() + STR_SEPARATOR + columnName ;
     }
 
     @Override
@@ -106,9 +146,38 @@ public class ColumnInfo {
             throw new IllegalArgumentException("Unparseable string: " + stringRepresentation);
         }
 
-        return new ColumnInfo(
-                components.get(1),
-                PDataType.fromSqlTypeName(components.get(0)).getSqlType());
+        String typePart = components.get(0);
+        String columnName = components.get(1);
+        if (!typePart.contains("(")) {
+            return new ColumnInfo(
+                    columnName,
+                    PDataType.fromSqlTypeName(typePart).getSqlType());
+        }
+        Matcher matcher = Pattern.compile("([^\\(]+)\\((\\d+)(?:,(\\d+))?\\)").matcher(typePart);
+        if (!matcher.matches() || matcher.groupCount() > 3) {
+            throw new IllegalArgumentException("Unparseable type string: " + typePart);
+        }
+        int sqlType = PDataType.fromSqlTypeName(matcher.group(1)).getSqlType();
+        if (matcher.group(3) == null) {
+            assert sqlType == Types.CHAR || sqlType == Types.VARCHAR;
+            int maxLength = Integer.parseInt(matcher.group(2));
+            return new ColumnInfo(columnName, sqlType, maxLength);
+        }
+        assert sqlType == Types.DECIMAL;
+        int precision = Integer.parseInt(matcher.group(2));
+        int scale = Integer.parseInt(matcher.group(3));
+        return new ColumnInfo(columnName, sqlType, precision, scale);
+    }
+    
+    public int getMaxLength() {
+        return precision;
     }
 
+    public int getPrecision() {
+        return precision;
+    }
+    
+    public int getScale() {
+        return scale;
+    }
 }
