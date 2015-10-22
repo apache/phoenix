@@ -169,6 +169,7 @@ public class QueryExecutor implements Workload {
                         resultManager.write(dataModelResult);
                     }
                     resultManager.write(dataModelResults);
+                    resultManager.flush();
                 } catch (Exception e) {
                     logger.warn("", e);
                 }
