@@ -124,6 +124,7 @@ public class ResultTest extends ResultBaseTest {
         modelResults.add(dataModelResult);
         modelResults.add(dataModelResult);
         resultManager.write(modelResults);
+        resultManager.flush();
 
         // read result from file
         List<Result> resultList = xmlResultHandler.read();

@@ -89,6 +89,10 @@ class MultiThreadedRunner implements Runnable {
                 e.printStackTrace();
             }
         }
+
+        // Make sure all result have been dumped before exiting
+        resultManager.flush();
+
         logger.info("\n\nThread exiting." + threadName + "\n\n");
     }
 
