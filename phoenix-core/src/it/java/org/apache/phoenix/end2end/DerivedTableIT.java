@@ -101,6 +101,7 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER ATABLE_DERIVED_IDX\n" +
                 "    SERVER AGGREGATE INTO DISTINCT ROWS BY [\"A_STRING\", \"B_STRING\"]\n" +
                 "CLIENT MERGE SORT\n" +
+                "CLIENT SORTED BY [A]\n" +
                 "CLIENT AGGREGATE INTO DISTINCT ROWS BY [A]\n" +
                 "CLIENT DISTINCT ON [COLLECTDISTINCT(B)]"}});
         testCases.add(new String[][] {
@@ -116,6 +117,7 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
                 "CLIENT PARALLEL 4-WAY FULL SCAN OVER ATABLE\n" +
                 "    SERVER AGGREGATE INTO DISTINCT ROWS BY [A_STRING, B_STRING]\n" +
                 "CLIENT MERGE SORT\n" +
+                "CLIENT SORTED BY [A]\n" +
                 "CLIENT AGGREGATE INTO DISTINCT ROWS BY [A]\n" +
                 "CLIENT DISTINCT ON [COLLECTDISTINCT(B)]"}});
         return testCases;
