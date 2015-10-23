@@ -26,6 +26,7 @@ import java.sql.Date;
 import java.util.Calendar;
 import java.util.GregorianCalendar;
 import java.util.List;
+import java.util.Locale;
 import java.util.TimeZone;
 
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
@@ -145,8 +146,14 @@ public class SortOrderExpressionTest {
     
     @Test
     public void toChar() throws Exception {
-        List<Expression> args = Lists.newArrayList(getInvertedLiteral(date(12, 11, 2001), PDate.INSTANCE));
-        evaluateAndAssertResult(new ToCharFunction(args, FunctionArgumentType.TEMPORAL, "", DateUtil.getDateFormatter("MM/dd/yy hh:mm a")), "12/11/01 12:00 AM");
+        Locale defaultLocale = Locale.getDefault();
+        try {
+            Locale.setDefault(Locale.US);
+            List<Expression> args = Lists.newArrayList(getInvertedLiteral(date(12, 11, 2001), PDate.INSTANCE));
+            evaluateAndAssertResult(new ToCharFunction(args, FunctionArgumentType.TEMPORAL, "", DateUtil.getDateFormatter("MM/dd/yy hh:mm a")), "12/11/01 12:00 AM");
+        } finally {
+            Locale.setDefault(defaultLocale);
+        }
     }
     
     @Test
