@@ -30,7 +30,6 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
-import java.sql.Types;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -469,20 +468,8 @@ public class PhoenixRuntime {
         if (pColumn == null) {
             throw new SQLException("pColumn must not be null.");
         }
-        int sqlType = pColumn.getDataType().getSqlType();
-        if (pColumn.getMaxLength() == null) {
-            return new ColumnInfo(pColumn.toString(), sqlType);
-        }
-        if (sqlType == Types.CHAR || sqlType == Types.VARCHAR) {
-            int maxLength = pColumn.getMaxLength();
-            return new ColumnInfo(pColumn.toString(), sqlType, maxLength);
-        }
-        if (sqlType == Types.DECIMAL) {
-            int precision = pColumn.getMaxLength();
-            int scale = pColumn.getScale() == null ? 0 : Math.min(precision, pColumn.getScale());
-            return new ColumnInfo(pColumn.toString(), sqlType, precision, scale);
-        }
-        return new ColumnInfo(pColumn.toString(), sqlType);
+        return ColumnInfo.create(pColumn.toString(), pColumn.getDataType().getSqlType(),
+                pColumn.getMaxLength(), pColumn.getScale());
     }
 
    /**
