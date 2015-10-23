@@ -470,7 +470,7 @@ public class PhoenixRuntime {
             throw new SQLException("pColumn must not be null.");
         }
         int sqlType = pColumn.getDataType().getSqlType();
-        if (pColumn.getMaxLength() != null) {
+        if (pColumn.getMaxLength() == null) {
             return new ColumnInfo(pColumn.toString(), sqlType);
         }
         if (sqlType == Types.CHAR || sqlType == Types.VARCHAR) {
