@@ -25,13 +25,20 @@ import static org.apache.phoenix.util.TestUtil.analyzeTableIndex;
 import static org.apache.phoenix.util.TestUtil.getAllSplits;
 import static org.apache.phoenix.util.TestUtil.getSplits;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.hadoop.hbase.ServerName;
+import org.apache.hadoop.hbase.client.Scan;
+import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.types.PChar;
@@ -105,6 +112,28 @@ public class ParallelIteratorsIT extends BaseOwnClusterHBaseManagedTimeIT {
         conn.close();
     }
 
+    @Test
+    public void testServerNameOnScan() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl(), TEST_PROPERTIES);
+        byte[][] splits = new byte[][] { K3, K9, KR };
+        ensureTableCreated(getUrl(), STABLE_NAME, splits);
+        
+        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
+        ResultSet rs = stmt.executeQuery("SELECT * FROM " + STABLE_NAME + " LIMIT 1");
+        rs.next();
+        QueryPlan plan = stmt.getQueryPlan();
+        List<List<Scan>> nestedScans = plan.getScans();
+        assertNotNull(nestedScans);
+        for (List<Scan> scans : nestedScans) {
+            for (Scan scan : scans) {
+                byte[] serverNameBytes = scan.getAttribute(BaseScannerRegionObserver.SCAN_REGION_SERVER);
+                assertNotNull(serverNameBytes);
+                ServerName serverName = ServerName.parseVersionedServerName(serverNameBytes);
+                assertNotNull(serverName.getHostname());
+            }
+        }
+    }
+    
     @Test
     public void testGuidePostsLifeCycle() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl(), TEST_PROPERTIES);

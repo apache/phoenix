@@ -88,6 +88,7 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
     public static final String GUIDEPOST_WIDTH_BYTES = "_GUIDEPOST_WIDTH_BYTES";
     public static final String GUIDEPOST_PER_REGION = "_GUIDEPOST_PER_REGION";
     public static final String UPGRADE_DESC_ROW_KEY = "_UPGRADE_DESC_ROW_KEY";
+    public static final String SCAN_REGION_SERVER = "_SCAN_REGION_SERVER";
     
     /**
      * Attribute name used to pass custom annotations in Scans and Mutations (later). Custom annotations
