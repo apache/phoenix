@@ -401,9 +401,10 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         return buf.toString();
     }
     
-    private List<Scan> addNewScan(List<List<Scan>> parallelScans, List<Scan> scans, Scan scan, byte[] startKey, boolean crossedRegionBoundary) {
+    private List<Scan> addNewScan(List<List<Scan>> parallelScans, List<Scan> scans, Scan scan, byte[] startKey, boolean crossedRegionBoundary, HRegionLocation regionLocation) {
         boolean startNewScan = scanGrouper.shouldStartNewScan(plan, scans, startKey, crossedRegionBoundary);
         if (scan != null) {
+            scan.setAttribute(BaseScannerRegionObserver.SCAN_REGION_SERVER, regionLocation.getServerName().getVersionedBytes());
         	scans.add(scan);
         }
         if (startNewScan && !scans.isEmpty()) {
@@ -476,15 +477,16 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             } else {
                 endKey = regionBoundaries.get(regionIndex);
             }
+            HRegionLocation regionLocation = regionLocations.get(regionIndex);
             if (isLocalIndex) {
-                HRegionInfo regionInfo = regionLocations.get(regionIndex).getRegionInfo();
+                HRegionInfo regionInfo = regionLocation.getRegionInfo();
                 endRegionKey = regionInfo.getEndKey();
                 keyOffset = ScanUtil.getRowKeyOffset(regionInfo.getStartKey(), endRegionKey);
             }
             while (guideIndex < gpsSize
                     && (Bytes.compareTo(currentGuidePost = gps.get(guideIndex), endKey) <= 0 || endKey.length == 0)) {
                 Scan newScan = scanRanges.intersectScan(scan, currentKey, currentGuidePost, keyOffset, false);
-                scans = addNewScan(parallelScans, scans, newScan, currentGuidePost, false);
+                scans = addNewScan(parallelScans, scans, newScan, currentGuidePost, false, regionLocation);
                 currentKey = currentGuidePost;
                 guideIndex++;
             }
@@ -496,7 +498,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     scans.get(scans.size()-1).setAttribute(EXPECTED_UPPER_REGION_KEY, endRegionKey);
                 }
             }
-            scans = addNewScan(parallelScans, scans, newScan, endKey, true);
+            scans = addNewScan(parallelScans, scans, newScan, endKey, true, regionLocation);
             currentKey = endKey;
             regionIndex++;
         }
