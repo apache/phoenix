@@ -999,12 +999,12 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                        "    PhoenixToClientConverter\n" +
                        "      PhoenixServerJoin(condition=[=($0, $7)], joinType=[left], isSingleValueRhs=[true])\n" +
                        "        PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
-                       "        PhoenixServerAggregate(group=[{7}], SQ=[MAX($4)], isOrdered=[false])\n" +
-                       "          PhoenixServerJoin(condition=[=($2, $7)], joinType=[inner])\n" +
-                       "            PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n" +
+                       "        PhoenixServerAggregate(group=[{0}], SQ=[MAX($5)], isOrdered=[true])\n" +
+                       "          PhoenixServerJoin(condition=[=($3, $0)], joinType=[inner])\n" +
+                       "            PhoenixServerProject(item_id=[$0])\n" +
+                       "              PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
                        "            PhoenixToClientConverter\n" +
-                       "              PhoenixServerProject(item_id=[$0])\n" +
-                       "                PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n")
+                       "              PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n")
             .resultIs(new Object[][] {
                     new Object[] {"0000000001", "T1", 1000},
                     new Object[] {"0000000002", "T2", 3000},
@@ -1027,8 +1027,9 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                           "          PhoenixToClientConverter\n" +
                           "            PhoenixServerJoin(condition=[=($2, $7)], joinType=[inner])\n" +
                           "              PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n" +
-                          "              PhoenixServerAggregate(group=[{0}], isOrdered=[true])\n" +
-                          "                PhoenixTableScan(table=[[phoenix, Join, ItemTable]], filter=[<($0, '0000000006')])\n")
+                          "              PhoenixToClientConverter\n" +
+                          "                PhoenixServerProject(item_id=[$0])\n" +
+                          "                  PhoenixTableScan(table=[[phoenix, Join, ItemTable]], filter=[<($0, '0000000006')])\n")
                .resultIs(new Object[][] {
                          new Object[] {"0000000001", "T1", 1000},
                          new Object[] {"0000000002", "T2", 3000},
@@ -1287,15 +1288,15 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                 "PhoenixToEnumerableConverter\n" +
                 "  PhoenixClientProject(item_id=[$0], NAME=[$1])\n" +
                 "    PhoenixToClientConverter\n" +
-                "      PhoenixServerSemiJoin(condition=[=($0, $8)], joinType=[inner])\n" +
+                "      PhoenixServerSemiJoin(condition=[=($0, $7)], joinType=[inner])\n" +
                 "        PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
-                "        PhoenixClientProject($f0=[true], item_id0=[$7])\n" +
+                "        PhoenixClientProject(item_id0=[$0], $f0=[true])\n" +
                 "          PhoenixToClientConverter\n" +
-                "            PhoenixServerJoin(condition=[=($7, $2)], joinType=[inner])\n" +
-                "              PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n" +
+                "            PhoenixServerJoin(condition=[=($0, $3)], joinType=[inner])\n" +
+                "              PhoenixServerProject(item_id=[$0])\n" +
+                "                PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
                 "              PhoenixToClientConverter\n" +
-                "                PhoenixServerProject(item_id=[$0])\n" +
-                "                  PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n";
+                "                PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n";
         start(correlProps).sql(q3a).explainIs(p3aCorrelate).resultIs(r3a).close();
         start(decorrelProps).sql(q3a).explainIs(p3aDecorrelated).resultIs(r3a).close();
         // Test PhoenixClientSemiJoin

@@ -13,6 +13,8 @@ import org.apache.calcite.prepare.CalcitePrepareImpl;
 import org.apache.calcite.prepare.Prepare.Materialization;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.rules.JoinCommuteRule;
+import org.apache.calcite.rel.rules.SortJoinTransposeRule;
+import org.apache.calcite.rel.rules.SortUnionTransposeRule;
 import org.apache.calcite.runtime.Hook;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.parser.SqlParser;
@@ -65,6 +67,8 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
         planner.removeRule(EnumerableRules.ENUMERABLE_SEMI_JOIN_RULE);
         planner.removeRule(JoinCommuteRule.INSTANCE);
         planner.addRule(JoinCommuteRule.SWAP_OUTER);
+        planner.removeRule(SortUnionTransposeRule.INSTANCE);
+        planner.addRule(SortUnionTransposeRule.MATCH_NULL_FETCH);
         
         for (RelOptRule rule : this.defaultConverterRules) {
             planner.addRule(rule);
