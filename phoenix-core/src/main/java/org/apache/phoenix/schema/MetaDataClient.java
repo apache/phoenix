@@ -2351,9 +2351,10 @@ public class MetaDataClient {
                         return new MutationState(0,connection);
                     }
 
-                    // Only update client side cache if we aren't adding a PK column to a table with indexes.
+                    // Only update client side cache if we aren't adding a PK column to a table with indexes or 
+                    // transitioning a table from.
                     // We could update the cache manually then too, it'd just be a pain.
-                    if (numPkColumnsAdded==0 || table.getIndexes().isEmpty()) {
+                    if (table.getIndexes().isEmpty() || (numPkColumnsAdded==0 && !nonTxToTx)) {
 						connection.addColumn(
 								tenantId,
 								SchemaUtil.getTableName(schemaName, tableName),

@@ -22,8 +22,6 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 
-import co.cask.tephra.hbase98.coprocessor.TransactionProcessor;
-
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Put;
@@ -39,6 +37,8 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Before;
 import org.junit.Test;
+
+import co.cask.tephra.hbase98.coprocessor.TransactionProcessor;
 
 public class TransactionIT extends BaseHBaseManagedTimeIT {
 	
@@ -252,7 +252,6 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
         conn.commit();
         
         conn.createStatement().execute("CREATE INDEX IDX ON NON_TX_TABLE(v)");
-        
         // Reset empty column value to an empty value like it is pre-transactions
         /** TODO: when TEPHRA-143 is fixed, comment this back in
         HTableInterface htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes("NON_TX_TABLE"));
@@ -272,41 +271,15 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
 
         conn.createStatement().execute("UPSERT INTO NON_TX_TABLE VALUES (4, 'c')");
         ResultSet rs = conn.createStatement().executeQuery("SELECT /*+ NO_INDEX */ k FROM NON_TX_TABLE WHERE v IS NULL");
+        assertTrue(conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, "NON_TX_TABLE")).isTransactional());
         assertTrue(rs.next());
         assertEquals(1,rs.getInt(1));
         assertFalse(rs.next());
         conn.commit();
         
         conn.createStatement().execute("UPSERT INTO NON_TX_TABLE VALUES (5, 'd')");
-        rs = conn.createStatement().executeQuery("SELECT /*+ NO_INDEX */ k FROM NON_TX_TABLE");
-        assertTrue(rs.next());
-        assertEquals(1,rs.getInt(1));
-        assertTrue(rs.next());
-        assertEquals(2,rs.getInt(1));
-        assertTrue(rs.next());
-        assertEquals(3,rs.getInt(1));
-        assertTrue(rs.next());
-        assertEquals(4,rs.getInt(1));
-        assertTrue(rs.next());
-        assertEquals(5,rs.getInt(1));
-        assertFalse(rs.next());
-        conn.rollback();
-        
-        rs = conn.createStatement().executeQuery("SELECT /*+ NO_INDEX */ k FROM NON_TX_TABLE");
-        assertTrue(rs.next());
-        assertEquals(1,rs.getInt(1));
-        assertTrue(rs.next());
-        assertEquals(2,rs.getInt(1));
-        assertTrue(rs.next());
-        assertEquals(3,rs.getInt(1));
-        assertTrue(rs.next());
-        assertEquals(4,rs.getInt(1));
-        assertFalse(rs.next());
-        
-        /* TODO: this should succeed too (with SELECT going through index), but doesn't. Try again after TEPHRA-143 is fixed.
-         * It might be the case that we're still using an empty value for indexes.
-        conn.createStatement().execute("UPSERT INTO NON_TX_TABLE VALUES (5, 'd')");
         rs = conn.createStatement().executeQuery("SELECT k FROM NON_TX_TABLE");
+        assertTrue(conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, "IDX")).isTransactional());
         assertTrue(rs.next());
         assertEquals(1,rs.getInt(1));
         assertTrue(rs.next());
@@ -330,7 +303,6 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
         assertTrue(rs.next());
         assertEquals(4,rs.getInt(1));
         assertFalse(rs.next());
-        */
     }
     
     @Test
