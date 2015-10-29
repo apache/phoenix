@@ -96,7 +96,8 @@ public class CsvBulkLoadTool extends Configured implements Tool {
     static final Option HELP_OPT = new Option("h", "help", false, "Show this help and quit");
 
     public static void main(String[] args) throws Exception {
-        ToolRunner.run(new CsvBulkLoadTool(), args);
+        int exitStatus = ToolRunner.run(new CsvBulkLoadTool(), args);
+        System.exit(exitStatus);
     }
 
     /**
