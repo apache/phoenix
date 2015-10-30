@@ -21,6 +21,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.List;
 
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HTableInterface;
@@ -37,6 +38,8 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Before;
 import org.junit.Test;
+
+import com.google.common.collect.Lists;
 
 import co.cask.tephra.hbase98.coprocessor.TransactionProcessor;
 
@@ -253,18 +256,16 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
         
         conn.createStatement().execute("CREATE INDEX IDX ON NON_TX_TABLE(v)");
         // Reset empty column value to an empty value like it is pre-transactions
-        /** TODO: when TEPHRA-143 is fixed, comment this back in
         HTableInterface htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes("NON_TX_TABLE"));
         List<Put>puts = Lists.newArrayList(new Put(PInteger.INSTANCE.toBytes(1)), new Put(PInteger.INSTANCE.toBytes(2)), new Put(PInteger.INSTANCE.toBytes(3)));
         for (Put put : puts) {
             put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES, ByteUtil.EMPTY_BYTE_ARRAY);
         }
         htable.put(puts);
-        **/
         
         conn.createStatement().execute("ALTER TABLE NON_TX_TABLE SET TRANSACTIONAL=true");
         
-        HTableInterface htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes("NON_TX_TABLE"));
+        htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes("NON_TX_TABLE"));
         assertTrue(htable.getTableDescriptor().getCoprocessors().contains(TransactionProcessor.class.getName()));
         htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes("IDX"));
         assertTrue(htable.getTableDescriptor().getCoprocessors().contains(TransactionProcessor.class.getName()));
