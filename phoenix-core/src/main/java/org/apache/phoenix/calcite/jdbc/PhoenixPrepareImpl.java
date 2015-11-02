@@ -30,6 +30,7 @@ import org.apache.phoenix.calcite.rules.PhoenixCompactClientSortRule;
 import org.apache.phoenix.calcite.rules.PhoenixFilterScanMergeRule;
 import org.apache.phoenix.calcite.rules.PhoenixInnerSortRemoveRule;
 import org.apache.phoenix.calcite.rules.PhoenixJoinSingleValueAggregateMergeRule;
+import org.apache.phoenix.calcite.rules.PhoenixMergeSortUnionRule;
 import org.apache.phoenix.calcite.rules.PhoenixOrderedAggregateRule;
 
 import com.google.common.base.Function;
@@ -76,6 +77,7 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
         planner.addRule(PhoenixFilterScanMergeRule.INSTANCE);
         planner.addRule(PhoenixCompactClientSortRule.SORT_SERVERAGGREGATE);
         planner.addRule(PhoenixJoinSingleValueAggregateMergeRule.INSTANCE);
+        planner.addRule(PhoenixMergeSortUnionRule.INSTANCE);
         planner.addRule(PhoenixInnerSortRemoveRule.INSTANCE);
         planner.addRule(PhoenixOrderedAggregateRule.INSTANCE);
         

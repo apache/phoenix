@@ -39,7 +39,6 @@ import org.apache.calcite.rel.logical.LogicalValues;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.util.trace.CalciteTrace;
 import org.apache.phoenix.calcite.CalciteUtils;
-import org.apache.phoenix.calcite.metadata.PhoenixRelMdCollation;
 import org.apache.phoenix.calcite.rel.PhoenixAbstractAggregate;
 import org.apache.phoenix.calcite.rel.PhoenixClientAggregate;
 import org.apache.phoenix.calcite.rel.PhoenixClientJoin;
@@ -49,7 +48,6 @@ import org.apache.phoenix.calcite.rel.PhoenixClientSort;
 import org.apache.phoenix.calcite.rel.PhoenixCorrelate;
 import org.apache.phoenix.calcite.rel.PhoenixFilter;
 import org.apache.phoenix.calcite.rel.PhoenixLimit;
-import org.apache.phoenix.calcite.rel.PhoenixMergeSortUnion;
 import org.apache.phoenix.calcite.rel.PhoenixRel;
 import org.apache.phoenix.calcite.rel.PhoenixServerAggregate;
 import org.apache.phoenix.calcite.rel.PhoenixServerJoin;
@@ -91,7 +89,6 @@ public class PhoenixConverterRules {
         PhoenixServerAggregateRule.SERVER,
         PhoenixServerAggregateRule.SERVERJOIN,
         PhoenixUnionRule.INSTANCE,
-        PhoenixMergeSortUnionRule.INSTANCE,
         PhoenixClientJoinRule.INSTANCE,
         PhoenixServerJoinRule.INSTANCE,
         PhoenixClientSemiJoinRule.INSTANCE,
@@ -116,7 +113,6 @@ public class PhoenixConverterRules {
         PhoenixServerAggregateRule.CONVERTIBLE_SERVER,
         PhoenixServerAggregateRule.CONVERTIBLE_SERVERJOIN,
         PhoenixUnionRule.CONVERTIBLE,
-        PhoenixMergeSortUnionRule.CONVERTIBLE,
         PhoenixClientJoinRule.CONVERTIBLE,
         PhoenixServerJoinRule.CONVERTIBLE,
         PhoenixClientSemiJoinRule.INSTANCE,
@@ -482,43 +478,6 @@ public class PhoenixConverterRules {
         public RelNode convert(RelNode rel) {
             final LogicalUnion union = (LogicalUnion) rel;
             return PhoenixUnion.create(
-                    convertList(union.getInputs(), out),
-                    union.all);
-        }
-    }
-
-    /**
-     * Rule to convert a {@link org.apache.calcite.rel.core.Union} to a
-     * {@link PhoenixMergeSortUnion}.
-     */
-    public static class PhoenixMergeSortUnionRule extends PhoenixConverterRule {
-        private static Predicate<LogicalUnion> IS_CONVERTIBLE = new Predicate<LogicalUnion>() {
-            @Override
-            public boolean apply(LogicalUnion input) {
-                return isConvertible(input);
-            }            
-        };
-        
-        private static Predicate<LogicalUnion> NON_EMPTY_COLLATION = new Predicate<LogicalUnion>() {
-			@Override
-			public boolean apply(LogicalUnion input) {
-				List<RelCollation> collations = PhoenixRelMdCollation.mergeSortUnion(input.getInputs(), input.all);
-				return collations.size() == 1 && !collations.get(0).getFieldCollations().isEmpty();
-			}
-        };
-        
-        public static final PhoenixMergeSortUnionRule INSTANCE = new PhoenixMergeSortUnionRule(NON_EMPTY_COLLATION);
-        
-        public static final PhoenixMergeSortUnionRule CONVERTIBLE = new PhoenixMergeSortUnionRule(Predicates.and(IS_CONVERTIBLE, NON_EMPTY_COLLATION));
-
-        private PhoenixMergeSortUnionRule(Predicate<LogicalUnion> predicate) {
-            super(LogicalUnion.class, predicate, Convention.NONE, 
-                    PhoenixRel.CLIENT_CONVENTION, "PhoenixMergeSortUnionRule");
-        }
-
-        public RelNode convert(RelNode rel) {
-            final LogicalUnion union = (LogicalUnion) rel;
-            return PhoenixMergeSortUnion.create(
                     convertList(union.getInputs(), out),
                     union.all);
         }

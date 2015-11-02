@@ -11,7 +11,7 @@ import org.apache.calcite.rel.RelCollation;
 import org.apache.calcite.rel.RelCollationTraitDef;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Union;
-import org.apache.phoenix.calcite.metadata.PhoenixRelMdCollation;
+import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
@@ -26,10 +26,8 @@ import com.google.common.collect.Lists;
 public class PhoenixMergeSortUnion extends Union implements PhoenixRel {
 	public final RelCollation collation;
     
-    public static PhoenixMergeSortUnion create(final List<RelNode> inputs, final boolean all) {
-    	final List<RelCollation> collationList = PhoenixRelMdCollation.mergeSortUnion(inputs, all);
-    	assert collationList.size() == 1;
-    	final RelCollation collation = collationList.get(0);
+    public static PhoenixMergeSortUnion create(final List<RelNode> inputs,
+            final boolean all, final RelCollation collation) {
         RelOptCluster cluster = inputs.get(0).getCluster();
         RelTraitSet traits = 
         		cluster.traitSetOf(PhoenixRel.CLIENT_CONVENTION)
@@ -49,13 +47,14 @@ public class PhoenixMergeSortUnion extends Union implements PhoenixRel {
 
     @Override
     public PhoenixMergeSortUnion copy(RelTraitSet traits, List<RelNode> inputs, boolean all) {
-        return create(inputs, all);
+        return create(inputs, all, collation);
     }
 
     @Override
     public RelOptCost computeSelfCost(RelOptPlanner planner) {
         for (RelNode input : getInputs()) {
-            if (input.getConvention() != PhoenixRel.CLIENT_CONVENTION) {
+            if (input.getConvention() != PhoenixRel.CLIENT_CONVENTION
+                    || !RelMetadataQuery.collations(input).contains(collation)) {
                 return planner.getCostFactory().makeInfiniteCost();
             }
         }
