@@ -39,9 +39,6 @@ public class PDate extends PDataType<Date> {
 
   @Override
   public byte[] toBytes(Object object) {
-    if (object == null) {
-      throw newIllegalDataException(this + " may not be null");
-    }
     byte[] bytes = new byte[getByteSize()];
     toBytes(object, bytes, 0);
     return bytes;
@@ -50,7 +47,8 @@ public class PDate extends PDataType<Date> {
   @Override
   public int toBytes(Object object, byte[] bytes, int offset) {
     if (object == null) {
-      throw newIllegalDataException(this + " may not be null");
+        getCodec().encodeLong(0l, bytes, offset);
+        return this.getByteSize();
     }
     getCodec().encodeLong(((java.util.Date) object).getTime(), bytes, offset);
     return this.getByteSize();
@@ -148,14 +146,15 @@ public class PDate extends PDataType<Date> {
   }
 
   @Override
-  public String toStringLiteral(Object o, Format formatter) {
-      if (formatter == null) {
-          // If default formatter has not been overridden,
-          // use default one.
-          formatter = DateUtil.DEFAULT_DATE_FORMATTER;
+    public String toStringLiteral(Object o, Format formatter) {
+        if (formatter == null) {
+            // If default formatter has not been overridden,
+            // use default one.
+            formatter = DateUtil.DEFAULT_DATE_FORMATTER;
         }
-        return "'" + StringUtil.escapeStringConstant(super.toStringLiteral(o, formatter)) + "'";
-  }
+        return null == o ? String.valueOf(o) : "'"
+                + StringUtil.escapeStringConstant(super.toStringLiteral(o, formatter)) + "'";
+    }
 
   @Override
   public void coerceBytes(ImmutableBytesWritable ptr, Object object, PDataType actualType,

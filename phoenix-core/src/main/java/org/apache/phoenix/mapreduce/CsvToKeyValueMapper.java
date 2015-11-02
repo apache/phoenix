@@ -19,7 +19,6 @@ package org.apache.phoenix.mapreduce;
 
 import java.io.IOException;
 import java.io.StringReader;
-import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Iterator;
 import java.util.List;
@@ -28,20 +27,10 @@ import java.util.Properties;
 
 import javax.annotation.Nullable;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Function;
-import com.google.common.base.Joiner;
-import com.google.common.base.Preconditions;
-import com.google.common.base.Splitter;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Iterables;
-import com.google.common.collect.Lists;
-
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -49,15 +38,27 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Mapper;
-import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixDriver;
+import org.apache.phoenix.mapreduce.CsvBulkLoadTool.TargetTableRefFunctions;
+import org.apache.phoenix.mapreduce.bulkload.CsvTableRowkeyPair;
+import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.util.CSVCommonsLoader;
 import org.apache.phoenix.util.ColumnInfo;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.csv.CsvUpsertExecutor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Function;
+import com.google.common.base.Joiner;
+import com.google.common.base.Preconditions;
+import com.google.common.base.Splitter;
+import com.google.common.base.Throwables;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Lists;
 
 /**
  * MapReduce mapper that converts CSV input lines into KeyValues that can be written to HFiles.
@@ -66,15 +67,12 @@ import org.slf4j.LoggerFactory;
  * extracting the created KeyValues and rolling back the statement execution before it is
  * committed to HBase.
  */
-public class CsvToKeyValueMapper extends Mapper<LongWritable,Text,ImmutableBytesWritable,
+public class CsvToKeyValueMapper extends Mapper<LongWritable,Text,CsvTableRowkeyPair,
         KeyValue> {
 
     private static final Logger LOG = LoggerFactory.getLogger(CsvToKeyValueMapper.class);
 
     private static final String COUNTER_GROUP_NAME = "Phoenix MapReduce Import";
-
-    /** Configuration key for the class name of an ImportPreUpsertKeyValueProcessor */
-    public static final String UPSERT_HOOK_CLASS_CONFKEY = "phoenix.mapreduce.import.kvprocessor";
 
     /** Configuration key for the field delimiter for input csv records */
     public static final String FIELD_DELIMITER_CONFKEY = "phoenix.mapreduce.import.fielddelimiter";
@@ -99,19 +97,24 @@ public class CsvToKeyValueMapper extends Mapper<LongWritable,Text,ImmutableBytes
 
     /** Configuration key for the flag to ignore invalid rows */
     public static final String IGNORE_INVALID_ROW_CONFKEY = "phoenix.mapreduce.import.ignoreinvalidrow";
+    
+    /** Configuration key for the table names */
+    public static final String TABLE_NAMES_CONFKEY = "phoenix.mapreduce.import.tablenames";
+    
+    /** Configuration key for the table configurations */
+    public static final String TABLE_CONFIG_CONFKEY = "phoenix.mapreduce.import.table.config";
 
     private PhoenixConnection conn;
     private CsvUpsertExecutor csvUpsertExecutor;
     private MapperUpsertListener upsertListener;
     private CsvLineParser csvLineParser;
     private ImportPreUpsertKeyValueProcessor preUpdateProcessor;
-    private byte[] tableName;
+    private List<String> tableNames;
 
     @Override
     protected void setup(Context context) throws IOException, InterruptedException {
 
         Configuration conf = context.getConfiguration();
-        String jdbcUrl = getJdbcUrl(conf);
 
         // pass client configuration into driver
         Properties clientInfos = new Properties();
@@ -121,33 +124,29 @@ public class CsvToKeyValueMapper extends Mapper<LongWritable,Text,ImmutableBytes
             clientInfos.setProperty(entry.getKey(), entry.getValue());
         }
         
-        // This statement also ensures that the driver class is loaded
-        LOG.info("Connection with driver {} with url {}", PhoenixDriver.class.getName(), jdbcUrl);
-
         try {
-            conn = (PhoenixConnection) DriverManager.getConnection(jdbcUrl, clientInfos);
-        } catch (SQLException e) {
+            conn = (PhoenixConnection) QueryUtil.getConnection(clientInfos, conf);
+        } catch (SQLException | ClassNotFoundException e) {
             throw new RuntimeException(e);
         }
 
+        final String tableNamesConf = conf.get(TABLE_NAMES_CONFKEY);
+        tableNames = TargetTableRefFunctions.NAMES_FROM_JSON.apply(tableNamesConf);
+        
         upsertListener = new MapperUpsertListener(
                 context, conf.getBoolean(IGNORE_INVALID_ROW_CONFKEY, true));
         csvUpsertExecutor = buildUpsertExecutor(conf);
-        csvLineParser = new CsvLineParser(conf.get(FIELD_DELIMITER_CONFKEY).charAt(0), conf.get(QUOTE_CHAR_CONFKEY).charAt(0),
-                conf.get(ESCAPE_CHAR_CONFKEY).charAt(0));
+        csvLineParser = new CsvLineParser(
+                CsvBulkImportUtil.getCharacter(conf, FIELD_DELIMITER_CONFKEY),
+                CsvBulkImportUtil.getCharacter(conf, QUOTE_CHAR_CONFKEY),
+                CsvBulkImportUtil.getCharacter(conf, ESCAPE_CHAR_CONFKEY));
 
-        preUpdateProcessor = loadPreUpsertProcessor(conf);
-        if(!conf.get(CsvToKeyValueMapper.INDEX_TABLE_NAME_CONFKEY, "").isEmpty()){
-        	tableName = Bytes.toBytes(conf.get(CsvToKeyValueMapper.INDEX_TABLE_NAME_CONFKEY));
-        } else {
-        	tableName = Bytes.toBytes(conf.get(CsvToKeyValueMapper.TABLE_NAME_CONFKEY, ""));
-        }
+        preUpdateProcessor = PhoenixConfigurationUtil.loadPreUpsertProcessor(conf);
     }
 
     @SuppressWarnings("deprecation")
     @Override
     protected void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
-        ImmutableBytesWritable outputKey = new ImmutableBytesWritable();
         try {
             CSVRecord csvRecord = null;
             try {
@@ -166,15 +165,19 @@ public class CsvToKeyValueMapper extends Mapper<LongWritable,Text,ImmutableBytes
                     = PhoenixRuntime.getUncommittedDataIterator(conn, true);
             while (uncommittedDataIterator.hasNext()) {
                 Pair<byte[], List<KeyValue>> kvPair = uncommittedDataIterator.next();
-                if (Bytes.compareTo(tableName, kvPair.getFirst()) != 0) {
-                	// skip edits for other tables
-                	continue;
-                }
                 List<KeyValue> keyValueList = kvPair.getSecond();
                 keyValueList = preUpdateProcessor.preUpsert(kvPair.getFirst(), keyValueList);
-                for (KeyValue kv : keyValueList) {
-                    outputKey.set(kv.getRowArray(), kv.getRowOffset(), kv.getRowLength());
-                    context.write(outputKey, kv);
+                byte[] first = kvPair.getFirst();
+                for(String tableName : tableNames) {
+                    if (Bytes.compareTo(Bytes.toBytes(tableName), first) != 0) {
+                        // skip edits for other tables
+                        continue;
+                    }  
+                    for (KeyValue kv : keyValueList) {
+                        ImmutableBytesWritable outputKey = new ImmutableBytesWritable();
+                        outputKey.set(kv.getRowArray(), kv.getRowOffset(), kv.getRowLength());
+                        context.write(new CsvTableRowkeyPair(tableName, outputKey), kv);
+                    }
                 }
             }
             conn.rollback();
@@ -190,37 +193,6 @@ public class CsvToKeyValueMapper extends Mapper<LongWritable,Text,ImmutableBytes
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
-    }
-
-    /**
-     * Load the configured ImportPreUpsertKeyValueProcessor, or supply a dummy processor.
-     */
-    @VisibleForTesting
-    static ImportPreUpsertKeyValueProcessor loadPreUpsertProcessor(Configuration conf) {
-        Class<? extends ImportPreUpsertKeyValueProcessor> processorClass = null;
-        try {
-            processorClass = conf.getClass(
-                    UPSERT_HOOK_CLASS_CONFKEY, DefaultImportPreUpsertKeyValueProcessor.class,
-                    ImportPreUpsertKeyValueProcessor.class);
-        } catch (Exception e) {
-            throw new IllegalStateException("Couldn't load upsert hook class", e);
-        }
-
-        return ReflectionUtils.newInstance(processorClass, conf);
-    }
-
-    /**
-     * Build up the JDBC URL for connecting to Phoenix.
-     *
-     * @return the full JDBC URL for a Phoenix connection
-     */
-    @VisibleForTesting
-    static String getJdbcUrl(Configuration conf) {
-        String zkQuorum = conf.get(HConstants.ZOOKEEPER_QUORUM);
-        if (zkQuorum == null) {
-            throw new IllegalStateException(HConstants.ZOOKEEPER_QUORUM + " is not configured");
-        }
-        return PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum;
     }
 
     @VisibleForTesting
@@ -290,12 +262,11 @@ public class CsvToKeyValueMapper extends Mapper<LongWritable,Text,ImmutableBytes
         }
 
         @Override
-        public void errorOnRecord(CSVRecord csvRecord, String errorMessage) {
-            LOG.error("Error on record {}: {}", csvRecord, errorMessage);
+        public void errorOnRecord(CSVRecord csvRecord, Throwable throwable) {
+            LOG.error("Error on record " + csvRecord, throwable);
             context.getCounter(COUNTER_GROUP_NAME, "Errors on records").increment(1L);
             if (!ignoreRecordErrors) {
-                throw new RuntimeException("Error on record, " + errorMessage + ", " +
-                        "record =" + csvRecord);
+                throw Throwables.propagate(throwable);
             }
         }
     }

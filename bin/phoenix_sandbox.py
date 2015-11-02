@@ -57,3 +57,6 @@ except KeyboardInterrupt:
 proc.wait()
 
 print "Sandbox is stopped"
+returncode = proc.returncode
+if returncode is not None:
+    sys.exit(returncode)

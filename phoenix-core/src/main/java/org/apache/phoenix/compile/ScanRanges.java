@@ -19,25 +19,34 @@ package org.apache.phoenix.compile;
 
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.STARTKEY_OFFSET;
 
+import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.KeyRange.Bound;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SaltingUtil;
+import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ScanUtil;
+import org.apache.phoenix.util.ScanUtil.BytesComparator;
 import org.apache.phoenix.util.SchemaUtil;
 
+import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
@@ -46,22 +55,29 @@ import com.google.common.collect.Lists;
 public class ScanRanges {
     private static final List<List<KeyRange>> EVERYTHING_RANGES = Collections.<List<KeyRange>>emptyList();
     private static final List<List<KeyRange>> NOTHING_RANGES = Collections.<List<KeyRange>>singletonList(Collections.<KeyRange>singletonList(KeyRange.EMPTY_RANGE));
-    public static final ScanRanges EVERYTHING = new ScanRanges(null,ScanUtil.SINGLE_COLUMN_SLOT_SPAN,EVERYTHING_RANGES, KeyRange.EVERYTHING_RANGE, KeyRange.EVERYTHING_RANGE, false, false, null);
-    public static final ScanRanges NOTHING = new ScanRanges(null,ScanUtil.SINGLE_COLUMN_SLOT_SPAN,NOTHING_RANGES, KeyRange.EMPTY_RANGE, KeyRange.EMPTY_RANGE, false, false, null);
+    public static final ScanRanges EVERYTHING = new ScanRanges(null,ScanUtil.SINGLE_COLUMN_SLOT_SPAN,EVERYTHING_RANGES, KeyRange.EVERYTHING_RANGE, KeyRange.EVERYTHING_RANGE, false, false, null, null);
+    public static final ScanRanges NOTHING = new ScanRanges(null,ScanUtil.SINGLE_COLUMN_SLOT_SPAN,NOTHING_RANGES, KeyRange.EMPTY_RANGE, KeyRange.EMPTY_RANGE, false, false, null, null);
     private static final Scan HAS_INTERSECTION = new Scan();
 
-    public static ScanRanges create(RowKeySchema schema, List<List<KeyRange>> ranges, int[] slotSpan) {
-        return create(schema, ranges, slotSpan, KeyRange.EVERYTHING_RANGE, false, null);
+    public static ScanRanges createPointLookup(List<KeyRange> keys) {
+        return ScanRanges.create(SchemaUtil.VAR_BINARY_SCHEMA, Collections.singletonList(keys), ScanUtil.SINGLE_COLUMN_SLOT_SPAN, KeyRange.EVERYTHING_RANGE, null, true, -1);
     }
     
-    public static ScanRanges create(RowKeySchema schema, List<List<KeyRange>> ranges, int[] slotSpan, KeyRange minMaxRange, boolean forceRangeScan, Integer nBuckets) {
+    // For testing
+    public static ScanRanges createSingleSpan(RowKeySchema schema, List<List<KeyRange>> ranges) {
+        return create(schema, ranges, ScanUtil.getDefaultSlotSpans(ranges.size()), KeyRange.EVERYTHING_RANGE, null, true, -1);
+    }
+    
+    public static ScanRanges create(RowKeySchema schema, List<List<KeyRange>> ranges, int[] slotSpan, KeyRange minMaxRange, Integer nBuckets, boolean useSkipScan, int rowTimestampColIndex) {
         int offset = nBuckets == null ? 0 : SaltingUtil.NUM_SALTING_BYTES;
-        if (ranges.size() == offset && minMaxRange == KeyRange.EVERYTHING_RANGE) {
+        int nSlots = ranges.size();
+        if (nSlots == offset && minMaxRange == KeyRange.EVERYTHING_RANGE) {
             return EVERYTHING;
-        } else if (minMaxRange == KeyRange.EMPTY_RANGE || (ranges.size() == 1 + offset && ranges.get(offset).size() == 1 && ranges.get(offset).get(0) == KeyRange.EMPTY_RANGE)) {
+        } else if (minMaxRange == KeyRange.EMPTY_RANGE || (nSlots == 1 + offset && ranges.get(offset).size() == 1 && ranges.get(offset).get(0) == KeyRange.EMPTY_RANGE)) {
             return NOTHING;
         }
-        boolean isPointLookup = !forceRangeScan && ScanRanges.isPointLookup(schema, ranges, slotSpan);
+        TimeRange rowTimestampRange = getRowTimestampColumnRange(ranges, schema, rowTimestampColIndex);
+        boolean isPointLookup = isPointLookup(schema, ranges, slotSpan, useSkipScan);
         if (isPointLookup) {
             // TODO: consider keeping original to use for serialization as it would be smaller?
             List<byte[]> keys = ScanRanges.getPointKeys(ranges, slotSpan, schema, nBuckets);
@@ -74,15 +90,20 @@ public class ScanRanges {
                         stripPrefix(minMaxRange.getUpperRange(),offset), 
                         minMaxRange.upperUnbound());
             }
+            // We have full keys here, so use field from our varbinary schema
+            BytesComparator comparator = ScanUtil.getComparator(SchemaUtil.VAR_BINARY_SCHEMA.getField(0));
             for (byte[] key : keys) {
                 // Filter now based on unsalted minMaxRange and ignore the point key salt byte
-                if ( unsaltedMinMaxRange.compareLowerToUpperBound(key, offset, key.length-offset, true) <= 0 &&
-                     unsaltedMinMaxRange.compareUpperToLowerBound(key, offset, key.length-offset, true) >= 0) {
+                if ( unsaltedMinMaxRange.compareLowerToUpperBound(key, offset, key.length-offset, true, comparator) <= 0 &&
+                     unsaltedMinMaxRange.compareUpperToLowerBound(key, offset, key.length-offset, true, comparator) >= 0) {
                     keyRanges.add(KeyRange.getKeyRange(key));
                 }
             }
             ranges = Collections.singletonList(keyRanges);
-            if (keys.size() > 1) {
+            useSkipScan = keyRanges.size() > 1;
+            // Treat as binary if descending because we've got a separator byte at the end
+            // which is not part of the value.
+            if (keys.size() > 1 || SchemaUtil.getSeparatorByte(schema.rowKeyOrderOptimizable(), false, schema.getField(0)) == QueryConstants.DESC_SEPARATOR_BYTE) {
                 schema = SchemaUtil.VAR_BINARY_SCHEMA;
                 slotSpan = ScanUtil.SINGLE_COLUMN_SLOT_SPAN;
             } else {
@@ -97,7 +118,7 @@ public class ScanRanges {
             Collections.sort(sorted, KeyRange.COMPARATOR);
             sortedRanges.add(ImmutableList.copyOf(sorted));
         }
-        boolean useSkipScanFilter = useSkipScanFilter(forceRangeScan, isPointLookup, sortedRanges);
+        
         
         // Don't set minMaxRange for point lookup because it causes issues during intersect
         // by going across region boundaries
@@ -105,7 +126,7 @@ public class ScanRanges {
         // if (!isPointLookup && (nBuckets == null || !useSkipScanFilter)) {
         // if (! ( isPointLookup || (nBuckets != null && useSkipScanFilter) ) ) {
         // if (nBuckets == null || (nBuckets != null && (!isPointLookup || !useSkipScanFilter))) {
-        if (nBuckets == null || !isPointLookup || !useSkipScanFilter) {
+        if (nBuckets == null || !isPointLookup || !useSkipScan) {
             byte[] minKey = ScanUtil.getMinKey(schema, sortedRanges, slotSpan);
             byte[] maxKey = ScanUtil.getMaxKey(schema, sortedRanges, slotSpan);
             // If the maxKey has crossed the salt byte boundary, then we do not
@@ -127,7 +148,7 @@ public class ScanRanges {
         if (scanRange == KeyRange.EMPTY_RANGE) {
             return NOTHING;
         }
-        return new ScanRanges(schema, slotSpan, sortedRanges, scanRange, minMaxRange, useSkipScanFilter, isPointLookup, nBuckets);
+        return new ScanRanges(schema, slotSpan, sortedRanges, scanRange, minMaxRange, useSkipScan, isPointLookup, nBuckets, rowTimestampRange);
     }
 
     private SkipScanFilter filter;
@@ -139,13 +160,15 @@ public class ScanRanges {
     private final boolean useSkipScanFilter;
     private final KeyRange scanRange;
     private final KeyRange minMaxRange;
+    private final TimeRange rowTimestampRange;
 
-    private ScanRanges (RowKeySchema schema, int[] slotSpan, List<List<KeyRange>> ranges, KeyRange scanRange, KeyRange minMaxRange, boolean useSkipScanFilter, boolean isPointLookup, Integer bucketNum) {
+    private ScanRanges (RowKeySchema schema, int[] slotSpan, List<List<KeyRange>> ranges, KeyRange scanRange, KeyRange minMaxRange, boolean useSkipScanFilter, boolean isPointLookup, Integer bucketNum, TimeRange rowTimestampRange) {
         this.isPointLookup = isPointLookup;
         this.isSalted = bucketNum != null;
         this.useSkipScanFilter = useSkipScanFilter;
         this.scanRange = scanRange;
         this.minMaxRange = minMaxRange;
+        this.rowTimestampRange = rowTimestampRange;
         
         // Only blow out the bucket values if we're using the skip scan. We need all the
         // bucket values in this case because we use intersect against a key that may have
@@ -157,8 +180,13 @@ public class ScanRanges {
         this.ranges = ImmutableList.copyOf(ranges);
         this.slotSpan = slotSpan;
         this.schema = schema;
-        if (schema != null && !ranges.isEmpty()) { // TODO: only create if useSkipScanFilter is true?
-            this.filter = new SkipScanFilter(this.ranges, slotSpan, schema);
+        if (schema != null && !ranges.isEmpty()) {
+            if (!this.useSkipScanFilter) {
+                int boundSlotCount = this.getBoundSlotCount();
+                ranges = ranges.subList(0, boundSlotCount);
+                slotSpan = Arrays.copyOf(slotSpan, boundSlotCount);
+            }
+            this.filter = new SkipScanFilter(ranges, slotSpan, this.schema);
         }
     }
     
@@ -399,12 +427,16 @@ public class ScanRanges {
         return ranges;
     }
 
+    public List<List<KeyRange>> getBoundRanges() {
+        return ranges.subList(0, getBoundSlotCount());
+    }
+
     public RowKeySchema getSchema() {
         return schema;
     }
 
     public boolean isEverything() {
-        return this == EVERYTHING;
+        return this == EVERYTHING || ranges.get(0).get(0) == KeyRange.EVERYTHING_RANGE;
     }
 
     public boolean isDegenerate() {
@@ -421,33 +453,48 @@ public class ScanRanges {
         return useSkipScanFilter;
     }
     
-    private static boolean useSkipScanFilter(boolean forceRangeScan, boolean isPointLookup, List<List<KeyRange>> ranges) {
-        if (forceRangeScan) {
-            return false;
-        }
-        if (isPointLookup) {
-            return getPointLookupCount(isPointLookup, ranges) > 1;
-        }
-        boolean hasRangeKey = false, useSkipScan = false;
-        for (List<KeyRange> orRanges : ranges) {
-            useSkipScan |= (orRanges.size() > 1 || hasRangeKey);
-            if (useSkipScan) {
-                return true;
-            }
+    /**
+     * Finds the total number of row keys spanned by this ranges / slotSpan pair.
+     * This accounts for slots in the ranges that may span more than on row key.
+     * @param ranges  the KeyRange slots paired with this slotSpan. corresponds to {@link ScanRanges#ranges}
+     * @param slotSpan  the extra span per skip scan slot. corresponds to {@link ScanRanges#slotSpan}
+     * @return  the total number of row keys spanned yb this ranges / slotSpan pair.
+     */
+    private static int getBoundPkSpan(List<List<KeyRange>> ranges, int[] slotSpan) {
+        int count = 0;
+        boolean hasUnbound = false;
+        int nRanges = ranges.size();
+
+        for(int i = 0; i < nRanges && !hasUnbound; i++) {
+            List<KeyRange> orRanges = ranges.get(i);
             for (KeyRange range : orRanges) {
-                hasRangeKey |= !range.isSingleKey();
+                if (range == KeyRange.EVERYTHING_RANGE) {
+                    return count;
+                }
+                if (range.isUnbound()) {
+                    hasUnbound = true;
+                }
             }
+            count += slotSpan[i] + 1;
         }
-        return false;
+
+        return count;
     }
 
-    private static boolean isPointLookup(RowKeySchema schema, List<List<KeyRange>> ranges, int[] slotSpan) {
-        if (ScanUtil.getTotalSpan(ranges, slotSpan) < schema.getMaxFields()) {
+    private static boolean isFullyQualified(RowKeySchema schema, List<List<KeyRange>> ranges, int[] slotSpan) {
+        return getBoundPkSpan(ranges, slotSpan) == schema.getMaxFields();
+    }
+    
+    private static boolean isPointLookup(RowKeySchema schema, List<List<KeyRange>> ranges, int[] slotSpan, boolean useSkipScan) {
+        if (!isFullyQualified(schema, ranges, slotSpan)) {
             return false;
         }
         int lastIndex = ranges.size()-1;
         for (int i = lastIndex; i >= 0; i--) {
             List<KeyRange> orRanges = ranges.get(i);
+            if (!useSkipScan && orRanges.size() > 1) {
+                return false;
+            }
             for (KeyRange keyRange : orRanges) {
                 // Special case for single trailing IS NULL. We cannot consider this as a point key because
                 // we strip trailing nulls when we form the key.
@@ -513,13 +560,142 @@ public class ScanRanges {
         return isPointLookup ? ranges.get(0).iterator() : Iterators.<KeyRange>emptyIterator();
     }
 
-    public int getPkColumnSpan() {
-        return this == ScanRanges.NOTHING ? 0 : ScanUtil.getTotalSpan(ranges, slotSpan);
+    public int getBoundPkColumnCount() {
+        return this.useSkipScanFilter ? ScanUtil.getRowKeyPosition(slotSpan, ranges.size()) : getBoundPkSpan(ranges, slotSpan);
+    }
+
+    public int getBoundSlotCount() {
+        int count = 0;
+        boolean hasUnbound = false;
+        int nRanges = ranges.size();
+
+        for(int i = 0; i < nRanges && !hasUnbound; i++) {
+            List<KeyRange> orRanges = ranges.get(i);
+            for (KeyRange range : orRanges) {
+                if (range == KeyRange.EVERYTHING_RANGE) {
+                    return count;
+                }
+                if (range.isUnbound()) {
+                    hasUnbound = true;
+                }
+            }
+            count++;
+        }
+
+        return count;
     }
 
     @Override
     public String toString() {
         return "ScanRanges[" + ranges.toString() + "]";
+    }
+
+    public int[] getSlotSpans() {
+        return slotSpan;
+    }
+
+    public boolean hasEqualityConstraint(int pkPosition) {
+        if (isPointLookup) {
+            return true;
+        }
+        
+        int pkOffset = 0;
+        int nRanges = ranges.size();
+
+        for(int i = 0; i < nRanges; i++) {
+            if (pkOffset + slotSpan[i] >= pkPosition) {
+                List<KeyRange> range = ranges.get(i);
+                return range.size() == 1 && range.get(0).isSingleKey();
+            }
+            pkOffset += slotSpan[i] + 1;
+        }
+
+        return false;
+        
+    }
+    
+    private static TimeRange getRowTimestampColumnRange(List<List<KeyRange>> ranges, RowKeySchema schema, int rowTimestampColPos) {
+        try {
+            if (rowTimestampColPos != -1) {
+                if (ranges != null && ranges.size() > rowTimestampColPos) {
+                    List<KeyRange> rowTimestampColRange = ranges.get(rowTimestampColPos);
+                    List<KeyRange> sortedRange = new ArrayList<>(rowTimestampColRange);
+                    Collections.sort(sortedRange, KeyRange.COMPARATOR);
+                    //ranges.set(rowTimestampColPos, sortedRange); //TODO: do I really need to do this?
+                    Field f = schema.getField(rowTimestampColPos);
+                    SortOrder order = f.getSortOrder();
+                    KeyRange lowestRange = rowTimestampColRange.get(0);
+                    KeyRange highestRange = rowTimestampColRange.get(rowTimestampColRange.size() - 1);
+                    if (order == SortOrder.DESC) {
+                        return getDescTimeRange(lowestRange, highestRange, f);
+                    }
+                    return getAscTimeRange( lowestRange, highestRange, f);
+                }
+            }
+        } catch (IOException e) {
+            Throwables.propagate(e);
+        }
+        return null;
+    }
+
+    private static TimeRange getAscTimeRange(KeyRange lowestRange, KeyRange highestRange, Field f)
+            throws IOException {
+        long low;
+        long high;
+        if (lowestRange.lowerUnbound()) {
+            low = 0;
+        } else {
+            long lowerRange = f.getDataType().getCodec().decodeLong(lowestRange.getLowerRange(), 0, SortOrder.ASC);
+            low = lowestRange.isLowerInclusive() ? lowerRange : safelyIncrement(lowerRange);
+        }
+        if (highestRange.upperUnbound()) {
+            high = HConstants.LATEST_TIMESTAMP;
+        } else {
+            long upperRange = f.getDataType().getCodec().decodeLong(highestRange.getUpperRange(), 0, SortOrder.ASC);
+            if (highestRange.isUpperInclusive()) {
+                high = safelyIncrement(upperRange);
+            } else {
+                high = upperRange;
+            }
+        }
+        return new TimeRange(low, high);
+    }
+    
+    public static TimeRange getDescTimeRange(KeyRange lowestKeyRange, KeyRange highestKeyRange, Field f) throws IOException {
+        boolean lowerUnbound = lowestKeyRange.lowerUnbound();
+        boolean lowerInclusive = lowestKeyRange.isLowerInclusive();
+        boolean upperUnbound = highestKeyRange.upperUnbound();
+        boolean upperInclusive = highestKeyRange.isUpperInclusive();
+
+        long low = lowerUnbound ? -1 : f.getDataType().getCodec().decodeLong(lowestKeyRange.getLowerRange(), 0, SortOrder.DESC);
+        long high = upperUnbound ? -1 : f.getDataType().getCodec().decodeLong(highestKeyRange.getUpperRange(), 0, SortOrder.DESC);
+        long newHigh;
+        long newLow;
+        if (!lowerUnbound && !upperUnbound) {
+            newHigh = lowerInclusive ? safelyIncrement(low) : low;
+            newLow = upperInclusive ? high : safelyIncrement(high);
+            return new TimeRange(newLow, newHigh);
+        } else if (!lowerUnbound && upperUnbound) {
+            newHigh = lowerInclusive ? safelyIncrement(low) : low;
+            newLow = 0;
+            return new TimeRange(newLow, newHigh);
+        } else if (lowerUnbound && !upperUnbound) {
+            newLow = upperInclusive ? high : safelyIncrement(high);
+            newHigh = HConstants.LATEST_TIMESTAMP;
+            return new TimeRange(newLow, newHigh);
+        } else {
+            newLow = 0;
+            newHigh = HConstants.LATEST_TIMESTAMP;
+            return new TimeRange(newLow, newHigh);
+        }
+    }
+    
+    private static long safelyIncrement(long value) {
+        return value < HConstants.LATEST_TIMESTAMP ? (value + 1) : HConstants.LATEST_TIMESTAMP;
+    }
+    
+    public TimeRange getRowTimestampRange() {
+        return rowTimestampRange;
     }
 
 }

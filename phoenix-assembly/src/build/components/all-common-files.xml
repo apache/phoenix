@@ -48,8 +48,8 @@
       <fileMode>0644</fileMode>
       <directoryMode>0755</directoryMode>
       <excludes>
-        <exclude>*.py/</exclude>
-        <exclude>*.sh/</exclude>
+        <exclude>*.py*</exclude>
+        <exclude>*.sh*</exclude>
       </excludes>
     </fileSet>
     <fileSet>
@@ -62,10 +62,19 @@
       <fileMode>0644</fileMode>
       <directoryMode>0755</directoryMode>
     </fileSet>
-      <fileSet>
+    <fileSet>
       <directory>${project.basedir}/../examples</directory>
       <fileMode>0644</fileMode>
       <directoryMode>0755</directoryMode>
     </fileSet>
+      <fileSet>
+          <directory>${project.basedir}/../phoenix-pherf/target</directory>
+          <outputDirectory>phoenix-pherf</outputDirectory>
+          <includes>
+              <include>*.zip</include>
+          </includes>
+          <fileMode>0644</fileMode>
+          <directoryMode>0755</directoryMode>
+      </fileSet>
   </fileSets>
 </component>

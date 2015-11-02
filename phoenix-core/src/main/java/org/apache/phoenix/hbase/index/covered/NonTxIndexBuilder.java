@@ -147,7 +147,7 @@ public class NonTxIndexBuilder extends BaseIndexBuilder {
      *            to update with the given kvs
      */
     protected void createTimestampBatchesFromKeyValues(Collection<KeyValue> kvs, Map<Long, Batch> batches) {
-        long now = EnvironmentEdgeManager.currentTimeMillis();
+        long now = EnvironmentEdgeManager.currentTime();
         byte[] nowBytes = Bytes.toBytes(now);
 
         // batch kvs by timestamp

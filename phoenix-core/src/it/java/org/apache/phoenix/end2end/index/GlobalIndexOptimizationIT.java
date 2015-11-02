@@ -198,7 +198,7 @@ public class GlobalIndexOptimizationIT extends BaseHBaseManagedTimeIT {
             
             expected = 
                     "CLIENT PARALLEL \\d-WAY FULL SCAN OVER " + TestUtil.DEFAULT_DATA_TABLE_NAME + "\n" +
-                            "    SERVER AGGREGATE INTO DISTINCT ROWS BY \\[T.T_ID, T.V1, T.K3\\]\n" +
+                            "    SERVER AGGREGATE INTO DISTINCT ROWS BY \\[T.V1, T.T_ID, T.K3\\]\n" +
                             "CLIENT MERGE SORT\n" +
                             "    SKIP-SCAN-JOIN TABLE 0\n" +
                             "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + TestUtil.DEFAULT_INDEX_TABLE_NAME + " \\[\\*\\] - \\['z'\\]\n" +
@@ -208,10 +208,6 @@ public class GlobalIndexOptimizationIT extends BaseHBaseManagedTimeIT {
             assertTrue("Expected:\n" + expected + "\nbut got\n" + actual, Pattern.matches(expected, actual));
             
             rs = conn1.createStatement().executeQuery(query);
-            assertTrue(rs.next());
-            assertEquals("b", rs.getString("t_id"));;
-            assertEquals(4, rs.getInt("k3"));
-            assertEquals("z", rs.getString("V1"));
             assertTrue(rs.next());
             assertEquals("f", rs.getString("t_id"));
             assertEquals(3, rs.getInt("k3"));
@@ -224,6 +220,10 @@ public class GlobalIndexOptimizationIT extends BaseHBaseManagedTimeIT {
             assertEquals("q", rs.getString("t_id"));
             assertEquals(1, rs.getInt("k3"));
             assertEquals("c", rs.getString("V1"));
+            assertTrue(rs.next());
+            assertEquals("b", rs.getString("t_id"));;
+            assertEquals(4, rs.getInt("k3"));
+            assertEquals("z", rs.getString("V1"));
             assertFalse(rs.next());
             
             query = "SELECT /*+ INDEX(" + TestUtil.DEFAULT_DATA_TABLE_NAME + " " + TestUtil.DEFAULT_INDEX_TABLE_NAME + ")*/ v1,sum(k3) from " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME + " where v1 <='z'  group by v1 order by v1";
@@ -233,7 +233,6 @@ public class GlobalIndexOptimizationIT extends BaseHBaseManagedTimeIT {
                     "CLIENT PARALLEL \\d-WAY FULL SCAN OVER T\n" +
                             "    SERVER AGGREGATE INTO DISTINCT ROWS BY \\[T.V1\\]\n" +
                             "CLIENT MERGE SORT\n" +
-                            "CLIENT SORTED BY \\[T.V1\\]\n" +
                             "    SKIP-SCAN-JOIN TABLE 0\n" +
                             "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER I \\[\\*\\] - \\['z'\\]\n" +
                             "            SERVER FILTER BY FIRST KEY ONLY\n" +

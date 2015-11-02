@@ -30,10 +30,16 @@ import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.regionserver.HRegion;
+import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
+import org.junit.Test;
+import org.mockito.Mockito;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
+import org.apache.phoenix.hbase.index.covered.IndexUpdate;
+import org.apache.phoenix.hbase.index.covered.LocalTableState;
 import org.apache.phoenix.hbase.index.covered.data.LocalHBaseState;
 import org.apache.phoenix.hbase.index.covered.data.LocalTable;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
@@ -64,7 +70,7 @@ public class TestLocalTableState {
     RegionCoprocessorEnvironment env = Mockito.mock(RegionCoprocessorEnvironment.class);
     Mockito.when(env.getConfiguration()).thenReturn(conf);
 
-    HRegion region = Mockito.mock(HRegion.class);
+    Region region = Mockito.mock(Region.class);
     Mockito.when(env.getRegion()).thenReturn(region);
     RegionScanner scanner = Mockito.mock(RegionScanner.class);
     Mockito.when(region.getScanner(Mockito.any(Scan.class))).thenReturn(scanner);
@@ -74,7 +80,7 @@ public class TestLocalTableState {
       public Boolean answer(InvocationOnMock invocation) throws Throwable {
         List<KeyValue> list = (List<KeyValue>) invocation.getArguments()[0];
         KeyValue kv = new KeyValue(row, fam, qual, ts, Type.Put, stored);
-        kv.setMvccVersion(0);
+        kv.setSequenceId(0);
         list.add(kv);
         return false;
       }
@@ -84,7 +90,7 @@ public class TestLocalTableState {
     LocalHBaseState state = new LocalTable(env);
     LocalTableState table = new LocalTableState(env, state, m);
     //add the kvs from the mutation
-    table.addPendingUpdates(m.get(fam, qual));
+    table.addPendingUpdates(KeyValueUtil.ensureKeyValues(m.get(fam, qual)));
 
     // setup the lookup
     ColumnReference col = new ColumnReference(fam, qual);
@@ -107,13 +113,13 @@ public class TestLocalTableState {
     // setup mocks
     RegionCoprocessorEnvironment env = Mockito.mock(RegionCoprocessorEnvironment.class);
 
-    HRegion region = Mockito.mock(HRegion.class);
+    Region region = Mockito.mock(Region.class);
     Mockito.when(env.getRegion()).thenReturn(region);
     RegionScanner scanner = Mockito.mock(RegionScanner.class);
     Mockito.when(region.getScanner(Mockito.any(Scan.class))).thenReturn(scanner);
     final byte[] stored = Bytes.toBytes("stored-value");
     final KeyValue storedKv = new KeyValue(row, fam, qual, ts, Type.Put, stored);
-    storedKv.setMvccVersion(2);
+    storedKv.setSequenceId(2);
     Mockito.when(scanner.next(Mockito.any(List.class))).thenAnswer(new Answer<Boolean>() {
       @Override
       public Boolean answer(InvocationOnMock invocation) throws Throwable {
@@ -126,8 +132,8 @@ public class TestLocalTableState {
     LocalHBaseState state = new LocalTable(env);
     LocalTableState table = new LocalTableState(env, state, m);
     // add the kvs from the mutation
-    Cell kv = m.get(fam, qual).get(0);
-    KeyValueUtil.ensureKeyValue(kv).setMvccVersion(0);
+    KeyValue kv = KeyValueUtil.ensureKeyValue(m.get(fam, qual).get(0));
+    kv.setSequenceId(0);
     table.addPendingUpdates(kv);
 
     // setup the lookup
@@ -153,13 +159,13 @@ public class TestLocalTableState {
     // setup mocks
     RegionCoprocessorEnvironment env = Mockito.mock(RegionCoprocessorEnvironment.class);
 
-    HRegion region = Mockito.mock(HRegion.class);
+    Region region = Mockito.mock(Region.class);
     Mockito.when(env.getRegion()).thenReturn(region);
     RegionScanner scanner = Mockito.mock(RegionScanner.class);
     Mockito.when(region.getScanner(Mockito.any(Scan.class))).thenReturn(scanner);
     final KeyValue storedKv =
         new KeyValue(row, fam, qual, ts, Type.Put, Bytes.toBytes("stored-value"));
-    storedKv.setMvccVersion(2);
+    storedKv.setSequenceId(2);
     Mockito.when(scanner.next(Mockito.any(List.class))).thenAnswer(new Answer<Boolean>() {
       @Override
       public Boolean answer(InvocationOnMock invocation) throws Throwable {

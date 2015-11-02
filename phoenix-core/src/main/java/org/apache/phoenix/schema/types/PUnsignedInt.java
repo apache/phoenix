@@ -17,10 +17,11 @@
  */
 package org.apache.phoenix.schema.types;
 
-import com.google.common.base.Preconditions;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Order;
 import org.apache.phoenix.schema.SortOrder;
+
+import com.google.common.base.Preconditions;
 
 /**
  * Unsigned integer type that restricts values to be from 0 to {@link Integer#MAX_VALUE}
@@ -30,7 +31,7 @@ import org.apache.phoenix.schema.SortOrder;
  * them to sort ahead of positive numbers when they're used as part of the row key when using the
  * HBase utility methods).
  */
-public class PUnsignedInt extends PDataType<Integer> {
+public class PUnsignedInt extends PWholeNumber<Integer> {
 
   public static final PUnsignedInt INSTANCE = new PUnsignedInt();
 

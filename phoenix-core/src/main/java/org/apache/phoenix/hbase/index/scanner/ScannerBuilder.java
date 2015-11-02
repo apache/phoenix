@@ -113,7 +113,7 @@ public class ScannerBuilder {
     // create a scanner and wrap it as an iterator, meaning you can only go forward
     final FilteredKeyValueScanner kvScanner = new FilteredKeyValueScanner(filters, memstore);
     // seek the scanner to initialize it
-    KeyValue start = KeyValue.createFirstOnRow(update.getRow());
+    KeyValue start = KeyValueUtil.createFirstOnRow(update.getRow());
     try {
       if (!kvScanner.seek(start)) {
         return new EmptyScanner();
@@ -140,7 +140,7 @@ public class ScannerBuilder {
       public boolean seek(Cell next) throws IOException {
         // check to see if the next kv is after the current key, in which case we can use reseek,
         // which will be more efficient
-        KeyValue peek = kvScanner.peek();
+        Cell peek = kvScanner.peek();
         // there is another value and its before the requested one - we can do a reseek!
         if (peek != null) {
           int compare = KeyValue.COMPARATOR.compare(peek, next);

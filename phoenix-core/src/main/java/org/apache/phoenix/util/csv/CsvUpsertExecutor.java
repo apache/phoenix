@@ -78,7 +78,7 @@ public class CsvUpsertExecutor implements Closeable {
          *
          * @param csvRecord the CSV record that was being upserted when the error occurred
          */
-        void errorOnRecord(CSVRecord csvRecord, String errorMessage);
+        void errorOnRecord(CSVRecord csvRecord, Throwable throwable);
     }
 
 
@@ -144,6 +144,11 @@ public class CsvUpsertExecutor implements Closeable {
      */
     void execute(CSVRecord csvRecord) {
         try {
+            if (csvRecord.size() < conversionFunctions.size()) {
+                String message = String.format("CSV record does not have enough values (has %d, but needs %d)",
+                        csvRecord.size(), conversionFunctions.size());
+                throw new IllegalArgumentException(message);
+            }
             for (int fieldIndex = 0; fieldIndex < conversionFunctions.size(); fieldIndex++) {
                 Object sqlValue = conversionFunctions.get(fieldIndex).apply(csvRecord.get(fieldIndex));
                 if (sqlValue != null) {
@@ -160,7 +165,7 @@ public class CsvUpsertExecutor implements Closeable {
                 // listener, and it can do its own logging if needed
                 LOG.debug("Error on CSVRecord " + csvRecord, e);
             }
-            upsertListener.errorOnRecord(csvRecord, e.getMessage());
+            upsertListener.errorOnRecord(csvRecord, e);
         }
     }
 
@@ -228,7 +233,10 @@ public class CsvUpsertExecutor implements Closeable {
         @Nullable
         @Override
         public Object apply(@Nullable String input) {
-            if(dateTimeParser != null) {
+            if (input == null || input.isEmpty()) {
+                return null;
+            }
+            if (dateTimeParser != null) {
                 long epochTime = dateTimeParser.parseDateTime(input);
                 byte[] byteValue = new byte[dataType.getByteSize()];
                 dataType.getCodec().encodeLong(epochTime, byteValue, 0);

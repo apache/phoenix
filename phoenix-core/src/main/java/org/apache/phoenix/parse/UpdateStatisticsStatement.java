@@ -21,6 +21,8 @@ import static org.apache.phoenix.schema.stats.StatisticsCollectionScope.ALL;
 import static org.apache.phoenix.schema.stats.StatisticsCollectionScope.COLUMNS;
 import static org.apache.phoenix.schema.stats.StatisticsCollectionScope.INDEX;
 
+import java.util.Map;
+
 import org.apache.phoenix.schema.stats.StatisticsCollectionScope;
 
 import com.sun.istack.NotNull;
@@ -28,9 +30,12 @@ import com.sun.istack.NotNull;
 
 public class UpdateStatisticsStatement extends SingleTableStatement {
     private final StatisticsCollectionScope scope;
-    public UpdateStatisticsStatement(NamedTableNode table, @NotNull StatisticsCollectionScope scope) {
+    private final Map<String,Object> props;
+    
+    public UpdateStatisticsStatement(NamedTableNode table, @NotNull StatisticsCollectionScope scope, Map<String,Object> props) {
         super(table, 0);
         this.scope = scope;
+        this.props = props;
     }
 
     public boolean updateColumns() {
@@ -43,5 +48,9 @@ public class UpdateStatisticsStatement extends SingleTableStatement {
 
     public boolean updateAll() {
         return scope == ALL;
+    }
+
+    public Map<String,Object> getProps() {
+        return props;
     };
 }

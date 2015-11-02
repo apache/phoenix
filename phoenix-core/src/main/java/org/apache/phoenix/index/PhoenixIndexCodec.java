@@ -15,8 +15,8 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.hadoop.hbase.client.Delete;
-import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Pair;
@@ -72,7 +72,7 @@ public class PhoenixIndexCodec extends BaseIndexCodec {
             IndexUpdate indexUpdate = statePair.getSecond();
             indexUpdate.setTable(maintainer.getIndexTableName());
             Put put = maintainer.buildUpdateMutation(KV_BUILDER, valueGetter, ptr, state.getCurrentTimestamp(), env
-                    .getRegion().getStartKey(), env.getRegion().getEndKey());
+                    .getRegion().getRegionInfo().getStartKey(), env.getRegion().getRegionInfo().getEndKey());
             indexUpdate.setUpdate(put);
             indexUpdates.add(indexUpdate);
         }
@@ -95,7 +95,7 @@ public class PhoenixIndexCodec extends BaseIndexCodec {
             IndexUpdate indexUpdate = statePair.getSecond();
             indexUpdate.setTable(maintainer.getIndexTableName());
             Delete delete = maintainer.buildDeleteMutation(KV_BUILDER, valueGetter, ptr, state.getPendingUpdate(),
-                    state.getCurrentTimestamp(), env.getRegion().getStartKey(), env.getRegion().getEndKey());
+                    state.getCurrentTimestamp(), env.getRegion().getRegionInfo().getStartKey(), env.getRegion().getRegionInfo().getEndKey());
             indexUpdate.setUpdate(delete);
             indexUpdates.add(indexUpdate);
         }

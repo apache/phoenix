@@ -19,6 +19,7 @@ package org.apache.phoenix.execute;
 
 
 import java.sql.SQLException;
+import java.util.Collections;
 import java.util.List;
 
 import org.apache.hadoop.hbase.HTableDescriptor;
@@ -29,6 +30,7 @@ import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.ScanRegionObserver;
+import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.iterate.ChunkedResultIterator;
 import org.apache.phoenix.iterate.ConcatResultIterator;
 import org.apache.phoenix.iterate.LimitingResultIterator;
@@ -36,8 +38,10 @@ import org.apache.phoenix.iterate.MergeSortRowKeyResultIterator;
 import org.apache.phoenix.iterate.MergeSortTopNResultIterator;
 import org.apache.phoenix.iterate.ParallelIteratorFactory;
 import org.apache.phoenix.iterate.ParallelIterators;
+import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.iterate.ResultIterators;
+import org.apache.phoenix.iterate.RoundRobinResultIterator;
 import org.apache.phoenix.iterate.SequenceResultIterator;
 import org.apache.phoenix.iterate.SerialIterators;
 import org.apache.phoenix.iterate.SpoolingResultIterator;
@@ -54,6 +58,7 @@ import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.StatisticsUtil;
 import org.apache.phoenix.util.LogUtil;
+import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -72,11 +77,15 @@ public class ScanPlan extends BaseQueryPlan {
     private List<KeyRange> splits;
     private List<List<Scan>> scans;
     private boolean allowPageFilter;
-
+    
     public ScanPlan(StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector, Integer limit, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory, boolean allowPageFilter) throws SQLException {
+        this(context, statement, table, projector, limit, orderBy, parallelIteratorFactory, allowPageFilter, null);
+    }
+    
+    private ScanPlan(StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector, Integer limit, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory, boolean allowPageFilter, Expression dynamicFilter) throws SQLException {
         super(context, statement, table, projector, context.getBindManager().getParameterMetaData(), limit, orderBy, GroupBy.EMPTY_GROUP_BY,
                 parallelIteratorFactory != null ? parallelIteratorFactory :
-                        buildResultIteratorFactory(context, table, orderBy, limit, allowPageFilter));
+                        buildResultIteratorFactory(context, table, orderBy, limit, allowPageFilter), dynamicFilter);
         this.allowPageFilter = allowPageFilter;
         if (!orderBy.getOrderByExpressions().isEmpty()) { // TopN
             int thresholdBytes = context.getConnection().getQueryServices().getProps().getInt(
@@ -128,7 +137,7 @@ public class ScanPlan extends BaseQueryPlan {
     private static ParallelIteratorFactory buildResultIteratorFactory(StatementContext context,
             TableRef table, OrderBy orderBy, Integer limit, boolean allowPageFilter) throws SQLException {
 
-        if (isSerial(context, table, orderBy, limit, allowPageFilter)) {
+        if (isSerial(context, table, orderBy, limit, allowPageFilter) || ScanUtil.isRoundRobinPossible(orderBy, context)) {
             return ParallelIteratorFactory.NOOP_FACTORY;
         }
         ParallelIteratorFactory spoolingResultIteratorFactory =
@@ -148,16 +157,22 @@ public class ScanPlan extends BaseQueryPlan {
 
     @Override
     public List<KeyRange> getSplits() {
-        return splits;
+        if (splits == null)
+            return Collections.emptyList();
+        else
+            return splits;
     }
 
     @Override
     public List<List<Scan>> getScans() {
-        return scans;
+        if (scans == null)
+            return Collections.emptyList();
+        else
+            return scans;
     }
 
     @Override
-    protected ResultIterator newIterator() throws SQLException {
+    protected ResultIterator newIterator(ParallelScanGrouper scanGrouper) throws SQLException {
         // Set any scan attributes before creating the scanner, as it will be too late afterwards
     	Scan scan = context.getScan();
         scan.setAttribute(BaseScannerRegionObserver.NON_AGGREGATE_QUERY, QueryConstants.TRUE);
@@ -173,22 +188,29 @@ public class ScanPlan extends BaseQueryPlan {
         Integer perScanLimit = !allowPageFilter || isOrdered ? null : limit;
         ResultIterators iterators;
         if (isSerial) {
-        	iterators = new SerialIterators(this, perScanLimit, parallelIteratorFactory);
+        	iterators = new SerialIterators(this, perScanLimit, parallelIteratorFactory, scanGrouper);
         } else {
-        	iterators = new ParallelIterators(this, perScanLimit, parallelIteratorFactory);
+        	iterators = new ParallelIterators(this, perScanLimit, parallelIteratorFactory, scanGrouper);
         }
         splits = iterators.getSplits();
         scans = iterators.getScans();
         if (isOrdered) {
             scanner = new MergeSortTopNResultIterator(iterators, limit, orderBy.getOrderByExpressions());
         } else {
-            if ((isSalted || table.getIndexType() == IndexType.LOCAL) &&
-                    (context.getConnection().getQueryServices().getProps().getBoolean(
-                            QueryServices.ROW_KEY_ORDER_SALTED_TABLE_ATTRIB,
-                            QueryServicesOptions.DEFAULT_ROW_KEY_ORDER_SALTED_TABLE) ||
-                     orderBy == OrderBy.FWD_ROW_KEY_ORDER_BY ||
-                     orderBy == OrderBy.REV_ROW_KEY_ORDER_BY)) { // ORDER BY was optimized out b/c query is in row key order
+            if ((isSalted || table.getIndexType() == IndexType.LOCAL) && ScanUtil.shouldRowsBeInRowKeyOrder(orderBy, context)) {
+                /*
+                 * For salted tables or local index, a merge sort is needed if: 
+                 * 1) The config phoenix.query.force.rowkeyorder is set to true 
+                 * 2) Or if the query has an order by that wants to sort
+                 * the results by the row key (forward or reverse ordering)
+                 */
                 scanner = new MergeSortRowKeyResultIterator(iterators, isSalted ? SaltingUtil.NUM_SALTING_BYTES : 0, orderBy == OrderBy.REV_ROW_KEY_ORDER_BY);
+            } else if (useRoundRobinIterator()) {
+                /*
+                 * For any kind of tables, round robin is possible if there is
+                 * no ordering of rows needed.
+                 */
+                scanner = new RoundRobinResultIterator(iterators, this);
             } else {
                 scanner = new ConcatResultIterator(iterators);
             }
@@ -202,4 +224,10 @@ public class ScanPlan extends BaseQueryPlan {
         }
         return scanner;
     }
+    
+    @Override
+    public boolean useRoundRobinIterator() throws SQLException {
+        return ScanUtil.isRoundRobinPossible(orderBy, context);
+    }
+
 }

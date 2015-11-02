@@ -55,14 +55,13 @@ public class PhoenixTestDriver extends PhoenixEmbeddedDriver {
     private boolean closed = false;
 
     public PhoenixTestDriver() {
-        this.overrideProps = ReadOnlyProps.EMPTY_PROPS;
-        queryServices = new QueryServicesTestImpl(getDefaultProps());
+        this(ReadOnlyProps.EMPTY_PROPS);
     }
 
     // For tests to override the default configuration
     public PhoenixTestDriver(ReadOnlyProps props) {
         overrideProps = props;
-        queryServices = new QueryServicesTestImpl(getDefaultProps(),overrideProps);
+        queryServices = new QueryServicesTestImpl(getDefaultProps(), overrideProps);
     }
 
     @Override

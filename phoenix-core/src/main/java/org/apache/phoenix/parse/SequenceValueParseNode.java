@@ -39,10 +39,16 @@ public class SequenceValueParseNode extends TerminalParseNode {
     }
 	private final TableName tableName;
 	private final Op op;
+	private final ParseNode numToAllocate;
 
-	public SequenceValueParseNode(TableName tableName, Op op) {
+	public SequenceValueParseNode(TableName tableName, Op op, ParseNode numToAllocate) {
 		this.tableName = tableName;
 		this.op = op;
+		this.numToAllocate = numToAllocate;
+	}
+	
+	public ParseNode getNumToAllocateNode() {
+	    return numToAllocate;
 	}
 
 	@Override

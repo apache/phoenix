@@ -26,8 +26,9 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Mutation;
-import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
+import org.apache.hadoop.hbase.regionserver.ScannerContext;
+import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 
 /**
@@ -37,11 +38,11 @@ public class StatisticsScanner implements InternalScanner {
     private static final Log LOG = LogFactory.getLog(StatisticsScanner.class);
     private InternalScanner delegate;
     private StatisticsWriter stats;
-    private HRegion region;
+    private Region region;
     private StatisticsCollector tracker;
     private ImmutableBytesPtr family;
 
-    public StatisticsScanner(StatisticsCollector tracker, StatisticsWriter stats, HRegion region,
+    public StatisticsScanner(StatisticsCollector tracker, StatisticsWriter stats, Region region,
             InternalScanner delegate, ImmutableBytesPtr family) {
         this.tracker = tracker;
         this.stats = stats;
@@ -58,15 +59,15 @@ public class StatisticsScanner implements InternalScanner {
     }
 
     @Override
-    public boolean next(List<Cell> result, int limit) throws IOException {
-        boolean ret = delegate.next(result, limit);
+    public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
+        boolean ret = delegate.next(result, scannerContext);
         updateStat(result);
         return ret;
     }
 
     /**
      * Update the current statistics based on the lastest batch of key-values from the underlying scanner
-     * 
+     *
      * @param results
      *            next batch of {@link KeyValue}s
      */
@@ -84,17 +85,17 @@ public class StatisticsScanner implements InternalScanner {
             // Just verify if this if fine
             ArrayList<Mutation> mutations = new ArrayList<Mutation>();
             if (LOG.isDebugEnabled()) {
-                LOG.debug("Deleting the stats for the region " + region.getRegionNameAsString()
+                LOG.debug("Deleting the stats for the region " + region.getRegionInfo().getRegionNameAsString()
                         + " as part of major compaction");
             }
-            stats.deleteStats(region.getRegionName(), this.tracker, family, mutations);
+            stats.deleteStats(region.getRegionInfo().getRegionName(), this.tracker, family, mutations);
             if (LOG.isDebugEnabled()) {
-                LOG.debug("Adding new stats for the region " + region.getRegionNameAsString()
+                LOG.debug("Adding new stats for the region " + region.getRegionInfo().getRegionNameAsString()
                         + " as part of major compaction");
             }
-            stats.addStats(region.getRegionName(), this.tracker, family, mutations);
+            stats.addStats(region.getRegionInfo().getRegionName(), this.tracker, family, mutations);
             if (LOG.isDebugEnabled()) {
-                LOG.debug("Committing new stats for the region " + region.getRegionNameAsString()
+                LOG.debug("Committing new stats for the region " + region.getRegionInfo().getRegionNameAsString()
                         + " as part of major compaction");
             }
             stats.commitStats(mutations);
@@ -122,4 +123,5 @@ public class StatisticsScanner implements InternalScanner {
             }
         }
     }
+
 }

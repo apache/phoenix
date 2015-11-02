@@ -16,6 +16,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -27,6 +28,9 @@ import java.sql.ResultSet;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
@@ -104,6 +108,62 @@ public class LpadFunctionIT extends BaseHBaseManagedTimeIT {
     private void testLpad(Connection conn, List<String> inputList, int length, List<String> fillStringList,
         List<String> expectedOutputList) throws Exception {
         testLpad(conn, inputList, length, fillStringList, "pk", expectedOutputList);
+    }
+
+    @Test
+    public void testCharPadding() throws Exception {
+        ResultSet rs;
+        Connection conn = DriverManager.getConnection(getUrl());
+        
+        conn.createStatement().execute("CREATE TABLE t (k CHAR(3) PRIMARY KEY)");
+        conn.createStatement().execute("UPSERT INTO t VALUES('a')");
+        conn.createStatement().execute("UPSERT INTO t VALUES('ab')");
+        conn.commit();
+        rs = conn.createStatement().executeQuery("SELECT * FROM t ORDER BY k");
+        assertTrue(rs.next());
+        assertEquals("a", rs.getString(1));
+        assertTrue(rs.next());
+        assertEquals("ab", rs.getString(1));
+        assertFalse(rs.next());
+
+        conn.createStatement().execute("CREATE TABLE tdesc (k CHAR(3) PRIMARY KEY DESC)");
+        conn.createStatement().execute("UPSERT INTO tdesc VALUES('a')");
+        conn.createStatement().execute("UPSERT INTO tdesc VALUES('ab')");
+        conn.commit();
+        rs = conn.createStatement().executeQuery("SELECT * FROM tdesc ORDER BY k DESC");
+        assertTrue(rs.next());
+        assertEquals("ab", rs.getString(1));
+        assertTrue(rs.next());
+        assertEquals("a", rs.getString(1));
+        assertFalse(rs.next());
+    }
+
+    @Test
+    public void testBinaryPadding() throws Exception {
+        ResultSet rs;
+        Connection conn = DriverManager.getConnection(getUrl());
+        
+        conn.createStatement().execute("CREATE TABLE t (k BINARY(3) PRIMARY KEY)");
+        conn.createStatement().execute("UPSERT INTO t VALUES('a')");
+        conn.createStatement().execute("UPSERT INTO t VALUES('ab')");
+        conn.commit();
+        rs = conn.createStatement().executeQuery("SELECT * FROM t ORDER BY k");
+        assertTrue(rs.next());
+        assertArrayEquals(ByteUtil.concat(Bytes.toBytes("a"), QueryConstants.SEPARATOR_BYTE_ARRAY, QueryConstants.SEPARATOR_BYTE_ARRAY), rs.getBytes(1));
+        assertTrue(rs.next());
+        assertArrayEquals(ByteUtil.concat(Bytes.toBytes("ab"), QueryConstants.SEPARATOR_BYTE_ARRAY), rs.getBytes(1));
+        assertFalse(rs.next());
+
+        conn.createStatement().execute("CREATE TABLE tdesc (k BINARY(3) PRIMARY KEY DESC)");
+        conn.createStatement().execute("UPSERT INTO tdesc VALUES('a')");
+        conn.createStatement().execute("UPSERT INTO tdesc VALUES('ab')");
+        conn.commit();
+        rs = conn.createStatement().executeQuery("SELECT * FROM tdesc ORDER BY k DESC");
+        assertTrue(rs.next());
+        assertArrayEquals(ByteUtil.concat(Bytes.toBytes("ab"), QueryConstants.SEPARATOR_BYTE_ARRAY), rs.getBytes(1));
+        assertTrue(rs.next());
+        assertArrayEquals(ByteUtil.concat(Bytes.toBytes("a"), QueryConstants.SEPARATOR_BYTE_ARRAY, QueryConstants.SEPARATOR_BYTE_ARRAY), rs.getBytes(1));
+        assertFalse(rs.next());
     }
 
     @Test

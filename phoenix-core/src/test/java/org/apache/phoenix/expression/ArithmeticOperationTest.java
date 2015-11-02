@@ -28,9 +28,9 @@ import java.util.Arrays;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.phoenix.exception.ValueTypeIncompatibleException;
+import org.apache.phoenix.exception.DataExceedsCapacityException;
 import org.apache.phoenix.expression.function.RandomFunction;
-import org.apache.phoenix.expression.visitor.CloneExpressionVisitor;
+import org.apache.phoenix.expression.visitor.CloneNonDeterministicExpressionVisitor;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PInteger;
@@ -68,7 +68,7 @@ public class ArithmeticOperationTest {
         try {
             e.evaluate(null, new ImmutableBytesWritable());
             fail("Evaluation should have failed");
-        } catch (ValueTypeIncompatibleException ex) {
+        } catch (DataExceedsCapacityException ex) {
         }
 
         // Pass since we roll out imposing precisioin and scale.
@@ -87,7 +87,7 @@ public class ArithmeticOperationTest {
         try {
             e.evaluate(null, new ImmutableBytesWritable());
             fail("Evaluation should have failed");
-        } catch (ValueTypeIncompatibleException ex) {
+        } catch (DataExceedsCapacityException ex) {
         }
         
         // Decimal with no precision and scale.
@@ -141,7 +141,7 @@ public class ArithmeticOperationTest {
         try {
             e.evaluate(null, new ImmutableBytesWritable());
             fail("Evaluation should have failed");
-        } catch (ValueTypeIncompatibleException ex) {
+        } catch (DataExceedsCapacityException ex) {
         }
 
         // Pass since we roll up precision and scale imposing.
@@ -160,7 +160,7 @@ public class ArithmeticOperationTest {
         try {
             e.evaluate(null, new ImmutableBytesWritable());
             fail("Evaluation should have failed");
-        } catch (ValueTypeIncompatibleException ex) {
+        } catch (DataExceedsCapacityException ex) {
         }
         
         // Decimal with no precision and scale.
@@ -194,7 +194,7 @@ public class ArithmeticOperationTest {
         try {
             e.evaluate(null, new ImmutableBytesWritable());
             fail("Evaluation should have failed");
-        } catch (ValueTypeIncompatibleException ex) {
+        } catch (DataExceedsCapacityException ex) {
         }
 
         // Values exceeds scale.
@@ -205,7 +205,7 @@ public class ArithmeticOperationTest {
         try {
             e.evaluate(null, new ImmutableBytesWritable());
             fail("Evaluation should have failed");
-        } catch (ValueTypeIncompatibleException ex) {
+        } catch (DataExceedsCapacityException ex) {
         }
         
         // Decimal with no precision and scale.
@@ -243,7 +243,7 @@ public class ArithmeticOperationTest {
         try {
             e.evaluate(null, new ImmutableBytesWritable());
             fail("Evaluation should have failed");
-        } catch (ValueTypeIncompatibleException ex) {
+        } catch (DataExceedsCapacityException ex) {
         }
         
         // Decimal with no precision and scale.
@@ -273,7 +273,7 @@ public class ArithmeticOperationTest {
         e2 = new DoubleSubtractExpression(children);
         e3 = new DoubleAddExpression(Arrays.<Expression>asList(e1, e2));
         e4 = new DoubleAddExpression(Arrays.<Expression>asList(new RandomFunction(Arrays.<Expression>asList(LiteralExpression.newConstant(null))), e3));
-        CloneExpressionVisitor visitor = new CloneExpressionVisitor();
+        CloneNonDeterministicExpressionVisitor visitor = new CloneNonDeterministicExpressionVisitor();
         Expression clone = e4.accept(visitor);
         assertTrue(clone != e4);
         e4.evaluate(null, ptr1);
@@ -281,7 +281,7 @@ public class ArithmeticOperationTest {
         assertNotEquals(ptr1, ptr2);
         
         e4 = new DoubleAddExpression(Arrays.<Expression>asList(new RandomFunction(Arrays.<Expression>asList(LiteralExpression.newConstant(1))), e3));
-        visitor = new CloneExpressionVisitor();
+        visitor = new CloneNonDeterministicExpressionVisitor();
         clone = e4.accept(visitor);
         assertTrue(clone == e4);
         e4.evaluate(null, ptr1);
@@ -294,7 +294,7 @@ public class ArithmeticOperationTest {
         boolean evaluated = e.evaluate(null, ptr);
         assertTrue(evaluated);
         assertEquals(value, type.toObject(ptr.get()));
-        CloneExpressionVisitor visitor = new CloneExpressionVisitor();
+        CloneNonDeterministicExpressionVisitor visitor = new CloneNonDeterministicExpressionVisitor();
         Expression clone = e.accept(visitor);
         evaluated = clone.evaluate(null, ptr);
         assertTrue(evaluated);

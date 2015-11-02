@@ -34,14 +34,14 @@ phoenix_jar_path = os.getenv(phoenix_utils.phoenix_class_path, phoenix_utils.pho
 
 # HBase configuration folder path (where hbase-site.xml reside) for
 # HBase/Phoenix client side property override
-hbase_config_path = os.getenv('HBASE_CONF_DIR', phoenix_utils.hbase_conf_path)
 hbase_library_path = os.getenv('HBASE_LIBRARY_DIR', '')
 
-print "Current ClassPath=%s:%s:%s" % (hbase_config_path, phoenix_jar_path,
+print "Current ClassPath=%s:%s:%s" % (phoenix_utils.hbase_conf_dir, phoenix_jar_path,
                                       hbase_library_path)
 
-java_cmd = "java -cp " + hbase_config_path + os.pathsep + phoenix_jar_path + os.pathsep + \
+java_cmd = "java -cp " + phoenix_utils.hbase_conf_dir + os.pathsep + phoenix_jar_path + os.pathsep + \
     hbase_library_path + " org.apache.phoenix.end2end.End2EndTestDriver " + \
     ' '.join(sys.argv[1:])
 
-subprocess.call(java_cmd, shell=True)
+exitcode = subprocess.call(java_cmd, shell=True)
+sys.exit(exitcode)

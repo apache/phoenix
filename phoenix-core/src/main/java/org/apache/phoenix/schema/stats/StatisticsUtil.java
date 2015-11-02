@@ -60,10 +60,10 @@ public class StatisticsUtil {
         int offset = 0;
         System.arraycopy(table, 0, rowKey, offset, table.length);
         offset += table.length;
-        rowKey[offset++] = QueryConstants.SEPARATOR_BYTE;
+        rowKey[offset++] = QueryConstants.SEPARATOR_BYTE; // assumes stats table columns not DESC
         System.arraycopy(fam.get(), fam.getOffset(), rowKey, offset, fam.getLength());
         offset += fam.getLength();
-        rowKey[offset++] = QueryConstants.SEPARATOR_BYTE;
+        rowKey[offset++] = QueryConstants.SEPARATOR_BYTE; // assumes stats table columns not DESC
         System.arraycopy(region, 0, rowKey, offset, region.length);
         return rowKey;
     }
@@ -80,6 +80,8 @@ public class StatisticsUtil {
         get.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH_BYTES);
         get.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_BYTES);
         get.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_ROW_COUNT_BYTES);
+        get.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
+            PhoenixDatabaseMetaData.MIN_KEY_BYTES);
         return statsHTable.get(get);
     }
     

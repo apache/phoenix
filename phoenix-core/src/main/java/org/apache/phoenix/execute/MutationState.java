@@ -17,12 +17,14 @@
  */
 package org.apache.phoenix.execute;
 
-import static org.apache.phoenix.monitoring.PhoenixMetrics.SizeMetric.MUTATION_BATCH_SIZE;
-import static org.apache.phoenix.monitoring.PhoenixMetrics.SizeMetric.MUTATION_BYTES;
-import static org.apache.phoenix.monitoring.PhoenixMetrics.SizeMetric.MUTATION_COMMIT_TIME;
+import static com.google.common.base.Preconditions.checkNotNull;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_BATCH_SIZE;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_BYTES;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_COMMIT_TIME;
 
 import java.io.IOException;
 import java.sql.SQLException;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
@@ -40,6 +42,9 @@ import co.cask.tephra.TransactionNotInProgressException;
 import co.cask.tephra.TransactionSystemClient;
 import co.cask.tephra.hbase98.TransactionAwareHTable;
 
+import javax.annotation.Nonnull;
+import javax.annotation.concurrent.Immutable;
+
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.HTableInterface;
@@ -47,6 +52,8 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.htrace.Span;
+import org.apache.htrace.TraceScope;
 import org.apache.phoenix.cache.ServerCacheClient;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.MutationPlan;
@@ -60,26 +67,33 @@ import org.apache.phoenix.index.IndexMetaDataCacheClient;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
-import org.apache.phoenix.monitoring.PhoenixMetrics;
+import org.apache.phoenix.monitoring.GlobalClientMetrics;
+import org.apache.phoenix.monitoring.MutationMetricQueue;
+import org.apache.phoenix.monitoring.MutationMetricQueue.MutationMetric;
+import org.apache.phoenix.monitoring.MutationMetricQueue.NoOpMutationMetricsQueue;
+import org.apache.phoenix.monitoring.ReadMetricQueue;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PRow;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.ValueSchema.Field;
+import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SQLCloseable;
+import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.TransactionUtil;
-import org.cloudera.htrace.Span;
-import org.cloudera.htrace.TraceScope;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -102,10 +116,7 @@ public class MutationState implements SQLCloseable {
     
     private PhoenixConnection connection;
     private final long maxSize;
-    // map from table to rows 
-    //   rows - map from rowkey to columns
-    //      columns - map from column to value
-    private final Map<TableRef, Map<ImmutableBytesPtr,Map<PColumn,byte[]>>> mutations = Maps.newHashMapWithExpectedSize(3); // TODO: Sizing?
+    private final Map<TableRef, Map<ImmutableBytesPtr,RowMutationState>> mutations;
     private final List<TransactionAware> txAwares;
     private final TransactionContext txContext;
     private final Set<String> uncommittedPhysicalNames = Sets.newHashSetWithExpectedSize(10);
@@ -115,12 +126,16 @@ public class MutationState implements SQLCloseable {
     private int numRows = 0;
     private boolean txStarted = false;
     
+    private final ImmutableBytesPtr tempPtr = new ImmutableBytesPtr();
+    private final MutationMetricQueue mutationMetricQueue;
+    private ReadMetricQueue readMetricQueue;
+    
     public MutationState(long maxSize, PhoenixConnection connection) {
-        this(maxSize,connection,null);
+        this(maxSize,connection, null);
     }
     
     public MutationState(MutationState mutationState) {
-        this(mutationState.maxSize,mutationState.connection,mutationState.getTransaction());
+        this(mutationState.maxSize, mutationState.connection, mutationState.getTransaction());
     }
     
     public MutationState(long maxSize, PhoenixConnection connection, long sizeOffset) {
@@ -132,28 +147,34 @@ public class MutationState implements SQLCloseable {
     }
     
     private MutationState(long maxSize, PhoenixConnection connection, Transaction tx, long sizeOffset) {
-        this.maxSize = maxSize;
-        this.connection = connection;
+    	this(maxSize, connection, Maps.<TableRef, Map<ImmutableBytesPtr,RowMutationState>>newHashMapWithExpectedSize(connection.getMutateBatchSize()), tx);
         this.sizeOffset = sizeOffset;
-        this.tx = tx;
-        if (tx == null) {
-          this.txAwares = Collections.emptyList();
-          TransactionSystemClient txServiceClient = this.connection.getQueryServices().getTransactionSystemClient();
-          this.txContext = new TransactionContext(txServiceClient);
-        } else {
-            txAwares = Lists.newArrayList();
-            txContext = null;
-        }
     }
     
-    public MutationState(TableRef table, Map<ImmutableBytesPtr,Map<PColumn,byte[]>> mutations, long sizeOffset, long maxSize, PhoenixConnection connection) {
-        this.maxSize = maxSize;
-        this.connection = connection;
+	MutationState(long maxSize, PhoenixConnection connection,
+			Map<TableRef, Map<ImmutableBytesPtr, RowMutationState>> mutations,
+			Transaction tx) {
+		this.maxSize = maxSize;
+		this.connection = connection;
+		this.mutations = mutations;
+		boolean isMetricsEnabled = connection.isRequestLevelMetricsEnabled();
+		this.mutationMetricQueue = isMetricsEnabled ? new MutationMetricQueue()
+				: NoOpMutationMetricsQueue.NO_OP_MUTATION_METRICS_QUEUE;
+		if (tx == null) {
+			this.txAwares = Collections.emptyList();
+			TransactionSystemClient txServiceClient = this.connection
+					.getQueryServices().getTransactionSystemClient();
+			this.txContext = new TransactionContext(txServiceClient);
+		} else {
+			txAwares = Lists.newArrayList();
+			txContext = null;
+		}
+	}
+
+    public MutationState(TableRef table, Map<ImmutableBytesPtr,RowMutationState> mutations, long sizeOffset, long maxSize, PhoenixConnection connection) {
+        this(maxSize, connection, null, sizeOffset);
         this.mutations.put(table, mutations);
-        this.sizeOffset = sizeOffset;
         this.numRows = mutations.size();
-        this.txAwares = Lists.newArrayList();
-        this.txContext = null;
         this.tx = connection.getMutationState().getTransaction();
         throwIfTooBig();
     }
@@ -299,6 +320,12 @@ public class MutationState implements SQLCloseable {
         }
         return false;
     }
+
+    public static MutationState emptyMutationState(long maxSize, PhoenixConnection connection) {
+        MutationState state = new MutationState(maxSize, connection, Collections.<TableRef, Map<ImmutableBytesPtr,RowMutationState>>emptyMap(), null);
+        state.sizeOffset = 0;
+        return state;
+    }
     
     private void throwIfTooBig() {
         if (numRows > maxSize) {
@@ -312,12 +339,13 @@ public class MutationState implements SQLCloseable {
     }
     
     /**
-     * Combine a newer mutation with this one, where in the event of overlaps,
-     * the newer one will take precedence.
-     * @param newMutation the newer mutation
+     * Combine a newer mutation with this one, where in the event of overlaps, the newer one will take precedence.
+     * Combine any metrics collected for the newer mutation.
+     * 
+     * @param newMutationState the newer mutation state
      */
-    public void join(MutationState newMutation) {
-        if (this == newMutation) { // Doesn't make sense
+    public void join(MutationState newMutationState) {
+        if (this == newMutationState) { // Doesn't make sense
             return;
         }
         // TODO: what if new and old have txContext as that's really an error
@@ -327,33 +355,32 @@ public class MutationState implements SQLCloseable {
                 txContext.addTransactionAware(txAware);
             }
         } else {
-            txAwares.addAll(newMutation.txAwares);
+            txAwares.addAll(newMutationState.txAwares);
         }
-        this.sizeOffset += newMutation.sizeOffset;
+        this.sizeOffset += newMutationState.sizeOffset;
         // Merge newMutation with this one, keeping state from newMutation for any overlaps
-        for (Map.Entry<TableRef, Map<ImmutableBytesPtr,Map<PColumn,byte[]>>> entry : newMutation.mutations.entrySet()) {
+        for (Map.Entry<TableRef, Map<ImmutableBytesPtr,RowMutationState>> entry : newMutationState.mutations.entrySet()) {
             // Replace existing entries for the table with new entries
             TableRef tableRef = entry.getKey();
             PTable table = tableRef.getTable();
             boolean isIndex = table.getType() == PTableType.INDEX;
-            Map<ImmutableBytesPtr,Map<PColumn,byte[]>> existingRows = this.mutations.put(tableRef, entry.getValue());
+            Map<ImmutableBytesPtr,RowMutationState> existingRows = this.mutations.put(tableRef, entry.getValue());
             if (existingRows != null) { // Rows for that table already exist
                 // Loop through new rows and replace existing with new
-                for (Map.Entry<ImmutableBytesPtr,Map<PColumn,byte[]>> rowEntry : entry.getValue().entrySet()) {
+                for (Map.Entry<ImmutableBytesPtr,RowMutationState> rowEntry : entry.getValue().entrySet()) {
                     // Replace existing row with new row
-                    Map<PColumn,byte[]> existingValues = existingRows.put(rowEntry.getKey(), rowEntry.getValue());
-                    if (existingValues != null) {
+                	RowMutationState existingRowMutationState = existingRows.put(rowEntry.getKey(), rowEntry.getValue());
+                    if (existingRowMutationState != null) {
+                    	Map<PColumn,byte[]> existingValues = existingRowMutationState.getColumnValues();
                         if (existingValues != PRow.DELETE_MARKER) {
-                            Map<PColumn,byte[]> newRow = rowEntry.getValue();
+                            Map<PColumn,byte[]> newRow = rowEntry.getValue().getColumnValues();
                             // if new row is PRow.DELETE_MARKER, it means delete, and we don't need to merge it with existing row. 
                             if (newRow != PRow.DELETE_MARKER) {
-                                // Replace existing column values with new column values
-                                for (Map.Entry<PColumn,byte[]> valueEntry : newRow.entrySet()) {
-                                    existingValues.put(valueEntry.getKey(), valueEntry.getValue());
-                                }
+                                // Merge existing column values with new column values
+                                existingRowMutationState.join(rowEntry.getValue());
                                 // Now that the existing row has been merged with the new row, replace it back
-                                // again (since it was replaced with the new one above).
-                                existingRows.put(rowEntry.getKey(), existingValues);
+                                // again (since it was merged with the new one above).
+                                existingRows.put(rowEntry.getKey(), existingRowMutationState);
                             }
                         }
                     } else {
@@ -370,13 +397,42 @@ public class MutationState implements SQLCloseable {
                 }
             }
         }
+        mutationMetricQueue.combineMetricQueues(newMutationState.mutationMetricQueue);
+        if (readMetricQueue == null) {
+            readMetricQueue = newMutationState.readMetricQueue;
+        } else if (readMetricQueue != null && newMutationState.readMetricQueue != null) {
+            readMetricQueue.combineReadMetrics(newMutationState.readMetricQueue);
+        }
         throwIfTooBig();
     }
     
-    private Iterator<Pair<byte[],List<Mutation>>> addRowMutations(final TableRef tableRef, final Map<ImmutableBytesPtr, Map<PColumn, byte[]>> values, final long timestamp, boolean includeMutableIndexes, final boolean sendAll) {
+
+	private static ImmutableBytesPtr getNewRowKeyWithRowTimestamp(ImmutableBytesPtr ptr, long rowTimestamp, PTable table) {
+        RowKeySchema schema = table.getRowKeySchema();
+        int rowTimestampColPos = table.getRowTimestampColPos();
+        Field rowTimestampField = schema.getField(rowTimestampColPos); 
+        byte[] rowTimestampBytes = PLong.INSTANCE.toBytes(rowTimestamp, rowTimestampField.getSortOrder());
+        int oldOffset = ptr.getOffset();
+        int oldLength = ptr.getLength();
+        // Move the pointer to the start byte of the row timestamp pk
+        schema.position(ptr, 0, rowTimestampColPos);
+        byte[] b  = ptr.get();
+        int newOffset = ptr.getOffset();
+        int length = ptr.getLength();
+        for (int i = newOffset; i < newOffset + length; i++) {
+            // modify the underlying bytes array with the bytes of the row timestamp
+            b[i] = rowTimestampBytes[i - newOffset];
+        }
+        // move the pointer back to where it was before.
+        ptr.set(ptr.get(), oldOffset, oldLength);
+        return ptr;
+    }
+    
+	private Iterator<Pair<byte[],List<Mutation>>> addRowMutations(final TableRef tableRef, final Map<ImmutableBytesPtr, RowMutationState> values, final long timestamp, boolean includeMutableIndexes, final boolean sendAll) { 
+        final PTable table = tableRef.getTable();
         final Iterator<PTable> indexes = // Only maintain tables with immutable rows through this client-side mechanism
-                (tableRef.getTable().isImmutableRows() || includeMutableIndexes) ? 
-                        IndexMaintainer.nonDisabledIndexIterator(tableRef.getTable().getIndexes().iterator()) : 
+                (table.isImmutableRows() || includeMutableIndexes) ? 
+                        IndexMaintainer.nonDisabledIndexIterator(table.getIndexes().iterator()) : 
                         Iterators.<PTable>emptyIterator();
         final List<Mutation> mutationList = Lists.newArrayListWithExpectedSize(values.size());
         final List<Mutation> mutationsPertainingToIndex = indexes.hasNext() ? Lists.<Mutation>newArrayListWithExpectedSize(values.size()) : null;
@@ -393,18 +449,18 @@ public class MutationState implements SQLCloseable {
             public Pair<byte[], List<Mutation>> next() {
                 if (isFirst) {
                     isFirst = false;
-                    return new Pair<byte[],List<Mutation>>(tableRef.getTable().getPhysicalName().getBytes(),mutationList);
+                    return new Pair<byte[],List<Mutation>>(table.getPhysicalName().getBytes(), mutationList);
                 }
                 PTable index = indexes.next();
                 List<Mutation> indexMutations;
                 try {
                     indexMutations =
-                            IndexUtil.generateIndexData(tableRef.getTable(), index, mutationsPertainingToIndex,
-                                    connection.getKeyValueBuilder(), connection);
+                            IndexUtil.generateIndexData(table, index, mutationsPertainingToIndex,
+                                connection.getKeyValueBuilder(), connection);
                     // we may also have to include delete mutations for immutable tables if we are not processing all the tables in the mutations map
                     if (!sendAll) {
 	                    TableRef key = new TableRef(index);
-						Map<ImmutableBytesPtr, Map<PColumn, byte[]>> rowToColumnMap = mutations.remove(key);
+						Map<ImmutableBytesPtr, RowMutationState> rowToColumnMap = mutations.remove(key);
 	                    if (rowToColumnMap!=null) {
 		                    final List<Mutation> deleteMutations = Lists.newArrayList();
 		                    generateMutations(tableRef, timestamp, rowToColumnMap, deleteMutations, null);
@@ -426,16 +482,31 @@ public class MutationState implements SQLCloseable {
     }
 
 	private void generateMutations(final TableRef tableRef, long timestamp,
-			final Map<ImmutableBytesPtr, Map<PColumn, byte[]>> values,
+			final Map<ImmutableBytesPtr, RowMutationState> values,
 			final List<Mutation> mutationList,
 			final List<Mutation> mutationsPertainingToIndex) {
-		Iterator<Map.Entry<ImmutableBytesPtr,Map<PColumn,byte[]>>> iterator = values.entrySet().iterator();
+		final PTable table = tableRef.getTable();
+        boolean tableWithRowTimestampCol = table.getRowTimestampColPos() != -1;
+		Iterator<Map.Entry<ImmutableBytesPtr,RowMutationState>> iterator = values.entrySet().iterator();
+		long timestampToUse = timestamp;
         while (iterator.hasNext()) {
-            Map.Entry<ImmutableBytesPtr,Map<PColumn,byte[]>> rowEntry = iterator.next();
+            Entry<ImmutableBytesPtr, RowMutationState> rowEntry = iterator.next();
             ImmutableBytesPtr key = rowEntry.getKey();
-			PRow row = tableRef.getTable().newRow(connection.getKeyValueBuilder(), timestamp, key);
+            RowMutationState state = rowEntry.getValue();
+            if (tableWithRowTimestampCol) {
+                RowTimestampColInfo rowTsColInfo = state.getRowTimestampColInfo();
+                if (rowTsColInfo.useServerTimestamp()) {
+                    // regenerate the key with this timestamp.
+                    key = getNewRowKeyWithRowTimestamp(key, timestampToUse, table);
+                } else {
+                    if (rowTsColInfo.getTimestamp() != null) {
+                        timestampToUse = rowTsColInfo.getTimestamp();
+                    }
+                }
+            }
+			PRow row = tableRef.getTable().newRow(connection.getKeyValueBuilder(), timestampToUse, key);
 			List<Mutation> rowMutations, rowMutationsPertainingToIndex;
-			if (rowEntry.getValue() == PRow.DELETE_MARKER) { // means delete
+			if (rowEntry.getValue().getColumnValues() == PRow.DELETE_MARKER) { // means delete
 			    row.delete();
 			    rowMutations = row.toRowMutations();
 			    // Row deletes for index tables are processed by running a re-written query
@@ -443,7 +514,7 @@ public class MutationState implements SQLCloseable {
 			    // delete rows).
 			    rowMutationsPertainingToIndex = Collections.emptyList();
 			} else {
-			    for (Map.Entry<PColumn,byte[]> valueEntry : rowEntry.getValue().entrySet()) {
+				for (Map.Entry<PColumn,byte[]> valueEntry : rowEntry.getValue().getColumnValues().entrySet()) {
 			        row.setValue(valueEntry.getKey(), valueEntry.getValue());
 			    }
 			    rowMutations = row.toRowMutations();
@@ -463,7 +534,7 @@ public class MutationState implements SQLCloseable {
     }
     
     public Iterator<Pair<byte[],List<Mutation>>> toMutations(final boolean includeMutableIndexes, final Long tableTimestamp) {
-        final Iterator<Map.Entry<TableRef, Map<ImmutableBytesPtr,Map<PColumn,byte[]>>>> iterator = this.mutations.entrySet().iterator();
+        final Iterator<Map.Entry<TableRef, Map<ImmutableBytesPtr,RowMutationState>>> iterator = this.mutations.entrySet().iterator();
         if (!iterator.hasNext()) {
             return Iterators.emptyIterator();
         }
@@ -471,7 +542,7 @@ public class MutationState implements SQLCloseable {
         final long timestamp = (tableTimestamp!=null && tableTimestamp!=QueryConstants.UNSET_TIMESTAMP) ? tableTimestamp : (scn == null ? HConstants.LATEST_TIMESTAMP : scn);
 //        final long timestamp = (scn == null ? HConstants.LATEST_TIMESTAMP : scn);
         return new Iterator<Pair<byte[],List<Mutation>>>() {
-            private Map.Entry<TableRef, Map<ImmutableBytesPtr,Map<PColumn,byte[]>>> current = iterator.next();
+            private Map.Entry<TableRef, Map<ImmutableBytesPtr,RowMutationState>> current = iterator.next();
             private Iterator<Pair<byte[],List<Mutation>>> innerIterator = init();
                     
             private Iterator<Pair<byte[],List<Mutation>>> init() {
@@ -499,32 +570,32 @@ public class MutationState implements SQLCloseable {
         };
     }
         
-    /**
-     * Validates that the meta data is valid against the server meta data if we haven't yet done so.
-     * Otherwise, for every UPSERT VALUES call, we'd need to hit the server to see if the meta data
-     * has changed.
-     * @param connection
-     * @return the server time to use for the upsert
-     * @throws SQLException if the table or any columns no longer exist
-     */
-    private long[] validateAll() throws SQLException {
-        int i = 0;
-        long[] timeStamps = new long[this.mutations.size()];
-        for (Map.Entry<TableRef, Map<ImmutableBytesPtr,Map<PColumn,byte[]>>> entry : mutations.entrySet()) {
-            TableRef tableRef = entry.getKey();
-            timeStamps[i++] = validate(tableRef, entry.getValue());
-        }
-        return timeStamps;
-    }
-    
-    private long validate(TableRef tableRef, Map<ImmutableBytesPtr,Map<PColumn,byte[]>> values) throws SQLException {
-        Long scn = connection.getSCN();
-        MetaDataClient client = new MetaDataClient(connection);
-        long serverTimeStamp = tableRef.getTimeStamp();
-        PTable table = tableRef.getTable();
-        // If we're auto committing, we've already validated the schema when we got the ColumnResolver,
-        // so no need to do it again here.
-        if (!connection.getAutoCommit()) {
+	/**
+	 * Validates that the meta data is valid against the server meta data if we haven't yet done so.
+	 * Otherwise, for every UPSERT VALUES call, we'd need to hit the server to see if the meta data
+	 * has changed.
+	 * @param connection
+	 * @return the server time to use for the upsert
+	 * @throws SQLException if the table or any columns no longer exist
+	 */
+	private long[] validateAll() throws SQLException {
+	    int i = 0;
+	    long[] timeStamps = new long[this.mutations.size()];
+	    for (Map.Entry<TableRef, Map<ImmutableBytesPtr,RowMutationState>> entry : mutations.entrySet()) {
+	        TableRef tableRef = entry.getKey();
+	        timeStamps[i++] = validate(tableRef, entry.getValue());
+	    }
+	    return timeStamps;
+	}
+	
+	private long validate(TableRef tableRef, Map<ImmutableBytesPtr, RowMutationState> rowKeyToColumnMap) throws SQLException {
+	    Long scn = connection.getSCN();
+	    MetaDataClient client = new MetaDataClient(connection);
+	    long serverTimeStamp = tableRef.getTimeStamp();
+	    PTable table = tableRef.getTable();
+	    // If we're auto committing, we've already validated the schema when we got the ColumnResolver,
+	    // so no need to do it again here.
+	    if (!connection.getAutoCommit()) {
             MetaDataMutationResult result = client.updateCache(table.getSchemaName().getString(), table.getTableName().getString());
             long timestamp = result.getMutationTime();
             if (timestamp != QueryConstants.UNSET_TIMESTAMP) {
@@ -533,12 +604,15 @@ public class MutationState implements SQLCloseable {
                     // TODO: use bitset?
                     table = result.getTable();
                     PColumn[] columns = new PColumn[table.getColumns().size()];
-                    for (Map.Entry<ImmutableBytesPtr,Map<PColumn,byte[]>> rowEntry : values.entrySet()) {
-                        Map<PColumn,byte[]> valueEntry = rowEntry.getValue();
-                        if (valueEntry != PRow.DELETE_MARKER) {
-                            for (PColumn column : valueEntry.keySet()) {
-                                columns[column.getPosition()] = column;
-                            }
+                    for (Map.Entry<ImmutableBytesPtr,RowMutationState> rowEntry : rowKeyToColumnMap.entrySet()) {
+                    	RowMutationState valueEntry = rowEntry.getValue();
+                        if (valueEntry != null) {
+                        	Map<PColumn, byte[]> colValues = valueEntry.getColumnValues();
+                        	if (colValues != PRow.DELETE_MARKER) {
+                                for (PColumn column : colValues.keySet()) {
+                                    columns[column.getPosition()] = column;
+                                }
+                        	}
                         }
                     }
                     for (PColumn column : columns) {
@@ -550,21 +624,18 @@ public class MutationState implements SQLCloseable {
                 }
             }
         }
-        return scn == null ? serverTimeStamp == QueryConstants.UNSET_TIMESTAMP ? HConstants.LATEST_TIMESTAMP : serverTimeStamp : scn;
-    }
+	    return scn == null ? serverTimeStamp == QueryConstants.UNSET_TIMESTAMP ? HConstants.LATEST_TIMESTAMP : serverTimeStamp : scn;
+	}
     
-    private static void logMutationSize(HTableInterface htable, List<Mutation> mutations, PhoenixConnection connection) {
+    private static long calculateMutationSize(List<Mutation> mutations) {
         long byteSize = 0;
-        int keyValueCount = 0;
-        if (PhoenixMetrics.isMetricsEnabled() || logger.isDebugEnabled()) {
+        if (GlobalClientMetrics.isMetricsEnabled()) {
             for (Mutation mutation : mutations) {
                 byteSize += mutation.heapSize();
             }
-            MUTATION_BYTES.update(byteSize);
-            if (logger.isDebugEnabled()) {
-                logger.debug(LogUtil.addCustomAnnotations("Sending " + mutations.size() + " mutations for " + Bytes.toString(htable.getTableName()) + " with " + keyValueCount + " key values of total size " + byteSize + " bytes", connection));
-            }
         }
+        GLOBAL_MUTATION_BYTES.update(byteSize);
+        return byteSize;
     }
     
     private boolean hasKeyValueColumn(PTable table, PTable index) {
@@ -655,136 +726,142 @@ public class MutationState implements SQLCloseable {
         }
 
         // add tracing for this operation
-        TraceScope trace = Tracing.startNewSpan(connection, "Committing mutations to tables");
-        Span span = trace.getSpan();
-        ImmutableBytesWritable indexMetaDataPtr = new ImmutableBytesWritable();
-        while (tableRefIterator.hasNext()) {
-            TableRef tableRef = tableRefIterator.next();
-            Map<ImmutableBytesPtr,Map<PColumn,byte[]>> valuesMap = mutations.get(tableRef);
-            if (valuesMap == null) {
-                continue;
-            }
-            PTable table = tableRef.getTable();
-            // Track tables to which we've sent uncommitted data
-            if (table.isTransactional()) {
-                uncommittedPhysicalNames.add(table.getPhysicalName().getString());
-            }
-            table.getIndexMaintainers(indexMetaDataPtr, connection);
-            boolean isDataTable = true;
-            // Validate as we go if transactional since we can undo if a problem occurs (which is unlikely)
-            long serverTimestamp = serverTimeStamps == null ? validate(tableRef, valuesMap) : serverTimeStamps[i++];
-            Iterator<Pair<byte[],List<Mutation>>> mutationsIterator = addRowMutations(tableRef, valuesMap, serverTimestamp, false, sendAll);
-            while (mutationsIterator.hasNext()) {
-                Pair<byte[],List<Mutation>> pair = mutationsIterator.next();
-                byte[] htableName = pair.getFirst();
-                List<Mutation> mutations = pair.getSecond();
-                
-                //create a span per target table
-                //TODO maybe we can be smarter about the table name to string here?
-                Span child = Tracing.child(span,"Writing mutation batch for table: "+Bytes.toString(htableName));
-
-                int retryCount = 0;
-                boolean shouldRetry = false;
-                do {
-                    ServerCache cache = null;
-                    if (isDataTable) {
-                        cache = setMetaDataOnMutations(tableRef, mutations, indexMetaDataPtr);
-                    }
-                
-                    // If we haven't retried yet, retry for this case only, as it's possible that
-                    // a split will occur after we send the index metadata cache to all known
-                    // region servers.
-                    shouldRetry = cache != null;
-                    SQLException sqlE = null;
-                    HTableInterface hTable = connection.getQueryServices().getTable(htableName);
-                    try {
-                        if (table.isTransactional()) {
-                            // If we have indexes, wrap the HTable in a delegate HTable that
-                            // will attach the necessary index meta data in the event of a
-                            // rollback
-                            if (!table.getIndexes().isEmpty()) {
-                                hTable = new MetaDataAwareHTable(hTable, tableRef);
-                            }
-                            TransactionAwareHTable txnAware = TransactionUtil.getTransactionAwareHTable(hTable, table);
-                            // Don't add immutable indexes (those are the only ones that would participate
-                            // during a commit), as we don't need conflict detection for these.
-                            if (isDataTable) {
-                                // Even for immutable, we need to do this so that an abort has the state
-                                // necessary to generate the rows to delete.
-                                addTransactionParticipant(txnAware);
-                            } else {
-                                txnAware.startTx(getTransaction());
-                            }
-                            hTable = txnAware;
-                        }
-                        logMutationSize(hTable, mutations, connection);
-                        MUTATION_BATCH_SIZE.update(mutations.size());
-                        long startTime = System.currentTimeMillis();
-                        child.addTimelineAnnotation("Attempt " + retryCount);
-                        hTable.batch(mutations);
-                        child.stop();
-                        long duration = System.currentTimeMillis() - startTime;
-                        MUTATION_COMMIT_TIME.update(duration);
-                        shouldRetry = false;
-                        if (logger.isDebugEnabled()) logger.debug(LogUtil.addCustomAnnotations("Total time for batch call of  " + mutations.size() + " mutations into " + table.getName().getString() + ": " + duration + " ms", connection));
-                    } catch (Exception e) {
-                        SQLException inferredE = ServerUtil.parseServerExceptionOrNull(e);
-                        if (inferredE != null) {
-                            if (shouldRetry && retryCount == 0 && inferredE.getErrorCode() == SQLExceptionCode.INDEX_METADATA_NOT_FOUND.getErrorCode()) {
-                                // Swallow this exception once, as it's possible that we split after sending the index metadata
-                                // and one of the region servers doesn't have it. This will cause it to have it the next go around.
-                                // If it fails again, we don't retry.
-                                String msg = "Swallowing exception and retrying after clearing meta cache on connection. " + inferredE;
-                                logger.warn(LogUtil.addCustomAnnotations(msg, connection));
-                                connection.getQueryServices().clearTableRegionCache(htableName);
-
-                                // add a new child span as this one failed
-                                child.addTimelineAnnotation(msg);
-                                child.stop();
-                                child = Tracing.child(span,"Failed batch, attempting retry");
-
-                                continue;
-                            }
-                            e = inferredE;
-                        }
-                        // Throw to client with both what was committed so far and what is left to be committed.
-                        // That way, client can either undo what was done or try again with what was not done.
-                        sqlE = new CommitException(e, this);
-                    } finally {
-                        try {
-                            if (cache != null) {
-                                cache.close();
-                            }
-                        } finally {
-                            try {
-                                hTable.close();
-                            } 
-                            catch (IOException e) {
-                                if (sqlE != null) {
-                                    sqlE.setNextException(ServerUtil.parseServerException(e));
-                                } else {
-                                    sqlE = ServerUtil.parseServerException(e);
-                                }
-                            } 
-                            if (sqlE != null) {
-                                throw sqlE;
-                            }
-                        }
-                    }
-                } while (shouldRetry && retryCount++ < 1);
-                isDataTable = false;
-            }
-            if (tableRef.getTable().getType() != PTableType.INDEX) {
-                numRows -= valuesMap.size();
-            }
-            // Remove batches as we process them
-            if (sendAll) {
-            	tableRefIterator.remove(); // Iterating through actual map in this case
-            } else {
-            	mutations.remove(tableRef);
-            }
+        try (TraceScope trace = Tracing.startNewSpan(connection, "Committing mutations to tables")) {
+            Span span = trace.getSpan();
+	        ImmutableBytesWritable indexMetaDataPtr = new ImmutableBytesWritable();
+	        while (tableRefIterator.hasNext()) {
+	        	// at this point we are going through mutations for each table
+	            TableRef tableRef = tableRefIterator.next();
+	            Map<ImmutableBytesPtr, RowMutationState> valuesMap = mutations.get(tableRef);
+	            if (valuesMap == null) {
+	                continue;
+	            }
+	            PTable table = tableRef.getTable();
+	            // Track tables to which we've sent uncommitted data
+	            if (table.isTransactional()) {
+	                uncommittedPhysicalNames.add(table.getPhysicalName().getString());
+	            }
+	            table.getIndexMaintainers(indexMetaDataPtr, connection);
+	            boolean isDataTable = true;
+	            // Validate as we go if transactional since we can undo if a problem occurs (which is unlikely)
+	            long serverTimestamp = serverTimeStamps == null ? validate(tableRef, valuesMap) : serverTimeStamps[i++];
+	            Iterator<Pair<byte[],List<Mutation>>> mutationsIterator = addRowMutations(tableRef, valuesMap, serverTimestamp, false, sendAll);
+	            while (mutationsIterator.hasNext()) {
+	                Pair<byte[],List<Mutation>> pair = mutationsIterator.next();
+	                byte[] htableName = pair.getFirst();
+	                List<Mutation> mutations = pair.getSecond();
+	                
+	                //create a span per target table
+	                //TODO maybe we can be smarter about the table name to string here?
+	                Span child = Tracing.child(span,"Writing mutation batch for table: "+Bytes.toString(htableName));
+	
+	                int retryCount = 0;
+	                boolean shouldRetry = false;
+	                do {
+	                    ServerCache cache = null;
+	                    if (isDataTable) {
+	                        cache = setMetaDataOnMutations(tableRef, mutations, indexMetaDataPtr);
+	                    }
+	                
+	                    // If we haven't retried yet, retry for this case only, as it's possible that
+	                    // a split will occur after we send the index metadata cache to all known
+	                    // region servers.
+	                    shouldRetry = cache != null;
+	                    SQLException sqlE = null;
+	                    HTableInterface hTable = connection.getQueryServices().getTable(htableName);
+	                    try {
+	                        if (table.isTransactional()) {
+	                            // If we have indexes, wrap the HTable in a delegate HTable that
+	                            // will attach the necessary index meta data in the event of a
+	                            // rollback
+	                            if (!table.getIndexes().isEmpty()) {
+	                                hTable = new MetaDataAwareHTable(hTable, tableRef);
+	                            }
+	                            TransactionAwareHTable txnAware = TransactionUtil.getTransactionAwareHTable(hTable, table);
+	                            // Don't add immutable indexes (those are the only ones that would participate
+	                            // during a commit), as we don't need conflict detection for these.
+	                            if (isDataTable) {
+	                                // Even for immutable, we need to do this so that an abort has the state
+	                                // necessary to generate the rows to delete.
+	                                addTransactionParticipant(txnAware);
+	                            } else {
+	                                txnAware.startTx(getTransaction());
+	                            }
+	                            hTable = txnAware;
+	                        }
+	                        long numMutations = mutations.size();
+                            GLOBAL_MUTATION_BATCH_SIZE.update(numMutations);
+                            
+                            long startTime = System.currentTimeMillis();
+                            child.addTimelineAnnotation("Attempt " + retryCount);;
+	                        hTable.batch(mutations);
+	                        child.stop();
+	                        child.stop();
+                            shouldRetry = false;
+                            long mutationCommitTime = System.currentTimeMillis() - startTime;
+                            GLOBAL_MUTATION_COMMIT_TIME.update(mutationCommitTime);
+                            
+                            long mutationSizeBytes = calculateMutationSize(mutations);
+                            MutationMetric mutationsMetric = new MutationMetric(numMutations, mutationSizeBytes, mutationCommitTime);
+                            mutationMetricQueue.addMetricsForTable(Bytes.toString(htableName), mutationsMetric);
+	                    } catch (Exception e) {
+	                        SQLException inferredE = ServerUtil.parseServerExceptionOrNull(e);
+	                        if (inferredE != null) {
+	                            if (shouldRetry && retryCount == 0 && inferredE.getErrorCode() == SQLExceptionCode.INDEX_METADATA_NOT_FOUND.getErrorCode()) {
+	                                // Swallow this exception once, as it's possible that we split after sending the index metadata
+	                                // and one of the region servers doesn't have it. This will cause it to have it the next go around.
+	                                // If it fails again, we don't retry.
+	                                String msg = "Swallowing exception and retrying after clearing meta cache on connection. " + inferredE;
+	                                logger.warn(LogUtil.addCustomAnnotations(msg, connection));
+	                                connection.getQueryServices().clearTableRegionCache(htableName);
+	
+	                                // add a new child span as this one failed
+	                                child.addTimelineAnnotation(msg);
+	                                child.stop();
+	                                child = Tracing.child(span,"Failed batch, attempting retry");
+	
+	                                continue;
+	                            }
+	                            e = inferredE;
+	                        }
+	                        // Throw to client with both what was committed so far and what is left to be committed.
+	                        // That way, client can either undo what was done or try again with what was not done.
+	                        sqlE = new CommitException(e, getUncommittedStatementIndexes());
+	                    } finally {
+	                        try {
+	                            if (cache != null) {
+	                                cache.close();
+	                            }
+	                        } finally {
+	                            try {
+	                                hTable.close();
+	                            } 
+	                            catch (IOException e) {
+	                                if (sqlE != null) {
+	                                    sqlE.setNextException(ServerUtil.parseServerException(e));
+	                                } else {
+	                                    sqlE = ServerUtil.parseServerException(e);
+	                                }
+	                            } 
+	                            if (sqlE != null) {
+	                                throw sqlE;
+	                            }
+	                        }
+	                    }
+	                } while (shouldRetry && retryCount++ < 1);
+	                isDataTable = false;
+	            }
+	            if (tableRef.getTable().getType() != PTableType.INDEX) {
+	                numRows -= valuesMap.size();
+	            }
+	            // Remove batches as we process them
+	            if (sendAll) {
+	            	tableRefIterator.remove(); // Iterating through actual map in this case
+	            } else {
+	            	mutations.remove(tableRef);
+	            }
+	        }
         }
-        trace.close();
         // Note that we cannot assume that *all* mutations have been sent, since we've optimized this
         // now to only send the mutations for the tables we're querying, hence we've removed the
         // assertions that we're here before.
@@ -848,6 +925,16 @@ public class MutationState implements SQLCloseable {
     public void clear() throws SQLException {
         this.mutations.clear();
         numRows = 0;
+    }
+    
+    private int[] getUncommittedStatementIndexes() {
+    	int[] result = new int[0];
+    	for (Map<ImmutableBytesPtr, RowMutationState> rowMutations : mutations.values()) {
+    		for (RowMutationState rowMutationState : rowMutations.values()) {
+    			result = joinSortedIntArrays(result, rowMutationState.getStatementIndexes());
+    		}
+    	}
+    	return result;
     }
     
     @Override
@@ -944,4 +1031,91 @@ public class MutationState implements SQLCloseable {
     public void send() throws SQLException {
         send(null);
     }
+    
+    public static int[] joinSortedIntArrays(int[] a, int[] b) {
+        int[] result = new int[a.length + b.length];
+        int i = 0, j = 0, k = 0, current;
+        while (i < a.length && j < b.length) {
+            current = a[i] < b[j] ? a[i++] : b[j++];
+            for ( ; i < a.length && a[i] == current; i++);
+            for ( ; j < b.length && b[j] == current; j++);
+            result[k++] = current;
+        }
+        while (i < a.length) {
+            for (current = a[i++] ; i < a.length && a[i] == current; i++);
+            result[k++] = current;
+        }
+        while (j < b.length) {
+            for (current = b[j++] ; j < b.length && b[j] == current; j++);
+            result[k++] = current;
+        }
+        return Arrays.copyOf(result, k);
+    }
+    
+    @Immutable
+    public static class RowTimestampColInfo {
+        private final boolean useServerTimestamp;
+        private final Long rowTimestamp; 
+        
+        public static final RowTimestampColInfo NULL_ROWTIMESTAMP_INFO = new RowTimestampColInfo(false, null);
+
+        public RowTimestampColInfo(boolean autoGenerate, Long value) {
+            this.useServerTimestamp = autoGenerate;
+            this.rowTimestamp = value;
+        }
+        
+        public boolean useServerTimestamp() {
+            return useServerTimestamp;
+        }
+        
+        public Long getTimestamp() {
+            return rowTimestamp;
+        }
+    }
+    
+    public static class RowMutationState {
+        @Nonnull private Map<PColumn,byte[]> columnValues;
+        private int[] statementIndexes;
+        @Nonnull private final RowTimestampColInfo rowTsColInfo;
+        
+        public RowMutationState(@Nonnull Map<PColumn,byte[]> columnValues, int statementIndex, @Nonnull RowTimestampColInfo rowTsColInfo) {
+            checkNotNull(columnValues);
+            checkNotNull(rowTsColInfo);
+            this.columnValues = columnValues;
+            this.statementIndexes = new int[] {statementIndex};
+            this.rowTsColInfo = rowTsColInfo;
+        }
+
+        Map<PColumn, byte[]> getColumnValues() {
+            return columnValues;
+        }
+
+        int[] getStatementIndexes() {
+            return statementIndexes;
+        }
+
+        void join(RowMutationState newRow) {
+            getColumnValues().putAll(newRow.getColumnValues());
+            statementIndexes = joinSortedIntArrays(statementIndexes, newRow.getStatementIndexes());
+        }
+        
+        @Nonnull
+        RowTimestampColInfo getRowTimestampColInfo() {
+            return rowTsColInfo;
+        }
+       
+    }
+    
+    public ReadMetricQueue getReadMetricQueue() {
+        return readMetricQueue;
+    }
+
+    public void setReadMetricQueue(ReadMetricQueue readMetricQueue) {
+        this.readMetricQueue = readMetricQueue;
+    }
+
+    public MutationMetricQueue getMutationMetricQueue() {
+        return mutationMetricQueue;
+    }
+    
 }

@@ -17,17 +17,12 @@
  */
 package org.apache.hadoop.hbase.regionserver;
 
-import java.io.IOException;
-import java.sql.SQLException;
-import java.util.List;
-
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.MetaTableAccessor;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.catalog.MetaEditor;
-import org.apache.hadoop.hbase.catalog.MetaReader;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
@@ -39,22 +34,26 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.parse.AlterIndexStatement;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.schema.MetaDataClient;
-import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
+import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
+import java.io.IOException;
+import java.sql.SQLException;
+import java.util.List;
+
 public class LocalIndexSplitter extends BaseRegionObserver {
 
     private static final Log LOG = LogFactory.getLog(LocalIndexSplitter.class);
 
-    private SplitTransaction st = null;
-    private PairOfSameType<HRegion> daughterRegions = null;
+    private SplitTransactionImpl st = null; // FIXME: Uses private type
+    private PairOfSameType<Region> daughterRegions = null;
     private static final ParseNodeFactory FACTORY = new ParseNodeFactory();
     private static final int SPLIT_TXN_MINIMUM_SUPPORTED_VERSION = VersionUtil
             .encodeVersion("0.98.9");
@@ -73,19 +72,20 @@ public class LocalIndexSplitter extends BaseRegionObserver {
                         .getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES)))) {
             TableName indexTable =
                     TableName.valueOf(MetaDataUtil.getLocalIndexPhysicalName(tableDesc.getName()));
-            if (!MetaReader.tableExists(rss.getCatalogTracker(), indexTable)) return;
+            if (!MetaTableAccessor.tableExists(rss.getConnection(), indexTable)) return;
 
-            HRegion indexRegion = IndexUtil.getIndexRegion(environment);
+            Region indexRegion = IndexUtil.getIndexRegion(environment);
             if (indexRegion == null) {
                 LOG.warn("Index region corresponindg to data region " + environment.getRegion()
                         + " not in the same server. So skipping the split.");
                 ctx.bypass();
                 return;
             }
+            // FIXME: Uses private type
             try {
                 int encodedVersion = VersionUtil.encodeVersion(environment.getHBaseVersion());
                 if(encodedVersion >= SPLIT_TXN_MINIMUM_SUPPORTED_VERSION) {
-                    st = new SplitTransaction(indexRegion, splitKey);
+                    st = new SplitTransactionImpl(indexRegion, splitKey);
                     st.useZKForAssignment =
                             environment.getConfiguration().getBoolean("hbase.assignment.usezk",
                                 true);
@@ -99,20 +99,22 @@ public class LocalIndexSplitter extends BaseRegionObserver {
                     ctx.bypass();
                     return;
                 }
-                indexRegion.forceSplit(splitKey);
+                ((HRegion)indexRegion).forceSplit(splitKey);
                 daughterRegions = st.stepsBeforePONR(rss, rss, false);
                 HRegionInfo copyOfParent = new HRegionInfo(indexRegion.getRegionInfo());
                 copyOfParent.setOffline(true);
                 copyOfParent.setSplit(true);
                 // Put for parent
-                Put putParent = MetaEditor.makePutFromRegionInfo(copyOfParent);
-                MetaEditor.addDaughtersToPut(putParent, daughterRegions.getFirst().getRegionInfo(),
-                    daughterRegions.getSecond().getRegionInfo());
+                Put putParent = MetaTableAccessor.makePutFromRegionInfo(copyOfParent);
+                MetaTableAccessor.addDaughtersToPut(putParent,
+                        daughterRegions.getFirst().getRegionInfo(),
+                        daughterRegions.getSecond().getRegionInfo());
                 metaEntries.add(putParent);
                 // Puts for daughters
-                Put putA = MetaEditor.makePutFromRegionInfo(daughterRegions.getFirst().getRegionInfo());
-                Put putB =
-                    MetaEditor.makePutFromRegionInfo(daughterRegions.getSecond().getRegionInfo());
+                Put putA = MetaTableAccessor.makePutFromRegionInfo(
+                        daughterRegions.getFirst().getRegionInfo());
+                Put putB = MetaTableAccessor.makePutFromRegionInfo(
+                        daughterRegions.getSecond().getRegionInfo());
                 st.addLocation(putA, rss.getServerName(), 1);
                 st.addLocation(putB, rss.getServerName(), 1);
                 metaEntries.add(putA);

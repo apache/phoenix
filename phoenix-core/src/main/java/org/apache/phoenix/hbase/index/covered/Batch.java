@@ -20,7 +20,6 @@ package org.apache.phoenix.hbase.index.covered;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 
 /**
@@ -28,9 +27,9 @@ import org.apache.hadoop.hbase.KeyValue;
  */
 public class Batch {
 
-  private static final byte pointDeleteCode = KeyValue.Type.Delete.getCode();
+  private static final long pointDeleteCode = KeyValue.Type.Delete.getCode();
   private final long timestamp;
-  private List<Cell> batch = new ArrayList<Cell>();
+  private List<KeyValue> batch = new ArrayList<KeyValue>();
   private boolean allPointDeletes = true;
 
   /**
@@ -40,8 +39,8 @@ public class Batch {
     this.timestamp = ts;
   }
 
-  public void add(Cell kv){
-    if (pointDeleteCode != kv.getTypeByte()) {
+  public void add(KeyValue kv){
+    if (pointDeleteCode != kv.getType()) {
       allPointDeletes = false;
     }
     batch.add(kv);
@@ -55,7 +54,7 @@ public class Batch {
     return this.timestamp;
   }
 
-  public List<Cell> getKvs() {
+  public List<KeyValue> getKvs() {
     return this.batch;
   }
 }

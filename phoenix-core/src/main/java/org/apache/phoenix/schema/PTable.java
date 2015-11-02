@@ -33,7 +33,7 @@ import org.apache.phoenix.schema.stats.PTableStats;
  *
  * @since 0.1
  */
-public interface PTable {
+public interface PTable extends PMetaDataEntity {
     public static final long INITIAL_SEQ_NUM = 0;
     public static final String IS_IMMUTABLE_ROWS_PROP_NAME = "IMMUTABLE_ROWS";
     public static final boolean DEFAULT_DISABLE_WAL = false;
@@ -321,7 +321,22 @@ public interface PTable {
     Short getViewIndexId();
     PTableKey getKey();
 
-    int getEstimatedSize();
     IndexType getIndexType();
     PTableStats getTableStats();
+    int getBaseColumnCount();
+
+    /**
+     * Determines whether or not we may optimize out an ORDER BY or do a GROUP BY
+     * in-place when the optimizer tells us it's possible. This is due to PHOENIX-2067
+     * and only applicable for tables using DESC primary key column(s) which have
+     * not been upgraded.
+     * @return true if optimizations row key order optimizations are possible
+     */
+    boolean rowKeyOrderOptimizable();
+    
+    /**
+     * @return Position of the column with {@link PColumn#isRowTimestamp()} as true. 
+     * -1 if there is no such column.
+     */
+    int getRowTimestampColPos();
 }

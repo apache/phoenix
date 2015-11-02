@@ -22,7 +22,6 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.Date;
@@ -36,14 +35,13 @@ import java.util.Properties;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
-import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixDriver;
+import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PVarchar;
-import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.StringUtil;
@@ -169,16 +167,6 @@ public class ConnectionlessTest {
         kv = iterator.next();
         assertArrayEquals(expectedRowKey2, kv.getRow());        
         assertEquals(QueryConstants.EMPTY_COLUMN_NAME, PVarchar.INSTANCE.toObject(kv.getValue()));
-    }
-    
-    @Test
-    public void testNoConnectionInfo() throws Exception {
-        try {
-            DriverManager.getConnection(PhoenixRuntime.JDBC_PROTOCOL);
-            fail();
-        } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.MALFORMED_CONNECTION_URL.getSQLState(),e.getSQLState());
-        }
     }
     
     @Test

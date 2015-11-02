@@ -23,6 +23,7 @@ import static org.apache.phoenix.util.TestUtil.closeConnection;
 import static org.apache.phoenix.util.TestUtil.closeStatement;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -443,7 +444,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         conn.commit();
 
         assertIndexExists(conn,true);
-        conn.createStatement().execute("ALTER TABLE " + DATA_TABLE_FULL_NAME + " ADD v3 VARCHAR, k2 DECIMAL PRIMARY KEY");
+        conn.createStatement().execute("ALTER TABLE " + DATA_TABLE_FULL_NAME + " ADD v3 VARCHAR, k2 DECIMAL PRIMARY KEY, k3 DECIMAL PRIMARY KEY");
         rs = conn.getMetaData().getPrimaryKeys("", SCHEMA_NAME, DATA_TABLE_NAME);
         assertTrue(rs.next());
         assertEquals("K",rs.getString("COLUMN_NAME"));
@@ -451,6 +452,10 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         assertTrue(rs.next());
         assertEquals("K2",rs.getString("COLUMN_NAME"));
         assertEquals(2, rs.getShort("KEY_SEQ"));
+        assertTrue(rs.next());
+        assertEquals("K3",rs.getString("COLUMN_NAME"));
+        assertEquals(3, rs.getShort("KEY_SEQ"));
+        assertFalse(rs.next());
 
         rs = conn.getMetaData().getPrimaryKeys("", SCHEMA_NAME, INDEX_TABLE_NAME);
         assertTrue(rs.next());
@@ -462,6 +467,10 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         assertTrue(rs.next());
         assertEquals(IndexUtil.INDEX_COLUMN_NAME_SEP + "K2",rs.getString("COLUMN_NAME"));
         assertEquals(3, rs.getShort("KEY_SEQ"));
+        assertTrue(rs.next());
+        assertEquals(IndexUtil.INDEX_COLUMN_NAME_SEP + "K3",rs.getString("COLUMN_NAME"));
+        assertEquals(4, rs.getShort("KEY_SEQ"));
+        assertFalse(rs.next());
 
         query = "SELECT * FROM " + DATA_TABLE_FULL_NAME;
         rs = conn.createStatement().executeQuery(query);
@@ -473,19 +482,21 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         assertFalse(rs.next());
 
         // load some data into the table
-        stmt = conn.prepareStatement("UPSERT INTO " + DATA_TABLE_FULL_NAME + "(K,K2,V1,V2) VALUES(?,?,?,?)");
+        stmt = conn.prepareStatement("UPSERT INTO " + DATA_TABLE_FULL_NAME + "(K,K2,V1,V2,K3) VALUES(?,?,?,?,?)");
         stmt.setString(1, "b");
         stmt.setBigDecimal(2, BigDecimal.valueOf(2));
         stmt.setString(3, "y");
         stmt.setString(4, "2");
+        stmt.setBigDecimal(5, BigDecimal.valueOf(3));
         stmt.execute();
         conn.commit();
 
-        query = "SELECT k,k2 FROM " + DATA_TABLE_FULL_NAME + " WHERE v1='y'";
+        query = "SELECT k,k2,k3 FROM " + DATA_TABLE_FULL_NAME + " WHERE v1='y'";
         rs = conn.createStatement().executeQuery(query);
         assertTrue(rs.next());
         assertEquals("b",rs.getString(1));
         assertEquals(BigDecimal.valueOf(2),rs.getBigDecimal(2));
+        assertEquals(BigDecimal.valueOf(3),rs.getBigDecimal(3));
         assertFalse(rs.next());
     }
 
@@ -2041,4 +2052,73 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         assertTrue(table.isTransactional());
         assertTrue(htable.getTableDescriptor().getCoprocessors().contains(TransactionProcessor.class.getName()));
     }
+
+    public void testDeclaringColumnAsRowTimestamp() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute("CREATE TABLE T1 (PK1 DATE NOT NULL, PK2 VARCHAR NOT NULL, KV1 VARCHAR CONSTRAINT PK PRIMARY KEY(PK1 ROW_TIMESTAMP, PK2)) ");
+            PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class); 
+            PTable table = phxConn.getMetaDataCache().getTableRef(new PTableKey(phxConn.getTenantId(), "T1")).getTable();
+            // Assert that the column shows up as row time stamp in the cache.
+            assertTrue(table.getColumn("PK1").isRowTimestamp());
+            assertFalse(table.getColumn("PK2").isRowTimestamp());
+            assertIsRowTimestampSet("T1", "PK1");
+            
+            conn.createStatement().execute("CREATE TABLE T6 (PK1 VARCHAR, PK2 DATE PRIMARY KEY ROW_TIMESTAMP, KV1 VARCHAR, KV2 INTEGER)");
+            table = phxConn.getMetaDataCache().getTableRef(new PTableKey(phxConn.getTenantId(), "T6")).getTable();
+            // Assert that the column shows up as row time stamp in the cache.
+            assertFalse(table.getColumn("PK1").isRowTimestamp());
+            assertTrue(table.getColumn("PK2").isRowTimestamp());
+            assertIsRowTimestampSet("T6", "PK2");
+            
+            // Create an index on a table has a row time stamp pk column. The column should show up as a row time stamp column for the index too. 
+            conn.createStatement().execute("CREATE INDEX T6_IDX ON T6 (KV1) include (KV2)");
+            PTable indexTable = phxConn.getMetaDataCache().getTableRef(new PTableKey(phxConn.getTenantId(), "T6_IDX")).getTable();
+            String indexColName = IndexUtil.getIndexColumnName(table.getColumn("PK2"));
+            // Assert that the column shows up as row time stamp in the cache.
+            assertTrue(indexTable.getColumn(indexColName).isRowTimestamp());
+            assertIsRowTimestampSet("T6_IDX", indexColName);
+            
+            // Creating a view with a row_timestamp column in its pk constraint is not allowed
+            try {
+                conn.createStatement().execute("CREATE VIEW T6_VIEW (KV3 VARCHAR, KV4 DATE, KV5 INTEGER, CONSTRAINT PK PRIMARY KEY (KV3, KV4 ROW_TIMESTAMP) ) AS SELECT * FROM T6");
+                fail("Creating a view with a row_timestamp column in its pk constraint is not allowed");
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.ROWTIMESTAMP_NOT_ALLOWED_ON_VIEW.getErrorCode(), e.getErrorCode());
+            }
+            
+            // Make sure that the base table column declared as row_timestamp is also row_timestamp for view
+            conn.createStatement().execute("CREATE VIEW T6_VIEW (KV3 VARCHAR, KV4 VARCHAR, KV5 INTEGER, CONSTRAINT PK PRIMARY KEY (KV3, KV4) ) AS SELECT * FROM T6");
+            PTable view = phxConn.getMetaDataCache().getTableRef(new PTableKey(phxConn.getTenantId(), "T6_VIEW")).getTable();
+            assertNotNull(view.getPKColumn("PK2"));
+            assertTrue(view.getPKColumn("PK2").isRowTimestamp());
+        }
+    }
+    
+    private void assertIsRowTimestampSet(String tableName, String columnName) throws SQLException {
+        String sql = "SELECT IS_ROW_TIMESTAMP FROM SYSTEM.CATALOG WHERE TABLE_SCHEM IS NULL AND TABLE_NAME = ? AND COLUMN_FAMILY IS NULL AND COLUMN_NAME = ?";
+        try(Connection conn = DriverManager.getConnection(getUrl())) {
+            PreparedStatement stmt = conn.prepareStatement(sql);
+            stmt.setString(1, tableName);
+            stmt.setString(2, columnName);
+            ResultSet rs = stmt.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(true, rs.getBoolean(1));
+        }
+    }
+    
+    @Test
+    public void testAddingRowTimestampColumnNotAllowedViaAlterTable() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute("CREATE TABLE T1 (PK1 VARCHAR NOT NULL, PK2 VARCHAR NOT NULL, KV1 VARCHAR CONSTRAINT PK PRIMARY KEY(PK1, PK2)) ");
+            // adding a new pk column that is also row_timestamp is not allowed
+            try {
+                conn.createStatement().execute("ALTER TABLE T1 ADD PK3 DATE PRIMARY KEY ROW_TIMESTAMP");
+                fail("Altering table to add a PK column as row_timestamp column should fail");
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.ROWTIMESTAMP_CREATE_ONLY.getErrorCode(), e.getErrorCode());
+            }
+        }
+    }
+    
 }
+ 

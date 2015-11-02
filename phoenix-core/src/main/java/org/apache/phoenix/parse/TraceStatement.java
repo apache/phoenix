@@ -21,10 +21,12 @@ import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 
 public class TraceStatement implements BindableStatement {
 
-    private boolean traceOn = false;
+    private final boolean traceOn;
+    private final double samplingRate;
 
-    public TraceStatement(boolean isOn) {
+    public TraceStatement(boolean isOn, double samplingRate) {
         this.traceOn = isOn;
+        this.samplingRate = samplingRate;
     }
 
     @Override
@@ -38,6 +40,10 @@ public class TraceStatement implements BindableStatement {
     }
 
     public boolean isTraceOn() {
-        return traceOn == true;
+        return traceOn;
+    }
+
+    public double getSamplingRate() {
+        return samplingRate;
     }
 }

@@ -17,6 +17,9 @@
  */
 package org.apache.phoenix.schema;
 
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.exception.SQLExceptionInfo;
+
 /**
  * 
  * Exception thrown when a schema constraint is violated at the
@@ -29,18 +32,15 @@ public class ConstraintViolationException extends RuntimeException {
 	private static final long serialVersionUID = 1L;
 
     public ConstraintViolationException() {
+        this((String)null);
     }
-
+    
     public ConstraintViolationException(String message) {
-        super(message);
+        super(new SQLExceptionInfo.Builder(
+                SQLExceptionCode.CONSTRAINT_VIOLATION).setMessage(message).build().buildException());
     }
-
+    
     public ConstraintViolationException(Throwable cause) {
-        super(cause);
+        super(cause); // Already wrapped - don't rewrap
     }
-
-    public ConstraintViolationException(String message, Throwable cause) {
-        super(message, cause);
-    }
-
 }

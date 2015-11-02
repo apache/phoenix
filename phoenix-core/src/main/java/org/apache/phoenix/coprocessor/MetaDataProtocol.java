@@ -17,13 +17,17 @@
  */
 package org.apache.phoenix.coprocessor;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import org.apache.hadoop.hbase.util.ByteStringer;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos;
+import org.apache.phoenix.coprocessor.generated.PFunctionProtos;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataService;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
+import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
@@ -31,8 +35,6 @@ import org.apache.phoenix.util.ByteUtil;
 
 import com.google.common.collect.Lists;
 import com.google.protobuf.ByteString;
-import com.google.protobuf.HBaseZeroCopyByteString;
-
 
 /**
  *
@@ -53,15 +55,13 @@ import com.google.protobuf.HBaseZeroCopyByteString;
  */
 public abstract class MetaDataProtocol extends MetaDataService {
     public static final int PHOENIX_MAJOR_VERSION = 4;
-    public static final int PHOENIX_MINOR_VERSION = 2;
-    public static final int PHOENIX_PATCH_NUMBER = 1;
+    public static final int PHOENIX_MINOR_VERSION = 6;
+    public static final int PHOENIX_PATCH_NUMBER = 0;
     public static final int PHOENIX_VERSION =
             VersionUtil.encodeVersion(PHOENIX_MAJOR_VERSION, PHOENIX_MINOR_VERSION, PHOENIX_PATCH_NUMBER);
 
     public static final long MIN_TABLE_TIMESTAMP = 0;
 
-    // Incremented from 5 to 7 with the addition of the STORE_NULLS table option in 4.3
-    public static final long MIN_SYSTEM_TABLE_TIMESTAMP = MIN_TABLE_TIMESTAMP + 7;
     public static final int DEFAULT_MAX_META_DATA_VERSIONS = 1000;
     public static final int DEFAULT_MAX_STAT_DATA_VERSIONS = 3;
     public static final boolean DEFAULT_META_DATA_KEEP_DELETED_CELLS = true;
@@ -71,8 +71,9 @@ public abstract class MetaDataProtocol extends MetaDataService {
     public static final long MIN_SYSTEM_TABLE_TIMESTAMP_4_2_0 = MIN_TABLE_TIMESTAMP + 4;
     public static final long MIN_SYSTEM_TABLE_TIMESTAMP_4_2_1 = MIN_TABLE_TIMESTAMP + 5;
     public static final long MIN_SYSTEM_TABLE_TIMESTAMP_4_3_0 = MIN_TABLE_TIMESTAMP + 7;
-    public static final long MIN_SYSTEM_TABLE_TIMESTAMP_4_4_0 = MIN_TABLE_TIMESTAMP + 8;
-    
+    public static final long MIN_SYSTEM_TABLE_TIMESTAMP_4_5_0 = MIN_TABLE_TIMESTAMP + 8;
+    public static final long MIN_SYSTEM_TABLE_TIMESTAMP_4_6_0 = MIN_TABLE_TIMESTAMP + 9;
+    public static final long MIN_SYSTEM_TABLE_TIMESTAMP = MIN_SYSTEM_TABLE_TIMESTAMP_4_6_0;
     // TODO: pare this down to minimum, as we don't need duplicates for both table and column errors, nor should we need
     // a different code for every type of error.
     // ENTITY_ALREADY_EXISTS, ENTITY_NOT_FOUND, NEWER_ENTITY_FOUND, ENTITY_NOT_IN_REGION, CONCURRENT_MODIFICATION
@@ -88,6 +89,10 @@ public abstract class MetaDataProtocol extends MetaDataService {
         UNALLOWED_TABLE_MUTATION,
         NO_PK_COLUMNS,
         PARENT_TABLE_NOT_FOUND,
+        FUNCTION_ALREADY_EXISTS,
+        FUNCTION_NOT_FOUND,
+        NEWER_FUNCTION_FOUND,
+        FUNCTION_NOT_IN_REGION,
         NO_OP
     };
 
@@ -99,6 +104,7 @@ public abstract class MetaDataProtocol extends MetaDataService {
         private byte[] columnName;
         private byte[] familyName;
         private boolean wasUpdated;
+        private List<PFunction> functions = new ArrayList<PFunction>(1);
 
         public MetaDataMutationResult() {
         }
@@ -115,12 +121,19 @@ public abstract class MetaDataProtocol extends MetaDataService {
            this(returnCode, currentTime, table, Collections.<byte[]> emptyList());
         }
 
+        public MetaDataMutationResult(MutationCode returnCode, long currentTime, List<PFunction> functions, boolean wasUpdated) {
+            this.returnCode = returnCode;
+            this.mutationTime = currentTime;
+            this.functions = functions;
+            this.wasUpdated = wasUpdated;
+         }
+
         // For testing, so that connectionless can set wasUpdated so ColumnResolver doesn't complain
         public MetaDataMutationResult(MutationCode returnCode, long currentTime, PTable table, boolean wasUpdated) {
             this(returnCode, currentTime, table, Collections.<byte[]> emptyList());
             this.wasUpdated = wasUpdated;
          }
-
+        
         public MetaDataMutationResult(MutationCode returnCode, long currentTime, PTable table, List<byte[]> tableNamesToDelete) {
             this.returnCode = returnCode;
             this.mutationTime = currentTime;
@@ -147,6 +160,10 @@ public abstract class MetaDataProtocol extends MetaDataService {
         public void setTable(PTable table) {
             this.table = table;
         }
+        
+        public void setFunction(PFunction function) {
+            this.functions.add(function);
+        }
 
         public List<byte[]> getTableNamesToDelete() {
             return tableNamesToDelete;
@@ -160,6 +177,10 @@ public abstract class MetaDataProtocol extends MetaDataService {
             return familyName;
         }
 
+        public List<PFunction> getFunctions() {
+            return functions;
+        }
+
         public static MetaDataMutationResult constructFromProto(MetaDataResponse proto) {
           MetaDataMutationResult result = new MetaDataMutationResult();
           result.returnCode = MutationCode.values()[proto.getReturnCode().ordinal()];
@@ -167,6 +188,11 @@ public abstract class MetaDataProtocol extends MetaDataService {
           if (proto.hasTable()) {
             result.wasUpdated = true;
             result.table = PTableImpl.createFromProto(proto.getTable());
+          }
+          if (proto.getFunctionCount() > 0) {
+              result.wasUpdated = true;
+              for(PFunctionProtos.PFunction function: proto.getFunctionList())
+              result.functions.add(PFunction.createFromProto(function));
           }
           if (proto.getTablesToDeleteCount() > 0) {
             result.tableNamesToDelete =
@@ -197,14 +223,14 @@ public abstract class MetaDataProtocol extends MetaDataService {
             }
             if (result.getTableNamesToDelete() != null) {
               for (byte[] tableName : result.tableNamesToDelete) {
-                builder.addTablesToDelete(HBaseZeroCopyByteString.wrap(tableName));
+                builder.addTablesToDelete(ByteStringer.wrap(tableName));
               }
             }
             if(result.getColumnName() != null){
-              builder.setColumnName(HBaseZeroCopyByteString.wrap(result.getColumnName()));
+              builder.setColumnName(ByteStringer.wrap(result.getColumnName()));
             }
             if(result.getFamilyName() != null){
-              builder.setFamilyName(HBaseZeroCopyByteString.wrap(result.getFamilyName()));
+              builder.setFamilyName(ByteStringer.wrap(result.getFamilyName()));
             }
           }
           return builder.build();

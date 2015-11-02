@@ -48,6 +48,9 @@ import org.apache.hadoop.hbase.regionserver.RegionServerAccounting;
 import org.apache.hadoop.hbase.regionserver.RegionServerServices;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.FSUtils;
+import org.apache.hadoop.hbase.wal.WAL;
+import org.apache.hadoop.hbase.wal.WALFactory;
+import org.apache.hadoop.hbase.wal.WALSplitter;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.hbase.index.IndexTestingUtils;
 import org.apache.phoenix.hbase.index.TableName;
@@ -65,7 +68,7 @@ import org.mockito.Mockito;
 
 /**
  * For pre-0.94.9 instances, this class tests correctly deserializing WALEdits w/o compression. Post
- * 0.94.9 we can support a custom {@link WALEditCodec}, which handles reading/writing the compressed
+ * 0.94.9 we can support a custom  {@link WALCellCodec} which handles reading/writing the compressed
  * edits.
  * <p>
  * Most of the underlying work (creating/splitting the WAL, etc) is from
@@ -93,13 +96,12 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
   @Before
   public void setUp() throws Exception {
     setupCluster();
+    Path hbaseRootDir = UTIL.getDataTestDir();
     this.conf = HBaseConfiguration.create(UTIL.getConfiguration());
     this.fs = UTIL.getDFSCluster().getFileSystem();
     this.hbaseRootDir = new Path(this.conf.get(HConstants.HBASE_DIR));
     this.oldLogDir = new Path(this.hbaseRootDir, HConstants.HREGION_OLDLOGDIR_NAME);
     this.logDir = new Path(this.hbaseRootDir, HConstants.HREGION_LOGDIR_NAME);
-    // reset the log reader to ensure we pull the one from this config
-    HLogFactory.resetLogReaderClass();
   }
 
   private void setupCluster() throws Exception {
@@ -133,11 +135,11 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
   protected void startCluster() throws Exception {
     UTIL.startMiniDFSCluster(3);
     UTIL.startMiniZKCluster();
-    UTIL.startMiniHBaseCluster(1, 1);
 
     Path hbaseRootDir = UTIL.getDFSCluster().getFileSystem().makeQualified(new Path("/hbase"));
     LOG.info("hbase.rootdir=" + hbaseRootDir);
     UTIL.getConfiguration().set(HConstants.HBASE_DIR, hbaseRootDir.toString());
+    UTIL.startMiniHBaseCluster(1, 1);
   }
 
   @After
@@ -157,7 +159,7 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
   }
 
   /**
-   * Test writing edits into an HRegion, closing it, splitting logs, opening Region again. Verify
+   * Test writing edits into an region, closing it, splitting logs, opening Region again. Verify
    * seqids.
    * @throws Exception on failure
    */
@@ -181,10 +183,13 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
     builder.build(htd);
 
     // create the region + its WAL
-    HRegion region0 = HRegion.createHRegion(hri, hbaseRootDir, this.conf, htd);
+    HRegion region0 = HRegion.createHRegion(hri, hbaseRootDir, this.conf, htd); // FIXME: Uses private type
     region0.close();
-    region0.getLog().closeAndDelete();
-    HLog wal = createWAL(this.conf);
+    region0.getWAL().close();
+
+    WALFactory walFactory = new WALFactory(this.conf, null, "localhost,1234");
+
+    WAL wal = createWAL(this.conf, walFactory);
     RegionServerServices mockRS = Mockito.mock(RegionServerServices.class);
     // mock out some of the internals of the RSS, so we can run CPs
     Mockito.when(mockRS.getWAL(null)).thenReturn(wal);
@@ -206,15 +211,13 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
     // we should then see the server go down
     Mockito.verify(mockRS, Mockito.times(1)).abort(Mockito.anyString(),
       Mockito.any(Exception.class));
-    region.close(true);
-    wal.close();
 
     // then create the index table so we are successful on WAL replay
     CoveredColumnIndexer.createIndexTable(UTIL.getHBaseAdmin(), INDEX_TABLE_NAME);
 
     // run the WAL split and setup the region
-    runWALSplit(this.conf);
-    HLog wal2 = createWAL(this.conf);
+    runWALSplit(this.conf, walFactory);
+    WAL wal2 = createWAL(this.conf, walFactory);
     HRegion region1 = new HRegion(basedir, wal2, this.fs, this.conf, hri, htd, mockRS);
 
     // initialize the region - this should replay the WALEdits from the WAL
@@ -257,8 +260,9 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
    * @return WAL with retries set down from 5 to 1 only.
    * @throws IOException
    */
-  private HLog createWAL(final Configuration c) throws IOException {
-    HLog wal = HLogFactory.createHLog(FileSystem.get(c), logDir, "localhost,1234", c);
+  private WAL createWAL(final Configuration c, WALFactory walFactory) throws IOException {
+    WAL wal = walFactory.getWAL(new byte[]{});
+
     // Set down maximum recovery so we dfsclient doesn't linger retrying something
     // long gone.
     HBaseTestingUtility.setMaxRecoveryErrorCount(((FSHLog) wal).getOutputStream(), 1);
@@ -271,11 +275,11 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
    * @return The single split file made
    * @throws IOException
    */
-  private Path runWALSplit(final Configuration c) throws IOException {
+  private Path runWALSplit(final Configuration c, WALFactory walFactory) throws IOException {
     FileSystem fs = FileSystem.get(c);
     
-    List<Path> splits = HLogSplitter.split(this.hbaseRootDir, new Path(this.logDir, "localhost,1234"),
-        this.oldLogDir, fs, c);
+    List<Path> splits = WALSplitter.split(this.hbaseRootDir, new Path(this.logDir, "localhost,1234"),
+        this.oldLogDir, fs, c, walFactory);
     // Split should generate only 1 file since there's only 1 region
     assertEquals("splits=" + splits, 1, splits.size());
     // Make sure the file exists

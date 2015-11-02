@@ -45,7 +45,9 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.TupleProjector.ProjectedValueTuple;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.iterate.DefaultParallelScanGrouper;
 import org.apache.phoenix.iterate.MappedByteBufferQueue;
+import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixParameterMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
@@ -85,6 +87,7 @@ public class SortMergeJoinPlan implements QueryPlan {
     private final int rhsFieldPosition;
     private final boolean isSingleValueOnly;
     private final Set<TableRef> tableRefs;
+    private final int thresholdBytes;
 
     public SortMergeJoinPlan(StatementContext context, FilterableStatement statement, TableRef table, 
             JoinType type, QueryPlan lhsPlan, QueryPlan rhsPlan, List<Expression> lhsKeyExpressions, List<Expression> rhsKeyExpressions,
@@ -106,9 +109,10 @@ public class SortMergeJoinPlan implements QueryPlan {
         this.tableRefs = Sets.newHashSetWithExpectedSize(lhsPlan.getSourceRefs().size() + rhsPlan.getSourceRefs().size());
         this.tableRefs.addAll(lhsPlan.getSourceRefs());
         this.tableRefs.addAll(rhsPlan.getSourceRefs());
+        this.thresholdBytes = context.getConnection().getQueryServices().getProps().getInt(
+                QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB, QueryServicesOptions.DEFAULT_SPOOL_THRESHOLD_BYTES);
     }
 
-    
     @Override
     public Operation getOperation() {
         return statement.getOperation();
@@ -127,10 +131,15 @@ public class SortMergeJoinPlan implements QueryPlan {
     }
 
     @Override
-    public ResultIterator iterator() throws SQLException {        
+    public ResultIterator iterator(ParallelScanGrouper scanGrouper) throws SQLException {        
         return type == JoinType.Semi || type == JoinType.Anti ? 
-                new SemiAntiJoinIterator(lhsPlan.iterator(), rhsPlan.iterator()) :
-                new BasicJoinIterator(lhsPlan.iterator(), rhsPlan.iterator());
+                new SemiAntiJoinIterator(lhsPlan.iterator(scanGrouper), rhsPlan.iterator(scanGrouper)) :
+                new BasicJoinIterator(lhsPlan.iterator(scanGrouper), rhsPlan.iterator(scanGrouper));
+    }
+    
+    @Override
+    public ResultIterator iterator() throws SQLException {        
+        return iterator(DefaultParallelScanGrouper.getInstance());
     }
 
     @Override
@@ -250,8 +259,6 @@ public class SortMergeJoinPlan implements QueryPlan {
             int len = lhsBitSet.getEstimatedLength();
             this.emptyProjectedValue = new byte[len];
             lhsBitSet.toBytes(emptyProjectedValue, 0);
-            int thresholdBytes = context.getConnection().getQueryServices().getProps().getInt(
-                    QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB, QueryServicesOptions.DEFAULT_SPOOL_THRESHOLD_BYTES);
             this.queue = new MappedByteBufferTupleQueue(thresholdBytes);
             this.queueIterator = null;
         }
@@ -498,7 +505,7 @@ public class SortMergeJoinPlan implements QueryPlan {
             this.expressions = expressions;
             this.keys = Lists.newArrayListWithExpectedSize(expressions.size());
             for (int i = 0; i < expressions.size(); i++) {
-                this.keys.add(new ImmutableBytesWritable());
+                this.keys.add(new ImmutableBytesWritable(EMPTY_PTR));
             }
         }
         
@@ -643,6 +650,11 @@ public class SortMergeJoinPlan implements QueryPlan {
             }
             
         }
+    }
+    
+    @Override
+    public boolean useRoundRobinIterator() {
+        return false;
     }
 
     @Override

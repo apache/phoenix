@@ -145,7 +145,7 @@ public class TestIndexWriter {
     Abortable abort = new StubAbortable();
     Stoppable stop = Mockito.mock(Stoppable.class);
     // single thread factory so the older request gets queued
-    ExecutorService exec = Executors.newFixedThreadPool(1);
+    ExecutorService exec = Executors.newFixedThreadPool(3);
     Map<ImmutableBytesPtr, HTableInterface> tables = new HashMap<ImmutableBytesPtr, HTableInterface>();
     FakeTableFactory factory = new FakeTableFactory(tables);
 

@@ -17,17 +17,15 @@
  */
 package org.apache.phoenix.mapreduce;
 
+import java.io.IOException;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Future;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -41,13 +39,9 @@ import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseConfiguration;
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.HTable;
-import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.mapreduce.HFileOutputFormat;
 import org.apache.hadoop.hbase.mapreduce.LoadIncrementalHFiles;
-import org.apache.hadoop.hbase.mapreduce.TableMapReduceUtil;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
@@ -56,25 +50,28 @@ import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
-import org.apache.phoenix.job.JobManager;
-import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
+import org.apache.phoenix.jdbc.PhoenixDriver;
+import org.apache.phoenix.mapreduce.bulkload.CsvTableRowkeyPair;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.util.CSVCommonsLoader;
 import org.apache.phoenix.util.ColumnInfo;
-import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
+import org.codehaus.jackson.annotate.JsonCreator;
+import org.codehaus.jackson.annotate.JsonProperty;
+import org.codehaus.jackson.map.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Function;
 import com.google.common.base.Splitter;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 
 /**
  * Base tool for running MapReduce-based ingests of data.
@@ -84,7 +81,7 @@ public class CsvBulkLoadTool extends Configured implements Tool {
 
     private static final Logger LOG = LoggerFactory.getLogger(CsvBulkLoadTool.class);
 
-    static final Option ZK_QUORUM_OPT = new Option("z", "zookeeper", true, "Zookeeper quorum to connect to (optional)");
+    static final Option ZK_QUORUM_OPT = new Option("z", "zookeeper", true, "Supply zookeeper connection details (optional)");
     static final Option INPUT_PATH_OPT = new Option("i", "input", true, "Input CSV path (mandatory)");
     static final Option OUTPUT_PATH_OPT = new Option("o", "output", true, "Output path for temporary HFiles (optional)");
     static final Option SCHEMA_NAME_OPT = new Option("s", "schema", true, "Phoenix schema name (optional)");
@@ -176,7 +173,7 @@ public class CsvBulkLoadTool extends Configured implements Tool {
     @Override
     public int run(String[] args) throws Exception {
 
-        Configuration conf = HBaseConfiguration.addHbaseResources(getConf());
+        Configuration conf = HBaseConfiguration.create(getConf());
 
         CommandLine cmdLine = null;
         try {
@@ -184,35 +181,48 @@ public class CsvBulkLoadTool extends Configured implements Tool {
         } catch (IllegalStateException e) {
             printHelpAndExit(e.getMessage(), getOptions());
         }
-        Class.forName(DriverManager.class.getName());
-        Connection conn = DriverManager.getConnection(
-                getJdbcUrl(cmdLine.getOptionValue(ZK_QUORUM_OPT.getOpt())));
-        
-        return loadData(conf, cmdLine, conn);
+        return loadData(conf, cmdLine);
     }
 
-	private int loadData(Configuration conf, CommandLine cmdLine,
-			Connection conn) throws SQLException, InterruptedException,
-			ExecutionException {
-		    String tableName = cmdLine.getOptionValue(TABLE_NAME_OPT.getOpt());
+	private int loadData(Configuration conf, CommandLine cmdLine) throws SQLException,
+            InterruptedException, ExecutionException, ClassNotFoundException {
+        String tableName = cmdLine.getOptionValue(TABLE_NAME_OPT.getOpt());
         String schemaName = cmdLine.getOptionValue(SCHEMA_NAME_OPT.getOpt());
         String indexTableName = cmdLine.getOptionValue(INDEX_TABLE_NAME_OPT.getOpt());
         String qualifiedTableName = getQualifiedTableName(schemaName, tableName);
-        String qualifedIndexTableName = null;
-        if(indexTableName != null){
-        	qualifedIndexTableName = getQualifiedTableName(schemaName, indexTableName);
+        String qualifiedIndexTableName = null;
+        if (indexTableName != null){
+        	qualifiedIndexTableName = getQualifiedTableName(schemaName, indexTableName);
+        }
+
+        if (cmdLine.hasOption(ZK_QUORUM_OPT.getOpt())) {
+            // ZK_QUORUM_OPT is optional, but if it's there, use it for both the conn and the job.
+            String zkQuorum = cmdLine.getOptionValue(ZK_QUORUM_OPT.getOpt());
+            PhoenixDriver.ConnectionInfo info = PhoenixDriver.ConnectionInfo.create(zkQuorum);
+            LOG.info("Configuring HBase connection to {}", info);
+            for (Map.Entry<String,String> entry : info.asProps()) {
+                if (LOG.isDebugEnabled()) {
+                    LOG.debug("Setting {} = {}", entry.getKey(), entry.getValue());
+                }
+                conf.set(entry.getKey(), entry.getValue());
+            }
+        }
+
+        final Connection conn = QueryUtil.getConnection(conf);
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Reading columns from {} :: {}", ((PhoenixConnection) conn).getURL(),
+                    qualifiedTableName);
         }
         List<ColumnInfo> importColumns = buildImportColumns(conn, cmdLine, qualifiedTableName);
         configureOptions(cmdLine, importColumns, conf);
-
         try {
             validateTable(conn, schemaName, tableName);
         } finally {
             conn.close();
         }
 
-        Path inputPath = new Path(cmdLine.getOptionValue(INPUT_PATH_OPT.getOpt()));
-        Path outputPath = null;
+        final Path inputPath = new Path(cmdLine.getOptionValue(INPUT_PATH_OPT.getOpt()));
+        final Path outputPath;
         if (cmdLine.hasOption(OUTPUT_PATH_OPT.getOpt())) {
             outputPath = new Path(cmdLine.getOptionValue(OUTPUT_PATH_OPT.getOpt()));
         } else {
@@ -221,66 +231,101 @@ public class CsvBulkLoadTool extends Configured implements Tool {
         
         List<TargetTableRef> tablesToBeLoaded = new ArrayList<TargetTableRef>();
         tablesToBeLoaded.add(new TargetTableRef(qualifiedTableName));
+        // using conn after it's been closed... o.O
         tablesToBeLoaded.addAll(getIndexTables(conn, schemaName, qualifiedTableName));
         
         // When loading a single index table, check index table name is correct
-        if(qualifedIndexTableName != null){
+        if (qualifiedIndexTableName != null){
             TargetTableRef targetIndexRef = null;
         	for (TargetTableRef tmpTable : tablesToBeLoaded){
-        		if(tmpTable.getLogicalName().compareToIgnoreCase(qualifedIndexTableName) == 0) {
+        		if (tmpTable.getLogicalName().compareToIgnoreCase(qualifiedIndexTableName) == 0) {
                     targetIndexRef = tmpTable;
         			break;
         		}
         	}
-        	if(targetIndexRef == null){
+        	if (targetIndexRef == null){
                 throw new IllegalStateException("CSV Bulk Loader error: index table " +
-                    qualifedIndexTableName + " doesn't exist");
+                    qualifiedIndexTableName + " doesn't exist");
         	}
         	tablesToBeLoaded.clear();
         	tablesToBeLoaded.add(targetIndexRef);
         }
         
-        List<Future<Boolean>> runningJobs = new ArrayList<Future<Boolean>>();
-        boolean useInstrumentedPool = conn
-                .unwrap(PhoenixConnection.class)
-                .getQueryServices()
-                .getProps()
-                .getBoolean(QueryServices.METRICS_ENABLED,
-                        QueryServicesOptions.DEFAULT_IS_METRICS_ENABLED);
-        ExecutorService executor =  JobManager.createThreadPoolExec(Integer.MAX_VALUE, 5, 20, useInstrumentedPool);
-        try{
-	        for (TargetTableRef table : tablesToBeLoaded) {
-	        	Path tablePath = new Path(outputPath, table.getPhysicalName());
-	        	Configuration jobConf = new Configuration(conf);
-	        	jobConf.set(CsvToKeyValueMapper.TABLE_NAME_CONFKEY, qualifiedTableName);
-	        	if(qualifiedTableName.compareToIgnoreCase(table.getLogicalName()) != 0) {
-                    jobConf.set(CsvToKeyValueMapper.INDEX_TABLE_NAME_CONFKEY, table.getPhysicalName());
-	        	}
-	        	TableLoader tableLoader = new TableLoader(
-                        jobConf, table.getPhysicalName(), inputPath, tablePath);
-	        	runningJobs.add(executor.submit(tableLoader));
-	        }
-        } finally {
-        	executor.shutdown();
-        }
-        
-        // wait for all jobs to complete
-        int retCode = 0;
-        for(Future<Boolean> task : runningJobs){
-        	if(!task.get() && (retCode==0)){
-        		retCode = -1;
-        	}
-        }
-		return retCode;
+        return submitJob(conf, tableName, inputPath, outputPath, tablesToBeLoaded);
 	}
-
-    String getJdbcUrl(String zkQuorum) {
-        if (zkQuorum == null) {
-            LOG.warn("Defaulting to localhost for ZooKeeper quorum");
-            zkQuorum = "localhost:2181";
+	
+	/**
+	 * Submits the jobs to the cluster. 
+	 * Loads the HFiles onto the respective tables.
+	 * @param configuration
+	 * @param qualifiedTableName
+	 * @param inputPath
+	 * @param outputPath
+	 * @param tablesToBeoaded
+	 * @return status 
+	 */
+	public int submitJob(final Configuration conf, final String qualifiedTableName, final Path inputPath,
+	                        final Path outputPath , List<TargetTableRef> tablesToBeLoaded) {
+	    try {
+	        Job job = new Job(conf, "Phoenix MapReduce import for " + qualifiedTableName);
+    
+            // Allow overriding the job jar setting by using a -D system property at startup
+            if (job.getJar() == null) {
+                job.setJarByClass(CsvToKeyValueMapper.class);
+            }
+            job.setInputFormatClass(TextInputFormat.class);
+            FileInputFormat.addInputPath(job, inputPath);
+            FileOutputFormat.setOutputPath(job, outputPath);
+            job.setMapperClass(CsvToKeyValueMapper.class);
+            job.setMapOutputKeyClass(CsvTableRowkeyPair.class);
+            job.setMapOutputValueClass(KeyValue.class);
+            job.setOutputKeyClass(CsvTableRowkeyPair.class);
+            job.setOutputValueClass(KeyValue.class);
+            job.setReducerClass(CsvToKeyValueReducer.class);
+          
+            MultiHfileOutputFormat.configureIncrementalLoad(job, tablesToBeLoaded);
+    
+            final String tableNamesAsJson = TargetTableRefFunctions.NAMES_TO_JSON.apply(tablesToBeLoaded);
+            job.getConfiguration().set(CsvToKeyValueMapper.TABLE_NAMES_CONFKEY,tableNamesAsJson);
+            
+            LOG.info("Running MapReduce import job from {} to {}", inputPath, outputPath);
+            boolean success = job.waitForCompletion(true);
+            
+            if (success) {
+               LOG.info("Loading HFiles from {}", outputPath);
+               completebulkload(conf,outputPath,tablesToBeLoaded);
+            }
+        
+           LOG.info("Removing output directory {}", outputPath);
+           if (!FileSystem.get(conf).delete(outputPath, true)) {
+               LOG.error("Removing output directory {} failed", outputPath);
+           }
+           return 0;
+        } catch(Exception e) {
+            LOG.error("Error {} occurred submitting CSVBulkLoad ",e.getMessage());
+            return -1;
         }
-        return PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum;
-    }
+	    
+	}
+	
+	/**
+	 * bulkload HFiles .
+	 * @param conf
+	 * @param outputPath
+	 * @param tablesToBeLoaded
+	 * @throws Exception
+	 */
+	private void completebulkload(Configuration conf,Path outputPath , List<TargetTableRef> tablesToBeLoaded) throws Exception {
+	    for(TargetTableRef table : tablesToBeLoaded) {
+	        LoadIncrementalHFiles loader = new LoadIncrementalHFiles(conf);
+            String tableName = table.getPhysicalName();
+            Path tableOutputPath = new Path(outputPath,tableName);
+            HTable htable = new HTable(conf,tableName);
+            LOG.info("Loading HFiles for {} from {}", tableName , tableOutputPath);
+            loader.doBulkLoad(tableOutputPath, htable);
+            LOG.info("Incremental load complete for table=" + tableName);
+        }
+	}
 
     /**
      * Build up the list of columns to be imported. The list is taken from the command line if
@@ -327,9 +372,11 @@ public class CsvBulkLoadTool extends Configured implements Tool {
      * @param importColumns descriptors of columns to be imported
      * @param conf job configuration
      */
-    @VisibleForTesting
-    static void configureOptions(CommandLine cmdLine, List<ColumnInfo> importColumns,
-            Configuration conf) {
+    private static void configureOptions(CommandLine cmdLine, List<ColumnInfo> importColumns,
+            Configuration conf) throws SQLException {
+
+        // we don't parse ZK_QUORUM_OPT here because we need it in order to
+        // create the connection we need to build importColumns.
 
         char delimiterChar = ',';
         if (cmdLine.hasOption(DELIMITER_OPT.getOpt())) {
@@ -356,12 +403,6 @@ public class CsvBulkLoadTool extends Configured implements Tool {
                 throw new IllegalArgumentException("Illegal escape character: " + escapeString);
             }
             escapeChar = escapeString.charAt(0);
-        }
-
-        if (cmdLine.hasOption(ZK_QUORUM_OPT.getOpt())) {
-            String zkQuorum = cmdLine.getOptionValue(ZK_QUORUM_OPT.getOpt());
-            LOG.info("Configuring ZK quorum to {}", zkQuorum);
-            conf.set(HConstants.ZOOKEEPER_QUORUM, zkQuorum);
         }
 
         CsvBulkImportUtil.initCsvImportJob(
@@ -415,10 +456,11 @@ public class CsvBulkLoadTool extends Configured implements Tool {
         List<TargetTableRef> indexTables = new ArrayList<TargetTableRef>();
         for(PTable indexTable : table.getIndexes()){
             if (indexTable.getIndexType() == IndexType.LOCAL) {
-                indexTables.add(
+                throw new UnsupportedOperationException("Local indexes not supported by CSV Bulk Loader");
+                /*indexTables.add(
                         new TargetTableRef(getQualifiedTableName(schemaName,
                                 indexTable.getTableName().getString()),
-                                MetaDataUtil.getLocalIndexTableName(qualifiedTableName)));
+                                MetaDataUtil.getLocalIndexTableName(qualifiedTableName))); */
             } else {
                 indexTables.add(new TargetTableRef(getQualifiedTableName(schemaName,
                         indexTable.getTableName().getString())));
@@ -433,16 +475,23 @@ public class CsvBulkLoadTool extends Configured implements Tool {
      * This class exists to allow for the difference between HBase physical table names and
      * Phoenix logical table names.
      */
-    private static class TargetTableRef {
+     static class TargetTableRef {
 
+        @JsonProperty 
         private final String logicalName;
+        
+        @JsonProperty
         private final String physicalName;
+        
+        @JsonProperty
+        private Map<String,String> configuration = Maps.newHashMap();
 
         private TargetTableRef(String name) {
             this(name, name);
         }
 
-        private TargetTableRef(String logicalName, String physicalName) {
+        @JsonCreator
+        private TargetTableRef(@JsonProperty("logicalName") String logicalName, @JsonProperty("physicalName") String physicalName) {
             this.logicalName = logicalName;
             this.physicalName = physicalName;
         }
@@ -454,80 +503,82 @@ public class CsvBulkLoadTool extends Configured implements Tool {
         public String getPhysicalName() {
             return physicalName;
         }
-    }
-
-    /**
-     * A runnable to load data into a single table
-     *
-     */
-    private static class TableLoader implements Callable<Boolean> {
-    	 
-    	private Configuration conf;
-        private String tableName;
-        private Path inputPath;
-        private Path outputPath;
-         
-        public TableLoader(Configuration conf, String qualifiedTableName, Path inputPath, 
-        		Path outputPath){
-        	this.conf = conf;
-            this.tableName = qualifiedTableName;
-            this.inputPath = inputPath;
-            this.outputPath = outputPath;
-        }
         
-        @Override
-        public Boolean call() {
-            LOG.info("Configuring HFile output path to {}", outputPath);
-            try{
-	            Job job = new Job(conf, "Phoenix MapReduce import for " + tableName);
-	
-	            // Allow overriding the job jar setting by using a -D system property at startup
-	            if (job.getJar() == null) {
-	                job.setJarByClass(CsvToKeyValueMapper.class);
-	            }
-	            job.setInputFormatClass(TextInputFormat.class);
-	            FileInputFormat.addInputPath(job, inputPath);
-	            FileOutputFormat.setOutputPath(job, outputPath);
-	
-	            job.setMapperClass(CsvToKeyValueMapper.class);
-	            job.setMapOutputKeyClass(ImmutableBytesWritable.class);
-	            job.setMapOutputValueClass(KeyValue.class);
-
-	            // initialize credentials to possibily run in a secure env
-	            TableMapReduceUtil.initCredentials(job);
-
-                HTable htable = new HTable(conf, tableName);
-
-	            // Auto configure partitioner and reducer according to the Main Data table
-	            HFileOutputFormat.configureIncrementalLoad(job, htable);
-	
-	            LOG.info("Running MapReduce import job from {} to {}", inputPath, outputPath);
-	            boolean success = job.waitForCompletion(true);
-	            if (!success) {
-	                LOG.error("Import job failed, check JobTracker for details");
-	                htable.close();
-	                return false;
-	            }
-	
-	            LOG.info("Loading HFiles from {}", outputPath);
-	            LoadIncrementalHFiles loader = new LoadIncrementalHFiles(conf);
-	            loader.doBulkLoad(outputPath, htable);
-	            htable.close();
-	
-	            LOG.info("Incremental load complete for table=" + tableName);
-	
-	            LOG.info("Removing output directory {}", outputPath);
-	            if (!FileSystem.get(conf).delete(outputPath, true)) {
-	                LOG.error("Removing output directory {} failed", outputPath);
-	            }
-	            
-	            return true;
-            } catch(Exception ex) {
-            	LOG.error("Import job on table=" + tableName + " failed due to exception:" + ex);
-            	return false;
-            }
+        public Map<String, String> getConfiguration() {
+            return configuration;
         }
-     
+
+        public void setConfiguration(Map<String, String> configuration) {
+            this.configuration = configuration;
+        }
     }
+
+     /**
+      * Utility functions to get/put json.
+      * 
+      */
+     static class TargetTableRefFunctions {
+         
+         public static Function<TargetTableRef,String> TO_JSON =  new Function<TargetTableRef,String>() {
+
+             @Override
+             public String apply(TargetTableRef input) {
+                 try {
+                     ObjectMapper mapper = new ObjectMapper();
+                     return mapper.writeValueAsString(input);
+                 } catch (IOException e) {
+                     throw new RuntimeException(e);
+                 }
+                 
+             }
+         };
+         
+         public static Function<String,TargetTableRef> FROM_JSON =  new Function<String,TargetTableRef>() {
+
+             @Override
+             public TargetTableRef apply(String json) {
+                 try {
+                     ObjectMapper mapper = new ObjectMapper();
+                     return mapper.readValue(json, TargetTableRef.class);
+                 } catch (IOException e) {
+                     throw new RuntimeException(e);
+                 }
+                 
+             }
+         };
+         
+         public static Function<List<TargetTableRef>,String> NAMES_TO_JSON =  new Function<List<TargetTableRef>,String>() {
+
+             @Override
+             public String apply(List<TargetTableRef> input) {
+                 try {
+                     List<String> tableNames = Lists.newArrayListWithCapacity(input.size());
+                     for(TargetTableRef table : input) {
+                         tableNames.add(table.getPhysicalName());
+                     }
+                     ObjectMapper mapper = new ObjectMapper();
+                     return mapper.writeValueAsString(tableNames);
+                 } catch (IOException e) {
+                     throw new RuntimeException(e);
+                 }
+                 
+             }
+         };
+         
+         public static Function<String,List<String>> NAMES_FROM_JSON =  new Function<String,List<String>>() {
+
+             @SuppressWarnings("unchecked")
+             @Override
+             public List<String> apply(String json) {
+                 try {
+                     ObjectMapper mapper = new ObjectMapper();
+                     return mapper.readValue(json, ArrayList.class);
+                 } catch (IOException e) {
+                     throw new RuntimeException(e);
+                 }
+                 
+             }
+         };
+     }
     
 }

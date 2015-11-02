@@ -46,9 +46,12 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.compile.ColumnProjector;
 import org.apache.phoenix.compile.RowProjector;
+import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.iterate.ResultIterator;
+import org.apache.phoenix.monitoring.OverAllQueryMetrics;
+import org.apache.phoenix.monitoring.ReadMetricQueue;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PBoolean;
@@ -65,8 +68,9 @@ import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PTinyint;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
-import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.SQLCloseable;
+
+import com.google.common.annotations.VisibleForTesting;
 
 
 
@@ -108,18 +112,25 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable, org.apache.pho
     private final ResultIterator scanner;
     private final RowProjector rowProjector;
     private final PhoenixStatement statement;
+    private final StatementContext context;
+    private final ReadMetricQueue readMetricsQueue;
+    private final OverAllQueryMetrics overAllQueryMetrics;
     private final ImmutableBytesWritable ptr = new ImmutableBytesWritable();
 
     private Tuple currentRow = BEFORE_FIRST;
     private boolean isClosed = false;
     private boolean wasNull = false;
-
-    public PhoenixResultSet(ResultIterator resultIterator, RowProjector rowProjector, PhoenixStatement statement) throws SQLException {
+    private boolean firstRecordRead = false;
+    
+    public PhoenixResultSet(ResultIterator resultIterator, RowProjector rowProjector, StatementContext ctx) throws SQLException {
         this.rowProjector = rowProjector;
         this.scanner = resultIterator;
-        this.statement = statement;
+        this.context = ctx;
+        this.statement = context.getStatement();
+        this.readMetricsQueue = context.getReadMetricsQueue();
+        this.overAllQueryMetrics = context.getOverallQueryMetrics();
     }
-
+    
     @Override
     public boolean absolute(int row) throws SQLException {
         throw new SQLFeatureNotSupportedException();
@@ -146,14 +157,14 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable, org.apache.pho
 
     @Override
     public void close() throws SQLException {
-        if (isClosed) {
-            return;
-        }
+        if (isClosed) { return; }
         try {
             scanner.close();
         } finally {
             isClosed = true;
             statement.getResultSets().remove(this);
+            overAllQueryMetrics.endQuery();
+            overAllQueryMetrics.stopResultSetWatch();
         }
     }
 
@@ -652,15 +663,7 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable, org.apache.pho
 
     @Override
     public Timestamp getTimestamp(int columnIndex, Calendar cal) throws SQLException {
-        checkCursorState();
-        Timestamp value = (Timestamp)rowProjector.getColumnProjector(columnIndex-1).getValue(currentRow,
-            PTimestamp.INSTANCE, ptr);
-        wasNull = (value == null);
-        if (value == null) {
-            return null;
-        }
-        cal.setTime(value); //this resets the millisecond part of timestamp according to the time zone of the calendar.
-        return DateUtil.getTimestamp(cal.getTimeInMillis(), value.getNanos());
+        return getTimestamp(columnIndex);
     }
 
     @Override
@@ -761,6 +764,10 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable, org.apache.pho
     public boolean next() throws SQLException {
         checkOpen();
         try {
+            if (!firstRecordRead) {
+                firstRecordRead = true;
+                overAllQueryMetrics.startResultSetWatch();
+            }
             currentRow = scanner.next();
             rowProjector.reset();
         } catch (RuntimeException e) {
@@ -770,6 +777,10 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable, org.apache.pho
                 throw (SQLException) e.getCause();
             }
             throw e;
+        }
+        if (currentRow == null) {
+            overAllQueryMetrics.endQuery();
+            overAllQueryMetrics.stopResultSetWatch();
         }
         return currentRow != null;
     }
@@ -1263,4 +1274,27 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable, org.apache.pho
     public <T> T getObject(String columnLabel, Class<T> type) throws SQLException {
         return (T) getObject(columnLabel); // Just ignore type since we only support built-in types
     }
+    
+    @VisibleForTesting
+    public ResultIterator getUnderlyingIterator() {
+        return scanner;
+    }
+    
+    public Map<String, Map<String, Long>> getReadMetrics() {
+        return readMetricsQueue.aggregate();
+    }
+
+    public Map<String, Long> getOverAllRequestReadMetrics() {
+        return overAllQueryMetrics.publish();
+    }
+    
+    public void resetMetrics() {
+        readMetricsQueue.clearMetrics();
+        overAllQueryMetrics.reset();
+    }
+    
+    public StatementContext getContext() {
+        return context;
+    }
+
 }

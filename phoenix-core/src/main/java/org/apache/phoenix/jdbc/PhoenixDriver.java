@@ -60,25 +60,43 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
     private static volatile String driverShutdownMsg;
     static {
         try {
-            DriverManager.registerDriver( INSTANCE = new PhoenixDriver() );
-            // Add shutdown hook to release any resources that were never closed
-            // In theory not necessary, but it won't hurt anything
-            Runtime.getRuntime().addShutdownHook(new Thread() {
-                @Override
-                public void run() {
-                    try {
-                        INSTANCE.close();
-                    } catch (SQLException e) {
-                        logger.warn("Unable to close PhoenixDriver on shutdown", e);
-                    } finally {
-                        driverShutdownMsg = "Phoenix driver closed because server is shutting down";
+            INSTANCE = new PhoenixDriver();
+            try {
+                // Add shutdown hook to release any resources that were never closed
+                // In theory not necessary, but it won't hurt anything
+                Runtime.getRuntime().addShutdownHook(new Thread() {
+                    @Override
+                    public void run() {
+                        closeInstance(INSTANCE);
                     }
-                }
-            });
+                });
+
+                // Only register the driver when we successfully register the shutdown hook
+                // Don't want to register it if we're already in the process of going down.
+                DriverManager.registerDriver( INSTANCE );
+            } catch (IllegalStateException e) {
+                logger.warn("Failed to register PhoenixDriver shutdown hook as the JVM is already shutting down");
+
+                // Close the instance now because we don't have the shutdown hook
+                closeInstance(INSTANCE);
+
+                throw e;
+            }
         } catch (SQLException e) {
             throw new IllegalStateException("Unable to register " + PhoenixDriver.class.getName() + ": "+ e.getMessage());
         }
     }
+
+    private static void closeInstance(PhoenixDriver instance) {
+        try {
+            instance.close();
+        } catch (SQLException e) {
+            logger.warn("Unable to close PhoenixDriver on shutdown", e);
+        } finally {
+            driverShutdownMsg = "Phoenix driver closed because server is shutting down";
+        }
+    }
+
     // One entry per cluster here
     private final ConcurrentMap<ConnectionInfo,ConnectionQueryServices> connectionQueryServicesMap = new ConcurrentHashMap<ConnectionInfo,ConnectionQueryServices>(3);
 

@@ -59,6 +59,7 @@ public class StatsCollectorWithSplitsAndMultiCFIT extends StatsCollectorAbstract
         // Must update config before starting server
         props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(1000));
         props.put(QueryServices.EXPLAIN_CHUNK_COUNT_ATTRIB, Boolean.TRUE.toString());
+        props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(1024));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 
@@ -104,9 +105,12 @@ public class StatsCollectorWithSplitsAndMultiCFIT extends StatsCollectorAbstract
         List<HRegionLocation> regions = services.getAllTableRegions(STATS_TEST_TABLE_NEW_BYTES);
         assertEquals(1, regions.size());
 
-        rs = conn.createStatement().executeQuery(
-                "SELECT GUIDE_POSTS_COUNT, REGION_NAME, GUIDE_POSTS_ROW_COUNT FROM SYSTEM.STATS WHERE PHYSICAL_NAME='"
-                        + STATS_TEST_TABLE_NAME_NEW + "' AND REGION_NAME IS NOT NULL");
+        rs =
+                conn.createStatement()
+                        .executeQuery(
+                            "SELECT GUIDE_POSTS_COUNT, REGION_NAME, GUIDE_POSTS_ROW_COUNT, " +
+                            "MIN_KEY FROM SYSTEM.STATS WHERE PHYSICAL_NAME='"
+                                    + STATS_TEST_TABLE_NAME_NEW + "' AND REGION_NAME IS NOT NULL");
         assertTrue(rs.next());
         assertEquals(11, (rs.getLong(1)));
         assertEquals(regions.get(0).getRegionInfo().getRegionNameAsString(), rs.getString(2));
@@ -135,6 +139,12 @@ public class StatsCollectorWithSplitsAndMultiCFIT extends StatsCollectorAbstract
             assertRowCountAndByteCount(info, rowCountArr[i], byteCountArr[i]);
             i++;
         }
+        
+        TestUtil.analyzeTable(conn, STATS_TEST_TABLE_NAME_NEW);
+        String query = "UPDATE STATISTICS " + STATS_TEST_TABLE_NAME_NEW + " SET \"" + QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB + "\"=" + Long.toString(2000);
+        conn.createStatement().execute(query);
+        keyRanges = getAllSplits(conn, STATS_TEST_TABLE_NAME_NEW);
+        assertEquals(6, keyRanges.size());
     }
 
     protected void assertRowCountAndByteCount(GuidePostsInfo info, long rowCount, long byteCount) {
@@ -180,13 +190,15 @@ public class StatsCollectorWithSplitsAndMultiCFIT extends StatsCollectorAbstract
         assertEquals(1, regions.size());
 
         rs = conn.createStatement().executeQuery(
-                "SELECT GUIDE_POSTS_COUNT, REGION_NAME, GUIDE_POSTS_ROW_COUNT FROM SYSTEM.STATS WHERE PHYSICAL_NAME='"
+                "SELECT GUIDE_POSTS_COUNT, REGION_NAME, GUIDE_POSTS_ROW_COUNT, MIN_KEY " +
+                " FROM SYSTEM.STATS WHERE PHYSICAL_NAME='"
                         + STATS_TEST_TABLE_NAME + "' AND REGION_NAME IS NOT NULL");
         assertTrue(rs.next());
         assertEquals(nRows / 2, (rs.getLong(1)));
         assertEquals(regions.get(0).getRegionInfo().getRegionNameAsString(), rs.getString(2));
         //PhoenixArray arr = (PhoenixArray)rs.getArray(3);
         assertEquals(20, rs.getLong(3));
+        assertTrue(Bytes.toString(rs.getBytes(4)).startsWith("a"));
         assertFalse(rs.next());
 
         byte[] midPoint = Bytes.toBytes(Character.toString((char)('a' + (5))));
@@ -197,19 +209,24 @@ public class StatsCollectorWithSplitsAndMultiCFIT extends StatsCollectorAbstract
 
         regions = services.getAllTableRegions(STATS_TEST_TABLE_BYTES);
         assertEquals(2, regions.size());
-        rs = conn.createStatement().executeQuery(
-                "SELECT GUIDE_POSTS_COUNT, REGION_NAME, "
-                        + "GUIDE_POSTS_ROW_COUNT FROM SYSTEM.STATS WHERE PHYSICAL_NAME='" + STATS_TEST_TABLE_NAME
-                        + "' AND REGION_NAME IS NOT NULL");
+        rs =
+                conn.createStatement()
+                        .executeQuery(
+                            "SELECT GUIDE_POSTS_COUNT, REGION_NAME, "
+                                    + "GUIDE_POSTS_ROW_COUNT, MIN_KEY " +
+                                    " FROM SYSTEM.STATS WHERE PHYSICAL_NAME='"
+                                    + STATS_TEST_TABLE_NAME + "' AND REGION_NAME IS NOT NULL");
         assertTrue(rs.next());
         assertEquals(2, rs.getLong(1));
         assertEquals(regions.get(0).getRegionInfo().getRegionNameAsString(), rs.getString(2));
         //assertEquals(5, rs.getLong(3));
+        assertTrue(Bytes.toString(rs.getBytes(4)).startsWith("a"));
         assertTrue(rs.next());
         assertEquals(8, rs.getLong(1));
         assertEquals(regions.get(1).getRegionInfo().getRegionNameAsString(), rs.getString(2));
         // This could even be 15 if the compaction thread completes after the update from split
         //assertEquals(16, rs.getLong(3));
+        assertTrue(Bytes.toString(rs.getBytes(4)).startsWith("f"));
         assertFalse(rs.next());
 
         byte[] midPoint2 = Bytes.toBytes("cj");
@@ -221,20 +238,24 @@ public class StatsCollectorWithSplitsAndMultiCFIT extends StatsCollectorAbstract
         regions = services.getAllTableRegions(STATS_TEST_TABLE_BYTES);
         assertEquals(3, regions.size());
         rs = conn.createStatement().executeQuery(
-                "SELECT GUIDE_POSTS_COUNT, REGION_NAME, GUIDE_POSTS_ROW_COUNT FROM SYSTEM.STATS WHERE PHYSICAL_NAME='"
+                "SELECT GUIDE_POSTS_COUNT, REGION_NAME, GUIDE_POSTS_ROW_COUNT, MIN_KEY " +
+                "FROM SYSTEM.STATS WHERE PHYSICAL_NAME='"
                         + STATS_TEST_TABLE_NAME + "' AND REGION_NAME IS NOT NULL");
         assertTrue(rs.next());
         assertEquals(1, rs.getLong(1));
         assertEquals(regions.get(0).getRegionInfo().getRegionNameAsString(), rs.getString(2));
         // This value varies based on whether compaction updates or split updates the GPs
         //assertEquals(3, rs.getLong(3));
+        assertTrue(Bytes.toString(rs.getBytes(4)).startsWith("a"));
         assertTrue(rs.next());
         assertEquals(1, rs.getLong(1));
         assertEquals(regions.get(1).getRegionInfo().getRegionNameAsString(), rs.getString(2));
+        assertTrue(Bytes.toString(rs.getBytes(4)).startsWith("d"));
         //assertEquals(2, rs.getLong(3));
         assertTrue(rs.next());
         assertEquals(8, rs.getLong(1));
         assertEquals(regions.get(2).getRegionInfo().getRegionNameAsString(), rs.getString(2));
+        assertTrue(Bytes.toString(rs.getBytes(4)).startsWith("f"));
         //assertEquals(16, rs.getLong(3));
         assertFalse(rs.next());
         rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + STATS_TEST_TABLE_NAME);

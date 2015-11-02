@@ -59,15 +59,16 @@ import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheRequest
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataService;
 import org.apache.phoenix.expression.AndExpression;
+import org.apache.phoenix.expression.ByteBasedLikeExpression;
 import org.apache.phoenix.expression.ComparisonExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.InListExpression;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
-import org.apache.phoenix.expression.LikeExpression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.NotExpression;
 import org.apache.phoenix.expression.OrExpression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
+import org.apache.phoenix.expression.StringBasedLikeExpression;
 import org.apache.phoenix.expression.function.SubstrFunction;
 import org.apache.phoenix.filter.MultiCQKeyValueComparisonFilter;
 import org.apache.phoenix.filter.MultiKeyValueComparisonFilter;
@@ -80,6 +81,8 @@ import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.parse.LikeParseNode.LikeType;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.TableRef;
@@ -210,6 +213,7 @@ public class TestUtil {
     public static final String JOIN_ITEM_TABLE_DISPLAY_NAME = JOIN_SCHEMA + "." + JOIN_ITEM_TABLE;
     public static final String JOIN_SUPPLIER_TABLE_DISPLAY_NAME = JOIN_SCHEMA + "." + JOIN_SUPPLIER_TABLE;
     public static final String JOIN_COITEM_TABLE_DISPLAY_NAME = JOIN_SCHEMA + "." + JOIN_COITEM_TABLE;
+    public static final String BINARY_NAME = "BinaryTable";
 
     /**
      * Read-only properties used by all tests
@@ -270,13 +274,26 @@ public class TestUtil {
         return  new ComparisonExpression(Arrays.asList(e, LiteralExpression.newConstant(o)), op);
     }
 
-    public static Expression like(Expression e, Object o) {
-        return LikeExpression.create(Arrays.asList(e, LiteralExpression.newConstant(o)), LikeType.CASE_SENSITIVE);
+    private static boolean useByteBasedRegex(StatementContext context) {
+        return context
+                .getConnection()
+                .getQueryServices()
+                .getProps()
+                .getBoolean(QueryServices.USE_BYTE_BASED_REGEX_ATTRIB,
+                    QueryServicesOptions.DEFAULT_USE_BYTE_BASED_REGEX);
     }
 
-    public static Expression ilike(Expression e, Object o) {
-      return LikeExpression.create(Arrays.asList(e, LiteralExpression.newConstant(o)), LikeType.CASE_INSENSITIVE);
-  }
+    public static Expression like(Expression e, Object o, StatementContext context) {
+        return useByteBasedRegex(context)?
+               ByteBasedLikeExpression.create(Arrays.asList(e, LiteralExpression.newConstant(o)), LikeType.CASE_SENSITIVE):
+               StringBasedLikeExpression.create(Arrays.asList(e, LiteralExpression.newConstant(o)), LikeType.CASE_SENSITIVE);
+    }
+
+    public static Expression ilike(Expression e, Object o, StatementContext context) {
+        return useByteBasedRegex(context)?
+                ByteBasedLikeExpression.create(Arrays.asList(e, LiteralExpression.newConstant(o)), LikeType.CASE_INSENSITIVE):
+                StringBasedLikeExpression.create(Arrays.asList(e, LiteralExpression.newConstant(o)), LikeType.CASE_INSENSITIVE);
+    }
 
     public static Expression substr(Expression e, Object offset, Object length) {
         return  new SubstrFunction(Arrays.asList(e, LiteralExpression.newConstant(offset), LiteralExpression.newConstant(length)));
@@ -311,7 +328,7 @@ public class TestUtil {
     }
 
     public static Expression in(Expression... expressions) throws SQLException {
-        return InListExpression.create(Arrays.asList(expressions), false, new ImmutableBytesWritable());
+        return InListExpression.create(Arrays.asList(expressions), false, new ImmutableBytesWritable(), true);
     }
 
     public static Expression in(Expression e, Object... literals) throws SQLException {
@@ -321,7 +338,7 @@ public class TestUtil {
         for (Object o : literals) {
             expressions.add(LiteralExpression.newConstant(o, childType));
         }
-        return InListExpression.create(expressions, false, new ImmutableBytesWritable());
+        return InListExpression.create(expressions, false, new ImmutableBytesWritable(), true);
     }
 
     public static void assertDegenerate(StatementContext context) {

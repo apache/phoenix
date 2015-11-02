@@ -39,7 +39,8 @@ public class UngroupedAggregatingResultIterator extends GroupedAggregatingResult
         Tuple result = super.next();
         // Ensure ungrouped aggregregation always returns a row, even if the underlying iterator doesn't.
         if (result == null && !hasRows) {
-            // Generate value using unused ClientAggregators
+            // We should reset ClientAggregators here in case they are being reused in a new ResultIterator.
+            aggregators.reset(aggregators.getAggregators());
             byte[] value = aggregators.toBytes(aggregators.getAggregators());
             result = new SingleKeyValueTuple(
                     KeyValueUtil.newKeyValue(UNGROUPED_AGG_ROW_KEY, 

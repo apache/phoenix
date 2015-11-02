@@ -17,8 +17,12 @@
  */
 package org.apache.phoenix.end2end;
 
+import static com.google.common.collect.Lists.newArrayListWithExpectedSize;
+import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_MODIFY_VIEW_PK;
+import static org.apache.phoenix.exception.SQLExceptionCode.NOT_NULLABLE_COLUMN_IN_ROW_KEY;
 import static org.apache.phoenix.util.TestUtil.analyzeTable;
 import static org.apache.phoenix.util.TestUtil.getAllSplits;
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -26,14 +30,18 @@ import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
 
+import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.schema.ColumnAlreadyExistsException;
 import org.apache.phoenix.schema.ReadOnlyTableException;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
 
@@ -92,8 +100,11 @@ public class ViewIT extends BaseViewIT {
             fail();
         } catch (ReadOnlyTableException e) {
             
+        } finally {
+            conn.close();
         }
 
+        conn = DriverManager.getConnection(getUrl());
         int count = 0;
         ResultSet rs = conn.createStatement().executeQuery("SELECT k FROM v2");
         while (rs.next()) {
@@ -457,5 +468,140 @@ public class ViewIT extends BaseViewIT {
         assertEquals(
                 "CLIENT PARALLEL 1-WAY SKIP SCAN ON 4 KEYS OVER I1 [1,100] - [2,109]\n" + 
                 "    SERVER FILTER BY (\"S2\" = 'bas' AND \"S1\" = 'foo')", queryPlan);
+    }
+	
+    @Test
+    public void testCreateViewDefinesPKColumn() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String ddl = "CREATE TABLE tp (k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, v1 DECIMAL, CONSTRAINT pk PRIMARY KEY (k1, k2))";
+        conn.createStatement().execute(ddl);
+        ddl = "CREATE VIEW v1(v2 VARCHAR, k3 VARCHAR PRIMARY KEY) AS SELECT * FROM tp WHERE K1 = 1";
+        conn.createStatement().execute(ddl);
+
+        // assert PK metadata
+        ResultSet rs = conn.getMetaData().getPrimaryKeys(null, null, "V1");
+        assertPKs(rs, new String[] {"K1", "K2", "K3"});
+        
+        // sanity check upserts into base table and view
+        conn.createStatement().executeUpdate("upsert into tp (k1, k2, v1) values (1, 1, 1)");
+        conn.createStatement().executeUpdate("upsert into v1 (k1, k2, k3, v2) values (1, 1, 'abc', 'def')");
+        conn.commit();
+        
+        // expect 2 rows in the base table
+        rs = conn.createStatement().executeQuery("select count(*) from tp");
+        assertTrue(rs.next());
+        assertEquals(2, rs.getInt(1));
+        
+        // expect 2 row in the view
+        rs = conn.createStatement().executeQuery("select count(*) from v1");
+        assertTrue(rs.next());
+        assertEquals(2, rs.getInt(1));
+    }
+    
+    @Test
+    public void testCreateViewDefinesPKConstraint() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String ddl = "CREATE TABLE tp (k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, v1 DECIMAL, CONSTRAINT pk PRIMARY KEY (k1, k2))";
+        conn.createStatement().execute(ddl);
+        ddl = "CREATE VIEW v1(v2 VARCHAR, k3 VARCHAR, k4 INTEGER NOT NULL, CONSTRAINT PKVEW PRIMARY KEY (k3, k4)) AS SELECT * FROM tp WHERE K1 = 1";
+        conn.createStatement().execute(ddl);
+
+        // assert PK metadata
+        ResultSet rs = conn.getMetaData().getPrimaryKeys(null, null, "V1");
+        assertPKs(rs, new String[] {"K1", "K2", "K3", "K4"});
+    }
+    
+    @Test
+    public void testViewAddsPKColumn() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String ddl = "CREATE TABLE tp (k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, v1 DECIMAL, CONSTRAINT pk PRIMARY KEY (k1, k2))";
+        conn.createStatement().execute(ddl);
+        ddl = "CREATE VIEW v1  AS SELECT * FROM tp WHERE v1 = 1.0";
+        conn.createStatement().execute(ddl);
+        ddl = "ALTER VIEW V1 ADD k3 VARCHAR PRIMARY KEY, k4 VARCHAR PRIMARY KEY, v2 INTEGER";
+        conn.createStatement().execute(ddl);
+
+        // assert PK metadata
+        ResultSet rs = conn.getMetaData().getPrimaryKeys(null, null, "V1");
+        assertPKs(rs, new String[] {"K1", "K2", "K3", "K4"});
+    }
+    
+    @Test
+    public void testViewAddsPKColumnWhoseParentsLastPKIsVarLength() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String ddl = "CREATE TABLE tp (k1 INTEGER NOT NULL, k2 VARCHAR NOT NULL, v1 DECIMAL, CONSTRAINT pk PRIMARY KEY (k1, k2))";
+        conn.createStatement().execute(ddl);
+        ddl = "CREATE VIEW v1  AS SELECT * FROM tp WHERE v1 = 1.0";
+        conn.createStatement().execute(ddl);
+        ddl = "ALTER VIEW V1 ADD k3 VARCHAR PRIMARY KEY, k4 VARCHAR PRIMARY KEY, v2 INTEGER";
+        try {
+            conn.createStatement().execute(ddl);
+            fail("View cannot extend PK if parent's last PK is variable length. See https://issues.apache.org/jira/browse/PHOENIX-978.");
+        } catch (SQLException e) {
+            assertEquals(CANNOT_MODIFY_VIEW_PK.getErrorCode(), e.getErrorCode());
+        }
+        ddl = "CREATE VIEW v2 (k3 VARCHAR PRIMARY KEY)  AS SELECT * FROM tp WHERE v1 = 1.0";
+        try {
+        	conn.createStatement().execute(ddl);
+        } catch (SQLException e) {
+            assertEquals(CANNOT_MODIFY_VIEW_PK.getErrorCode(), e.getErrorCode());
+        }
+    }
+    
+    @Test(expected=ColumnAlreadyExistsException.class)
+    public void testViewAddsClashingPKColumn() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String ddl = "CREATE TABLE tp (k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, v1 DECIMAL, CONSTRAINT pk PRIMARY KEY (k1, k2))";
+        conn.createStatement().execute(ddl);
+        ddl = "CREATE VIEW v1  AS SELECT * FROM tp WHERE v1 = 1.0";
+        conn.createStatement().execute(ddl);
+        ddl = "ALTER VIEW V1 ADD k3 VARCHAR PRIMARY KEY, k2 VARCHAR PRIMARY KEY, v2 INTEGER";
+        conn.createStatement().execute(ddl);
+    }
+    
+    @Test
+    public void testViewAddsNotNullPKColumn() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String ddl = "CREATE TABLE tp (k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, v1 DECIMAL, CONSTRAINT pk PRIMARY KEY (k1, k2))";
+        conn.createStatement().execute(ddl);
+        ddl = "CREATE VIEW v1  AS SELECT * FROM tp WHERE v1 = 1.0";
+        conn.createStatement().execute(ddl);
+        try {
+            ddl = "ALTER VIEW V1 ADD k3 VARCHAR NOT NULL PRIMARY KEY"; 
+            conn.createStatement().execute(ddl);
+            fail("can only add nullable PKs via ALTER VIEW/TABLE");
+        } catch (SQLException e) {
+            assertEquals(NOT_NULLABLE_COLUMN_IN_ROW_KEY.getErrorCode(), e.getErrorCode());
+        }
+    }
+    
+    @Test
+    public void testQueryViewStatementOptimization() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String sql = "CREATE TABLE tp (k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, v1 DECIMAL, CONSTRAINT pk PRIMARY KEY (k1, k2))";
+        conn.createStatement().execute(sql);
+        sql = "CREATE VIEW v1  AS SELECT * FROM tp";
+        conn.createStatement().execute(sql);
+        sql = "CREATE VIEW v2  AS SELECT * FROM tp WHERE k1 = 1.0";
+        conn.createStatement().execute(sql);
+        
+        sql = "SELECT * FROM v1 order by k1, k2";
+        PreparedStatement stmt = conn.prepareStatement(sql);
+        QueryPlan plan = PhoenixRuntime.getOptimizedQueryPlan(stmt);
+        assertEquals(0, plan.getOrderBy().getOrderByExpressions().size());
+        
+        sql = "SELECT * FROM v2 order by k1, k2";
+        stmt = conn.prepareStatement(sql);
+        plan = PhoenixRuntime.getOptimizedQueryPlan(stmt);
+        assertEquals(0, plan.getOrderBy().getOrderByExpressions().size());
+    }
+    
+    private void assertPKs(ResultSet rs, String[] expectedPKs) throws SQLException {
+        List<String> pkCols = newArrayListWithExpectedSize(expectedPKs.length);
+        while (rs.next()) {
+            pkCols.add(rs.getString("COLUMN_NAME"));
+        }
+        String[] actualPKs = pkCols.toArray(new String[0]);
+        assertArrayEquals(expectedPKs, actualPKs);
     }
 }

@@ -30,16 +30,18 @@ import java.util.TimeZone;
 
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.phoenix.expression.function.ByteBasedRegexpReplaceFunction;
+import org.apache.phoenix.expression.function.ByteBasedRegexpSubstrFunction;
 import org.apache.phoenix.expression.function.FunctionArgumentType;
 import org.apache.phoenix.expression.function.LTrimFunction;
 import org.apache.phoenix.expression.function.LengthFunction;
 import org.apache.phoenix.expression.function.LowerFunction;
 import org.apache.phoenix.expression.function.LpadFunction;
 import org.apache.phoenix.expression.function.RTrimFunction;
-import org.apache.phoenix.expression.function.RegexpReplaceFunction;
-import org.apache.phoenix.expression.function.RegexpSubstrFunction;
 import org.apache.phoenix.expression.function.RoundDateExpression;
 import org.apache.phoenix.expression.function.SqlTypeNameFunction;
+import org.apache.phoenix.expression.function.StringBasedRegexpReplaceFunction;
+import org.apache.phoenix.expression.function.StringBasedRegexpSubstrFunction;
 import org.apache.phoenix.expression.function.SubstrFunction;
 import org.apache.phoenix.expression.function.ToCharFunction;
 import org.apache.phoenix.expression.function.ToDateFunction;
@@ -80,13 +82,15 @@ public class SortOrderExpressionTest {
     @Test
     public void regexpSubstr() throws Exception {
         List<Expression> args = Lists.newArrayList(getInvertedLiteral("blah", PChar.INSTANCE), getLiteral("l.h"), getLiteral(2));
-        evaluateAndAssertResult(new RegexpSubstrFunction(args), "lah");
+        evaluateAndAssertResult(new StringBasedRegexpSubstrFunction(args), "lah");
+        evaluateAndAssertResult(new ByteBasedRegexpSubstrFunction(args), "lah");
     }
     
     @Test
     public void regexpReplace() throws Exception {
         List<Expression> args = Lists.newArrayList(getInvertedLiteral("blah", PChar.INSTANCE), getLiteral("l.h"), getLiteral("foo"));
-        evaluateAndAssertResult(new RegexpReplaceFunction(args), "bfoo");
+        evaluateAndAssertResult(new ByteBasedRegexpReplaceFunction(args), "bfoo");
+        evaluateAndAssertResult(new StringBasedRegexpReplaceFunction(args), "bfoo");
     }
     
     @Test
@@ -288,17 +292,20 @@ public class SortOrderExpressionTest {
     }
     
     private void runCompareTest(CompareOp op, boolean expectedResult, Object lhsValue, PDataType lhsDataType, Object rhsValue, PDataType rhsDataType) throws Exception {
-        List<Expression> args = Lists.newArrayList(getLiteral(lhsValue, lhsDataType), getLiteral(rhsValue, rhsDataType));
-        evaluateAndAssertResult(new ComparisonExpression(args, op), expectedResult, "lhsDataType: " + lhsDataType + " rhsDataType: " + rhsDataType);
+        List<Expression> args;
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+
+        args = Lists.newArrayList(getLiteral(lhsValue, lhsDataType), getLiteral(rhsValue, rhsDataType));
+        evaluateAndAssertResult(ComparisonExpression.create(op, args, ptr, true), expectedResult, "lhsDataType: " + lhsDataType + " rhsDataType: " + rhsDataType);
         
         args = Lists.newArrayList(getInvertedLiteral(lhsValue, lhsDataType), getLiteral(rhsValue, rhsDataType));
-        evaluateAndAssertResult(new ComparisonExpression(args, op), expectedResult, "lhs (inverted) dataType: " + lhsDataType + " rhsDataType: " + rhsDataType);
+        evaluateAndAssertResult(ComparisonExpression.create(op, args, ptr, true), expectedResult, "lhs (inverted) dataType: " + lhsDataType + " rhsDataType: " + rhsDataType);
         
         args = Lists.newArrayList(getLiteral(lhsValue, lhsDataType), getInvertedLiteral(rhsValue, rhsDataType));
-        evaluateAndAssertResult(new ComparisonExpression(args, op), expectedResult, "lhsDataType: " + lhsDataType + " rhs (inverted) dataType: " + rhsDataType);
+        evaluateAndAssertResult(ComparisonExpression.create(op, args, ptr, true), expectedResult, "lhsDataType: " + lhsDataType + " rhs (inverted) dataType: " + rhsDataType);
         
         args = Lists.newArrayList(getInvertedLiteral(lhsValue, lhsDataType), getInvertedLiteral(rhsValue, rhsDataType));
-        evaluateAndAssertResult(new ComparisonExpression(args, op), expectedResult, "lhs (inverted) dataType: " + lhsDataType + " rhs (inverted) dataType: " + rhsDataType);                
+        evaluateAndAssertResult(ComparisonExpression.create(op, args, ptr, true), expectedResult, "lhs (inverted) dataType: " + lhsDataType + " rhs (inverted) dataType: " + rhsDataType);                
     }
     
     private void evaluateAndAssertResult(Expression expression, Object expectedResult) {

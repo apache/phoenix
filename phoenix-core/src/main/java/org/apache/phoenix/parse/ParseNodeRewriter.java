@@ -58,7 +58,7 @@ public class ParseNodeRewriter extends TraverseAllParseNodeVisitor<ParseNode> {
     public static SelectStatement rewrite(SelectStatement statement, ParseNodeRewriter rewriter) throws SQLException {
         Map<String,ParseNode> aliasMap = rewriter.getAliasMap();
         TableNode from = statement.getFrom();
-        TableNode normFrom = from.accept(new TableNodeRewriter(rewriter));
+        TableNode normFrom = from == null ? null : from.accept(new TableNodeRewriter(rewriter));
         ParseNode where = statement.getWhere();
         ParseNode normWhere = where;
         if (where != null) {
@@ -150,7 +150,8 @@ public class ParseNodeRewriter extends TraverseAllParseNodeVisitor<ParseNode> {
         }
         return NODE_FACTORY.select(normFrom, statement.getHint(), statement.isDistinct(),
                 normSelectNodes, normWhere, normGroupByNodes, normHaving, normOrderByNodes,
-                statement.getLimit(), statement.getBindCount(), statement.isAggregate(), statement.hasSequence());
+                statement.getLimit(), statement.getBindCount(), statement.isAggregate(), statement.hasSequence(),
+                statement.getSelects(), statement.getUdfParseNodes());
     }
 
     private Map<String, ParseNode> getAliasMap() {

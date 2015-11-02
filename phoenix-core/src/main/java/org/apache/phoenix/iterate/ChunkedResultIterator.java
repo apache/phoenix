@@ -19,6 +19,7 @@
 package org.apache.phoenix.iterate;
 
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.STARTKEY_OFFSET;
+import static org.apache.phoenix.monitoring.MetricType.SCAN_BYTES;
 
 import java.sql.SQLException;
 import java.util.List;
@@ -26,6 +27,7 @@ import java.util.List;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -48,6 +50,7 @@ public class ChunkedResultIterator implements PeekingResultIterator {
 
     private final ParallelIteratorFactory delegateIteratorFactory;
     private ImmutableBytesWritable lastKey = new ImmutableBytesWritable();
+    private final StatementContext context;
     private final TableRef tableRef;
     private final long chunkSize;
     private final MutationState mutationState;
@@ -70,19 +73,19 @@ public class ChunkedResultIterator implements PeekingResultIterator {
         }
 
         @Override
-        public PeekingResultIterator newIterator(ResultIterator scanner, Scan scan) throws SQLException {
-            scanner.close(); //close the iterator since we don't need it anymore.
+        public PeekingResultIterator newIterator(StatementContext context, ResultIterator scanner, Scan scan, String tableName) throws SQLException {
             if (logger.isDebugEnabled()) logger.debug(LogUtil.addCustomAnnotations("ChunkedResultIteratorFactory.newIterator over " + tableRef.getTable().getName().getString() + " with " + scan, ScanUtil.getCustomAnnotations(scan)));
-            return new ChunkedResultIterator(delegateFactory, mutationState, tableRef, scan, 
+            return new ChunkedResultIterator(delegateFactory, mutationState, context, tableRef, scan, 
                     mutationState.getConnection().getQueryServices().getProps().getLong(
                                 QueryServices.SCAN_RESULT_CHUNK_SIZE,
-                                QueryServicesOptions.DEFAULT_SCAN_RESULT_CHUNK_SIZE));
+                                QueryServicesOptions.DEFAULT_SCAN_RESULT_CHUNK_SIZE), scanner);
         }
     }
 
     private ChunkedResultIterator(ParallelIteratorFactory delegateIteratorFactory, MutationState mutationState,
-            TableRef tableRef, Scan scan, long chunkSize) throws SQLException {
+    		StatementContext context, TableRef tableRef, Scan scan, long chunkSize, ResultIterator scanner) throws SQLException {
         this.delegateIteratorFactory = delegateIteratorFactory;
+        this.context = context;
         this.tableRef = tableRef;
         this.scan = scan;
         this.chunkSize = chunkSize;
@@ -91,9 +94,9 @@ public class ChunkedResultIterator implements PeekingResultIterator {
         // to get parallel scans kicked off in separate threads. If we delay this,
         // we'll get serialized behavior (see PHOENIX-
         if (logger.isDebugEnabled()) logger.debug(LogUtil.addCustomAnnotations("Get first chunked result iterator over " + tableRef.getTable().getName().getString() + " with " + scan, ScanUtil.getCustomAnnotations(scan)));
-        ResultIterator singleChunkResultIterator = new SingleChunkResultIterator(
-                new TableResultIterator(mutationState, tableRef, scan), chunkSize);
-        resultIterator = delegateIteratorFactory.newIterator(singleChunkResultIterator, scan);
+        ResultIterator singleChunkResultIterator = new SingleChunkResultIterator(scanner, chunkSize);
+        String tableName = tableRef.getTable().getPhysicalName().getString();
+        resultIterator = delegateIteratorFactory.newIterator(context, singleChunkResultIterator, scan, tableName);
     }
 
     @Override
@@ -122,9 +125,10 @@ public class ChunkedResultIterator implements PeekingResultIterator {
             scan = ScanUtil.newScan(scan);
             scan.setStartRow(ByteUtil.copyKeyBytesIfNecessary(lastKey));
             if (logger.isDebugEnabled()) logger.debug(LogUtil.addCustomAnnotations("Get next chunked result iterator over " + tableRef.getTable().getName().getString() + " with " + scan, ScanUtil.getCustomAnnotations(scan)));
+            String tableName = tableRef.getTable().getPhysicalName().getString();
             ResultIterator singleChunkResultIterator = new SingleChunkResultIterator(
-                    new TableResultIterator(mutationState, tableRef, scan), chunkSize);
-            resultIterator = delegateIteratorFactory.newIterator(singleChunkResultIterator, scan);
+                    new TableResultIterator(mutationState, tableRef, scan, context.getReadMetricsQueue().allotMetric(SCAN_BYTES, tableName)), chunkSize);
+            resultIterator = delegateIteratorFactory.newIterator(context, singleChunkResultIterator, scan, tableName);
         }
         return resultIterator;
     }

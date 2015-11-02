@@ -67,7 +67,7 @@ public class CoveredColumnIndexCodec extends BaseIndexCodec {
             updates.add(update);
         }
         return updates;
-    }
+  }
 
     /**
      * @param group

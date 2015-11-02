@@ -45,6 +45,7 @@ import org.apache.phoenix.compile.SequenceManager;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.iterate.ParallelIterators;
+import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.iterate.SpoolingResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -52,6 +53,7 @@ import org.apache.phoenix.jdbc.PhoenixParameterMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.parse.FilterableStatement;
+import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.PDatum;
@@ -65,7 +67,6 @@ import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.ScanUtil;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -298,7 +299,7 @@ public class ParallelIteratorsSplitTest extends BaseConnectionlessQueryTest {
         // Always set start and stop key to max to verify we are using the information in skipscan
         // filter over the scan's KMIN and KMAX.
         Scan scan = new Scan().setFilter(filter);
-        ScanRanges scanRanges = ScanRanges.create(schema, slots, ScanUtil.getDefaultSlotSpans(ranges.length));
+        ScanRanges scanRanges = ScanRanges.createSingleSpan(schema, slots);
         List<Object> ret = Lists.newArrayList();
         ret.add(new Object[] {scan, scanRanges, Arrays.<KeyRange>asList(expectedSplits)});
         return ret;
@@ -316,6 +317,11 @@ public class ParallelIteratorsSplitTest extends BaseConnectionlessQueryTest {
             final ScanRanges scanRanges) throws SQLException {
         final List<TableRef> tableRefs = Collections.singletonList(tableRef);
         ColumnResolver resolver = new ColumnResolver() {
+            
+            @Override
+            public List<PFunction> getFunctions() {
+                return Collections.emptyList();
+            }
 
             @Override
             public List<TableRef> getTables() {
@@ -332,7 +338,16 @@ public class ParallelIteratorsSplitTest extends BaseConnectionlessQueryTest {
             public ColumnRef resolveColumn(String schemaName, String tableName, String colName) throws SQLException {
                 throw new UnsupportedOperationException();
             }
+
+            @Override
+            public PFunction resolveFunction(String functionName) throws SQLException {
+                throw new UnsupportedOperationException();
+            }
             
+            @Override
+            public boolean hasUDFs() {
+                return false;
+            }
         };
         PhoenixConnection connection = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
         final PhoenixStatement statement = new PhoenixStatement(connection);
@@ -356,6 +371,11 @@ public class ParallelIteratorsSplitTest extends BaseConnectionlessQueryTest {
                 return ExplainPlan.EMPTY_PLAN;
             }
 
+            @Override
+            public ResultIterator iterator(ParallelScanGrouper scanGrouper) throws SQLException {
+                return ResultIterator.EMPTY_ITERATOR;
+            }
+            
             @Override
             public ResultIterator iterator() throws SQLException {
                 return ResultIterator.EMPTY_ITERATOR;
@@ -424,6 +444,11 @@ public class ParallelIteratorsSplitTest extends BaseConnectionlessQueryTest {
             @Override
             public Operation getOperation() {
                 return Operation.QUERY;
+            }
+            
+            @Override
+            public boolean useRoundRobinIterator() {
+                return false;
             }
             
         }, null, new SpoolingResultIterator.SpoolingResultIteratorFactory(context.getConnection().getQueryServices()));

@@ -22,9 +22,12 @@ import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.monitoring.CombinableMetric;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.Closeables;
@@ -45,9 +48,10 @@ public class TableResultIterator implements ResultIterator {
     private final Scan scan;
     private final HTableInterface htable;
     private volatile ResultIterator delegate;
-
-    public TableResultIterator(MutationState mutationState, Scan scan, TableRef tableRef) throws SQLException {
-        this(mutationState, tableRef, scan);
+    private final CombinableMetric scanMetrics;
+    
+    public TableResultIterator(MutationState mutationState, Scan scan, TableRef tableRef, CombinableMetric scanMetrics) throws SQLException {
+        this(mutationState, tableRef, scan, scanMetrics);
     }
 
     /*
@@ -63,7 +67,12 @@ public class TableResultIterator implements ResultIterator {
                 delegate = this.delegate;
                 if (delegate == null) {
                     try {
-                        this.delegate = delegate = isClosing ? ResultIterator.EMPTY_ITERATOR : new ScanningResultIterator(htable.getScanner(scan));
+                    	ResultScanner resultScanner = htable.getScanner(scan);
+                    	Result result = null;
+                    	while ( (result = resultScanner.next())!=null ) {
+                        	System.out.println(result);
+                        }
+                        this.delegate = delegate = isClosing ? ResultIterator.EMPTY_ITERATOR : new ScanningResultIterator(htable.getScanner(scan), scanMetrics);
                     } catch (IOException e) {
                         Closeables.closeQuietly(htable);
                         throw ServerUtil.parseServerException(e);
@@ -74,14 +83,15 @@ public class TableResultIterator implements ResultIterator {
         return delegate;
     }
     
-    public TableResultIterator(MutationState mutationState, TableRef tableRef, Scan scan) throws SQLException {
-        this(mutationState, tableRef, scan, ScannerCreation.IMMEDIATE);
+    public TableResultIterator(MutationState mutationState, TableRef tableRef, Scan scan, CombinableMetric scanMetrics) throws SQLException {
+        this(mutationState, tableRef, scan, scanMetrics, ScannerCreation.IMMEDIATE);
     }
 
-    public TableResultIterator(MutationState mutationState, TableRef tableRef, Scan scan, ScannerCreation creationMode) throws SQLException {
+    public TableResultIterator(MutationState mutationState, TableRef tableRef, Scan scan, CombinableMetric scanMetrics, ScannerCreation creationMode) throws SQLException {
         this.scan = scan;
+        this.scanMetrics = scanMetrics;
         PTable table = tableRef.getTable();
-        this.htable = mutationState.getHTable(table);
+        htable = mutationState.getHTable(table);
         if (creationMode == ScannerCreation.IMMEDIATE) {
         	getDelegate(false);
         }

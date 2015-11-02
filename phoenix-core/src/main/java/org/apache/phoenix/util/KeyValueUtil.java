@@ -23,6 +23,7 @@ import java.util.Comparator;
 import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.KVComparator;
 import org.apache.hadoop.hbase.KeyValue.Type;
@@ -92,30 +93,15 @@ public class KeyValueUtil {
         if (kvs.size() == 0) {
         	return null;
         }
-        Cell row = kvs.get(0);
-        Comparator<Cell> comp = new SearchComparator(kvBuilder, 
-          row.getRowArray(), row.getRowOffset(), row.getRowLength(), family, qualifier);
-        // pos === ( -(insertion point) - 1)
+        assert CellUtil.matchingRow(kvs.get(0), kvs.get(kvs.size()-1));
+
+        Comparator<Cell> comp = new SearchComparator(kvBuilder, family, qualifier);
         int pos = Collections.binarySearch(kvs, null, comp);
-        // never will exact match
-        if (pos < 0) {
-          pos = (pos+1) * -1;
-          // pos is now insertion point
-        }
-        if (pos == kvs.size()) {
+        if (pos < 0 || pos == kvs.size()) {
           return null; // doesn't exist
         }
     
-        Cell kv = kvs.get(pos);
-        if (Bytes.compareTo(kv.getFamilyArray(), kv.getFamilyOffset(), kv.getFamilyLength(),
-                family, 0, family.length) != 0) {
-            return null;
-        }
-        if (Bytes.compareTo(kv.getQualifierArray(), kv.getQualifierOffset(), kv.getQualifierLength(),
-                qualifier, 0, qualifier.length) != 0) {
-            return null;
-        }
-        return kv;
+        return kvs.get(pos);
     }
 
 
@@ -130,79 +116,50 @@ public class KeyValueUtil {
         if (kvs.length == 0) {
             return null;
         }
-        Cell kvForRow = kvs[0];
-        Comparator<Cell> comp = new SearchComparator(kvBuilder, kvForRow.getRowArray(), 
-          kvForRow.getRowOffset(), kvForRow.getRowLength(), family, qualifier);
-        // pos === ( -(insertion point) - 1)
+        assert CellUtil.matchingRow(kvs[0], kvs[kvs.length-1]);
+
+        Comparator<Cell> comp = new SearchComparator(kvBuilder, family, qualifier);
         int pos = Arrays.binarySearch(kvs, null, comp);
-        // never will exact match
-        if (pos < 0) {
-          pos = (pos+1) * -1;
-          // pos is now insertion point
-        }
-        if (pos == kvs.length) {
+        if (pos < 0 || pos == kvs.length) {
           return null; // doesn't exist
         }
     
-        Cell kv = kvs[pos];
-        if (Bytes.compareTo(kv.getFamilyArray(), kv.getFamilyOffset(), kv.getFamilyLength(),
-                family, 0, family.length) != 0) {
-            return null;
-        }
-        if (Bytes.compareTo(kv.getQualifierArray(), kv.getQualifierOffset(), kv.getQualifierLength(),
-                qualifier, 0, qualifier.length) != 0) {
-            return null;
-        }
-        return kv;
+        return kvs[pos];
     }
 
     /*
      * Special comparator, *only* works for binary search.
-     * Current JDKs only uses the search term on the right side,
-     * Making use of that saves instanceof checks, and allows us
-     * to inline the search term in the comparator
+     *
+     * We make the following assumption:
+     * 1. All KVs compared have the same row key
+     * 2. For each (rowkey, family, qualifier) there is at most one version
+     * 3. Current JDKs only uses the search term on the right side
+     *
+     * #1 allows us to avoid row key comparisons altogether.
+     * #2 allows for exact matches
+     * #3 lets us save instanceof checks, and allows to inline the search term in the comparator
      */
 	private static class SearchComparator implements Comparator<Cell> {
 	  private final KeyValueBuilder kvBuilder;
-    private final byte[] row;
     private final byte[] family;
     private final byte[] qualifier;
-    private final int rowOff;
-    private final int rowLen;
 
-    public SearchComparator(KeyValueBuilder kvBuilder, byte[] r, int rOff, int rLen, byte[] f, byte[] q) {
+    public SearchComparator(KeyValueBuilder kvBuilder, byte[] f, byte[] q) {
       this.kvBuilder = kvBuilder;
-      row = r;
       family = f;
       qualifier = q;
-      rowOff = rOff;
-      rowLen = rLen;
     }
 
-		@Override
+    @Override
     public int compare(final Cell l, final Cell ignored) {
 			assert ignored == null;
-      KVComparator comparator = kvBuilder.getKeyValueComparator();
-			// row
-			int val = comparator.compareRows(l.getRowArray(), l.getRowOffset(), 
-			  l.getRowLength(), row, rowOff, rowLen);
-			if (val != 0) {
-				return val;
-			}
 			// family
-			val = kvBuilder.compareFamily(l, family, 0, family.length);
+			int val = kvBuilder.compareFamily(l, family, 0, family.length);
 			if (val != 0) {
 				return val;
 			}
 			// qualifier
-      val = kvBuilder.compareQualifier(l, qualifier, 0, qualifier.length);
-			if (val != 0) {
-				return val;
-			}
-			// We want the latest TS and type, so we get the first one.
-			// This assumes they KV are passed in ordered from latest to earliest,
-			// as that's the order the server sends them.
-			return 1;
+			return kvBuilder.compareQualifier(l, qualifier, 0, qualifier.length);
 		}
 	}
 }

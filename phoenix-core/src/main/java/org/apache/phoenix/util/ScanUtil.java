@@ -17,13 +17,15 @@
  */
 package org.apache.phoenix.util;
 
+import static org.apache.phoenix.compile.OrderByCompiler.OrderBy.FWD_ROW_KEY_ORDER_BY;
+import static org.apache.phoenix.compile.OrderByCompiler.OrderBy.REV_ROW_KEY_ORDER_BY;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CUSTOM_ANNOTATIONS;
 
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableSet;
@@ -37,21 +39,31 @@ import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.io.WritableComparator;
+import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.ScanRanges;
+import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.execute.DescVarLengthFastByteComparisons;
 import org.apache.phoenix.filter.BooleanExpressionFilter;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.KeyRange.Bound;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.PName;
-import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.RowKeySchema;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
 
+import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 
 /**
@@ -275,7 +287,15 @@ public class ScanUtil {
         for (int i = 0; i < position.length; i++) {
             position[i] = bound == Bound.LOWER ? 0 : slots.get(i).size()-1;
             KeyRange range = slots.get(i).get(position[i]);
-            maxLength += range.getRange(bound).length + (schema.getField(i + slotSpan[i]).getDataType().isFixedWidth() ? 0 : 1);
+            Field field = schema.getField(i + slotSpan[i]);
+            int keyLength = range.getRange(bound).length;
+            if (!field.getDataType().isFixedWidth()) {
+                keyLength++;
+                if (range.isUnbound(bound) && !range.isInclusive(bound) && field.getSortOrder() == SortOrder.DESC) {
+                    keyLength++;
+                }
+            }
+            maxLength += keyLength;
         }
         byte[] key = new byte[maxLength];
         int length = setKey(schema, slots, slotSpan, position, bound, key, 0, 0, position.length);
@@ -314,18 +334,20 @@ public class ScanUtil {
         int offset = byteOffset;
         boolean lastInclusiveUpperSingleKey = false;
         boolean anyInclusiveUpperRangeKey = false;
+        boolean lastUnboundUpper = false;
         // The index used for slots should be incremented by 1,
         // but the index for the field it represents in the schema
         // should be incremented by 1 + value in the current slotSpan index
         // slotSpan stores the number of columns beyond one that the range spans
+        Field field = null;
         int i = slotStartIndex, fieldIndex = ScanUtil.getRowKeyPosition(slotSpan, slotStartIndex);
         for (i = slotStartIndex; i < slotEndIndex; i++) {
             // Build up the key by appending the bound of each key range
             // from the current position of each slot. 
             KeyRange range = slots.get(i).get(position[i]);
             // Use last slot in a multi-span column to determine if fixed width
-            boolean isFixedWidth = schema.getField(fieldIndex + slotSpan[i]).getDataType().isFixedWidth();
-            fieldIndex += slotSpan[i] + 1;
+            field = schema.getField(fieldIndex + slotSpan[i]);
+            boolean isFixedWidth = field.getDataType().isFixedWidth();
             /*
              * If the current slot is unbound then stop if:
              * 1) setting the upper bound. There's no value in
@@ -334,21 +356,27 @@ public class ScanUtil {
              *    for the same reason. However, if the type is variable width
              *    continue building the key because null values will be filtered
              *    since our separator byte will be appended and incremented.
+             * 3) if the range includes everything as we cannot add any more useful
+             *    information to the key after that.
              */
+            lastUnboundUpper = false;
             if (  range.isUnbound(bound) &&
-                ( bound == Bound.UPPER || isFixedWidth) ){
+                ( bound == Bound.UPPER || isFixedWidth || range == KeyRange.EVERYTHING_RANGE) ){
+                lastUnboundUpper = (bound == Bound.UPPER);
                 break;
             }
             byte[] bytes = range.getRange(bound);
             System.arraycopy(bytes, 0, key, offset, bytes.length);
             offset += bytes.length;
+            
             /*
              * We must add a terminator to a variable length key even for the last PK column if
              * the lower key is non inclusive or the upper key is inclusive. Otherwise, we'd be
              * incrementing the key value itself, and thus bumping it up too much.
              */
-            boolean inclusiveUpper = range.isInclusive(bound) && bound == Bound.UPPER;
-            boolean exclusiveLower = !range.isInclusive(bound) && bound == Bound.LOWER;
+            boolean inclusiveUpper = range.isUpperInclusive() && bound == Bound.UPPER;
+            boolean exclusiveLower = !range.isLowerInclusive() && bound == Bound.LOWER;
+            boolean exclusiveUpper = !range.isUpperInclusive() && bound == Bound.UPPER;
             // If we are setting the upper bound of using inclusive single key, we remember 
             // to increment the key if we exit the loop after this iteration.
             // 
@@ -361,17 +389,27 @@ public class ScanUtil {
             // key slots would cause the flag to become true.
             lastInclusiveUpperSingleKey = range.isSingleKey() && inclusiveUpper;
             anyInclusiveUpperRangeKey |= !range.isSingleKey() && inclusiveUpper;
+            // A null or empty byte array is always represented as a zero byte
+            byte sepByte = SchemaUtil.getSeparatorByte(schema.rowKeyOrderOptimizable(), bytes.length == 0, field);
             
-            if (!isFixedWidth && ( fieldIndex < schema.getMaxFields() || inclusiveUpper || exclusiveLower)) {
-                key[offset++] = QueryConstants.SEPARATOR_BYTE;
+            if ( !isFixedWidth && ( sepByte == QueryConstants.DESC_SEPARATOR_BYTE 
+                                    || ( !exclusiveUpper 
+                                         && (fieldIndex < schema.getMaxFields() || inclusiveUpper || exclusiveLower) ) ) ) {
+                key[offset++] = sepByte;
                 // Set lastInclusiveUpperSingleKey back to false if this is the last pk column
                 // as we don't want to increment the null byte in this case
                 lastInclusiveUpperSingleKey &= i < schema.getMaxFields()-1;
             }
+            if (exclusiveUpper) {
+                // Cannot include anything else on the key, as otherwise
+                // keys that match the upper range will be included. For example WHERE k1 < 2 and k2 = 3
+                // would match k1 = 2, k2 = 3 which is wrong.
+                break;
+            }
             // If we are setting the lower bound with an exclusive range key, we need to bump the
             // slot up for each key part. For an upper bound, we bump up an inclusive key, but
             // only after the last key part.
-            if (!range.isSingleKey() && exclusiveLower) {
+            if (exclusiveLower) {
                 if (!ByteUtil.nextKey(key, offset)) {
                     // Special case for not being able to increment.
                     // In this case we return a negative byteOffset to
@@ -380,9 +418,19 @@ public class ScanUtil {
                     // have an end key specified.
                     return -byteOffset;
                 }
+                // We're filtering on values being non null here, but we still need the 0xFF
+                // terminator, since DESC keys ignore the last byte as it's expected to be 
+                // the terminator. Without this, we'd ignore the separator byte that was
+                // just added and incremented.
+                if (!isFixedWidth && bytes.length == 0 
+                    && SchemaUtil.getSeparatorByte(schema.rowKeyOrderOptimizable(), false, field) == QueryConstants.DESC_SEPARATOR_BYTE) {
+                    key[offset++] = QueryConstants.DESC_SEPARATOR_BYTE;
+                }
             }
+            
+            fieldIndex += slotSpan[i] + 1;
         }
-        if (lastInclusiveUpperSingleKey || anyInclusiveUpperRangeKey) {
+        if (lastInclusiveUpperSingleKey || anyInclusiveUpperRangeKey || lastUnboundUpper) {
             if (!ByteUtil.nextKey(key, offset)) {
                 // Special case for not being able to increment.
                 // In this case we return a negative byteOffset to
@@ -397,7 +445,8 @@ public class ScanUtil {
         // byte.
         if (bound == Bound.LOWER) {
             while (--i >= schemaStartIndex && offset > byteOffset && 
-                    !schema.getField(--fieldIndex).getDataType().isFixedWidth() && 
+                    !(field=schema.getField(--fieldIndex)).getDataType().isFixedWidth() && 
+                    field.getSortOrder() == SortOrder.ASC &&
                     key[offset-1] == QueryConstants.SEPARATOR_BYTE) {
                 offset--;
                 fieldIndex -= slotSpan[i];
@@ -405,19 +454,47 @@ public class ScanUtil {
         }
         return offset - byteOffset;
     }
+    
+    public static interface BytesComparator {
+        public int compare(byte[] b1, int s1, int l1, byte[] b2, int s2, int l2);
+    };
 
+    private static final BytesComparator DESC_VAR_WIDTH_COMPARATOR = new BytesComparator() {
+
+        @Override
+        public int compare(byte[] b1, int s1, int l1, byte[] b2, int s2, int l2) {
+            return DescVarLengthFastByteComparisons.compareTo(b1, s1, l1, b2, s2, l2);
+        }
+        
+    };
+    
+    private static final BytesComparator ASC_FIXED_WIDTH_COMPARATOR = new BytesComparator() {
+
+        @Override
+        public int compare(byte[] b1, int s1, int l1, byte[] b2, int s2, int l2) {
+            return WritableComparator.compareBytes(b1, s1, l1, b2, s2, l2);
+        }
+        
+    };
+    public static BytesComparator getComparator(boolean isFixedWidth, SortOrder sortOrder) {
+        return isFixedWidth || sortOrder == SortOrder.ASC ? ASC_FIXED_WIDTH_COMPARATOR : DESC_VAR_WIDTH_COMPARATOR;
+    }
+    public static BytesComparator getComparator(Field field) {
+        return getComparator(field.getDataType().isFixedWidth(),field.getSortOrder());
+    }
     /**
      * Perform a binary lookup on the list of KeyRange for the tightest slot such that the slotBound
      * of the current slot is higher or equal than the slotBound of our range. 
      * @return  the index of the slot whose slot bound equals or are the tightest one that is 
      *          smaller than rangeBound of range, or slots.length if no bound can be found.
      */
-    public static int searchClosestKeyRangeWithUpperHigherThanPtr(List<KeyRange> slots, ImmutableBytesWritable ptr, int lower) {
+    public static int searchClosestKeyRangeWithUpperHigherThanPtr(List<KeyRange> slots, ImmutableBytesWritable ptr, int lower, Field field) {
         int upper = slots.size() - 1;
         int mid;
+        BytesComparator comparator = ScanUtil.getComparator(field.getDataType().isFixedWidth(), field.getSortOrder());
         while (lower <= upper) {
             mid = (lower + upper) / 2;
-            int cmp = slots.get(mid).compareUpperToLowerBound(ptr, true);
+            int cmp = slots.get(mid).compareUpperToLowerBound(ptr, true, comparator);
             if (cmp < 0) {
                 lower = mid + 1;
             } else if (cmp > 0) {
@@ -427,7 +504,7 @@ public class ScanUtil {
             }
         }
         mid = (lower + upper) / 2;
-        if (mid == 0 && slots.get(mid).compareUpperToLowerBound(ptr, true) > 0) {
+        if (mid == 0 && slots.get(mid).compareUpperToLowerBound(ptr, true, comparator) > 0) {
             return mid;
         } else {
             return ++mid;
@@ -439,7 +516,7 @@ public class ScanUtil {
         for (Mutation m : mutations) {
             keys.add(PVarbinary.INSTANCE.getKeyRange(m.getRow()));
         }
-        ScanRanges keyRanges = ScanRanges.create(SchemaUtil.VAR_BINARY_SCHEMA, Collections.singletonList(keys), ScanUtil.SINGLE_COLUMN_SLOT_SPAN);
+        ScanRanges keyRanges = ScanRanges.createPointLookup(keys);
         return keyRanges;
     }
 
@@ -476,10 +553,11 @@ public class ScanUtil {
         while (schema.next(ptr, pos, maxOffset) != null) {
             pos++;
         }
-        if (!schema.getField(pos-1).getDataType().isFixedWidth()) {
+        Field field = schema.getField(pos - 1);
+        if (!field.getDataType().isFixedWidth()) {
             byte[] newLowerRange = new byte[key.length + 1];
             System.arraycopy(key, 0, newLowerRange, 0, key.length);
-            newLowerRange[key.length] = QueryConstants.SEPARATOR_BYTE;
+            newLowerRange[key.length] = SchemaUtil.getSeparatorByte(schema.rowKeyOrderOptimizable(), key.length==0, field);
             key = newLowerRange;
         } else {
             key = Arrays.copyOf(key, key.length);
@@ -564,19 +642,6 @@ public class ScanUtil {
     }
 
     /**
-     * Finds the total number of row keys spanned by this ranges / slotSpan pair.
-     * This accounts for slots in the ranges that may span more than on row key.
-     * @param ranges  the KeyRange slots paired with this slotSpan. corresponds to {@link ScanRanges#ranges}
-     * @param slotSpan  the extra span per skip scan slot. corresponds to {@link ScanRanges#slotSpan}
-     * @return  the total number of row keys spanned yb this ranges / slotSpan pair.
-     * @see #getRowKeyPosition(int[], int)
-     */
-    public static int getTotalSpan(List<List<KeyRange>> ranges, int[] slotSpan) {
-        // finds the position at the "end" of the ranges, which is also the total span
-        return getRowKeyPosition(slotSpan, ranges.size());
-    }
-
-    /**
      * Finds the position in the row key schema for a given position in the scan slots.
      * For example, with a slotSpan of {0, 1, 0}, the slot at index 1 spans an extra column in the row key. This means
      * that the slot at index 2 has a slot index of 2 but a row key index of 3.
@@ -585,7 +650,6 @@ public class ScanUtil {
      * @param slotSpan  the extra span per skip scan slot. corresponds to {@link ScanRanges#slotSpan}
      * @param slotPosition  the index of a slot in the SkipScan slots list.
      * @return  the equivalent row key position in the RowKeySchema
-     * @see #getTotalSpan(java.util.List, int[])
      */
     public static int getRowKeyPosition(int[] slotSpan, int slotPosition) {
         int offset = 0;
@@ -627,20 +691,89 @@ public class ScanUtil {
         }
         return Bytes.compareTo(key, 0, nBytesToCheck, ZERO_BYTE_ARRAY, 0, nBytesToCheck) != 0;
     }
-    
-    public static PName padTenantIdIfNecessary(RowKeySchema schema, boolean isSalted, PName tenantId) {
+
+    public static byte[] getTenantIdBytes(RowKeySchema schema, boolean isSalted, PName tenantId)
+            throws SQLException {
         int pkPos = isSalted ? 1 : 0;
-        String tenantIdStr = tenantId.getString();
         Field field = schema.getField(pkPos);
         PDataType dataType = field.getDataType();
-        boolean isFixedWidth = dataType.isFixedWidth();
-        Integer maxLength = field.getMaxLength();
-        if (isFixedWidth && maxLength != null) {
-            if (tenantIdStr.length() < maxLength) {
-                tenantIdStr = (String)dataType.pad(tenantIdStr, maxLength);
-                return PNameFactory.newName(tenantIdStr);
+        byte[] convertedValue;
+        try {
+            Object value = dataType.toObject(tenantId.getString());
+            convertedValue = dataType.toBytes(value);
+            ImmutableBytesWritable ptr = new ImmutableBytesWritable(convertedValue);
+            dataType.pad(ptr, field.getMaxLength(), field.getSortOrder());
+            convertedValue = ByteUtil.copyKeyBytesIfNecessary(ptr);
+        } catch(IllegalDataException ex) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.TENANTID_IS_OF_WRONG_TYPE)
+                    .build().buildException();
+        }
+        return convertedValue;
+    }
+
+    public static Iterator<Filter> getFilterIterator(Scan scan) {
+        Iterator<Filter> filterIterator;
+        Filter topLevelFilter = scan.getFilter();
+        if (topLevelFilter == null) {
+            filterIterator = Iterators.emptyIterator();
+        } else if (topLevelFilter instanceof FilterList) {
+            filterIterator = ((FilterList) topLevelFilter).getFilters().iterator();
+        } else {
+            filterIterator = Iterators.singletonIterator(topLevelFilter);
+        }
+        return filterIterator;
+    }
+    
+    public static boolean isRoundRobinPossible(OrderBy orderBy, StatementContext context) throws SQLException {
+        int fetchSize  = context.getStatement().getFetchSize();
+        /*
+         * Selecting underlying scanners in a round-robin fashion is possible if there is no ordering of rows needed,
+         * not even row key order. Also no point doing round robin of scanners if fetch size
+         * is 1.
+         */
+        return fetchSize > 1 && !shouldRowsBeInRowKeyOrder(orderBy, context) && orderBy.getOrderByExpressions().isEmpty();
+    }
+    
+    public static boolean forceRowKeyOrder(StatementContext context) {
+        return context.getConnection().getQueryServices().getProps()
+                .getBoolean(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, QueryServicesOptions.DEFAULT_FORCE_ROW_KEY_ORDER);
+    }
+    
+    public static boolean shouldRowsBeInRowKeyOrder(OrderBy orderBy, StatementContext context) {
+        return forceRowKeyOrder(context) || orderBy == FWD_ROW_KEY_ORDER_BY || orderBy == REV_ROW_KEY_ORDER_BY;
+    }
+    
+    public static TimeRange intersectTimeRange(TimeRange rowTimestampColRange, TimeRange scanTimeRange, Long scn) throws IOException, SQLException {
+        long scnToUse = scn == null ? HConstants.LATEST_TIMESTAMP : scn;
+        long lowerRangeToBe = 0;
+        long upperRangeToBe = scnToUse;
+        if (rowTimestampColRange != null) {
+            long minRowTimestamp = rowTimestampColRange.getMin();
+            long maxRowTimestamp = rowTimestampColRange.getMax();
+            if ((lowerRangeToBe > maxRowTimestamp) || (upperRangeToBe < minRowTimestamp)) {
+                return null; // degenerate
+            } else {
+                // there is an overlap of ranges
+                lowerRangeToBe = Math.max(lowerRangeToBe, minRowTimestamp);
+                upperRangeToBe = Math.min(upperRangeToBe, maxRowTimestamp);
             }
         }
-        return tenantId;
+        if (scanTimeRange != null) {
+            long minScanTimeRange = scanTimeRange.getMin();
+            long maxScanTimeRange = scanTimeRange.getMax();
+            if ((lowerRangeToBe > maxScanTimeRange) || (upperRangeToBe < lowerRangeToBe)) {
+                return null; // degenerate
+            } else {
+                // there is an overlap of ranges
+                lowerRangeToBe = Math.max(lowerRangeToBe, minScanTimeRange);
+                upperRangeToBe = Math.min(upperRangeToBe, maxScanTimeRange);
+            }
+        }
+        return new TimeRange(lowerRangeToBe, upperRangeToBe);
     }
+    
+    public static boolean isDefaultTimeRange(TimeRange range) {
+        return range.getMin() == 0 && range.getMax() == Long.MAX_VALUE;
+    }
+
 }

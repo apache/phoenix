@@ -37,12 +37,14 @@ import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PMetaData;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.Sequence;
+import org.apache.phoenix.schema.SequenceAllocation;
 import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.stats.PTableStats;
 
@@ -189,15 +191,15 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     }
 
     @Override
-    public void validateSequences(List<SequenceKey> sequenceKeys, long timestamp, long[] values,
-            SQLException[] exceptions, Sequence.ValueOp action) throws SQLException {
-        getDelegate().validateSequences(sequenceKeys, timestamp, values, exceptions, action);
+    public void validateSequences(List<SequenceAllocation> sequenceAllocations, long timestamp,
+            long[] values, SQLException[] exceptions, Sequence.ValueOp action) throws SQLException {
+        getDelegate().validateSequences(sequenceAllocations, timestamp, values, exceptions, action);
     }
 
     @Override
-    public void incrementSequences(List<SequenceKey> sequenceKeys, long timestamp, long[] values,
-            SQLException[] exceptions) throws SQLException {
-        getDelegate().incrementSequences(sequenceKeys, timestamp, values, exceptions);
+    public void incrementSequences(List<SequenceAllocation> sequenceAllocations, long timestamp,
+            long[] values, SQLException[] exceptions) throws SQLException {
+        getDelegate().incrementSequences(sequenceAllocations, timestamp, values, exceptions);
     }
 
     @Override
@@ -261,5 +263,34 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     @Override
     public TransactionSystemClient getTransactionSystemClient() {
         return getDelegate().getTransactionSystemClient();
+    }
+
+    public MetaDataMutationResult createFunction(List<Mutation> functionData, PFunction function, boolean temporary)
+            throws SQLException {
+        return getDelegate().createFunction(functionData, function, temporary);
+    }
+
+    @Override
+    public PMetaData addFunction(PFunction function) throws SQLException {
+        return getDelegate().addFunction(function);
+    }
+
+    @Override
+    public PMetaData removeFunction(PName tenantId, String function, long functionTimeStamp)
+            throws SQLException {
+        return getDelegate().removeFunction(tenantId, function, functionTimeStamp);
+    }
+
+    @Override
+    public MetaDataMutationResult getFunctions(PName tenantId,
+            List<Pair<byte[], Long>> functionNameAndTimeStampPairs, long clientTimestamp)
+            throws SQLException {
+        return getDelegate().getFunctions(tenantId, functionNameAndTimeStampPairs, clientTimestamp);
+    }
+
+    @Override
+    public MetaDataMutationResult dropFunction(List<Mutation> tableMetadata, boolean ifExists)
+            throws SQLException {
+        return getDelegate().dropFunction(tableMetadata, ifExists);
     }
 }

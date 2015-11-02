@@ -24,35 +24,78 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.Properties;
 
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.HConstants;
-import org.apache.phoenix.util.QueryUtil;
-
 import com.google.common.base.Preconditions;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.QueryUtil;
 
 /**
  * Utility class to return a {@link Connection} .
  */
 public class ConnectionUtil {
+
+
+    /**
+     * Retrieve the configured input Connection.
+     *
+     * @param conf configuration containing connection information
+     * @return the configured input connection
+     */
+    public static Connection getInputConnection(final Configuration conf) throws SQLException {
+        return getInputConnection(conf, new Properties());
+    }
     
     /**
-     * Returns the {@link Connection} from Configuration
-     * @param configuration
-     * @return
-     * @throws SQLException
+     * Retrieve the configured input Connection.
+     *
+     * @param conf configuration containing connection information
+     * @param props custom connection properties
+     * @return the configured input connection
      */
-    public static Connection getConnection(final Configuration configuration) throws SQLException {
-        Preconditions.checkNotNull(configuration);
-        final Properties props = new Properties();
-        Iterator<Map.Entry<String, String>> iterator = configuration.iterator();
-        if(iterator != null) {
-            while (iterator.hasNext()) {
-                Map.Entry<String, String> entry = iterator.next();
-                props.setProperty(entry.getKey(), entry.getValue());
-            }
-        }
-        final Connection conn = DriverManager.getConnection(QueryUtil.getUrl(configuration.get(HConstants.ZOOKEEPER_QUORUM)), props);
-        return conn;
+    public static Connection getInputConnection(final Configuration conf , final Properties props) throws SQLException {
+        Preconditions.checkNotNull(conf);
+		return getConnection(PhoenixConfigurationUtil.getInputCluster(conf),
+				PhoenixConfigurationUtil.getClientPort(conf),
+				PhoenixConfigurationUtil.getZNodeParent(conf),
+				PropertiesUtil.extractProperties(props, conf));
+    }
+
+    /**
+     * Create the configured output Connection.
+     *
+     * @param conf configuration containing the connection information
+     * @return the configured output connection
+     */
+    public static Connection getOutputConnection(final Configuration conf) throws SQLException {
+        return getOutputConnection(conf, new Properties());
+    }
+    
+    /**
+     * Create the configured output Connection.
+     *
+     * @param conf configuration containing the connection information
+     * @param props custom connection properties
+     * @return the configured output connection
+     */
+    public static Connection getOutputConnection(final Configuration conf, Properties props) throws SQLException {
+        Preconditions.checkNotNull(conf);
+		return getConnection(PhoenixConfigurationUtil.getOutputCluster(conf),
+				PhoenixConfigurationUtil.getClientPort(conf),
+				PhoenixConfigurationUtil.getZNodeParent(conf),
+				PropertiesUtil.extractProperties(props, conf));
+    }
+
+    /**
+     * Returns the {@link Connection} from a ZooKeeper cluster string.
+     *
+     * @param quorum a ZooKeeper quorum connection string
+     * @param clientPort a ZooKeeper client port
+     * @param znodeParent a zookeeper znode parent
+     * @return a Phoenix connection to the given connection string
+     */
+    private static Connection getConnection(final String quorum, final Integer clientPort, final String znodeParent, Properties props) throws SQLException {
+        Preconditions.checkNotNull(quorum);
+        return DriverManager.getConnection(QueryUtil.getUrl(quorum, clientPort, znodeParent), props);
     }
 
 }

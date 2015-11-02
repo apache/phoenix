@@ -20,6 +20,7 @@ package org.apache.phoenix.util;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.sql.Types;
 import java.util.Properties;
@@ -38,7 +39,7 @@ public class QueryUtilTest {
     @Test
     public void testConstructUpsertStatement_ColumnInfos() {
         assertEquals(
-                "UPSERT INTO MYTAB (\"ID\", \"NAME\") VALUES (?, ?)",
+                "UPSERT  INTO MYTAB (\"ID\", \"NAME\") VALUES (?, ?)",
                 QueryUtil.constructUpsertStatement("MYTAB", ImmutableList.of(ID_COLUMN, NAME_COLUMN)));
 
     }
@@ -63,10 +64,37 @@ public class QueryUtilTest {
     @Test
     public void testConstructSelectStatement() {
         assertEquals(
-                "SELECT \"ID\",\"NAME\" FROM \"MYTAB\"",
+                "SELECT \"ID\",\"NAME\" FROM MYTAB",
                 QueryUtil.constructSelectStatement("MYTAB", ImmutableList.of(ID_COLUMN,NAME_COLUMN),null));
     }
 
+    @Test
+    public void testConstructSelectStatementWithSchema() {
+        assertEquals(
+                "SELECT \"ID\",\"NAME\" FROM A.MYTAB",
+                QueryUtil.constructSelectStatement("A.MYTAB", ImmutableList.of(ID_COLUMN,NAME_COLUMN),null));
+    }
+    
+    @Test
+    public void testConstructSelectStatementWithCaseSensitiveSchema() {
+        final String tableName = "MYTAB";
+        final String schemaName = SchemaUtil.getEscapedArgument("a");
+        final String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+        assertEquals(
+                "SELECT \"ID\",\"NAME\" FROM \"a\".MYTAB",
+                QueryUtil.constructSelectStatement(fullTableName, ImmutableList.of(ID_COLUMN,NAME_COLUMN),null));
+    }
+    
+    @Test
+    public void testConstructSelectStatementWithCaseSensitiveTable() {
+        final String tableName = SchemaUtil.getEscapedArgument("mytab");
+        final String schemaName = SchemaUtil.getEscapedArgument("a");
+        final String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+        assertEquals(
+                "SELECT \"ID\",\"NAME\" FROM \"a\".\"mytab\"",
+                QueryUtil.constructSelectStatement(fullTableName, ImmutableList.of(ID_COLUMN,NAME_COLUMN),null));
+    }
+    
     /**
      * Test that we create connection strings from the HBase Configuration that match the
      * expected syntax. Expected to log exceptions as it uses ZK host names that don't exist
@@ -96,19 +124,28 @@ public class QueryUtilTest {
     }
 
     private void validateUrl(String url) {
-        String prefix = QueryUtil.getUrl("");
+        String prefix = PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
         assertTrue("JDBC URL missing jdbc protocol prefix", url.startsWith(prefix));
-        //remove the prefix, should only be left with server,server...:port
-        url = url.substring(prefix.length()+1);
-        // make sure only a single ':'
-        assertEquals("More than a single ':' in url: "+url, url.indexOf(PhoenixRuntime
-                .JDBC_PROTOCOL_SEPARATOR),
-                url.lastIndexOf(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR));
+        assertTrue("JDBC URL missing jdbc terminator suffix", url.endsWith(";"));
+        // remove the prefix, should only be left with server[,server...]:port:/znode
+        url = url.substring(prefix.length());
+        String[] splits = url.split(":");
+        assertTrue("zk details should contain at least server component", splits.length >= 1);
         // make sure that each server is comma separated
-        url = url.substring(0, url.indexOf(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR));
-        String[] servers = url.split(",");
+        String[] servers = splits[0].split(",");
         for(String server: servers){
             assertFalse("Found whitespace in server names for url: " + url, server.contains(" "));
+        }
+        if (splits.length >= 2) {
+            // second bit is a port number, should not through
+            try {
+                Integer.parseInt(splits[1]);
+            } catch (NumberFormatException e) {
+                fail(e.getMessage());
+            }
+        }
+        if (splits.length >= 3) {
+            assertTrue("znode parent is not an absolute path", splits[2].startsWith("/"));
         }
     }
 }

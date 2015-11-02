@@ -26,6 +26,8 @@ import org.apache.phoenix.util.SchemaUtil;
 
 
 public class TableRef {
+    public static final TableRef EMPTY_TABLE_REF = new TableRef(new PTableImpl());
+    
     private PTable table;
     private final String alias;
     private final long upperBoundTimeStamp;
@@ -103,7 +105,7 @@ public class TableRef {
     public int hashCode() {
         final int prime = 31;
         int result = alias == null ? 0 : alias.hashCode();
-        result = prime * result + this.table.getName().getString().hashCode();
+        result = prime * result + ( this.table!=null && this.table.getName()!=null ? this.table.getName().getString().hashCode() : 0);
         return result;
     }
 

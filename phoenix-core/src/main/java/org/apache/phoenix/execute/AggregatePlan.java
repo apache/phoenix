@@ -45,6 +45,7 @@ import org.apache.phoenix.iterate.OrderedAggregatingResultIterator;
 import org.apache.phoenix.iterate.OrderedResultIterator;
 import org.apache.phoenix.iterate.ParallelIteratorFactory;
 import org.apache.phoenix.iterate.ParallelIterators;
+import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.PeekingResultIterator;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.iterate.SequenceResultIterator;
@@ -77,7 +78,14 @@ public class AggregatePlan extends BaseQueryPlan {
             StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector,
             Integer limit, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory, GroupBy groupBy,
             Expression having) {
-        super(context, statement, table, projector, context.getBindManager().getParameterMetaData(), limit, orderBy, groupBy, parallelIteratorFactory);
+        this(context, statement, table, projector, limit, orderBy, parallelIteratorFactory, groupBy, having, null);
+    }
+    
+    private AggregatePlan(
+            StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector,
+            Integer limit, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory, GroupBy groupBy,
+            Expression having, Expression dynamicFilter) {
+        super(context, statement, table, projector, context.getBindManager().getParameterMetaData(), limit, orderBy, groupBy, parallelIteratorFactory, dynamicFilter);
         this.having = having;
         this.aggregators = context.getAggregationManager().getAggregators();
     }
@@ -88,12 +96,18 @@ public class AggregatePlan extends BaseQueryPlan {
     
     @Override
     public List<KeyRange> getSplits() {
-        return splits;
+        if (splits == null)
+            return Collections.emptyList();
+        else
+            return splits;
     }
 
     @Override
     public List<List<Scan>> getScans() {
-        return scans;
+        if (scans == null)
+            return Collections.emptyList();
+        else
+            return scans;
     }
 
     private static class OrderingResultIteratorFactory implements ParallelIteratorFactory {
@@ -103,7 +117,7 @@ public class AggregatePlan extends BaseQueryPlan {
             this.services = services;
         }
         @Override
-        public PeekingResultIterator newIterator(ResultIterator scanner, Scan scan) throws SQLException {
+        public PeekingResultIterator newIterator(StatementContext context, ResultIterator scanner, Scan scan, String tableName) throws SQLException {
             Expression expression = RowKeyExpression.INSTANCE;
             OrderByExpression orderByExpression = new OrderByExpression(expression, false, true);
             int threshold = services.getProps().getInt(QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB, QueryServicesOptions.DEFAULT_SPOOL_THRESHOLD_BYTES);
@@ -120,9 +134,9 @@ public class AggregatePlan extends BaseQueryPlan {
             this.outerFactory = outerFactory;
         }
         @Override
-        public PeekingResultIterator newIterator(ResultIterator scanner, Scan scan) throws SQLException {
-            PeekingResultIterator iterator = innerFactory.newIterator(scanner, scan);
-            return outerFactory.newIterator(iterator, scan);
+        public PeekingResultIterator newIterator(StatementContext context, ResultIterator scanner, Scan scan, String tableName) throws SQLException {
+            PeekingResultIterator iterator = innerFactory.newIterator(context, scanner, scan, tableName);
+            return outerFactory.newIterator(context, iterator, scan, tableName);
         }
     }
 
@@ -142,7 +156,7 @@ public class AggregatePlan extends BaseQueryPlan {
     }
     
     @Override
-    protected ResultIterator newIterator() throws SQLException {
+    protected ResultIterator newIterator(ParallelScanGrouper scanGrouper) throws SQLException {
         if (groupBy.isEmpty()) {
             UngroupedAggregateRegionObserver.serializeIntoScan(context.getScan());
         } else {
@@ -178,6 +192,7 @@ public class AggregatePlan extends BaseQueryPlan {
         }
         ParallelIterators parallelIterators = new ParallelIterators(this, null, wrapParallelIteratorFactory());
         splits = parallelIterators.getSplits();
+        scans = parallelIterators.getScans();
 
         AggregatingResultIterator aggResultIterator;
         // No need to merge sort for ungrouped aggregation
@@ -209,5 +224,10 @@ public class AggregatePlan extends BaseQueryPlan {
             resultScanner = new SequenceResultIterator(resultScanner, context.getSequenceManager());
         }
         return resultScanner;
+    }
+
+    @Override
+    public boolean useRoundRobinIterator() throws SQLException {
+        return false;
     }
 }

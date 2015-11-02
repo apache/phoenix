@@ -19,7 +19,9 @@
  */
 package org.apache.phoenix.pig;
 
-import static org.apache.phoenix.query.BaseTest.setUpConfigForMiniCluster;
+import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
+import static org.apache.phoenix.util.TestUtil.LOCALHOST;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
@@ -35,18 +37,11 @@ import java.util.Properties;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.HBaseTestingUtility;
-import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
-import org.apache.phoenix.jdbc.PhoenixDriver;
-import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.TestUtil;
 import org.apache.pig.ExecType;
 import org.apache.pig.PigServer;
-import org.apache.pig.backend.hadoop.datastorage.ConfigurationUtil;
 import org.apache.pig.builtin.mock.Storage;
 import org.apache.pig.builtin.mock.Storage.Data;
 import org.apache.pig.data.DataType;
@@ -54,11 +49,8 @@ import org.apache.pig.data.Tuple;
 import org.apache.pig.impl.logicalLayer.schema.Schema;
 import org.apache.pig.impl.logicalLayer.schema.Schema.FieldSchema;
 import org.junit.After;
-import org.junit.AfterClass;
 import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 
 import com.google.common.base.Preconditions;
 
@@ -66,40 +58,25 @@ import com.google.common.base.Preconditions;
  * 
  * Test class to run all the integration tests against a virtual map reduce cluster.
  */
-@Category(NeedsOwnMiniClusterTest.class)
-public class PhoenixHBaseLoaderIT {
+public class PhoenixHBaseLoaderIT extends BaseHBaseManagedTimeIT {
     
     private static final Log LOG = LogFactory.getLog(PhoenixHBaseLoaderIT.class);
     private static final String SCHEMA_NAME = "T";
     private static final String TABLE_NAME = "A";
     private static final String INDEX_NAME = "I";
     private static final String TABLE_FULL_NAME = SchemaUtil.getTableName(SCHEMA_NAME, TABLE_NAME);
-    private static HBaseTestingUtility hbaseTestUtil;
-    private static String zkQuorum;
-    private static Connection conn;
-    private static PigServer pigServer;
-    private static Configuration conf;
+    private static final String CASE_SENSITIVE_TABLE_NAME = SchemaUtil.getEscapedArgument("a");
+    private static final String CASE_SENSITIVE_TABLE_FULL_NAME = SchemaUtil.getTableName(SCHEMA_NAME,CASE_SENSITIVE_TABLE_NAME);
+    private String zkQuorum;
+    private Connection conn;
+    private PigServer pigServer;
 
-    @BeforeClass
-    public static void setUpBeforeClass() throws Exception {
-        hbaseTestUtil = new HBaseTestingUtility();
-        conf = hbaseTestUtil.getConfiguration();
-        setUpConfigForMiniCluster(conf);
-        conf.set(QueryServices.DROP_METADATA_ATTRIB, Boolean.toString(true));
-        hbaseTestUtil.startMiniCluster();
-
-        Class.forName(PhoenixDriver.class.getName());
-        zkQuorum = "localhost:" + hbaseTestUtil.getZkCluster().getClientPort();
-        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
-        props.put(QueryServices.DROP_METADATA_ATTRIB, Boolean.toString(true));
-        conn = DriverManager.getConnection(PhoenixRuntime.JDBC_PROTOCOL +
-                 PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum,props);
-     }
-    
     @Before
     public void setUp() throws Exception {
-        pigServer = new PigServer(ExecType.LOCAL,
-                ConfigurationUtil.toProperties(conf));
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        conn = DriverManager.getConnection(getUrl(), props);
+        zkQuorum = LOCALHOST + JDBC_PROTOCOL_SEPARATOR + getZKClientPort(getTestClusterConfig());
+        pigServer = new PigServer(ExecType.LOCAL, getTestClusterConfig());
     }
 
     /**
@@ -108,13 +85,14 @@ public class PhoenixHBaseLoaderIT {
      */
     @Test
     public void testSchemaForTable() throws Exception {
+        final String TABLE = "TABLE1";
         final String ddl = String.format("CREATE TABLE %s "
                 + "  (a_string varchar not null, a_binary varbinary not null, a_integer integer, cf1.a_float float"
-                + "  CONSTRAINT pk PRIMARY KEY (a_string, a_binary))\n", TABLE_FULL_NAME);
+                + "  CONSTRAINT pk PRIMARY KEY (a_string, a_binary))\n", TABLE);
         conn.createStatement().execute(ddl);
-
+        conn.commit();
         pigServer.registerQuery(String.format(
-                "A = load 'hbase://table/%s' using " + PhoenixHBaseLoader.class.getName() + "('%s');", TABLE_FULL_NAME,
+                "A = load 'hbase://table/%s' using " + PhoenixHBaseLoader.class.getName() + "('%s');", TABLE,
                 zkQuorum));
         
         final Schema schema = pigServer.dumpSchema("A");
@@ -138,15 +116,15 @@ public class PhoenixHBaseLoaderIT {
     public void testSchemaForTableWithSpecificColumns() throws Exception {
         
         //create the table
-        final String ddl = "CREATE TABLE " + TABLE_FULL_NAME 
+        final String TABLE = "TABLE2";
+        final String ddl = "CREATE TABLE " + TABLE
                 + "  (ID INTEGER NOT NULL PRIMARY KEY,NAME VARCHAR, AGE INTEGER) ";
         conn.createStatement().execute(ddl);
-        
         
         final String selectColumns = "ID,NAME";
         pigServer.registerQuery(String.format(
                 "A = load 'hbase://table/%s/%s' using " + PhoenixHBaseLoader.class.getName() + "('%s');",
-                TABLE_FULL_NAME, selectColumns, zkQuorum));
+                TABLE, selectColumns, zkQuorum));
         
         Schema schema = pigServer.dumpSchema("A");
         List<FieldSchema> fields = schema.getFields();
@@ -155,7 +133,6 @@ public class PhoenixHBaseLoaderIT {
         assertTrue(fields.get(0).type == DataType.INTEGER);
         assertTrue(fields.get(1).alias.equalsIgnoreCase("NAME"));
         assertTrue(fields.get(1).type == DataType.CHARARRAY);
-        
     }
     
     /**
@@ -166,15 +143,16 @@ public class PhoenixHBaseLoaderIT {
     public void testSchemaForQuery() throws Exception {
         
        //create the table.
-        String ddl = String.format("CREATE TABLE " + TABLE_FULL_NAME +
+        final String TABLE = "TABLE3";
+        String ddl = String.format("CREATE TABLE " + TABLE +
                  "  (A_STRING VARCHAR NOT NULL, A_DECIMAL DECIMAL NOT NULL, CF1.A_INTEGER INTEGER, CF2.A_DOUBLE DOUBLE"
-                + "  CONSTRAINT pk PRIMARY KEY (A_STRING, A_DECIMAL))\n", TABLE_FULL_NAME);
+                + "  CONSTRAINT pk PRIMARY KEY (A_STRING, A_DECIMAL))\n", TABLE);
         conn.createStatement().execute(ddl);
-        
+
         
         
         //sql query for LOAD
-        final String sqlQuery = "SELECT A_STRING,CF1.A_INTEGER,CF2.A_DOUBLE FROM " + TABLE_FULL_NAME;
+        final String sqlQuery = "SELECT A_STRING,CF1.A_INTEGER,CF2.A_DOUBLE FROM " + TABLE;
         pigServer.registerQuery(String.format(
                 "A = load 'hbase://query/%s' using " + PhoenixHBaseLoader.class.getName() + "('%s');",
                 sqlQuery, zkQuorum));
@@ -199,13 +177,14 @@ public class PhoenixHBaseLoaderIT {
     public void testSchemaForTableWithAlias() throws Exception {
         
         //create the table.
-        String ddl = "CREATE TABLE  " + TABLE_FULL_NAME 
+        final String TABLE = "S.TABLE4";
+        String ddl = "CREATE TABLE  " + TABLE
                 + "  (A_STRING VARCHAR NOT NULL, A_DECIMAL DECIMAL NOT NULL, CF1.A_INTEGER INTEGER, CF2.A_DOUBLE DOUBLE"
                 + "  CONSTRAINT pk PRIMARY KEY (A_STRING, A_DECIMAL)) \n";
         conn.createStatement().execute(ddl);
-        
+
         //select query given as part of LOAD.
-        final String sqlQuery = "SELECT A_STRING,A_DECIMAL,CF1.A_INTEGER,CF2.A_DOUBLE FROM " + TABLE_FULL_NAME;
+        final String sqlQuery = "SELECT A_STRING,A_DECIMAL,CF1.A_INTEGER,CF2.A_DOUBLE FROM " + TABLE;
         
         LOG.info(String.format("Generated SQL Query [%s]",sqlQuery));
         
@@ -234,13 +213,13 @@ public class PhoenixHBaseLoaderIT {
     public void testDataForTable() throws Exception {
         
          //create the table
-         String ddl = "CREATE TABLE  " + TABLE_FULL_NAME 
+         String ddl = "CREATE TABLE  " + CASE_SENSITIVE_TABLE_FULL_NAME 
                 + "  (ID  INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, AGE INTEGER) ";
                 
         conn.createStatement().execute(ddl);
         
         //prepare data with 10 rows having age 25 and the other 30.
-        final String dml = "UPSERT INTO " + TABLE_FULL_NAME + " VALUES(?,?,?)";
+        final String dml = "UPSERT INTO " + CASE_SENSITIVE_TABLE_FULL_NAME + " VALUES(?,?,?)";
         PreparedStatement stmt = conn.prepareStatement(dml);
         int rows = 20;
         for(int i = 0 ; i < rows; i++) {
@@ -253,7 +232,7 @@ public class PhoenixHBaseLoaderIT {
          
         //load data and filter rows whose age is > 25
         pigServer.registerQuery(String.format(
-                "A = load 'hbase://table/%s' using "  + PhoenixHBaseLoader.class.getName() + "('%s');", TABLE_FULL_NAME,
+                "A = load 'hbase://table/%s' using "  + PhoenixHBaseLoader.class.getName() + "('%s');", CASE_SENSITIVE_TABLE_FULL_NAME,
                 zkQuorum));
         pigServer.registerQuery("B = FILTER A BY AGE > 25;");
         
@@ -315,13 +294,14 @@ public class PhoenixHBaseLoaderIT {
     public void testForNonPKSQLQuery() throws Exception {
         
          //create the table
-         String ddl = "CREATE TABLE  " + TABLE_FULL_NAME 
+        final String TABLE = "TABLE5";
+        String ddl = "CREATE TABLE  " + TABLE
                 + " ( ID VARCHAR PRIMARY KEY, FOO VARCHAR, BAR INTEGER, BAZ UNSIGNED_INT)";
                 
         conn.createStatement().execute(ddl);
         
         //upsert data.
-        final String dml = "UPSERT INTO " + TABLE_FULL_NAME + " VALUES(?,?,?,?) ";
+        final String dml = "UPSERT INTO " + TABLE + " VALUES(?,?,?,?) ";
         PreparedStatement stmt = conn.prepareStatement(dml);
         stmt.setString(1, "a");
         stmt.setString(2, "a");
@@ -337,7 +317,7 @@ public class PhoenixHBaseLoaderIT {
         conn.commit();
         
         //sql query
-        final String sqlQuery = String.format(" SELECT FOO, BAZ FROM %s WHERE BAR = -1 " , TABLE_FULL_NAME);
+        final String sqlQuery = String.format(" SELECT FOO, BAZ FROM %s WHERE BAR = -1 " , TABLE);
       
         pigServer.registerQuery(String.format(
                 "A = load 'hbase://query/%s' using " + PhoenixHBaseLoader.class.getName() + "('%s');", sqlQuery,
@@ -370,13 +350,14 @@ public class PhoenixHBaseLoaderIT {
     public void testGroupingOfDataForTable() throws Exception {
         
          //create the table
-         String ddl = "CREATE TABLE  " + TABLE_FULL_NAME 
+        final String TABLE = "TABLE6";
+        String ddl = "CREATE TABLE  " + TABLE
                 + "  (ID  INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, AGE INTEGER, SAL INTEGER) ";
                 
         conn.createStatement().execute(ddl);
         
         //prepare data with 10 rows having age 25 and the other 30.
-        final String dml = "UPSERT INTO " + TABLE_FULL_NAME + " VALUES(?,?,?,?)";
+        final String dml = "UPSERT INTO " + TABLE + " VALUES(?,?,?,?)";
         PreparedStatement stmt = conn.prepareStatement(dml);
         int rows = 20;
         int j = 0, k = 0;
@@ -404,7 +385,7 @@ public class PhoenixHBaseLoaderIT {
          //load data and filter rows whose age is > 25
         pigServer.setBatchOn();
         pigServer.registerQuery(String.format(
-                "A = load 'hbase://table/%s' using " + PhoenixHBaseLoader.class.getName() + "('%s');", TABLE_FULL_NAME,
+                "A = load 'hbase://table/%s' using " + PhoenixHBaseLoader.class.getName() + "('%s');", TABLE,
                 zkQuorum));
         
         pigServer.registerQuery("B = GROUP A BY AGE;");
@@ -415,6 +396,90 @@ public class PhoenixHBaseLoaderIT {
         List<Tuple> actualList = data.get("out");
         assertEquals(expectedList, actualList);
     }
+	 
+    @Test
+    public void testTimestampForSQLQuery() throws Exception {
+        try {
+            //create the table
+            String ddl = "CREATE TABLE TIMESTAMP_T (MYKEY VARCHAR,DATE_STP TIMESTAMP CONSTRAINT PK PRIMARY KEY (MYKEY)) ";
+            conn.createStatement().execute(ddl);
+
+            final String dml = "UPSERT INTO TIMESTAMP_T VALUES('foo',TO_TIMESTAMP('2006-04-12 00:00:00'))";
+            conn.createStatement().execute(dml);
+            conn.commit();
+
+            //sql query
+            final String sqlQuery = " SELECT mykey, year(DATE_STP) FROM TIMESTAMP_T ";
+            pigServer.registerQuery(String.format(
+                "A = load 'hbase://query/%s' using org.apache.phoenix.pig.PhoenixHBaseLoader('%s');", sqlQuery,
+                zkQuorum));
+
+            final Iterator<Tuple> iterator = pigServer.openIterator("A");
+            while (iterator.hasNext()) {
+                Tuple tuple = iterator.next();
+                assertEquals("foo", tuple.get(0));
+                assertEquals(2006, tuple.get(1));
+            }
+        } finally {
+            dropTable("TIMESTAMP_T");
+        }
+    }
+    
+    @Test
+    public void testDateForSQLQuery() throws Exception {
+        try {
+            //create the table
+            String ddl = "CREATE TABLE DATE_T (MYKEY VARCHAR,DATE_STP Date CONSTRAINT PK PRIMARY KEY (MYKEY)) ";
+            conn.createStatement().execute(ddl);
+
+            final String dml = "UPSERT INTO DATE_T VALUES('foo',TO_DATE('2004-03-10 10:00:00'))";
+            conn.createStatement().execute(dml);
+            conn.commit();
+
+            //sql query
+            final String sqlQuery = " SELECT mykey, hour(DATE_STP) FROM DATE_T ";
+            pigServer.registerQuery(String.format(
+                "A = load 'hbase://query/%s' using org.apache.phoenix.pig.PhoenixHBaseLoader('%s');", sqlQuery,
+                zkQuorum));
+
+            final Iterator<Tuple> iterator = pigServer.openIterator("A");
+            while (iterator.hasNext()) {
+                Tuple tuple = iterator.next();
+                assertEquals("foo", tuple.get(0));
+                assertEquals(10, tuple.get(1));
+            }
+        } finally {
+            dropTable("DATE_T");
+        }
+    }
+
+    @Test
+    public void testTimeForSQLQuery() throws Exception {
+        try {
+            //create the table
+            String ddl = "CREATE TABLE TIME_T (MYKEY VARCHAR,DATE_STP TIME CONSTRAINT PK PRIMARY KEY (MYKEY)) ";
+            conn.createStatement().execute(ddl);
+
+            final String dml = "UPSERT INTO TIME_T VALUES('foo',TO_TIME('2008-05-16 00:30:00'))";
+            conn.createStatement().execute(dml);
+            conn.commit();
+
+            //sql query
+            final String sqlQuery = " SELECT mykey, minute(DATE_STP) FROM TIME_T ";
+            pigServer.registerQuery(String.format(
+                "A = load 'hbase://query/%s' using org.apache.phoenix.pig.PhoenixHBaseLoader('%s');", sqlQuery,
+                zkQuorum));
+
+            final Iterator<Tuple> iterator = pigServer.openIterator("A");
+            while (iterator.hasNext()) {
+                Tuple tuple = iterator.next();
+                assertEquals("foo", tuple.get(0));
+                assertEquals(30, tuple.get(1));
+            }
+        } finally {
+            dropTable("TIME_T");
+        }
+    }
     
     /**
      * Tests both  {@link PhoenixHBaseLoader} and {@link PhoenixHBaseStorage} 
@@ -424,18 +489,19 @@ public class PhoenixHBaseLoaderIT {
     public void testLoadAndStore() throws Exception {
         
          //create the tables
-         final String sourceTableddl = "CREATE TABLE  " + TABLE_FULL_NAME 
+        final String TABLE = "TABLE7";
+        final String sourceTableddl = "CREATE TABLE  " + TABLE
                 + "  (ID  INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, AGE INTEGER, SAL INTEGER) ";
          
-         final String targetTable = "AGGREGATE";
-         final String targetTableddl = "CREATE TABLE " + targetTable 
+        final String targetTable = "AGGREGATE";
+        final String targetTableddl = "CREATE TABLE " + targetTable
                  +  "(AGE INTEGER NOT NULL PRIMARY KEY , MIN_SAL INTEGER , MAX_SAL INTEGER) ";
                  
         conn.createStatement().execute(sourceTableddl);
         conn.createStatement().execute(targetTableddl);
         
         //prepare data with 10 rows having age 25 and the other 30.
-        final String dml = "UPSERT INTO " + TABLE_FULL_NAME + " VALUES(?,?,?,?)";
+        final String dml = "UPSERT INTO " + TABLE + " VALUES(?,?,?,?)";
         PreparedStatement stmt = conn.prepareStatement(dml);
         int rows = 20;
         int j = 0, k = 0;
@@ -458,7 +524,7 @@ public class PhoenixHBaseLoaderIT {
          //load data and filter rows whose age is > 25
         pigServer.setBatchOn();
         pigServer.registerQuery(String.format(
-                "A = load 'hbase://table/%s' using " + PhoenixHBaseLoader.class.getName() + "('%s');", TABLE_FULL_NAME,
+                "A = load 'hbase://table/%s' using " + PhoenixHBaseLoader.class.getName() + "('%s');", TABLE,
                 zkQuorum));
         
         pigServer.registerQuery("B = GROUP A BY AGE;");
@@ -489,7 +555,8 @@ public class PhoenixHBaseLoaderIT {
     public void testDataForSQLQueryWithSequences() throws Exception {
         
          //create the table
-         String ddl = "CREATE TABLE " + TABLE_FULL_NAME
+        final String TABLE = "TABLE8";
+        String ddl = "CREATE TABLE " + TABLE
                 + " (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, AGE INTEGER) ";
                 
         conn.createStatement().execute(ddl);
@@ -499,7 +566,7 @@ public class PhoenixHBaseLoaderIT {
         conn.createStatement().execute(sequenceDdl);
            
         //prepare data with 10 rows having age 25 and the other 30.
-        final String dml = "UPSERT INTO " + TABLE_FULL_NAME + " VALUES(?,?,?)";
+        final String dml = "UPSERT INTO " + TABLE + " VALUES(?,?,?)";
         PreparedStatement stmt = conn.prepareStatement(dml);
         int rows = 20;
         for(int i = 0 ; i < rows; i++) {
@@ -511,7 +578,7 @@ public class PhoenixHBaseLoaderIT {
         conn.commit();
         
         //sql query load data and filter rows whose age is > 25
-        final String sqlQuery = " SELECT NEXT VALUE FOR my_sequence AS my_seq,ID,NAME,AGE FROM " + TABLE_FULL_NAME + " WHERE AGE > 25";
+        final String sqlQuery = " SELECT NEXT VALUE FOR my_sequence AS my_seq,ID,NAME,AGE FROM " + TABLE + " WHERE AGE > 25";
         pigServer.registerQuery(String.format(
                 "A = load 'hbase://query/%s' using " + PhoenixHBaseLoader.class.getName() + "('%s');", sqlQuery,
                 zkQuorum));
@@ -530,12 +597,13 @@ public class PhoenixHBaseLoaderIT {
     public void testDataForSQLQueryWithFunctions() throws Exception {
         
          //create the table
-         String ddl = "CREATE TABLE " + TABLE_FULL_NAME
+         final String TABLE = "TABLE9";
+         String ddl = "CREATE TABLE " + TABLE
                 + " (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR) ";
                 
         conn.createStatement().execute(ddl);
         
-        final String dml = "UPSERT INTO " + TABLE_FULL_NAME + " VALUES(?,?)";
+        final String dml = "UPSERT INTO " + TABLE + " VALUES(?,?)";
         PreparedStatement stmt = conn.prepareStatement(dml);
         int rows = 20;
         for(int i = 0 ; i < rows; i++) {
@@ -546,7 +614,7 @@ public class PhoenixHBaseLoaderIT {
         conn.commit();
         
         //sql query
-        final String sqlQuery = " SELECT UPPER(NAME) AS n FROM " + TABLE_FULL_NAME + " ORDER BY ID" ;
+        final String sqlQuery = " SELECT UPPER(NAME) AS n FROM " + TABLE + " ORDER BY ID" ;
 
         pigServer.registerQuery(String.format(
                 "A = load 'hbase://query/%s' using "  + PhoenixHBaseLoader.class.getName() + "('%s');", sqlQuery,
@@ -599,25 +667,64 @@ public class PhoenixHBaseLoaderIT {
           dropTable(INDEX_NAME);
         }
     }
+	 
+	@Test 
+	public void testLoadOfSaltTable() throws Exception {
+	    final String TABLE = "TABLE11";
+        final String sourceTableddl = "CREATE TABLE  " + TABLE
+                + "  (ID  INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, AGE INTEGER, SAL INTEGER) SALT_BUCKETS=2  ";
+         
+        conn.createStatement().execute(sourceTableddl);
+        
+        //prepare data with 10 rows having age 25 and the other 30.
+        final String dml = "UPSERT INTO " + TABLE + " VALUES(?,?,?,?)";
+        PreparedStatement stmt = conn.prepareStatement(dml);
+        int rows = 20;
+        int j = 0, k = 0;
+        for(int i = 0 ; i < rows; i++) {
+            stmt.setInt(1, i);
+            stmt.setString(2, "a"+i);
+            if(i % 2 == 0) {
+                stmt.setInt(3, 25);
+                stmt.setInt(4, 10 * 2 * j++);    
+            } else {
+                stmt.setInt(3, 30);
+                stmt.setInt(4, 10 * 3 * k++);
+            }
+            
+            stmt.execute();    
+        }
+        conn.commit();
+            
+        final Data data = Storage.resetData(pigServer);
+        List<Tuple> expectedList = new ArrayList<Tuple>();
+        expectedList.add(Storage.tuple(25,10));
+        expectedList.add(Storage.tuple(30,10));
+        
+        pigServer.setBatchOn();
+        pigServer.registerQuery(String.format(
+                "A = load 'hbase://table/%s' using " + PhoenixHBaseLoader.class.getName() + "('%s');", TABLE,
+                zkQuorum));
+        
+        pigServer.registerQuery("B = GROUP A BY AGE;");
+        pigServer.registerQuery("C = FOREACH B GENERATE group,COUNT(A);");
+        pigServer.registerQuery("STORE C INTO 'out' using mock.Storage();");
+        pigServer.executeBatch();
+        
+        List<Tuple> actualList = data.get("out");
+        assertEquals(expectedList.size(), actualList.size());
+	}
     
     @After
     public void tearDown() throws Exception {
-        dropTable(TABLE_FULL_NAME);
+        if(conn != null) {
+            conn.close();
+        }
         pigServer.shutdown();
     }
-
 
     private void dropTable(String tableFullName) throws SQLException {
       Preconditions.checkNotNull(conn);
       conn.createStatement().execute(String.format("DROP TABLE IF EXISTS %s",tableFullName));
-    }
-
-    @AfterClass
-    public static void tearDownAfterClass() throws Exception {
-        try {
-            conn.close();
-        } finally {
-            hbaseTestUtil.shutdownMiniCluster();
-        }
     }
 }

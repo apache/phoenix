@@ -38,8 +38,10 @@ import java.util.List;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.ConstraintViolationException;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
@@ -463,6 +465,8 @@ public class PDataTypeTest {
         Object doubleObj = PTinyint.INSTANCE.toObject(doubleValue, PDouble.INSTANCE);
         assertTrue(doubleObj instanceof Byte);
         assertEquals(100, ((Byte)doubleObj).byteValue());
+
+        assertTrue(PTinyint.INSTANCE.isCoercibleTo(PTinyint.INSTANCE, (byte) -1));
     }
     
     @Test
@@ -737,6 +741,38 @@ public class PDataTypeTest {
         float nna = PFloat.INSTANCE.getCodec().decodeFloat(ba, 0, SortOrder.DESC);
         float nnb = PFloat.INSTANCE.getCodec().decodeFloat(bb, 0, SortOrder.DESC);
         assertTrue(Float.compare(nna, nnb) < 0);
+    }
+    
+    @Test
+    public void testDoubleComparison() {
+        testRealNumberComparison(PDouble.INSTANCE, new Double[] {0.99, 1.0, 1.001, 1.01, 2.0});
+    }
+    
+    @Test
+    public void testFloatComparison() {
+        testRealNumberComparison(PFloat.INSTANCE, new Float[] {0.99f, 1.0f, 1.001f, 1.01f, 2.0f});
+    }
+    
+    @Test
+    public void testDecimalComparison() {
+        testRealNumberComparison(PDecimal.INSTANCE, new BigDecimal[] {BigDecimal.valueOf(0.99), BigDecimal.valueOf(1.0), BigDecimal.valueOf(1.001), BigDecimal.valueOf(1.01), BigDecimal.valueOf(2.0)});
+    }
+    
+    private static void testRealNumberComparison(PDataType type, Object[] a) {
+        
+        for (SortOrder sortOrder : SortOrder.values()) {
+            int factor = (sortOrder == SortOrder.ASC ? 1 : -1);
+            byte[] prev_b = null;
+            Object prev_o = null;
+            for (Object o : a) {
+                byte[] b = type.toBytes(o, sortOrder);
+                if (prev_b != null) {
+                    assertTrue("Compare of " + o + " with " + prev_o + " " + sortOrder + " failed.", ScanUtil.getComparator(type.isFixedWidth(), sortOrder).compare(prev_b, 0, prev_b.length, b, 0, b.length) * factor < 0);
+                }
+                prev_b = b;
+                prev_o = o;
+            }
+        }
     }
     
     @Test
@@ -1751,5 +1787,49 @@ public class PDataTypeTest {
         int i = -1;
         assertTrue(PLong.INSTANCE.compareTo(l, i, PInteger.INSTANCE)==0);
         assertTrue(PInteger.INSTANCE.compareTo(i, l, PLong.INSTANCE)==0);
+    }
+    
+    @Test
+    public void testSeparatorBytes() {
+        byte biggest = (byte) 0xFF;
+        assertEquals(biggest, QueryConstants.DESC_SEPARATOR_BYTE);
+        byte[] array = new byte[1];
+        for (int i = Byte.MIN_VALUE; i <= Byte.MAX_VALUE; i++) {
+            array[0] = (byte) i;
+            assertTrue(Bytes.compareTo(array, QueryConstants.DESC_SEPARATOR_BYTE_ARRAY) <= 0);
+        }
+    }
+    
+    @Test
+    public void testBoolean() {
+        byte[] bytes = PBoolean.INSTANCE.toBytes(Boolean.TRUE);
+        assertEquals(1, bytes[0]);
+        bytes = PBoolean.INSTANCE.toBytes(Boolean.FALSE);
+        assertEquals(0, bytes[0]);
+        
+        bytes = PBoolean.INSTANCE.toBytes(Boolean.TRUE, SortOrder.DESC);
+        assertEquals(0, bytes[0]);
+        bytes = PBoolean.INSTANCE.toBytes(Boolean.FALSE, SortOrder.DESC);
+        assertEquals(1, bytes[0]);
+        
+        Object dec = PDecimal.INSTANCE.toObject(Boolean.TRUE, PBoolean.INSTANCE);
+        bytes = PDecimal.INSTANCE.toBytes(dec);
+        Object b = PBoolean.INSTANCE.toObject(bytes, 0, bytes.length, PDecimal.INSTANCE, SortOrder.ASC);
+        assertEquals(true, b);
+        
+        dec = PDecimal.INSTANCE.toObject(Boolean.FALSE, PBoolean.INSTANCE);
+        bytes = PDecimal.INSTANCE.toBytes(dec);
+        b = PBoolean.INSTANCE.toObject(bytes, 0, bytes.length, PDecimal.INSTANCE, SortOrder.ASC);
+        assertEquals(false, b);
+        
+        dec = PDecimal.INSTANCE.toObject(Boolean.TRUE, PBoolean.INSTANCE);
+        bytes = PDecimal.INSTANCE.toBytes(dec, SortOrder.DESC);
+        b = PBoolean.INSTANCE.toObject(bytes, 0, bytes.length, PDecimal.INSTANCE, SortOrder.DESC);
+        assertEquals(true, b);
+        
+        dec = PDecimal.INSTANCE.toObject(Boolean.FALSE, PBoolean.INSTANCE);
+        bytes = PDecimal.INSTANCE.toBytes(dec, SortOrder.DESC);
+        b = PBoolean.INSTANCE.toObject(bytes, 0, bytes.length, PDecimal.INSTANCE, SortOrder.DESC);
+        assertEquals(false, b);
     }
 }

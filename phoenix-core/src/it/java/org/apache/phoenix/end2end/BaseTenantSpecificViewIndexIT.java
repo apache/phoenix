@@ -40,6 +40,7 @@ public class BaseTenantSpecificViewIndexIT extends BaseHBaseManagedTimeIT {
     
     public static final String TENANT1_ID = "tenant1";
     public static final String TENANT2_ID = "tenant2";
+    public static final String NON_STRING_TENANT_ID = "1234";
     
     protected Set<Pair<String, String>> tenantViewsToDelete = newHashSet();
     
@@ -48,11 +49,23 @@ public class BaseTenantSpecificViewIndexIT extends BaseHBaseManagedTimeIT {
     }
     
     protected void testUpdatableView(Integer saltBuckets, boolean localIndex) throws Exception {
-        createBaseTable("t", saltBuckets);
+        createBaseTable("t", saltBuckets, true);
         Connection conn = createTenantConnection(TENANT1_ID);
         try {
             createAndPopulateTenantView(conn, TENANT1_ID, "t", "");
             createAndVerifyIndex(conn, saltBuckets, TENANT1_ID, "", localIndex);
+            verifyViewData(conn, "");
+        } finally {
+            try { conn.close();} catch (Exception ignored) {}
+        }
+    }
+
+    protected void testUpdatableViewNonString(Integer saltBuckets, boolean localIndex) throws Exception {
+        createBaseTable("t", saltBuckets, false);
+        Connection conn = createTenantConnection(NON_STRING_TENANT_ID);
+        try {
+            createAndPopulateTenantView(conn, NON_STRING_TENANT_ID, "t", "");
+            createAndVerifyIndexNonStringTenantId(conn, NON_STRING_TENANT_ID, "");
             verifyViewData(conn, "");
         } finally {
             try { conn.close();} catch (Exception ignored) {}
@@ -64,7 +77,7 @@ public class BaseTenantSpecificViewIndexIT extends BaseHBaseManagedTimeIT {
     }
 
     protected void testUpdatableViewsWithSameNameDifferentTenants(Integer saltBuckets, boolean localIndex) throws Exception {
-        createBaseTable("t", saltBuckets);
+        createBaseTable("t", saltBuckets, true);
         Connection conn1 = createTenantConnection(TENANT1_ID);
         Connection conn2 = createTenantConnection(TENANT2_ID);
         try {
@@ -86,9 +99,10 @@ public class BaseTenantSpecificViewIndexIT extends BaseHBaseManagedTimeIT {
         }
     }
     
-    private void createBaseTable(String tableName, Integer saltBuckets) throws SQLException {
+    private void createBaseTable(String tableName, Integer saltBuckets, boolean hasStringTenantId) throws SQLException {
         Connection conn = DriverManager.getConnection(getUrl());
-        String ddl = "CREATE TABLE " + tableName + " (t_id VARCHAR NOT NULL,\n" +
+        String tenantIdType = hasStringTenantId ? "VARCHAR" : "BIGINT";
+        String ddl = "CREATE TABLE " + tableName + " (t_id " + tenantIdType + " NOT NULL,\n" +
                 "k1 INTEGER NOT NULL,\n" +
                 "k2 INTEGER NOT NULL,\n" +
                 "v1 VARCHAR,\n" +
@@ -134,6 +148,17 @@ public class BaseTenantSpecificViewIndexIT extends BaseHBaseManagedTimeIT {
                   + "CLIENT MERGE SORT";
             assertEquals(expected, QueryUtil.getExplainPlan(rs));
         }
+    }
+
+    private void createAndVerifyIndexNonStringTenantId(Connection conn, String tenantId, String valuePrefix) throws SQLException {
+        conn.createStatement().execute("CREATE LOCAL INDEX i ON v(v2)");
+        conn.createStatement().execute("UPSERT INTO v(k2,v1,v2) VALUES (-1, 'blah', 'superblah')"); // sanity check that we can upsert after index is there
+        conn.commit();
+        ResultSet rs = conn.createStatement().executeQuery("EXPLAIN SELECT k1, k2, v2 FROM v WHERE v2='" + valuePrefix + "v2-1'");
+        assertEquals(
+                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_T [" + tenantId + ",-32768,'" + valuePrefix + "v2-1']\n"
+                        + "    SERVER FILTER BY FIRST KEY ONLY\n"
+                        + "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
     }
     
     private Connection createTenantConnection(String tenantId) throws SQLException {

@@ -37,6 +37,7 @@ public class SQLExceptionInfo {
     public static final String TABLE_NAME = "tableName";
     public static final String FAMILY_NAME = "familyName";
     public static final String COLUMN_NAME = "columnName";
+    public static final String FUNCTION_NAME = "functionName";
 
     private final Throwable rootCause;
     private final SQLExceptionCode code; // Should always have one.
@@ -45,6 +46,7 @@ public class SQLExceptionInfo {
     private final String tableName;
     private final String familyName;
     private final String columnName;
+    private final String functionName;
 
     public static class Builder {
 
@@ -55,6 +57,7 @@ public class SQLExceptionInfo {
         private String tableName;
         private String familyName;
         private String columnName;
+        private String functionName;
 
         public Builder(SQLExceptionCode code) {
             this.code = code;
@@ -90,6 +93,10 @@ public class SQLExceptionInfo {
             return this;
         }
 
+        public Builder setFunctionName(String functionName) {
+            this.functionName = functionName;
+            return this;
+        }
         public SQLExceptionInfo build() {
             return new SQLExceptionInfo(this);
         }
@@ -108,6 +115,7 @@ public class SQLExceptionInfo {
         tableName = builder.tableName;
         familyName = builder.familyName;
         columnName = builder.columnName;
+        functionName = builder.functionName;
     }
 
     @Override
@@ -115,6 +123,10 @@ public class SQLExceptionInfo {
         StringBuilder builder = new StringBuilder(code.toString());
         if (message != null) {
             builder.append(" ").append(message);
+        }
+        if (functionName != null) {
+            builder.append(" ").append(FUNCTION_NAME).append("=").append(functionName);
+            return builder.toString();
         }
         String columnDisplayName = SchemaUtil.getMetaDataEntityName(schemaName, tableName, familyName, columnName);
         if (columnName != null) {
@@ -153,6 +165,10 @@ public class SQLExceptionInfo {
         return columnName;
     }
 
+    public String getFunctionName() {
+        return functionName;
+    }
+    
     public SQLExceptionCode getCode() {
         return code;
     }

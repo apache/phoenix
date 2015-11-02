@@ -41,6 +41,7 @@ import org.apache.phoenix.parse.DerivedTableNode;
 import org.apache.phoenix.parse.FamilyWildcardParseNode;
 import org.apache.phoenix.parse.JoinTableNode;
 import org.apache.phoenix.parse.NamedTableNode;
+import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.SelectStatement;
@@ -49,6 +50,7 @@ import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.parse.TableNode;
 import org.apache.phoenix.parse.TableNodeVisitor;
 import org.apache.phoenix.parse.TableWildcardParseNode;
+import org.apache.phoenix.parse.UDFParseNode;
 import org.apache.phoenix.parse.WildcardParseNode;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
@@ -57,6 +59,7 @@ import org.apache.phoenix.schema.AmbiguousTableException;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
+import org.apache.phoenix.schema.FunctionNotFoundException;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
@@ -100,19 +103,32 @@ public class FromCompiler {
 
         @Override
         public List<TableRef> getTables() {
+            return Collections.singletonList(TableRef.EMPTY_TABLE_REF);
+        }
+
+        @Override
+        public List<PFunction> getFunctions() {
             return Collections.emptyList();
         }
 
         @Override
         public TableRef resolveTable(String schemaName, String tableName)
                 throws SQLException {
-            throw new UnsupportedOperationException();
+            throw new TableNotFoundException(schemaName, tableName);
         }
 
         @Override
         public ColumnRef resolveColumn(String schemaName, String tableName, String colName) throws SQLException {
-            throw new UnsupportedOperationException();
+            throw new ColumnNotFoundException(schemaName, tableName, null, colName);
         }
+        
+        public PFunction resolveFunction(String functionName) throws SQLException {
+            throw new FunctionNotFoundException(functionName);
+        };
+
+        public boolean hasUDFs() {
+            return false;
+        };
     };
 
     public static ColumnResolver getResolverForCreation(final CreateTableStatement statement, final PhoenixConnection connection)
@@ -142,7 +158,7 @@ public class FromCompiler {
                     if (htable != null) Closeables.closeQuietly(htable);
                 }
                 tableNode = NamedTableNode.create(null, baseTable, statement.getColumnDefs());
-                return new SingleTableColumnResolver(connection, tableNode, e.getTimeStamp());
+                return new SingleTableColumnResolver(connection, tableNode, e.getTimeStamp(), new HashMap<String, UDFParseNode>(1));
             }
             throw e;
         }
@@ -164,10 +180,12 @@ public class FromCompiler {
     public static ColumnResolver getResolverForQuery(SelectStatement statement, PhoenixConnection connection)
     		throws SQLException {
     	TableNode fromNode = statement.getFrom();
+    	if (fromNode == null)
+    	    return EMPTY_TABLE_RESOLVER;
         if (fromNode instanceof NamedTableNode)
-            return new SingleTableColumnResolver(connection, (NamedTableNode) fromNode, true, 1);
+            return new SingleTableColumnResolver(connection, (NamedTableNode) fromNode, true, 1, statement.getUdfParseNodes());
 
-        MultiTableColumnResolver visitor = new MultiTableColumnResolver(connection, 1);
+        MultiTableColumnResolver visitor = new MultiTableColumnResolver(connection, 1, statement.getUdfParseNodes());
         fromNode.accept(visitor);
         return visitor;
     }
@@ -177,9 +195,21 @@ public class FromCompiler {
         return visitor;
     }
 
+    public static ColumnResolver getResolver(NamedTableNode tableNode, PhoenixConnection connection, Map<String, UDFParseNode> udfParseNodes) throws SQLException {
+        SingleTableColumnResolver visitor =
+                new SingleTableColumnResolver(connection, tableNode, true, 0, udfParseNodes);
+        return visitor;
+    }
+
     public static ColumnResolver getResolver(SingleTableStatement statement, PhoenixConnection connection)
             throws SQLException {
         SingleTableColumnResolver visitor = new SingleTableColumnResolver(connection, statement.getTable(), true);
+        return visitor;
+    }
+
+    public static ColumnResolver getResolver(SingleTableStatement statement, PhoenixConnection connection, Map<String, UDFParseNode> udfParseNodes)
+            throws SQLException {
+        SingleTableColumnResolver visitor = new SingleTableColumnResolver(connection, statement.getTable(), true, 0, udfParseNodes);
         return visitor;
     }
 
@@ -191,7 +221,7 @@ public class FromCompiler {
             Expression sourceExpression = projector.getColumnProjector(column.getPosition()).getExpression();
             PColumnImpl projectedColumn = new PColumnImpl(column.getName(), column.getFamilyName(),
                     sourceExpression.getDataType(), sourceExpression.getMaxLength(), sourceExpression.getScale(), sourceExpression.isNullable(),
-                    column.getPosition(), sourceExpression.getSortOrder(), column.getArraySize(), column.getViewConstant(), column.isViewReferenced(), column.getExpressionStr());
+                    column.getPosition(), sourceExpression.getSortOrder(), column.getArraySize(), column.getViewConstant(), column.isViewReferenced(), column.getExpressionStr(), column.isRowTimestamp());
             projectedColumns.add(projectedColumn);
         }
         PTable t = PTableImpl.makePTable(table, projectedColumns);
@@ -210,26 +240,32 @@ public class FromCompiler {
         return visitor;
     }
 
+    public static ColumnResolver getResolver(PhoenixConnection connection, TableRef tableRef, Map<String, UDFParseNode> udfParseNodes)
+            throws SQLException {
+        SingleTableColumnResolver visitor = new SingleTableColumnResolver(connection, tableRef, udfParseNodes);
+        return visitor;
+    }
+
     public static ColumnResolver getResolverForMutation(DMLStatement statement, PhoenixConnection connection)
             throws SQLException {
         /*
          * We validate the meta data at commit time for mutations, as this allows us to do many UPSERT VALUES calls
          * without hitting the server each time to check if the meta data is up-to-date.
          */
-        SingleTableColumnResolver visitor = new SingleTableColumnResolver(connection, statement.getTable(), false);
+        SingleTableColumnResolver visitor = new SingleTableColumnResolver(connection, statement.getTable(), false, 0,  statement.getUdfParseNodes());
         return visitor;
     }
     
-    public static ColumnResolver getResolverForProjectedTable(PTable projectedTable) {
-        return new ProjectedTableColumnResolver(projectedTable);
+    public static ColumnResolver getResolverForProjectedTable(PTable projectedTable, PhoenixConnection connection, Map<String, UDFParseNode> udfParseNodes) throws SQLException {
+        return new ProjectedTableColumnResolver(projectedTable, connection, udfParseNodes);
     }
 
     private static class SingleTableColumnResolver extends BaseColumnResolver {
     	private final List<TableRef> tableRefs;
     	private final String alias;
 
-       public SingleTableColumnResolver(PhoenixConnection connection, NamedTableNode table, long timeStamp) throws SQLException  {
-           super(connection, 0);
+       public SingleTableColumnResolver(PhoenixConnection connection, NamedTableNode table, long timeStamp, Map<String, UDFParseNode> udfParseNodes) throws SQLException  {
+           super(connection, 0, false, udfParseNodes);
            List<PColumnFamily> families = Lists.newArrayListWithExpectedSize(table.getDynamicColumns().size());
            for (ColumnDef def : table.getDynamicColumns()) {
                if (def.getColumnDefName().getFamilyName() != null) {
@@ -244,11 +280,13 @@ public class FromCompiler {
        }
 
         public SingleTableColumnResolver(PhoenixConnection connection, NamedTableNode tableNode, boolean updateCacheImmediately) throws SQLException {
-            this(connection, tableNode, updateCacheImmediately, 0);
+            this(connection, tableNode, updateCacheImmediately, 0, new HashMap<String,UDFParseNode>(1));
         }
 
-        public SingleTableColumnResolver(PhoenixConnection connection, NamedTableNode tableNode, boolean updateCacheImmediately, int tsAddition) throws SQLException {
-            super(connection, tsAddition);
+        public SingleTableColumnResolver(PhoenixConnection connection, NamedTableNode tableNode,
+                boolean updateCacheImmediately, int tsAddition,
+                Map<String, UDFParseNode> udfParseNodes) throws SQLException {
+            super(connection, tsAddition, updateCacheImmediately, udfParseNodes);
             alias = tableNode.getAlias();
             TableRef tableRef = createTableRef(tableNode, updateCacheImmediately);
             tableRefs = ImmutableList.of(tableRef);
@@ -256,6 +294,12 @@ public class FromCompiler {
 
         public SingleTableColumnResolver(PhoenixConnection connection, TableRef tableRef) {
             super(connection, 0);
+            alias = tableRef.getTableAlias();
+            tableRefs = ImmutableList.of(tableRef);
+        }
+
+        public SingleTableColumnResolver(PhoenixConnection connection, TableRef tableRef, Map<String, UDFParseNode> udfParseNodes) throws SQLException {
+            super(connection, 0, false, udfParseNodes);
             alias = tableRef.getTableAlias();
             tableRefs = ImmutableList.of(tableRef);
         }
@@ -270,6 +314,11 @@ public class FromCompiler {
 		public List<TableRef> getTables() {
 			return tableRefs;
 		}
+
+        @Override
+        public List<PFunction> getFunctions() {
+            throw new UnsupportedOperationException();
+        }
 
         @Override
         public TableRef resolveTable(String schemaName, String tableName)
@@ -321,7 +370,6 @@ public class FromCompiler {
         			: tableRef.getTable().getColumn(colName);
             return new ColumnRef(tableRef, column.getPosition());
 		}
-
     }
 
     private static abstract class BaseColumnResolver implements ColumnResolver {
@@ -331,11 +379,30 @@ public class FromCompiler {
         // on Windows because the millis timestamp granularity is so bad we sometimes won't
         // get the data back that we just upsert.
         private final int tsAddition;
+        protected final Map<String, PFunction> functionMap;
+        protected List<PFunction> functions;
 
         private BaseColumnResolver(PhoenixConnection connection, int tsAddition) {
+            this.connection = connection;
+            this.client = connection == null ? null : new MetaDataClient(connection);
+            this.tsAddition = tsAddition;
+            functionMap = new HashMap<String, PFunction>(1);
+            this.functions = Collections.<PFunction>emptyList();
+        }
+
+        private BaseColumnResolver(PhoenixConnection connection, int tsAddition, boolean updateCacheImmediately, Map<String, UDFParseNode> udfParseNodes) throws SQLException {
         	this.connection = connection;
             this.client = connection == null ? null : new MetaDataClient(connection);
             this.tsAddition = tsAddition;
+            functionMap = new HashMap<String, PFunction>(1);
+            if (udfParseNodes.isEmpty()) {
+                functions = Collections.<PFunction> emptyList();
+            } else {
+                functions = createFunctionRef(new ArrayList<String>(udfParseNodes.keySet()), updateCacheImmediately);
+                for (PFunction function : functions) {
+                    functionMap.put(function.getFunctionName(), function);
+                }
+            }
         }
 
         protected TableRef createTableRef(NamedTableNode tableNode, boolean updateCacheImmediately) throws SQLException {
@@ -388,6 +455,85 @@ public class FromCompiler {
             return tableRef;
         }
 
+        @Override
+        public List<PFunction> getFunctions() {
+            return functions;
+        }
+
+        private List<PFunction> createFunctionRef(List<String> functionNames, boolean updateCacheImmediately) throws SQLException {
+            long timeStamp = QueryConstants.UNSET_TIMESTAMP;
+            int numFunctions = functionNames.size();
+            List<PFunction> functionsFound = new ArrayList<PFunction>(functionNames.size());
+            if (updateCacheImmediately || connection.getAutoCommit()) {
+                getFunctionFromCache(functionNames, functionsFound, true);
+                if(functionNames.isEmpty()) {
+                    return functionsFound;
+                }
+                MetaDataMutationResult result = client.updateCache(functionNames);
+                timeStamp = result.getMutationTime();
+                functionsFound = result.getFunctions();
+                if(functionNames.size() != functionsFound.size()){
+                    throw new FunctionNotFoundException("Some of the functions in "+functionNames.toString()+" are not found");
+                }
+            } else {
+                getFunctionFromCache(functionNames, functionsFound, false);
+                // We always attempt to update the cache in the event of a FunctionNotFoundException
+                MetaDataMutationResult result = null;
+                if (!functionNames.isEmpty()) {
+                    result = client.updateCache(functionNames);
+                }
+                if(result!=null) {
+                    if (!result.getFunctions().isEmpty()) {
+                        functionsFound.addAll(result.getFunctions());
+                    }
+                    if(result.wasUpdated()) {
+                        timeStamp = result.getMutationTime();
+                    }
+                }
+                if (functionsFound.size()!=numFunctions) {
+                    throw new FunctionNotFoundException("Some of the functions in "+functionNames.toString()+" are not found", timeStamp);
+                }
+            }
+            if (timeStamp != QueryConstants.UNSET_TIMESTAMP) {
+                timeStamp += tsAddition;
+            }
+            
+            if (logger.isDebugEnabled() && timeStamp != QueryConstants.UNSET_TIMESTAMP) {
+                logger.debug(LogUtil.addCustomAnnotations("Re-resolved stale function " + functionNames.toString() + "at timestamp " + timeStamp, connection));
+            }
+            return functionsFound;
+        }
+
+        private void getFunctionFromCache(List<String> functionNames,
+                List<PFunction> functionsFound, boolean getOnlyTemporyFunctions) {
+            Iterator<String> iterator = functionNames.iterator();
+            while(iterator.hasNext()) {
+                PFunction function = null;
+                String functionName = iterator.next();
+                try {
+                    function = connection.getMetaDataCache().getFunction(new PTableKey(connection.getTenantId(), functionName));
+                } catch (FunctionNotFoundException e1) {
+                    if (connection.getTenantId() != null) { // Check with null tenantId next
+                        try {
+                            function = connection.getMetaDataCache().getFunction(new PTableKey(null, functionName));
+                        } catch (FunctionNotFoundException e2) {
+                        }
+                    }
+                }
+                if (function != null) {
+                    if (getOnlyTemporyFunctions) {
+                        if (function.isTemporaryFunction()) {
+                            functionsFound.add(function);
+                            iterator.remove();
+                        }
+                    } else {
+                        functionsFound.add(function);
+                        iterator.remove();
+                    }
+                }
+            }
+        }
+
         protected PTable addDynamicColumns(List<ColumnDef> dynColumns, PTable theTable)
                 throws SQLException {
             if (!dynColumns.isEmpty()) {
@@ -407,12 +553,26 @@ public class FromCompiler {
                         familyName = PNameFactory.newName(family);
                     }
                     allcolumns.add(new PColumnImpl(name, familyName, dynColumn.getDataType(), dynColumn.getMaxLength(),
-                            dynColumn.getScale(), dynColumn.isNull(), position, dynColumn.getSortOrder(), dynColumn.getArraySize(), null, false, dynColumn.getExpression()));
+                            dynColumn.getScale(), dynColumn.isNull(), position, dynColumn.getSortOrder(), dynColumn.getArraySize(), null, false, dynColumn.getExpression(), false));
                     position++;
                 }
                 theTable = PTableImpl.makePTable(theTable, allcolumns);
             }
             return theTable;
+        }
+        
+        @Override
+        public PFunction resolveFunction(String functionName) throws SQLException {
+            PFunction function = functionMap.get(functionName);
+            if(function == null) {
+                throw new FunctionNotFoundException(functionName);
+            }
+            return function;
+        }
+
+        @Override
+        public boolean hasUDFs() {
+            return !functions.isEmpty();
         }
     }
 
@@ -422,6 +582,12 @@ public class FromCompiler {
 
         private MultiTableColumnResolver(PhoenixConnection connection, int tsAddition) {
         	super(connection, tsAddition);
+            tableMap = ArrayListMultimap.<String, TableRef> create();
+            tables = Lists.newArrayList();
+        }
+
+        private MultiTableColumnResolver(PhoenixConnection connection, int tsAddition, Map<String, UDFParseNode> udfParseNodes) throws SQLException {
+            super(connection, tsAddition, false, udfParseNodes);
             tableMap = ArrayListMultimap.<String, TableRef> create();
             tables = Lists.newArrayList();
         }
@@ -474,7 +640,7 @@ public class FromCompiler {
                     if (node instanceof WildcardParseNode
                             || node instanceof TableWildcardParseNode
                             || node instanceof FamilyWildcardParseNode)
-                        throw new SQLException("Encountered wildcard in subqueries.");
+                        throw new SQLFeatureNotSupportedException("Wildcard in subqueries not supported.");
 
                     alias = SchemaUtil.normalizeIdentifier(node.getAlias());
                 }
@@ -485,14 +651,14 @@ public class FromCompiler {
                 }
                 PColumnImpl column = new PColumnImpl(PNameFactory.newName(alias),
                         PNameFactory.newName(QueryConstants.DEFAULT_COLUMN_FAMILY),
-                        null, 0, 0, true, position++, SortOrder.ASC, null, null, false, null);
+                        null, 0, 0, true, position++, SortOrder.ASC, null, null, false, null, false);
                 columns.add(column);
             }
             PTable t = PTableImpl.makePTable(null, PName.EMPTY_NAME, PName.EMPTY_NAME,
                     PTableType.SUBQUERY, null, MetaDataProtocol.MIN_TABLE_TIMESTAMP, PTable.INITIAL_SEQ_NUM,
                     null, null, columns, null, null, Collections.<PTable>emptyList(),
                     false, Collections.<PName>emptyList(), null, null, false, false, false, null,
-                    null, null, false);
+                    null, null, false, false);
 
             String alias = subselectNode.getAlias();
             TableRef tableRef = new TableRef(alias, t, MetaDataProtocol.MIN_TABLE_TIMESTAMP, false);
@@ -547,7 +713,12 @@ public class FromCompiler {
                 if (theColumnFamilyRef != null) { return theColumnFamilyRef; }
                 throw new TableNotFoundException(cfName);
             } else {
-                TableRef tableRef = resolveTable(null, tableName);
+                TableRef tableRef = null;
+                try {
+                    tableRef = resolveTable(null, tableName);
+                } catch (TableNotFoundException e) {
+                    return resolveColumnFamily(null, cfName);
+                }
                 PColumnFamily columnFamily = tableRef.getTable().getColumnFamily(cfName);
                 return new ColumnFamilyRef(tableRef, columnFamily);
             }
@@ -585,16 +756,14 @@ public class FromCompiler {
                 }
             }
         }
-
     }
     
     private static class ProjectedTableColumnResolver extends MultiTableColumnResolver {
         private final boolean isLocalIndex;
         private final List<TableRef> theTableRefs;
         private final Map<ColumnRef, Integer> columnRefMap;
-        
-        private ProjectedTableColumnResolver(PTable projectedTable) {
-            super(null, 0);
+        private ProjectedTableColumnResolver(PTable projectedTable, PhoenixConnection conn, Map<String, UDFParseNode> udfParseNodes) throws SQLException {
+            super(conn, 0, udfParseNodes);
             Preconditions.checkArgument(projectedTable.getType() == PTableType.PROJECTED);
             this.isLocalIndex = projectedTable.getIndexType() == IndexType.LOCAL;
             this.columnRefMap = new HashMap<ColumnRef, Integer>();
@@ -620,6 +789,7 @@ public class FromCompiler {
                 this.columnRefMap.put(new ColumnRef(tableRef, colRef.getColumnPosition()), column.getPosition());
             }
             this.theTableRefs = ImmutableList.of(new TableRef(ParseNodeFactory.createTempAlias(), projectedTable, ts, false));
+            
         }
         
         @Override

@@ -19,10 +19,10 @@ import java.util.List;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
-import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PArrayDataType;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 
 /**
@@ -32,35 +32,34 @@ public class ArrayConstructorExpression extends BaseCompoundExpression {
     private PDataType baseType;
     private int position = -1;
     private Object[] elements;
-    private TrustedByteArrayOutputStream byteStream = null;
-    private DataOutputStream oStream = null;
+    private final ImmutableBytesWritable valuePtr = new ImmutableBytesWritable();
     private int estimatedSize = 0;
     // store the offset postion in this.  Later based on the total size move this to a byte[]
     // and serialize into byte stream
     private int[] offsetPos;
+    private boolean rowKeyOrderOptimizable;
     
     public ArrayConstructorExpression() {
     }
 
-    public ArrayConstructorExpression(List<Expression> children, PDataType baseType) {
+    public ArrayConstructorExpression(List<Expression> children, PDataType baseType, boolean rowKeyOrderOptimizable) {
         super(children);
-        init(baseType);
+        init(baseType, rowKeyOrderOptimizable);
     }
 
     public ArrayConstructorExpression clone(List<Expression> children) {
-        return new ArrayConstructorExpression(children, this.baseType);
+        return new ArrayConstructorExpression(children, this.baseType, this.rowKeyOrderOptimizable);
     }
     
-    private void init(PDataType baseType) {
+    private void init(PDataType baseType, boolean rowKeyOrderOptimizable) {
         this.baseType = baseType;
+        this.rowKeyOrderOptimizable = rowKeyOrderOptimizable;
         elements = new Object[getChildren().size()];
+        valuePtr.set(ByteUtil.EMPTY_BYTE_ARRAY);
         estimatedSize = PArrayDataType.estimateSize(this.children.size(), this.baseType);
         if (!this.baseType.isFixedWidth()) {
             offsetPos = new int[children.size()];
-            byteStream = new TrustedByteArrayOutputStream(estimatedSize);
-        } else {
-            byteStream = new TrustedByteArrayOutputStream(estimatedSize);
-        }            
+        }
     }
 
     @Override
@@ -73,14 +72,20 @@ public class ArrayConstructorExpression extends BaseCompoundExpression {
         super.reset();
         position = 0;
         Arrays.fill(elements, null);
+        valuePtr.set(ByteUtil.EMPTY_BYTE_ARRAY);
     }
 
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
+        if (position == elements.length) {
+            ptr.set(valuePtr.get(), valuePtr.getOffset(), valuePtr.getLength());
+            return true;
+        }
+        TrustedByteArrayOutputStream byteStream = new TrustedByteArrayOutputStream(estimatedSize);
+        DataOutputStream oStream = new DataOutputStream(byteStream);
         try {
             int noOfElements =  children.size();
             int nNulls = 0;
-            oStream = new DataOutputStream(byteStream);
             for (int i = position >= 0 ? position : 0; i < elements.length; i++) {
                 Expression child = children.get(i);
                 if (!child.evaluate(tuple, ptr)) {
@@ -109,7 +114,7 @@ public class ArrayConstructorExpression extends BaseCompoundExpression {
                             PArrayDataType.serializeNulls(oStream, nNulls);
                             offsetPos[i] = byteStream.size();
                             oStream.write(ptr.get(), ptr.getOffset(), ptr.getLength());
-                            oStream.write(QueryConstants.SEPARATOR_BYTE);
+                            oStream.write(PArrayDataType.getSeparatorByte(rowKeyOrderOptimizable, getSortOrder()));
                         }
                     } else { // No nulls for fixed length
                         oStream.write(ptr.get(), ptr.getOffset(), ptr.getLength());
@@ -119,12 +124,13 @@ public class ArrayConstructorExpression extends BaseCompoundExpression {
             if (position >= 0) position = elements.length;
             if (!baseType.isFixedWidth()) {
                 // Double seperator byte to show end of the non null array
-                PArrayDataType.writeEndSeperatorForVarLengthArray(oStream);
+                PArrayDataType.writeEndSeperatorForVarLengthArray(oStream, getSortOrder(), rowKeyOrderOptimizable);
                 noOfElements = PArrayDataType.serailizeOffsetArrayIntoStream(oStream, byteStream, noOfElements,
                         offsetPos[offsetPos.length - 1], offsetPos);
                 PArrayDataType.serializeHeaderInfoIntoStream(oStream, noOfElements);
             }
             ptr.set(byteStream.getBuffer(), 0, byteStream.size());
+            valuePtr.set(ptr.get(), ptr.getOffset(), ptr.getLength());
             return true;
         } catch (IOException e) {
             throw new RuntimeException("Exception while serializing the byte array");
@@ -142,14 +148,23 @@ public class ArrayConstructorExpression extends BaseCompoundExpression {
     @Override
     public void readFields(DataInput input) throws IOException {
         super.readFields(input);
+        boolean rowKeyOrderOptimizable = false;
         int baseTypeOrdinal = WritableUtils.readVInt(input);
-        init(PDataType.values()[baseTypeOrdinal]);
+        if (baseTypeOrdinal < 0) {
+            rowKeyOrderOptimizable = true;
+            baseTypeOrdinal = -(baseTypeOrdinal+1);
+        }
+        init(PDataType.values()[baseTypeOrdinal], rowKeyOrderOptimizable);
     }
 
     @Override
     public void write(DataOutput output) throws IOException {
         super.write(output);
-        WritableUtils.writeVInt(output, baseType.ordinal());
+        if (rowKeyOrderOptimizable) {
+            WritableUtils.writeVInt(output, -(baseType.ordinal()+1));
+        } else {
+            WritableUtils.writeVInt(output, baseType.ordinal());
+        }
     }
     
     @Override

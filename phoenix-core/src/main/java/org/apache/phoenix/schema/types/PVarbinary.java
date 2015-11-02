@@ -26,7 +26,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.ByteUtil;
 
-public class PVarbinary extends PDataType<byte[]> {
+public class PVarbinary extends PBinaryBase {
 
   public static final PVarbinary INSTANCE = new PVarbinary();
 

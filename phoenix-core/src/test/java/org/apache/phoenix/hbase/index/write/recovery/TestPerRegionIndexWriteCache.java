@@ -24,6 +24,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map.Entry;
+import java.util.Random;
 import java.util.Set;
 
 import org.apache.hadoop.fs.FileSystem;
@@ -36,10 +37,10 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.regionserver.HRegion;
-import org.apache.hadoop.hbase.regionserver.wal.HLog;
-import org.apache.hadoop.hbase.regionserver.wal.HLogFactory;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.FSUtils;
+import org.apache.hadoop.hbase.wal.WAL;
+import org.apache.hadoop.hbase.wal.WALFactory;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.junit.After;
@@ -50,8 +51,8 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
 
 public class TestPerRegionIndexWriteCache {
-  private static final HBaseTestingUtility TEST_UTIL = new HBaseTestingUtility();
-  private static final TableName tableName = TableName.valueOf("t1"); 
+  private static final HBaseTestingUtility TEST_UTIL = new HBaseTestingUtility(); 
+  private static TableName tableName = TableName.valueOf("t1");;
   private static final byte[] row = Bytes.toBytes("row");
   private static final byte[] family = Bytes.toBytes("family");
   private static final byte[] qual = Bytes.toBytes("qual");
@@ -64,19 +65,23 @@ public class TestPerRegionIndexWriteCache {
     p2.add(family, qual, val);
   }
 
-  HRegion r1;
-  HRegion r2;
+  HRegion r1; // FIXME: Uses private type
+  HRegion r2; // FIXME: Uses private type
+  WAL wal;
 
   @SuppressWarnings("deprecation")
 @Before
   public void setUp() throws Exception {
-      FileSystem newFS = FileSystem.get(TEST_UTIL.getConfiguration());
       Path hbaseRootDir = TEST_UTIL.getDataTestDir();
-      
+      TEST_UTIL.getConfiguration().set("hbase.rootdir", hbaseRootDir.toString());
+
+      FileSystem newFS = FileSystem.newInstance(TEST_UTIL.getConfiguration());
       HRegionInfo hri = new HRegionInfo(tableName, null, null, false);
-      Path basedir = FSUtils.getTableDir(hbaseRootDir, tableName); 
-      HLog wal = HLogFactory.createHLog(newFS, 
-          hbaseRootDir, "logs", TEST_UTIL.getConfiguration());
+      Path basedir = FSUtils.getTableDir(hbaseRootDir, tableName);
+      Random rn = new Random();
+      tableName = TableName.valueOf("TestPerRegion" + rn.nextInt());
+      WALFactory walFactory = new WALFactory(TEST_UTIL.getConfiguration(), null, "TestPerRegionIndexWriteCache");
+      wal = walFactory.getWAL(Bytes.toBytes("logs"));
       HTableDescriptor htd = new HTableDescriptor(tableName);
       HColumnDescriptor a = new HColumnDescriptor(Bytes.toBytes("a"));
       htd.addFamily(a);
@@ -108,9 +113,15 @@ public class TestPerRegionIndexWriteCache {
   
   @After
   public void cleanUp() throws Exception {
-	  TEST_UTIL.cleanupTestDir();
+      try{
+          r1.close();
+          r2.close();
+          wal.close();
+      } catch (Exception ignored) {}
+      FileSystem newFS = FileSystem.get(TEST_UTIL.getConfiguration());
+      newFS.delete(TEST_UTIL.getDataTestDir(), true);
   }
-  
+
   
   @Test
   public void testAddRemoveSingleRegion() {

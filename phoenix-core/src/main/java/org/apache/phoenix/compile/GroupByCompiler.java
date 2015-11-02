@@ -23,9 +23,9 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
+import org.apache.hadoop.hbase.util.Pair;
 import org.apache.http.annotation.Immutable;
-import org.apache.phoenix.compile.TrackOrderPreservingExpressionCompiler.Entry;
-import org.apache.phoenix.compile.TrackOrderPreservingExpressionCompiler.Ordering;
+import org.apache.phoenix.compile.OrderPreservingTracker.Ordering;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -158,29 +158,30 @@ public class GroupByCompiler {
         }
 
        // Accumulate expressions in GROUP BY
-        TrackOrderPreservingExpressionCompiler groupByVisitor =
-                new TrackOrderPreservingExpressionCompiler(context, 
-                        GroupBy.EMPTY_GROUP_BY, groupByNodes.size(), 
-                        Ordering.UNORDERED, tupleProjector);
-        for (ParseNode node : groupByNodes) {
-            Expression expression = node.accept(groupByVisitor);
-            if (groupByVisitor.isAggregate()) {
-                throw new SQLExceptionInfo.Builder(SQLExceptionCode.AGGREGATE_IN_GROUP_BY)
-                    .setMessage(expression.toString()).build().buildException();
-            }
+        ExpressionCompiler compiler =
+                new ExpressionCompiler(context, GroupBy.EMPTY_GROUP_BY);
+        List<Pair<Integer,Expression>> groupBys = Lists.newArrayListWithExpectedSize(groupByNodes.size());
+        OrderPreservingTracker tracker = new OrderPreservingTracker(context, GroupBy.EMPTY_GROUP_BY, Ordering.UNORDERED, groupByNodes.size(), tupleProjector);
+        for (int i = 0; i < groupByNodes.size(); i++) {
+            ParseNode node = groupByNodes.get(i);
+            Expression expression = node.accept(compiler);
             if (!expression.isStateless()) {
-                groupByVisitor.addEntry(expression);
+                if (compiler.isAggregate()) {
+                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.AGGREGATE_IN_GROUP_BY)
+                        .setMessage(expression.toString()).build().buildException();
+                }
+                tracker.track(expression);
+                groupBys.add(new Pair<Integer,Expression>(i,expression));
             }
-            groupByVisitor.reset();
+            compiler.reset();
         }
         
-        List<Entry> groupByEntries = groupByVisitor.getEntries();
-        if (groupByEntries.isEmpty()) {
+        if (groupBys.isEmpty()) {
             return GroupBy.EMPTY_GROUP_BY;
         }
         
-        boolean isRowKeyOrderedGrouping = isInRowKeyOrder && groupByVisitor.isOrderPreserving();
-        List<Expression> expressions = Lists.newArrayListWithCapacity(groupByEntries.size());
+        boolean isRowKeyOrderedGrouping = isInRowKeyOrder && tracker.isOrderPreserving();
+        List<Expression> expressions = Lists.newArrayListWithExpectedSize(groupBys.size());
         List<Expression> keyExpressions = expressions;
         String groupExprAttribName;
         // This is true if the GROUP BY is composed of only PK columns. We further check here that
@@ -188,8 +189,8 @@ public class GroupByCompiler {
         // column and use each subsequent one in PK order).
         if (isRowKeyOrderedGrouping) {
             groupExprAttribName = BaseScannerRegionObserver.KEY_ORDERED_GROUP_BY_EXPRESSIONS;
-            for (Entry groupByEntry : groupByEntries) {
-                expressions.add(groupByEntry.getExpression());
+            for (Pair<Integer,Expression> groupBy : groupBys) {
+                expressions.add(groupBy.getSecond());
             }
         } else {
             /*
@@ -211,11 +212,11 @@ public class GroupByCompiler {
              * Within each bucket, order based on the column position in the schema. Putting the fixed width values
              * in the beginning optimizes access to subsequent values.
              */
-            Collections.sort(groupByEntries, new Comparator<Entry>() {
+            Collections.sort(groupBys, new Comparator<Pair<Integer,Expression>>() {
                 @Override
-                public int compare(Entry o1, Entry o2) {
-                    Expression e1 = o1.getExpression();
-                    Expression e2 = o2.getExpression();
+                public int compare(Pair<Integer,Expression> gb1, Pair<Integer,Expression> gb2) {
+                    Expression e1 = gb1.getSecond();
+                    Expression e2 = gb2.getSecond();
                     boolean isFixed1 = e1.getDataType().isFixedWidth();
                     boolean isFixed2 = e2.getDataType().isFixedWidth();
                     boolean isFixedNullable1 = e1.isNullable() &&isFixed1;
@@ -224,7 +225,8 @@ public class GroupByCompiler {
                         if (isFixed1 == isFixed2) {
                             // Not strictly necessary, but forces the order to match the schema
                             // column order (with PK columns before value columns).
-                            return o1.getColumnPosition() - o2.getColumnPosition();
+                            //return o1.getColumnPosition() - o2.getColumnPosition();
+                            return gb1.getFirst() - gb2.getFirst();
                         } else if (isFixed1) {
                             return -1;
                         } else {
@@ -237,8 +239,8 @@ public class GroupByCompiler {
                     }
                 }
             });
-            for (Entry groupByEntry : groupByEntries) {
-                expressions.add(groupByEntry.getExpression());
+            for (Pair<Integer,Expression> groupBy : groupBys) {
+                expressions.add(groupBy.getSecond());
             }
             for (int i = expressions.size()-2; i >= 0; i--) {
                 Expression expression = expressions.get(i);

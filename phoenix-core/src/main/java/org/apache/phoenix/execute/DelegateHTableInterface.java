@@ -279,4 +279,22 @@ public class DelegateHTableInterface implements HTableInterface {
         return delegate.checkAndMutate(row, family, qualifier, compareOp, value, mutation);
     }
 
+	@Override
+	public boolean[] existsAll(List<Get> gets) throws IOException {
+		return delegate.existsAll(gets);
+	}
+
+	@Override
+	public boolean checkAndPut(byte[] row, byte[] family, byte[] qualifier,
+			CompareOp compareOp, byte[] value, Put put) throws IOException {
+		return delegate.checkAndPut(row, family, qualifier, value, put);
+	}
+
+	@Override
+	public boolean checkAndDelete(byte[] row, byte[] family, byte[] qualifier,
+			CompareOp compareOp, byte[] value, Delete delete)
+			throws IOException {
+		return delegate.checkAndDelete(row, family, qualifier, compareOp, value, delete);
+	}
+
 }

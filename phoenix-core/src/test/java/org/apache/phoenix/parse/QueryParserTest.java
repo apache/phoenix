@@ -212,7 +212,7 @@ public class QueryParserTest {
             parseQuery(sql);
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.MISMATCHED_TOKEN.getErrorCode(), e.getErrorCode());
+            assertEquals(SQLExceptionCode.MISSING_TOKEN.getErrorCode(), e.getErrorCode());
         }
     }
 
@@ -289,24 +289,6 @@ public class QueryParserTest {
     }
 
     @Test
-    public void testUnknownFunction() throws Exception {
-        String sql = ((
-            "select /*gatherSlowStats*/ bogus_function(ind.key_prefix) from core.search_name_lookup ind\n" +
-            "where (ind.name = 'X')\n" +
-            "and rownum <= 2000\n" +
-            "and (ind.organization_id = '000000000000000')\n" +
-            "and (ind.key_prefix = '00T')\n" +
-            "and (ind.name_type = 't')"
-            ));
-        try {
-            parseQuery(sql);
-            fail();
-        } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.UNKNOWN_FUNCTION.getErrorCode(), e.getErrorCode());
-        }
-    }
-
-    @Test
     public void testNegativeNonBooleanWhere() throws Exception {
         String sql = ((
             "select /*gatherSlowStats*/ max( distinct 1) from core.search_name_lookup ind\n" +
@@ -366,7 +348,7 @@ public class QueryParserTest {
             parseQuery(sql);
             fail("Should have caught exception.");
         } catch (SQLException e) {
-            assertTrue(e.getMessage(), e.getMessage().contains("ERROR 602 (42P00): Syntax error. Missing \"FROM\" at line 1, column 16."));
+            assertTrue(e.getMessage(), e.getMessage().contains("ERROR 602 (42P00): Syntax error. Missing \"EOF\" at line 1, column 16."));
         }
     }
 
@@ -393,55 +375,42 @@ public class QueryParserTest {
     }
 
     @Test
-    public void testParsingStatementWithMissingToken() throws Exception {
-        try {
-            String sql = ((
-                    "select a b\n" +
-                    "where e = d\n"));
-            parseQuery(sql);
-            fail("Should have caught exception.");
-        } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.MISMATCHED_TOKEN.getErrorCode(), e.getErrorCode());
-        }
-    }
-
-    @Test
     public void testParseCreateTableInlinePrimaryKeyWithOrder() throws Exception {
-    	for (String order : new String[]{"asc", "desc"}) {
+        for (String order : new String[]{"asc", "desc"}) {
             String s = "create table core.entity_history_archive (id char(15) primary key ${o})".replace("${o}", order);
-    		CreateTableStatement stmt = (CreateTableStatement)new SQLParser((s)).parseStatement();
-    		List<ColumnDef> columnDefs = stmt.getColumnDefs();
-    		assertEquals(1, columnDefs.size());
-    		assertEquals(SortOrder.fromDDLValue(order), columnDefs.iterator().next().getSortOrder()); 
-    	}
+            CreateTableStatement stmt = (CreateTableStatement)new SQLParser((s)).parseStatement();
+            List<ColumnDef> columnDefs = stmt.getColumnDefs();
+            assertEquals(1, columnDefs.size());
+            assertEquals(SortOrder.fromDDLValue(order), columnDefs.iterator().next().getSortOrder()); 
+        }
     }
     
     @Test
     public void testParseCreateTableOrderWithoutPrimaryKeyFails() throws Exception {
-    	for (String order : new String[]{"asc", "desc"}) {
-    		String stmt = "create table core.entity_history_archive (id varchar(20) ${o})".replace("${o}", order);
-    		try {
-    			new SQLParser((stmt)).parseStatement();
-    			fail("Expected parse exception to be thrown");
-    		} catch (SQLException e) {
-    			String errorMsg = "ERROR 603 (42P00): Syntax error. Unexpected input. Expecting \"RPAREN\", got \"${o}\"".replace("${o}", order);
-    			assertTrue("Expected message to contain \"" + errorMsg + "\" but got \"" + e.getMessage() + "\"", e.getMessage().contains(errorMsg));
-    		}
-    	}
+        for (String order : new String[]{"asc", "desc"}) {
+            String stmt = "create table core.entity_history_archive (id varchar(20) ${o})".replace("${o}", order);
+            try {
+                new SQLParser((stmt)).parseStatement();
+                fail("Expected parse exception to be thrown");
+            } catch (SQLException e) {
+                String errorMsg = "ERROR 603 (42P00): Syntax error. Unexpected input. Expecting \"RPAREN\", got \"${o}\"".replace("${o}", order);
+                assertTrue("Expected message to contain \"" + errorMsg + "\" but got \"" + e.getMessage() + "\"", e.getMessage().contains(errorMsg));
+            }
+        }
     }
     
     @Test
     public void testParseCreateTablePrimaryKeyConstraintWithOrder() throws Exception {
-    	for (String order : new String[]{"asc", "desc"}) {
-    		String s = "create table core.entity_history_archive (id CHAR(15), name VARCHAR(150), constraint pk primary key (id ${o}, name ${o}))".replace("${o}", order);
-    		CreateTableStatement stmt = (CreateTableStatement)new SQLParser((s)).parseStatement();
-    		PrimaryKeyConstraint pkConstraint = stmt.getPrimaryKeyConstraint();
-    		List<Pair<ColumnName,SortOrder>> columns = pkConstraint.getColumnNames();
-    		assertEquals(2, columns.size());
-    		for (Pair<ColumnName,SortOrder> pair : columns) {
-    			assertEquals(SortOrder.fromDDLValue(order), pkConstraint.getColumn(pair.getFirst()).getSecond());
-    		}    		
-    	}
+        for (String order : new String[]{"asc", "desc"}) {
+            String s = "create table core.entity_history_archive (id CHAR(15), name VARCHAR(150), constraint pk primary key (id ${o}, name ${o}))".replace("${o}", order);
+            CreateTableStatement stmt = (CreateTableStatement)new SQLParser((s)).parseStatement();
+            PrimaryKeyConstraint pkConstraint = stmt.getPrimaryKeyConstraint();
+            List<Pair<ColumnName,SortOrder>> columns = pkConstraint.getColumnNames();
+            assertEquals(2, columns.size());
+            for (Pair<ColumnName,SortOrder> pair : columns) {
+                assertEquals(SortOrder.fromDDLValue(order), pkConstraint.getColumnWithSortOrder(pair.getFirst()).getSecond());
+            }           
+        }
     }
 
     @Test
@@ -470,30 +439,31 @@ public class QueryParserTest {
     }
 
     @Test
-	public void testCreateSequence() throws Exception {
-		String sql = ((
-				"create sequence foo.bar\n" + 
-						"start with 0\n"	+ 
-						"increment by 1\n"));
-		parseQuery(sql);
-	}
-	
-	@Test
-	public void testNextValueForSelect() throws Exception {
-		String sql = ((
-				"select next value for foo.bar \n" + 
-						"from core.custom_entity_data\n"));						
-		parseQuery(sql);
-	}
-	
-	@Test
+    public void testCreateSequence() throws Exception {
+        String sql = ((
+                "create sequence foo.bar\n" + 
+                        "start with 0\n"    + 
+                        "increment by 1\n"));
+        parseQuery(sql);
+    }
+    
+    @Test
+    public void testNextValueForSelect() throws Exception {
+        String sql = ((
+                "select next value for foo.bar \n" + 
+                        "from core.custom_entity_data\n"));                     
+        parseQuery(sql);
+    }
+    
+    @Test
     public void testNextValueForWhere() throws Exception {
         String sql = ((
                 "upsert into core.custom_entity_data\n" + 
                         "select next value for foo.bar from core.custom_entity_data\n"));                    
         parseQuery(sql);
     }
-	
+
+    @Test
     public void testBadCharDef() throws Exception {
         try {
             String sql = ("CREATE TABLE IF NOT EXISTS testBadVarcharDef" + 
@@ -501,7 +471,7 @@ public class QueryParserTest {
             parseQuery(sql);
             fail("Should have caught bad char definition.");
         } catch (SQLException e) {
-            assertTrue(e.getMessage(), e.getMessage().contains("ERROR 208 (22003): CHAR or VARCHAR must have a positive length. columnName=COL"));
+            assertEquals(SQLExceptionCode.NONPOSITIVE_MAX_LENGTH.getErrorCode(), e.getErrorCode());
         }
         try {
             String sql = ("CREATE TABLE IF NOT EXISTS testBadVarcharDef" + 
@@ -509,7 +479,7 @@ public class QueryParserTest {
             parseQuery(sql);
             fail("Should have caught bad char definition.");
         } catch (SQLException e) {
-            assertTrue(e.getMessage(), e.getMessage().contains("ERROR 207 (22003): Missing length for CHAR. columnName=COL"));
+            assertEquals(SQLExceptionCode.MISSING_MAX_LENGTH.getErrorCode(), e.getErrorCode());
         }
     }
 
@@ -521,7 +491,7 @@ public class QueryParserTest {
             parseQuery(sql);
             fail("Should have caught bad varchar definition.");
         } catch (SQLException e) {
-            assertTrue(e.getMessage(), e.getMessage().contains("ERROR 208 (22003): CHAR or VARCHAR must have a positive length. columnName=COL"));
+            assertEquals(SQLExceptionCode.NONPOSITIVE_MAX_LENGTH.getErrorCode(), e.getErrorCode());
         }
     }
 
@@ -553,7 +523,7 @@ public class QueryParserTest {
             parseQuery(sql);
             fail("Should have caught bad binary definition.");
         } catch (SQLException e) {
-            assertTrue(e.getMessage(), e.getMessage().contains("ERROR 211 (22003): BINARY must have a positive length. columnName=COL"));
+            assertEquals(SQLExceptionCode.NONPOSITIVE_MAX_LENGTH.getErrorCode(), e.getErrorCode());
         }
         try {
             String sql = ("CREATE TABLE IF NOT EXISTS testBadVarcharDef" + 
@@ -561,7 +531,7 @@ public class QueryParserTest {
             parseQuery(sql);
             fail("Should have caught bad char definition.");
         } catch (SQLException e) {
-            assertTrue(e.getMessage(), e.getMessage().contains("ERROR 210 (22003): Missing length for BINARY. columnName=COL"));
+            assertEquals(SQLExceptionCode.MISSING_MAX_LENGTH.getErrorCode(), e.getErrorCode());
         }
     }
 
@@ -630,20 +600,7 @@ public class QueryParserTest {
             parseQuery(sql);
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.MISMATCHED_TOKEN.getErrorCode(), e.getErrorCode());
-        }
-    }
-
-    @Test
-    public void testInvalidUpsertSelectHint() throws Exception {
-        String sql = (
-                (
-                        "upsert into t select /*+ NO_INDEX */ k from t where k in ( 1,2 )"));
-        try {
-            parseQuery(sql);
-            fail();
-        } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.PARSER_ERROR.getErrorCode(), e.getErrorCode());
+            assertEquals(SQLExceptionCode.MISSING_TOKEN.getErrorCode(), e.getErrorCode());
         }
     }
 
@@ -746,6 +703,24 @@ public class QueryParserTest {
                 (
                         "select * from t where d = UNSIGNED_TIMESTAMP '2013-11-04 09:12:00'"));
         parseQuery(sql);
+    }
+    
+    @Test
+    public void testParseDateEquality() throws Exception {
+        SQLParser parser = new SQLParser(new StringReader(
+            "select a from b\n" +
+            "where date '2014-01-04' = date '2014-01-04'"
+            ));
+        parser.parseStatement();
+    }
+
+    @Test
+    public void testParseDateIn() throws Exception {
+        SQLParser parser = new SQLParser(new StringReader(
+            "select a from b\n" +
+            "where date '2014-01-04' in (date '2014-01-04')"
+            ));
+        parser.parseStatement();
     }
     
     @Test

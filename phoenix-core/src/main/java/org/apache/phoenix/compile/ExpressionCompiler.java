@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.compile;
 
+
 import java.math.BigDecimal;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
@@ -32,6 +33,7 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.AndExpression;
 import org.apache.phoenix.expression.ArrayConstructorExpression;
+import org.apache.phoenix.expression.ByteBasedLikeExpression;
 import org.apache.phoenix.expression.CaseExpression;
 import org.apache.phoenix.expression.CoerceExpression;
 import org.apache.phoenix.expression.ComparisonExpression;
@@ -60,6 +62,7 @@ import org.apache.phoenix.expression.NotExpression;
 import org.apache.phoenix.expression.OrExpression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.expression.RowValueConstructorExpression;
+import org.apache.phoenix.expression.StringBasedLikeExpression;
 import org.apache.phoenix.expression.StringConcatExpression;
 import org.apache.phoenix.expression.TimestampAddExpression;
 import org.apache.phoenix.expression.TimestampSubtractExpression;
@@ -93,13 +96,17 @@ import org.apache.phoenix.parse.ModulusParseNode;
 import org.apache.phoenix.parse.MultiplyParseNode;
 import org.apache.phoenix.parse.NotParseNode;
 import org.apache.phoenix.parse.OrParseNode;
+import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.RowValueConstructorParseNode;
 import org.apache.phoenix.parse.SequenceValueParseNode;
 import org.apache.phoenix.parse.StringConcatParseNode;
 import org.apache.phoenix.parse.SubqueryParseNode;
 import org.apache.phoenix.parse.SubtractParseNode;
+import org.apache.phoenix.parse.UDFParseNode;
 import org.apache.phoenix.parse.UnsupportedAllParseNodeVisitor;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
@@ -218,7 +225,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         } else {
             addBindParamMetaData(lhsNode, rhsNode, lhsExpr, rhsExpr);
         }
-        return wrapGroupByExpression(ComparisonExpression.create(op, children, context.getTempPtr()));
+        return wrapGroupByExpression(ComparisonExpression.create(op, children, context.getTempPtr(), context.getCurrentTable().getTable().rowKeyOrderOptimizable()));
     }
 
     @Override
@@ -253,7 +260,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
             determinism = determinism.combine(child.getDeterminism());
         }
         if (children.size() == 0) {
-            return LiteralExpression.newConstant(true, determinism);
+            return LiteralExpression.newConstant(false, determinism);
         }
         if (children.size() == 1) {
             return children.get(0);
@@ -309,12 +316,20 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
      * @param children the child expression arguments to the function expression node.
      */
     public Expression visitLeave(FunctionParseNode node, List<Expression> children) throws SQLException {
-        children = node.validate(children, context);
-        Expression expression = node.create(children, context);
-        ImmutableBytesWritable ptr = context.getTempPtr();
-        if (ExpressionUtil.isConstant(expression)) {
-            return ExpressionUtil.getConstantExpression(expression, ptr);
+        PFunction function = null;
+        if(node instanceof UDFParseNode) {
+            function = context.getResolver().resolveFunction(node.getName());
+            BuiltInFunctionInfo info = new BuiltInFunctionInfo(function);
+            node = new UDFParseNode(node.getName(), node.getChildren(), info);
         }
+        children = node.validate(children, context);
+        Expression expression = null;
+        if (function == null) {
+            expression = node.create(children, context);
+        } else {
+            expression = node.create(children, function, context);
+        }
+        ImmutableBytesWritable ptr = context.getTempPtr();
         BuiltInFunctionInfo info = node.getInfo();
         for (int i = 0; i < info.getRequiredArgCount(); i++) { 
             // Optimization to catch cases where a required argument is null resulting in the function
@@ -326,6 +341,9 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                     return ExpressionUtil.getNullExpression(expression);
                 }
             }
+        }
+        if (ExpressionUtil.isConstant(expression)) {
+            return ExpressionUtil.getConstantExpression(expression, ptr);
         }
         expression = addExpression(expression);
         expression = wrapGroupByExpression(expression);
@@ -495,9 +513,20 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                       return new ComparisonExpression(Arrays.asList(lhs,rhs), op);
                   }
                 }
+            } else if (index == 0 && pattern.length() == 1) {
+                return IsNullExpression.create(lhs, true, context.getTempPtr());
             }
         }
-        Expression expression = LikeExpression.create(children, node.getLikeType());
+        QueryServices services = context.getConnection().getQueryServices();
+        boolean useByteBasedRegex =
+                services.getProps().getBoolean(QueryServices.USE_BYTE_BASED_REGEX_ATTRIB,
+                    QueryServicesOptions.DEFAULT_USE_BYTE_BASED_REGEX);
+        Expression expression;
+        if (useByteBasedRegex) {
+            expression = ByteBasedLikeExpression.create(children, node.getLikeType());
+        } else {
+            expression = StringBasedLikeExpression.create(children, node.getLikeType());
+        }
         if (ExpressionUtil.isConstant(expression)) {
             ImmutableBytesWritable ptr = context.getTempPtr();
             if (!expression.evaluate(null, ptr)) {
@@ -576,7 +605,8 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                 expr =  convertToRoundExpressionIfNeeded(fromDataType, targetDataType, children);
             }
         }
-        return wrapGroupByExpression(CoerceExpression.create(expr, targetDataType, SortOrder.getDefault(), expr.getMaxLength()));  
+        boolean rowKeyOrderOptimizable = context.getCurrentTable().getTable().rowKeyOrderOptimizable();
+        return wrapGroupByExpression(CoerceExpression.create(expr, targetDataType, SortOrder.getDefault(), expr.getMaxLength(), rowKeyOrderOptimizable));  
     }
     
    @Override
@@ -605,7 +635,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                 context.getBindManager().addParamMetaData((BindParseNode)childNode, firstChild);
             }
         }
-        return wrapGroupByExpression(InListExpression.create(inChildren, node.isNegate(), ptr));
+        return wrapGroupByExpression(InListExpression.create(inChildren, node.isNegate(), ptr, context.getCurrentTable().getTable().rowKeyOrderOptimizable()));
     }
 
     private static final PDatum DECIMAL_DATUM = new PDatum() {
@@ -1239,17 +1269,23 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         // the value object array type should match the java known type
         Object[] elements = (Object[]) java.lang.reflect.Array.newInstance(theArrayElemDataType.getJavaClass(), children.size());
 
-        ArrayConstructorExpression arrayExpression = new ArrayConstructorExpression(children, arrayElemDataType);
+        boolean rowKeyOrderOptimizable = context.getCurrentTable().getTable().rowKeyOrderOptimizable();
+        ArrayConstructorExpression arrayExpression = new ArrayConstructorExpression(children, arrayElemDataType, rowKeyOrderOptimizable);
         if (ExpressionUtil.isConstant(arrayExpression)) {
             for (int i = 0; i < children.size(); i++) {
                 Expression child = children.get(i);
                 child.evaluate(null, ptr);
-                Object value = arrayElemDataType.toObject(ptr, child.getDataType(), child.getSortOrder());
-                elements[i] = LiteralExpression.newConstant(value, child.getDataType(), child.getDeterminism()).getValue();
+                Object value = null;
+                if (child.getDataType() == null) {
+                    value = arrayElemDataType.toObject(ptr, theArrayElemDataType, child.getSortOrder());
+                } else {
+                    value = arrayElemDataType.toObject(ptr, child.getDataType(), child.getSortOrder());
+                }
+                elements[i] = LiteralExpression.newConstant(value, theArrayElemDataType, child.getDeterminism()).getValue();
             }
             Object value = PArrayDataType.instantiatePhoenixArray(arrayElemDataType, elements);
             return LiteralExpression.newConstant(value,
-                    PDataType.fromTypeId(arrayElemDataType.getSqlType() + PDataType.ARRAY_TYPE_BASE), Determinism.ALWAYS);
+                    PDataType.fromTypeId(arrayElemDataType.getSqlType() + PDataType.ARRAY_TYPE_BASE), null, null, arrayExpression.getSortOrder(), Determinism.ALWAYS, rowKeyOrderOptimizable);
         }
         
         return wrapGroupByExpression(arrayExpression);

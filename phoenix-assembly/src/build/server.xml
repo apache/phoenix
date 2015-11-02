@@ -39,6 +39,9 @@
 	<include>org.antlr:antlr*</include>
         <include>co.cask.tephra:tephra*</include>
         <include>com.google.code.gson:gson</include>
+        <include>org.jruby.joni:joni</include>
+        <include>org.jruby.jcodings:jcodings</include>
+	<include>joda-time:joda-time</include>
       </includes>
     </dependencySet>
   </dependencySets>

@@ -22,11 +22,11 @@ import org.apache.hadoop.metrics2.*;
 import org.apache.hadoop.metrics2.lib.Interns;
 import org.apache.phoenix.metrics.MetricInfo;
 import org.apache.phoenix.metrics.Metrics;
-import org.cloudera.htrace.HTraceConfiguration;
-import org.cloudera.htrace.Span;
-import org.cloudera.htrace.SpanReceiver;
-import org.cloudera.htrace.TimelineAnnotation;
-import org.cloudera.htrace.impl.MilliSpan;
+import org.apache.htrace.HTraceConfiguration;
+import org.apache.htrace.Span;
+import org.apache.htrace.SpanReceiver;
+import org.apache.htrace.TimelineAnnotation;
+import org.apache.htrace.impl.MilliSpan;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -150,11 +150,6 @@ public class TraceMetricSource implements SpanReceiver, MetricsSource {
 
   @Override
   public void close() throws IOException {
-    // noop
-  }
-
-  @Override
-  public void configure(HTraceConfiguration conf) {
     // noop
   }
 

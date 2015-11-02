@@ -241,4 +241,23 @@ public class DelegateTable implements PTable {
     public boolean isTransactional() {
         return delegate.isTransactional();
     }
+
+    public int getBaseColumnCount() {
+        return delegate.getBaseColumnCount();
+    }
+
+    @Override
+    public boolean rowKeyOrderOptimizable() {
+        return delegate.rowKeyOrderOptimizable();
+    }
+
+    @Override
+    public int getRowTimestampColPos() {
+        return delegate.getRowTimestampColPos();
+    }
+    
+    @Override
+    public String toString() {
+        return delegate.toString();
+    }
 }

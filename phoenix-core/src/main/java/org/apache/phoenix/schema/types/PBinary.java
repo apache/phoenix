@@ -19,14 +19,16 @@ package org.apache.phoenix.schema.types;
 
 import java.sql.Types;
 import java.text.Format;
+import java.util.Arrays;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Base64;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.exception.ValueTypeIncompatibleException;
+import org.apache.phoenix.exception.DataExceedsCapacityException;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.SortOrder;
 
-public class PBinary extends PDataType<byte[]> {
+public class PBinary extends PBinaryBase {
 
   public static final PBinary INSTANCE = new PBinary();
 
@@ -35,29 +37,43 @@ public class PBinary extends PDataType<byte[]> {
   }
 
   @Override
-  public void pad(ImmutableBytesWritable ptr, Integer maxLength) {
+  public byte[] pad(byte[] b, Integer maxLength, SortOrder sortOrder) {
+      if (b == null || b.length >= maxLength) {
+          return b;
+        }
+        byte[] newBytes = new byte[maxLength];
+        System.arraycopy(b, 0, newBytes, 0, b.length);
+        if (sortOrder == SortOrder.DESC) {
+            Arrays.fill(newBytes, b.length, maxLength, QueryConstants.DESC_SEPARATOR_BYTE);
+        }
+        return newBytes;
+  }
+  
+  @Override
+  public void pad(ImmutableBytesWritable ptr, Integer maxLength, SortOrder sortOrder) {
     if (ptr.getLength() >= maxLength) {
       return;
     }
     byte[] newBytes = new byte[maxLength];
     System.arraycopy(ptr.get(), ptr.getOffset(), newBytes, 0, ptr.getLength());
+    if (sortOrder == SortOrder.DESC) {
+        Arrays.fill(newBytes, ptr.getLength(), maxLength, QueryConstants.DESC_SEPARATOR_BYTE);
+    }
     ptr.set(newBytes);
   }
 
   @Override
   public Object pad(Object object, Integer maxLength) {
     byte[] b = (byte[]) object;
-    if (b == null) {
-      return null;
-    }
-    if (b.length == maxLength) {
+    int length = (b == null ? 0 : b.length);
+    if (length == maxLength) {
       return object;
     }
-    if (b.length > maxLength) {
-      throw new ValueTypeIncompatibleException(this, maxLength, null);
+    if (length > maxLength) {
+      throw new DataExceedsCapacityException(this, maxLength, null);
     }
     byte[] newBytes = new byte[maxLength];
-    System.arraycopy(b, 0, newBytes, 0, b.length);
+    System.arraycopy(b, 0, newBytes, 0, length);
 
     return newBytes;
   }

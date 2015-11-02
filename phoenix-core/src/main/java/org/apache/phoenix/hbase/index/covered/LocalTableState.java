@@ -36,6 +36,8 @@ import org.apache.phoenix.hbase.index.scanner.Scanner;
 import org.apache.phoenix.hbase.index.scanner.ScannerBuilder;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 
+import com.google.inject.Key;
+
 /**
  * Manage the state of the HRegion's view of the table, for the single row.
  * <p>
@@ -53,7 +55,7 @@ public class LocalTableState implements TableState {
     private Mutation update;
     private Set<ColumnTracker> trackedColumns = new HashSet<ColumnTracker>();
     private ScannerBuilder scannerBuilder;
-    private List<Cell> kvs = new ArrayList<Cell>();
+    private List<KeyValue> kvs = new ArrayList<KeyValue>();
     private List<? extends IndexedColumnGroup> hints;
     private CoveredColumns columnSet;
 
@@ -66,25 +68,25 @@ public class LocalTableState implements TableState {
         this.columnSet = new CoveredColumns();
     }
 
-    public void addPendingUpdates(Cell... kvs) {
+    public void addPendingUpdates(KeyValue... kvs) {
         if (kvs == null) return;
         addPendingUpdates(Arrays.asList(kvs));
     }
 
-    public void addPendingUpdates(List<Cell> kvs) {
+    public void addPendingUpdates(List<KeyValue> kvs) {
         if (kvs == null) return;
         setPendingUpdates(kvs);
         addUpdate(kvs);
     }
 
-    private void addUpdate(List<Cell> list) {
+    private void addUpdate(List<KeyValue> list) {
         addUpdate(list, true);
     }
 
-    private void addUpdate(List<Cell> list, boolean overwrite) {
+    private void addUpdate(List<KeyValue> list, boolean overwrite) {
         if (list == null) return;
-        for (Cell kv : list) {
-            this.memstore.add(KeyValueUtil.ensureKeyValue(kv), overwrite);
+        for (KeyValue kv : list) {
+            this.memstore.add(kv, overwrite);
         }
     }
 
@@ -173,7 +175,7 @@ public class LocalTableState implements TableState {
         if (toCover.isEmpty()) { return; }
 
         // add the current state of the row
-        this.addUpdate(this.table.getCurrentRowState(update, toCover).listCells(), false);
+        this.addUpdate(this.table.getCurrentRowState(update, toCover).list(), false);
 
         // add the covered columns to the set
         for (ColumnReference ref : toCover) {
@@ -213,7 +215,7 @@ public class LocalTableState implements TableState {
      */
     public void addUpdateForTesting(Mutation pendingUpdate) {
         for (Map.Entry<byte[], List<Cell>> e : pendingUpdate.getFamilyCellMap().entrySet()) {
-            List<Cell> edits = e.getValue();
+        	List<KeyValue> edits = KeyValueUtil.ensureKeyValues(e.getValue());
             addUpdate(edits);
         }
     }
@@ -231,7 +233,7 @@ public class LocalTableState implements TableState {
     }
 
     @Override
-    public Collection<Cell> getPendingUpdate() {
+    public Collection<KeyValue> getPendingUpdate() {
         return this.kvs;
     }
 
@@ -242,7 +244,7 @@ public class LocalTableState implements TableState {
      * @param update
      *            pending {@link KeyValue}s
      */
-    public void setPendingUpdates(Collection<Cell> update) {
+    public void setPendingUpdates(Collection<KeyValue> update) {
         this.kvs.clear();
         this.kvs.addAll(update);
     }
@@ -259,9 +261,9 @@ public class LocalTableState implements TableState {
      * 
      * @param values
      */
-    public void rollback(Collection<Cell> values) {
-        for (Cell kv : values) {
-            this.memstore.rollback(KeyValueUtil.ensureKeyValue(kv));
+    public void rollback(Collection<KeyValue> values) {
+        for (KeyValue kv : values) {
+            this.memstore.rollback(kv);
         }
     }
 

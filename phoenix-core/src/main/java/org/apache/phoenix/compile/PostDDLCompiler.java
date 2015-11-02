@@ -33,12 +33,14 @@ import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
+import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
+import org.apache.phoenix.schema.FunctionNotFoundException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.TableNotFoundException;
@@ -99,6 +101,22 @@ public class PostDDLCompiler {
                             throws SQLException {
                         throw new UnsupportedOperationException();
                     }
+
+					@Override
+					public List<PFunction> getFunctions() {
+						return Collections.<PFunction>emptyList();
+					}
+
+					@Override
+					public PFunction resolveFunction(String functionName)
+							throws SQLException {
+						throw new FunctionNotFoundException(functionName);
+					}
+
+					@Override
+					public boolean hasUDFs() {
+						return false;
+					}
                     
                 },
                 scan,
@@ -131,6 +149,12 @@ public class PostDDLCompiler {
                             public List<TableRef> getTables() {
                                 return Collections.singletonList(tableRef);
                             }
+                            
+                            @Override
+                            public java.util.List<PFunction> getFunctions() {
+                                return Collections.emptyList();
+                            };
+                            
                             @Override
                             public TableRef resolveTable(String schemaName, String tableName)
                                     throws SQLException {
@@ -143,6 +167,16 @@ public class PostDDLCompiler {
                                         : tableRef.getTable().getColumn(colName);
                                 return new ColumnRef(tableRef, column.getPosition());
                             }
+                            
+                            @Override
+                            public PFunction resolveFunction(String functionName) throws SQLException {
+                                throw new UnsupportedOperationException();
+                            };
+
+                            @Override
+                            public boolean hasUDFs() {
+                                return false;
+                            };
                         };
                         PhoenixStatement statement = new PhoenixStatement(connection);
                         StatementContext context = new StatementContext(statement, resolver, scan, new SequenceManager(statement));

@@ -27,6 +27,7 @@ import java.io.Reader;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.util.ArrayList;
@@ -34,6 +35,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.TreeSet;
@@ -61,9 +63,11 @@ import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
-import org.apache.phoenix.monitoring.Metric;
-import org.apache.phoenix.monitoring.PhoenixMetrics;
+import org.apache.phoenix.jdbc.PhoenixResultSet;
+import org.apache.phoenix.monitoring.GlobalClientMetrics;
+import org.apache.phoenix.monitoring.GlobalMetric;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.KeyValueSchema;
@@ -75,12 +79,12 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.types.PDataType;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
@@ -105,6 +109,11 @@ public class PhoenixRuntime {
      * Root for the JDBC URL that the Phoenix accepts accepts.
      */
     public final static String JDBC_PROTOCOL = "jdbc:phoenix";
+    /**
+     * Root for the JDBC URL used by the thin driver. Duplicated here to avoid dependencies
+     * between modules.
+     */
+    public final static String JDBC_THIN_PROTOCOL = "jdbc:phoenix:thin";
     public final static char JDBC_PROTOCOL_TERMINATOR = ';';
     public final static char JDBC_PROTOCOL_SEPARATOR = ':';
 
@@ -137,9 +146,14 @@ public class PhoenixRuntime {
     public static final String ANNOTATION_ATTRIB_PREFIX = "phoenix.annotation.";
 
     /**
-     * Use this connection property to explicity enable or disable auto-commit on a new connection.
+     * Use this connection property to explicitly enable or disable auto-commit on a new connection.
      */
     public static final String AUTO_COMMIT_ATTRIB = "AutoCommit";
+
+    /**
+     * Use this connection property to explicitly set read consistency level on a new connection.
+     */
+    public static final String CONSISTENCY_ATTRIB = "Consistency";
 
     /**
      * Use this as the zookeeper quorum name to have a connection-less connection. This enables
@@ -147,6 +161,11 @@ public class PhoenixRuntime {
      * upserting data into them, and getting the uncommitted state through {@link #getUncommittedData(Connection)}
      */
     public final static String CONNECTIONLESS = "none";
+    
+    /**
+     * Use this connection property to explicitly enable or disable request level metric collection.
+     */
+    public static final String REQUEST_METRIC_ATTRIB = "RequestMetric";
 
     private static final String HEADER_IN_LINE = "in-line";
     private static final String SQL_FILE_EXT = ".sql";
@@ -173,24 +192,50 @@ public class PhoenixRuntime {
             conn = DriverManager.getConnection(jdbcUrl, props)
                     .unwrap(PhoenixConnection.class);
 
-            for (String inputFile : execCmd.getInputFiles()) {
-                if (inputFile.endsWith(SQL_FILE_EXT)) {
-                    PhoenixRuntime.executeStatements(conn,
-                            new FileReader(inputFile), Collections.emptyList());
-                } else if (inputFile.endsWith(CSV_FILE_EXT)) {
-
-                    String tableName = execCmd.getTableName();
-                    if (tableName == null) {
-                        tableName = SchemaUtil.normalizeIdentifier(
-                                inputFile.substring(inputFile.lastIndexOf(File.separatorChar) + 1,
-                                        inputFile.length() - CSV_FILE_EXT.length()));
+            if (execCmd.isUpgrade()) {
+                if (conn.getClientInfo(PhoenixRuntime.CURRENT_SCN_ATTRIB) != null) {
+                    throw new SQLException("May not specify the CURRENT_SCN property when upgrading");
+                }
+                if (conn.getClientInfo(PhoenixRuntime.TENANT_ID_ATTRIB) != null) {
+                    throw new SQLException("May not specify the TENANT_ID_ATTRIB property when upgrading");
+                }
+                if (execCmd.getInputFiles().isEmpty()) {
+                    List<String> tablesNeedingUpgrade = UpgradeUtil.getPhysicalTablesWithDescRowKey(conn);
+                    if (tablesNeedingUpgrade.isEmpty()) {
+                        String msg = "No tables are required to be upgraded due to incorrect row key order (PHOENIX-2067 and PHOENIX-2120)";
+                        System.out.println(msg);
+                    } else {
+                        String msg = "The following tables require upgrade due to a bug causing the row key to be incorrectly ordered (PHOENIX-2067 and PHOENIX-2120):\n" + Joiner.on(' ').join(tablesNeedingUpgrade);
+                        System.out.println("WARNING: " + msg);
                     }
-                    CSVCommonsLoader csvLoader =
-                            new CSVCommonsLoader(conn, tableName, execCmd.getColumns(),
-                                    execCmd.isStrict(), execCmd.getFieldDelimiter(),
-                                    execCmd.getQuoteCharacter(), execCmd.getEscapeCharacter(),
-                                    execCmd.getArrayElementSeparator());
-                    csvLoader.upsert(inputFile);
+                    List<String> unsupportedTables = UpgradeUtil.getPhysicalTablesWithDescVarbinaryRowKey(conn);
+                    if (!unsupportedTables.isEmpty()) {
+                        String msg = "The following tables use an unsupported VARBINARY DESC construct and need to be changed:\n" + Joiner.on(' ').join(unsupportedTables);
+                        System.out.println("WARNING: " + msg);
+                    }
+                } else {
+                    UpgradeUtil.upgradeDescVarLengthRowKeys(conn, execCmd.getInputFiles(), execCmd.isBypassUpgrade());
+                }
+            } else {
+                for (String inputFile : execCmd.getInputFiles()) {
+                    if (inputFile.endsWith(SQL_FILE_EXT)) {
+                        PhoenixRuntime.executeStatements(conn,
+                                new FileReader(inputFile), Collections.emptyList());
+                    } else if (inputFile.endsWith(CSV_FILE_EXT)) {
+    
+                        String tableName = execCmd.getTableName();
+                        if (tableName == null) {
+                            tableName = SchemaUtil.normalizeIdentifier(
+                                    inputFile.substring(inputFile.lastIndexOf(File.separatorChar) + 1,
+                                            inputFile.length() - CSV_FILE_EXT.length()));
+                        }
+                        CSVCommonsLoader csvLoader =
+                                new CSVCommonsLoader(conn, tableName, execCmd.getColumns(),
+                                        execCmd.isStrict(), execCmd.getFieldDelimiter(),
+                                        execCmd.getQuoteCharacter(), execCmd.getEscapeCharacter(),
+                                        execCmd.getArrayElementSeparator());
+                        csvLoader.upsert(inputFile);
+                    }
                 }
             }
         } catch (Throwable t) {
@@ -299,12 +344,18 @@ public class PhoenixRuntime {
         };
     }
 
+    /**
+     * 
+     * @param conn
+     * @param name requires a pre-normalized table name or a pre-normalized schema and table name
+     * @return
+     * @throws SQLException
+     */
     public static PTable getTable(Connection conn, String name) throws SQLException {
         PTable table = null;
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
         try {
-            name = SchemaUtil.normalizeIdentifier(name);
-            table = pconn.getTable(new PTableKey(pconn.getTenantId(), name));
+            table = pconn.getMetaDataCache().getTableRef(new PTableKey(pconn.getTenantId(), name)).getTable();
         } catch (TableNotFoundException e) {
             String schemaName = SchemaUtil.getSchemaNameFromFullName(name);
             String tableName = SchemaUtil.getTableNameFromFullName(name);
@@ -330,13 +381,14 @@ public class PhoenixRuntime {
     public static List<ColumnInfo> generateColumnInfo(Connection conn,
             String tableName, List<String> columns)
             throws SQLException {
-
-        PTable table = PhoenixRuntime.getTable(conn, tableName);
+        PTable table = PhoenixRuntime.getTable(conn, SchemaUtil.normalizeFullTableName(tableName));
         List<ColumnInfo> columnInfoList = Lists.newArrayList();
         Set<String> unresolvedColumnNames = new TreeSet<String>();
-        if (columns == null) {
+        if (columns == null || columns.isEmpty()) {
             // use all columns in the table
-            for(PColumn pColumn : table.getColumns()) {
+        	int offset = (table.getBucketNum() == null ? 0 : 1);
+        	for (int i = offset; i < table.getColumns().size(); i++) {
+        	   PColumn pColumn = table.getColumns().get(i);
                int sqlType = pColumn.getDataType().getSqlType();
                columnInfoList.add(new ColumnInfo(pColumn.toString(), sqlType)); 
             }
@@ -436,6 +488,8 @@ public class PhoenixRuntime {
         private String arrayElementSeparator;
         private boolean strict;
         private List<String> inputFiles;
+        private boolean isUpgrade;
+        private boolean isBypassUpgrade;
 
         /**
          * Factory method to build up an {@code ExecutionCommand} based on supplied parameters.
@@ -460,6 +514,20 @@ public class PhoenixRuntime {
                             "character");
             Option arrayValueSeparatorOption = new Option("a", "array-separator", true,
                     "Define the array element separator, defaults to ':'");
+            Option upgradeOption = new Option("u", "upgrade", false, "Upgrades tables specified as arguments " +
+                    "by rewriting them with the correct row key for descending columns. If no arguments are " +
+                    "specified, then tables that need to be upgraded will be displayed without being upgraded. " +
+                    "Use the -b option to bypass the rewrite if you know that your data does not need to be upgrade. " +
+                    "This would only be the case if you have not relied on auto padding for BINARY and CHAR data, " +
+                    "but instead have always provided data up to the full max length of the column. See PHOENIX-2067 " +
+                    "and PHOENIX-2120 for more information. " +
+                    "Note that " + QueryServices.THREAD_TIMEOUT_MS_ATTRIB + " and hbase.regionserver.lease.period " +
+                    "parameters must be set very high to prevent timeouts when upgrading.");
+            Option bypassUpgradeOption = new Option("b", "bypass-upgrade", false,
+                    "Used in conjunction with the -u option to bypass the rewrite during upgrade if you know that your data does not need to be upgrade. " +
+                    "This would only be the case if you have not relied on auto padding for BINARY and CHAR data, " +
+                    "but instead have always provided data up to the full max length of the column. See PHOENIX-2067 " +
+                    "and PHOENIX-2120 for more information. ");
             Options options = new Options();
             options.addOption(tableOption);
             options.addOption(headerOption);
@@ -468,6 +536,8 @@ public class PhoenixRuntime {
             options.addOption(quoteCharacterOption);
             options.addOption(escapeCharacterOption);
             options.addOption(arrayValueSeparatorOption);
+            options.addOption(upgradeOption);
+            options.addOption(bypassUpgradeOption);
 
             CommandLineParser parser = new PosixParser();
             CommandLine cmdLine = null;
@@ -507,6 +577,17 @@ public class PhoenixRuntime {
             execCmd.arrayElementSeparator = cmdLine.getOptionValue(
                     arrayValueSeparatorOption.getOpt(),
                     CSVCommonsLoader.DEFAULT_ARRAY_ELEMENT_SEPARATOR);
+            
+            if (cmdLine.hasOption(upgradeOption.getOpt())) {
+                execCmd.isUpgrade = true;
+            }
+
+            if (cmdLine.hasOption(bypassUpgradeOption.getOpt())) {
+                if (!execCmd.isUpgrade()) {
+                    usageError("The bypass-upgrade option may only be used in conjunction with the -u option", options);
+                }
+                execCmd.isBypassUpgrade = true;
+            }
 
 
             List<String> argList = Lists.newArrayList(cmdLine.getArgList());
@@ -516,20 +597,18 @@ public class PhoenixRuntime {
             execCmd.connectionString = argList.remove(0);
             List<String> inputFiles = Lists.newArrayList();
             for (String arg : argList) {
-                if (arg.endsWith(CSV_FILE_EXT) || arg.endsWith(SQL_FILE_EXT)) {
+                if (execCmd.isUpgrade || arg.endsWith(CSV_FILE_EXT) || arg.endsWith(SQL_FILE_EXT)) {
                     inputFiles.add(arg);
                 } else {
                     usageError("Don't know how to interpret argument '" + arg + "'", options);
                 }
             }
 
-            if (inputFiles.isEmpty()) {
+            if (inputFiles.isEmpty() && !execCmd.isUpgrade) {
                 usageError("At least one input file must be supplied", options);
             }
 
             execCmd.inputFiles = inputFiles;
-
-
 
             return execCmd;
         }
@@ -597,87 +676,16 @@ public class PhoenixRuntime {
         public boolean isStrict() {
             return strict;
         }
+
+        public boolean isUpgrade() {
+            return isUpgrade;
+        }
+
+        public boolean isBypassUpgrade() {
+            return isBypassUpgrade;
+        }
     }
     
-    /**
-     * Encode the primary key values from the table as a byte array. The values must
-     * be in the same order as the primary key constraint. If the connection and
-     * table are both tenant-specific, the tenant ID column must not be present in
-     * the values.
-     * @param conn an open connection
-     * @param fullTableName the full table name
-     * @param values the values of the primary key columns ordered in the same order
-     *  as the primary key constraint
-     * @return the encoded byte array
-     * @throws SQLException if the table cannot be found or the incorrect number of
-     *  of values are provided
-     * @see #decodePK(Connection, String, byte[]) to decode the byte[] back to the
-     *  values
-     */
-    @Deprecated
-    public static byte[] encodePK(Connection conn, String fullTableName, Object[] values) throws SQLException {
-        PTable table = getTable(conn, fullTableName);
-        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        int offset = (table.getBucketNum() == null ? 0 : 1) + (table.isMultiTenant() && pconn.getTenantId() != null ? 1 : 0);
-        List<PColumn> pkColumns = table.getPKColumns();
-        if (pkColumns.size() - offset != values.length) {
-            throw new SQLException("Expected " + (pkColumns.size() - offset) + " but got " + values.length);
-        }
-        PDataType type = null;
-        TrustedByteArrayOutputStream output = new TrustedByteArrayOutputStream(table.getRowKeySchema().getEstimatedValueLength());
-        try {
-            for (int i = offset; i < pkColumns.size(); i++) {
-                if (type != null && !type.isFixedWidth()) {
-                    output.write(QueryConstants.SEPARATOR_BYTE);
-                }
-                type = pkColumns.get(i).getDataType();
-
-                //for fixed width data types like CHAR and BINARY, we need to pad values to be of max length.
-                Object paddedObj = type.pad(values[i - offset], pkColumns.get(i).getMaxLength());
-                byte[] value = type.toBytes(paddedObj);
-                output.write(value);
-            }
-            return output.toByteArray();
-        } finally {
-            try {
-                output.close();
-            } catch (IOException e) {
-                throw new RuntimeException(e); // Impossible
-            }
-        }
-    }
-
-    /**
-     * Decode a byte array value back into the Object values of the
-     * primary key constraint. If the connection and table are both
-     * tenant-specific, the tenant ID column is not expected to have
-     * been encoded and will not appear in the returned values.
-     * @param conn an open connection
-     * @param name the full table name
-     * @param encodedValue the value that was encoded with {@link #encodePK(Connection, String, Object[])}
-     * @return the Object values encoded in the byte array value
-     * @throws SQLException
-     */
-    @Deprecated
-    public static Object[] decodePK(Connection conn, String name, byte[] value) throws SQLException {
-        PTable table = getTable(conn, name);
-        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        int offset = (table.getBucketNum() == null ? 0 : 1) + (table.isMultiTenant() && pconn.getTenantId() != null ? 1 : 0);
-        int nValues = table.getPKColumns().size() - offset;
-        RowKeySchema schema = table.getRowKeySchema();
-        Object[] values = new Object[nValues];
-        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-        schema.iterator(value, ptr);
-        int i = 0;
-        int fieldIdx = offset;
-        while (i < nValues && schema.next(ptr, fieldIdx, value.length) != null) {
-            values[i] = schema.getField(fieldIdx).getDataType().toObject(ptr);
-            i++;
-            fieldIdx++;
-        }
-        return values;
-    }
-
     /**
      * Returns the opitmized query plan used by phoenix for executing the sql.
      * @param stmt to return the plan for
@@ -969,9 +977,162 @@ public class PhoenixRuntime {
     }
     
     /**
-     * Exposes the various internal phoenix metrics. 
+     * Exposes the various internal phoenix metrics collected at the client JVM level. 
      */
-    public static Collection<Metric> getInternalPhoenixMetrics() {
-        return PhoenixMetrics.getMetrics();
+    public static Collection<GlobalMetric> getGlobalPhoenixClientMetrics() {
+        return GlobalClientMetrics.getMetrics();
     }
-}
+    
+    /**
+     * 
+     * @return whether or not the global client metrics are being collected
+     */
+    public static boolean areGlobalClientMetricsBeingCollected() {
+        return GlobalClientMetrics.isMetricsEnabled();
+    }
+    
+    /**
+     * Method to expose the metrics associated with performing reads using the passed result set. A typical pattern is:
+     * 
+     * <pre>
+     * {@code
+     * Map<String, Map<String, Long>> overAllQueryMetrics = null;
+     * Map<String, Map<String, Long>> requestReadMetrics = null;
+     * try (ResultSet rs = stmt.executeQuery()) {
+     *    while(rs.next()) {
+     *      .....
+     *    }
+     *    overAllQueryMetrics = PhoenixRuntime.getOverAllReadRequestMetrics(rs);
+     *    requestReadMetrics = PhoenixRuntime.getRequestReadMetrics(rs);
+     *    PhoenixRuntime.resetMetrics(rs);
+     * }
+     * </pre>
+     * 
+     * @param rs
+     *            result set to get the metrics for
+     * @return a map of (table name) -> (map of (metric name) -> (metric value))
+     * @throws SQLException
+     */
+    public static Map<String, Map<String, Long>> getRequestReadMetrics(ResultSet rs) throws SQLException {
+        PhoenixResultSet resultSet = rs.unwrap(PhoenixResultSet.class);
+        return resultSet.getReadMetrics();
+    }
+
+    /**
+     * Method to expose the overall metrics associated with executing a query via phoenix. A typical pattern of
+     * accessing request level read metrics and overall read query metrics is:
+     * 
+     * <pre>
+     * {@code
+     * Map<String, Map<String, Long>> overAllQueryMetrics = null;
+     * Map<String, Map<String, Long>> requestReadMetrics = null;
+     * try (ResultSet rs = stmt.executeQuery()) {
+     *    while(rs.next()) {
+     *      .....
+     *    }
+     *    overAllQueryMetrics = PhoenixRuntime.getOverAllReadRequestMetrics(rs);
+     *    requestReadMetrics = PhoenixRuntime.getRequestReadMetrics(rs);
+     *    PhoenixRuntime.resetMetrics(rs);
+     * }
+     * </pre>
+     * 
+     * @param rs
+     *            result set to get the metrics for
+     * @return a map of metric name -> metric value
+     * @throws SQLException
+     */
+    public static Map<String, Long> getOverAllReadRequestMetrics(ResultSet rs) throws SQLException {
+        PhoenixResultSet resultSet = rs.unwrap(PhoenixResultSet.class);
+        return resultSet.getOverAllRequestReadMetrics();
+    }
+
+    /**
+     * Method to expose the metrics associated with sending over mutations to HBase. These metrics are updated when
+     * commit is called on the passed connection. Mutation metrics are accumulated for the connection till
+     * {@link #resetMetrics(Connection)} is called or the connection is closed. Example usage:
+     * 
+     * <pre>
+     * {@code
+     * Map<String, Map<String, Long>> mutationWriteMetrics = null;
+     * Map<String, Map<String, Long>> mutationReadMetrics = null;
+     * try (Connection conn = DriverManager.getConnection(url)) {
+     *    conn.createStatement.executeUpdate(dml1);
+     *    ....
+     *    conn.createStatement.executeUpdate(dml2);
+     *    ...
+     *    conn.createStatement.executeUpdate(dml3);
+     *    ...
+     *    conn.commit();
+     *    mutationWriteMetrics = PhoenixRuntime.getWriteMetricsForMutationsSinceLastReset(conn);
+     *    mutationReadMetrics = PhoenixRuntime.getReadMetricsForMutationsSinceLastReset(conn);
+     *    PhoenixRuntime.resetMetrics(rs);
+     * }
+     * </pre>
+     *  
+     * @param conn
+     *            connection to get the metrics for
+     * @return a map of (table name) -> (map of (metric name) -> (metric value))
+     * @throws SQLException
+     */
+    public static Map<String, Map<String, Long>> getWriteMetricsForMutationsSinceLastReset(Connection conn) throws SQLException {
+        PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
+        return pConn.getMutationMetrics();
+    }
+
+    /**
+     * Method to expose the read metrics associated with executing a dml statement. These metrics are updated when
+     * commit is called on the passed connection. Read metrics are accumulated till {@link #resetMetrics(Connection)} is
+     * called or the connection is closed. Example usage:
+     * 
+     * <pre>
+     * {@code
+     * Map<String, Map<String, Long>> mutationWriteMetrics = null;
+     * Map<String, Map<String, Long>> mutationReadMetrics = null;
+     * try (Connection conn = DriverManager.getConnection(url)) {
+     *    conn.createStatement.executeUpdate(dml1);
+     *    ....
+     *    conn.createStatement.executeUpdate(dml2);
+     *    ...
+     *    conn.createStatement.executeUpdate(dml3);
+     *    ...
+     *    conn.commit();
+     *    mutationWriteMetrics = PhoenixRuntime.getWriteMetricsForMutationsSinceLastReset(conn);
+     *    mutationReadMetrics = PhoenixRuntime.getReadMetricsForMutationsSinceLastReset(conn);
+     *    PhoenixRuntime.resetMetrics(rs);
+     * }
+     * </pre> 
+     * @param conn
+     *            connection to get the metrics for
+     * @return  a map of (table name) -> (map of (metric name) -> (metric value))
+     * @throws SQLException
+     */
+    public static Map<String, Map<String, Long>> getReadMetricsForMutationsSinceLastReset(Connection conn) throws SQLException {
+        PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
+        return pConn.getReadMetrics();
+    }
+
+    /**
+     * Reset the read metrics collected in the result set.
+     * 
+     * @see {@link #getRequestReadMetrics(ResultSet)} {@link #getOverAllReadRequestMetrics(ResultSet)}
+     * @param rs
+     * @throws SQLException
+     */
+    public static void resetMetrics(ResultSet rs) throws SQLException {
+        PhoenixResultSet prs = rs.unwrap(PhoenixResultSet.class);
+        prs.resetMetrics();
+    }
+    
+    /**
+     * Reset the mutation and reads-for-mutations metrics collected in the connection.
+     * 
+     * @see {@link #getReadMetricsForMutationsSinceLastReset(Connection)} {@link #getWriteMetricsForMutationsSinceLastReset(Connection)}
+     * @param conn
+     * @throws SQLException
+     */
+    public static void resetMetrics(Connection conn) throws SQLException {
+        PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
+        pConn.clearMetrics();
+    }
+    
+ }

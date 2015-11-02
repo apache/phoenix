@@ -33,6 +33,7 @@ import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -48,6 +49,9 @@ import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.htrace.Span;
+import org.apache.htrace.Trace;
+import org.apache.htrace.TraceScope;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.hbase.index.MultiMutation;
 import org.apache.phoenix.hbase.index.ValueGetter;
@@ -67,13 +71,11 @@ import org.apache.phoenix.trace.util.NullSpan;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
-import org.cloudera.htrace.Span;
-import org.cloudera.htrace.Trace;
-import org.cloudera.htrace.TraceScope;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.google.inject.Key;
 
 /**
  * Do all the work of managing index updates for a transactional table from a single coprocessor. Since the transaction
@@ -216,7 +218,7 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
                 }
                 // Project empty key value column
                 scan.addColumn(indexMaintainers.get(0).getDataEmptyKeyValueCF(), QueryConstants.EMPTY_COLUMN_BYTES);
-                ScanRanges scanRanges = ScanRanges.create(SchemaUtil.VAR_BINARY_SCHEMA, Collections.singletonList(keys), ScanUtil.SINGLE_COLUMN_SLOT_SPAN);
+                ScanRanges scanRanges = ScanRanges.create(SchemaUtil.VAR_BINARY_SCHEMA, Collections.singletonList(keys), ScanUtil.SINGLE_COLUMN_SLOT_SPAN, KeyRange.EVERYTHING_RANGE, null, true, -1);
                 scanRanges.initializeScan(scan);
                 scan.setFilter(scanRanges.getSkipScanFilter());
                 TableName tableName = env.getRegion().getRegionInfo().getTable();
@@ -317,7 +319,7 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
         private final long currentTimestamp;
         private final RegionCoprocessorEnvironment env;
         private final Map<String, byte[]> attributes;
-        private final List<Cell> pendingUpdates;
+        private final List<KeyValue> pendingUpdates;
         private final Set<ColumnReference> indexedColumns;
         private final Map<ColumnReference, ImmutableBytesWritable> valueMap;
         
@@ -334,7 +336,7 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
                 CellScanner scanner = mutation.cellScanner();
                 while (scanner.advance()) {
                     Cell cell = scanner.current();
-                    pendingUpdates.add(cell);
+                    pendingUpdates.add(KeyValueUtil.ensureKeyValue(cell));
                 }
             } catch (IOException e) {
                 throw new RuntimeException(e); // Impossible
@@ -416,7 +418,7 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
         }
         
         @Override
-        public Collection<Cell> getPendingUpdate() {
+        public Collection<KeyValue> getPendingUpdate() {
             return pendingUpdates;
         }
 

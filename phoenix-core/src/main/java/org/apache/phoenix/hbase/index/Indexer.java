@@ -29,6 +29,7 @@ import java.util.Map;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
@@ -63,9 +64,9 @@ import org.apache.phoenix.hbase.index.write.recovery.StoreFailuresInCachePolicy;
 import org.apache.phoenix.hbase.index.write.recovery.TrackingParallelWriterIndexCommitter;
 import org.apache.phoenix.trace.TracingUtils;
 import org.apache.phoenix.trace.util.NullSpan;
-import org.cloudera.htrace.Span;
-import org.cloudera.htrace.Trace;
-import org.cloudera.htrace.TraceScope;
+import org.apache.htrace.Span;
+import org.apache.htrace.Trace;
+import org.apache.htrace.TraceScope;
 
 import com.google.common.collect.Multimap;
 
@@ -421,7 +422,7 @@ public class Indexer extends BaseRegionObserver {
    *         present
    */
   private IndexedKeyValue getFirstIndexedKeyValue(WALEdit edit) {
-    for (KeyValue kv : edit.getKeyValues()) {
+    for (Cell kv : edit.getCells()) {
       if (kv instanceof IndexedKeyValue) {
         return (IndexedKeyValue) kv;
       }
@@ -436,7 +437,7 @@ public class Indexer extends BaseRegionObserver {
    */
   private Collection<Pair<Mutation, byte[]>> extractIndexUpdate(WALEdit edit) {
     Collection<Pair<Mutation, byte[]>> indexUpdates = new ArrayList<Pair<Mutation, byte[]>>();
-    for (KeyValue kv : edit.getKeyValues()) {
+    for (Cell kv : edit.getCells()) {
       if (kv instanceof IndexedKeyValue) {
         IndexedKeyValue ikv = (IndexedKeyValue) kv;
         indexUpdates.add(new Pair<Mutation, byte[]>(ikv.getMutation(), ikv.getIndexTable()));

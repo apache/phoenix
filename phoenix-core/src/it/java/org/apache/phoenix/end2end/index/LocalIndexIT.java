@@ -37,9 +37,8 @@ import java.util.concurrent.CountDownLatch;
 
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.MetaTableAccessor;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.catalog.CatalogTracker;
-import org.apache.hadoop.hbase.catalog.MetaReader;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Result;
@@ -727,24 +726,27 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
             
             HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
             for (int i = 1; i < 5; i++) {
-                CatalogTracker ct = new CatalogTracker(admin.getConfiguration());
                 admin.split(Bytes.toBytes(TestUtil.DEFAULT_DATA_TABLE_NAME), ByteUtil.concat(Bytes.toBytes(strings[3*i])));
                 List<HRegionInfo> regionsOfUserTable =
-                        MetaReader.getTableRegions(ct, TableName.valueOf(TestUtil.DEFAULT_DATA_TABLE_NAME), false);
+                        MetaTableAccessor.getTableRegions(getUtility().getZooKeeperWatcher(), admin.getConnection(),
+                                TableName.valueOf(TestUtil.DEFAULT_DATA_TABLE_NAME), false);
 
                 while (regionsOfUserTable.size() != (4+i)) {
                     Thread.sleep(100);
-                    regionsOfUserTable = MetaReader.getTableRegions(ct, TableName.valueOf(TestUtil.DEFAULT_DATA_TABLE_NAME), false);
+                    regionsOfUserTable = MetaTableAccessor.getTableRegions(getUtility().getZooKeeperWatcher(),
+                            admin.getConnection(), TableName.valueOf(TestUtil.DEFAULT_DATA_TABLE_NAME), false);
                 }
                 assertEquals(4+i, regionsOfUserTable.size());
                 TableName indexTable =
                         TableName.valueOf(MetaDataUtil.getLocalIndexTableName(TestUtil.DEFAULT_DATA_TABLE_NAME));
                 List<HRegionInfo> regionsOfIndexTable =
-                        MetaReader.getTableRegions(ct, indexTable, false);
+                        MetaTableAccessor.getTableRegions(getUtility().getZooKeeperWatcher(),
+                                admin.getConnection(), indexTable, false);
 
                 while (regionsOfIndexTable.size() != (4 + i)) {
                     Thread.sleep(100);
-                    regionsOfIndexTable = MetaReader.getTableRegions(ct, indexTable, false);
+                    regionsOfIndexTable = MetaTableAccessor.getTableRegions(getUtility().getZooKeeperWatcher(),
+                            admin.getConnection(), indexTable, false);
                 }
                 assertEquals(4 + i, regionsOfIndexTable.size());
                 String query = "SELECT t_id,k1,v1 FROM " + TestUtil.DEFAULT_DATA_TABLE_NAME;
@@ -847,32 +849,32 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
             assertTrue(rs.next());
 
             HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-            CatalogTracker ct = new CatalogTracker(admin.getConfiguration());
             List<HRegionInfo> regionsOfUserTable =
-                    MetaReader.getTableRegions(ct,
+                    MetaTableAccessor.getTableRegions(getUtility().getZooKeeperWatcher(), admin.getConnection(),
                         TableName.valueOf(TestUtil.DEFAULT_DATA_TABLE_NAME), false);
             admin.mergeRegions(regionsOfUserTable.get(0).getEncodedNameAsBytes(),
                 regionsOfUserTable.get(1).getEncodedNameAsBytes(), false);
             regionsOfUserTable =
-                    MetaReader.getTableRegions(ct,
+                    MetaTableAccessor.getTableRegions(getUtility().getZooKeeperWatcher(), admin.getConnection(),
                         TableName.valueOf(TestUtil.DEFAULT_DATA_TABLE_NAME), false);
 
             while (regionsOfUserTable.size() != 3) {
                 Thread.sleep(100);
-                regionsOfUserTable =
-                        MetaReader.getTableRegions(ct,
-                            TableName.valueOf(TestUtil.DEFAULT_DATA_TABLE_NAME), false);
+                regionsOfUserTable = MetaTableAccessor.getTableRegions(getUtility().getZooKeeperWatcher(),
+                        admin.getConnection(), TableName.valueOf(TestUtil.DEFAULT_DATA_TABLE_NAME), false);
             }
             assertEquals(3, regionsOfUserTable.size());
             TableName indexTable =
                     TableName.valueOf(MetaDataUtil
                             .getLocalIndexTableName(TestUtil.DEFAULT_DATA_TABLE_NAME));
             List<HRegionInfo> regionsOfIndexTable =
-                    MetaReader.getTableRegions(ct, indexTable, false);
+                    MetaTableAccessor.getTableRegions(getUtility().getZooKeeperWatcher(),
+                            admin.getConnection(), indexTable, false);
 
             while (regionsOfIndexTable.size() != 3) {
                 Thread.sleep(100);
-                regionsOfIndexTable = MetaReader.getTableRegions(ct, indexTable, false);
+                regionsOfIndexTable = MetaTableAccessor.getTableRegions(
+                        getUtility().getZooKeeperWatcher(), admin.getConnection(), indexTable, false);
             }
             assertEquals(3, regionsOfIndexTable.size());
             String query = "SELECT t_id,k1,v1 FROM " + TestUtil.DEFAULT_DATA_TABLE_NAME;

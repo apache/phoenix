@@ -21,6 +21,7 @@ package org.apache.phoenix.hbase.index.scanner;
 import java.io.IOException;
 import java.util.SortedSet;
 
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Scan;
@@ -49,25 +50,25 @@ public class FilteredKeyValueScanner implements KeyValueScanner {
     }
 
     @Override
-    public KeyValue peek() {
+    public Cell peek() {
         return delegate.peek();
     }
 
     /**
      * Same a {@link KeyValueScanner#next()} except that we filter out the next {@link KeyValue} until we find one that
      * passes the filter.
-     * 
+     *
      * @return the next {@link KeyValue} or <tt>null</tt> if no next {@link KeyValue} is present and passes all the
      *         filters.
      */
     @Override
-    public KeyValue next() throws IOException {
+    public Cell next() throws IOException {
         seekToNextUnfilteredKeyValue();
         return delegate.next();
     }
 
     @Override
-    public boolean seek(KeyValue key) throws IOException {
+    public boolean seek(Cell key) throws IOException {
         if (filter.filterAllRemaining()) { return false; }
         // see if we can seek to the next key
         if (!delegate.seek(key)) { return false; }
@@ -77,7 +78,7 @@ public class FilteredKeyValueScanner implements KeyValueScanner {
 
     private boolean seekToNextUnfilteredKeyValue() throws IOException {
         while (true) {
-            KeyValue peeked = delegate.peek();
+            Cell peeked = delegate.peek();
             // no more key values, so we are done
             if (peeked == null) { return false; }
 
@@ -102,13 +103,13 @@ public class FilteredKeyValueScanner implements KeyValueScanner {
     }
 
     @Override
-    public boolean reseek(KeyValue key) throws IOException {
+    public boolean reseek(Cell key) throws IOException {
         this.delegate.reseek(key);
         return this.seekToNextUnfilteredKeyValue();
     }
 
     @Override
-    public boolean requestSeek(KeyValue kv, boolean forward, boolean useBloom) throws IOException {
+    public boolean requestSeek(Cell kv, boolean forward, boolean useBloom) throws IOException {
         return this.reseek(kv);
     }
 
@@ -144,7 +145,7 @@ public class FilteredKeyValueScanner implements KeyValueScanner {
     }
 
     @Override
-    public boolean backwardSeek(KeyValue arg0) throws IOException {
+    public boolean backwardSeek(Cell arg0) throws IOException {
         return this.delegate.backwardSeek(arg0);
     }
 
@@ -154,7 +155,14 @@ public class FilteredKeyValueScanner implements KeyValueScanner {
     }
 
     @Override
-    public boolean seekToPreviousRow(KeyValue arg0) throws IOException {
+    public boolean seekToPreviousRow(Cell arg0) throws IOException {
         return this.delegate.seekToPreviousRow(arg0);
+    }
+
+    // Added for compatibility with HBASE-13109
+    // Once we drop support for older versions, add an @override annotation here
+    // and figure out how to get the next indexed key
+    public Cell getNextIndexedKey() {
+        return null; // indicate that we cannot use the optimization
     }
 }

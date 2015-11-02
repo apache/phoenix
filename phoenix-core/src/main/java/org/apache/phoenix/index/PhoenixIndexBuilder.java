@@ -19,7 +19,6 @@ package org.apache.phoenix.index;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -30,8 +29,8 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
+import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.hbase.index.covered.IndexMetaData;
@@ -40,8 +39,6 @@ import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.hbase.index.write.IndexWriter;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.types.PVarbinary;
-import org.apache.phoenix.util.ScanUtil;
-import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.collect.Lists;
 
@@ -89,15 +86,15 @@ public class PhoenixIndexBuilder extends NonTxIndexBuilder {
                 if (maintainers.get(indexTableName) != null) continue;
                 maintainers.put(indexTableName, indexMaintainer);
             }
-            
+
         }
         if (maintainers.isEmpty()) return;
         Scan scan = IndexManagementUtil.newLocalStateScan(new ArrayList<IndexMaintainer>(maintainers.values()));
         scan.setRaw(true);
-        ScanRanges scanRanges = ScanRanges.create(SchemaUtil.VAR_BINARY_SCHEMA, Collections.singletonList(keys), ScanUtil.SINGLE_COLUMN_SLOT_SPAN);
+        ScanRanges scanRanges = ScanRanges.createPointLookup(keys);
         scanRanges.initializeScan(scan);
         scan.setFilter(scanRanges.getSkipScanFilter());
-        HRegion region = env.getRegion();
+        Region region = env.getRegion();
         RegionScanner scanner = region.getScanner(scan);
         // Run through the scanner using internal nextRaw method
         region.startRegionOperation();

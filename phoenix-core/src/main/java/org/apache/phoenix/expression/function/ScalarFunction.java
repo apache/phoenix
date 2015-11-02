@@ -53,7 +53,7 @@ public abstract class ScalarFunction extends FunctionExpression {
     }
     
     @Override
-    public final <T> T accept(ExpressionVisitor<T> visitor) {
+    public <T> T accept(ExpressionVisitor<T> visitor) {
         List<T> l = acceptChildren(visitor, visitor.visitEnter(this));
         T t = visitor.visitLeave(this, l);
         if (t == null) {
@@ -65,13 +65,15 @@ public abstract class ScalarFunction extends FunctionExpression {
     /**
      * Determines whether or not a function may be used to form
      * the start/stop key of a scan
+     * When OrderPreserving is YES, in order to make order-by optimization
+     * valid, it should return 0. (refer to {@link RoundDateExpression})
      * @return the zero-based position of the argument to traverse
      *  into to look for a primary key column reference, or
      *  {@value #NO_TRAVERSAL} if the function cannot be used to
      *  form the scan key.
      */
     public int getKeyFormationTraversalIndex() {
-        return NO_TRAVERSAL;
+        return preservesOrder() == OrderPreserving.NO ? NO_TRAVERSAL : 0;
     }
 
     /**

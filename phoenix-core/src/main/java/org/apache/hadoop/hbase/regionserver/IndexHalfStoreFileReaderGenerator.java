@@ -30,8 +30,8 @@ import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.MetaTableAccessor;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.catalog.MetaReader;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
@@ -76,11 +76,11 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
             FileSystem fs, Path p, FSDataInputStreamWrapper in, long size, CacheConfig cacheConf,
             Reference r, Reader reader) throws IOException {
         TableName tableName = ctx.getEnvironment().getRegion().getTableDesc().getTableName();
-        HRegion region = ctx.getEnvironment().getRegion();
+        Region region = ctx.getEnvironment().getRegion();
         HRegionInfo childRegion = region.getRegionInfo();
         byte[] splitKey = null;
         if (reader == null && r != null) {
-            Scan scan = MetaReader.getScanForTableName(tableName);
+            Scan scan = MetaTableAccessor.getScanForTableName(tableName);
             SingleColumnValueFilter scvf = null;
             if (Reference.isTopFileRegion(r.getFileRegion())) {
                 scvf = new SingleColumnValueFilter(HConstants.CATALOG_FAMILY,
@@ -107,9 +107,9 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
                 }
                 if (result == null || result.isEmpty()) {
                     Pair<HRegionInfo, HRegionInfo> mergeRegions =
-                            MetaReader.getRegionsFromMergeQualifier(ctx.getEnvironment()
-                                    .getRegionServerServices().getCatalogTracker(),
-                                region.getRegionName());
+                            MetaTableAccessor.getRegionsFromMergeQualifier(ctx.getEnvironment()
+                                    .getRegionServerServices().getConnection(),
+                                region.getRegionInfo().getRegionName());
                     if (mergeRegions == null || mergeRegions.getFirst() == null) return reader;
                     byte[] splitRow =
                             CellUtil.cloneRow(KeyValue.createKeyValueFromKey(r.getSplitKey()));
@@ -121,10 +121,9 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
                         childRegion = mergeRegions.getSecond();
                         regionStartKeyInHFile = mergeRegions.getSecond().getStartKey();
                     }
-                    splitKey =
-                            KeyValue.createFirstOnRow(
-                                region.getStartKey().length == 0 ? new byte[region.getEndKey().length] : region
-                                        .getStartKey()).getKey();
+                    splitKey = KeyValue.createFirstOnRow(region.getRegionInfo().getStartKey().length == 0 ?
+                        new byte[region.getRegionInfo().getEndKey().length] :
+                            region.getRegionInfo().getStartKey()).getKey();
                 } else {
                     HRegionInfo parentRegion = HRegionInfo.getHRegionInfo(result);
                     regionStartKeyInHFile =
