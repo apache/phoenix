@@ -25,7 +25,6 @@ import org.apache.calcite.rel.core.JoinInfo;
 import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rel.core.Project;
 import org.apache.calcite.rel.core.SemiJoin;
-import org.apache.calcite.rel.core.Sort;
 import org.apache.calcite.rel.core.Uncollect;
 import org.apache.calcite.rel.core.Union;
 import org.apache.calcite.rel.logical.LogicalAggregate;
@@ -102,10 +101,10 @@ public class PhoenixConverterRules {
         PhoenixToEnumerableConverterRule.INSTANCE,
         PhoenixServerToClientConverterRule.INSTANCE,
         PhoenixProjectableToClientConverterRule.INSTANCE,
-        PhoenixClientSortRule.CONVERTIBLE,
-        PhoenixServerSortRule.CONVERTIBLE_SERVER,
-        PhoenixServerSortRule.CONVERTIBLE_SERVERJOIN,
-        PhoenixLimitRule.CONVERTIBLE,
+        PhoenixClientSortRule.INSTANCE,
+        PhoenixServerSortRule.SERVER,
+        PhoenixServerSortRule.SERVERJOIN,
+        PhoenixLimitRule.INSTANCE,
         PhoenixFilterRule.CONVERTIBLE,
         PhoenixClientProjectRule.CONVERTIBLE,
         PhoenixServerProjectRule.CONVERTIBLE,
@@ -152,13 +151,6 @@ public class PhoenixConverterRules {
      */
     public static class PhoenixClientSortRule extends PhoenixConverterRule {
         
-        private static Predicate<LogicalSort> IS_CONVERTIBLE = new Predicate<LogicalSort>() {
-            @Override
-            public boolean apply(LogicalSort input) {
-                return isConvertible(input);
-            }            
-        };
-        
         private static Predicate<LogicalSort> SORT_ONLY = new Predicate<LogicalSort>() {
             @Override
             public boolean apply(LogicalSort input) {
@@ -168,12 +160,11 @@ public class PhoenixConverterRules {
             }            
         };
         
-        public static final PhoenixClientSortRule INSTANCE = new PhoenixClientSortRule(SORT_ONLY);
-        public static final PhoenixClientSortRule CONVERTIBLE = new PhoenixClientSortRule(Predicates.and(Arrays.asList(SORT_ONLY, IS_CONVERTIBLE)));
+        public static final PhoenixClientSortRule INSTANCE = new PhoenixClientSortRule();
 
-        private PhoenixClientSortRule(Predicate<LogicalSort> predicate) {
+        private PhoenixClientSortRule() {
             super(LogicalSort.class, 
-                    predicate, 
+                    SORT_ONLY, 
                     Convention.NONE, PhoenixRel.CLIENT_CONVENTION, "PhoenixClientSortRule");
         }
 
@@ -193,13 +184,6 @@ public class PhoenixConverterRules {
      */
     public static class PhoenixServerSortRule extends PhoenixConverterRule {
         
-        private static Predicate<LogicalSort> IS_CONVERTIBLE = new Predicate<LogicalSort>() {
-            @Override
-            public boolean apply(LogicalSort input) {
-                return isConvertible(input);
-            }            
-        };
-        
         private static Predicate<LogicalSort> SORT_ONLY = new Predicate<LogicalSort>() {
             @Override
             public boolean apply(LogicalSort input) {
@@ -209,17 +193,14 @@ public class PhoenixConverterRules {
             }            
         };
         
-        public static final PhoenixServerSortRule SERVER = new PhoenixServerSortRule(SORT_ONLY, PhoenixRel.SERVER_CONVENTION);
-        public static final PhoenixServerSortRule SERVERJOIN = new PhoenixServerSortRule(SORT_ONLY, PhoenixRel.SERVERJOIN_CONVENTION);
-
-        public static final PhoenixServerSortRule CONVERTIBLE_SERVER = new PhoenixServerSortRule(Predicates.and(Arrays.asList(SORT_ONLY, IS_CONVERTIBLE)), PhoenixRel.SERVER_CONVENTION);
-        public static final PhoenixServerSortRule CONVERTIBLE_SERVERJOIN = new PhoenixServerSortRule(Predicates.and(Arrays.asList(SORT_ONLY, IS_CONVERTIBLE)), PhoenixRel.SERVERJOIN_CONVENTION);
+        public static final PhoenixServerSortRule SERVER = new PhoenixServerSortRule(PhoenixRel.SERVER_CONVENTION);
+        public static final PhoenixServerSortRule SERVERJOIN = new PhoenixServerSortRule(PhoenixRel.SERVERJOIN_CONVENTION);
 
         private final Convention inputConvention;
 
-        private PhoenixServerSortRule(Predicate<LogicalSort> predicate, Convention inputConvention) {
+        private PhoenixServerSortRule(Convention inputConvention) {
             super(LogicalSort.class, 
-                    predicate, 
+                    SORT_ONLY, 
                     Convention.NONE, PhoenixRel.CLIENT_CONVENTION, "PhoenixServerSortRule:" + inputConvention.getName());
             this.inputConvention = inputConvention;
         }
@@ -239,27 +220,20 @@ public class PhoenixConverterRules {
      * {@link PhoenixLimit}.
      */
     public static class PhoenixLimitRule extends PhoenixConverterRule {
-        private static Predicate<LogicalSort> IS_CONVERTIBLE = new Predicate<LogicalSort>() {
+        
+        private static Predicate<LogicalSort> HAS_FETCH = new Predicate<LogicalSort>() {
             @Override
             public boolean apply(LogicalSort input) {
-                return isConvertible(input);
-            }            
-        };
-        private static Predicate<LogicalSort> OFFSET_OR_FETCH = new Predicate<LogicalSort>() {
-            @Override
-            public boolean apply(LogicalSort input) {
-                return input.offset != null 
-                        || input.fetch != null;
-            }            
+                return input.offset == null 
+                        && input.fetch != null;
+            }
         };
         
-        public static final PhoenixLimitRule INSTANCE = new PhoenixLimitRule(OFFSET_OR_FETCH);
+        public static final PhoenixLimitRule INSTANCE = new PhoenixLimitRule();
 
-        public static final PhoenixLimitRule CONVERTIBLE = new PhoenixLimitRule(Predicates.and(Arrays.asList(OFFSET_OR_FETCH, IS_CONVERTIBLE)));
-
-        private PhoenixLimitRule(Predicate<LogicalSort> predicate) {
+        private PhoenixLimitRule() {
             super(LogicalSort.class, 
-                    predicate, 
+                    HAS_FETCH, 
                     Convention.NONE, PhoenixRel.CLIENT_CONVENTION, "PhoenixLimitRule");
         }
 
@@ -934,13 +908,6 @@ public class PhoenixConverterRules {
                 return false;
             }
         }
-        
-        return true;
-    }
-    
-    public static boolean isConvertible(Sort sort) {
-        if (sort.offset != null)
-            return false;
         
         return true;
     }

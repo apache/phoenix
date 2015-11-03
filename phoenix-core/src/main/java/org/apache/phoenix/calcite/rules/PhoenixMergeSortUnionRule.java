@@ -32,10 +32,10 @@ public class PhoenixMergeSortUnionRule extends RelOptRule {
 
     @Override
     public void onMatch(RelOptRuleCall call) {
-        PhoenixClientSort sort = call.rel(0);
-        PhoenixUnion union = call.rel(1);        
+        final PhoenixClientSort sort = call.rel(0);
+        final PhoenixUnion union = call.rel(1);        
         assert union.all;
-        RelCollation collation = sort.getCollation();
+        final RelCollation collation = sort.getCollation();
         call.transformTo(
                 PhoenixMergeSortUnion.create(
                         convertList(union.getInputs(), collation),
