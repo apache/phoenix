@@ -33,6 +33,8 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.Properties;
 
+import co.cask.tephra.Transaction.VisibilityLevel;
+
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.execute.MutationState;
@@ -47,8 +49,6 @@ import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
 import com.google.common.collect.Maps;
-
-import co.cask.tephra.Transaction.VisibilityLevel;
 
 @RunWith(Parameterized.class)
 public class TxCheckpointIT extends BaseHBaseManagedTimeIT {
@@ -274,7 +274,7 @@ public class TxCheckpointIT extends BaseHBaseManagedTimeIT {
 	}
 	
 	@Test
-    public void testCheckpointForDelete() throws Exception {
+    public void testCheckpointForDeleteAndUpsert() throws Exception {
 		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 		ResultSet rs;
 		try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
@@ -308,7 +308,7 @@ public class TxCheckpointIT extends BaseHBaseManagedTimeIT {
 	        assertFalse(rs.next());
 	        
 	        rs = conn.createStatement().executeQuery("select /*+ INDEX(DEMO IDX) */ id1 from DEMO1");
-	        assertTrue(rs.next());
+            assertTrue(rs.next());
 	        assertEquals(3,rs.getLong(1));
 	        assertTrue(rs.next());
 	        assertEquals(1,rs.getLong(1));
@@ -323,7 +323,30 @@ public class TxCheckpointIT extends BaseHBaseManagedTimeIT {
 	        assertEquals(1,rs.getLong(1));
 	        assertFalse(rs.next());
 	
+            rs = conn.createStatement().executeQuery("select /*+ INDEX(DEMO IDX) */ id1 from DEMO1");
+            assertTrue(rs.next());
+            assertEquals(1,rs.getLong(1));
+            assertFalse(rs.next());
+    
+            stmt.executeUpdate("upsert into DEMO1 SELECT id1 + 3, id1, id1 FROM DEMO1");
+            stmt.executeUpdate("upsert into DEMO2 values (2, 4)");
+
+            conn.createStatement().execute("delete from DEMO1 where id1 in (select fk1a from DEMO1 join DEMO2 on (fk2=id1))");
+            assertEquals(VisibilityLevel.SNAPSHOT_EXCLUDE_CURRENT, state.getVisibilityLevel());
+            assertNotEquals(wp, state.getWritePointer()); // Make sure write ptr moved
+    
+            rs = conn.createStatement().executeQuery("select /*+ NO_INDEX */ id1 from DEMO1");
+            assertTrue(rs.next());
+            assertEquals(4,rs.getLong(1));
+            assertFalse(rs.next());
+    
+            rs = conn.createStatement().executeQuery("select /*+ INDEX(DEMO IDX) */ id1 from DEMO1");
+            assertTrue(rs.next());
+            assertEquals(4,rs.getLong(1));
+            assertFalse(rs.next());
+    
 	        conn.rollback();
+	        
 	        rs = conn.createStatement().executeQuery("select /*+ NO_INDEX */ id1 from DEMO1");
 	        assertTrue(rs.next());
 	        assertEquals(1,rs.getLong(1));
@@ -332,6 +355,15 @@ public class TxCheckpointIT extends BaseHBaseManagedTimeIT {
 	        assertTrue(rs.next());
 	        assertEquals(3,rs.getLong(1));
 	        assertFalse(rs.next());
+
+	        rs = conn.createStatement().executeQuery("select /*+ INDEX(DEMO IDX) */ id1 from DEMO1");
+            assertTrue(rs.next());
+            assertEquals(3,rs.getLong(1));
+            assertTrue(rs.next());
+            assertEquals(2,rs.getLong(1));
+            assertTrue(rs.next());
+            assertEquals(1,rs.getLong(1));
+            assertFalse(rs.next());
 		}
     }  
 

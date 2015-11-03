@@ -154,6 +154,7 @@ public interface QueryServices extends SQLCloseable {
     public static final String DEFAULT_STORE_NULLS_ATTRIB = "phoenix.table.default.store.nulls";
     public static final String METRICS_ENABLED = "phoenix.query.metrics.enabled";
     public static final String DEFAULT_TRANSACTIONAL_ATTRIB = "phoenix.transactions.default.enabled";
+    public static final String MAX_VERSIONS_TRANSACTIONAL_ATTRIB = "phoenix.transactions.maxVersions";
 
     /**
      * Get executor service used for parallel scans

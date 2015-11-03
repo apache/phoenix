@@ -185,6 +185,7 @@ public class QueryServicesOptions {
     public static final boolean DEFAULT_AUTO_COMMIT = false;
     public static final boolean DEFAULT_IS_METRICS_ENABLED = true;
     public static final boolean DEFAULT_TRANSACTIONAL = false;
+    public static final int DEFAULT_MAX_VERSIONS_TRANSACTIONAL = Integer.MAX_VALUE;
     
     private final Configuration config;
 

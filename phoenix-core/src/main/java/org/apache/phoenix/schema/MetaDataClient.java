@@ -1286,12 +1286,10 @@ public class MetaDataClient {
             }
 
             Map<String,Object> tableProps = Maps.newHashMapWithExpectedSize(statement.getProps().size());
-            Map<String,Object> commonFamilyProps = Collections.emptyMap();
+            Map<String,Object> commonFamilyProps = Maps.newHashMapWithExpectedSize(statement.getProps().size() + 1);
             // Somewhat hacky way of determining if property is for HColumnDescriptor or HTableDescriptor
             HColumnDescriptor defaultDescriptor = new HColumnDescriptor(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES);
             if (!statement.getProps().isEmpty()) {
-                commonFamilyProps = Maps.newHashMapWithExpectedSize(statement.getProps().size());
-
                 Collection<Pair<String,Object>> props = statement.getProps().get(QueryConstants.ALL_FAMILY_PROPERTIES_KEY);
                 for (Pair<String,Object> prop : props) {
                     if (defaultDescriptor.getValue(prop.getFirst()) == null) {
@@ -1373,7 +1371,9 @@ public class MetaDataClient {
             }
             tableProps.put(PhoenixDatabaseMetaData.TRANSACTIONAL, Boolean.valueOf(transactional));
             
-            if (transactional) { // FIXME: remove once Tephra handles storing multiple versions of a cell value, 
+            boolean sharedTable = statement.getTableType() == PTableType.VIEW || indexId != null;
+            if (transactional) { 
+                // FIXME: remove once Tephra handles storing multiple versions of a cell value, 
             	// and allows ignoring empty key values for an operation
             	if (Boolean.FALSE.equals(storeNullsProp)) {
             		throw new SQLExceptionInfo.Builder(SQLExceptionCode.STORE_NULLS_MUST_BE_TRUE_FOR_TRANSACTIONAL)
@@ -1383,11 +1383,29 @@ public class MetaDataClient {
             	// Force STORE_NULLS to true when transactional as Tephra cannot deal with column deletes
             	storeNulls = true;
             	tableProps.put(PhoenixDatabaseMetaData.STORE_NULLS, Boolean.TRUE);
+            	
+            	if (!sharedTable) {
+                    Integer maxVersionsProp = (Integer) commonFamilyProps.get(HConstants.VERSIONS);
+                    if (maxVersionsProp == null) {
+                        if (parent != null) {
+                            HTableDescriptor desc = connection.getQueryServices().getTableDescriptor(parent.getPhysicalName().getBytes());
+                            if (desc != null) {
+                                maxVersionsProp = desc.getFamily(SchemaUtil.getEmptyColumnFamily(parent)).getMaxVersions();
+                            }
+                        }
+                        if (maxVersionsProp == null) {
+                            maxVersionsProp = connection.getQueryServices().getProps().getInt(
+                                    QueryServices.MAX_VERSIONS_TRANSACTIONAL_ATTRIB,
+                                    QueryServicesOptions.DEFAULT_MAX_VERSIONS_TRANSACTIONAL);
+                        }
+                        commonFamilyProps.put(HConstants.VERSIONS, maxVersionsProp);
+                    }
+            	}
             }
             timestamp = timestamp==null ? TransactionUtil.getTableTimestamp(connection, transactional) : timestamp;
 
             // Delay this check as it is supported to have IMMUTABLE_ROWS and SALT_BUCKETS defined on views
-            if (statement.getTableType() == PTableType.VIEW || indexId != null) {
+            if (sharedTable) {
                 if (tableProps.get(PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAMILY_NAME) != null) {
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.DEFAULT_COLUMN_FAMILY_ON_SHARED_TABLE)
                     .setSchemaName(schemaName).setTableName(tableName)
@@ -1403,7 +1421,7 @@ public class MetaDataClient {
             List<PColumn> columns;
             LinkedHashSet<PColumn> pkColumns;
 
-            if (tenantId != null && (tableType != PTableType.VIEW && indexId == null)) {
+            if (tenantId != null && !sharedTable) {
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_CREATE_TENANT_SPECIFIC_TABLE)
                     .setSchemaName(schemaName).setTableName(tableName).build().buildException();
             }
