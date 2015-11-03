@@ -1500,7 +1500,8 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                            "    PhoenixServerJoin(condition=[AND(=($0, $4), =($1, $5))], joinType=[inner])\n" +
                            "      PhoenixTableScan(table=[[phoenix, SALTED_TEST_TABLE]], filter=[>($0, 1)])\n" +
                            "      PhoenixToClientConverter\n" +
-                           "        PhoenixTableScan(table=[[phoenix, SALTED_TEST_TABLE]], filter=[<($3, 6)])\n")
+                           "        PhoenixServerProject(MYPK0=[$1], MYPK1=[$2], COL0=[$3], COL1=[CAST($0):INTEGER])\n" +
+                           "          PhoenixTableScan(table=[[phoenix, IDXSALTED_SALTED_TEST_TABLE]], filter=[<(CAST($0):INTEGER, 6)])\n")
                 .resultIs(new Object[][] {
                         {2, 3, 4, 5, 2, 3, 4, 5}})
                 .close();
