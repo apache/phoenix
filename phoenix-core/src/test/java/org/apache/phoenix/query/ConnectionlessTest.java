@@ -20,7 +20,6 @@ package org.apache.phoenix.query;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -40,10 +39,10 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixDriver;
+import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PVarchar;
-import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.StringUtil;
@@ -152,7 +151,7 @@ public class ConnectionlessTest {
         assertTrue(iterator.hasNext());
         kv = iterator.next();
         assertArrayEquals(expectedRowKey1, kv.getRow());        
-        assertEquals(QueryConstants.EMPTY_COLUMN_NAME, PVarchar.INSTANCE.toObject(kv.getValue()));
+        assertEquals(QueryConstants.EMPTY_COLUMN_VALUE, PVarchar.INSTANCE.toObject(kv.getValue()));
     }
 
     private static void assertRow2(Iterator<KeyValue> iterator, byte[] expectedRowKey2) {
@@ -168,7 +167,7 @@ public class ConnectionlessTest {
         assertTrue(iterator.hasNext());
         kv = iterator.next();
         assertArrayEquals(expectedRowKey2, kv.getRow());        
-        assertEquals(QueryConstants.EMPTY_COLUMN_NAME, PVarchar.INSTANCE.toObject(kv.getValue()));
+        assertEquals(QueryConstants.EMPTY_COLUMN_VALUE, PVarchar.INSTANCE.toObject(kv.getValue()));
     }
     
     @Test
