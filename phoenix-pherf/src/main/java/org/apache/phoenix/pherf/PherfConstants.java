@@ -78,12 +78,20 @@ public class PherfConstants {
         return instance;
     }
 
+    /**
+     * Get a {@link Properties} object based on the file name
+     * @param fileName      Name of the file
+     * @param getDefault    True if you want to use the properties that may have been loaded into
+     *                      the instance. use false if you want to reload the passed file.
+     * @return {@link Properties}
+     * @throws Exception
+     */
     public Properties getProperties(final String fileName, boolean getDefault) throws Exception {
 
         if (instanceProperties == null) {
             instanceProperties = loadProperties(fileName);
         } else {
-            return getDefault ? loadProperties(fileName) : instanceProperties;
+            return getDefault ? instanceProperties : loadProperties(fileName);
         }
 
         return instanceProperties;

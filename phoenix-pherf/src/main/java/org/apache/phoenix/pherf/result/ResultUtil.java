@@ -51,8 +51,8 @@ public class ResultUtil {
         try {
             if (!dataLoadThreadTime.getThreadTime().isEmpty()) {
                 writer = new CSVFileResultHandler();
-                writer.setResultFileName("Data_Load_Details");
                 writer.setResultFileDetails(ResultFileDetails.CSV);
+                writer.setResultFileName("Data_Load_Details");
 
                 for (WriteThreadTime writeThreadTime : dataLoadThreadTime.getThreadTime()) {
                     List<ResultValue> rowValues = new ArrayList<>();
@@ -86,8 +86,8 @@ public class ResultUtil {
         ResultFileDetails resultFileDetails = ResultFileDetails.CSV_AGGREGATE_DATA_LOAD;
         try {
             writer = new CSVFileResultHandler();
-            writer.setResultFileName("Data_Load_Summary");
             writer.setResultFileDetails(resultFileDetails);
+            writer.setResultFileName("Data_Load_Summary");
 
             for (TableLoadTime loadTime : dataLoadTime.getTableLoadTime()) {
                 List<ResultValue> rowValues = new ArrayList<>();
