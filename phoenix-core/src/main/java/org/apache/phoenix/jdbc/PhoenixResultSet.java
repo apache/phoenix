@@ -242,6 +242,9 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable, org.apache.pho
     @Override
     public BigDecimal getBigDecimal(int columnIndex, int scale) throws SQLException {
         BigDecimal value = getBigDecimal(columnIndex);
+        if (wasNull) {
+            return null;
+        }
         return value.setScale(scale);
     }
 
@@ -383,6 +386,10 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable, org.apache.pho
         checkCursorState();
         Date value = (Date)rowProjector.getColumnProjector(columnIndex-1).getValue(currentRow,
             PDate.INSTANCE, ptr);
+        wasNull = (value == null);
+        if (wasNull) {
+            return null;
+        }
         cal.setTime(value);
         return new Date(cal.getTimeInMillis());
     }

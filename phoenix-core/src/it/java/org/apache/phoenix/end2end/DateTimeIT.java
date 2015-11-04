@@ -34,6 +34,8 @@ import static org.apache.phoenix.util.TestUtil.ROW8;
 import static org.apache.phoenix.util.TestUtil.ROW9;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.math.BigDecimal;
@@ -47,6 +49,7 @@ import java.sql.Statement;
 import java.sql.Types;
 import java.text.Format;
 import java.util.Calendar;
+import java.util.GregorianCalendar;
 
 import org.apache.phoenix.util.DateUtil;
 import org.junit.After;
@@ -59,6 +62,7 @@ public class DateTimeIT extends BaseHBaseManagedTimeIT {
     protected Connection conn;
     protected Date date;
     protected static final String tenantId = getOrganizationId();
+    protected final static String ROW10 = "00D123122312312";
 
     public DateTimeIT() throws Exception {
         super();
@@ -262,6 +266,25 @@ public class DateTimeIT extends BaseHBaseManagedTimeIT {
         stmt.setDouble(14, 0.0009);
         stmt.setFloat(15, 0.09f);
         stmt.setDouble(16, 0.0009);
+        stmt.execute();
+
+        stmt.setString(1, tenantId);
+        stmt.setString(2, ROW10);
+        stmt.setString(3, B_VALUE);
+        stmt.setString(4, B_VALUE);
+        stmt.setInt(5, 7);
+        // Intentionally null
+        stmt.setDate(6, null);
+        stmt.setBigDecimal(7, BigDecimal.valueOf(0.1));
+        stmt.setLong(8, 5L);
+        stmt.setInt(9, 5);
+        stmt.setNull(10, Types.INTEGER);
+        stmt.setByte(11, (byte)7);
+        stmt.setShort(12, (short) 134);
+        stmt.setFloat(13, 0.07f);
+        stmt.setDouble(14, 0.0007);
+        stmt.setFloat(15, 0.07f);
+        stmt.setDouble(16, 0.0007);
         stmt.execute();
 
         conn.commit();
@@ -632,6 +655,17 @@ public class DateTimeIT extends BaseHBaseManagedTimeIT {
         assertEquals(1, rs.getInt(1));
         assertEquals(8, rs.getInt(2));
         assertEquals(26, rs.getInt(3));
+        assertFalse(rs.next());
+    }
+
+    @Test
+    public void testNullDate() throws Exception {
+        ResultSet rs = conn.createStatement().executeQuery("SELECT a_date, entity_id from " + ATABLE_NAME + " WHERE entity_id = '" + ROW10 + "'");
+        assertNotNull(rs);
+        assertTrue(rs.next());
+        assertEquals(ROW10, rs.getString(2));
+        assertNull(rs.getDate(1));
+        assertNull(rs.getDate(1, GregorianCalendar.getInstance()));
         assertFalse(rs.next());
     }
 }
