@@ -46,10 +46,10 @@ import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.base.Supplier;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 
 /**
@@ -67,10 +67,7 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
                 .replaceIfs(RelCollationTraitDef.INSTANCE,
                         new Supplier<List<RelCollation>>() {
                     public List<RelCollation> get() {
-                        if (table != null) {
-                            return table.unwrap(PhoenixTable.class).getStatistic().getCollations();
-                        }
-                        return ImmutableList.of();
+                        return table.unwrap(PhoenixTable.class).getStatistic().getCollations();
                     }
                 });
         return new PhoenixTableScan(cluster, traits, table, filter);
@@ -149,6 +146,19 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
         } else if (table.unwrap(PhoenixTable.class).getTable().getParentName() != null){
             rowCount = addEpsilon(rowCount);
         }
+        if (requireRowKeyOrder()) {
+            // We don't want to make a big difference here. The idea is to avoid
+            // forcing row key order whenever the order is absolutely useless.
+            // E.g. in "select count(*) from t" we do not need the row key order;
+            // while in "select * from t order by pk0" we should force row key
+            // order to avoid sorting.
+            // Another case is "select pk0, count(*) from t", where we'd like to
+            // choose the row key ordered TableScan rel so that the Aggregate rel
+            // above it can be an stream aggregate, although at runtime this will
+            // eventually be an AggregatePlan, in which the "forceRowKeyOrder"
+            // flag takes no effect.
+            rowCount = addEpsilon(rowCount);
+        }
         int fieldCount = this.table.getRowType().getFieldCount();
         return planner.getCostFactory()
                 .makeCost(rowCount * 2 * fieldCount / (fieldCount + 1), rowCount + 1, 0)
@@ -202,6 +212,9 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
             Integer limit = null;
             OrderBy orderBy = OrderBy.EMPTY_ORDER_BY;
             ParallelIteratorFactory iteratorFactory = null;
+            if (requireRowKeyOrder()) {
+                ScanUtil.setForceRowKeyOrder(context.getScan());
+            }
             return new ScanPlan(context, select, tableRef, RowProjector.EMPTY_PROJECTOR, limit, orderBy, iteratorFactory, true, dynamicFilter);
         } catch (SQLException e) {
             throw new RuntimeException(e);
@@ -233,6 +246,10 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
                 scan.addFamily(familyName.getBytes());
             }
         }
+    }
+    
+    private boolean requireRowKeyOrder() {
+        return table.unwrap(PhoenixTable.class).requireRowKeyOrder;
     }
 
     private double addEpsilon(double d) {

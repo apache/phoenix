@@ -84,6 +84,8 @@ public class ScanUtil {
         Arrays.fill(MAX_FILL_LENGTH_FOR_PREVIOUS_KEY, (byte)-1);
     }
     private static final byte[] ZERO_BYTE_ARRAY = new byte[1024];
+    
+    private static final String FORCE_ROW_KEY_ORDER = "_ForceRowKeyOrder";
 
     private ScanUtil() {
     }
@@ -734,9 +736,14 @@ public class ScanUtil {
         return fetchSize > 1 && !shouldRowsBeInRowKeyOrder(orderBy, context) && orderBy.getOrderByExpressions().isEmpty();
     }
     
+    public static void setForceRowKeyOrder(Scan scan) {
+        scan.setAttribute(FORCE_ROW_KEY_ORDER, Bytes.toBytes(Boolean.TRUE.toString()));
+    }
+    
     public static boolean forceRowKeyOrder(StatementContext context) {
-        return context.getConnection().getQueryServices().getProps()
-                .getBoolean(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, QueryServicesOptions.DEFAULT_FORCE_ROW_KEY_ORDER);
+        return context.getScan().getAttribute(FORCE_ROW_KEY_ORDER) != null
+                && context.getConnection().getQueryServices().getProps()
+                    .getBoolean(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, QueryServicesOptions.DEFAULT_FORCE_ROW_KEY_ORDER);
     }
     
     public static boolean shouldRowsBeInRowKeyOrder(OrderBy orderBy, StatementContext context) {

@@ -762,7 +762,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
         start(false).sql("select mypk0, avg(mypk1) from " + SALTED_TABLE_NAME + " group by mypk0")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixClientProject(MYPK0=[$0], EXPR$1=[CAST(/($1, $2)):INTEGER NOT NULL])\n" +
-                           "    PhoenixServerAggregate(group=[{0}], agg#0=[$SUM0($1)], agg#1=[COUNT()], isOrdered=[false])\n" +
+                           "    PhoenixServerAggregate(group=[{0}], agg#0=[$SUM0($1)], agg#1=[COUNT()], isOrdered=[true])\n" +
                            "      PhoenixTableScan(table=[[phoenix, SALTED_TEST_TABLE]])\n")
                 .resultIs(new Object[][] {
                         {1, 2},
@@ -1465,14 +1465,15 @@ public class CalciteIT extends BaseClientManagedTimeIT {
         start(true).sql("select count(*) from " + NOSALT_TABLE_NAME + " where col0 > 3")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixServerAggregate(group=[{}], EXPR$0=[COUNT()])\n" +
-                           "    PhoenixTableScan(table=[[phoenix, IDXSALTED_NOSALT_TEST_TABLE]], filter=[>(CAST($0):INTEGER, 3)])\n")
+                           "    PhoenixServerProject(DUMMY=[0])\n" +
+                           "      PhoenixTableScan(table=[[phoenix, IDXSALTED_NOSALT_TEST_TABLE:unordered]], filter=[>(CAST($0):INTEGER, 3)])\n")
                 .resultIs(new Object[][]{{2L}})
                 .close();
         start(true).sql("select mypk0, mypk1, col0 from " + NOSALT_TABLE_NAME + " where col0 <= 4")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixToClientConverter\n" +
                            "    PhoenixServerProject(MYPK0=[$1], MYPK1=[$2], COL0=[CAST($0):INTEGER])\n" +
-                           "      PhoenixTableScan(table=[[phoenix, IDXSALTED_NOSALT_TEST_TABLE]], filter=[<=(CAST($0):INTEGER, 4)])\n")
+                           "      PhoenixTableScan(table=[[phoenix, IDXSALTED_NOSALT_TEST_TABLE:unordered]], filter=[<=(CAST($0):INTEGER, 4)])\n")
                 .resultIs(new Object[][] {
                         {2, 3, 4},
                         {1, 2, 3}})
@@ -1480,7 +1481,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
         start(true).sql("select * from " + SALTED_TABLE_NAME + " where mypk0 < 3")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixToClientConverter\n" +
-                           "    PhoenixTableScan(table=[[phoenix, SALTED_TEST_TABLE]], filter=[<($0, 3)])\n")
+                           "    PhoenixTableScan(table=[[phoenix, SALTED_TEST_TABLE:unordered]], filter=[<($0, 3)])\n")
                 .resultIs(new Object[][] {
                         {1, 2, 3, 4},
                         {2, 3, 4, 5}})
@@ -1488,14 +1489,15 @@ public class CalciteIT extends BaseClientManagedTimeIT {
         start(true).sql("select count(*) from " + SALTED_TABLE_NAME + " where col0 > 3")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixServerAggregate(group=[{}], EXPR$0=[COUNT()])\n" +
-                           "    PhoenixTableScan(table=[[phoenix, IDX_SALTED_TEST_TABLE]], filter=[>(CAST($0):INTEGER, 3)])\n")
+                           "    PhoenixServerProject(DUMMY=[0])\n" +
+                           "      PhoenixTableScan(table=[[phoenix, IDX_SALTED_TEST_TABLE:unordered]], filter=[>(CAST($0):INTEGER, 3)])\n")
                 .resultIs(new Object[][]{{2L}})
                 .close();
         start(true).sql("select mypk0, mypk1, col0 from " + SALTED_TABLE_NAME + " where col0 <= 4")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixToClientConverter\n" +
                            "    PhoenixServerProject(MYPK0=[$1], MYPK1=[$2], COL0=[CAST($0):INTEGER])\n" +
-                           "      PhoenixTableScan(table=[[phoenix, IDX_SALTED_TEST_TABLE]], filter=[<=(CAST($0):INTEGER, 4)])\n")
+                           "      PhoenixTableScan(table=[[phoenix, IDX_SALTED_TEST_TABLE:unordered]], filter=[<=(CAST($0):INTEGER, 4)])\n")
                 .resultIs(new Object[][] {
                         {2, 3, 4},
                         {1, 2, 3}})
@@ -1503,10 +1505,11 @@ public class CalciteIT extends BaseClientManagedTimeIT {
         start(true).sql("select count(*) from " + SALTED_TABLE_NAME + " where col1 > 4")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixServerAggregate(group=[{}], EXPR$0=[COUNT()])\n" +
-                           "    PhoenixTableScan(table=[[phoenix, IDXSALTED_SALTED_TEST_TABLE]], filter=[>(CAST($0):INTEGER, 4)])\n")
+                           "    PhoenixServerProject(DUMMY=[0])\n" +
+                           "      PhoenixTableScan(table=[[phoenix, IDXSALTED_SALTED_TEST_TABLE:unordered]], filter=[>(CAST($0):INTEGER, 4)])\n")
                 .resultIs(new Object[][]{{2L}})
                 .close();
-        start(true).sql("select * from " + SALTED_TABLE_NAME + " where col1 <= 5")
+        start(true).sql("select * from " + SALTED_TABLE_NAME + " where col1 <= 5 order by col1")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixToClientConverter\n" +
                            "    PhoenixServerProject(MYPK0=[$1], MYPK1=[$2], COL0=[$3], COL1=[CAST($0):INTEGER])\n" +
@@ -1519,10 +1522,10 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixToClientConverter\n" +
                            "    PhoenixServerJoin(condition=[AND(=($0, $4), =($1, $5))], joinType=[inner])\n" +
-                           "      PhoenixTableScan(table=[[phoenix, SALTED_TEST_TABLE]], filter=[>($0, 1)])\n" +
+                           "      PhoenixTableScan(table=[[phoenix, SALTED_TEST_TABLE:unordered]], filter=[>($0, 1)])\n" +
                            "      PhoenixToClientConverter\n" +
                            "        PhoenixServerProject(MYPK0=[$1], MYPK1=[$2], COL0=[$3], COL1=[CAST($0):INTEGER])\n" +
-                           "          PhoenixTableScan(table=[[phoenix, IDXSALTED_SALTED_TEST_TABLE]], filter=[<(CAST($0):INTEGER, 6)])\n")
+                           "          PhoenixTableScan(table=[[phoenix, IDXSALTED_SALTED_TEST_TABLE:unordered]], filter=[<(CAST($0):INTEGER, 6)])\n")
                 .resultIs(new Object[][] {
                         {2, 3, 4, 5, 2, 3, 4, 5}})
                 .close();

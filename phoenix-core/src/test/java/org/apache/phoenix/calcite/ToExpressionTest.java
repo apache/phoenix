@@ -165,7 +165,7 @@ public class ToExpressionTest extends BaseConnectionlessQueryTest {
                 return null;
             
             PTable table = rootTables.get(name);
-            return new PhoenixTable(pc, table);
+            return new PhoenixTable(pc, table, true);
         }
 
         @Override

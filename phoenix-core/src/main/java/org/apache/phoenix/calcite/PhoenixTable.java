@@ -42,21 +42,25 @@ public class PhoenixTable extends AbstractTable implements TranslatableTable {
   public final ImmutableBitSet pkBitSet;
   public final RelCollation collation;
   public final PhoenixConnection pc;
+  public final boolean requireRowKeyOrder;
   
   public static int getStartingColumnPosition(PTable pTable) {
       return (pTable.getBucketNum() == null ? 0 : 1) + (pTable.isMultiTenant() ? 1 : 0) + (pTable.getViewIndexId() == null ? 0 : 1);
   }
 
-  public PhoenixTable(PhoenixConnection pc, PTable pTable) {
+  public PhoenixTable(PhoenixConnection pc, PTable pTable, boolean requireRowKeyOrder) {
       this.pc = Preconditions.checkNotNull(pc);
       this.pTable = Preconditions.checkNotNull(pTable);
+      this.requireRowKeyOrder = requireRowKeyOrder;
       List<Integer> pkPositions = Lists.<Integer> newArrayList();
       List<RelFieldCollation> fieldCollations = Lists.<RelFieldCollation> newArrayList();
-      for (PColumn column : pTable.getPKColumns()) {
-          int position = column.getPosition();
-          SortOrder sortOrder = column.getSortOrder();
-          pkPositions.add(position);
-          fieldCollations.add(new RelFieldCollation(position, sortOrder == SortOrder.ASC ? Direction.ASCENDING : Direction.DESCENDING));
+      if (requireRowKeyOrder) {
+          for (PColumn column : pTable.getPKColumns()) {
+              int position = column.getPosition();
+              SortOrder sortOrder = column.getSortOrder();
+              pkPositions.add(position);
+              fieldCollations.add(new RelFieldCollation(position, sortOrder == SortOrder.ASC ? Direction.ASCENDING : Direction.DESCENDING));
+          }
       }
       this.pkBitSet = ImmutableBitSet.of(pkPositions);
       this.collation = RelCollationTraitDef.INSTANCE.canonize(RelCollations.of(fieldCollations));
@@ -128,9 +132,9 @@ public class PhoenixTable extends AbstractTable implements TranslatableTable {
 
             @Override
             public List<RelCollation> getCollations() {
-                return pTable.getBucketNum() == null ? 
-                        ImmutableList.<RelCollation> of(collation)
-                      : ImmutableList.<RelCollation>of();
+                return collation.getFieldCollations().isEmpty() ? 
+                        ImmutableList.<RelCollation>of()
+                      : ImmutableList.<RelCollation>of(collation);
             }
 
             @Override
