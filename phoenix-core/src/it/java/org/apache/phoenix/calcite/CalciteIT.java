@@ -748,6 +748,27 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                           {"0000000005", 1L},
                           {"0000000006", 1L}})
                 .close();
+        
+        start(false).sql("select a_string, sum(a_integer) from aTable group by a_string")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                           "  PhoenixServerAggregate(group=[{2}], EXPR$1=[SUM($4)], isOrdered=[false])\n" +
+                           "    PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
+                .resultIs(new Object[][] {
+                           {"a", 10L},
+                           {"b", 26L},
+                           {"c", 9L}})
+                .close();
+        
+        start(false).sql("select mypk0, avg(mypk1) from " + SALTED_TABLE_NAME + " group by mypk0")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                           "  PhoenixClientProject(MYPK0=[$0], EXPR$1=[CAST(/($1, $2)):INTEGER NOT NULL])\n" +
+                           "    PhoenixServerAggregate(group=[{0}], agg#0=[$SUM0($1)], agg#1=[COUNT()], isOrdered=[false])\n" +
+                           "      PhoenixTableScan(table=[[phoenix, SALTED_TEST_TABLE]])\n")
+                .resultIs(new Object[][] {
+                        {1, 2},
+                        {2, 3},
+                        {3, 4}})
+                .close();
     }
     
     @Test public void testDistinct() {

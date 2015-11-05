@@ -73,6 +73,7 @@ import org.apache.phoenix.expression.function.PowerFunction;
 import org.apache.phoenix.expression.function.RoundDecimalExpression;
 import org.apache.phoenix.expression.function.RoundTimestampExpression;
 import org.apache.phoenix.expression.function.SqrtFunction;
+import org.apache.phoenix.expression.function.SumAggregateFunction;
 import org.apache.phoenix.expression.function.TrimFunction;
 import org.apache.phoenix.expression.function.UpperFunction;
 import org.apache.phoenix.parse.JoinTableNode.JoinType;
@@ -760,14 +761,20 @@ public class CalciteUtils {
                 return new CountAggregateFunction(args);
             }
         });
-        // TODO Buggy. Disable for now.
-        //FUNCTION_MAP.put("$SUM0", new FunctionFactory() {
-        //    @Override
-        //    public FunctionExpression newFunction(SqlFunction sqlFunc,
-        //            List<Expression> args) {
-        //        return new SumAggregateFunction(args);
-        //    }
-        //});
+        FUNCTION_MAP.put("$SUM0", new FunctionFactory() {
+            @Override
+            public FunctionExpression newFunction(SqlFunction sqlFunc,
+                    List<Expression> args) {
+                return new SumAggregateFunction(args);
+            }
+        });
+        FUNCTION_MAP.put("SUM", new FunctionFactory() {
+            @Override
+            public FunctionExpression newFunction(SqlFunction sqlFunc,
+                    List<Expression> args) {
+                return new SumAggregateFunction(args);
+            }
+        });
         FUNCTION_MAP.put("MAX", new FunctionFactory() {
             @Override
             public FunctionExpression newFunction(SqlFunction sqlFunc,

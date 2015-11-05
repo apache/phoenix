@@ -13,7 +13,6 @@ import org.apache.calcite.prepare.CalcitePrepareImpl;
 import org.apache.calcite.prepare.Prepare.Materialization;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.rules.JoinCommuteRule;
-import org.apache.calcite.rel.rules.SortJoinTransposeRule;
 import org.apache.calcite.rel.rules.SortUnionTransposeRule;
 import org.apache.calcite.runtime.Hook;
 import org.apache.calcite.sql.SqlNode;
