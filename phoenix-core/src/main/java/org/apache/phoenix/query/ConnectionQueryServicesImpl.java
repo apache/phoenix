@@ -46,6 +46,7 @@ import java.util.concurrent.TimeoutException;
 import javax.annotation.concurrent.GuardedBy;
 
 import co.cask.tephra.TransactionSystemClient;
+import co.cask.tephra.TxConstants;
 import co.cask.tephra.distributed.PooledClientProvider;
 import co.cask.tephra.distributed.TransactionServiceClient;
 import co.cask.tephra.hbase98.coprocessor.TransactionProcessor;
@@ -177,7 +178,6 @@ import org.apache.twill.zookeeper.ZKClients;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.base.Objects;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Joiner;
 import com.google.common.base.Throwables;
@@ -579,12 +579,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
      }
 
     @Override
-    public PMetaData addColumn(final PName tenantId, final String tableName, final List<PColumn> columns, final long tableTimeStamp, final long tableSeqNum, final boolean isImmutableRows, final boolean isWalDisabled, final boolean isMultitenant, final boolean storeNulls, final long resolvedTime) throws SQLException {
+    public PMetaData addColumn(final PName tenantId, final String tableName, final List<PColumn> columns, final long tableTimeStamp, final long tableSeqNum, final boolean isImmutableRows, final boolean isWalDisabled, final boolean isMultitenant, final boolean storeNulls, final boolean isTransactional, final long resolvedTime) throws SQLException {
         return metaDataMutated(tenantId, tableName, tableSeqNum, new Mutator() {
             @Override
             public PMetaData mutate(PMetaData metaData) throws SQLException {
                 try {
-                    return metaData.addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows, isWalDisabled, isMultitenant, storeNulls, resolvedTime);
+                    return metaData.addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows, isWalDisabled, isMultitenant, storeNulls, isTransactional, resolvedTime);
                 } catch (TableNotFoundException e) {
                     // The DROP TABLE may have been processed first, so just ignore.
                     return metaData;
@@ -642,25 +642,40 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             for (Entry<String,Object> entry : family.getSecond().entrySet()) {
                 String key = entry.getKey();
                 Object value = entry.getValue();
-                columnDesc.setValue(key, value == null ? null : value.toString());
+                setHColumnDescriptorValue(columnDesc, key, value);
             }
         }
         return columnDesc;
     }
-
-    private void modifyColumnFamilyDescriptor(HColumnDescriptor hcd, Pair<byte[], Map<String,Object>> family) throws SQLException {
-        if (Bytes.equals(hcd.getName(), family.getFirst())) {
-            modifyColumnFamilyDescriptor(hcd, family.getSecond());
+    
+    // Workaround HBASE-14737
+    private static void setHColumnDescriptorValue(HColumnDescriptor columnDesc, String key, Object value) {
+        if (HConstants.VERSIONS.equals(key)) {
+            columnDesc.setMaxVersions(getMaxVersion(value));
         } else {
-            throw new IllegalArgumentException("Column family names don't match. Column descriptor family name: " + hcd.getNameAsString() + ", Family name: " + Bytes.toString(family.getFirst()));
+            columnDesc.setValue(key, value == null ? null : value.toString());
         }
+    }
+
+    private static int getMaxVersion(Object value) {
+        if (value == null) {
+            return -1;  // HColumnDescriptor.UNINITIALIZED is private
+        }
+        if (value instanceof Number) {
+            return ((Number)value).intValue();
+        }
+        String stringValue = value.toString();
+        if (stringValue.isEmpty()) {
+            return -1;
+        }
+        return Integer.parseInt(stringValue);
     }
     
     private void modifyColumnFamilyDescriptor(HColumnDescriptor hcd, Map<String,Object> props) throws SQLException {
         for (Entry<String, Object> entry : props.entrySet()) {
             String propName = entry.getKey();
             Object value = entry.getValue();
-            hcd.setValue(propName, value == null ? null : value.toString());
+            setHColumnDescriptorValue(hcd, propName, value);
         }
     }
     
@@ -699,7 +714,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     tableDescriptor.addFamily(columnDescriptor);
                 } else {
                     if (tableType != PTableType.VIEW) {
-                        modifyColumnFamilyDescriptor(tableDescriptor.getFamily(familyByte), family);
+                        HColumnDescriptor columnDescriptor = tableDescriptor.getFamily(familyByte);
+                        if (columnDescriptor == null) {
+                            throw new IllegalArgumentException("Unable to find column descriptor with family name " + Bytes.toString(family.getFirst()));
+                        }
+                        modifyColumnFamilyDescriptor(columnDescriptor, family.getSecond());
                     }
                 }
             }
@@ -724,7 +743,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             if (!descriptor.hasCoprocessor(ServerCachingEndpointImpl.class.getName())) {
                 descriptor.addCoprocessor(ServerCachingEndpointImpl.class.getName(), null, priority, null);
             }
-            boolean isTransactional = Boolean.TRUE.equals(tableProps.get(TableProperty.TRANSACTIONAL.name()));
+            boolean isTransactional = 
+                    Boolean.TRUE.equals(tableProps.get(TableProperty.TRANSACTIONAL.name())) ||
+                    Boolean.TRUE.equals(tableProps.get(TxConstants.READ_NON_TX_DATA)); // For ALTER TABLE
             // TODO: better encapsulation for this
             // Since indexes can't have indexes, don't install our indexing coprocessor for indexes.
             // Also don't install on the SYSTEM.CATALOG and SYSTEM.STATS table because we use
@@ -736,8 +757,16 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     if (!descriptor.hasCoprocessor(PhoenixTransactionalIndexer.class.getName())) {
                         descriptor.addCoprocessor(PhoenixTransactionalIndexer.class.getName(), null, priority, null);
                     }
+                    // For alter table, remove non transactional index coprocessor
+                    if (descriptor.hasCoprocessor(Indexer.class.getName())) {
+                        descriptor.removeCoprocessor(Indexer.class.getName());
+                    }
                 } else {
                     if (!descriptor.hasCoprocessor(Indexer.class.getName())) {
+                        // If exception on alter table to transition back to non transactional
+                        if (descriptor.hasCoprocessor(PhoenixTransactionalIndexer.class.getName())) {
+                            descriptor.removeCoprocessor(PhoenixTransactionalIndexer.class.getName());
+                        }
                         Map<String, String> opts = Maps.newHashMapWithExpectedSize(1);
                         opts.put(NonTxIndexBuilder.CODEC_CLASS_NAME_KEY, PhoenixIndexCodec.class.getName());
                         Indexer.enableIndexing(descriptor, PhoenixIndexBuilder.class, opts, priority);
@@ -781,8 +810,15 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 }
             }
             
-            if (isTransactional && !descriptor.hasCoprocessor(TransactionProcessor.class.getName())) {
-                descriptor.addCoprocessor(TransactionProcessor.class.getName(), null, priority - 10, null);
+            if (isTransactional) {
+                if (!descriptor.hasCoprocessor(TransactionProcessor.class.getName())) {
+                    descriptor.addCoprocessor(TransactionProcessor.class.getName(), null, priority - 10, null);
+                }
+            } else {
+                // If exception on alter table to transition back to non transactional
+                if (descriptor.hasCoprocessor(TransactionProcessor.class.getName())) {
+                    descriptor.removeCoprocessor(TransactionProcessor.class.getName());
+                }                
             }
         } catch (IOException e) {
             throw ServerUtil.parseServerException(e);
@@ -944,21 +980,25 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 if (!modifyExistingMetaData) {
                     return existingDesc; // Caller already knows that no metadata was changed
                 }
+                boolean willBeTx = Boolean.TRUE.equals(props.get(TableProperty.TRANSACTIONAL.name()));
+                // If mapping an existing table as transactional, set property so that existing
+                // data is correctly read.
+                if (willBeTx) {
+                    newDesc.setValue(TxConstants.READ_NON_TX_DATA, Boolean.TRUE.toString());
+                } else {
+                    // If we think we're creating a non transactional table when it's already
+                    // transactional, don't allow.
+                    if (existingDesc.hasCoprocessor(TransactionProcessor.class.getName())) {
+                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.TX_MAY_NOT_SWITCH_TO_NON_TX)
+                        .setSchemaName(SchemaUtil.getSchemaNameFromFullName(tableName))
+                        .setTableName(SchemaUtil.getTableNameFromFullName(tableName)).build().buildException();
+                    }
+                    newDesc.remove(TxConstants.READ_NON_TX_DATA);
+                }
                 if (existingDesc.equals(newDesc)) {
                     return null; // Indicate that no metadata was changed
                 }
 
-                // Don't allow TRANSACTIONAL attribute to change, as we may have issued
-                // a CREATE TABLE IF NOT EXISTS and be updating the metadata.
-                String existingTxnal = existingDesc.getValue(PhoenixDatabaseMetaData.TRANSACTIONAL);
-                String newTxnal = newDesc.getValue(PhoenixDatabaseMetaData.TRANSACTIONAL);
-                if (!Objects.equal(existingTxnal, newTxnal)) {
-                    if (existingTxnal == null) {
-                        newDesc.remove(PhoenixDatabaseMetaData.TRANSACTIONAL);
-                    } else {
-                        newDesc.setValue(PhoenixDatabaseMetaData.TRANSACTIONAL, existingTxnal);
-                    }
-                }
                 modifyTable(tableName, newDesc, true);
                 return newDesc;
             }
@@ -1295,22 +1335,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         byte[] tableName = physicalTableName != null ? physicalTableName : SchemaUtil.getTableNameAsBytes(schemaBytes, tableBytes);
         boolean localIndexTable = Boolean.TRUE.equals(tableProps.remove(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_NAME));
 
-        HTableDescriptor tableDescriptor = null;
         if ((tableType == PTableType.VIEW && physicalTableName != null) || (tableType != PTableType.VIEW && physicalTableName == null)) {
             // For views this will ensure that metadata already exists
             // For tables and indexes, this will create the metadata if it doesn't already exist
-            tableDescriptor = ensureTableCreated(tableName, tableType, tableProps, families, splits, true);
-            // This means the HTable already existed and is transactional which is an error case for now,
-            // as the timestamps are likely not scaled and the table may have delete markers (which isn't
-            // handled by Tephra currently). It's possible that we could allow this, but only allow queries
-            // after a major compaction and some conversion process runs.
-            ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-            boolean isTransactional = MetaDataUtil.isTransactional(m, kvBuilder, ptr);
-            if (tableDescriptor != null && isTransactional) {
-                throw new SQLExceptionInfo.Builder(SQLExceptionCode.MAY_NOT_MAP_TO_EXISTING_TABLE_AS_TRANSACTIONAL)
-                .setSchemaName(Bytes.toString(schemaBytes)).setTableName(Bytes.toString(tableBytes))
-                .build().buildException();
-            }
+            ensureTableCreated(tableName, tableType, tableProps, families, splits, true);
         }
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         if (tableType == PTableType.INDEX) { // Index on view
@@ -1594,21 +1622,200 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     @Override
     public MetaDataMutationResult addColumn(final List<Mutation> tableMetaData, PTable table, Map<String, List<Pair<String,Object>>> stmtProperties, Set<String> colFamiliesForPColumnsToBeAdded) throws SQLException {
         Map<String, Object> tableProps = new HashMap<String, Object>();
-        HTableDescriptor tableDescriptor = separateAndValidateProperties(table, stmtProperties, colFamiliesForPColumnsToBeAdded, tableProps);
-        SQLException sqlE = null;
+        Set<HTableDescriptor> tableDescriptors = Collections.emptySet();
+        Set<HTableDescriptor> origTableDescriptors = Collections.emptySet();
+        boolean nonTxToTx = false;
+        Pair<HTableDescriptor,HTableDescriptor> tableDescriptorPair = separateAndValidateProperties(table, stmtProperties, colFamiliesForPColumnsToBeAdded, families, tableProps);
+        HTableDescriptor tableDescriptor = tableDescriptorPair.getSecond();
+        HTableDescriptor origTableDescriptor = tableDescriptorPair.getFirst();
         if (tableDescriptor != null) {
+            tableDescriptors = Sets.newHashSetWithExpectedSize(3 + table.getIndexes().size());
+            origTableDescriptors = Sets.newHashSetWithExpectedSize(3 + table.getIndexes().size());
+            tableDescriptors.add(tableDescriptor);
+            origTableDescriptors.add(origTableDescriptor);
+            nonTxToTx = Boolean.TRUE.equals(tableProps.get(TxConstants.READ_NON_TX_DATA));
+            /*
+             * If the table was transitioned from non transactional to transactional, we need
+             * to also transition the index tables.
+             */
+            if (nonTxToTx) {
+                updateDescriptorForTx(table, tableProps, tableDescriptor, Boolean.TRUE.toString(), tableDescriptors, origTableDescriptors);
+            }
+        }
+        
+        boolean success = false;
+        boolean metaDataUpdated = !tableDescriptors.isEmpty();
+        boolean pollingNeeded = !(!tableProps.isEmpty() && families.isEmpty() && colFamiliesForPColumnsToBeAdded.isEmpty());
+        MetaDataMutationResult result = null;
+        try {
+            boolean modifyHTable = true;
+            if (table.getType() == PTableType.VIEW) {
+                boolean canViewsAddNewCF = props.getBoolean(QueryServices.ALLOW_VIEWS_ADD_NEW_CF_BASE_TABLE,
+                        QueryServicesOptions.DEFAULT_ALLOW_VIEWS_ADD_NEW_CF_BASE_TABLE);
+                // When adding a column to a view, base physical table should only be modified when new column families are being added.  
+                modifyHTable = canViewsAddNewCF && !existingColumnFamiliesForBaseTable(table.getPhysicalName()).containsAll(colFamiliesForPColumnsToBeAdded);
+            }
+            boolean pollingNotNeeded = (!tableProps.isEmpty() && !existingColumnFamilies(table).containsAll(colFamiliesForPColumnsToBeAdded));
+            if (modifyHTable) {
+                sendHBaseMetaData(tableDescriptors, pollingNeeded);
+            }
+            
+            // Special case for call during drop table to ensure that the empty column family exists.
+            // In this, case we only include the table header row, as until we add schemaBytes and tableBytes
+            // as args to this function, we have no way of getting them in this case.
+            // TODO: change to  if (tableMetaData.isEmpty()) once we pass through schemaBytes and tableBytes
+            // Also, could be used to update property values on ALTER TABLE t SET prop=xxx
+            if ((tableMetaData.isEmpty()) || (tableMetaData.size() == 1 && tableMetaData.get(0).isEmpty())) {
+                return new MetaDataMutationResult(MutationCode.NO_OP, System.currentTimeMillis(), table);
+            }
+             byte[][] rowKeyMetaData = new byte[3][];
+             PTableType tableType = table.getType();
+    
+            Mutation m = tableMetaData.get(0);
+            byte[] rowKey = m.getRow();
+            SchemaUtil.getVarChars(rowKey, rowKeyMetaData);
+            byte[] tenantIdBytes = rowKeyMetaData[PhoenixDatabaseMetaData.TENANT_ID_INDEX];
+            byte[] schemaBytes = rowKeyMetaData[PhoenixDatabaseMetaData.SCHEMA_NAME_INDEX];
+            byte[] tableBytes = rowKeyMetaData[PhoenixDatabaseMetaData.TABLE_NAME_INDEX];
+            byte[] tableKey = SchemaUtil.getTableKey(tenantIdBytes, schemaBytes, tableBytes);
+            
+            ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+            result =  metaDataCoprocessorExec(tableKey,
+                new Batch.Call<MetaDataService, MetaDataResponse>() {
+                    @Override
+                    public MetaDataResponse call(MetaDataService instance) throws IOException {
+                        ServerRpcController controller = new ServerRpcController();
+                        BlockingRpcCallback<MetaDataResponse> rpcCallback =
+                                new BlockingRpcCallback<MetaDataResponse>();
+                        AddColumnRequest.Builder builder = AddColumnRequest.newBuilder();
+                        for (Mutation m : tableMetaData) {
+                            MutationProto mp = ProtobufUtil.toProto(m);
+                            builder.addTableMetadataMutations(mp.toByteString());
+                        }
+    
+                        instance.addColumn(controller, builder.build(), rpcCallback);
+                        if(controller.getFailedOn() != null) {
+                            throw controller.getFailedOn();
+                        }
+                        return rpcCallback.get();
+                    }
+                });
+    
+            if (result.getMutationCode() == MutationCode.COLUMN_NOT_FOUND || result.getMutationCode() == MutationCode.TABLE_ALREADY_EXISTS) { // Success
+                success = true;
+                // Flush the table if transitioning DISABLE_WAL from TRUE to FALSE
+                if (  MetaDataUtil.getMutationValue(m,PhoenixDatabaseMetaData.DISABLE_WAL_BYTES, kvBuilder, ptr)
+                   && Boolean.FALSE.equals(PBoolean.INSTANCE.toObject(ptr))) {
+                    flushTable(table.getPhysicalName().getBytes());
+                }
+    
+                if (tableType == PTableType.TABLE) {
+                    // If we're changing MULTI_TENANT to true or false, create or drop the view index table
+                    if (MetaDataUtil.getMutationValue(m, PhoenixDatabaseMetaData.MULTI_TENANT_BYTES, kvBuilder, ptr)){
+                        long timestamp = MetaDataUtil.getClientTimeStamp(m);
+                        if (Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(ptr.get(), ptr.getOffset(), ptr.getLength()))) {
+                            this.ensureViewIndexTableCreated(table, timestamp);
+                        } else {
+                            this.ensureViewIndexTableDropped(table.getPhysicalName().getBytes(), timestamp);
+                        }
+                    }
+                }
+            }
+        } finally {
+            // If we weren't successful with our metadata update
+            // and we've already pushed the HBase metadata changes to the server
+            // and we've tried to go from non transactional to transactional
+            // then we must undo the metadata change otherwise the table will
+            // no longer function correctly.
+            // Note that if this fails, we're in a corrupt state.
+            if (!success && metaDataUpdated && nonTxToTx) {
+                sendHBaseMetaData(origTableDescriptors, pollingNeeded);
+            }
+        }
+        return result;
+    }
+    private void updateDescriptorForTx(PTable table, Map<String, Object> tableProps, HTableDescriptor tableDescriptor,
+            String txValue, Set<HTableDescriptor> descriptorsToUpdate, Set<HTableDescriptor> origDescriptors) throws SQLException {
+        HBaseAdmin admin = null;
+        byte[] physicalTableName = table.getPhysicalName().getBytes();
+        try {
+            admin = new HBaseAdmin(config);
+            setTransactional(tableDescriptor, table.getType(), txValue, tableProps);
+            Map<String, Object> indexTableProps;
+            if (txValue == null) {
+                indexTableProps = Collections.<String,Object>emptyMap();
+            } else {
+                indexTableProps = Maps.newHashMapWithExpectedSize(1);
+                indexTableProps.put(TxConstants.READ_NON_TX_DATA, Boolean.valueOf(txValue));
+            }
+            for (PTable index : table.getIndexes()) {
+                HTableDescriptor indexDescriptor = admin.getTableDescriptor(index.getPhysicalName().getBytes());
+                origDescriptors.add(indexDescriptor);
+                indexDescriptor = new HTableDescriptor(indexDescriptor);
+                descriptorsToUpdate.add(indexDescriptor);
+                if (index.getColumnFamilies().isEmpty()) {
+                    byte[] dataFamilyName = SchemaUtil.getEmptyColumnFamily(table);
+                    byte[] indexFamilyName = SchemaUtil.getEmptyColumnFamily(index);
+                    indexDescriptor.getFamily(indexFamilyName).setMaxVersions(tableDescriptor.getFamily(dataFamilyName).getMaxVersions());
+                } else {
+                    for (PColumnFamily family : index.getColumnFamilies()) {
+                        byte[] familyName = family.getName().getBytes();
+                        indexDescriptor.getFamily(familyName).setMaxVersions(tableDescriptor.getFamily(familyName).getMaxVersions());
+                    }
+                }
+                setTransactional(indexDescriptor, index.getType(), txValue, indexTableProps);
+            }
             try {
-                boolean modifyHTable = true;
-                if (table.getType() == PTableType.VIEW) {
-                    boolean canViewsAddNewCF = props.getBoolean(QueryServices.ALLOW_VIEWS_ADD_NEW_CF_BASE_TABLE,
-                            QueryServicesOptions.DEFAULT_ALLOW_VIEWS_ADD_NEW_CF_BASE_TABLE);
-                    // When adding a column to a view, base physical table should only be modified when new column families are being added.  
-                    modifyHTable = canViewsAddNewCF && !existingColumnFamiliesForBaseTable(table.getPhysicalName()).containsAll(colFamiliesForPColumnsToBeAdded);
+                HTableDescriptor indexDescriptor = admin.getTableDescriptor(MetaDataUtil.getViewIndexPhysicalName(physicalTableName));
+                origDescriptors.add(indexDescriptor);
+                indexDescriptor = new HTableDescriptor(indexDescriptor);
+                descriptorsToUpdate.add(indexDescriptor);
+                setSharedIndexMaxVersion(table, tableDescriptor, indexDescriptor);
+                setTransactional(indexDescriptor, PTableType.INDEX, txValue, indexTableProps);
+            } catch (org.apache.hadoop.hbase.TableNotFoundException ignore) {
+                // Ignore, as we may never have created a view index table
+            }
+            try {
+                HTableDescriptor indexDescriptor = admin.getTableDescriptor(MetaDataUtil.getLocalIndexPhysicalName(physicalTableName));
+                origDescriptors.add(indexDescriptor);
+                indexDescriptor = new HTableDescriptor(indexDescriptor);
+                descriptorsToUpdate.add(indexDescriptor);
+                setSharedIndexMaxVersion(table, tableDescriptor, indexDescriptor);
+                setTransactional(indexDescriptor, PTableType.INDEX, txValue, indexTableProps);
+            } catch (org.apache.hadoop.hbase.TableNotFoundException ignore) {
+                // Ignore, as we may never have created a view index table
+            }
+        } catch (IOException e) {
+            throw ServerUtil.parseServerException(e);
+        } finally {
+            try {
+                if (admin != null) admin.close();
+            } catch (IOException e) {
+                logger.warn("Could not close admin",e);
+            }
+        }
+    }
+    private void setSharedIndexMaxVersion(PTable table, HTableDescriptor tableDescriptor,
+            HTableDescriptor indexDescriptor) {
+        if (table.getColumnFamilies().isEmpty()) {
+            byte[] familyName = SchemaUtil.getEmptyColumnFamily(table);
+            indexDescriptor.getFamily(familyName).setMaxVersions(tableDescriptor.getFamily(familyName).getMaxVersions());
+        } else {
+            for (PColumnFamily family : table.getColumnFamilies()) {
+                byte[] familyName = family.getName().getBytes();
+                HColumnDescriptor colDescriptor = indexDescriptor.getFamily(familyName);
+                if (colDescriptor != null) {
+                    colDescriptor.setMaxVersions(tableDescriptor.getFamily(familyName).getMaxVersions());
                 }
-                boolean pollingNotNeeded = (!tableProps.isEmpty() && !existingColumnFamilies(table).containsAll(colFamiliesForPColumnsToBeAdded));
-                if (modifyHTable) {
-                    modifyTable(table.getPhysicalName().getBytes(), tableDescriptor, !pollingNotNeeded);
-                }
+            }
+        }
+    }
+    
+    private void sendHBaseMetaData(Set<HTableDescriptor> tableDescriptors, boolean pollingNeeded) throws SQLException {
+        SQLException sqlE = null;
+        for (HTableDescriptor descriptor : tableDescriptors) {
+            try {
+                modifyTable(descriptor.getName(), descriptor, pollingNeeded);
             } catch (IOException e) {
                 sqlE = ServerUtil.parseServerException(e);
             } catch (InterruptedException e) {
@@ -1623,76 +1830,25 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 }
             }
         }
-        
-        // Special case for call during drop table to ensure that the empty column family exists.
-        // In this, case we only include the table header row, as until we add schemaBytes and tableBytes
-        // as args to this function, we have no way of getting them in this case.
-        // TODO: change to  if (tableMetaData.isEmpty()) once we pass through schemaBytes and tableBytes
-        // Also, could be used to update property values on ALTER TABLE t SET prop=xxx
-        if ((tableMetaData.isEmpty()) || (tableMetaData.size() == 1 && tableMetaData.get(0).isEmpty())) {
-            return new MetaDataMutationResult(MutationCode.NO_OP, System.currentTimeMillis(), table);
+    }
+    private void setTransactional(HTableDescriptor tableDescriptor, PTableType tableType, String txValue, Map<String, Object> tableProps) throws SQLException {
+        if (txValue == null) {
+            tableDescriptor.remove(TxConstants.READ_NON_TX_DATA);
+        } else {
+            tableDescriptor.setValue(TxConstants.READ_NON_TX_DATA, txValue);
         }
-         byte[][] rowKeyMetaData = new byte[3][];
-         PTableType tableType = table.getType();
-
-        Mutation m = tableMetaData.get(0);
-        byte[] rowKey = m.getRow();
-        SchemaUtil.getVarChars(rowKey, rowKeyMetaData);
-        byte[] tenantIdBytes = rowKeyMetaData[PhoenixDatabaseMetaData.TENANT_ID_INDEX];
-        byte[] schemaBytes = rowKeyMetaData[PhoenixDatabaseMetaData.SCHEMA_NAME_INDEX];
-        byte[] tableBytes = rowKeyMetaData[PhoenixDatabaseMetaData.TABLE_NAME_INDEX];
-        byte[] tableKey = SchemaUtil.getTableKey(tenantIdBytes, schemaBytes, tableBytes);
-        
-        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-        MetaDataMutationResult result =  metaDataCoprocessorExec(tableKey,
-            new Batch.Call<MetaDataService, MetaDataResponse>() {
-                @Override
-                public MetaDataResponse call(MetaDataService instance) throws IOException {
-                    ServerRpcController controller = new ServerRpcController();
-                    BlockingRpcCallback<MetaDataResponse> rpcCallback =
-                            new BlockingRpcCallback<MetaDataResponse>();
-                    AddColumnRequest.Builder builder = AddColumnRequest.newBuilder();
-                    for (Mutation m : tableMetaData) {
-                        MutationProto mp = ProtobufUtil.toProto(m);
-                        builder.addTableMetadataMutations(mp.toByteString());
-                    }
-                    builder.setClientVersion(VersionUtil.encodeVersion(PHOENIX_MAJOR_VERSION, PHOENIX_MINOR_VERSION, PHOENIX_PATCH_NUMBER));
-                    instance.addColumn(controller, builder.build(), rpcCallback);
-                    if(controller.getFailedOn() != null) {
-                        throw controller.getFailedOn();
-                    }
-                    return rpcCallback.get();
-                }
-            });
-
-        if (result.getMutationCode() == MutationCode.COLUMN_NOT_FOUND) { // Success
-            // Flush the table if transitioning DISABLE_WAL from TRUE to FALSE
-            if (  MetaDataUtil.getMutationValue(m,PhoenixDatabaseMetaData.DISABLE_WAL_BYTES, kvBuilder, ptr)
-               && Boolean.FALSE.equals(PBoolean.INSTANCE.toObject(ptr))) {
-                flushTable(table.getPhysicalName().getBytes());
-            }
-
-            if (tableType == PTableType.TABLE) {
-                // If we're changing MULTI_TENANT to true or false, create or drop the view index table
-                if (MetaDataUtil.getMutationValue(m, PhoenixDatabaseMetaData.MULTI_TENANT_BYTES, kvBuilder, ptr)){
-                    long timestamp = MetaDataUtil.getClientTimeStamp(m);
-                    if (Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(ptr.get(), ptr.getOffset(), ptr.getLength()))) {
-                        this.ensureViewIndexTableCreated(table, timestamp);
-                    } else {
-                        this.ensureViewIndexTableDropped(table.getPhysicalName().getBytes(), timestamp);
-                    }
-                }
-            }
-        }
-        return result;
+        this.addCoprocessors(tableDescriptor.getName(), tableDescriptor, tableType, tableProps);
     }
     
-    private HTableDescriptor separateAndValidateProperties(PTable table, Map<String, List<Pair<String, Object>>> properties, Set<String> colFamiliesForPColumnsToBeAdded, Map<String, Object> tableProps) throws SQLException {
+    private Pair<HTableDescriptor,HTableDescriptor> separateAndValidateProperties(PTable table, Map<String, List<Pair<String, Object>>> properties, Set<String> colFamiliesForPColumnsToBeAdded, List<Pair<byte[], Map<String, Object>>> families, Map<String, Object> tableProps) throws SQLException {
         Map<String, Map<String, Object>> stmtFamiliesPropsMap = new HashMap<>(properties.size());
         Map<String,Object> commonFamilyProps = new HashMap<>();
         boolean addingColumns = colFamiliesForPColumnsToBeAdded != null && colFamiliesForPColumnsToBeAdded.size() > 0;
         HashSet<String> existingColumnFamilies = existingColumnFamilies(table);
         Map<String, Map<String, Object>> allFamiliesProps = new HashMap<>(existingColumnFamilies.size());
+        boolean isTransactional = table.isTransactional();
+        boolean willBeTransactional = false;
+        boolean isOrWillBeTransactional = isTransactional;
         for (String family : properties.keySet()) {
             List<Pair<String, Object>> propsList = properties.get(family);
             if (propsList != null && propsList.size() > 0) {
@@ -1721,13 +1877,16 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 // Even though TTL is really a HColumnProperty we treat it specially.
                                 // We enforce that all column families have the same TTL.
                                 commonFamilyProps.put(propName, prop.getSecond());
+                            } else if (propName.equals(PhoenixDatabaseMetaData.TRANSACTIONAL) && Boolean.TRUE.equals(propValue)) {
+                                willBeTransactional = isOrWillBeTransactional = true;
+                                tableProps.put(TxConstants.READ_NON_TX_DATA, propValue);
                             }
                         } else {
                             if (isHColumnProperty(propName)) {
                                 if (family.equals(QueryConstants.ALL_FAMILY_PROPERTIES_KEY)) {
-                                    commonFamilyProps.put(propName, prop.getSecond());
+                                    commonFamilyProps.put(propName, propValue);
                                 } else {
-                                    colFamilyPropsMap.put(propName, prop.getSecond());
+                                    colFamilyPropsMap.put(propName, propValue);
                                 }
                             } else {
                                 // invalid property - neither of HTableProp, HColumnProp or PhoenixTableProp
@@ -1816,16 +1975,17 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             allFamiliesProps.put(Bytes.toString(table.getDefaultFamilyName() == null ? QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES : table.getDefaultFamilyName().getBytes() ), commonFamilyProps);
         }
 
-
         // Views are not allowed to have any of these properties.
         if (table.getType() == PTableType.VIEW && (!stmtFamiliesPropsMap.isEmpty() || !commonFamilyProps.isEmpty() || !tableProps.isEmpty())) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.VIEW_WITH_PROPERTIES).build()
             .buildException();
         }
+        
         HTableDescriptor newTableDescriptor = null;
+        HTableDescriptor origTableDescriptor = null;
         if (!allFamiliesProps.isEmpty() || !tableProps.isEmpty()) {
             byte[] tableNameBytes = Bytes.toBytes(table.getPhysicalName().getString());
-            HTableDescriptor existingTableDescriptor = getTableDescriptor(tableNameBytes);
+            HTableDescriptor existingTableDescriptor = origTableDescriptor = getTableDescriptor(tableNameBytes);
             newTableDescriptor = new HTableDescriptor(existingTableDescriptor);
             if (!tableProps.isEmpty()) {
                 // add all the table properties to the existing table descriptor
@@ -1834,22 +1994,69 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 }
             }
             if (addingColumns) {
+                // FIXME: we should be setting TTL on all table column families, not
+                // just the ones being modified here (if TTL is being set).
                 // Make sure that all the CFs of the table have the same TTL as the empty CF. 
                 setTTLToEmptyCFTTL(allFamiliesProps, table, newTableDescriptor);
             }
+            Integer defaultTxMaxVersions = null;
+            if (isOrWillBeTransactional) {
+                Map<String, Object> emptyFamilyProps = allFamiliesProps.get(SchemaUtil.getEmptyColumnFamilyAsString(table));
+                if (emptyFamilyProps != null) {
+                    defaultTxMaxVersions = (Integer)emptyFamilyProps.get(HConstants.VERSIONS);
+                }
+                if (defaultTxMaxVersions == null) {
+                    if (isTransactional) {
+                        defaultTxMaxVersions = newTableDescriptor.getFamily(SchemaUtil.getEmptyColumnFamily(table)).getMaxVersions();
+                    } else {
+                        defaultTxMaxVersions = 
+                                this.getProps().getInt(
+                                        QueryServices.MAX_VERSIONS_TRANSACTIONAL_ATTRIB,
+                                        QueryServicesOptions.DEFAULT_MAX_VERSIONS_TRANSACTIONAL);
+                    }
+                }
+                if (willBeTransactional) {
+                    // Set VERSIONS for all column families when transitioning to transactional
+                    for (PColumnFamily family : table.getColumnFamilies()) {
+                        if (!allFamiliesProps.containsKey(family.getName().getString())) {
+                            Map<String,Object> familyProps = Maps.newHashMapWithExpectedSize(1);
+                            familyProps.put(HConstants.VERSIONS, defaultTxMaxVersions);
+                            allFamiliesProps.put(family.getName().getString(), familyProps);
+                        }
+                    }
+                }
+            }
             for (Entry<String, Map<String, Object>> entry : allFamiliesProps.entrySet()) {
-                byte[] cf = entry.getKey().getBytes();
+                Map<String,Object> familyProps = entry.getValue();
+                if (isOrWillBeTransactional) {
+                    if (!familyProps.containsKey(HConstants.VERSIONS)) {
+                        familyProps.put(HConstants.VERSIONS, defaultTxMaxVersions);
+                    }
+                }
+                byte[] cf = Bytes.toBytes(entry.getKey());
                 HColumnDescriptor colDescriptor = newTableDescriptor.getFamily(cf);
                 if (colDescriptor == null) {
                     // new column family
-                    colDescriptor = generateColumnFamilyDescriptor(new Pair<>(cf, entry.getValue()), table.getType());
+                    colDescriptor = generateColumnFamilyDescriptor(new Pair<>(cf, familyProps), table.getType());
                     newTableDescriptor.addFamily(colDescriptor);
                 } else {
-                    modifyColumnFamilyDescriptor(colDescriptor, entry.getValue());
+                    modifyColumnFamilyDescriptor(colDescriptor, familyProps);
+                }
+                if (isOrWillBeTransactional) {
+                    checkTransactionalVersionsValue(colDescriptor);
                 }
             }
         }
-        return newTableDescriptor;
+        return new Pair<>(origTableDescriptor, newTableDescriptor);
+    }
+    
+    private void checkTransactionalVersionsValue(HColumnDescriptor colDescriptor) throws SQLException {
+        int maxVersions = colDescriptor.getMaxVersions();
+        if (maxVersions <= 1) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.TX_MAX_VERSIONS_MUST_BE_GREATER_THAN_ONE)
+            .setFamilyName(colDescriptor.getNameAsString())
+            .build().buildException();
+        }
     }
     
     private boolean isHColumnProperty(String propName) {

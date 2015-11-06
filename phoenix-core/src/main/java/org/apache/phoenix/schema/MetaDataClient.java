@@ -1634,12 +1634,10 @@ public class MetaDataClient {
             }
 
             Map<String,Object> tableProps = Maps.newHashMapWithExpectedSize(statement.getProps().size());
-            Map<String,Object> commonFamilyProps = Collections.emptyMap();
+            Map<String,Object> commonFamilyProps = Maps.newHashMapWithExpectedSize(statement.getProps().size() + 1);
             // Somewhat hacky way of determining if property is for HColumnDescriptor or HTableDescriptor
             HColumnDescriptor defaultDescriptor = new HColumnDescriptor(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES);
             if (!statement.getProps().isEmpty()) {
-                commonFamilyProps = Maps.newHashMapWithExpectedSize(statement.getProps().size());
-
                 Collection<Pair<String,Object>> props = statement.getProps().get(QueryConstants.ALL_FAMILY_PROPERTIES_KEY);
                 for (Pair<String,Object> prop : props) {
                     if (defaultDescriptor.getValue(prop.getFirst()) == null) {
@@ -1721,7 +1719,9 @@ public class MetaDataClient {
             }
             tableProps.put(PhoenixDatabaseMetaData.TRANSACTIONAL, Boolean.valueOf(transactional));
             
-            if (transactional) { // FIXME: remove once Tephra handles storing multiple versions of a cell value, 
+            boolean sharedTable = statement.getTableType() == PTableType.VIEW || indexId != null;
+            if (transactional) { 
+                // FIXME: remove once Tephra handles storing multiple versions of a cell value, 
             	// and allows ignoring empty key values for an operation
             	if (Boolean.FALSE.equals(storeNullsProp)) {
             		throw new SQLExceptionInfo.Builder(SQLExceptionCode.STORE_NULLS_MUST_BE_TRUE_FOR_TRANSACTIONAL)
@@ -1731,11 +1731,29 @@ public class MetaDataClient {
             	// Force STORE_NULLS to true when transactional as Tephra cannot deal with column deletes
             	storeNulls = true;
             	tableProps.put(PhoenixDatabaseMetaData.STORE_NULLS, Boolean.TRUE);
+            	
+            	if (!sharedTable) {
+                    Integer maxVersionsProp = (Integer) commonFamilyProps.get(HConstants.VERSIONS);
+                    if (maxVersionsProp == null) {
+                        if (parent != null) {
+                            HTableDescriptor desc = connection.getQueryServices().getTableDescriptor(parent.getPhysicalName().getBytes());
+                            if (desc != null) {
+                                maxVersionsProp = desc.getFamily(SchemaUtil.getEmptyColumnFamily(parent)).getMaxVersions();
+                            }
+                        }
+                        if (maxVersionsProp == null) {
+                            maxVersionsProp = connection.getQueryServices().getProps().getInt(
+                                    QueryServices.MAX_VERSIONS_TRANSACTIONAL_ATTRIB,
+                                    QueryServicesOptions.DEFAULT_MAX_VERSIONS_TRANSACTIONAL);
+                        }
+                        commonFamilyProps.put(HConstants.VERSIONS, maxVersionsProp);
+                    }
+            	}
             }
             timestamp = timestamp==null ? TransactionUtil.getTableTimestamp(connection, transactional) : timestamp;
 
             // Delay this check as it is supported to have IMMUTABLE_ROWS and SALT_BUCKETS defined on views
-            if (statement.getTableType() == PTableType.VIEW || indexId != null) {
+            if (sharedTable) {
                 if (tableProps.get(PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAMILY_NAME) != null) {
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.DEFAULT_COLUMN_FAMILY_ON_SHARED_TABLE)
                     .setSchemaName(schemaName).setTableName(tableName)
@@ -1751,7 +1769,7 @@ public class MetaDataClient {
             List<PColumn> columns;
             LinkedHashSet<PColumn> pkColumns;
 
-            if (tenantId != null && (tableType != PTableType.VIEW && indexId == null)) {
+            if (tenantId != null && !sharedTable) {
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_CREATE_TENANT_SPECIFIC_TABLE)
                     .setSchemaName(schemaName).setTableName(tableName).build().buildException();
             }
@@ -2446,12 +2464,12 @@ public class MetaDataClient {
         return mutationCode;
     }
 
-    private  long incrementTableSeqNum(PTable table, PTableType expectedType, int columnCountDelta) throws SQLException {
-        return incrementTableSeqNum(table, expectedType, columnCountDelta, null, null, null, null);
+    private  long incrementTableSeqNum(PTable table, PTableType expectedType, int columnCountDelta, Boolean isTransactional) throws SQLException {
+        return incrementTableSeqNum(table, expectedType, columnCountDelta, isTransactional, null, null, null, null);
     }
 
     private long incrementTableSeqNum(PTable table, PTableType expectedType, int columnCountDelta,
-            Boolean isImmutableRows, Boolean disableWAL, Boolean isMultiTenant, Boolean storeNulls)
+            Boolean isTransactional, Boolean isImmutableRows, Boolean disableWAL, Boolean isMultiTenant, Boolean storeNulls)
             throws SQLException {
         String schemaName = table.getSchemaName().getString();
         String tableName = table.getTableName().getString();
@@ -2482,6 +2500,9 @@ public class MetaDataClient {
         }
         if (storeNulls != null) {
             mutateBooleanProperty(tenantId, schemaName, tableName, STORE_NULLS, storeNulls);
+        }
+        if (isTransactional != null) {
+            mutateBooleanProperty(tenantId, schemaName, tableName, TRANSACTIONAL, isTransactional);
         }
         return seqNum;
     }
@@ -2516,6 +2537,7 @@ public class MetaDataClient {
             Boolean multiTenantProp = null;
             Boolean disableWALProp = null;
             Boolean storeNullsProp = null;
+            Boolean isTransactionalProp = null;
 
             ListMultimap<String,Pair<String,Object>> stmtProperties = statement.getProps();
             Map<String, List<Pair<String, Object>>> properties = new HashMap<>(stmtProperties.size());
@@ -2540,6 +2562,8 @@ public class MetaDataClient {
                             disableWALProp = (Boolean)prop.getSecond();
                         } else if (propName.equals(STORE_NULLS)) {
                             storeNullsProp = (Boolean)prop.getSecond();
+                        } else if (propName.equals(TRANSACTIONAL)) {
+                            isTransactionalProp = (Boolean)prop.getSecond();
                         }
                     } 
                 }
@@ -2547,6 +2571,7 @@ public class MetaDataClient {
             }
             boolean retried = false;
             boolean changingPhoenixTableProperty = false;
+            boolean nonTxToTx = false;
             while (true) {
                 ColumnResolver resolver = FromCompiler.getResolver(statement, connection);
                 table = resolver.getTables().get(0).getTable();
@@ -2599,6 +2624,23 @@ public class MetaDataClient {
                     if (storeNullsProp.booleanValue() != table.getStoreNulls()) {
                         storeNulls = storeNullsProp;
                         changingPhoenixTableProperty = true;
+                    }
+                }
+                Boolean isTransactional = null;
+                if (isTransactionalProp != null) {
+                    if (isTransactionalProp.booleanValue() != table.isTransactional()) {
+                        isTransactional = isTransactionalProp;
+                        // We can only go one way: from non transactional to transactional
+                        // Going the other way would require rewriting the cell timestamps
+                        // and doing a major compaction to get rid of any Tephra specific
+                        // delete markers.
+                        if (!isTransactional) {
+                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.TX_MAY_NOT_SWITCH_TO_NON_TX)
+                            .setSchemaName(schemaName).setTableName(tableName).build().buildException();
+                        }
+                        timeStamp = TransactionUtil.getTableTimestamp(connection, isTransactional);
+                        changingPhoenixTableProperty = true;
+                        nonTxToTx = true;
                     }
                 }
 
@@ -2681,10 +2723,12 @@ public class MetaDataClient {
                     if (Boolean.FALSE.equals(isImmutableRows) && !table.getIndexes().isEmpty()) {
                         int hbaseVersion = connection.getQueryServices().getLowestClusterHBaseVersion();
                         if (hbaseVersion < PhoenixDatabaseMetaData.MUTABLE_SI_VERSION_THRESHOLD) {
-                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.NO_MUTABLE_INDEXES).setSchemaName(schemaName).setTableName(tableName).build().buildException();
+                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.NO_MUTABLE_INDEXES)
+                            .setSchemaName(schemaName).setTableName(tableName).build().buildException();
                         }
                         if (connection.getQueryServices().hasInvalidIndexConfiguration() && !table.isTransactional()) {
-                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_MUTABLE_INDEX_CONFIG).setSchemaName(schemaName).setTableName(tableName).build().buildException();
+                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_MUTABLE_INDEX_CONFIG)
+                            .setSchemaName(schemaName).setTableName(tableName).build().buildException();
                         }
                     }
                     if (Boolean.TRUE.equals(multiTenant)) {
@@ -2692,16 +2736,18 @@ public class MetaDataClient {
                     }
                 }
 
-                if (numPkColumnsAdded>0 && !table.getIndexes().isEmpty()) {
+                if (!table.getIndexes().isEmpty() && (numPkColumnsAdded>0 || nonTxToTx)) {
                     for (PTable index : table.getIndexes()) {
-                        incrementTableSeqNum(index, index.getType(), 1);
+                        // TODO: verify master has fix for multiple index columns added and unit test
+                        incrementTableSeqNum(index, index.getType(), numPkColumnsAdded, nonTxToTx ? Boolean.TRUE : null);
                     }
                     tableMetaData.addAll(connection.getMutationState().toMutations(timeStamp).next().getSecond());
                     connection.rollback();
                 }
                 long seqNum = table.getSequenceNumber();
                 if (changingPhoenixTableProperty || columnDefs.size() > 0) { 
-                    seqNum = incrementTableSeqNum(table, statement.getTableType(), columnDefs.size(), isImmutableRows, disableWAL, multiTenant, storeNulls);
+                    // TODO: verify master has fix for multiple data columns added and unit test
+                    seqNum = incrementTableSeqNum(table, statement.getTableType(), columnDefs.size(), isTransactional, isImmutableRows, disableWAL, multiTenant, storeNulls);
                     tableMetaData.addAll(connection.getMutationState().toMutations(timeStamp).next().getSecond());
                     connection.rollback();
                 }
@@ -2740,9 +2786,10 @@ public class MetaDataClient {
                         return new MutationState(0,connection);
                     }
 
-                    // Only update client side cache if we aren't adding a PK column to a table with indexes.
+                    // Only update client side cache if we aren't adding a PK column to a table with indexes or 
+                    // transitioning a table from.
                     // We could update the cache manually then too, it'd just be a pain.
-                    if (numPkColumnsAdded==0 || table.getIndexes().isEmpty()) {
+                    if (table.getIndexes().isEmpty() || (numPkColumnsAdded==0 && !nonTxToTx)) {
 						connection.addColumn(
 								tenantId,
 								SchemaUtil.getTableName(schemaName, tableName),
@@ -2753,6 +2800,7 @@ public class MetaDataClient {
 								disableWAL == null ? table.isWALDisabled() : disableWAL,
 								multiTenant == null ? table.isMultiTenant() : multiTenant,
 								storeNulls == null ? table.getStoreNulls() : storeNulls, 
+								isTransactional == null ? table.isTransactional() : isTransactional,
 								TransactionUtil.getResolvedTime(connection, result));
                     }
                     // Delete rows in view index if we haven't dropped it already
@@ -2933,7 +2981,8 @@ public class MetaDataClient {
                         }
                     }
                     if(!indexColumnsToDrop.isEmpty()) {
-                        incrementTableSeqNum(index, index.getType(), -1);
+                        // TODO: verify master has fix for multiple index columns dropped and unit test
+                        incrementTableSeqNum(index, index.getType(), -indexColumnsToDrop.size(), null);
                         dropColumnMutations(index, indexColumnsToDrop, tableMetaData);
                     }
 
@@ -2942,7 +2991,8 @@ public class MetaDataClient {
                 tableMetaData.addAll(connection.getMutationState().toMutations(timeStamp).next().getSecond());
                 connection.rollback();
 
-                long seqNum = incrementTableSeqNum(table, statement.getTableType(), -1);
+                // TODO: verify master has fix for multiple data columns dropped and unit test
+                long seqNum = incrementTableSeqNum(table, statement.getTableType(), -tableColumnsToDrop.size(), null);
                 tableMetaData.addAll(connection.getMutationState().toMutations(timeStamp).next().getSecond());
                 connection.rollback();
                 // Force table header to be first in list

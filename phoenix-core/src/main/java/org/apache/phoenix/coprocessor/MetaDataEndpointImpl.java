@@ -2337,6 +2337,17 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                                 }
                                 continue;
                             }
+                        } else if (pkCount == COLUMN_NAME_INDEX &&
+                                   ! (Bytes.compareTo(schemaName, rowKeyMetaData[SCHEMA_NAME_INDEX]) == 0 &&
+                                      Bytes.compareTo(tableName, rowKeyMetaData[TABLE_NAME_INDEX]) == 0 ) ) {
+                            // Invalidate any table with mutations
+                            // TODO: this likely means we don't need the above logic that
+                            // loops through the indexes if adding a PK column, since we'd
+                            // always have header rows for those.
+                            invalidateList.add(new ImmutableBytesPtr(SchemaUtil
+                                    .getTableKey(tenantId, 
+                                            rowKeyMetaData[SCHEMA_NAME_INDEX],
+                                            rowKeyMetaData[TABLE_NAME_INDEX])));
                         }
                     }
                     tableMetaData.addAll(mutationsForAddingColumnsToViews);

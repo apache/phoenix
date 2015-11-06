@@ -10,7 +10,6 @@
 package org.apache.phoenix.tx;
 
 import static org.apache.phoenix.util.TestUtil.INDEX_DATA_SCHEMA;
-import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.TRANSACTIONAL_DATA_TABLE;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -22,25 +21,30 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
-import java.util.Map;
-import java.util.Properties;
+import java.util.List;
 
+import org.apache.hadoop.hbase.HColumnDescriptor;
+import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
-import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTableKey;
-import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Test;
 
-import com.google.common.collect.Maps;
+import com.google.common.collect.Lists;
+
+import co.cask.tephra.hbase98.coprocessor.TransactionProcessor;
 
 public class TransactionIT extends BaseHBaseManagedTimeIT {
 	
@@ -119,8 +123,6 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
             conn1.commit();
             
             // verify rows are deleted after commit
-            // FIXME: this is failing, I think because Tephra isn't handling deletes like we need it to
-            // TODO: confirm this works once we get the patch from Gary.
             rs = conn1.createStatement().executeQuery(selectSQL);
             assertFalse(rs.next());
         }
@@ -245,5 +247,161 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
 		conn.createStatement().execute("ALTER TABLE " + FULL_TABLE_NAME + " SET IMMUTABLE_ROWS=true");
 		testRowConflicts();
 	}
-	
+    
+    @Test
+    public void testNonTxToTxTable() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute("CREATE TABLE NON_TX_TABLE(k INTEGER PRIMARY KEY, v VARCHAR)");
+        conn.createStatement().execute("UPSERT INTO NON_TX_TABLE VALUES (1)");
+        conn.createStatement().execute("UPSERT INTO NON_TX_TABLE VALUES (2, 'a')");
+        conn.createStatement().execute("UPSERT INTO NON_TX_TABLE VALUES (3, 'b')");
+        conn.commit();
+        
+        conn.createStatement().execute("CREATE INDEX IDX ON NON_TX_TABLE(v)");
+        // Reset empty column value to an empty value like it is pre-transactions
+        HTableInterface htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes("NON_TX_TABLE"));
+        List<Put>puts = Lists.newArrayList(new Put(PInteger.INSTANCE.toBytes(1)), new Put(PInteger.INSTANCE.toBytes(2)), new Put(PInteger.INSTANCE.toBytes(3)));
+        for (Put put : puts) {
+            put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES, ByteUtil.EMPTY_BYTE_ARRAY);
+        }
+        htable.put(puts);
+        
+        conn.createStatement().execute("ALTER TABLE NON_TX_TABLE SET TRANSACTIONAL=true");
+        
+        htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes("NON_TX_TABLE"));
+        assertTrue(htable.getTableDescriptor().getCoprocessors().contains(TransactionProcessor.class.getName()));
+        htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes("IDX"));
+        assertTrue(htable.getTableDescriptor().getCoprocessors().contains(TransactionProcessor.class.getName()));
+
+        conn.createStatement().execute("UPSERT INTO NON_TX_TABLE VALUES (4, 'c')");
+        ResultSet rs = conn.createStatement().executeQuery("SELECT /*+ NO_INDEX */ k FROM NON_TX_TABLE WHERE v IS NULL");
+        assertTrue(conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, "NON_TX_TABLE")).isTransactional());
+        assertTrue(rs.next());
+        assertEquals(1,rs.getInt(1));
+        assertFalse(rs.next());
+        conn.commit();
+        
+        conn.createStatement().execute("UPSERT INTO NON_TX_TABLE VALUES (5, 'd')");
+        rs = conn.createStatement().executeQuery("SELECT k FROM NON_TX_TABLE");
+        assertTrue(conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, "IDX")).isTransactional());
+        assertTrue(rs.next());
+        assertEquals(1,rs.getInt(1));
+        assertTrue(rs.next());
+        assertEquals(2,rs.getInt(1));
+        assertTrue(rs.next());
+        assertEquals(3,rs.getInt(1));
+        assertTrue(rs.next());
+        assertEquals(4,rs.getInt(1));
+        assertTrue(rs.next());
+        assertEquals(5,rs.getInt(1));
+        assertFalse(rs.next());
+        conn.rollback();
+        
+        rs = conn.createStatement().executeQuery("SELECT k FROM NON_TX_TABLE");
+        assertTrue(rs.next());
+        assertEquals(1,rs.getInt(1));
+        assertTrue(rs.next());
+        assertEquals(2,rs.getInt(1));
+        assertTrue(rs.next());
+        assertEquals(3,rs.getInt(1));
+        assertTrue(rs.next());
+        assertEquals(4,rs.getInt(1));
+        assertFalse(rs.next());
+    }
+    
+    @Test
+    public void testNonTxToTxTableFailure() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        // Put table in SYSTEM schema to prevent attempts to update the cache after we disable SYSTEM.CATALOG
+        conn.createStatement().execute("CREATE TABLE SYSTEM.NON_TX_TABLE(k INTEGER PRIMARY KEY, v VARCHAR)");
+        conn.createStatement().execute("UPSERT INTO SYSTEM.NON_TX_TABLE VALUES (1)");
+        conn.commit();
+        // Reset empty column value to an empty value like it is pre-transactions
+        HTableInterface htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes("SYSTEM.NON_TX_TABLE"));
+        Put put = new Put(PInteger.INSTANCE.toBytes(1));
+        put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES, ByteUtil.EMPTY_BYTE_ARRAY);
+        htable.put(put);
+        
+        HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
+        admin.disableTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME);
+        try {
+            // This will succeed initially in updating the HBase metadata, but then will fail when
+            // the SYSTEM.CATALOG table is attempted to be updated, exercising the code to restore
+            // the coprocessors back to the non transactional ones.
+            conn.createStatement().execute("ALTER TABLE SYSTEM.NON_TX_TABLE SET TRANSACTIONAL=true");
+            fail();
+        } catch (SQLException e) {
+            assertTrue(e.getMessage().contains(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME + " is disabled"));
+        } finally {
+            admin.enableTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME);
+            admin.close();
+        }
+        
+        ResultSet rs = conn.createStatement().executeQuery("SELECT k FROM SYSTEM.NON_TX_TABLE WHERE v IS NULL");
+        assertTrue(rs.next());
+        assertEquals(1,rs.getInt(1));
+        assertFalse(rs.next());
+        
+        htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes("SYSTEM.NON_TX_TABLE"));
+        assertFalse(htable.getTableDescriptor().getCoprocessors().contains(TransactionProcessor.class.getName()));
+        assertEquals(1,conn.unwrap(PhoenixConnection.class).getQueryServices().
+                getTableDescriptor(Bytes.toBytes("SYSTEM.NON_TX_TABLE")).
+                getFamily(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES).getMaxVersions());
+    }
+    
+    @Test
+    public void testMaxVersions() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute("CREATE TABLE NON_TX_TABLE1(k INTEGER PRIMARY KEY, a.v VARCHAR, b.v VARCHAR, c.v VARCHAR)");
+        conn.createStatement().execute("CREATE INDEX idx1 ON NON_TX_TABLE1(a.v, b.v)");
+        conn.createStatement().execute("CREATE INDEX idx2 ON NON_TX_TABLE1(c.v) INCLUDE (a.v, b.v)");
+
+        conn.createStatement().execute("ALTER TABLE NON_TX_TABLE1 SET TRANSACTIONAL=true");
+
+        HTableDescriptor desc = conn.unwrap(PhoenixConnection.class).getQueryServices().getTableDescriptor(Bytes.toBytes("NON_TX_TABLE1"));
+        for (HColumnDescriptor colDesc : desc.getFamilies()) {
+            assertEquals(QueryServicesOptions.DEFAULT_MAX_VERSIONS_TRANSACTIONAL, colDesc.getMaxVersions());
+        }
+
+        desc = conn.unwrap(PhoenixConnection.class).getQueryServices().getTableDescriptor(Bytes.toBytes("IDX1"));
+        for (HColumnDescriptor colDesc : desc.getFamilies()) {
+            assertEquals(QueryServicesOptions.DEFAULT_MAX_VERSIONS_TRANSACTIONAL, colDesc.getMaxVersions());
+        }
+        
+        desc = conn.unwrap(PhoenixConnection.class).getQueryServices().getTableDescriptor(Bytes.toBytes("IDX2"));
+        for (HColumnDescriptor colDesc : desc.getFamilies()) {
+            assertEquals(QueryServicesOptions.DEFAULT_MAX_VERSIONS_TRANSACTIONAL, colDesc.getMaxVersions());
+        }
+        
+        conn.createStatement().execute("CREATE TABLE NON_TX_TABLE2(k INTEGER PRIMARY KEY, a.v VARCHAR, b.v VARCHAR, c.v VARCHAR)");
+        conn.createStatement().execute("ALTER TABLE NON_TX_TABLE2 SET TRANSACTIONAL=true, VERSIONS=10");
+        desc = conn.unwrap(PhoenixConnection.class).getQueryServices().getTableDescriptor(Bytes.toBytes("NON_TX_TABLE2"));
+        for (HColumnDescriptor colDesc : desc.getFamilies()) {
+            assertEquals(10, colDesc.getMaxVersions());
+        }
+
+        conn.createStatement().execute("CREATE TABLE NON_TX_TABLE3(k INTEGER PRIMARY KEY, a.v VARCHAR, b.v VARCHAR, c.v VARCHAR)");
+        conn.createStatement().execute("ALTER TABLE NON_TX_TABLE3 SET TRANSACTIONAL=true, b.VERSIONS=10, c.VERSIONS=20");
+        desc = conn.unwrap(PhoenixConnection.class).getQueryServices().getTableDescriptor(Bytes.toBytes("NON_TX_TABLE3"));
+        assertEquals(QueryServicesOptions.DEFAULT_MAX_VERSIONS_TRANSACTIONAL, desc.getFamily(Bytes.toBytes("A")).getMaxVersions());
+        assertEquals(10, desc.getFamily(Bytes.toBytes("B")).getMaxVersions());
+        assertEquals(20, desc.getFamily(Bytes.toBytes("C")).getMaxVersions());
+
+        conn.createStatement().execute("CREATE TABLE NON_TX_TABLE4(k INTEGER PRIMARY KEY, a.v VARCHAR, b.v VARCHAR, c.v VARCHAR)");
+        try {
+            conn.createStatement().execute("ALTER TABLE NON_TX_TABLE4 SET TRANSACTIONAL=true, VERSIONS=1");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.TX_MAX_VERSIONS_MUST_BE_GREATER_THAN_ONE.getErrorCode(), e.getErrorCode());
+        }
+
+        try {
+            conn.createStatement().execute("ALTER TABLE NON_TX_TABLE4 SET TRANSACTIONAL=true, b.VERSIONS=1");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.TX_MAX_VERSIONS_MUST_BE_GREATER_THAN_ONE.getErrorCode(), e.getErrorCode());
+        }
+    }
+        
+
 }
