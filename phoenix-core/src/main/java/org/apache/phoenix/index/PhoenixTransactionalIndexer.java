@@ -21,6 +21,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import co.cask.tephra.Transaction;
+import co.cask.tephra.Transaction.VisibilityLevel;
+import co.cask.tephra.TxConstants;
+import co.cask.tephra.hbase98.TransactionAwareHTable;
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.Cell;
@@ -233,14 +238,7 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
             if (isRollback) {
                 processRollback(env, indexMetaData, txRollbackAttribute, currentScanner, mutations, tx, mutableColumns, indexUpdates);
             } else {
-                processScanner(env, indexMetaData, txRollbackAttribute, currentScanner, mutations, tx, mutableColumns, indexUpdates);
-                for (Mutation m : mutations.values()) {
-                    TxTableState state = new TxTableState(env, mutableColumns, indexMetaData.getAttributes(), tx.getWritePointer(), m);
-                    // if we did not generate valid put, we might have to generate a delete
-                    if (!generatePuts(indexMetaData, indexUpdates, state)) {
-                        generateDeletes(indexMetaData, indexUpdates, txRollbackAttribute, state);
-                    }
-                }
+                processMutation(env, indexMetaData, txRollbackAttribute, currentScanner, mutations, tx, mutableColumns, indexUpdates);
             }
         } finally {
             if (txTable != null) txTable.close();
@@ -249,7 +247,7 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
         return indexUpdates;
     }
 
-    private void processScanner(RegionCoprocessorEnvironment env,
+    private void processMutation(RegionCoprocessorEnvironment env,
             PhoenixIndexMetaData indexMetaData, byte[] txRollbackAttribute,
             ResultScanner scanner,
             Map<ImmutableBytesPtr, MultiMutation> mutations, Transaction tx,
@@ -258,12 +256,18 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
         if (scanner != null) {
             Result result;
             ColumnReference emptyColRef = new ColumnReference(indexMetaData.getIndexMaintainers().get(0).getDataEmptyKeyValueCF(), QueryConstants.EMPTY_COLUMN_BYTES);
+            // Process existing data table rows by removing the old index row and adding the new index row
             while ((result = scanner.next()) != null) {
                 Mutation m = mutations.remove(new ImmutableBytesPtr(result.getRow()));
                 TxTableState state = new TxTableState(env, mutableColumns, indexMetaData.getAttributes(), tx.getWritePointer(), m, emptyColRef, result);
                 generateDeletes(indexMetaData, indexUpdates, txRollbackAttribute, state);
                 generatePuts(indexMetaData, indexUpdates, state);
             }
+        }
+        // Process new data table by adding new index rows
+        for (Mutation m : mutations.values()) {
+            TxTableState state = new TxTableState(env, mutableColumns, indexMetaData.getAttributes(), tx.getWritePointer(), m);
+            generatePuts(indexMetaData, indexUpdates, state);
         }
     }
 
@@ -275,10 +279,15 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
             Collection<Pair<Mutation, byte[]>> indexUpdates) throws IOException {
         if (scanner != null) {
             Result result;
+            // Loop through last committed row state plus all new rows associated with current transaction
+            // to generate point delete markers for all index rows that were added. We don't have Tephra
+            // manage index rows in change sets because we don't want to be hit with the additional
+            // memory hit and do not need to do conflict detection on index rows.
             ColumnReference emptyColRef = new ColumnReference(indexMetaData.getIndexMaintainers().get(0).getDataEmptyKeyValueCF(), QueryConstants.EMPTY_COLUMN_BYTES);
             while ((result = scanner.next()) != null) {
                 Mutation m = mutations.remove(new ImmutableBytesPtr(result.getRow()));
-                // Sort by timestamp, type, cf, cq so we can process in time batches
+                // Sort by timestamp, type, cf, cq so we can process in time batches from oldest to newest
+                // (as if we're "replaying" them in time order).
                 List<Cell> cells = result.listCells();
                 Collections.sort(cells, new Comparator<Cell>() {
 

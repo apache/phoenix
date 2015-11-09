@@ -31,6 +31,8 @@ import java.util.Map;
 import java.util.SortedMap;
 import java.util.TreeMap;
 
+import co.cask.tephra.TxConstants;
+
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Delete;
@@ -678,7 +680,7 @@ public class PTableImpl implements PTable {
 
         private Put setValues;
         private Delete unsetValues;
-        private Delete deleteRow;
+        private Mutation deleteRow;
         private final long ts;
 
         public PRowImpl(KeyValueBuilder kvBuilder, ImmutableBytesWritable key, long ts, Integer bucketNum) {
@@ -782,11 +784,20 @@ public class PTableImpl implements PTable {
         @Override
         public void delete() {
             newMutations();
-            Delete delete = new Delete(key);
-            for (PColumnFamily colFamily : families) {
-            	delete.addFamily(colFamily.getName().getBytes(), ts);
+            if (PTableImpl.this.isTransactional()) {
+                Put delete = new Put(key);
+                for (PColumnFamily colFamily : families) {
+                    delete.add(colFamily.getName().getBytes(), TxConstants.FAMILY_DELETE_QUALIFIER, ts,
+                            HConstants.EMPTY_BYTE_ARRAY);
+                }
+                deleteRow = delete;                
+            } else {
+                Delete delete = new Delete(key);
+                for (PColumnFamily colFamily : families) {
+                	delete.deleteFamily(colFamily.getName().getBytes(), ts);
+                }
+                deleteRow = delete;
             }
-            deleteRow = delete;
             // No need to write to the WAL for indexes
             if (PTableImpl.this.getType() == PTableType.INDEX) {
                 deleteRow.setDurability(Durability.SKIP_WAL);
