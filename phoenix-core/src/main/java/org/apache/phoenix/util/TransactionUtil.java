@@ -30,7 +30,7 @@ import org.apache.phoenix.schema.PTable;
 import co.cask.tephra.TransactionConflictException;
 import co.cask.tephra.TransactionFailureException;
 import co.cask.tephra.TxConstants;
-import co.cask.tephra.hbase98.TransactionAwareHTable;
+import co.cask.tephra.hbase11.TransactionAwareHTable;
 
 public class TransactionUtil {
     private TransactionUtil() {

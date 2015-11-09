@@ -185,61 +185,60 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
         }
     }
     
-    //TODO ENABLE THIS TEST AFTER MERGING MASTER TO SEE IF THE SCAN IS CREATED CORRECTLY
-//    @Test
-//    public void testDeleteFromNonPKColumnIndex() throws Exception {
-//        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-//        // create unique table and index names for each parameterized test
-//        String tableName = TestUtil.DEFAULT_DATA_TABLE_NAME + "_" + System.currentTimeMillis();
-//        String indexName = "IDX"  + "_" + System.currentTimeMillis();
-//        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
-//        String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
-//        String ddl ="CREATE TABLE " + fullTableName + BaseTest.TEST_TABLE_SCHEMA + tableDDLOptions;
-//        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-//	        conn.setAutoCommit(false);
-//	        Statement stmt = conn.createStatement();
-//	        stmt.execute(ddl);
-//	        BaseTest.populateTestTable(fullTableName);
-//	        ddl = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX " + indexName + " ON " + fullTableName
-//	                    + " (long_col1, long_col2)"
-//	                    + " INCLUDE (decimal_col1, decimal_col2)";
-//	        stmt.execute(ddl);
-//        }
-//        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {    
-//	        ResultSet rs;
-//	        
-//	        rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM " + fullTableName);
-//	        assertTrue(rs.next());
-//	        assertEquals(3,rs.getInt(1));
-//	        rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM " + fullIndexName);
-//	        assertTrue(rs.next());
-//	        assertEquals(3,rs.getInt(1));
-//	        
-//	        String dml = "DELETE from " + fullTableName + " WHERE long_col2 = 4";
-//	        assertEquals(1,conn.createStatement().executeUpdate(dml));
-//	        conn.commit();
-//
-//	        // query the data table
-//	        String query = "SELECT /*+ NO_INDEX */ long_pk FROM " + fullTableName;
-//	        rs = conn.createStatement().executeQuery(query);
-//	        assertTrue(rs.next());
-//	        assertEquals(1L, rs.getLong(1));
-//	        assertTrue(rs.next());
-//	        assertEquals(3L, rs.getLong(1));
-//	        assertFalse(rs.next());
-//	        
-//	        // query the index table
-//	        query = "SELECT long_pk FROM " + fullTableName + " ORDER BY long_col1";
-//	        rs = conn.createStatement().executeQuery(query);
-//	        assertTrue(rs.next());
-//	        assertEquals(1L, rs.getLong(1));
-//	        assertTrue(rs.next());
-//	        assertEquals(3L, rs.getLong(1));
-//	        assertFalse(rs.next());
-//	        
-//	        conn.createStatement().execute("DROP INDEX " + indexName + " ON " + fullTableName);
-//        }
-//    }
+    @Test
+    public void testDeleteFromNonPKColumnIndex() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        // create unique table and index names for each parameterized test
+        String tableName = TestUtil.DEFAULT_DATA_TABLE_NAME + "_" + System.currentTimeMillis();
+        String indexName = "IDX"  + "_" + System.currentTimeMillis();
+        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+        String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
+        String ddl ="CREATE TABLE " + fullTableName + BaseTest.TEST_TABLE_SCHEMA + tableDDLOptions;
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+	        conn.setAutoCommit(false);
+	        Statement stmt = conn.createStatement();
+	        stmt.execute(ddl);
+	        BaseTest.populateTestTable(fullTableName);
+	        ddl = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX " + indexName + " ON " + fullTableName
+	                    + " (long_col1, long_col2)"
+	                    + " INCLUDE (decimal_col1, decimal_col2)";
+	        stmt.execute(ddl);
+        }
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {    
+	        ResultSet rs;
+	        
+	        rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM " + fullTableName);
+	        assertTrue(rs.next());
+	        assertEquals(3,rs.getInt(1));
+	        rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM " + fullIndexName);
+	        assertTrue(rs.next());
+	        assertEquals(3,rs.getInt(1));
+	        
+	        String dml = "DELETE from " + fullTableName + " WHERE long_col2 = 4";
+	        assertEquals(1,conn.createStatement().executeUpdate(dml));
+	        conn.commit();
+
+	        // query the data table
+	        String query = "SELECT /*+ NO_INDEX */ long_pk FROM " + fullTableName;
+	        rs = conn.createStatement().executeQuery(query);
+	        assertTrue(rs.next());
+	        assertEquals(1L, rs.getLong(1));
+	        assertTrue(rs.next());
+	        assertEquals(3L, rs.getLong(1));
+	        assertFalse(rs.next());
+	        
+	        // query the index table
+	        query = "SELECT long_pk FROM " + fullTableName + " ORDER BY long_col1";
+	        rs = conn.createStatement().executeQuery(query);
+	        assertTrue(rs.next());
+	        assertEquals(1L, rs.getLong(1));
+	        assertTrue(rs.next());
+	        assertEquals(3L, rs.getLong(1));
+	        assertFalse(rs.next());
+	        
+	        conn.createStatement().execute("DROP INDEX " + indexName + " ON " + fullTableName);
+        }
+    }
     
     @Test
     public void testGroupByCount() throws Exception {

@@ -27,6 +27,7 @@ import static org.apache.phoenix.util.UpgradeUtil.upgradeTo4_5_0;
 
 import java.io.IOException;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -49,7 +50,7 @@ import co.cask.tephra.TransactionSystemClient;
 import co.cask.tephra.TxConstants;
 import co.cask.tephra.distributed.PooledClientProvider;
 import co.cask.tephra.distributed.TransactionServiceClient;
-import co.cask.tephra.hbase98.coprocessor.TransactionProcessor;
+import co.cask.tephra.hbase11.coprocessor.TransactionProcessor;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HColumnDescriptor;
@@ -1387,7 +1388,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             builder.addTableMetadataMutations(mp.toByteString());
                         }
                         builder.setClientVersion(VersionUtil.encodeVersion(PHOENIX_MAJOR_VERSION, PHOENIX_MINOR_VERSION, PHOENIX_PATCH_NUMBER));
-                        instance.createTable(controller, builder.build(), rpcCallback);
+                        CreateTableRequest build = builder.build();
+						instance.createTable(controller, build, rpcCallback);
                         if(controller.getFailedOn() != null) {
                             throw controller.getFailedOn();
                         }
@@ -1621,7 +1623,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     
     @Override
     public MetaDataMutationResult addColumn(final List<Mutation> tableMetaData, PTable table, Map<String, List<Pair<String,Object>>> stmtProperties, Set<String> colFamiliesForPColumnsToBeAdded) throws SQLException {
-        Map<String, Object> tableProps = new HashMap<String, Object>();
+    	List<Pair<byte[], Map<String, Object>>> families = new ArrayList<>(stmtProperties.size());
+    	Map<String, Object> tableProps = new HashMap<String, Object>();
         Set<HTableDescriptor> tableDescriptors = Collections.emptySet();
         Set<HTableDescriptor> origTableDescriptors = Collections.emptySet();
         boolean nonTxToTx = false;
@@ -1692,7 +1695,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             MutationProto mp = ProtobufUtil.toProto(m);
                             builder.addTableMetadataMutations(mp.toByteString());
                         }
-    
+                        builder.setClientVersion(VersionUtil.encodeVersion(PHOENIX_MAJOR_VERSION, PHOENIX_MINOR_VERSION, PHOENIX_PATCH_NUMBER));
                         instance.addColumn(controller, builder.build(), rpcCallback);
                         if(controller.getFailedOn() != null) {
                             throw controller.getFailedOn();

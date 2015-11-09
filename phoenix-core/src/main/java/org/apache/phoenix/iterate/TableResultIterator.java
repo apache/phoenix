@@ -67,11 +67,6 @@ public class TableResultIterator implements ResultIterator {
                 delegate = this.delegate;
                 if (delegate == null) {
                     try {
-                    	ResultScanner resultScanner = htable.getScanner(scan);
-                    	Result result = null;
-                    	while ( (result = resultScanner.next())!=null ) {
-                        	System.out.println(result);
-                        }
                         this.delegate = delegate = isClosing ? ResultIterator.EMPTY_ITERATOR : new ScanningResultIterator(htable.getScanner(scan), scanMetrics);
                     } catch (IOException e) {
                         Closeables.closeQuietly(htable);

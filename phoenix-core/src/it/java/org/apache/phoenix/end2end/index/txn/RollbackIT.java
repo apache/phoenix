@@ -52,7 +52,8 @@ public class RollbackIT extends BaseHBaseManagedTimeIT {
 	@Parameters(name="localIndex = {0} , mutable = {1}")
     public static Collection<Boolean[]> data() {
         return Arrays.asList(new Boolean[][] {     
-                 { false, false }, { false, true }, { true, false }, { true, true }  
+                 { false, false }, { false, true },
+                 { true, false }, { true, true }  
            });
     }
     

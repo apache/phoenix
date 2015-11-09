@@ -31,6 +31,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import javax.annotation.Nonnull;
+import javax.annotation.concurrent.Immutable;
+
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.HTableInterface;
@@ -96,7 +99,7 @@ import co.cask.tephra.TransactionCodec;
 import co.cask.tephra.TransactionContext;
 import co.cask.tephra.TransactionFailureException;
 import co.cask.tephra.TransactionSystemClient;
-import co.cask.tephra.hbase98.TransactionAwareHTable;
+import co.cask.tephra.hbase11.TransactionAwareHTable;
 
 /**
  * 
@@ -485,7 +488,7 @@ public class MutationState implements SQLCloseable {
 		Iterator<Map.Entry<ImmutableBytesPtr,RowMutationState>> iterator = values.entrySet().iterator();
 		long timestampToUse = timestamp;
         while (iterator.hasNext()) {
-            Entry<ImmutableBytesPtr, RowMutationState> rowEntry = iterator.next();
+        	Map.Entry<ImmutableBytesPtr, RowMutationState> rowEntry = iterator.next();
             ImmutableBytesPtr key = rowEntry.getKey();
             RowMutationState state = rowEntry.getValue();
             if (tableWithRowTimestampCol) {
@@ -728,7 +731,7 @@ public class MutationState implements SQLCloseable {
 	        	// at this point we are going through mutations for each table
 	            TableRef tableRef = tableRefIterator.next();
 	            Map<ImmutableBytesPtr, RowMutationState> valuesMap = mutations.get(tableRef);
-	            if (valuesMap == null) {
+	            if (valuesMap == null || valuesMap.isEmpty()) {
 	                continue;
 	            }
 	            PTable table = tableRef.getTable();

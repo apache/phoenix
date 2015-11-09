@@ -63,7 +63,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import co.cask.tephra.TxConstants;
-import co.cask.tephra.hbase98.coprocessor.TransactionProcessor;
+import co.cask.tephra.hbase11.coprocessor.TransactionProcessor;
 
 /**
  *

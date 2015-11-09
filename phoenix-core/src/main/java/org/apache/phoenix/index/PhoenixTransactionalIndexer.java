@@ -72,7 +72,7 @@ import com.google.common.primitives.Longs;
 import co.cask.tephra.Transaction;
 import co.cask.tephra.Transaction.VisibilityLevel;
 import co.cask.tephra.TxConstants;
-import co.cask.tephra.hbase98.TransactionAwareHTable;
+import co.cask.tephra.hbase11.TransactionAwareHTable;
 
 /**
  * Do all the work of managing index updates for a transactional table from a single coprocessor. Since the transaction

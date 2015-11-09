@@ -883,7 +883,16 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         }
         // This is what a delete looks like on the server side for mutable indexing...
         // Should all be one or the other for DeleteFamily versus DeleteFamilyVersion, but just in case not
-        return nDeleteVersionCF >= this.nDataCFs ? DeleteType.SINGLE_VERSION : nDeleteCF + nDeleteVersionCF >= this.nDataCFs ? DeleteType.ALL_VERSIONS : null;
+        DeleteType deleteType = null; 
+        if (nDeleteVersionCF > 0 && nDeleteVersionCF >= this.nDataCFs) {
+        	deleteType = DeleteType.SINGLE_VERSION;
+        } else {
+			int nDelete = nDeleteCF + nDeleteVersionCF;
+			if (nDelete>0 && nDelete >= this.nDataCFs) {
+				deleteType = DeleteType.ALL_VERSIONS;
+			}
+		}
+        return deleteType;
     }
     
     public boolean isRowDeleted(Collection<KeyValue> pendingUpdates) {

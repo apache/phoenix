@@ -44,7 +44,7 @@ import org.junit.Test;
 
 import com.google.common.collect.Lists;
 
-import co.cask.tephra.hbase98.coprocessor.TransactionProcessor;
+import co.cask.tephra.hbase11.coprocessor.TransactionProcessor;
 
 public class TransactionIT extends BaseHBaseManagedTimeIT {
 	
