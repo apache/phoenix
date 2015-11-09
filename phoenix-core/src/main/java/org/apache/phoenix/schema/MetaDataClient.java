@@ -2601,7 +2601,7 @@ public class MetaDataClient {
 
                 if (numPkColumnsAdded>0 && !table.getIndexes().isEmpty()) {
                     for (PTable index : table.getIndexes()) {
-                        incrementTableSeqNum(index, index.getType(), 1);
+                        incrementTableSeqNum(index, index.getType(), numPkColumnsAdded);
                     }
                     tableMetaData.addAll(connection.getMutationState().toMutations().next().getSecond());
                     connection.rollback();
@@ -2831,7 +2831,7 @@ public class MetaDataClient {
                         }
                     }
                     if(!indexColumnsToDrop.isEmpty()) {
-                        incrementTableSeqNum(index, index.getType(), -1);
+                        incrementTableSeqNum(index, index.getType(), -indexColumnsToDrop.size());
                         dropColumnMutations(index, indexColumnsToDrop, tableMetaData);
                     }
 
@@ -2839,7 +2839,7 @@ public class MetaDataClient {
                 tableMetaData.addAll(connection.getMutationState().toMutations().next().getSecond());
                 connection.rollback();
 
-                long seqNum = incrementTableSeqNum(table, statement.getTableType(), -1);
+                long seqNum = incrementTableSeqNum(table, statement.getTableType(), -tableColumnsToDrop.size());
                 tableMetaData.addAll(connection.getMutationState().toMutations().next().getSecond());
                 connection.rollback();
                 // Force table header to be first in list
