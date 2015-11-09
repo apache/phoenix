@@ -80,12 +80,18 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
         planner.addRule(PhoenixInnerSortRemoveRule.INSTANCE);
         planner.addRule(PhoenixOrderedAggregateRule.INSTANCE);
         
-        if (prepareContext.config().materializationsEnabled()) {
-            for (CalciteSchema subSchema : prepareContext.getRootSchema().getSubSchemaMap().values()) {
-                if (subSchema.schema instanceof PhoenixSchema) {
-                    ((PhoenixSchema) subSchema.schema).defineIndexesAsMaterializations();
-                    for (CalciteSchema phoenixSubSchema : subSchema.getSubSchemaMap().values()) {
-                        ((PhoenixSchema) phoenixSubSchema.schema).defineIndexesAsMaterializations();
+        for (CalciteSchema schema : prepareContext.getRootSchema().getSubSchemaMap().values()) {
+            if (schema.schema instanceof PhoenixSchema) {
+                PhoenixSchema phoenixSchema = (PhoenixSchema) schema.schema;
+                phoenixSchema.initFunctionMap(schema);
+                if (prepareContext.config().materializationsEnabled()) {
+                    phoenixSchema.defineIndexesAsMaterializations(schema);
+                }
+                for (CalciteSchema subSchema : schema.getSubSchemaMap().values()) {
+                    PhoenixSchema phoenixSubSchema = (PhoenixSchema) subSchema.schema;
+                    phoenixSubSchema.initFunctionMap(subSchema);
+                    if (prepareContext.config().materializationsEnabled()) {
+                        phoenixSubSchema.defineIndexesAsMaterializations(subSchema);
                     }
                 }
             }

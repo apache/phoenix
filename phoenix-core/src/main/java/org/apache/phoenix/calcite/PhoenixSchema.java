@@ -40,6 +40,12 @@ import java.util.Set;
 
 /**
  * Implementation of Calcite's {@link Schema} SPI for Phoenix.
+ * 
+ * TODO
+ * 1) change this to non-caching mode??
+ * 2) how to deal with define indexes and views since they require a CalciteSchema
+ *    instance??
+ *
  */
 public class PhoenixSchema implements Schema {
     public static final Factory FACTORY = new Factory();
@@ -47,23 +53,21 @@ public class PhoenixSchema implements Schema {
     
     protected final String name;
     protected final String schemaName;
-    protected final SchemaPlus parentSchema;
     protected final PhoenixConnection pc;
     protected final MetaDataClient client;
-    protected final CalciteSchema calciteSchema;
     
     protected final Set<String> subSchemaNames;
     protected final Map<String, PTable> tableMap;
+    protected final Map<String, ViewDef> viewDefMap;
     protected final Map<String, Function> functionMap;
     
-    private PhoenixSchema(String name, SchemaPlus parentSchema, String schemaName, PhoenixConnection pc) {
+    private PhoenixSchema(String name, String schemaName, PhoenixConnection pc) {
         this.name = name;
         this.schemaName = schemaName;
-        this.parentSchema = parentSchema;
         this.pc = pc;
         this.client = new MetaDataClient(pc);
-        this.calciteSchema = new CalciteSchema(CalciteSchema.from(parentSchema), this, name);
         this.tableMap = Maps.<String, PTable> newHashMap();
+        this.viewDefMap = Maps.<String, ViewDef> newHashMap();
         this.functionMap = Maps.<String, Function> newHashMap();
         loadTables();
         this.subSchemaNames = schemaName == null ? 
@@ -110,7 +114,7 @@ public class PhoenixSchema implements Schema {
                 } else {
                     String viewSql = rs.getString(PhoenixDatabaseMetaData.VIEW_STATEMENT);
                     String viewType = rs.getString(PhoenixDatabaseMetaData.VIEW_TYPE);
-                    functionMap.put(tableName, ViewTable.viewMacro(calciteSchema.plus(), viewSql, calciteSchema.path(null), viewType.equals(ViewType.UPDATABLE.name())));
+                    viewDefMap.put(tableName, new ViewDef(viewSql, viewType.equals(ViewType.UPDATABLE.name())));
                 }
             }
         } catch (SQLException e) {
@@ -118,7 +122,7 @@ public class PhoenixSchema implements Schema {
         }
     }
 
-    private static Schema create(String name, SchemaPlus parentSchema, Map<String, Object> operand) {
+    private static Schema create(String name, Map<String, Object> operand) {
         String url = (String) operand.get("url");
         final Properties properties = new Properties();
         for (Map.Entry<String, Object> entry : operand.entrySet()) {
@@ -130,7 +134,7 @@ public class PhoenixSchema implements Schema {
                 DriverManager.getConnection(url, properties);
             final PhoenixConnection phoenixConnection =
                 connection.unwrap(PhoenixConnection.class);
-            return new PhoenixSchema(name, parentSchema, null, phoenixConnection);
+            return new PhoenixSchema(name, null, phoenixConnection);
         } catch (ClassNotFoundException e) {
             throw new RuntimeException(e);
         } catch (SQLException e) {
@@ -152,12 +156,12 @@ public class PhoenixSchema implements Schema {
     @Override
     public Collection<Function> getFunctions(String name) {
         Function func = functionMap.get(name);
-        return func == null ? Collections.<Function>emptyList() : ImmutableList.of(functionMap.get(name));
+        return func == null ? Collections.<Function>emptyList() : ImmutableList.of(func);
     }
 
     @Override
     public Set<String> getFunctionNames() {
-        return functionMap.keySet();
+        return viewDefMap.keySet();
     }
 
     @Override
@@ -165,7 +169,7 @@ public class PhoenixSchema implements Schema {
         if (!subSchemaNames.contains(name))
             return null;
         
-        return new PhoenixSchema(name, calciteSchema.plus(), name, pc);
+        return new PhoenixSchema(name, name, pc);
     }
 
     @Override
@@ -188,14 +192,24 @@ public class PhoenixSchema implements Schema {
         return false;
     }
     
-    public void defineIndexesAsMaterializations() {
+    public void initFunctionMap(CalciteSchema calciteSchema) {
+        for (Map.Entry<String, ViewDef> entry : viewDefMap.entrySet()) {
+            ViewDef viewDef = entry.getValue();
+            Function func = ViewTable.viewMacro(
+                    calciteSchema.plus(), viewDef.viewSql,
+                    calciteSchema.path(null), viewDef.updatable);
+            functionMap.put(entry.getKey(), func);
+        }
+    }
+    
+    public void defineIndexesAsMaterializations(CalciteSchema calciteSchema) {
         List<String> path = calciteSchema.path(null);
         for (Map.Entry<String, PTable> entry : tableMap.entrySet()) {
             final String tableName = entry.getKey();
             final PTable table = entry.getValue();
             if (!isUnorderedTableName(tableName)) {
                 for (PTable index : table.getIndexes()) {
-                    addMaterialization(table, index, path);
+                    addMaterialization(table, index, path, calciteSchema);
                 }
             }
         }
@@ -203,12 +217,13 @@ public class PhoenixSchema implements Schema {
             final String tableName = entry.getKey();
             final PTable table = entry.getValue();
             if (isUnorderedTableName(tableName)) {
-                addUnorderedAsMaterialization(tableName, table, path);
+                addUnorderedAsMaterialization(tableName, table, path, calciteSchema);
             }
         }
     }
     
-    protected void addMaterialization(PTable table, PTable index, List<String> path) {
+    protected void addMaterialization(PTable table, PTable index, List<String> path,
+            CalciteSchema calciteSchema) {
         StringBuffer sb = new StringBuffer();
         sb.append("SELECT");
         for (int i = PhoenixTable.getStartingColumnPosition(index); i < index.getColumns().size(); i++) {
@@ -224,7 +239,8 @@ public class PhoenixSchema implements Schema {
                 calciteSchema, null, sb.toString(), path, index.getTableName().getString(), true, true);        
     }
     
-    protected void addUnorderedAsMaterialization(String tableName, PTable table, List<String> path) {
+    protected void addUnorderedAsMaterialization(String tableName, PTable table, List<String> path,
+            CalciteSchema calciteSchema) {
         StringBuffer sb = new StringBuffer();
         sb.append("SELECT * FROM ")
             .append("\"")
@@ -236,6 +252,16 @@ public class PhoenixSchema implements Schema {
     
     private boolean isUnorderedTableName(String tableName) {
         return tableName.endsWith(UNORDERED_SUFFIX);
+    }
+    
+    private static class ViewDef {
+        final String viewSql;
+        final boolean updatable;
+        
+        ViewDef(String viewSql, boolean updatable) {
+            this.viewSql = viewSql;
+            this.updatable = updatable;
+        }
     }
 
     /** Schema factory that creates a
@@ -263,7 +289,7 @@ public class PhoenixSchema implements Schema {
      */
     public static class Factory implements SchemaFactory {
         public Schema create(SchemaPlus parentSchema, String name, Map<String, Object> operand) {
-            return PhoenixSchema.create(name, parentSchema, operand);
+            return PhoenixSchema.create(name, operand);
         }
     }
 }
