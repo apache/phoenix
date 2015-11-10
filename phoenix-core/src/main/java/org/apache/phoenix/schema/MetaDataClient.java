@@ -2738,7 +2738,6 @@ public class MetaDataClient {
 
                 if (!table.getIndexes().isEmpty() && (numPkColumnsAdded>0 || nonTxToTx)) {
                     for (PTable index : table.getIndexes()) {
-                        // TODO: verify master has fix for multiple index columns added and unit test
                         incrementTableSeqNum(index, index.getType(), numPkColumnsAdded, nonTxToTx ? Boolean.TRUE : null);
                     }
                     tableMetaData.addAll(connection.getMutationState().toMutations(timeStamp).next().getSecond());
@@ -2981,7 +2980,6 @@ public class MetaDataClient {
                         }
                     }
                     if(!indexColumnsToDrop.isEmpty()) {
-                        // TODO: verify master has fix for multiple index columns dropped and unit test
                         incrementTableSeqNum(index, index.getType(), -indexColumnsToDrop.size(), null);
                         dropColumnMutations(index, indexColumnsToDrop, tableMetaData);
                     }
@@ -2991,7 +2989,6 @@ public class MetaDataClient {
                 tableMetaData.addAll(connection.getMutationState().toMutations(timeStamp).next().getSecond());
                 connection.rollback();
 
-                // TODO: verify master has fix for multiple data columns dropped and unit test
                 long seqNum = incrementTableSeqNum(table, statement.getTableType(), -tableColumnsToDrop.size(), null);
                 tableMetaData.addAll(connection.getMutationState().toMutations(timeStamp).next().getSecond());
                 connection.rollback();

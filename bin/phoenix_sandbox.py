@@ -33,8 +33,8 @@ cp_file_path = os.path.join(phoenix_target_dir, 'cached_classpath.txt')
 
 
 if not os.path.exists(cp_file_path):
-    sys.err.write("cached_classpath.txt is not present under "
-                + "phoenix-core/target, please rebuild the project first")
+    sys.stderr.write("cached_classpath.txt is not present under "
+                + "phoenix-core/target, please rebuild the project first\n")
     sys.exit(1)
 
 logging_config = os.path.join(base_dir, 'bin', 'sandbox-log4j.properties')

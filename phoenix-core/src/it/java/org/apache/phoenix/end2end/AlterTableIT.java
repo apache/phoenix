@@ -974,6 +974,115 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
     }
 
     @Test
+    public void testAddMultipleColumns() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String ddl = "CREATE TABLE T (\n"
+                +"ID VARCHAR(15) PRIMARY KEY,\n"
+                +"COL1 BIGINT)";
+        Connection conn1 = DriverManager.getConnection(getUrl(), props);
+        conn1.createStatement().execute(ddl);
+        conn1.createStatement().execute("CREATE INDEX I ON T(COL1)");
+        
+        ddl = "ALTER TABLE T ADD COL2 VARCHAR PRIMARY KEY, COL3 VARCHAR PRIMARY KEY";
+        conn1.createStatement().execute(ddl);
+        ResultSet rs = conn1.getMetaData().getColumns("", "", "T", null);
+        assertTrue(rs.next());
+        assertEquals("ID",rs.getString(4));
+        assertTrue(rs.next());
+        assertEquals("COL1",rs.getString(4));
+        assertTrue(rs.next());
+        assertEquals("COL2",rs.getString(4));
+        assertTrue(rs.next());
+        assertEquals("COL3",rs.getString(4));
+        assertFalse(rs.next());
+        
+        rs = conn1.createStatement().executeQuery("SELECT COLUMN_COUNT FROM SYSTEM.CATALOG\n"
+                + "WHERE TENANT_ID IS NULL AND\n"
+                + "TABLE_SCHEM IS NULL AND TABLE_NAME = 'T' AND\n"
+                + "COLUMN_FAMILY IS NULL AND COLUMN_NAME IS NULL");
+        assertTrue(rs.next());
+        assertEquals(4,rs.getInt(1));
+        assertFalse(rs.next());
+
+        rs = conn1.createStatement().executeQuery("SELECT COLUMN_COUNT FROM SYSTEM.CATALOG\n"
+                + "WHERE TENANT_ID IS NULL AND\n"
+                + "TABLE_SCHEM IS NULL AND TABLE_NAME = 'I' AND\n"
+                + "COLUMN_FAMILY IS NULL AND COLUMN_NAME IS NULL");
+        assertTrue(rs.next());
+        assertEquals(4,rs.getInt(1));
+        assertFalse(rs.next());
+        
+        conn1.createStatement().execute("UPSERT INTO T VALUES ('a',2,'a','b')");
+        conn1.createStatement().execute("UPSERT INTO T VALUES ('b',3,'b','c')");
+        conn1.createStatement().execute("UPSERT INTO T VALUES ('c',4,'c','c')");
+        conn1.commit();
+        
+        rs = conn1.createStatement().executeQuery("SELECT ID,COL1 FROM T WHERE COL1=3");
+        assertTrue(rs.next());
+        assertEquals("b",rs.getString(1));
+        assertEquals(3,rs.getLong(2));
+        assertFalse(rs.next());
+        
+        conn1.close();
+    }
+
+
+    @Test
+    public void testDropMultipleColumns() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String ddl = "CREATE TABLE T (\n"
+                + "ID VARCHAR(15) PRIMARY KEY,\n"
+                + "COL1 BIGINT,"
+                + "COL2 BIGINT,"
+                + "COL3 BIGINT,"
+                + "COL4 BIGINT)";
+        Connection conn1 = DriverManager.getConnection(getUrl(), props);
+        conn1.createStatement().execute(ddl);
+        conn1.createStatement().execute("CREATE INDEX I ON T(COL1) INCLUDE (COL2,COL3,COL4)");
+        
+        ddl = "ALTER TABLE T DROP COLUMN COL2, COL3";
+        conn1.createStatement().execute(ddl);
+        ResultSet rs = conn1.getMetaData().getColumns("", "", "T", null);
+        assertTrue(rs.next());
+        assertEquals("ID",rs.getString(4));
+        assertTrue(rs.next());
+        assertEquals("COL1",rs.getString(4));
+        assertTrue(rs.next());
+        assertEquals("COL4",rs.getString(4));
+        assertFalse(rs.next());
+        
+        rs = conn1.createStatement().executeQuery("SELECT COLUMN_COUNT FROM SYSTEM.CATALOG\n"
+                + "WHERE TENANT_ID IS NULL AND\n"
+                + "TABLE_SCHEM IS NULL AND TABLE_NAME = 'T' AND\n"
+                + "COLUMN_FAMILY IS NULL AND COLUMN_NAME IS NULL");
+        assertTrue(rs.next());
+        assertEquals(3,rs.getInt(1));
+        assertFalse(rs.next());
+
+        rs = conn1.createStatement().executeQuery("SELECT COLUMN_COUNT FROM SYSTEM.CATALOG\n"
+                + "WHERE TENANT_ID IS NULL AND\n"
+                + "TABLE_SCHEM IS NULL AND TABLE_NAME = 'I' AND\n"
+                + "COLUMN_FAMILY IS NULL AND COLUMN_NAME IS NULL");
+        assertTrue(rs.next());
+        assertEquals(3,rs.getInt(1));
+        assertFalse(rs.next());
+        
+        conn1.createStatement().execute("UPSERT INTO T VALUES ('a',2, 20)");
+        conn1.createStatement().execute("UPSERT INTO T VALUES ('b',3, 30)");
+        conn1.createStatement().execute("UPSERT INTO T VALUES ('c',4, 40)");
+        conn1.commit();
+        
+        rs = conn1.createStatement().executeQuery("SELECT ID,COL1,COL4 FROM T WHERE COL1=3");
+        assertTrue(rs.next());
+        assertEquals("b",rs.getString(1));
+        assertEquals(3,rs.getLong(2));
+        assertEquals(30,rs.getLong(3));
+        assertFalse(rs.next());
+        
+        conn1.close();
+    }
+
+    @Test
     public void testAddColumnForNewColumnFamily() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String ddl = "CREATE TABLE testAddColumnForNewColumnFamily (\n"
