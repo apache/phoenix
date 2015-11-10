@@ -46,12 +46,6 @@ import java.util.concurrent.TimeoutException;
 
 import javax.annotation.concurrent.GuardedBy;
 
-import co.cask.tephra.TransactionSystemClient;
-import co.cask.tephra.TxConstants;
-import co.cask.tephra.distributed.PooledClientProvider;
-import co.cask.tephra.distributed.TransactionServiceClient;
-import co.cask.tephra.hbase11.coprocessor.TransactionProcessor;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
@@ -179,7 +173,6 @@ import org.apache.twill.zookeeper.ZKClients;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.base.Stopwatch;
 import com.google.common.base.Joiner;
 import com.google.common.base.Throwables;
 import com.google.common.cache.Cache;
@@ -188,6 +181,12 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+
+import co.cask.tephra.TransactionSystemClient;
+import co.cask.tephra.TxConstants;
+import co.cask.tephra.distributed.PooledClientProvider;
+import co.cask.tephra.distributed.TransactionServiceClient;
+import co.cask.tephra.hbase11.coprocessor.TransactionProcessor;
 
 
 public class ConnectionQueryServicesImpl extends DelegateQueryServices implements ConnectionQueryServices {
@@ -1658,7 +1657,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 // When adding a column to a view, base physical table should only be modified when new column families are being added.  
                 modifyHTable = canViewsAddNewCF && !existingColumnFamiliesForBaseTable(table.getPhysicalName()).containsAll(colFamiliesForPColumnsToBeAdded);
             }
-            boolean pollingNotNeeded = (!tableProps.isEmpty() && !existingColumnFamilies(table).containsAll(colFamiliesForPColumnsToBeAdded));
             if (modifyHTable) {
                 sendHBaseMetaData(tableDescriptors, pollingNeeded);
             }
@@ -1759,11 +1757,18 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 if (index.getColumnFamilies().isEmpty()) {
                     byte[] dataFamilyName = SchemaUtil.getEmptyColumnFamily(table);
                     byte[] indexFamilyName = SchemaUtil.getEmptyColumnFamily(index);
-                    indexDescriptor.getFamily(indexFamilyName).setMaxVersions(tableDescriptor.getFamily(dataFamilyName).getMaxVersions());
+                    HColumnDescriptor indexColDescriptor = indexDescriptor.getFamily(indexFamilyName);
+                    HColumnDescriptor tableColDescriptor = tableDescriptor.getFamily(dataFamilyName);
+                    indexColDescriptor.setMaxVersions(tableColDescriptor.getMaxVersions());
+                    indexColDescriptor.setValue(TxConstants.PROPERTY_TTL, tableColDescriptor.getValue(TxConstants.PROPERTY_TTL));
                 } else {
                     for (PColumnFamily family : index.getColumnFamilies()) {
                         byte[] familyName = family.getName().getBytes();
                         indexDescriptor.getFamily(familyName).setMaxVersions(tableDescriptor.getFamily(familyName).getMaxVersions());
+                        HColumnDescriptor indexColDescriptor = indexDescriptor.getFamily(familyName);
+                        HColumnDescriptor tableColDescriptor = tableDescriptor.getFamily(familyName);
+                        indexColDescriptor.setMaxVersions(tableColDescriptor.getMaxVersions());
+                        indexColDescriptor.setValue(TxConstants.PROPERTY_TTL, tableColDescriptor.getValue(TxConstants.PROPERTY_TTL));
                     }
                 }
                 setTransactional(indexDescriptor, index.getType(), txValue, indexTableProps);
@@ -1802,13 +1807,18 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             HTableDescriptor indexDescriptor) {
         if (table.getColumnFamilies().isEmpty()) {
             byte[] familyName = SchemaUtil.getEmptyColumnFamily(table);
-            indexDescriptor.getFamily(familyName).setMaxVersions(tableDescriptor.getFamily(familyName).getMaxVersions());
+            HColumnDescriptor indexColDescriptor = indexDescriptor.getFamily(familyName);
+            HColumnDescriptor tableColDescriptor = tableDescriptor.getFamily(familyName);
+            indexColDescriptor.setMaxVersions(tableColDescriptor.getMaxVersions());
+            indexColDescriptor.setValue(TxConstants.PROPERTY_TTL, tableColDescriptor.getValue(TxConstants.PROPERTY_TTL));
         } else {
             for (PColumnFamily family : table.getColumnFamilies()) {
                 byte[] familyName = family.getName().getBytes();
-                HColumnDescriptor colDescriptor = indexDescriptor.getFamily(familyName);
-                if (colDescriptor != null) {
-                    colDescriptor.setMaxVersions(tableDescriptor.getFamily(familyName).getMaxVersions());
+                HColumnDescriptor indexColDescriptor = indexDescriptor.getFamily(familyName);
+                if (indexColDescriptor != null) {
+                    HColumnDescriptor tableColDescriptor = tableDescriptor.getFamily(familyName);
+                    indexColDescriptor.setMaxVersions(tableColDescriptor.getMaxVersions());
+                    indexColDescriptor.setValue(TxConstants.PROPERTY_TTL, tableColDescriptor.getValue(TxConstants.PROPERTY_TTL));
                 }
             }
         }
@@ -1846,12 +1856,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private Pair<HTableDescriptor,HTableDescriptor> separateAndValidateProperties(PTable table, Map<String, List<Pair<String, Object>>> properties, Set<String> colFamiliesForPColumnsToBeAdded, List<Pair<byte[], Map<String, Object>>> families, Map<String, Object> tableProps) throws SQLException {
         Map<String, Map<String, Object>> stmtFamiliesPropsMap = new HashMap<>(properties.size());
         Map<String,Object> commonFamilyProps = new HashMap<>();
-        boolean addingColumns = colFamiliesForPColumnsToBeAdded != null && colFamiliesForPColumnsToBeAdded.size() > 0;
+        boolean addingColumns = colFamiliesForPColumnsToBeAdded != null && !colFamiliesForPColumnsToBeAdded.isEmpty();
         HashSet<String> existingColumnFamilies = existingColumnFamilies(table);
         Map<String, Map<String, Object>> allFamiliesProps = new HashMap<>(existingColumnFamilies.size());
         boolean isTransactional = table.isTransactional();
         boolean willBeTransactional = false;
         boolean isOrWillBeTransactional = isTransactional;
+        Integer newTTL = null;
         for (String family : properties.keySet()) {
             List<Pair<String, Object>> propsList = properties.get(family);
             if (propsList != null && propsList.size() > 0) {
@@ -1877,6 +1888,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         if (TableProperty.isPhoenixTableProperty(propName)) {
                             TableProperty.valueOf(propName).validate(true, !family.equals(QueryConstants.ALL_FAMILY_PROPERTIES_KEY), table.getType());
                             if (propName.equals(TTL)) {
+                                newTTL = ((Number)prop.getSecond()).intValue();
                                 // Even though TTL is really a HColumnProperty we treat it specially.
                                 // We enforce that all column families have the same TTL.
                                 commonFamilyProps.put(propName, prop.getSecond());
@@ -1997,13 +2009,22 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 }
             }
             if (addingColumns) {
-                // FIXME: we should be setting TTL on all table column families, not
-                // just the ones being modified here (if TTL is being set).
                 // Make sure that all the CFs of the table have the same TTL as the empty CF. 
-                setTTLToEmptyCFTTL(allFamiliesProps, table, newTableDescriptor);
+                setTTLForNewCFs(allFamiliesProps, table, newTableDescriptor, newTTL);
+            }
+            // Set TTL on all table column families, even if they're not referenced here
+            if (newTTL != null) {
+                for (PColumnFamily family : table.getColumnFamilies()) {
+                    if (!allFamiliesProps.containsKey(family.getName().getString())) {
+                        Map<String,Object> familyProps = Maps.newHashMapWithExpectedSize(1);
+                        familyProps.put(TTL, newTTL);
+                        allFamiliesProps.put(family.getName().getString(), familyProps);
+                    }
+                }
             }
             Integer defaultTxMaxVersions = null;
             if (isOrWillBeTransactional) {
+                // Calculate default for max versions
                 Map<String, Object> emptyFamilyProps = allFamiliesProps.get(SchemaUtil.getEmptyColumnFamilyAsString(table));
                 if (emptyFamilyProps != null) {
                     defaultTxMaxVersions = (Integer)emptyFamilyProps.get(HConstants.VERSIONS);
@@ -2025,6 +2046,26 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             Map<String,Object> familyProps = Maps.newHashMapWithExpectedSize(1);
                             familyProps.put(HConstants.VERSIONS, defaultTxMaxVersions);
                             allFamiliesProps.put(family.getName().getString(), familyProps);
+                        }
+                    }
+                }
+            }
+            // Set Tephra's TTL property based on HBase property if we're 
+            // transitioning to become transactional or setting TTL on
+            // an already transactional table.
+            if (isOrWillBeTransactional) {
+                int ttl = getTTL(table, newTableDescriptor, newTTL);
+                if (ttl != HColumnDescriptor.DEFAULT_TTL) {
+                    for (Map.Entry<String, Map<String, Object>> entry : allFamiliesProps.entrySet()) {
+                        Map<String, Object> props = entry.getValue();
+                        if (props == null) {
+                            props = new HashMap<String, Object>();
+                        }
+                        props.put(TxConstants.PROPERTY_TTL, ttl);
+                        // Remove HBase TTL if we're not transitioning an existing table to become transactional
+                        // or if the existing transactional table wasn't originally non transactional.
+                        if (!willBeTransactional && !Boolean.valueOf(newTableDescriptor.getValue(TxConstants.READ_NON_TX_DATA))) {
+                            props.remove(TTL);
                         }
                     }
                 }
@@ -2088,20 +2129,23 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return cfNames;
     }
 
-    private int getTTLForEmptyCf(byte[] emptyCf, byte[] tableNameBytes, HTableDescriptor tableDescriptor) throws SQLException {
-        if (tableDescriptor == null) {
-            tableDescriptor = getTableDescriptor(tableNameBytes);
-        }
-        return tableDescriptor.getFamily(emptyCf).getTimeToLive();
+    private static int getTTL(PTable table, HTableDescriptor tableDesc, Integer newTTL) throws SQLException {
+        // If we're setting TTL now, then use that value. Otherwise, use empty column family value
+        int ttl = newTTL != null ? newTTL 
+                : tableDesc.getFamily(SchemaUtil.getEmptyColumnFamily(table)).getTimeToLive();
+        return ttl;
     }
     
-    private void setTTLToEmptyCFTTL(Map<String, Map<String, Object>> familyProps, PTable table, 
-            HTableDescriptor tableDesc) throws SQLException {
+    private static void setTTLForNewCFs(Map<String, Map<String, Object>> familyProps, PTable table, 
+            HTableDescriptor tableDesc, Integer newTTL) throws SQLException {
         if (!familyProps.isEmpty()) {
-            int emptyCFTTL = getTTLForEmptyCf(SchemaUtil.getEmptyColumnFamily(table), table.getPhysicalName().getBytes(), tableDesc);
-            for (String family : familyProps.keySet()) {
-                Map<String, Object> props = familyProps.get(family) != null ? familyProps.get(family) : new HashMap<String, Object>();
-                props.put(TTL, emptyCFTTL);
+            int ttl = getTTL(table, tableDesc, newTTL);
+            for (Map.Entry<String, Map<String, Object>> entry : familyProps.entrySet()) {
+                Map<String, Object> props = entry.getValue();
+                if (props == null) {
+                    props = new HashMap<String, Object>();
+                }
+                props.put(TTL, ttl);
             }
         }
     }

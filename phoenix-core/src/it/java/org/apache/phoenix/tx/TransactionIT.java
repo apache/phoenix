@@ -44,6 +44,7 @@ import org.junit.Test;
 
 import com.google.common.collect.Lists;
 
+import co.cask.tephra.TxConstants;
 import co.cask.tephra.hbase11.coprocessor.TransactionProcessor;
 
 public class TransactionIT extends BaseHBaseManagedTimeIT {
@@ -350,27 +351,33 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
     }
     
     @Test
-    public void testMaxVersions() throws Exception {
+    public void testProperties() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        conn.createStatement().execute("CREATE TABLE NON_TX_TABLE1(k INTEGER PRIMARY KEY, a.v VARCHAR, b.v VARCHAR, c.v VARCHAR)");
-        conn.createStatement().execute("CREATE INDEX idx1 ON NON_TX_TABLE1(a.v, b.v)");
-        conn.createStatement().execute("CREATE INDEX idx2 ON NON_TX_TABLE1(c.v) INCLUDE (a.v, b.v)");
+        conn.createStatement().execute("CREATE TABLE NON_TX_TABLE1(k INTEGER PRIMARY KEY, a.v VARCHAR, b.v VARCHAR, c.v VARCHAR) TTL=1000");
+        conn.createStatement().execute("CREATE INDEX idx1 ON NON_TX_TABLE1(a.v, b.v) TTL=1000");
+        conn.createStatement().execute("CREATE INDEX idx2 ON NON_TX_TABLE1(c.v) INCLUDE (a.v, b.v) TTL=1000");
 
         conn.createStatement().execute("ALTER TABLE NON_TX_TABLE1 SET TRANSACTIONAL=true");
 
         HTableDescriptor desc = conn.unwrap(PhoenixConnection.class).getQueryServices().getTableDescriptor(Bytes.toBytes("NON_TX_TABLE1"));
         for (HColumnDescriptor colDesc : desc.getFamilies()) {
             assertEquals(QueryServicesOptions.DEFAULT_MAX_VERSIONS_TRANSACTIONAL, colDesc.getMaxVersions());
+            assertEquals(1000, colDesc.getTimeToLive());
+            assertEquals(1000, Integer.parseInt(colDesc.getValue(TxConstants.PROPERTY_TTL)));
         }
 
         desc = conn.unwrap(PhoenixConnection.class).getQueryServices().getTableDescriptor(Bytes.toBytes("IDX1"));
         for (HColumnDescriptor colDesc : desc.getFamilies()) {
             assertEquals(QueryServicesOptions.DEFAULT_MAX_VERSIONS_TRANSACTIONAL, colDesc.getMaxVersions());
+            assertEquals(1000, colDesc.getTimeToLive());
+            assertEquals(1000, Integer.parseInt(colDesc.getValue(TxConstants.PROPERTY_TTL)));
         }
         
         desc = conn.unwrap(PhoenixConnection.class).getQueryServices().getTableDescriptor(Bytes.toBytes("IDX2"));
         for (HColumnDescriptor colDesc : desc.getFamilies()) {
             assertEquals(QueryServicesOptions.DEFAULT_MAX_VERSIONS_TRANSACTIONAL, colDesc.getMaxVersions());
+            assertEquals(1000, colDesc.getTimeToLive());
+            assertEquals(1000, Integer.parseInt(colDesc.getValue(TxConstants.PROPERTY_TTL)));
         }
         
         conn.createStatement().execute("CREATE TABLE NON_TX_TABLE2(k INTEGER PRIMARY KEY, a.v VARCHAR, b.v VARCHAR, c.v VARCHAR)");
@@ -378,6 +385,15 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
         desc = conn.unwrap(PhoenixConnection.class).getQueryServices().getTableDescriptor(Bytes.toBytes("NON_TX_TABLE2"));
         for (HColumnDescriptor colDesc : desc.getFamilies()) {
             assertEquals(10, colDesc.getMaxVersions());
+            assertEquals(HColumnDescriptor.DEFAULT_TTL, colDesc.getTimeToLive());
+            assertEquals(null, colDesc.getValue(TxConstants.PROPERTY_TTL));
+        }
+        conn.createStatement().execute("ALTER TABLE NON_TX_TABLE2 SET TTL=1000");
+        desc = conn.unwrap(PhoenixConnection.class).getQueryServices().getTableDescriptor(Bytes.toBytes("NON_TX_TABLE2"));
+        for (HColumnDescriptor colDesc : desc.getFamilies()) {
+            assertEquals(10, colDesc.getMaxVersions());
+            assertEquals(1000, colDesc.getTimeToLive());
+            assertEquals(1000, Integer.parseInt(colDesc.getValue(TxConstants.PROPERTY_TTL)));
         }
 
         conn.createStatement().execute("CREATE TABLE NON_TX_TABLE3(k INTEGER PRIMARY KEY, a.v VARCHAR, b.v VARCHAR, c.v VARCHAR)");
@@ -401,7 +417,13 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.TX_MAX_VERSIONS_MUST_BE_GREATER_THAN_ONE.getErrorCode(), e.getErrorCode());
         }
-    }
         
-
+        conn.createStatement().execute("CREATE TABLE TX_TABLE1(k INTEGER PRIMARY KEY, v VARCHAR) TTL=1000, TRANSACTIONAL=true");
+        desc = conn.unwrap(PhoenixConnection.class).getQueryServices().getTableDescriptor(Bytes.toBytes("TX_TABLE1"));
+        for (HColumnDescriptor colDesc : desc.getFamilies()) {
+            assertEquals(QueryServicesOptions.DEFAULT_MAX_VERSIONS_TRANSACTIONAL, colDesc.getMaxVersions());
+            assertEquals(HColumnDescriptor.DEFAULT_TTL, colDesc.getTimeToLive());
+            assertEquals(1000, Integer.parseInt(colDesc.getValue(TxConstants.PROPERTY_TTL)));
+        }
+    }
 }

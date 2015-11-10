@@ -31,8 +31,6 @@ import java.util.Map;
 import java.util.SortedMap;
 import java.util.TreeMap;
 
-import co.cask.tephra.TxConstants;
-
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Delete;
@@ -78,6 +76,8 @@ import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.sun.istack.NotNull;
+
+import co.cask.tephra.TxConstants;
 
 /**
  *
@@ -241,7 +241,7 @@ public class PTableImpl implements PTable {
                 sequenceNumber, table.getPKName(), table.getBucketNum(), columns, table.getParentSchemaName(), table.getParentTableName(),
                 table.getIndexes(), isImmutableRows, table.getPhysicalNames(), table.getDefaultFamilyName(), table.getViewStatement(),
                 isWalDisabled, isMultitenant, storeNulls, table.getViewType(), table.getViewIndexId(), table.getIndexType(), table.getTableStats(),
-                table.getBaseColumnCount(), table.rowKeyOrderOptimizable(), table.isTransactional());
+                table.getBaseColumnCount(), table.rowKeyOrderOptimizable(), isTransactional);
     }
     
     public static PTableImpl makePTable(PTable table, PIndexState state) throws SQLException {

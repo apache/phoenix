@@ -194,8 +194,8 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.TransactionUtil;
 import org.apache.phoenix.util.StringUtil;
+import org.apache.phoenix.util.TransactionUtil;
 import org.apache.phoenix.util.UpgradeUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -207,6 +207,8 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.primitives.Ints;
+
+import co.cask.tephra.TxConstants;
 
 public class MetaDataClient {
     private static final Logger logger = LoggerFactory.getLogger(MetaDataClient.class);
@@ -1717,7 +1719,14 @@ public class MetaDataClient {
                     transactional = transactionalProp;
                 }
             }
-            tableProps.put(PhoenixDatabaseMetaData.TRANSACTIONAL, Boolean.valueOf(transactional));
+            tableProps.put(PhoenixDatabaseMetaData.TRANSACTIONAL, transactional);
+            if (transactional) {
+                // If TTL set, use Tephra TTL property name instead
+                Object ttl = commonFamilyProps.remove(HColumnDescriptor.TTL);
+                if (ttl != null) {
+                    commonFamilyProps.put(TxConstants.PROPERTY_TTL, ttl);
+                }
+            }
             
             boolean sharedTable = statement.getTableType() == PTableType.VIEW || indexId != null;
             if (transactional) { 
@@ -2786,7 +2795,7 @@ public class MetaDataClient {
                     }
 
                     // Only update client side cache if we aren't adding a PK column to a table with indexes or 
-                    // transitioning a table from.
+                    // transitioning a table from non transactional to transactional.
                     // We could update the cache manually then too, it'd just be a pain.
                     if (table.getIndexes().isEmpty() || (numPkColumnsAdded==0 && !nonTxToTx)) {
 						connection.addColumn(

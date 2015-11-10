@@ -65,7 +65,6 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumn;
-import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PRow;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
@@ -80,7 +79,6 @@ import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SQLCloseable;
-import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.TransactionUtil;
 import org.slf4j.Logger;
@@ -124,7 +122,6 @@ public class MutationState implements SQLCloseable {
     private int numRows = 0;
     private boolean txStarted = false;
     
-    private final ImmutableBytesPtr tempPtr = new ImmutableBytesPtr();
     private final MutationMetricQueue mutationMetricQueue;
     private ReadMetricQueue readMetricQueue;
     
