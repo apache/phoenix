@@ -24,7 +24,7 @@ import java.util.Set;
 import co.cask.tephra.Transaction;
 import co.cask.tephra.Transaction.VisibilityLevel;
 import co.cask.tephra.TxConstants;
-import co.cask.tephra.hbase98.TransactionAwareHTable;
+import co.cask.tephra.hbase11.TransactionAwareHTable;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;

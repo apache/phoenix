@@ -158,6 +158,7 @@ public class MutationState implements SQLCloseable {
 		boolean isMetricsEnabled = connection.isRequestLevelMetricsEnabled();
 		this.mutationMetricQueue = isMetricsEnabled ? new MutationMetricQueue()
 				: NoOpMutationMetricsQueue.NO_OP_MUTATION_METRICS_QUEUE;
+		this.tx = tx;
 		if (tx == null) {
 			this.txAwares = Collections.emptyList();
 			TransactionSystemClient txServiceClient = this.connection

@@ -244,10 +244,11 @@ public class MutableRollbackIT extends BaseHBaseManagedTimeIT {
             assertFalse(rs.next());
             
             //assert original row exists in DEMO1_idx
-            rs = stmt.executeQuery("select k, v1 from DEMO1 ORDER BY v1");
+            rs = stmt.executeQuery("select k, v1, v2 from DEMO1 ORDER BY v1");
             assertTrue(rs.next());
             assertEquals("x", rs.getString(1));
             assertEquals("y", rs.getString(2));
+            assertEquals("a", rs.getString(3));
             assertFalse(rs.next());
             
             //assert no rows exists in DEMO2
@@ -312,10 +313,11 @@ public class MutableRollbackIT extends BaseHBaseManagedTimeIT {
         assertFalse(rs.next());
         
         //assert new covered row key value exists in DEMO1_idx
-        rs = stmt.executeQuery("select k, v1 from DEMO1 ORDER BY v1");
+        rs = stmt.executeQuery("select k, v1, v2 from DEMO1 ORDER BY v1");
         assertTrue(rs.next());
         assertEquals("x", rs.getString(1));
         assertEquals("z", rs.getString(2));
+        assertEquals("a", rs.getString(3));
         assertFalse(rs.next());
         
         //assert rows exists in DEMO2
