@@ -172,6 +172,10 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         this(connection, connection.isDescVarLengthRowKeyUpgrade);
     }
     
+    public PhoenixConnection(PhoenixConnection connection, MutationState mutationState) throws SQLException {
+        this(connection.getQueryServices(), connection.getURL(), connection.getClientInfo(), connection.getMetaDataCache(), mutationState, connection.isDescVarLengthRowKeyUpgrade());
+    }
+    
     public PhoenixConnection(PhoenixConnection connection, long scn) throws SQLException {
         this(connection.getQueryServices(), connection, scn);
     }
