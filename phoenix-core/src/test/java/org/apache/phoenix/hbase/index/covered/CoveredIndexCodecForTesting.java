@@ -24,11 +24,10 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-
+import org.apache.phoenix.hbase.index.builder.BaseIndexCodec;
 import org.apache.phoenix.hbase.index.covered.IndexCodec;
 import org.apache.phoenix.hbase.index.covered.IndexUpdate;
 import org.apache.phoenix.hbase.index.covered.TableState;
-import org.apache.phoenix.index.BaseIndexCodec;
 
 /**
  * An {@link IndexCodec} for testing that allow you to specify the index updates/deletes, regardless
@@ -53,12 +52,12 @@ public class CoveredIndexCodecForTesting extends BaseIndexCodec {
   }
   
   @Override
-  public Iterable<IndexUpdate> getIndexDeletes(TableState state) {
+  public Iterable<IndexUpdate> getIndexDeletes(TableState state, IndexMetaData context) {
     return this.deletes;
   }
 
   @Override
-  public Iterable<IndexUpdate> getIndexUpserts(TableState state) {
+  public Iterable<IndexUpdate> getIndexUpserts(TableState state, IndexMetaData context) {
     return this.updates;
   }
 

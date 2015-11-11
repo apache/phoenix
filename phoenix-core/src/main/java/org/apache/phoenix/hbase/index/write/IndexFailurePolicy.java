@@ -22,16 +22,14 @@ import java.io.IOException;
 import org.apache.hadoop.hbase.Stoppable;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 
 import com.google.common.collect.Multimap;
-
-import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 
 /**
  * Handle failures to write to the index tables.
  */
 public interface IndexFailurePolicy extends Stoppable {
-
   public void setup(Stoppable parent, RegionCoprocessorEnvironment env);
 
   /**
