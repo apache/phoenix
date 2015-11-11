@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.mapreduce;
 
+import static org.apache.phoenix.query.BaseTest.initAndRegisterDriver;
 import static org.apache.phoenix.query.BaseTest.setUpConfigForMiniCluster;
 import static org.apache.phoenix.query.QueryServices.DATE_FORMAT_ATTRIB;
 import static org.junit.Assert.assertArrayEquals;
@@ -38,8 +39,12 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.jdbc.PhoenixDriver;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -61,11 +66,13 @@ public class CsvBulkLoadToolIT {
         hbaseTestUtil.startMiniCluster();
         hbaseTestUtil.startMiniMapReduceCluster();
 
-        Class.forName(PhoenixDriver.class.getName());
-        DriverManager.registerDriver(PhoenixDriver.INSTANCE);
-        zkQuorum = "localhost:" + hbaseTestUtil.getZkCluster().getClientPort();
-        conn = DriverManager.getConnection(PhoenixRuntime.JDBC_PROTOCOL
-                + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum);
+        zkQuorum = TestUtil.LOCALHOST + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + hbaseTestUtil.getZkCluster().getClientPort();
+        String url = PhoenixRuntime.JDBC_PROTOCOL +
+                PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum + 
+                PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR + 
+                conf.get(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
+        initAndRegisterDriver(url, ReadOnlyProps.EMPTY_PROPS);
+        conn = DriverManager.getConnection(url);
     }
 
     @AfterClass
