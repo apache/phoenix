@@ -17,14 +17,10 @@
  */
 package org.apache.phoenix.hbase.index.covered.example;
 
-import static org.apache.phoenix.query.BaseTest.setUpConfigForMiniCluster;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.regionserver.wal.IndexedWALEditCodec;
 import org.apache.hadoop.hbase.regionserver.wal.WALCellCodec;
-import org.apache.phoenix.hbase.index.IndexTestingUtils;
-import org.apache.phoenix.hbase.index.Indexer;
 import org.junit.BeforeClass;
 
 /**
@@ -34,19 +30,16 @@ import org.junit.BeforeClass;
 
 public class EndtoEndIndexingWithCompressionIT extends EndToEndCoveredIndexingIT {
 
-  @BeforeClass
-  public static void setupCluster() throws Exception {
-    //add our codec and enable WAL compression
-    Configuration conf = UTIL.getConfiguration();
-    setUpConfigForMiniCluster(conf);
-    IndexTestingUtils.setupConfig(conf);
-    // disable version checking, so we can test against whatever version of HBase happens to be
-    // installed (right now, its generally going to be SNAPSHOT versions).
-    conf.setBoolean(Indexer.CHECK_VERSION_CONF_KEY, false);
-    conf.set(WALCellCodec.WAL_CELL_CODEC_CLASS_KEY,
-    IndexedWALEditCodec.class.getName());
-    conf.setBoolean(HConstants.ENABLE_WAL_COMPRESSION, true);
-    //start the mini-cluster
-    UTIL.startMiniCluster();
-  }
+    @BeforeClass
+    public static void setupCluster() throws Exception {
+        setupConfig();
+        //add our codec and enable WAL compression
+        Configuration conf = UTIL.getConfiguration();
+        conf.set(WALCellCodec.WAL_CELL_CODEC_CLASS_KEY,
+                IndexedWALEditCodec.class.getName());
+        conf.setBoolean(HConstants.ENABLE_WAL_COMPRESSION, true);
+        //start the mini-cluster
+        UTIL.startMiniCluster();
+        initDriver();
+    }
 }
