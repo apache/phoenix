@@ -119,21 +119,16 @@ public class ServerUtil {
     }
 
     private static SQLException parseRemoteException(Throwable t) {
-        	String message = t.getLocalizedMessage();
-        	if (message != null) {
+        String message = t.getLocalizedMessage();
+        if (message != null) {
             // If the message matches the standard pattern, recover the SQLException and throw it.
             Matcher matcher = PATTERN.matcher(t.getLocalizedMessage());
             if (matcher.find()) {
                 int statusCode = Integer.parseInt(matcher.group(1));
-                SQLExceptionCode code;
-                try {
-                    code = SQLExceptionCode.fromErrorCode(statusCode);
-                } catch (SQLException e) {
-                    return e;
-                }
-                return new SQLExceptionInfo.Builder(code).setMessage(matcher.group()).build().buildException();
+                SQLExceptionCode code = SQLExceptionCode.fromErrorCode(statusCode);
+                return new SQLExceptionInfo.Builder(code).setMessage(matcher.group()).setRootCause(t).build().buildException();
             }
-        	}
+        }
         return null;
     }
 

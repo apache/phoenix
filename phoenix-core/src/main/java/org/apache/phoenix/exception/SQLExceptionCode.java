@@ -432,11 +432,10 @@ public enum SQLExceptionCode {
         }
     }
     
-    public static SQLExceptionCode fromErrorCode(int errorCode) throws SQLException {
+    public static SQLExceptionCode fromErrorCode(int errorCode) {
         SQLExceptionCode code = errorCodeMap.get(errorCode);
         if (code == null) {
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.UNKNOWN_ERROR_CODE)
-            .setMessage(Integer.toString(errorCode)).build().buildException();
+            return SQLExceptionCode.UNKNOWN_ERROR_CODE;
         }
         return code;
     }
