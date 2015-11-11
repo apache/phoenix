@@ -1,6 +1,7 @@
 package org.apache.phoenix.calcite.rel;
 
 import java.util.List;
+import java.util.Set;
 
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptCost;
@@ -15,10 +16,9 @@ import org.apache.calcite.rel.core.Aggregate;
 import org.apache.calcite.rel.core.AggregateCall;
 import org.apache.calcite.util.ImmutableBitSet;
 import org.apache.calcite.util.ImmutableIntList;
-import org.apache.calcite.util.Util;
 import org.apache.phoenix.calcite.CalciteUtils;
-import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
+import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.execute.TupleProjectionPlan;
@@ -34,6 +34,7 @@ import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.TableRef;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 
 /**
  * Implementation of {@link org.apache.calcite.rel.core.Aggregate}
@@ -50,22 +51,30 @@ abstract public class PhoenixAbstractAggregate extends Aggregate implements Phoe
         return call.getAggregation().getName().equals("SINGLE_VALUE");
     }
     
-    public static boolean isOrderedGroupSet(ImmutableBitSet groupSet, RelNode child) {
-        List<Integer> ordinals = groupSet.asList();
+    protected static boolean isOrderedGroupSet(ImmutableBitSet groupSet, RelNode child) {
+        if (groupSet.isEmpty()) {
+            return true;
+        }
+        
+        Set<Integer> ordinals = Sets.newHashSet(groupSet.asList());
         List<RelCollation> collations = child.getTraitSet().getTraits(RelCollationTraitDef.INSTANCE);
-        boolean isOrderedGroupBy = ordinals.isEmpty();
-        for (int i = 0; i < collations.size() && !isOrderedGroupBy; i++) {
+        for (int i = 0; i < collations.size(); i++) {
+            int count = 0;
             List<RelFieldCollation> fieldCollations = collations.get(i).getFieldCollations();
-            List<Integer> fields = Lists.newArrayListWithExpectedSize(fieldCollations.size());
-            for (RelFieldCollation fieldCollation : fieldCollations) {
-                fields.add(fieldCollation.getFieldIndex());
+            if (fieldCollations.size() < ordinals.size()) {
+                continue;
             }
-            if (Util.startsWith(fields, ordinals)) {
-                isOrderedGroupBy = true;
+            for (RelFieldCollation fieldCollation : fieldCollations.subList(0, ordinals.size())) {
+                if (ordinals.contains(fieldCollation.getFieldIndex())) {
+                    count++;
+                }
+            }
+            if (count == ordinals.size()) {
+                return true;
             }
         }
         
-        return isOrderedGroupBy;
+        return false;
     }
     
     public final boolean isOrderedGroupBy;
@@ -93,7 +102,7 @@ abstract public class PhoenixAbstractAggregate extends Aggregate implements Phoe
         if (isSingleValueCheckAggregate(this))
             return planner.getCostFactory().makeInfiniteCost();
         
-        double orderedGroupByFactor = isOrderedGroupBy ? 0.8 : 1.0;
+        double orderedGroupByFactor = isOrderedGroupBy ? 0.5 : 1.0;
         return super.computeSelfCost(planner).multiplyBy(orderedGroupByFactor);
     }
 

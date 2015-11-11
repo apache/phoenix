@@ -39,6 +39,8 @@ import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.iterate.ParallelIteratorFactory;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.SelectStatement;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.KeyValueSchema.KeyValueSchemaBuilder;
 import org.apache.phoenix.schema.PColumn;
@@ -46,36 +48,53 @@ import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.base.Supplier;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableList.Builder;
 import com.google.common.collect.Lists;
 
 /**
  * Scan of a Phoenix table.
  */
 public class PhoenixTableScan extends TableScan implements PhoenixRel {
-    public final RexNode filter;
+    public enum ScanOrder {
+        NONE,
+        FORWARD,
+        REVERSE,
+    }
     
-    private final ScanRanges scanRanges;
-        
+    public final RexNode filter;
+    public final ScanOrder scanOrder;
+    public final ScanRanges scanRanges;
+    
+    public static PhoenixTableScan create(RelOptCluster cluster, final RelOptTable table) {
+        return create(cluster, table, null,
+                getDefaultScanOrder(table.unwrap(PhoenixTable.class)));
+    }
+
     public static PhoenixTableScan create(RelOptCluster cluster, final RelOptTable table, 
-            RexNode filter) {
+            RexNode filter, final ScanOrder scanOrder) {
         final RelTraitSet traits =
-                cluster.traitSetOf(PhoenixRel.SERVER_CONVENTION)
+                cluster.traitSetOf(PhoenixConvention.SERVER)
                 .replaceIfs(RelCollationTraitDef.INSTANCE,
                         new Supplier<List<RelCollation>>() {
                     public List<RelCollation> get() {
-                        return table.unwrap(PhoenixTable.class).getStatistic().getCollations();
+                        if (scanOrder == ScanOrder.NONE) {
+                            return ImmutableList.of();
+                        }
+                        List<RelCollation> collations = table.getCollationList();
+                        return scanOrder == ScanOrder.FORWARD ? collations : reverse(collations);
                     }
                 });
-        return new PhoenixTableScan(cluster, traits, table, filter);
+        return new PhoenixTableScan(cluster, traits, table, filter, scanOrder);
     }
 
-    private PhoenixTableScan(RelOptCluster cluster, RelTraitSet traits, RelOptTable table, RexNode filter) {
+    private PhoenixTableScan(RelOptCluster cluster, RelTraitSet traits, RelOptTable table, RexNode filter, ScanOrder scanOrder) {
         super(cluster, traits, table);
         this.filter = filter;
+        this.scanOrder = scanOrder;
         
         ScanRanges scanRanges = null;
         if (filter != null) {
@@ -116,6 +135,30 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
         }        
         this.scanRanges = scanRanges;
     }
+    
+    private static ScanOrder getDefaultScanOrder(PhoenixTable table) {
+        //TODO why attribute value not correct in connectUsingModel??
+        //return table.pc.getQueryServices().getProps().getBoolean(
+        //        QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB,
+        //        QueryServicesOptions.DEFAULT_FORCE_ROW_KEY_ORDER) ?
+        //                ScanOrder.FORWARD : ScanOrder.NONE;
+        return ScanOrder.NONE;
+    }
+    
+    private static List<RelCollation> reverse(List<RelCollation> collations) {
+        Builder<RelCollation> builder = ImmutableList.<RelCollation>builder();
+        for (RelCollation collation : collations) {
+            builder.add(CalciteUtils.reverseCollation(collation));
+        }
+        return builder.build();
+    }
+    
+    public boolean isReverseScanEnabled() {
+        return table.unwrap(PhoenixTable.class).pc
+                .getQueryServices().getProps().getBoolean(
+                        QueryServices.USE_REVERSE_SCAN_ATTRIB,
+                        QueryServicesOptions.DEFAULT_USE_REVERSE_SCAN);
+    }
 
     @Override
     public RelNode copy(RelTraitSet traitSet, List<RelNode> inputs) {
@@ -126,7 +169,8 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
     @Override
     public RelWriter explainTerms(RelWriter pw) {
         return super.explainTerms(pw)
-            .itemIf("filter", filter, filter != null);
+            .itemIf("filter", filter, filter != null)
+            .itemIf("scanOrder", scanOrder, scanOrder != ScanOrder.NONE);
     }
 
     @Override
@@ -146,7 +190,7 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
         } else if (table.unwrap(PhoenixTable.class).getTable().getParentName() != null){
             rowCount = addEpsilon(rowCount);
         }
-        if (requireRowKeyOrder()) {
+        if (scanOrder != ScanOrder.NONE) {
             // We don't want to make a big difference here. The idea is to avoid
             // forcing row key order whenever the order is absolutely useless.
             // E.g. in "select count(*) from t" we do not need the row key order;
@@ -158,6 +202,9 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
             // eventually be an AggregatePlan, in which the "forceRowKeyOrder"
             // flag takes no effect.
             rowCount = addEpsilon(rowCount);
+            if (scanOrder == ScanOrder.REVERSE) {
+                rowCount = addEpsilon(rowCount);
+            }
         }
         int fieldCount = this.table.getRowType().getFieldCount();
         return planner.getCostFactory()
@@ -173,6 +220,11 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
         }
         
         return rows;
+    }
+    
+    @Override
+    public List<RelCollation> getCollationList() {
+        return getTraitSet().getTraits(RelCollationTraitDef.INSTANCE);        
     }
 
     @Override
@@ -210,11 +262,12 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
                 implementor.setTableRef(new TableRef(projectedTable));
             }
             Integer limit = null;
-            OrderBy orderBy = OrderBy.EMPTY_ORDER_BY;
+            OrderBy orderBy = scanOrder == ScanOrder.NONE ?
+                      OrderBy.EMPTY_ORDER_BY
+                    : (scanOrder == ScanOrder.FORWARD ?
+                              OrderBy.FWD_ROW_KEY_ORDER_BY
+                            : OrderBy.REV_ROW_KEY_ORDER_BY);
             ParallelIteratorFactory iteratorFactory = null;
-            if (requireRowKeyOrder()) {
-                ScanUtil.setForceRowKeyOrder(context.getScan());
-            }
             return new ScanPlan(context, select, tableRef, RowProjector.EMPTY_PROJECTOR, limit, orderBy, iteratorFactory, true, dynamicFilter);
         } catch (SQLException e) {
             throw new RuntimeException(e);
@@ -246,10 +299,6 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
                 scan.addFamily(familyName.getBytes());
             }
         }
-    }
-    
-    private boolean requireRowKeyOrder() {
-        return table.unwrap(PhoenixTable.class).requireRowKeyOrder;
     }
 
     private double addEpsilon(double d) {

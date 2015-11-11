@@ -9,14 +9,13 @@ import org.apache.phoenix.calcite.rel.PhoenixServerAggregate;
 
 public class PhoenixCompactClientSortRule extends RelOptRule {
     
-    public static final PhoenixCompactClientSortRule SORT_SERVERAGGREGATE = 
-            new PhoenixCompactClientSortRule("PhoenixCompactClientSortRule:sort_serveraggregate", PhoenixServerAggregate.class);
+    public static final PhoenixCompactClientSortRule INSTANCE = 
+            new PhoenixCompactClientSortRule();
 
-    public PhoenixCompactClientSortRule(String description, Class<? extends PhoenixRel> clazz) {
+    public PhoenixCompactClientSortRule() {
         super(
             operand(PhoenixClientSort.class, 
-                    operand(clazz, any())),
-            description);
+                    operand(PhoenixServerAggregate.class, any())));
     }
 
     @Override

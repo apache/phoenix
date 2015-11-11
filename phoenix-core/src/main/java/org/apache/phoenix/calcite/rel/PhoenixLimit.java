@@ -29,7 +29,7 @@ public class PhoenixLimit extends SingleRel implements PhoenixRel {
     public static PhoenixLimit create(final RelNode input, RexNode offset, RexNode fetch) {
         RelOptCluster cluster = input.getCluster();
         final RelTraitSet traits =
-                cluster.traitSet().replace(PhoenixRel.CLIENT_CONVENTION)
+                cluster.traitSet().replace(PhoenixConvention.CLIENT)
                 .replaceIfs(RelCollationTraitDef.INSTANCE,
                         new Supplier<List<RelCollation>>() {
                     public List<RelCollation> get() {
@@ -64,7 +64,7 @@ public class PhoenixLimit extends SingleRel implements PhoenixRel {
 
     @Override 
     public RelOptCost computeSelfCost(RelOptPlanner planner) {
-        if (getInput().getConvention() != PhoenixRel.CLIENT_CONVENTION)
+        if (!getInput().getConvention().satisfies(PhoenixConvention.GENERIC))
             return planner.getCostFactory().makeInfiniteCost();
         
         double rowCount = RelMetadataQuery.getRowCount(this);

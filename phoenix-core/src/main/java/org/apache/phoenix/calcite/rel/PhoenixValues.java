@@ -72,7 +72,7 @@ public class PhoenixValues extends Values implements PhoenixRel {
     
     public static PhoenixValues create(RelOptCluster cluster, final RelDataType rowType, final ImmutableList<ImmutableList<RexLiteral>> tuples) {
         final RelTraitSet traits =
-                cluster.traitSetOf(PhoenixRel.CLIENT_CONVENTION)
+                cluster.traitSetOf(PhoenixConvention.CLIENT)
                 .replaceIfs(RelCollationTraitDef.INSTANCE,
                         new Supplier<List<RelCollation>>() {
                     public List<RelCollation> get() {

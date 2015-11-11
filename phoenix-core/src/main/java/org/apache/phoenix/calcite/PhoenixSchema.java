@@ -20,7 +20,6 @@ import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableRef;
@@ -49,11 +48,11 @@ import java.util.Set;
  */
 public class PhoenixSchema implements Schema {
     public static final Factory FACTORY = new Factory();
-    private static final String UNORDERED_SUFFIX = ":unordered";
+
+    public final PhoenixConnection pc;
     
     protected final String name;
     protected final String schemaName;
-    protected final PhoenixConnection pc;
     protected final MetaDataClient client;
     
     protected final Set<String> subSchemaNames;
@@ -105,12 +104,7 @@ public class PhoenixSchema implements Schema {
                                     ImmutableList.<ColumnDef>of()), pc);
                     final List<TableRef> tables = x.getTables();
                     assert tables.size() == 1;
-                    final PTable pTable = tables.get(0).getTable();
-                    tableMap.put(tableName, pTable);
-                    if (pTable.getBucketNum() != null || pTable.getIndexType() == IndexType.LOCAL) {
-                        final String unorderedTableName = tableName + UNORDERED_SUFFIX;
-                        tableMap.put(unorderedTableName, pTable);
-                    }
+                    tableMap.put(tableName, tables.get(0).getTable());
                 } else {
                     String viewSql = rs.getString(PhoenixDatabaseMetaData.VIEW_STATEMENT);
                     String viewType = rs.getString(PhoenixDatabaseMetaData.VIEW_TYPE);
@@ -145,7 +139,7 @@ public class PhoenixSchema implements Schema {
     @Override
     public Table getTable(String name) {
         PTable table = tableMap.get(name);
-        return table == null ? null : new PhoenixTable(pc, table, !isUnorderedTableName(name));
+        return table == null ? null : new PhoenixTable(pc, table);
     }
 
     @Override
@@ -204,20 +198,9 @@ public class PhoenixSchema implements Schema {
     
     public void defineIndexesAsMaterializations(CalciteSchema calciteSchema) {
         List<String> path = calciteSchema.path(null);
-        for (Map.Entry<String, PTable> entry : tableMap.entrySet()) {
-            final String tableName = entry.getKey();
-            final PTable table = entry.getValue();
-            if (!isUnorderedTableName(tableName)) {
-                for (PTable index : table.getIndexes()) {
-                    addMaterialization(table, index, path, calciteSchema);
-                }
-            }
-        }
-        for (Map.Entry<String, PTable> entry : tableMap.entrySet()) {
-            final String tableName = entry.getKey();
-            final PTable table = entry.getValue();
-            if (isUnorderedTableName(tableName)) {
-                addUnorderedAsMaterialization(tableName, table, path, calciteSchema);
+        for (PTable table : tableMap.values()) {
+            for (PTable index : table.getIndexes()) {
+                addMaterialization(table, index, path, calciteSchema);
             }
         }
     }
@@ -237,21 +220,6 @@ public class PhoenixSchema implements Schema {
         sb.append(" FROM ").append("\"").append(table.getTableName().getString()).append("\"");
         MaterializationService.instance().defineMaterialization(
                 calciteSchema, null, sb.toString(), path, index.getTableName().getString(), true, true);        
-    }
-    
-    protected void addUnorderedAsMaterialization(String tableName, PTable table, List<String> path,
-            CalciteSchema calciteSchema) {
-        StringBuffer sb = new StringBuffer();
-        sb.append("SELECT * FROM ")
-            .append("\"")
-            .append(table.getTableName().getString())
-            .append("\"");
-        MaterializationService.instance().defineMaterialization(
-                calciteSchema, null, sb.toString(), path, tableName, true, true);        
-    }
-    
-    private boolean isUnorderedTableName(String tableName) {
-        return tableName.endsWith(UNORDERED_SUFFIX);
     }
     
     private static class ViewDef {

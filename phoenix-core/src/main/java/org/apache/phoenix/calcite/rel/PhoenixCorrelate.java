@@ -33,7 +33,7 @@ public class PhoenixCorrelate extends Correlate implements PhoenixRel {
             final SemiJoinType joinType) {
         RelOptCluster cluster = left.getCluster();
         final RelTraitSet traits =
-                cluster.traitSet().replace(PhoenixRel.CLIENT_CONVENTION)
+                cluster.traitSet().replace(PhoenixConvention.CLIENT)
                 .replaceIfs(RelCollationTraitDef.INSTANCE,
                         new Supplier<List<RelCollation>>() {
                     public List<RelCollation> get() {
@@ -60,9 +60,9 @@ public class PhoenixCorrelate extends Correlate implements PhoenixRel {
 
     @Override
     public RelOptCost computeSelfCost(RelOptPlanner planner) {
-        if (getLeft().getConvention() != PhoenixRel.CLIENT_CONVENTION 
-                || getRight().getConvention() != PhoenixRel.CLIENT_CONVENTION)
-            return planner.getCostFactory().makeInfiniteCost();   
+        if (!getLeft().getConvention().satisfies(PhoenixConvention.GENERIC)
+                || !getRight().getConvention().satisfies(PhoenixConvention.GENERIC))
+            return planner.getCostFactory().makeInfiniteCost();
         
         return super.computeSelfCost(planner).multiplyBy(PHOENIX_FACTOR);
     }

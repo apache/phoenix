@@ -7,6 +7,10 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.calcite.avatica.util.ByteString;
+import org.apache.calcite.rel.RelCollation;
+import org.apache.calcite.rel.RelCollations;
+import org.apache.calcite.rel.RelFieldCollation;
+import org.apache.calcite.rel.RelFieldCollation.Direction;
 import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexCorrelVariable;
@@ -148,6 +152,28 @@ public class CalciteUtils {
         }
         
         return ret;
+    }
+    
+    public static RelCollation reverseCollation(RelCollation collation) {
+        if (collation.getFieldCollations().isEmpty())
+            return collation;
+        
+        List<RelFieldCollation> fieldCollations = Lists.newArrayList();
+        for (RelFieldCollation fieldCollation : collation.getFieldCollations()) {
+            Direction dir = null;
+            switch (fieldCollation.direction) {
+            case ASCENDING:
+                dir = Direction.DESCENDING;
+                break;
+            case DESCENDING:
+                dir = Direction.ASCENDING;
+                break;
+            default:
+                assert false : "Shouldn't have come accross non Phoenix directions";
+            }
+            fieldCollations.add(new RelFieldCollation(fieldCollation.getFieldIndex(), dir, fieldCollation.nullDirection));
+        }
+        return RelCollations.of(fieldCollations);
     }
 
 	private static final Map<SqlKind, ExpressionFactory> EXPRESSION_MAP = Maps

@@ -29,7 +29,7 @@ public class PhoenixFilter extends Filter implements PhoenixRel {
     public static PhoenixFilter create(final RelNode input, final RexNode condition) {
         RelOptCluster cluster = input.getCluster();
         final RelTraitSet traits =
-                cluster.traitSet().replace(PhoenixRel.CLIENT_CONVENTION)
+                cluster.traitSet().replace(PhoenixConvention.CLIENT)
                 .replaceIfs(RelCollationTraitDef.INSTANCE,
                         new Supplier<List<RelCollation>>() {
                     public List<RelCollation> get() {
@@ -49,7 +49,7 @@ public class PhoenixFilter extends Filter implements PhoenixRel {
 
     @Override
     public RelOptCost computeSelfCost(RelOptPlanner planner) {
-        if (getInput().getConvention() != PhoenixRel.CLIENT_CONVENTION)
+        if (!getInput().getConvention().satisfies(PhoenixConvention.GENERIC))
             return planner.getCostFactory().makeInfiniteCost();
         
         return super.computeSelfCost(planner).multiplyBy(PHOENIX_FACTOR);

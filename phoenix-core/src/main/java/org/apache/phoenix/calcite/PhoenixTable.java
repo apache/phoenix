@@ -2,7 +2,6 @@ package org.apache.phoenix.calcite;
 
 import java.util.List;
 
-import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptTable;
 import org.apache.calcite.rel.RelCollation;
 import org.apache.calcite.rel.RelCollationTraitDef;
@@ -19,7 +18,6 @@ import org.apache.calcite.schema.TranslatableTable;
 import org.apache.calcite.schema.impl.AbstractTable;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.util.ImmutableBitSet;
-import org.apache.phoenix.calcite.rel.PhoenixRel;
 import org.apache.phoenix.calcite.rel.PhoenixTableScan;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.PColumn;
@@ -42,25 +40,21 @@ public class PhoenixTable extends AbstractTable implements TranslatableTable {
   public final ImmutableBitSet pkBitSet;
   public final RelCollation collation;
   public final PhoenixConnection pc;
-  public final boolean requireRowKeyOrder;
   
   public static int getStartingColumnPosition(PTable pTable) {
       return (pTable.getBucketNum() == null ? 0 : 1) + (pTable.isMultiTenant() ? 1 : 0) + (pTable.getViewIndexId() == null ? 0 : 1);
   }
 
-  public PhoenixTable(PhoenixConnection pc, PTable pTable, boolean requireRowKeyOrder) {
+  public PhoenixTable(PhoenixConnection pc, PTable pTable) {
       this.pc = Preconditions.checkNotNull(pc);
       this.pTable = Preconditions.checkNotNull(pTable);
-      this.requireRowKeyOrder = requireRowKeyOrder;
       List<Integer> pkPositions = Lists.<Integer> newArrayList();
       List<RelFieldCollation> fieldCollations = Lists.<RelFieldCollation> newArrayList();
-      if (requireRowKeyOrder) {
-          for (PColumn column : pTable.getPKColumns()) {
-              int position = column.getPosition();
-              SortOrder sortOrder = column.getSortOrder();
-              pkPositions.add(position);
-              fieldCollations.add(new RelFieldCollation(position, sortOrder == SortOrder.ASC ? Direction.ASCENDING : Direction.DESCENDING));
-          }
+      for (PColumn column : pTable.getPKColumns()) {
+          int position = column.getPosition();
+          SortOrder sortOrder = column.getSortOrder();
+          pkPositions.add(position);
+          fieldCollations.add(new RelFieldCollation(position, sortOrder == SortOrder.ASC ? Direction.ASCENDING : Direction.DESCENDING));
       }
       this.pkBitSet = ImmutableBitSet.of(pkPositions);
       this.collation = RelCollationTraitDef.INSTANCE.canonize(RelCollations.of(fieldCollations));
@@ -105,10 +99,7 @@ public class PhoenixTable extends AbstractTable implements TranslatableTable {
 
     @Override
     public RelNode toRel(RelOptTable.ToRelContext context, RelOptTable relOptTable) {
-        final RelOptCluster cluster = context.getCluster();
-        // TODO Is there a better place to do this?
-        cluster.setMetadataProvider(PhoenixRel.METADATA_PROVIDER);
-        return PhoenixTableScan.create(cluster, relOptTable, null);
+        return PhoenixTableScan.create(context.getCluster(), relOptTable);
     }
 
     @Override
@@ -132,9 +123,7 @@ public class PhoenixTable extends AbstractTable implements TranslatableTable {
 
             @Override
             public List<RelCollation> getCollations() {
-                return collation.getFieldCollations().isEmpty() ? 
-                        ImmutableList.<RelCollation>of()
-                      : ImmutableList.<RelCollation>of(collation);
+                return ImmutableList.<RelCollation>of(collation);
             }
 
             @Override

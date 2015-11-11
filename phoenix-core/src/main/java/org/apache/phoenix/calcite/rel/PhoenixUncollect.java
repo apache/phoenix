@@ -21,7 +21,7 @@ public class PhoenixUncollect extends Uncollect implements PhoenixRel {
     
     public static PhoenixUncollect create(RelNode input) {
         RelOptCluster cluster = input.getCluster();
-        RelTraitSet traits = cluster.traitSetOf(PhoenixRel.CLIENT_CONVENTION);
+        RelTraitSet traits = cluster.traitSetOf(PhoenixConvention.CLIENT);
         return new PhoenixUncollect(cluster, traits, input);
     }
 
@@ -38,7 +38,7 @@ public class PhoenixUncollect extends Uncollect implements PhoenixRel {
 
     @Override
     public RelOptCost computeSelfCost(RelOptPlanner planner) {
-        if (getInput().getConvention() != PhoenixRel.CLIENT_CONVENTION)
+        if (!getInput().getConvention().satisfies(PhoenixConvention.GENERIC))
             return planner.getCostFactory().makeInfiniteCost();
         
         return super.computeSelfCost(planner).multiplyBy(PHOENIX_FACTOR);

@@ -44,16 +44,15 @@ import org.apache.phoenix.calcite.rel.PhoenixClientJoin;
 import org.apache.phoenix.calcite.rel.PhoenixClientProject;
 import org.apache.phoenix.calcite.rel.PhoenixClientSemiJoin;
 import org.apache.phoenix.calcite.rel.PhoenixClientSort;
+import org.apache.phoenix.calcite.rel.PhoenixConvention;
 import org.apache.phoenix.calcite.rel.PhoenixCorrelate;
 import org.apache.phoenix.calcite.rel.PhoenixFilter;
 import org.apache.phoenix.calcite.rel.PhoenixLimit;
-import org.apache.phoenix.calcite.rel.PhoenixRel;
 import org.apache.phoenix.calcite.rel.PhoenixServerAggregate;
 import org.apache.phoenix.calcite.rel.PhoenixServerJoin;
 import org.apache.phoenix.calcite.rel.PhoenixServerProject;
 import org.apache.phoenix.calcite.rel.PhoenixServerSemiJoin;
 import org.apache.phoenix.calcite.rel.PhoenixServerSort;
-import org.apache.phoenix.calcite.rel.PhoenixToClientConverter;
 import org.apache.phoenix.calcite.rel.PhoenixToEnumerableConverter;
 import org.apache.phoenix.calcite.rel.PhoenixUncollect;
 import org.apache.phoenix.calcite.rel.PhoenixUnion;
@@ -65,7 +64,7 @@ import com.google.common.collect.Lists;
 
 /**
  * Rules and relational operators for
- * {@link PhoenixRel#CONVENTION PHOENIX}
+ * {@link PhoenixConvention}
  * calling convention.
  */
 public class PhoenixConverterRules {
@@ -74,15 +73,16 @@ public class PhoenixConverterRules {
     protected static final Logger LOGGER = CalciteTrace.getPlannerTracer();
 
     public static final RelOptRule[] RULES = {
-        PhoenixToEnumerableConverterRule.INSTANCE,
-        PhoenixServerToClientConverterRule.INSTANCE,
-        PhoenixProjectableToClientConverterRule.INSTANCE,
+        PhoenixToEnumerableConverterRule.SERVER,
+        PhoenixToEnumerableConverterRule.SERVERJOIN,
+        PhoenixToEnumerableConverterRule.CLIENT,
         PhoenixClientSortRule.INSTANCE,
         PhoenixServerSortRule.SERVER,
         PhoenixServerSortRule.SERVERJOIN,
         PhoenixLimitRule.INSTANCE,
         PhoenixFilterRule.INSTANCE,
-        PhoenixClientProjectRule.INSTANCE,
+        PhoenixClientProjectRule.SERVERJOIN,
+        PhoenixClientProjectRule.CLIENT,
         PhoenixServerProjectRule.INSTANCE,
         PhoenixClientAggregateRule.INSTANCE,
         PhoenixServerAggregateRule.SERVER,
@@ -98,15 +98,16 @@ public class PhoenixConverterRules {
     };
 
     public static final RelOptRule[] CONVERTIBLE_RULES = {
-        PhoenixToEnumerableConverterRule.INSTANCE,
-        PhoenixServerToClientConverterRule.INSTANCE,
-        PhoenixProjectableToClientConverterRule.INSTANCE,
+        PhoenixToEnumerableConverterRule.SERVER,
+        PhoenixToEnumerableConverterRule.SERVERJOIN,
+        PhoenixToEnumerableConverterRule.CLIENT,
         PhoenixClientSortRule.INSTANCE,
         PhoenixServerSortRule.SERVER,
         PhoenixServerSortRule.SERVERJOIN,
         PhoenixLimitRule.INSTANCE,
         PhoenixFilterRule.CONVERTIBLE,
-        PhoenixClientProjectRule.CONVERTIBLE,
+        PhoenixClientProjectRule.CONVERTIBLE_SERVERJOIN,
+        PhoenixClientProjectRule.CONVERTIBLE_CLIENT,
         PhoenixServerProjectRule.CONVERTIBLE,
         PhoenixClientAggregateRule.CONVERTIBLE,
         PhoenixServerAggregateRule.CONVERTIBLE_SERVER,
@@ -165,7 +166,7 @@ public class PhoenixConverterRules {
         private PhoenixClientSortRule() {
             super(LogicalSort.class, 
                     SORT_ONLY, 
-                    Convention.NONE, PhoenixRel.CLIENT_CONVENTION, "PhoenixClientSortRule");
+                    Convention.NONE, PhoenixConvention.CLIENT, "PhoenixClientSortRule");
         }
 
         public RelNode convert(RelNode rel) {
@@ -173,7 +174,7 @@ public class PhoenixConverterRules {
             return PhoenixClientSort.create(
                 convert(
                         sort.getInput(), 
-                        sort.getInput().getTraitSet().replace(PhoenixRel.CLIENT_CONVENTION)),
+                        sort.getInput().getTraitSet().replace(PhoenixConvention.CLIENT)),
                 sort.getCollation());
         }
     }
@@ -193,15 +194,15 @@ public class PhoenixConverterRules {
             }            
         };
         
-        public static final PhoenixServerSortRule SERVER = new PhoenixServerSortRule(PhoenixRel.SERVER_CONVENTION);
-        public static final PhoenixServerSortRule SERVERJOIN = new PhoenixServerSortRule(PhoenixRel.SERVERJOIN_CONVENTION);
+        public static final PhoenixServerSortRule SERVER = new PhoenixServerSortRule(PhoenixConvention.SERVER);
+        public static final PhoenixServerSortRule SERVERJOIN = new PhoenixServerSortRule(PhoenixConvention.SERVERJOIN);
 
         private final Convention inputConvention;
 
         private PhoenixServerSortRule(Convention inputConvention) {
             super(LogicalSort.class, 
                     SORT_ONLY, 
-                    Convention.NONE, PhoenixRel.CLIENT_CONVENTION, "PhoenixServerSortRule:" + inputConvention.getName());
+                    Convention.NONE, PhoenixConvention.CLIENT, "PhoenixServerSortRule:" + inputConvention.getName());
             this.inputConvention = inputConvention;
         }
 
@@ -234,7 +235,7 @@ public class PhoenixConverterRules {
         private PhoenixLimitRule() {
             super(LogicalSort.class, 
                     HAS_FETCH, 
-                    Convention.NONE, PhoenixRel.CLIENT_CONVENTION, "PhoenixLimitRule");
+                    Convention.NONE, PhoenixConvention.CLIENT, "PhoenixLimitRule");
         }
 
         public RelNode convert(RelNode rel) {
@@ -250,7 +251,7 @@ public class PhoenixConverterRules {
             return PhoenixLimit.create(
                 convert(
                         input, 
-                        input.getTraitSet().replace(out)),
+                        input.getTraitSet().replace(PhoenixConvention.GENERIC)),
                 sort.offset, 
                 sort.fetch);
         }
@@ -274,7 +275,7 @@ public class PhoenixConverterRules {
 
         private PhoenixFilterRule(Predicate<LogicalFilter> predicate) {
             super(LogicalFilter.class, predicate, Convention.NONE, 
-                    PhoenixRel.CLIENT_CONVENTION, "PhoenixFilterRule");
+                    PhoenixConvention.CLIENT, "PhoenixFilterRule");
         }
 
         public RelNode convert(RelNode rel) {
@@ -282,7 +283,7 @@ public class PhoenixConverterRules {
             return PhoenixFilter.create(
                 convert(
                         filter.getInput(), 
-                        filter.getInput().getTraitSet().replace(out)),
+                        filter.getInput().getTraitSet().replace(PhoenixConvention.GENERIC)),
                 filter.getCondition());
         }
     }
@@ -300,13 +301,30 @@ public class PhoenixConverterRules {
             }            
         };
         
-        private static final PhoenixClientProjectRule INSTANCE = new PhoenixClientProjectRule(Predicates.<LogicalProject>alwaysTrue());
+        private static final PhoenixClientProjectRule SERVERJOIN =
+                new PhoenixClientProjectRule(
+                        Predicates.<LogicalProject>alwaysTrue(),
+                        PhoenixConvention.SERVERJOIN);
+        private static final PhoenixClientProjectRule CLIENT =
+                new PhoenixClientProjectRule(
+                        Predicates.<LogicalProject>alwaysTrue(),
+                        PhoenixConvention.CLIENT);
+        private static final PhoenixClientProjectRule CONVERTIBLE_SERVERJOIN =
+                new PhoenixClientProjectRule(
+                        IS_CONVERTIBLE,
+                        PhoenixConvention.SERVERJOIN);
+        private static final PhoenixClientProjectRule CONVERTIBLE_CLIENT =
+                new PhoenixClientProjectRule(
+                        IS_CONVERTIBLE,
+                        PhoenixConvention.CLIENT);
+        
+        private final Convention inputConvention;
 
-        private static final PhoenixClientProjectRule CONVERTIBLE = new PhoenixClientProjectRule(IS_CONVERTIBLE);
-
-        private PhoenixClientProjectRule(Predicate<LogicalProject> predicate) {
+        private PhoenixClientProjectRule(Predicate<LogicalProject> predicate, Convention inputConvention) {
             super(LogicalProject.class, predicate, Convention.NONE, 
-                    PhoenixRel.CLIENT_CONVENTION, "PhoenixClientProjectRule");
+                    PhoenixConvention.CLIENT,
+                    "PhoenixClientProjectRule:" + inputConvention);
+            this.inputConvention = inputConvention;
         }
 
         public RelNode convert(RelNode rel) {
@@ -314,7 +332,7 @@ public class PhoenixConverterRules {
             return PhoenixClientProject.create(
                 convert(
                         project.getInput(), 
-                        project.getInput().getTraitSet().replace(PhoenixRel.CLIENT_CONVENTION)), 
+                        project.getInput().getTraitSet().replace(inputConvention)), 
                 project.getProjects(),
                 project.getRowType());
         }
@@ -339,7 +357,7 @@ public class PhoenixConverterRules {
 
         private PhoenixServerProjectRule(Predicate<LogicalProject> predicate) {
             super(LogicalProject.class, predicate, Convention.NONE, 
-                    PhoenixRel.SERVER_CONVENTION, "PhoenixServerProjectRule");
+                    PhoenixConvention.SERVER, "PhoenixServerProjectRule");
         }
 
         public RelNode convert(RelNode rel) {
@@ -347,7 +365,7 @@ public class PhoenixConverterRules {
             return PhoenixServerProject.create(
                 convert(
                         project.getInput(), 
-                        project.getInput().getTraitSet().replace(PhoenixRel.SERVER_CONVENTION)), 
+                        project.getInput().getTraitSet().replace(PhoenixConvention.SERVER)), 
                 project.getProjects(),
                 project.getRowType());
         }
@@ -372,7 +390,7 @@ public class PhoenixConverterRules {
 
         private PhoenixClientAggregateRule(Predicate<LogicalAggregate> predicate) {
             super(LogicalAggregate.class, predicate, Convention.NONE, 
-                    PhoenixRel.CLIENT_CONVENTION, "PhoenixClientAggregateRule");
+                    PhoenixConvention.CLIENT, "PhoenixClientAggregateRule");
         }
 
         public RelNode convert(RelNode rel) {
@@ -380,7 +398,7 @@ public class PhoenixConverterRules {
             return PhoenixClientAggregate.create(
                     convert(
                             agg.getInput(), 
-                            agg.getInput().getTraitSet().replace(PhoenixRel.CLIENT_CONVENTION)),
+                            agg.getInput().getTraitSet().replace(PhoenixConvention.CLIENT)),
                     agg.indicator,
                     agg.getGroupSet(),
                     agg.getGroupSets(),
@@ -401,17 +419,17 @@ public class PhoenixConverterRules {
             }            
         };
         
-        public static final RelOptRule SERVER = new PhoenixServerAggregateRule(Predicates.<LogicalAggregate>alwaysTrue(), PhoenixRel.SERVER_CONVENTION);
-        public static final RelOptRule SERVERJOIN = new PhoenixServerAggregateRule(Predicates.<LogicalAggregate>alwaysTrue(), PhoenixRel.SERVERJOIN_CONVENTION);
+        public static final RelOptRule SERVER = new PhoenixServerAggregateRule(Predicates.<LogicalAggregate>alwaysTrue(), PhoenixConvention.SERVER);
+        public static final RelOptRule SERVERJOIN = new PhoenixServerAggregateRule(Predicates.<LogicalAggregate>alwaysTrue(), PhoenixConvention.SERVERJOIN);
 
-        public static final RelOptRule CONVERTIBLE_SERVER = new PhoenixServerAggregateRule(IS_CONVERTIBLE, PhoenixRel.SERVER_CONVENTION);
-        public static final RelOptRule CONVERTIBLE_SERVERJOIN = new PhoenixServerAggregateRule(IS_CONVERTIBLE, PhoenixRel.SERVERJOIN_CONVENTION);
+        public static final RelOptRule CONVERTIBLE_SERVER = new PhoenixServerAggregateRule(IS_CONVERTIBLE, PhoenixConvention.SERVER);
+        public static final RelOptRule CONVERTIBLE_SERVERJOIN = new PhoenixServerAggregateRule(IS_CONVERTIBLE, PhoenixConvention.SERVERJOIN);
         
         private final Convention inputConvention;
 
         private PhoenixServerAggregateRule(Predicate<LogicalAggregate> predicate, Convention inputConvention) {
             super(LogicalAggregate.class, predicate, Convention.NONE, 
-                    PhoenixRel.CLIENT_CONVENTION, "PhoenixServerAggregateRule:" + inputConvention.getName());
+                    PhoenixConvention.CLIENT, "PhoenixServerAggregateRule:" + inputConvention.getName());
             this.inputConvention = inputConvention;
         }
 
@@ -446,13 +464,13 @@ public class PhoenixConverterRules {
 
         private PhoenixUnionRule(Predicate<LogicalUnion> predicate) {
             super(LogicalUnion.class, predicate, Convention.NONE, 
-                    PhoenixRel.CLIENT_CONVENTION, "PhoenixUnionRule");
+                    PhoenixConvention.CLIENT, "PhoenixUnionRule");
         }
 
         public RelNode convert(RelNode rel) {
             final LogicalUnion union = (LogicalUnion) rel;
             return PhoenixUnion.create(
-                    convertList(union.getInputs(), out),
+                    convertList(union.getInputs(), PhoenixConvention.GENERIC),
                     union.all);
         }
     }
@@ -483,7 +501,7 @@ public class PhoenixConverterRules {
 
         private PhoenixClientJoinRule(Predicate<LogicalJoin> predicate) {
             super(LogicalJoin.class, predicate, Convention.NONE, 
-                    PhoenixRel.CLIENT_CONVENTION, "PhoenixClientJoinRule");
+                    PhoenixConvention.CLIENT, "PhoenixClientJoinRule");
         }
 
         public RelNode convert(RelNode rel) {
@@ -511,10 +529,10 @@ public class PhoenixConverterRules {
             return PhoenixClientJoin.create(
                     convert(
                             left, 
-                            left.getTraitSet().replace(PhoenixRel.CLIENT_CONVENTION)),
+                            left.getTraitSet().replace(PhoenixConvention.GENERIC)),
                     convert(
                             right, 
-                            right.getTraitSet().replace(PhoenixRel.CLIENT_CONVENTION)),
+                            right.getTraitSet().replace(PhoenixConvention.GENERIC)),
                     join.getCondition(),
                     join.getJoinType(),
                     join.getVariablesStopped(),
@@ -548,7 +566,7 @@ public class PhoenixConverterRules {
 
         private PhoenixServerJoinRule(Predicate<LogicalJoin> predicate) {
             super(LogicalJoin.class, predicate, Convention.NONE, 
-                    PhoenixRel.SERVERJOIN_CONVENTION, "PhoenixServerJoinRule");
+                    PhoenixConvention.SERVERJOIN, "PhoenixServerJoinRule");
         }
 
         public RelNode convert(RelNode rel) {
@@ -556,10 +574,10 @@ public class PhoenixConverterRules {
             return PhoenixServerJoin.create(
                     convert(
                             join.getLeft(), 
-                            join.getLeft().getTraitSet().replace(PhoenixRel.SERVER_CONVENTION)),
+                            join.getLeft().getTraitSet().replace(PhoenixConvention.SERVER)),
                     convert(
                             join.getRight(), 
-                            join.getRight().getTraitSet().replace(PhoenixRel.CLIENT_CONVENTION)),
+                            join.getRight().getTraitSet().replace(PhoenixConvention.GENERIC)),
                     join.getCondition(),
                     join.getJoinType(),
                     join.getVariablesStopped(),
@@ -577,7 +595,7 @@ public class PhoenixConverterRules {
 
         private PhoenixClientSemiJoinRule() {
             super(SemiJoin.class, Convention.NONE, 
-                    PhoenixRel.CLIENT_CONVENTION, "PhoenixClientSemiJoinRule");
+                    PhoenixConvention.CLIENT, "PhoenixClientSemiJoinRule");
         }
 
         public RelNode convert(RelNode rel) {
@@ -605,10 +623,10 @@ public class PhoenixConverterRules {
             return PhoenixClientSemiJoin.create(
                     convert(
                             left, 
-                            left.getTraitSet().replace(PhoenixRel.CLIENT_CONVENTION)),
+                            left.getTraitSet().replace(PhoenixConvention.GENERIC)),
                     convert(
                             right, 
-                            right.getTraitSet().replace(PhoenixRel.CLIENT_CONVENTION)),
+                            right.getTraitSet().replace(PhoenixConvention.GENERIC)),
                     join.getCondition());
         }
     }
@@ -623,7 +641,7 @@ public class PhoenixConverterRules {
 
         private PhoenixServerSemiJoinRule() {
             super(SemiJoin.class, Convention.NONE, 
-                    PhoenixRel.SERVERJOIN_CONVENTION, "PhoenixServerSemiJoinRule");
+                    PhoenixConvention.SERVERJOIN, "PhoenixServerSemiJoinRule");
         }
 
         public RelNode convert(RelNode rel) {
@@ -631,10 +649,10 @@ public class PhoenixConverterRules {
             return PhoenixServerSemiJoin.create(
                     convert(
                             join.getLeft(), 
-                            join.getLeft().getTraitSet().replace(PhoenixRel.SERVER_CONVENTION)),
+                            join.getLeft().getTraitSet().replace(PhoenixConvention.SERVER)),
                     convert(
                             join.getRight(), 
-                            join.getRight().getTraitSet().replace(PhoenixRel.CLIENT_CONVENTION)),
+                            join.getRight().getTraitSet().replace(PhoenixConvention.GENERIC)),
                     join.getCondition());
         }
     }
@@ -647,7 +665,7 @@ public class PhoenixConverterRules {
         public static PhoenixValuesRule INSTANCE = new PhoenixValuesRule();
         
         private PhoenixValuesRule() {
-            super(LogicalValues.class, Convention.NONE, PhoenixRel.CLIENT_CONVENTION, "PhoenixValuesRule");
+            super(LogicalValues.class, Convention.NONE, PhoenixConvention.CLIENT, "PhoenixValuesRule");
         }
 
         @Override public RelNode convert(RelNode rel) {
@@ -669,7 +687,7 @@ public class PhoenixConverterRules {
 
         private PhoenixUncollectRule() {
             super(Uncollect.class, Convention.NONE, 
-                    PhoenixRel.CLIENT_CONVENTION, "PhoenixUncollectRule");
+                    PhoenixConvention.CLIENT, "PhoenixUncollectRule");
         }
 
         public RelNode convert(RelNode rel) {
@@ -677,7 +695,7 @@ public class PhoenixConverterRules {
             return PhoenixUncollect.create(
                 convert(
                         uncollect.getInput(), 
-                        uncollect.getInput().getTraitSet().replace(out)));
+                        uncollect.getInput().getTraitSet().replace(PhoenixConvention.GENERIC)));
         }
     }
 
@@ -691,16 +709,16 @@ public class PhoenixConverterRules {
 
         private PhoenixCorrelateRule() {
             super(LogicalCorrelate.class, Convention.NONE, 
-                    PhoenixRel.CLIENT_CONVENTION, "PhoenixCorrelateRule");
+                    PhoenixConvention.CLIENT, "PhoenixCorrelateRule");
         }
 
         public RelNode convert(RelNode rel) {
             final Correlate correlate = (Correlate) rel;
             return PhoenixCorrelate.create(
                 convert(correlate.getLeft(), 
-                        correlate.getLeft().getTraitSet().replace(out)),
+                        correlate.getLeft().getTraitSet().replace(PhoenixConvention.GENERIC)),
                 convert(correlate.getRight(), 
-                        correlate.getRight().getTraitSet().replace(out)),
+                        correlate.getRight().getTraitSet().replace(PhoenixConvention.GENERIC)),
                 correlate.getCorrelationId(),
                 correlate.getRequiredColumns(),
                 correlate.getJoinType());
@@ -809,57 +827,24 @@ public class PhoenixConverterRules {
      }
      }
      */
+    
 
     /**
      * Rule to convert a relational expression from
-     * {@link org.apache.phoenix.calcite.rel.PhoenixRel#SERVER_CONVENTION} to
-     * {@link org.apache.phoenix.calcite.rel.PhoenixRel#CLIENT_CONVENTION}.
-     */
-    public static class PhoenixServerToClientConverterRule extends ConverterRule {
-        public static final ConverterRule INSTANCE =
-            new PhoenixServerToClientConverterRule();
-
-        private PhoenixServerToClientConverterRule() {
-            super(RelNode.class, PhoenixRel.SERVER_CONVENTION, PhoenixRel.CLIENT_CONVENTION,
-                "PhoenixServerToClientConverterRule");
-        }
-
-        @Override public RelNode convert(RelNode rel) {
-            return PhoenixToClientConverter.create(rel);
-        }
-    }
-
-    /**
-     * Rule to convert a relational expression from
-     * {@link org.apache.phoenix.calcite.rel.PhoenixRel#SERVERJOIN_CONVENTION} to
-     * {@link org.apache.phoenix.calcite.rel.PhoenixRel#CLIENT_CONVENTION}.
-     */
-    public static class PhoenixProjectableToClientConverterRule extends ConverterRule {
-        public static final ConverterRule INSTANCE =
-            new PhoenixProjectableToClientConverterRule();
-
-        private PhoenixProjectableToClientConverterRule() {
-            super(RelNode.class, PhoenixRel.SERVERJOIN_CONVENTION, PhoenixRel.CLIENT_CONVENTION,
-                "PhoenixProjectableToClientConverterRule");
-        }
-
-        @Override public RelNode convert(RelNode rel) {
-            return PhoenixToClientConverter.create(rel);
-        }
-    }
-
-    /**
-     * Rule to convert a relational expression from
-     * {@link org.apache.phoenix.calcite.rel.PhoenixRel#CONVENTION} to
+     * {@link org.apache.phoenix.calcite.rel.PhoenixConvention} to
      * {@link org.apache.calcite.adapter.enumerable.EnumerableConvention}.
      */
     public static class PhoenixToEnumerableConverterRule extends ConverterRule {
-        public static final ConverterRule INSTANCE =
-            new PhoenixToEnumerableConverterRule();
+        public static final ConverterRule SERVER =
+                new PhoenixToEnumerableConverterRule(PhoenixConvention.SERVER);
+        public static final ConverterRule SERVERJOIN =
+                new PhoenixToEnumerableConverterRule(PhoenixConvention.SERVERJOIN);
+        public static final ConverterRule CLIENT =
+                new PhoenixToEnumerableConverterRule(PhoenixConvention.CLIENT);
 
-        private PhoenixToEnumerableConverterRule() {
-            super(RelNode.class, PhoenixRel.CLIENT_CONVENTION, EnumerableConvention.INSTANCE,
-                "PhoenixToEnumerableConverterRule");
+        private PhoenixToEnumerableConverterRule(Convention inputConvention) {
+            super(RelNode.class, inputConvention, EnumerableConvention.INSTANCE,
+                "PhoenixToEnumerableConverterRule:" + inputConvention);
         }
 
         @Override public RelNode convert(RelNode rel) {

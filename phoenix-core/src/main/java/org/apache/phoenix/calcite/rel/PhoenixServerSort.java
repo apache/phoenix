@@ -21,7 +21,7 @@ public class PhoenixServerSort extends PhoenixAbstractSort {
         RelOptCluster cluster = input.getCluster();
         collation = RelCollationTraitDef.INSTANCE.canonize(collation);
         RelTraitSet traits =
-            input.getTraitSet().replace(PhoenixRel.CLIENT_CONVENTION).replace(collation);
+            input.getTraitSet().replace(PhoenixConvention.CLIENT).replace(collation);
         return new PhoenixServerSort(cluster, traits, input, collation);
     }
 
@@ -38,8 +38,8 @@ public class PhoenixServerSort extends PhoenixAbstractSort {
     
     @Override
     public RelOptCost computeSelfCost(RelOptPlanner planner) {
-        if (getInput().getConvention() != PhoenixRel.SERVER_CONVENTION
-                && getInput().getConvention() != PhoenixRel.SERVERJOIN_CONVENTION)
+        if (!getInput().getConvention().satisfies(PhoenixConvention.SERVER)
+                && !getInput().getConvention().satisfies(PhoenixConvention.SERVERJOIN))
             return planner.getCostFactory().makeInfiniteCost();
         
         return super.computeSelfCost(planner)

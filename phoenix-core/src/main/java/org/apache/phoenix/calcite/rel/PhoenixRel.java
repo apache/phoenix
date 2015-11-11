@@ -2,7 +2,6 @@ package org.apache.phoenix.calcite.rel;
 
 import java.util.List;
 
-import org.apache.calcite.plan.Convention;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.metadata.RelMetadataProvider;
 import org.apache.calcite.util.ImmutableIntList;
@@ -24,11 +23,7 @@ import org.apache.phoenix.schema.types.PDataType;
  * over streams of {@link org.apache.phoenix.schema.tuple.Tuple}s.</p>
  */
 public interface PhoenixRel extends RelNode {
-  /** Calling conventions for relational operations that occur in Phoenix. */
-  Convention SERVER_CONVENTION = new Convention.Impl("PHOENIX_SERVER", PhoenixRel.class);
-  Convention SERVERJOIN_CONVENTION = new Convention.Impl("PHOENIX_SERVERJOIN", PhoenixRel.class);
-  Convention CLIENT_CONVENTION = new Convention.Impl("PHOENIX_CLIENT", PhoenixRel.class);
-  
+
   /** Metadata Provider for PhoenixRel */
   RelMetadataProvider METADATA_PROVIDER = new PhoenixRelMetadataProvider();
 

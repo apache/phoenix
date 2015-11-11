@@ -24,7 +24,7 @@ public class PhoenixClientProject extends PhoenixAbstractProject {
             final List<? extends RexNode> projects, RelDataType rowType) {
         RelOptCluster cluster = input.getCluster();
         final RelTraitSet traits =
-                cluster.traitSet().replace(PhoenixRel.CLIENT_CONVENTION)
+                cluster.traitSet().replace(PhoenixConvention.CLIENT)
                 .replaceIfs(RelCollationTraitDef.INSTANCE,
                         new Supplier<List<RelCollation>>() {
                     public List<RelCollation> get() {
@@ -47,7 +47,8 @@ public class PhoenixClientProject extends PhoenixAbstractProject {
 
     @Override
     public RelOptCost computeSelfCost(RelOptPlanner planner) {
-        if (getInput().getConvention() != PhoenixRel.CLIENT_CONVENTION)
+        if (!getInput().getConvention().satisfies(PhoenixConvention.SERVERJOIN)
+                && !getInput().getConvention().satisfies(PhoenixConvention.CLIENT))
             return planner.getCostFactory().makeInfiniteCost();
         
         return super.computeSelfCost(planner)

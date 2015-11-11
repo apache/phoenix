@@ -38,7 +38,7 @@ public class PhoenixClientSemiJoin extends PhoenixAbstractSemiJoin implements
         RelOptCluster cluster = left.getCluster();
         final JoinInfo joinInfo = JoinInfo.of(left, right, condition);
         final RelTraitSet traits =
-                cluster.traitSet().replace(PhoenixRel.CLIENT_CONVENTION)
+                cluster.traitSet().replace(PhoenixConvention.CLIENT)
                 .replaceIfs(RelCollationTraitDef.INSTANCE,
                         new Supplier<List<RelCollation>>() {
                     public List<RelCollation> get() {
@@ -64,8 +64,8 @@ public class PhoenixClientSemiJoin extends PhoenixAbstractSemiJoin implements
 
     @Override
     public RelOptCost computeSelfCost(RelOptPlanner planner) {
-        if (getLeft().getConvention() != PhoenixRel.CLIENT_CONVENTION 
-                || getRight().getConvention() != PhoenixRel.CLIENT_CONVENTION)
+        if (!getLeft().getConvention().satisfies(PhoenixConvention.GENERIC) 
+                || !getRight().getConvention().satisfies(PhoenixConvention.GENERIC))
             return planner.getCostFactory().makeInfiniteCost();            
         
         if ((!leftKeys.isEmpty() && !RelCollations.contains(RelMetadataQuery.collations(getLeft()), leftKeys))

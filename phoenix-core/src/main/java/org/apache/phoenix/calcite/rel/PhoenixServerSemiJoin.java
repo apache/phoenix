@@ -36,7 +36,7 @@ public class PhoenixServerSemiJoin extends PhoenixAbstractSemiJoin {
             final RelNode left, final RelNode right, RexNode condition) {
         RelOptCluster cluster = left.getCluster();
         final RelTraitSet traits =
-                cluster.traitSet().replace(PhoenixRel.SERVERJOIN_CONVENTION)
+                cluster.traitSet().replace(PhoenixConvention.SERVERJOIN)
                 .replaceIfs(RelCollationTraitDef.INSTANCE,
                         new Supplier<List<RelCollation>>() {
                     public List<RelCollation> get() {
@@ -64,8 +64,8 @@ public class PhoenixServerSemiJoin extends PhoenixAbstractSemiJoin {
 
     @Override
     public RelOptCost computeSelfCost(RelOptPlanner planner) {
-        if (getLeft().getConvention() != PhoenixRel.SERVER_CONVENTION 
-                || getRight().getConvention() != PhoenixRel.CLIENT_CONVENTION)
+        if (!getLeft().getConvention().satisfies(PhoenixConvention.SERVER) 
+                || !getRight().getConvention().satisfies(PhoenixConvention.GENERIC))
             return planner.getCostFactory().makeInfiniteCost();            
         
         //TODO return infinite cost if RHS size exceeds memory limit.

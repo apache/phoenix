@@ -6,6 +6,7 @@ import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.phoenix.calcite.rel.PhoenixAbstractAggregate;
 import org.apache.phoenix.calcite.rel.PhoenixAbstractJoin;
+import org.apache.phoenix.calcite.rel.PhoenixConvention;
 import org.apache.phoenix.calcite.rel.PhoenixRel;
 
 import com.google.common.base.Predicate;
@@ -60,7 +61,7 @@ public class PhoenixJoinSingleValueAggregateMergeRule extends RelOptRule {
         }
         
         call.transformTo(join.copy(join.getTraitSet(), join.getCondition(), 
-                left, convert(right.getInput(), right.getInput().getTraitSet().replace(PhoenixRel.CLIENT_CONVENTION)), join.getJoinType(), false, true));
+                left, convert(right.getInput(), right.getInput().getTraitSet().replace(PhoenixConvention.GENERIC)), join.getJoinType(), false, true));
     }
 
 }

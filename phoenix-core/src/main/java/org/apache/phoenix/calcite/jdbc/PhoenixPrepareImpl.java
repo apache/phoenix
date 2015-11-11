@@ -5,6 +5,7 @@ import java.util.List;
 import org.apache.calcite.adapter.enumerable.EnumerableRules;
 import org.apache.calcite.jdbc.CalcitePrepare;
 import org.apache.calcite.jdbc.CalciteSchema;
+import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptCostFactory;
 import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelOptRule;
@@ -12,8 +13,11 @@ import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.prepare.CalcitePrepareImpl;
 import org.apache.calcite.prepare.Prepare.Materialization;
 import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.rel.logical.LogicalSort;
 import org.apache.calcite.rel.rules.JoinCommuteRule;
+import org.apache.calcite.rel.rules.SortProjectTransposeRule;
 import org.apache.calcite.rel.rules.SortUnionTransposeRule;
+import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.runtime.Hook;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.parser.SqlParser;
@@ -22,15 +26,19 @@ import org.apache.calcite.tools.Programs;
 import org.apache.calcite.util.Holder;
 import org.apache.calcite.util.Pair;
 import org.apache.phoenix.calcite.PhoenixSchema;
-import org.apache.phoenix.calcite.metadata.PhoenixRelMetadataProvider;
 import org.apache.phoenix.calcite.parse.SqlCreateView;
 import org.apache.phoenix.calcite.parser.PhoenixParserImpl;
+import org.apache.phoenix.calcite.rel.PhoenixRel;
+import org.apache.phoenix.calcite.rel.PhoenixServerProject;
+import org.apache.phoenix.calcite.rel.PhoenixTemporarySort;
 import org.apache.phoenix.calcite.rules.PhoenixCompactClientSortRule;
 import org.apache.phoenix.calcite.rules.PhoenixFilterScanMergeRule;
-import org.apache.phoenix.calcite.rules.PhoenixInnerSortRemoveRule;
+import org.apache.phoenix.calcite.rules.PhoenixForwardTableScanRule;
 import org.apache.phoenix.calcite.rules.PhoenixJoinSingleValueAggregateMergeRule;
 import org.apache.phoenix.calcite.rules.PhoenixMergeSortUnionRule;
 import org.apache.phoenix.calcite.rules.PhoenixOrderedAggregateRule;
+import org.apache.phoenix.calcite.rules.PhoenixReverseTableScanRule;
+import org.apache.phoenix.calcite.rules.PhoenixSortServerJoinTransposeRule;
 
 import com.google.common.base.Function;
 
@@ -58,6 +66,14 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
     }
 
     @Override
+    protected RelOptCluster createCluster(RelOptPlanner planner,
+            RexBuilder rexBuilder) {
+        RelOptCluster cluster = super.createCluster(planner, rexBuilder);
+        cluster.setMetadataProvider(PhoenixRel.METADATA_PROVIDER);
+        return cluster;
+    }
+    
+    @Override
     protected RelOptPlanner createPlanner(
             final CalcitePrepare.Context prepareContext,
             org.apache.calcite.plan.Context externalContext,
@@ -69,16 +85,24 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
         planner.addRule(JoinCommuteRule.SWAP_OUTER);
         planner.removeRule(SortUnionTransposeRule.INSTANCE);
         planner.addRule(SortUnionTransposeRule.MATCH_NULL_FETCH);
+        planner.addRule(new SortProjectTransposeRule(
+                PhoenixTemporarySort.class,
+                PhoenixServerProject.class,
+                "PhoenixSortProjectTransposeRule"));
         
         for (RelOptRule rule : this.defaultConverterRules) {
             planner.addRule(rule);
         }
         planner.addRule(PhoenixFilterScanMergeRule.INSTANCE);
-        planner.addRule(PhoenixCompactClientSortRule.SORT_SERVERAGGREGATE);
+        planner.addRule(PhoenixCompactClientSortRule.INSTANCE);
         planner.addRule(PhoenixJoinSingleValueAggregateMergeRule.INSTANCE);
         planner.addRule(PhoenixMergeSortUnionRule.INSTANCE);
-        planner.addRule(PhoenixInnerSortRemoveRule.INSTANCE);
         planner.addRule(PhoenixOrderedAggregateRule.INSTANCE);
+        planner.addRule(PhoenixSortServerJoinTransposeRule.INSTANCE);
+        planner.addRule(new PhoenixForwardTableScanRule(LogicalSort.class));
+        planner.addRule(new PhoenixForwardTableScanRule(PhoenixTemporarySort.class));
+        planner.addRule(new PhoenixReverseTableScanRule(LogicalSort.class));
+        planner.addRule(new PhoenixReverseTableScanRule(PhoenixTemporarySort.class));
         
         for (CalciteSchema schema : prepareContext.getRootSchema().getSubSchemaMap().values()) {
             if (schema.schema instanceof PhoenixSchema) {
@@ -121,7 +145,7 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
 
 				// Second planner pass to do physical "tweaks". This the first time that
 				// EnumerableCalcRel is introduced.
-				final Program program2 = Programs.hep(Programs.CALC_RULES, true, new PhoenixRelMetadataProvider());;
+				final Program program2 = Programs.hep(Programs.CALC_RULES, true, PhoenixRel.METADATA_PROVIDER);;
 
 				Program p = Programs.sequence(program1, program2);
 				input.getValue().set(p);

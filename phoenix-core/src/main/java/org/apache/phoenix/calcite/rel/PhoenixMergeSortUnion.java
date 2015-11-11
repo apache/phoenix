@@ -30,7 +30,7 @@ public class PhoenixMergeSortUnion extends Union implements PhoenixRel {
             final boolean all, final RelCollation collation) {
         RelOptCluster cluster = inputs.get(0).getCluster();
         RelTraitSet traits = 
-        		cluster.traitSetOf(PhoenixRel.CLIENT_CONVENTION)
+        		cluster.traitSetOf(PhoenixConvention.CLIENT)
                 .replaceIfs(RelCollationTraitDef.INSTANCE,
                         new Supplier<List<RelCollation>>() {
                     public List<RelCollation> get() {
@@ -53,7 +53,7 @@ public class PhoenixMergeSortUnion extends Union implements PhoenixRel {
     @Override
     public RelOptCost computeSelfCost(RelOptPlanner planner) {
         for (RelNode input : getInputs()) {
-            if (input.getConvention() != PhoenixRel.CLIENT_CONVENTION
+            if (!input.getConvention().satisfies(PhoenixConvention.GENERIC)
                     || !RelMetadataQuery.collations(input).contains(collation)) {
                 return planner.getCostFactory().makeInfiniteCost();
             }

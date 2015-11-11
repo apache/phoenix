@@ -29,7 +29,7 @@ public class PhoenixClientAggregate extends PhoenixAbstractAggregate {
             ImmutableBitSet groupSet, List<ImmutableBitSet> groupSets, 
             List<AggregateCall> aggCalls) {
         RelOptCluster cluster = input.getCluster();
-        RelTraitSet traits = cluster.traitSetOf(PhoenixRel.CLIENT_CONVENTION);
+        RelTraitSet traits = cluster.traitSetOf(PhoenixConvention.CLIENT);
         return new PhoenixClientAggregate(cluster, traits, input, indicator, 
                 groupSet, groupSets, aggCalls);
     }
@@ -49,7 +49,7 @@ public class PhoenixClientAggregate extends PhoenixAbstractAggregate {
     
     @Override
     public RelOptCost computeSelfCost(RelOptPlanner planner) {
-        if (getInput().getConvention() != PhoenixRel.CLIENT_CONVENTION)
+        if (!getInput().getConvention().satisfies(PhoenixConvention.CLIENT))
             return planner.getCostFactory().makeInfiniteCost();
         
         return super.computeSelfCost(planner)

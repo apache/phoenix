@@ -25,7 +25,7 @@ public class PhoenixUnion extends Union implements PhoenixRel {
     
     public static PhoenixUnion create(List<RelNode> inputs, boolean all) {
         RelOptCluster cluster = inputs.get(0).getCluster();
-        RelTraitSet traits = cluster.traitSetOf(PhoenixRel.CLIENT_CONVENTION);
+        RelTraitSet traits = cluster.traitSetOf(PhoenixConvention.CLIENT);
         return new PhoenixUnion(cluster, traits, inputs, all);
     }
     
@@ -41,7 +41,7 @@ public class PhoenixUnion extends Union implements PhoenixRel {
     @Override
     public RelOptCost computeSelfCost(RelOptPlanner planner) {
         for (RelNode input : getInputs()) {
-            if (input.getConvention() != PhoenixRel.CLIENT_CONVENTION) {
+            if (!input.getConvention().satisfies(PhoenixConvention.GENERIC)) {
                 return planner.getCostFactory().makeInfiniteCost();
             }
         }

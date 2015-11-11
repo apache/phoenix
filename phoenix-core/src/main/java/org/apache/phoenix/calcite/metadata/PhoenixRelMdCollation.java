@@ -1,6 +1,7 @@
 package org.apache.phoenix.calcite.metadata;
 
 import java.util.List;
+
 import org.apache.calcite.rel.RelCollation;
 import org.apache.calcite.rel.RelCollations;
 import org.apache.calcite.rel.RelNode;
@@ -17,6 +18,7 @@ import org.apache.phoenix.calcite.rel.PhoenixCorrelate;
 import org.apache.phoenix.calcite.rel.PhoenixLimit;
 import org.apache.phoenix.calcite.rel.PhoenixMergeSortUnion;
 import org.apache.phoenix.calcite.rel.PhoenixServerJoin;
+import org.apache.phoenix.calcite.rel.PhoenixTableScan;
 
 import com.google.common.collect.ImmutableList;
 
@@ -26,6 +28,10 @@ public class PhoenixRelMdCollation {
                 BuiltInMethod.COLLATIONS.method, new PhoenixRelMdCollation());
 
     private PhoenixRelMdCollation() { }
+
+    public ImmutableList<RelCollation> collations(PhoenixTableScan tableScan) {
+        return ImmutableList.copyOf(tableScan.getCollationList());
+    }
 
     public ImmutableList<RelCollation> collations(PhoenixCorrelate correlate) {
         return ImmutableList.copyOf(correlate(correlate.getLeft(), correlate.getRight(), correlate.getJoinType()));
