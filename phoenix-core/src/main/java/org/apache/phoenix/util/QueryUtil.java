@@ -305,6 +305,9 @@ public final class QueryUtil {
             throws ClassNotFoundException, SQLException {
         // TODO: props is ignored!
         // make sure we load the phoenix driver
+        // TODO: remove this - it doesn't belong here
+        // The driver should be loaded outside of this call as we might
+        // be using the test driver.
         Class.forName(PhoenixDriver.class.getName());
 
         // read the hbase properties from the configuration
