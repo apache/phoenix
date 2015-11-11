@@ -15,13 +15,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.index;
+package org.apache.phoenix.hbase.index.builder;
 
 import java.io.IOException;
 
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-
 import org.apache.phoenix.hbase.index.covered.IndexCodec;
 
 /**
@@ -44,16 +43,5 @@ public abstract class BaseIndexCodec implements IndexCodec {
   @Override
   public boolean isEnabled(Mutation m) throws IOException {
     return true;
-  }
-
-  /**
-   * {@inheritDoc}
-   * <p>
-   * Assumes each mutation is not in a batch. Subclasses that have different batching behavior
-   * should override this.
-   */
-  @Override
-  public byte[] getBatchId(Mutation m) {
-    return null;
   }
 }

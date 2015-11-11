@@ -15,36 +15,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.phoenix.hbase.index.covered;
 
-package org.apache.phoenix.hbase.index.scanner;
-
-import java.io.IOException;
-
-import org.apache.hadoop.hbase.Cell;
-
-
-/**
- * {@link Scanner} that has no underlying data
- */
-public class EmptyScanner implements Scanner {
-
-  @Override
-  public Cell next() throws IOException {
-    return null;
-  }
-
-  @Override
-  public boolean seek(Cell next) throws IOException {
-    return false;
-  }
-
-  @Override
-  public Cell peek() throws IOException {
-    return null;
-  }
-
-  @Override
-  public void close() throws IOException {
-    // noop
-  }
+public interface IndexMetaData {
+    public static final IndexMetaData NULL_INDEX_META_DATA = new IndexMetaData() {};
 }

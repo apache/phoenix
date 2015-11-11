@@ -19,8 +19,8 @@ package org.apache.phoenix.hbase.index;
 
 import java.io.IOException;
 
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
-import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 
 public interface ValueGetter {
 
@@ -32,7 +32,7 @@ public interface ValueGetter {
    *         present.
    * @throws IOException if there is an error accessing the underlying data storage
    */
-  public ImmutableBytesPtr getLatestValue(ColumnReference ref) throws IOException;
+  public ImmutableBytesWritable getLatestValue(ColumnReference ref) throws IOException;
   
   public byte[] getRowKey();
 }

@@ -17,8 +17,6 @@
  */
 package org.apache.phoenix.schema.tuple;
 
-import static org.apache.phoenix.hbase.index.util.ImmutableBytesPtr.copyBytesIfNecessary;
-
 import java.io.IOException;
 
 import org.apache.hadoop.hbase.HConstants;
@@ -28,7 +26,6 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
-import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 
 /**
  * 
@@ -56,13 +53,22 @@ public class ValueGetterTuple extends BaseTuple {
 
     @Override
     public KeyValue getValue(byte[] family, byte[] qualifier) {
-    	ImmutableBytesPtr value = null;
+        ImmutableBytesWritable value = null;
         try {
             value = valueGetter.getLatestValue(new ColumnReference(family, qualifier));
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-    	return new KeyValue(valueGetter.getRowKey(), family, qualifier, HConstants.LATEST_TIMESTAMP, Type.Put, value!=null? copyBytesIfNecessary(value) : null);
+        byte[] rowKey = valueGetter.getRowKey();
+        int valueOffset = 0;
+        int valueLength = 0;
+        byte[] valueBytes = HConstants.EMPTY_BYTE_ARRAY;
+        if (value != null) {
+            valueBytes = value.get();
+            valueOffset = value.getOffset();
+            valueLength = value.getLength();
+        }
+    	return new KeyValue(rowKey, 0, rowKey.length, family, 0, family.length, qualifier, 0, qualifier.length, HConstants.LATEST_TIMESTAMP, Type.Put, valueBytes, valueOffset, valueLength);
     }
 
     @Override
