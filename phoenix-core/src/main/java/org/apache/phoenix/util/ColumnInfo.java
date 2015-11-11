@@ -10,10 +10,16 @@
 
 package org.apache.phoenix.util;
 
+import java.sql.Types;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.schema.types.PVarchar;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
@@ -28,8 +34,33 @@ public class ColumnInfo {
 
     private final String columnName;
     private final int sqlType;
-
+  
+    private final int precision;
+    private final int scale;
+    
+    public static ColumnInfo create(String columnName, int sqlType, Integer maxLength, Integer scale) {
+        if (maxLength == null) {
+            return new ColumnInfo(columnName, sqlType);
+        }
+        if (sqlType == Types.CHAR || sqlType == Types.VARCHAR) {
+            return new ColumnInfo(columnName, sqlType, maxLength);
+        }
+        if (sqlType == Types.DECIMAL) {
+            scale = scale == null ? 0 : Math.min(maxLength, scale);
+            return new ColumnInfo(columnName, sqlType, maxLength, scale);
+        }
+        return new ColumnInfo(columnName, sqlType);
+    }
+    
     public ColumnInfo(String columnName, int sqlType) {
+        this(columnName, sqlType, -1);
+    }
+    
+    public ColumnInfo(String columnName, int sqlType, int maxLength) {
+        this(columnName, sqlType, maxLength, -1);
+    }
+
+    public ColumnInfo(String columnName, int sqlType, int precision, int scale) {
         Preconditions.checkNotNull(columnName, "columnName cannot be null");
         Preconditions.checkArgument(!columnName.isEmpty(), "columnName cannot be empty");
         if(!columnName.startsWith(SchemaUtil.ESCAPE_CHARACTER)) {
@@ -37,6 +68,8 @@ public class ColumnInfo {
         }
         this.columnName = columnName;
         this.sqlType = sqlType;
+        this.precision = precision;
+        this.scale = scale;
     }
 
     public String getColumnName() {
@@ -63,10 +96,31 @@ public class ColumnInfo {
         }
         return unescapedColumnName.substring(index+1).trim();
     }
+    
+    public String toTypeString() {
+        PDataType dataType = getPDataType();
+        if (precision < 0) {
+            return dataType.getSqlTypeName();
+        }
+        if (dataType == PDecimal.INSTANCE) {
+            StringBuilder builder = new StringBuilder();
+            builder.append(dataType.getSqlTypeName());
+            builder.append('(').append(precision).append(',');
+            builder.append(scale < 0 ? 0 : Math.min(precision, scale)).append(')');
+            return builder.toString();
+        }
+        if (dataType == PChar.INSTANCE || dataType == PVarchar.INSTANCE) {
+            StringBuilder builder = new StringBuilder();
+            builder.append(dataType.getSqlTypeName());
+            builder.append('(').append(precision).append(')');
+          return builder.toString();
+        }
+        return dataType.getSqlTypeName();
+    }
 
     @Override
     public String toString() {
-        return getPDataType().getSqlTypeName() + STR_SEPARATOR + columnName ;
+        return toTypeString() + STR_SEPARATOR + columnName ;
     }
 
     @Override
@@ -77,6 +131,8 @@ public class ColumnInfo {
         ColumnInfo that = (ColumnInfo) o;
 
         if (sqlType != that.sqlType) return false;
+        if (precision != that.precision) return false;
+        if (scale != that.scale) return false;
         if (!columnName.equals(that.columnName)) return false;
 
         return true;
@@ -85,7 +141,7 @@ public class ColumnInfo {
     @Override
     public int hashCode() {
         int result = columnName.hashCode();
-        result = 31 * result + sqlType;
+        result = 31 * result + (precision << 2) + (scale << 1) + sqlType;
         return result;
     }
 
@@ -100,15 +156,44 @@ public class ColumnInfo {
      */
     public static ColumnInfo fromString(String stringRepresentation) {
         List<String> components =
-                Lists.newArrayList(stringRepresentation.split(":",2));
-        
+                Lists.newArrayList(stringRepresentation.split(":", 2));
+
         if (components.size() != 2) {
             throw new IllegalArgumentException("Unparseable string: " + stringRepresentation);
         }
 
-        return new ColumnInfo(
-                components.get(1),
-                PDataType.fromSqlTypeName(components.get(0)).getSqlType());
+        String typePart = components.get(0);
+        String columnName = components.get(1);
+        
+        PDataType dataType;
+        Integer maxLength = null;
+        Integer scale = null;
+        if (typePart.contains("(")) {
+            Matcher matcher = Pattern.compile("([^\\(]+)\\((\\d+)(?:,(\\d+))?\\)").matcher(typePart);
+            if (!matcher.matches() || matcher.groupCount() > 3) {
+                throw new IllegalArgumentException("Unparseable type string: " + typePart);
+            }
+            dataType = PDataType.fromSqlTypeName(matcher.group(1));
+            maxLength = Integer.valueOf(matcher.group(2));
+            if (matcher.group(3) != null) {
+                scale = Integer.valueOf(matcher.group(3));
+            }
+        } else {
+            dataType = PDataType.fromSqlTypeName(typePart);
+        }
+                
+        return ColumnInfo.create(columnName, dataType.getSqlType(), maxLength, scale);
+    }
+    
+    public int getMaxLength() {
+        return precision;
     }
 
+    public int getPrecision() {
+        return precision;
+    }
+    
+    public int getScale() {
+        return scale;
+    }
 }

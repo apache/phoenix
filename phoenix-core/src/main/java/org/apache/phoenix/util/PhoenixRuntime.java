@@ -389,8 +389,7 @@ public class PhoenixRuntime {
         	int offset = (table.getBucketNum() == null ? 0 : 1);
         	for (int i = offset; i < table.getColumns().size(); i++) {
         	   PColumn pColumn = table.getColumns().get(i);
-               int sqlType = pColumn.getDataType().getSqlType();
-               columnInfoList.add(new ColumnInfo(pColumn.toString(), sqlType)); 
+               columnInfoList.add(PhoenixRuntime.getColumnInfo(pColumn)); 
             }
         } else {
             // Leave "null" as indication to skip b/c it doesn't exist
@@ -459,19 +458,18 @@ public class PhoenixRuntime {
         return getColumnInfo(pColumn);
     }
 
-   /**
+    /**
      * Constructs a column info for the supplied pColumn
      * @param pColumn
      * @return columnInfo
      * @throws SQLException if the parameter is null.
      */
     public static ColumnInfo getColumnInfo(PColumn pColumn) throws SQLException {
-        if (pColumn==null) {
+        if (pColumn == null) {
             throw new SQLException("pColumn must not be null.");
         }
-        int sqlType = pColumn.getDataType().getSqlType();
-        ColumnInfo columnInfo = new ColumnInfo(pColumn.toString(),sqlType);
-        return columnInfo;
+        return ColumnInfo.create(pColumn.toString(), pColumn.getDataType().getSqlType(),
+                pColumn.getMaxLength(), pColumn.getScale());
     }
 
    /**

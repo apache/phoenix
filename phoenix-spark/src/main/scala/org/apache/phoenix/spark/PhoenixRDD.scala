@@ -13,15 +13,13 @@
  */
 package org.apache.phoenix.spark
 
-import java.text.DecimalFormat
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hbase.{HBaseConfiguration, HConstants}
 import org.apache.hadoop.io.NullWritable
 import org.apache.phoenix.mapreduce.PhoenixInputFormat
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil
 import org.apache.phoenix.schema.types._
-import org.apache.phoenix.util.{PhoenixRuntime, ColumnInfo}
+import org.apache.phoenix.util.ColumnInfo
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
@@ -124,22 +122,22 @@ class PhoenixRDD(sc: SparkContext, table: String, columns: Seq[String],
 
   def phoenixSchemaToCatalystSchema(columnList: Seq[ColumnInfo]) = {
     columnList.map(ci => {
-      val structType = phoenixTypeToCatalystType(ci.getPDataType)
+      val structType = phoenixTypeToCatalystType(ci)
       StructField(ci.getDisplayName, structType)
     })
   }
 
 
   // Lookup table for Phoenix types to Spark catalyst types
-  def phoenixTypeToCatalystType(phoenixType: PDataType[_]): DataType = phoenixType match {
+  def phoenixTypeToCatalystType(columnInfo: ColumnInfo): DataType = columnInfo.getPDataType match {
     case t if t.isInstanceOf[PVarchar] || t.isInstanceOf[PChar] => StringType
     case t if t.isInstanceOf[PLong] || t.isInstanceOf[PUnsignedLong] => LongType
     case t if t.isInstanceOf[PInteger] || t.isInstanceOf[PUnsignedInt] => IntegerType
     case t if t.isInstanceOf[PFloat] || t.isInstanceOf[PUnsignedFloat] => FloatType
     case t if t.isInstanceOf[PDouble] || t.isInstanceOf[PUnsignedDouble] => DoubleType
-    // TODO: support custom precision / scale.
     // Use Spark system default precision for now (explicit to work with < 1.5)
-    case t if t.isInstanceOf[PDecimal] => DecimalType(38, 18)
+    case t if t.isInstanceOf[PDecimal] => 
+      if (columnInfo.getPrecision < 0) DecimalType(38, 18) else DecimalType(columnInfo.getPrecision, columnInfo.getScale)
     case t if t.isInstanceOf[PTimestamp] || t.isInstanceOf[PUnsignedTimestamp] => TimestampType
     case t if t.isInstanceOf[PTime] || t.isInstanceOf[PUnsignedTime] => TimestampType
     case t if t.isInstanceOf[PDate] || t.isInstanceOf[PUnsignedDate] => TimestampType
@@ -154,8 +152,8 @@ class PhoenixRDD(sc: SparkContext, table: String, columns: Seq[String],
     case t if t.isInstanceOf[PTinyintArray] || t.isInstanceOf[PUnsignedTinyintArray] => ArrayType(ByteType, containsNull = true)
     case t if t.isInstanceOf[PFloatArray] || t.isInstanceOf[PUnsignedFloatArray] => ArrayType(FloatType, containsNull = true)
     case t if t.isInstanceOf[PDoubleArray] || t.isInstanceOf[PUnsignedDoubleArray] => ArrayType(DoubleType, containsNull = true)
-    // TODO: support custom precision / scale
-    case t if t.isInstanceOf[PDecimalArray] => { ArrayType(DecimalType(38, 18), containsNull = true) }
+    case t if t.isInstanceOf[PDecimalArray] => ArrayType(
+      if (columnInfo.getPrecision < 0) DecimalType(38, 18) else DecimalType(columnInfo.getPrecision, columnInfo.getScale), containsNull = true)
     case t if t.isInstanceOf[PTimestampArray] || t.isInstanceOf[PUnsignedTimestampArray] => ArrayType(TimestampType, containsNull = true)
     case t if t.isInstanceOf[PDateArray] || t.isInstanceOf[PUnsignedDateArray] => ArrayType(TimestampType, containsNull = true)
     case t if t.isInstanceOf[PTimeArray] || t.isInstanceOf[PUnsignedTimeArray] => ArrayType(TimestampType, containsNull = true)
