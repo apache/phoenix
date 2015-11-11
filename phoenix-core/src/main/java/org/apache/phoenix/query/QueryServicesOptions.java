@@ -27,6 +27,7 @@ import static org.apache.phoenix.query.QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB
 import static org.apache.phoenix.query.QueryServices.DELAY_FOR_SCHEMA_UPDATE_CHECK;
 import static org.apache.phoenix.query.QueryServices.DROP_METADATA_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.EXPLAIN_CHUNK_COUNT_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.GLOBAL_METRICS_ENABLED;
 import static org.apache.phoenix.query.QueryServices.GROUPBY_MAX_CACHE_SIZE_ATTRIB;
@@ -198,6 +199,7 @@ public class QueryServicesOptions {
     public static final boolean DEFAULT_ALLOW_VIEWS_ADD_NEW_CF_BASE_TABLE = true;
     
     public static final boolean DEFAULT_RETURN_SEQUENCE_VALUES = false;
+    public static final String DEFAULT_EXTRA_JDBC_ARGUMENTS = "";
 
     private final Configuration config;
 
@@ -543,4 +545,8 @@ public class QueryServicesOptions {
         return this;
     }
     
+    public QueryServicesOptions setExtraJDBCArguments(String extraArgs) {
+        config.set(EXTRA_JDBC_ARGUMENTS_ATTRIB, extraArgs);
+        return this;
+    }
 }

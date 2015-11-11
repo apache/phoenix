@@ -45,6 +45,7 @@ import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.parse.WildcardParseNode;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 
 import com.google.common.base.Function;
 import com.google.common.base.Joiner;
@@ -305,6 +306,9 @@ public final class QueryUtil {
             throws ClassNotFoundException, SQLException {
         // TODO: props is ignored!
         // make sure we load the phoenix driver
+        // TODO: remove this - it doesn't belong here
+        // The driver should be loaded outside of this call as we might
+        // be using the test driver.
         Class.forName(PhoenixDriver.class.getName());
 
         // read the hbase properties from the configuration
@@ -341,8 +345,13 @@ public final class QueryUtil {
         server = Joiner.on(',').join(servers);
         String znodeParent = conf.get(HConstants.ZOOKEEPER_ZNODE_PARENT,
                 HConstants.DEFAULT_ZOOKEEPER_ZNODE_PARENT);
-
-        return getUrl(server, port, znodeParent);
+        String url = getUrl(server, port, znodeParent);
+        // Mainly for testing to tack on the test=true part to ensure driver is found on server
+        String extraArgs = conf.get(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
+        if (extraArgs.length() > 0) {
+            url += extraArgs + PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
+        }
+        return url;
     }
     
     public static String getViewStatement(String schemaName, String tableName, String where) {
