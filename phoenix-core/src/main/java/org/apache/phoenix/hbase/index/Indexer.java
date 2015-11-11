@@ -25,7 +25,6 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -280,58 +279,6 @@ public class Indexer extends BaseRegionObserver {
           // write them, either to WAL or the index tables
           doPre(indexUpdates, edit, durability);
       }
-  }
-
-  private class MultiMutation extends Mutation {
-
-    private ImmutableBytesPtr rowKey;
-
-    public MultiMutation(ImmutableBytesPtr rowkey) {
-      this.rowKey = rowkey;
-    }
-
-    /**
-     * @param stored
-     */
-    public void addAll(Mutation stored) {
-      // add all the kvs
-      for (Entry<byte[], List<Cell>> kvs : stored.getFamilyCellMap().entrySet()) {
-        byte[] family = kvs.getKey();
-        List<Cell> list = getKeyValueList(family, kvs.getValue().size());
-        list.addAll(kvs.getValue());
-        familyMap.put(family, list);
-      }
-
-      // add all the attributes, not overriding already stored ones
-      for (Entry<String, byte[]> attrib : stored.getAttributesMap().entrySet()) {
-        if (this.getAttribute(attrib.getKey()) == null) {
-          this.setAttribute(attrib.getKey(), attrib.getValue());
-        }
-      }
-    }
-
-    private List<Cell> getKeyValueList(byte[] family, int hint) {
-      List<Cell> list = familyMap.get(family);
-      if (list == null) {
-        list = new ArrayList<Cell>(hint);
-      }
-      return list;
-    }
-
-    @Override
-    public byte[] getRow(){
-      return this.rowKey.copyBytesIfNecessary();
-    }
-
-    @Override
-    public int hashCode() {
-      return this.rowKey.hashCode();
-    }
-
-    @Override
-    public boolean equals(Object o) {
-      return o == null ? false : o.hashCode() == this.hashCode();
-    }
   }
 
   /**

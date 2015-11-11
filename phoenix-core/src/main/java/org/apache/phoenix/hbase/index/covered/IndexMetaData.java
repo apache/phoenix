@@ -15,27 +15,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.phoenix.hbase.index.covered;
 
-package org.apache.phoenix.cache;
-
-import java.io.Closeable;
-import java.io.IOException;
-import java.util.Collections;
-import java.util.List;
-
-import org.apache.phoenix.index.IndexMaintainer;
-
-public interface IndexMetaDataCache extends Closeable {
-    public static final IndexMetaDataCache EMPTY_INDEX_META_DATA_CACHE = new IndexMetaDataCache() {
-
-        @Override
-        public void close() throws IOException {
-        }
-
-        @Override
-        public List<IndexMaintainer> getIndexMaintainers() {
-            return Collections.emptyList();
-        }
-    };
-    public List<IndexMaintainer> getIndexMaintainers();
+public interface IndexMetaData {
+    public static final IndexMetaData NULL_INDEX_META_DATA = new IndexMetaData() {};
 }

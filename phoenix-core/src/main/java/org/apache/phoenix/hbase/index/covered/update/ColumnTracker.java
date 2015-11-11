@@ -19,7 +19,6 @@ package org.apache.phoenix.hbase.index.covered.update;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.List;
 
 
@@ -45,7 +44,7 @@ public class ColumnTracker implements IndexedColumnGroup {
   public ColumnTracker(Collection<? extends ColumnReference> columns) {
     this.columns = new ArrayList<ColumnReference>(columns);
     // sort the columns
-    Collections.sort(this.columns);
+    // no need to do this: Collections.sort(this.columns);
     this.hashCode = calcHashCode(this.columns);
   }
 
