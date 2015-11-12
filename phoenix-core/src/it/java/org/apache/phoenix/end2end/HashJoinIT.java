@@ -34,6 +34,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.sql.Array;
 import java.sql.Connection;
 import java.sql.Date;
 import java.sql.DriverManager;
@@ -3864,6 +3865,68 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
             statement.executeUpdate(query);
             query = "drop table SECONDARY_LARGE_TABLE";
             statement.executeUpdate(query);
+            conn.close();
+        }
+    }
+    
+    // PHOENIX-2381
+    @Test
+    public void testJoinWithMultiTenancy() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            conn.createStatement().execute("CREATE TABLE INVENTORY (" +
+                            " TENANTID UNSIGNED_INT NOT NULL" +
+                            ",ID UNSIGNED_INT NOT NULL" +
+                            ",FOO UNSIGNED_INT NOT NULL" +
+                            ",TIMESTAMP UNSIGNED_LONG NOT NULL" +
+                            ",CODES INTEGER ARRAY[] NOT NULL" +
+                            ",V UNSIGNED_LONG" +
+                            " CONSTRAINT pk PRIMARY KEY (TENANTID, ID, FOO, TIMESTAMP, CODES))" +
+                            " DEFAULT_COLUMN_FAMILY ='E'," +
+                            " MULTI_TENANT=true");
+            PreparedStatement upsertStmt = conn.prepareStatement(
+                    "upsert into INVENTORY "
+                    + "(tenantid, id, foo, timestamp, codes) "
+                    + "values (?, ?, ?, ?, ?)");
+            upsertStmt.setInt(1, 15);
+            upsertStmt.setInt(2, 5);
+            upsertStmt.setInt(3, 0);
+            upsertStmt.setLong(4, 6);
+            Array array = conn.createArrayOf("INTEGER", new Object[] {1, 2});
+            upsertStmt.setArray(5, array);
+            upsertStmt.executeUpdate();
+            conn.commit();
+            
+            conn.createStatement().execute("CREATE TABLE PRODUCT_IDS (" +
+                            " PRODUCT_ID UNSIGNED_INT NOT NULL" +
+                            ",PRODUCT_NAME VARCHAR" +
+                            " CONSTRAINT pk PRIMARY KEY (PRODUCT_ID))" +
+                            " DEFAULT_COLUMN_FAMILY ='NAME'");
+            upsertStmt = conn.prepareStatement(
+                    "upsert into PRODUCT_IDS "
+                    + "(product_id, product_name) "
+                    + "values (?, ?)");
+            upsertStmt.setInt(1, 5);
+            upsertStmt.setString(2, "DUMMY");
+            upsertStmt.executeUpdate();
+            conn.commit();
+            conn.close();            
+
+            // Create a tenant-specific connection.
+            props.setProperty("TenantId", "15");
+            conn = DriverManager.getConnection(getUrl(), props);
+            ResultSet rs = conn.createStatement().executeQuery(
+                    "SELECT * FROM INVENTORY INNER JOIN PRODUCT_IDS ON (PRODUCT_ID = INVENTORY.ID)");
+            assertTrue(rs.next());
+            assertEquals(rs.getInt(1), 5);
+            assertFalse(rs.next());
+            rs = conn.createStatement().executeQuery(
+                    "SELECT * FROM INVENTORY RIGHT JOIN PRODUCT_IDS ON (PRODUCT_ID = INVENTORY.ID)");
+            assertTrue(rs.next());
+            assertEquals(rs.getInt(1), 5);
+            assertFalse(rs.next());
+        } finally {
             conn.close();
         }
     }
