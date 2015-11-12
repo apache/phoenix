@@ -225,17 +225,13 @@ public abstract class BaseQueryPlan implements QueryPlan {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-        byte[] tenantIdBytes;
-        if( table.isMultiTenant() == true ) {
-            tenantIdBytes = connection.getTenantId() == null ? null :
-                    ScanUtil.getTenantIdBytes(
-                            table.getRowKeySchema(),
-                            table.getBucketNum()!=null,
-                            connection.getTenantId());
-        } else {
-            tenantIdBytes = connection.getTenantId() == null ? null : connection.getTenantId().getBytes();
-        }
-
+        byte[] tenantIdBytes = connection.getTenantId() == null ?
+                  null
+                : ScanUtil.getTenantIdBytes(
+                        table.getRowKeySchema(),
+                        table.getBucketNum()!=null,
+                        connection.getTenantId(),
+                        table.isMultiTenant());
         ScanUtil.setTenantId(scan, tenantIdBytes);
         String customAnnotations = LogUtil.customAnnotationsToString(connection);
         ScanUtil.setCustomAnnotations(scan, customAnnotations == null ? null : customAnnotations.getBytes());
