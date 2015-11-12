@@ -77,8 +77,8 @@ public class PUnsignedSmallintArray extends PArrayDataType<short[]> {
         if (value == null) {
             return true;
         }
-        PhoenixArray pArr = (PhoenixArray) value;
-        Object[] shortArr = (Object[]) pArr.array;
+        PhoenixArray.PrimitiveShortPhoenixArray pArr = (PhoenixArray.PrimitiveShortPhoenixArray) value;
+        short[] shortArr = (short[]) pArr.array;
         for (Object i : shortArr) {
             if (!super.isCoercibleTo(PUnsignedSmallint.INSTANCE, i)) {
                 return false;

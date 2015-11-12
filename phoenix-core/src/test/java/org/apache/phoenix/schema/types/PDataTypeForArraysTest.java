@@ -1200,4 +1200,15 @@ public class PDataTypeForArraysTest {
         String value = (String)PVarchar.INSTANCE.toObject(ptr, SortOrder.DESC);
         assertEquals(null, value);
     }
+    
+    @Test
+    public void testIsCoercibleTo() {
+        PDataTypeFactory typeFactory = PDataTypeFactory.getInstance();
+        for (PDataType<?> type : typeFactory.getTypes()) {
+            if (type.isArrayType()) {
+                Object arr = type.getSampleValue();
+                assertTrue(type.isCoercibleTo(type, arr));
+            }
+        }
+    }
 }
