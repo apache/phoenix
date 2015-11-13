@@ -208,6 +208,7 @@ public class TestUtil {
     public static final String JOIN_SUPPLIER_TABLE_DISPLAY_NAME = JOIN_SCHEMA + "." + JOIN_SUPPLIER_TABLE;
     public static final String JOIN_COITEM_TABLE_DISPLAY_NAME = JOIN_SCHEMA + "." + JOIN_COITEM_TABLE;
     public static final String BINARY_NAME = "BinaryTable";
+    public static final int NUM_MILLIS_IN_DAY = 86400000;
 
     /**
      * Read-only properties used by all tests
