@@ -228,12 +228,6 @@ public class FromCompiler {
         return new SingleTableColumnResolver(connection, new TableRef(tableRef.getTableAlias(), t, tableRef.getLowerBoundTimeStamp(), tableRef.hasDynamicCols()));
     }
     
-    public static ColumnResolver getResolver(PhoenixConnection connection, TableRef tableRef)
-            throws SQLException {
-        SingleTableColumnResolver visitor = new SingleTableColumnResolver(connection, tableRef);
-        return visitor;
-    }
-
     public static ColumnResolver getResolver(TableRef tableRef)
             throws SQLException {
         SingleTableColumnResolver visitor = new SingleTableColumnResolver(tableRef);

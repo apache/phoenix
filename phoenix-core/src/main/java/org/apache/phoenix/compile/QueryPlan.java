@@ -51,7 +51,7 @@ public interface QueryPlan extends StatementPlan {
     
     public long getEstimatedSize();
     
-    @Deprecated
+    // TODO: change once joins are supported
     TableRef getTableRef();
     
     /**

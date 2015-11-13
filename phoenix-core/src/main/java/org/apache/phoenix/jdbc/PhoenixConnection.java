@@ -53,8 +53,6 @@ import java.util.concurrent.Executor;
 
 import javax.annotation.Nullable;
 
-import co.cask.tephra.Transaction;
-
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.htrace.Sampler;
@@ -78,7 +76,6 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PMetaData;
 import org.apache.phoenix.schema.PMetaData.Pruner;
-import org.apache.phoenix.schema.PMetaDataImpl;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
@@ -169,7 +166,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     }
 
     public PhoenixConnection(PhoenixConnection connection) throws SQLException {
-        this(connection, connection.isDescVarLengthRowKeyUpgrade);
+        this(connection, connection.isDescVarLengthRowKeyUpgrade());
     }
     
     public PhoenixConnection(PhoenixConnection connection, MutationState mutationState) throws SQLException {
