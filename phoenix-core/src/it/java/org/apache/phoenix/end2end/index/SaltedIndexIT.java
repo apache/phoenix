@@ -68,7 +68,7 @@ public class SaltedIndexIT extends BaseHBaseManagedTimeIT {
             conn.createStatement().execute("ALTER TABLE " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME + " SET IMMUTABLE_ROWS=true");
             conn.createStatement().executeQuery("SELECT COUNT(*) FROM " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME).next();
             PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-            assertTrue(pconn.getMetaDataCache().getTable(new PTableKey(pconn.getTenantId(), TestUtil.DEFAULT_DATA_TABLE_FULL_NAME)).isImmutableRows());
+            assertTrue(pconn.getTable(new PTableKey(pconn.getTenantId(), TestUtil.DEFAULT_DATA_TABLE_FULL_NAME)).isImmutableRows());
         } finally {
             conn.close();
         }

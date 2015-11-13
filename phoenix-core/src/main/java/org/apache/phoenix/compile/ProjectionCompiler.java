@@ -184,11 +184,11 @@ public class ProjectionCompiler {
         String tableName = index.getParentName().getString();
         PTable dataTable = null;
         try {
-        	dataTable = conn.getMetaDataCache().getTable(new PTableKey(tenantId, tableName));
+        	dataTable = conn.getTable(new PTableKey(tenantId, tableName));
         } catch (TableNotFoundException e) {
             if (tenantId != null) { 
             	// Check with null tenantId 
-            	dataTable = conn.getMetaDataCache().getTable(new PTableKey(null, tableName));
+            	dataTable = conn.getTable(new PTableKey(null, tableName));
             }
             else {
             	throw e;
@@ -279,7 +279,7 @@ public class ProjectionCompiler {
         PTable index = tableRef.getTable();
         PhoenixConnection conn = context.getConnection();
         String tableName = index.getParentName().getString();
-        PTable table = conn.getMetaDataCache().getTable(new PTableKey(conn.getTenantId(), tableName));
+        PTable table = conn.getTable(new PTableKey(conn.getTenantId(), tableName));
         PColumnFamily pfamily = table.getColumnFamily(cfName);
         for (PColumn column : pfamily.getColumns()) {
             String indexColName = IndexUtil.getIndexColumnName(column);

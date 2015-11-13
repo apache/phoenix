@@ -101,8 +101,8 @@ public class IndexMaintainerTest  extends BaseConnectionlessQueryTest {
         try {
             conn.createStatement().execute("CREATE INDEX idx ON " + fullTableName + "(" + indexColumns + ") " + (includeColumns.isEmpty() ? "" : "INCLUDE (" + includeColumns + ") ") + (indexProps.isEmpty() ? "" : indexProps));
             PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-            PTable table = pconn.getMetaDataCache().getTable(new PTableKey(pconn.getTenantId(), fullTableName));
-            PTable index = pconn.getMetaDataCache().getTable(new PTableKey(pconn.getTenantId(),fullIndexName));
+            PTable table = pconn.getTable(new PTableKey(pconn.getTenantId(), fullTableName));
+            PTable index = pconn.getTable(new PTableKey(pconn.getTenantId(),fullIndexName));
             ImmutableBytesWritable ptr = new ImmutableBytesWritable();
             table.getIndexMaintainers(ptr, pconn);
             List<IndexMaintainer> c1 = IndexMaintainer.deserialize(ptr, builder);
