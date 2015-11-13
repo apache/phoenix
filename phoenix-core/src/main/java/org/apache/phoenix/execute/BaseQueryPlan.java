@@ -73,6 +73,7 @@ import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.ScanUtil;
+import org.apache.phoenix.util.TransactionUtil;
 
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
@@ -223,23 +224,25 @@ public abstract class BaseQueryPlan implements QueryPlan {
         if (table.getType() != PTableType.SYSTEM) {
             scan.setConsistency(connection.getConsistency());
         }
-        // Get the time range of row_timestamp column
-        TimeRange rowTimestampRange = context.getScanRanges().getRowTimestampRange();
-        // Get the already existing time range on the scan.
-        TimeRange scanTimeRange = scan.getTimeRange();
-        Long scn = connection.getSCN();
-        if (scn == null) {
-            scn = context.getCurrentTime();
-        }
-        try {
-            TimeRange timeRangeToUse = ScanUtil.intersectTimeRange(rowTimestampRange, scanTimeRange, scn);
-            if (timeRangeToUse == null) {
-                return ResultIterator.EMPTY_ITERATOR;
-            }
-            scan.setTimeRange(timeRangeToUse.getMin(), timeRangeToUse.getMax());
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+        if (!table.isTransactional()) {
+	                // Get the time range of row_timestamp column
+	        TimeRange rowTimestampRange = context.getScanRanges().getRowTimestampRange();
+	        // Get the already existing time range on the scan.
+	        TimeRange scanTimeRange = scan.getTimeRange();
+	        Long scn = connection.getSCN();
+	        if (scn == null) {
+	            scn = context.getCurrentTime();
+	        }
+	        try {
+	            TimeRange timeRangeToUse = ScanUtil.intersectTimeRange(rowTimestampRange, scanTimeRange, scn);
+	            if (timeRangeToUse == null) {
+	                return ResultIterator.EMPTY_ITERATOR;
+	            }
+	            scan.setTimeRange(timeRangeToUse.getMin(), timeRangeToUse.getMax());
+	        } catch (IOException e) {
+	            throw new RuntimeException(e);
+	        }
+	    }
         byte[] tenantIdBytes;
         if( table.isMultiTenant() == true ) {
             tenantIdBytes = connection.getTenantId() == null ? null :
@@ -326,6 +329,9 @@ public abstract class BaseQueryPlan implements QueryPlan {
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         IndexMaintainer.serialize(dataTable, ptr, indexes, context.getConnection());
         scan.setAttribute(BaseScannerRegionObserver.LOCAL_INDEX_BUILD, ByteUtil.copyKeyBytesIfNecessary(ptr));
+        if (dataTable.isTransactional()) {
+            scan.setAttribute(BaseScannerRegionObserver.TX_STATE, context.getConnection().getMutationState().encodeTransaction());
+        }
     }
 
     private void serializeViewConstantsIntoScan(Scan scan, PTable dataTable) {

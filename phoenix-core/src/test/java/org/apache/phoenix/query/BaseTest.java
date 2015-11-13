@@ -82,11 +82,13 @@ import static org.apache.phoenix.util.TestUtil.STABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.TABLE_WITH_ARRAY;
 import static org.apache.phoenix.util.TestUtil.TABLE_WITH_SALTING;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.apache.phoenix.util.TestUtil.TRANSACTIONAL_DATA_TABLE;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
@@ -106,6 +108,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Properties;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 import javax.annotation.Nonnull;
 
@@ -130,6 +133,7 @@ import org.apache.phoenix.end2end.BaseClientManagedTimeIT;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
+import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
 import org.apache.phoenix.schema.NewerTableAlreadyExistsException;
 import org.apache.phoenix.schema.PTableType;
@@ -143,12 +147,28 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.apache.twill.discovery.DiscoveryService;
+import org.apache.twill.discovery.ZKDiscoveryService;
+import org.apache.twill.internal.utils.Networks;
+import org.apache.twill.zookeeper.RetryStrategies;
+import org.apache.twill.zookeeper.ZKClientService;
+import org.apache.twill.zookeeper.ZKClientServices;
+import org.apache.twill.zookeeper.ZKClients;
+import org.junit.ClassRule;
+import org.junit.rules.TemporaryFolder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import co.cask.tephra.TransactionManager;
+import co.cask.tephra.TxConstants;
+import co.cask.tephra.distributed.TransactionService;
+import co.cask.tephra.metrics.TxMetricsCollector;
+import co.cask.tephra.persist.InMemoryTransactionStateStorage;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.google.inject.util.Providers;
 
 /**
  * 
@@ -187,7 +207,11 @@ public abstract class BaseTest {
             "   CONSTRAINT pk PRIMARY KEY (varchar_pk, char_pk, int_pk, long_pk DESC, decimal_pk, date_pk)) ";
     private static final Map<String,String> tableDDLMap;
     private static final Logger logger = LoggerFactory.getLogger(BaseTest.class);
-
+    private static ZKClientService zkClient;
+    private static TransactionService txService;
+    @ClassRule
+    public static TemporaryFolder tmpFolder = new TemporaryFolder();
+    
     static {
         ImmutableMap.Builder<String,String> builder = ImmutableMap.builder();
         builder.put(ENTITY_HISTORY_TABLE_NAME,"create table " + ENTITY_HISTORY_TABLE_NAME +
@@ -401,48 +425,9 @@ public abstract class BaseTest {
         builder.put("KVBigIntValueTest", "create table KVBigIntValueTest" +
                 "   (pk integer not null primary key,\n" +
                 "    kv bigint)\n");
-        builder.put(INDEX_DATA_TABLE, "create table " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE + "(" +
-                "   varchar_pk VARCHAR NOT NULL, " +
-                "   char_pk CHAR(6) NOT NULL, " +
-                "   int_pk INTEGER NOT NULL, "+ 
-                "   long_pk BIGINT NOT NULL, " +
-                "   decimal_pk DECIMAL(31, 10) NOT NULL, " +
-                "   date_pk DATE NOT NULL, " +
-                "   a.varchar_col1 VARCHAR, " +
-                "   a.char_col1 CHAR(10), " +
-                "   a.int_col1 INTEGER, " +
-                "   a.long_col1 BIGINT, " +
-                "   a.decimal_col1 DECIMAL(31, 10), " +
-                "   a.date1 DATE, " +
-                "   b.varchar_col2 VARCHAR, " +
-                "   b.char_col2 CHAR(10), " +
-                "   b.int_col2 INTEGER, " +
-                "   b.long_col2 BIGINT, " +
-                "   b.decimal_col2 DECIMAL(31, 10), " +
-                "   b.date2 DATE " +
-                "   CONSTRAINT pk PRIMARY KEY (varchar_pk, char_pk, int_pk, long_pk DESC, decimal_pk, date_pk)) " +
-                "IMMUTABLE_ROWS=true");
-        builder.put(MUTABLE_INDEX_DATA_TABLE, "create table " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + MUTABLE_INDEX_DATA_TABLE + "(" +
-                "   varchar_pk VARCHAR NOT NULL, " +
-                "   char_pk CHAR(6) NOT NULL, " +
-                "   int_pk INTEGER NOT NULL, "+ 
-                "   long_pk BIGINT NOT NULL, " +
-                "   decimal_pk DECIMAL(31, 10) NOT NULL, " +
-                "   date_pk DATE NOT NULL, " +
-                "   a.varchar_col1 VARCHAR, " +
-                "   a.char_col1 CHAR(10), " +
-                "   a.int_col1 INTEGER, " +
-                "   a.long_col1 BIGINT, " +
-                "   a.decimal_col1 DECIMAL(31, 10), " +
-                "   a.date1 DATE, " +
-                "   b.varchar_col2 VARCHAR, " +
-                "   b.char_col2 CHAR(10), " +
-                "   b.int_col2 INTEGER, " +
-                "   b.long_col2 BIGINT, " +
-                "   b.decimal_col2 DECIMAL(31, 10), " +
-                "   b.date2 DATE " +
-                "   CONSTRAINT pk PRIMARY KEY (varchar_pk, char_pk, int_pk, long_pk DESC, decimal_pk, date_pk)) "
-                );
+        builder.put(INDEX_DATA_TABLE, "create table " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE + TEST_TABLE_SCHEMA + "IMMUTABLE_ROWS=true");
+        builder.put(MUTABLE_INDEX_DATA_TABLE, "create table " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + MUTABLE_INDEX_DATA_TABLE + TEST_TABLE_SCHEMA);
+        builder.put(TRANSACTIONAL_DATA_TABLE, "create table " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + TRANSACTIONAL_DATA_TABLE + TEST_TABLE_SCHEMA + "TRANSACTIONAL=true");
         builder.put("SumDoubleTest","create table SumDoubleTest" +
                 "   (id varchar not null primary key, d DOUBLE, f FLOAT, ud UNSIGNED_DOUBLE, uf UNSIGNED_FLOAT, i integer, de decimal)");
         builder.put(JOIN_ORDER_TABLE_FULL_NAME, "create table " + JOIN_ORDER_TABLE_FULL_NAME +
@@ -499,9 +484,9 @@ public abstract class BaseTest {
         return conf.get(QueryServices.ZOOKEEPER_PORT_ATTRIB);
     }
     
-    private static String url;
+    protected static String url;
     protected static PhoenixTestDriver driver;
-    private static boolean clusterInitialized = false;
+    protected static boolean clusterInitialized = false;
     private static HBaseTestingUtility utility;
     protected static final Configuration config = HBaseConfiguration.create(); 
     
@@ -512,10 +497,53 @@ public abstract class BaseTest {
         return url;
     }
     
-    protected static String checkClusterInitialized(ReadOnlyProps overrideProps) {
+    private static void teardownTxManager() throws SQLException {
+        try {
+            if (txService != null) txService.stopAndWait();
+        } finally {
+            try {
+                if (zkClient != null) zkClient.stopAndWait();
+            } finally {
+                txService = null;
+                zkClient = null;
+            }
+        }
+        
+    }
+    
+    protected static void setupTxManager() throws SQLException, IOException {
+        config.setBoolean(TxConstants.Manager.CFG_DO_PERSIST, false);
+        config.set(TxConstants.Service.CFG_DATA_TX_CLIENT_RETRY_STRATEGY, "n-times");
+        config.setInt(TxConstants.Service.CFG_DATA_TX_CLIENT_ATTEMPTS, 1);
+        config.setInt(TxConstants.Service.CFG_DATA_TX_BIND_PORT, Networks.getRandomPort());
+        config.set(TxConstants.Manager.CFG_TX_SNAPSHOT_DIR, tmpFolder.newFolder().getAbsolutePath());
+        config.setInt(TxConstants.Manager.CFG_TX_TIMEOUT, 600);
+
+        ConnectionInfo connInfo = ConnectionInfo.create(getUrl());
+        zkClient = ZKClientServices.delegate(
+          ZKClients.reWatchOnExpire(
+            ZKClients.retryOnFailure(
+              ZKClientService.Builder.of(connInfo.getZookeeperConnectionString())
+                .setSessionTimeout(config.getInt(HConstants.ZK_SESSION_TIMEOUT,
+                        HConstants.DEFAULT_ZK_SESSION_TIMEOUT))
+                .build(),
+              RetryStrategies.exponentialDelay(500, 2000, TimeUnit.MILLISECONDS)
+            )
+          )
+        );
+        zkClient.startAndWait();
+
+        DiscoveryService discovery = new ZKDiscoveryService(zkClient);
+        TransactionManager txManager = new TransactionManager(config, new InMemoryTransactionStateStorage(), new TxMetricsCollector());
+        txService = new TransactionService(config, zkClient, discovery, Providers.of(txManager));
+        txService.startAndWait();
+    }
+
+    protected static String checkClusterInitialized(ReadOnlyProps overrideProps) throws Exception {
         if (!clusterInitialized) {
             url = setUpTestCluster(config, overrideProps);
             clusterInitialized = true;
+            setupTxManager();
         }
         return url;
     }
@@ -560,8 +588,12 @@ public abstract class BaseTest {
                     utility.shutdownMiniCluster();
                 }
             } finally {
-                utility = null;
-                clusterInitialized = false;
+                try {
+                    teardownTxManager();
+                } finally {
+                    utility = null;
+                    clusterInitialized = false;
+                }
             }
         }
     }

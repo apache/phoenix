@@ -25,14 +25,17 @@ import static org.apache.phoenix.util.PhoenixRuntime.PHOENIX_TEST_DRIVER_URL_PAR
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.io.File;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.sql.Connection;
+import java.sql.Date;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
@@ -98,7 +101,7 @@ public class TestUtil {
     public static final String DEFAULT_INDEX_TABLE_NAME = "I";
     public static final String DEFAULT_DATA_TABLE_FULL_NAME = SchemaUtil.getTableName(DEFAULT_SCHEMA_NAME, "T");
     public static final String DEFAULT_INDEX_TABLE_FULL_NAME = SchemaUtil.getTableName(DEFAULT_SCHEMA_NAME, "I");
-
+    
     private TestUtil() {
     }
 
@@ -191,6 +194,7 @@ public class TestUtil {
     public static final String INDEX_DATA_SCHEMA = "INDEX_TEST";
     public static final String INDEX_DATA_TABLE = "INDEX_DATA_TABLE";
     public static final String MUTABLE_INDEX_DATA_TABLE = "MUTABLE_INDEX_DATA_TABLE";
+    public static final String TRANSACTIONAL_DATA_TABLE = "TRANSACTIONAL_DATA_TABLE";
     public static final String JOIN_SCHEMA = "Join";
     public static final String JOIN_ORDER_TABLE = "OrderTable";
     public static final String JOIN_CUSTOMER_TABLE = "CustomerTable";
@@ -582,4 +586,27 @@ public class TestUtil {
         analyzeTable(conn, tableName);
         conn.close();
     }
+    
+    public static void setRowKeyColumns(PreparedStatement stmt, int i) throws SQLException {
+        // insert row
+        stmt.setString(1, "varchar" + String.valueOf(i));
+        stmt.setString(2, "char" + String.valueOf(i));
+        stmt.setInt(3, i);
+        stmt.setLong(4, i);
+        stmt.setBigDecimal(5, new BigDecimal(i*0.5d));
+        Date date = new Date(DateUtil.parseDate("2015-01-01 00:00:00").getTime() + (i - 1) * TestUtil.NUM_MILLIS_IN_DAY);
+        stmt.setDate(6, date);
+    }
+	
+    public static void validateRowKeyColumns(ResultSet rs, int i) throws SQLException {
+		assertTrue(rs.next());
+		assertEquals(rs.getString(1), "varchar" + String.valueOf(i));
+		assertEquals(rs.getString(2), "char" + String.valueOf(i));
+		assertEquals(rs.getInt(3), i);
+		assertEquals(rs.getInt(4), i);
+		assertEquals(rs.getBigDecimal(5), new BigDecimal(i*0.5d));
+		Date date = new Date(DateUtil.parseDate("2015-01-01 00:00:00").getTime() + (i - 1) * TestUtil.NUM_MILLIS_IN_DAY);
+		assertEquals(rs.getDate(6), date);
+	}
 }
+

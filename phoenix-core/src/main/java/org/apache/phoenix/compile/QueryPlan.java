@@ -53,6 +53,7 @@ public interface QueryPlan extends StatementPlan {
     
     // TODO: change once joins are supported
     TableRef getTableRef();
+    
     /**
      * Returns projector used to formulate resultSet row
      */

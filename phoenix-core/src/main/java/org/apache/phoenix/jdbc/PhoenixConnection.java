@@ -79,6 +79,7 @@ import org.apache.phoenix.schema.PMetaData.Pruner;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.schema.PTableRef;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.types.PArrayDataType;
@@ -158,14 +159,18 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     }
 
     public PhoenixConnection(PhoenixConnection connection, boolean isDescRowKeyOrderUpgrade) throws SQLException {
-        this(connection.getQueryServices(), connection.getURL(), connection.getClientInfo(), connection.getMetaDataCache(), isDescRowKeyOrderUpgrade);
+        this(connection.getQueryServices(), connection.getURL(), connection.getClientInfo(), connection.metaData, connection.getMutationState(), isDescRowKeyOrderUpgrade);
         this.isAutoCommit = connection.isAutoCommit;
         this.sampler = connection.sampler;
         this.statementExecutionCounter = connection.statementExecutionCounter;
     }
 
     public PhoenixConnection(PhoenixConnection connection) throws SQLException {
-        this(connection, connection.isDescVarLengthRowKeyUpgrade);
+        this(connection, connection.isDescVarLengthRowKeyUpgrade());
+    }
+    
+    public PhoenixConnection(PhoenixConnection connection, MutationState mutationState) throws SQLException {
+        this(connection.getQueryServices(), connection.getURL(), connection.getClientInfo(), connection.getMetaDataCache(), mutationState, connection.isDescVarLengthRowKeyUpgrade());
     }
     
     public PhoenixConnection(PhoenixConnection connection, long scn) throws SQLException {
@@ -173,17 +178,21 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     }
     
     public PhoenixConnection(ConnectionQueryServices services, PhoenixConnection connection, long scn) throws SQLException {
-        this(services, connection.getURL(), newPropsWithSCN(scn,connection.getClientInfo()), connection.getMetaDataCache(), connection.isDescVarLengthRowKeyUpgrade());
+        this(services, connection.getURL(), newPropsWithSCN(scn,connection.getClientInfo()), connection.metaData, connection.getMutationState(), connection.isDescVarLengthRowKeyUpgrade());
         this.isAutoCommit = connection.isAutoCommit;
         this.sampler = connection.sampler;
         this.statementExecutionCounter = connection.statementExecutionCounter;
     }
     
     public PhoenixConnection(ConnectionQueryServices services, String url, Properties info, PMetaData metaData) throws SQLException {
-        this(services, url, info, metaData, false);
+        this(services, url, info, metaData, null, false);
     }
-
-    public PhoenixConnection(ConnectionQueryServices services, String url, Properties info, PMetaData metaData, boolean isDescVarLengthRowKeyUpgrade) throws SQLException {
+    
+    public PhoenixConnection(PhoenixConnection connection, ConnectionQueryServices services, Properties info) throws SQLException {
+        this(services, connection.url, info, connection.metaData, null, connection.isDescVarLengthRowKeyUpgrade());
+    }
+    
+    public PhoenixConnection(ConnectionQueryServices services, String url, Properties info, PMetaData metaData, MutationState mutationState, boolean isDescVarLengthRowKeyUpgrade) throws SQLException {
         this.url = url;
         this.isDescVarLengthRowKeyUpgrade = isDescVarLengthRowKeyUpgrade;
         // Copy so client cannot change
@@ -255,7 +264,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
             }
         };
         this.isRequestLevelMetricsEnabled = JDBCUtil.isCollectingRequestLevelMetricsEnabled(url, info, this.services.getProps());
-        this.mutationState = newMutationState(maxSize);
+        this.mutationState = mutationState == null ? newMutationState(maxSize) : new MutationState(mutationState);
         this.metaData = metaData.pruneTables(pruner);
         this.metaData = metaData.pruneFunctions(pruner);
         this.services.addConnection(this);
@@ -408,12 +417,16 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         return mutateBatchSize;
     }
     
-    public PTable getTable(PTableKey key) throws TableNotFoundException {
-        return metaData.getTable(key);
-    }
-    
     public PMetaData getMetaDataCache() {
         return metaData;
+    }
+    
+    public PTable getTable(PTableKey key) throws TableNotFoundException {
+    	return metaData.getTableRef(key).getTable();
+    }
+    
+    public PTableRef getTableRef(PTableKey key) throws TableNotFoundException {
+    	return metaData.getTableRef(key);
     }
 
     protected MutationState newMutationState(int maxSize) {
@@ -450,7 +463,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         // from modifying this list.
         this.statements = Lists.newArrayList();
         try {
-            mutationState.rollback(this);
+            mutationState.clear();
         } finally {
             try {
                 SQLCloseables.closeAll(statements);
@@ -693,7 +706,13 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
 
     @Override
     public void rollback() throws SQLException {
-        mutationState.rollback(this);
+        CallRunner.run(new CallRunner.CallableThrowable<Void, SQLException>() {
+            @Override
+            public Void call() throws SQLException {
+                mutationState.rollback();
+                return null;
+            }
+        }, Tracing.withTracing(this, "rolling back"));
         statementExecutionCounter = 0;
     }
 
@@ -806,16 +825,20 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         // TODO Auto-generated method stub
         return 0;
     }
-
+    
     @Override
-    public PMetaData addTable(PTable table) throws SQLException {
-        // TODO: since a connection is only used by one thread at a time,
-        // we could modify this metadata in place since it's not shared.
-        if (scn == null || scn > table.getTimeStamp()) {
-            metaData = metaData.addTable(table);
-        }
+    public PMetaData addTable(PTable table, long resolvedTime) throws SQLException {
+        metaData = metaData.addTable(table, resolvedTime);
         //Cascade through to connectionQueryServices too
-        getQueryServices().addTable(table);
+        getQueryServices().addTable(table, resolvedTime);
+        return metaData;
+    }
+    
+    @Override
+    public PMetaData updateResolvedTimestamp(PTable table, long resolvedTime) throws SQLException {
+    	metaData = metaData.updateResolvedTimestamp(table, resolvedTime);
+    	//Cascade through to connectionQueryServices too
+        getQueryServices().updateResolvedTimestamp(table, resolvedTime);
         return metaData;
     }
     
@@ -832,11 +855,11 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     }
 
     @Override
-    public PMetaData addColumn(PName tenantId, String tableName, List<PColumn> columns, long tableTimeStamp, long tableSeqNum, boolean isImmutableRows, boolean isWalDisabled, boolean isMultitenant, boolean storeNulls)
+    public PMetaData addColumn(PName tenantId, String tableName, List<PColumn> columns, long tableTimeStamp, long tableSeqNum, boolean isImmutableRows, boolean isWalDisabled, boolean isMultitenant, boolean storeNulls, boolean isTransactional, long resolvedTime)
             throws SQLException {
-        metaData = metaData.addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows, isWalDisabled, isMultitenant, storeNulls);
+        metaData = metaData.addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows, isWalDisabled, isMultitenant, storeNulls, isTransactional, resolvedTime);
         //Cascade through to connectionQueryServices too
-        getQueryServices().addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows, isWalDisabled, isMultitenant, storeNulls);
+        getQueryServices().addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows, isWalDisabled, isMultitenant, storeNulls, isTransactional, resolvedTime);
         return metaData;
     }
 
@@ -858,10 +881,10 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
 
     @Override
     public PMetaData removeColumn(PName tenantId, String tableName, List<PColumn> columnsToRemove, long tableTimeStamp,
-            long tableSeqNum) throws SQLException {
-        metaData = metaData.removeColumn(tenantId, tableName, columnsToRemove, tableTimeStamp, tableSeqNum);
+            long tableSeqNum, long resolvedTime) throws SQLException {
+        metaData = metaData.removeColumn(tenantId, tableName, columnsToRemove, tableTimeStamp, tableSeqNum, resolvedTime);
         //Cascade through to connectionQueryServices too
-        getQueryServices().removeColumn(tenantId, tableName, columnsToRemove, tableTimeStamp, tableSeqNum);
+        getQueryServices().removeColumn(tenantId, tableName, columnsToRemove, tableTimeStamp, tableSeqNum, resolvedTime);
         return metaData;
     }
 

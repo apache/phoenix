@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.schema;
 
+import java.sql.SQLException;
+
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.query.MetaDataMutated;
 
@@ -28,7 +30,7 @@ public interface PMetaData extends MetaDataMutated, Iterable<PTable>, Cloneable 
     }
     public int size();
     public PMetaData clone();
-    public PTable getTable(PTableKey key) throws TableNotFoundException;
+    public PTableRef getTableRef(PTableKey key) throws TableNotFoundException;
     public PMetaData pruneTables(Pruner pruner);
     public PFunction getFunction(PTableKey key) throws FunctionNotFoundException;
     public PMetaData pruneFunctions(Pruner pruner);

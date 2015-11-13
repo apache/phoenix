@@ -45,19 +45,24 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
 	private final boolean localIndex;
 	private final String tableDDLOptions;
 	
-	public IndexIT(boolean localIndex, boolean mutable) {
+	public IndexIT(boolean localIndex, boolean mutable, boolean transactional) {
 		this.localIndex = localIndex;
 		StringBuilder optionBuilder = new StringBuilder();
 		if (!mutable) 
 			optionBuilder.append(" IMMUTABLE_ROWS=true ");
+		if (transactional) {
+			if (!(optionBuilder.length()==0))
+				optionBuilder.append(",");
+			optionBuilder.append(" TRANSACTIONAL=true ");
+		}
 		this.tableDDLOptions = optionBuilder.toString();
 	}
 	
-	@Parameters(name="localIndex = {0} , mutable = {1}")
+	@Parameters(name="localIndex = {0} , mutable = {1} , transactional = {2}")
     public static Collection<Boolean[]> data() {
         return Arrays.asList(new Boolean[][] {     
-                 { false, false }, { false, true },
-                 { true, false }, { true, true }
+                 { false, false, false }, { false, false, true }, { false, true, false }, { false, true, true }, 
+                 { true, false, false }, { true, false, true }, { true, true, false }, { true, true, true }
            });
     }
 

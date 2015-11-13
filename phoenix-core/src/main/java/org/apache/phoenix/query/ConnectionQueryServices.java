@@ -23,6 +23,8 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 
+import co.cask.tephra.TransactionSystemClient;
+
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
@@ -116,4 +118,6 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
     
     public void clearCache() throws SQLException;
     public int getSequenceSaltBuckets();
+
+    TransactionSystemClient getTransactionSystemClient();
 }

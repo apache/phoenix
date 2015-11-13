@@ -80,7 +80,7 @@ public class SerialIterators extends BaseResultIterators {
                 public PeekingResultIterator call() throws Exception {
                 	List<PeekingResultIterator> concatIterators = Lists.newArrayListWithExpectedSize(scans.size());
                 	for (final Scan scan : scans) {
-                	    ResultIterator scanner = new TableResultIterator(context, tableRef, scan, context.getReadMetricsQueue().allotMetric(SCAN_BYTES, tableName), ScannerCreation.DELAYED);
+                	    ResultIterator scanner = new TableResultIterator(mutationState, tableRef, scan, context.getReadMetricsQueue().allotMetric(SCAN_BYTES, tableName), ScannerCreation.DELAYED);
                 	    concatIterators.add(iteratorFactory.newIterator(context, scanner, scan, tableName));
                 	}
                 	PeekingResultIterator concatIterator = ConcatResultIterator.newIterator(concatIterators);

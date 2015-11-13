@@ -187,6 +187,10 @@ public abstract class PhoenixEmbeddedDriver implements Driver, org.apache.phoeni
             .setMessage(url).build().buildException();
         }
         
+		public String getZookeeperConnectionString() {
+			return getZookeeperQuorum() + ":" + getPort();
+		}
+        
         /**
          * Detect url with quorum:1,quorum:2 as HBase does not handle different port numbers
          * for different quorum hostnames.

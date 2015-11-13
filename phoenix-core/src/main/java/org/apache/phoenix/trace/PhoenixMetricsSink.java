@@ -42,6 +42,7 @@ import org.apache.hadoop.metrics2.AbstractMetric;
 import org.apache.hadoop.metrics2.MetricsRecord;
 import org.apache.hadoop.metrics2.MetricsSink;
 import org.apache.hadoop.metrics2.MetricsTag;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.metrics.MetricInfo;
 import org.apache.phoenix.metrics.Metrics;
 import org.apache.phoenix.query.QueryServices;
@@ -175,7 +176,9 @@ public class PhoenixMetricsSink implements MetricsSink {
                         TAG_COUNT + " smallint, " +
                         ANNOTATION_COUNT + " smallint" +
                         "  CONSTRAINT pk PRIMARY KEY (" + TRACE.columnName + ", "
-                        + PARENT.columnName + ", " + SPAN.columnName + "))\n";
+                        + PARENT.columnName + ", " + SPAN.columnName + "))\n" +
+                        PhoenixDatabaseMetaData.TRANSACTIONAL + "=" + Boolean.FALSE;
+;
         PreparedStatement stmt = conn.prepareStatement(ddl);
         stmt.execute();
         this.table = table;
