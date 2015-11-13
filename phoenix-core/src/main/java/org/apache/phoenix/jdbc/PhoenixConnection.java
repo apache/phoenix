@@ -78,7 +78,9 @@ import org.apache.phoenix.schema.PMetaData;
 import org.apache.phoenix.schema.PMetaData.Pruner;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.types.PArrayDataType;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDate;
@@ -403,6 +405,10 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     
     public int getMutateBatchSize() {
         return mutateBatchSize;
+    }
+    
+    public PTable getTable(PTableKey key) throws TableNotFoundException {
+        return metaData.getTable(key);
     }
     
     public PMetaData getMetaDataCache() {

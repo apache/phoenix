@@ -778,7 +778,7 @@ public class AlterTableWithViewsIT extends BaseHBaseManagedTimeIT {
     
     private boolean checkColumnPartOfPk(PhoenixConnection conn, String columnName, String tableName) throws SQLException {
         String normalizedTableName = SchemaUtil.normalizeIdentifier(tableName);
-        PTable table = conn.getMetaDataCache().getTable(new PTableKey(conn.getTenantId(), normalizedTableName));
+        PTable table = conn.getTable(new PTableKey(conn.getTenantId(), normalizedTableName));
         List<PColumn> pkCols = table.getPKColumns();
         String normalizedColumnName = SchemaUtil.normalizeIdentifier(columnName);
         for (PColumn pkCol : pkCols) {
@@ -791,7 +791,7 @@ public class AlterTableWithViewsIT extends BaseHBaseManagedTimeIT {
     
     private int getIndexOfPkColumn(PhoenixConnection conn, String columnName, String tableName) throws SQLException {
         String normalizedTableName = SchemaUtil.normalizeIdentifier(tableName);
-        PTable table = conn.getMetaDataCache().getTable(new PTableKey(conn.getTenantId(), normalizedTableName));
+        PTable table = conn.getTable(new PTableKey(conn.getTenantId(), normalizedTableName));
         List<PColumn> pkCols = table.getPKColumns();
         String normalizedColumnName = SchemaUtil.normalizeIdentifier(columnName);
         int i = 0;
@@ -1097,12 +1097,12 @@ public class AlterTableWithViewsIT extends BaseHBaseManagedTimeIT {
     }
     
     private static long getTableSequenceNumber(PhoenixConnection conn, String tableName) throws SQLException {
-        PTable table = conn.getMetaDataCache().getTable(new PTableKey(conn.getTenantId(), SchemaUtil.normalizeIdentifier(tableName)));
+        PTable table = conn.getTable(new PTableKey(conn.getTenantId(), SchemaUtil.normalizeIdentifier(tableName)));
         return table.getSequenceNumber();
     }
     
     private static short getMaxKeySequenceNumber(PhoenixConnection conn, String tableName) throws SQLException {
-        PTable table = conn.getMetaDataCache().getTable(new PTableKey(conn.getTenantId(), SchemaUtil.normalizeIdentifier(tableName)));
+        PTable table = conn.getTable(new PTableKey(conn.getTenantId(), SchemaUtil.normalizeIdentifier(tableName)));
         return SchemaUtil.getMaxKeySeq(table);
     }
     

@@ -414,11 +414,11 @@ public class FromCompiler {
                 }
             } else {
                 try {
-                    theTable = connection.getMetaDataCache().getTable(new PTableKey(tenantId, fullTableName));
+                    theTable = connection.getTable(new PTableKey(tenantId, fullTableName));
                 } catch (TableNotFoundException e1) {
                     if (tenantId != null) { // Check with null tenantId next
                         try {
-                            theTable = connection.getMetaDataCache().getTable(new PTableKey(null, fullTableName));
+                            theTable = connection.getTable(new PTableKey(null, fullTableName));
                         } catch (TableNotFoundException e2) {
                         }
                     }

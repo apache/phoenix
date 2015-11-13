@@ -646,7 +646,7 @@ public class SkipScanBigFilterTest extends BaseConnectionlessQueryTest {
         }
         stmt.execute();
         
-        final PTable table = conn.unwrap(PhoenixConnection.class).getMetaDataCache().getTable(new PTableKey(null, "PERF.BIG_OLAP_DOC"));
+        final PTable table = conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, "PERF.BIG_OLAP_DOC"));
         GuidePostsInfo info = new GuidePostsInfo(0,Collections.<byte[]> emptyList(), 0l);
         for (byte[] gp : guidePosts) {
             info.addGuidePost(gp, 1000);
