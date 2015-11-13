@@ -348,7 +348,7 @@ public class DeleteCompiler {
                     // optimizer updated the cache if it found indexes that were out of date.
                     // If the index was marked as disabled, it should not be in the list
                     // of immutable indexes.
-                    table = connection.getMetaDataCache().getTable(new PTableKey(table.getTenantId(), table.getName().getString()));
+                    table = connection.getTable(new PTableKey(table.getTenantId(), table.getName().getString()));
                     tableRefToBe.setTable(table);
                     immutableIndex = getNonDisabledImmutableIndexes(tableRefToBe);
                 }

@@ -427,7 +427,7 @@ public class MetaDataClient {
         String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
         long tableTimestamp = HConstants.LATEST_TIMESTAMP;
         try {
-            table = connection.getMetaDataCache().getTable(new PTableKey(tenantId, fullTableName));
+            table = connection.getTable(new PTableKey(tenantId, fullTableName));
             tableTimestamp = table.getTimeStamp();
         } catch (TableNotFoundException e) {
         }
@@ -1728,7 +1728,7 @@ public class MetaDataClient {
                         linkStatement.setString(4, physicalName.getString());
                         linkStatement.setByte(5, LinkType.PHYSICAL_TABLE.getSerializedValue());
                         if (tableType == PTableType.VIEW) {
-                            PTable physicalTable = connection.getMetaDataCache().getTable(new PTableKey(null, physicalName.getString()));
+                            PTable physicalTable = connection.getTable(new PTableKey(null, physicalName.getString()));
                             linkStatement.setLong(6, physicalTable.getSequenceNumber());
                         } else {
                             linkStatement.setLong(6, parent.getSequenceNumber());
@@ -2933,7 +2933,7 @@ public class MetaDataClient {
                     if (retried) {
                         throw e;
                     }
-                    table = connection.getMetaDataCache().getTable(new PTableKey(tenantId, fullTableName));
+                    table = connection.getTable(new PTableKey(tenantId, fullTableName));
                     retried = true;
                 }
             }
@@ -3052,7 +3052,7 @@ public class MetaDataClient {
         String physicalName = table.getPhysicalName().getString();
         if (isView && table.getViewType() != ViewType.MAPPED) {
             try {
-                return connection.getMetaDataCache().getTable(new PTableKey(null, physicalName)).getTableStats();
+                return connection.getTable(new PTableKey(null, physicalName)).getTableStats();
             } catch (TableNotFoundException e) {
                 // Possible when the table timestamp == current timestamp - 1.
                 // This would be most likely during the initial index build of a view index
@@ -3089,6 +3089,6 @@ public class MetaDataClient {
     	//TODO just use view.getParentName().getString() after implementing https://issues.apache.org/jira/browse/PHOENIX-2114 
         SelectStatement select = new SQLParser(view.getViewStatement()).parseQuery();
         String parentName = SchemaUtil.normalizeFullTableName(select.getFrom().toString().trim());
-        return connection.getMetaDataCache().getTable(new PTableKey(view.getTenantId(), parentName));
+        return connection.getTable(new PTableKey(view.getTenantId(), parentName));
     }
 }
