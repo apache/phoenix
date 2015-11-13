@@ -87,7 +87,6 @@ import static org.apache.phoenix.schema.PTableType.VIEW;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
-import java.sql.ParameterMetaData;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
@@ -119,8 +118,8 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.compile.BaseMutationPlan;
 import org.apache.phoenix.compile.ColumnResolver;
-import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.IndexExpressionCompiler;
 import org.apache.phoenix.compile.MutationPlan;
@@ -143,8 +142,8 @@ import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
-import org.apache.phoenix.jdbc.PhoenixParameterMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.parse.AddColumnStatement;
 import org.apache.phoenix.parse.AlterIndexStatement;
 import org.apache.phoenix.parse.ColumnDef;
@@ -1007,27 +1006,7 @@ public class MetaDataClient {
 
                     // Go through MutationPlan abstraction so that we can create local indexes
                     // with a connectionless connection (which makes testing easier).
-                    mutationPlan = new MutationPlan() {
-
-                        @Override
-                        public StatementContext getContext() {
-                            return plan.getContext();
-                        }
-
-                        @Override
-                        public ParameterMetaData getParameterMetaData() {
-                            return PhoenixParameterMetaData.EMPTY_PARAMETER_META_DATA;
-                        }
-
-                        @Override
-                        public ExplainPlan getExplainPlan() throws SQLException {
-                            return ExplainPlan.EMPTY_PLAN;
-                        }
-
-                        @Override
-                        public PhoenixConnection getConnection() {
-                            return connection;
-                        }
+                    mutationPlan = new BaseMutationPlan(plan.getContext(), Operation.UPSERT) {
 
                         @Override
                         public MutationState execute() throws SQLException {
