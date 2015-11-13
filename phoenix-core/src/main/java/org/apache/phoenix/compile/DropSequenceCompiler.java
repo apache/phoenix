@@ -17,23 +17,24 @@
  */
 package org.apache.phoenix.compile;
 
-import java.sql.ParameterMetaData;
 import java.sql.SQLException;
 import java.util.Collections;
 
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixParameterMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.parse.DropSequenceStatement;
 import org.apache.phoenix.schema.MetaDataClient;
 
 
 public class DropSequenceCompiler {
     private final PhoenixStatement statement;
+    private final Operation operation;
 
-    public DropSequenceCompiler(PhoenixStatement statement) {
+    public DropSequenceCompiler(PhoenixStatement statement, Operation operation) {
         this.statement = statement;
+        this.operation = operation;
     }
     
 
@@ -41,7 +42,7 @@ public class DropSequenceCompiler {
         final PhoenixConnection connection = statement.getConnection();
         final MetaDataClient client = new MetaDataClient(connection);        
         final StatementContext context = new StatementContext(statement);
-        return new MutationPlan() {           
+        return new BaseMutationPlan(context, operation) {           
 
             @Override
             public MutationState execute() throws SQLException {
@@ -51,21 +52,6 @@ public class DropSequenceCompiler {
             @Override
             public ExplainPlan getExplainPlan() throws SQLException {
                 return new ExplainPlan(Collections.singletonList("DROP SEQUENCE"));
-            }
-
-            @Override
-            public StatementContext getContext() {
-                return context;
-            }
-
-            @Override
-            public PhoenixConnection getConnection() {
-                return connection;
-            }
-
-            @Override
-            public ParameterMetaData getParameterMetaData() {                
-                return PhoenixParameterMetaData.EMPTY_PARAMETER_META_DATA;
             }
 
         };

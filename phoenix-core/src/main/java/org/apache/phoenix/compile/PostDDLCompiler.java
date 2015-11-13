@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.compile;
 
-import java.sql.ParameterMetaData;
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
@@ -32,8 +31,8 @@ import org.apache.phoenix.execute.AggregatePlan;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixParameterMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.query.QueryConstants;
@@ -41,12 +40,13 @@ import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
+import org.apache.phoenix.schema.FunctionNotFoundException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
-import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.ScanUtil;
 
 import com.google.common.collect.Lists;
@@ -66,7 +66,7 @@ import com.google.common.collect.Lists;
  */
 public class PostDDLCompiler {
     private final PhoenixConnection connection;
-    private final StatementContext context; // bogus context
+    private final Scan scan;
 
     public PostDDLCompiler(PhoenixConnection connection) {
         this(connection, new Scan());
@@ -74,29 +74,53 @@ public class PostDDLCompiler {
 
     public PostDDLCompiler(PhoenixConnection connection, Scan scan) {
         this.connection = connection;
-        this.context = new StatementContext(new PhoenixStatement(connection), scan);
+        this.scan = scan;
         scan.setAttribute(BaseScannerRegionObserver.UNGROUPED_AGG, QueryConstants.TRUE);
     }
 
     public MutationPlan compile(final List<TableRef> tableRefs, final byte[] emptyCF, final byte[] projectCF, final List<PColumn> deleteList,
             final long timestamp) throws SQLException {
-        
-        return new MutationPlan() {
-            
-            @Override
-            public PhoenixConnection getConnection() {
-                return connection;
-            }
-            
-            @Override
-            public ParameterMetaData getParameterMetaData() {
-                return PhoenixParameterMetaData.EMPTY_PARAMETER_META_DATA;
-            }
-            
-            @Override
-            public ExplainPlan getExplainPlan() throws SQLException {
-                return ExplainPlan.EMPTY_PLAN;
-            }
+        PhoenixStatement statement = new PhoenixStatement(connection);
+        final StatementContext context = new StatementContext(
+                statement, 
+                new ColumnResolver() {
+
+                    @Override
+                    public List<TableRef> getTables() {
+                        return tableRefs;
+                    }
+
+                    @Override
+                    public TableRef resolveTable(String schemaName, String tableName) throws SQLException {
+                        throw new UnsupportedOperationException();
+                    }
+
+                    @Override
+                    public ColumnRef resolveColumn(String schemaName, String tableName, String colName)
+                            throws SQLException {
+                        throw new UnsupportedOperationException();
+                    }
+
+					@Override
+					public List<PFunction> getFunctions() {
+						return Collections.<PFunction>emptyList();
+					}
+
+					@Override
+					public PFunction resolveFunction(String functionName)
+							throws SQLException {
+						throw new FunctionNotFoundException(functionName);
+					}
+
+					@Override
+					public boolean hasUDFs() {
+						return false;
+					}
+                    
+                },
+                scan,
+                new SequenceManager(statement));
+        return new BaseMutationPlan(context, Operation.UPSERT /* FIXME */) {
             
             @Override
             public MutationState execute() throws SQLException {
@@ -266,11 +290,6 @@ public class PostDDLCompiler {
                 } finally {
                     if (!wasAutoCommit) connection.setAutoCommit(wasAutoCommit);
                 }
-            }
-
-            @Override
-            public StatementContext getContext() {
-                return context;
             }
         };
     }
