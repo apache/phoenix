@@ -2114,14 +2114,14 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.createStatement().execute("CREATE TABLE T1 (PK1 DATE NOT NULL, PK2 VARCHAR NOT NULL, KV1 VARCHAR CONSTRAINT PK PRIMARY KEY(PK1 ROW_TIMESTAMP, PK2)) ");
             PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class); 
-            PTable table = phxConn.getMetaDataCache().getTableRef(new PTableKey(phxConn.getTenantId(), "T1")).getTable();
+            PTable table = phxConn.getTable(new PTableKey(phxConn.getTenantId(), "T1"));
             // Assert that the column shows up as row time stamp in the cache.
             assertTrue(table.getColumn("PK1").isRowTimestamp());
             assertFalse(table.getColumn("PK2").isRowTimestamp());
             assertIsRowTimestampSet("T1", "PK1");
             
             conn.createStatement().execute("CREATE TABLE T6 (PK1 VARCHAR, PK2 DATE PRIMARY KEY ROW_TIMESTAMP, KV1 VARCHAR, KV2 INTEGER)");
-            table = phxConn.getMetaDataCache().getTableRef(new PTableKey(phxConn.getTenantId(), "T6")).getTable();
+            table = phxConn.getTable(new PTableKey(phxConn.getTenantId(), "T6"));
             // Assert that the column shows up as row time stamp in the cache.
             assertFalse(table.getColumn("PK1").isRowTimestamp());
             assertTrue(table.getColumn("PK2").isRowTimestamp());
@@ -2129,7 +2129,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             
             // Create an index on a table has a row time stamp pk column. The column should show up as a row time stamp column for the index too. 
             conn.createStatement().execute("CREATE INDEX T6_IDX ON T6 (KV1) include (KV2)");
-            PTable indexTable = phxConn.getMetaDataCache().getTableRef(new PTableKey(phxConn.getTenantId(), "T6_IDX")).getTable();
+            PTable indexTable = phxConn.getTable(new PTableKey(phxConn.getTenantId(), "T6_IDX"));
             String indexColName = IndexUtil.getIndexColumnName(table.getColumn("PK2"));
             // Assert that the column shows up as row time stamp in the cache.
             assertTrue(indexTable.getColumn(indexColName).isRowTimestamp());
@@ -2145,7 +2145,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             
             // Make sure that the base table column declared as row_timestamp is also row_timestamp for view
             conn.createStatement().execute("CREATE VIEW T6_VIEW (KV3 VARCHAR, KV4 VARCHAR, KV5 INTEGER, CONSTRAINT PK PRIMARY KEY (KV3, KV4) ) AS SELECT * FROM T6");
-            PTable view = phxConn.getMetaDataCache().getTableRef(new PTableKey(phxConn.getTenantId(), "T6_VIEW")).getTable();
+            PTable view = phxConn.getTable(new PTableKey(phxConn.getTenantId(), "T6_VIEW"));
             assertNotNull(view.getPKColumn("PK2"));
             assertTrue(view.getPKColumn("PK2").isRowTimestamp());
         }

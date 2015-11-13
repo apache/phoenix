@@ -217,4 +217,3 @@ public class UnionPlan implements QueryPlan {
 		return sources;
 	}
 }
-

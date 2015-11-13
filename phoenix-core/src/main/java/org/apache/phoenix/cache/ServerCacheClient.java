@@ -162,7 +162,7 @@ public class ServerCacheClient {
         ExecutorService executor = services.getExecutor();
         List<Future<Boolean>> futures = Collections.emptyList();
         try {
-            PTable cacheUsingTable = cacheUsingTableRef.getTable();
+            final PTable cacheUsingTable = cacheUsingTableRef.getTable();
             List<HRegionLocation> locations = services.getAllTableRegions(cacheUsingTable.getPhysicalName().getBytes());
             int nRegions = locations.size();
             // Size these based on worst case
@@ -197,7 +197,17 @@ public class ServerCacheClient {
                                                             new BlockingRpcCallback<AddServerCacheResponse>();
                                                     AddServerCacheRequest.Builder builder = AddServerCacheRequest.newBuilder();
                                                     if(connection.getTenantId() != null){
-                                                        builder.setTenantId(ByteStringer.wrap(connection.getTenantId().getBytes()));
+                                                        try {
+                                                            byte[] tenantIdBytes =
+                                                                    ScanUtil.getTenantIdBytes(
+                                                                            cacheUsingTable.getRowKeySchema(),
+                                                                            cacheUsingTable.getBucketNum()!=null,
+                                                                            connection.getTenantId(),
+                                                                            cacheUsingTable.isMultiTenant());
+                                                            builder.setTenantId(ByteStringer.wrap(tenantIdBytes));
+                                                        } catch (SQLException e) {
+                                                            new IOException(e);
+                                                        }
                                                     }
                                                     builder.setCacheId(ByteStringer.wrap(cacheId));
                                                     builder.setCachePtr(org.apache.phoenix.protobuf.ProtobufUtil.toProto(cachePtr));

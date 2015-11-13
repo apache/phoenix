@@ -1048,9 +1048,9 @@ public class MetaDataClient {
                         scan.addColumn(columnRef.getFamily(), columnRef.getQualifier());
                     }
 
-                // Go through MutationPlan abstraction so that we can create local indexes
-                // with a connectionless connection (which makes testing easier).
-                mutationPlan = new BaseMutationPlan(plan.getContext(), Operation.UPSERT) {
+                    // Go through MutationPlan abstraction so that we can create local indexes
+                    // with a connectionless connection (which makes testing easier).
+                    mutationPlan = new BaseMutationPlan(plan.getContext(), Operation.UPSERT) {
 
                         @Override
                         public MutationState execute() throws SQLException {
@@ -1843,7 +1843,7 @@ public class MetaDataClient {
                         linkStatement.setString(4, physicalName.getString());
                         linkStatement.setByte(5, LinkType.PHYSICAL_TABLE.getSerializedValue());
                         if (tableType == PTableType.VIEW) {
-                            PTable physicalTable = connection.getMetaDataCache().getTableRef(new PTableKey(null, physicalName.getString())).getTable();
+                            PTable physicalTable = connection.getTable(new PTableKey(null, physicalName.getString()));
                             linkStatement.setLong(6, physicalTable.getSequenceNumber());
                         } else {
                             linkStatement.setLong(6, parent.getSequenceNumber());
@@ -3250,6 +3250,6 @@ public class MetaDataClient {
     	//TODO just use view.getParentName().getString() after implementing https://issues.apache.org/jira/browse/PHOENIX-2114 
         SelectStatement select = new SQLParser(view.getViewStatement()).parseQuery();
         String parentName = SchemaUtil.normalizeFullTableName(select.getFrom().toString().trim());
-        return connection.getMetaDataCache().getTableRef(new PTableKey(view.getTenantId(), parentName)).getTable();
+        return connection.getTable(new PTableKey(view.getTenantId(), parentName));
     }
 }

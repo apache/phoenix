@@ -663,4 +663,3 @@ public class SortMergeJoinPlan implements QueryPlan {
     }
 
 }
-

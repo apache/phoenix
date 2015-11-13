@@ -186,26 +186,26 @@ import com.google.inject.util.Providers;
  */
 public abstract class BaseTest {
     protected static final String TEST_TABLE_SCHEMA = "(" +
-	                "   varchar_pk VARCHAR NOT NULL, " +
-	                "   char_pk CHAR(6) NOT NULL, " +
-	                "   int_pk INTEGER NOT NULL, "+ 
-	                "   long_pk BIGINT NOT NULL, " +
-	                "   decimal_pk DECIMAL(31, 10) NOT NULL, " +
-	                "   date_pk DATE NOT NULL, " +
-	                "   a.varchar_col1 VARCHAR, " +
-	                "   a.char_col1 CHAR(10), " +
-	                "   a.int_col1 INTEGER, " +
-	                "   a.long_col1 BIGINT, " +
-	                "   a.decimal_col1 DECIMAL(31, 10), " +
-	                "   a.date1 DATE, " +
-	                "   b.varchar_col2 VARCHAR, " +
-	                "   b.char_col2 CHAR(10), " +
-	                "   b.int_col2 INTEGER, " +
-	                "   b.long_col2 BIGINT, " +
-	                "   b.decimal_col2 DECIMAL(31, 10), " +
-	                "   b.date2 DATE " +
-	                "   CONSTRAINT pk PRIMARY KEY (varchar_pk, char_pk, int_pk, long_pk DESC, decimal_pk, date_pk)) ";
-	private static final Map<String,String> tableDDLMap;
+            "   varchar_pk VARCHAR NOT NULL, " +
+            "   char_pk CHAR(6) NOT NULL, " +
+            "   int_pk INTEGER NOT NULL, "+ 
+            "   long_pk BIGINT NOT NULL, " +
+            "   decimal_pk DECIMAL(31, 10) NOT NULL, " +
+            "   date_pk DATE NOT NULL, " +
+            "   a.varchar_col1 VARCHAR, " +
+            "   a.char_col1 CHAR(10), " +
+            "   a.int_col1 INTEGER, " +
+            "   a.long_col1 BIGINT, " +
+            "   a.decimal_col1 DECIMAL(31, 10), " +
+            "   a.date1 DATE, " +
+            "   b.varchar_col2 VARCHAR, " +
+            "   b.char_col2 CHAR(10), " +
+            "   b.int_col2 INTEGER, " +
+            "   b.long_col2 BIGINT, " +
+            "   b.decimal_col2 DECIMAL(31, 10), " +
+            "   b.date2 DATE " +
+            "   CONSTRAINT pk PRIMARY KEY (varchar_pk, char_pk, int_pk, long_pk DESC, decimal_pk, date_pk)) ";
+    private static final Map<String,String> tableDDLMap;
     private static final Logger logger = LoggerFactory.getLogger(BaseTest.class);
     private static ZKClientService zkClient;
     private static TransactionService txService;
@@ -1768,80 +1768,80 @@ public abstract class BaseTest {
     }
 
     // Populate the test table with data.
-	public static void populateTestTable(String fullTableName) throws SQLException {
-	    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-	    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-	        String upsert = "UPSERT INTO " + fullTableName
-	                + " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-	        PreparedStatement stmt = conn.prepareStatement(upsert);
-	        stmt.setString(1, "varchar1");
-	        stmt.setString(2, "char1");
-	        stmt.setInt(3, 1);
-	        stmt.setLong(4, 1L);
-	        stmt.setBigDecimal(5, new BigDecimal(1.0));
-	        Date date = DateUtil.parseDate("2015-01-01 00:00:00");
-	        stmt.setDate(6, date);
-	        stmt.setString(7, "varchar_a");
-	        stmt.setString(8, "chara");
-	        stmt.setInt(9, 2);
-	        stmt.setLong(10, 2L);
-	        stmt.setBigDecimal(11, new BigDecimal(2.0));
-	        stmt.setDate(12, date);
-	        stmt.setString(13, "varchar_b");
-	        stmt.setString(14, "charb");
-	        stmt.setInt(15, 3);
-	        stmt.setLong(16, 3L);
-	        stmt.setBigDecimal(17, new BigDecimal(3.0));
-	        stmt.setDate(18, date);
-	        stmt.executeUpdate();
-	        
-	        stmt.setString(1, "varchar2");
-	        stmt.setString(2, "char2");
-	        stmt.setInt(3, 2);
-	        stmt.setLong(4, 2L);
-	        stmt.setBigDecimal(5, new BigDecimal(2.0));
-	        date = DateUtil.parseDate("2015-01-02 00:00:00");
-	        stmt.setDate(6, date);
-	        stmt.setString(7, "varchar_a");
-	        stmt.setString(8, "chara");
-	        stmt.setInt(9, 3);
-	        stmt.setLong(10, 3L);
-	        stmt.setBigDecimal(11, new BigDecimal(3.0));
-	        stmt.setDate(12, date);
-	        stmt.setString(13, "varchar_b");
-	        stmt.setString(14, "charb");
-	        stmt.setInt(15, 4);
-	        stmt.setLong(16, 4L);
-	        stmt.setBigDecimal(17, new BigDecimal(4.0));
-	        stmt.setDate(18, date);
-	        stmt.executeUpdate();
-	        
-	        stmt.setString(1, "varchar3");
-	        stmt.setString(2, "char3");
-	        stmt.setInt(3, 3);
-	        stmt.setLong(4, 3L);
-	        stmt.setBigDecimal(5, new BigDecimal(3.0));
-	        date = DateUtil.parseDate("2015-01-03 00:00:00");
-	        stmt.setDate(6, date);
-	        stmt.setString(7, "varchar_a");
-	        stmt.setString(8, "chara");
-	        stmt.setInt(9, 4);
-	        stmt.setLong(10, 4L);
-	        stmt.setBigDecimal(11, new BigDecimal(4.0));
-	        stmt.setDate(12, date);
-	        stmt.setString(13, "varchar_b");
-	        stmt.setString(14, "charb");
-	        stmt.setInt(15, 5);
-	        stmt.setLong(16, 5L);
-	        stmt.setBigDecimal(17, new BigDecimal(5.0));
-	        stmt.setDate(18, date);
-	        stmt.executeUpdate();
-	        
-	        conn.commit();
-	    }
-	}
+    public static void populateTestTable(String fullTableName) throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String upsert = "UPSERT INTO " + fullTableName
+                    + " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            PreparedStatement stmt = conn.prepareStatement(upsert);
+            stmt.setString(1, "varchar1");
+            stmt.setString(2, "char1");
+            stmt.setInt(3, 1);
+            stmt.setLong(4, 1L);
+            stmt.setBigDecimal(5, new BigDecimal(1.0));
+            Date date = DateUtil.parseDate("2015-01-01 00:00:00");
+            stmt.setDate(6, date);
+            stmt.setString(7, "varchar_a");
+            stmt.setString(8, "chara");
+            stmt.setInt(9, 2);
+            stmt.setLong(10, 2L);
+            stmt.setBigDecimal(11, new BigDecimal(2.0));
+            stmt.setDate(12, date);
+            stmt.setString(13, "varchar_b");
+            stmt.setString(14, "charb");
+            stmt.setInt(15, 3);
+            stmt.setLong(16, 3L);
+            stmt.setBigDecimal(17, new BigDecimal(3.0));
+            stmt.setDate(18, date);
+            stmt.executeUpdate();
+            
+            stmt.setString(1, "varchar2");
+            stmt.setString(2, "char2");
+            stmt.setInt(3, 2);
+            stmt.setLong(4, 2L);
+            stmt.setBigDecimal(5, new BigDecimal(2.0));
+            date = DateUtil.parseDate("2015-01-02 00:00:00");
+            stmt.setDate(6, date);
+            stmt.setString(7, "varchar_a");
+            stmt.setString(8, "chara");
+            stmt.setInt(9, 3);
+            stmt.setLong(10, 3L);
+            stmt.setBigDecimal(11, new BigDecimal(3.0));
+            stmt.setDate(12, date);
+            stmt.setString(13, "varchar_b");
+            stmt.setString(14, "charb");
+            stmt.setInt(15, 4);
+            stmt.setLong(16, 4L);
+            stmt.setBigDecimal(17, new BigDecimal(4.0));
+            stmt.setDate(18, date);
+            stmt.executeUpdate();
+            
+            stmt.setString(1, "varchar3");
+            stmt.setString(2, "char3");
+            stmt.setInt(3, 3);
+            stmt.setLong(4, 3L);
+            stmt.setBigDecimal(5, new BigDecimal(3.0));
+            date = DateUtil.parseDate("2015-01-03 00:00:00");
+            stmt.setDate(6, date);
+            stmt.setString(7, "varchar_a");
+            stmt.setString(8, "chara");
+            stmt.setInt(9, 4);
+            stmt.setLong(10, 4L);
+            stmt.setBigDecimal(11, new BigDecimal(4.0));
+            stmt.setDate(12, date);
+            stmt.setString(13, "varchar_b");
+            stmt.setString(14, "charb");
+            stmt.setInt(15, 5);
+            stmt.setLong(16, 5L);
+            stmt.setBigDecimal(17, new BigDecimal(5.0));
+            stmt.setDate(18, date);
+            stmt.executeUpdate();
+            
+            conn.commit();
+        }
+    }
 
-	protected static void createMultiCFTestTable(String tableName, String options) throws SQLException {
+    protected static void createMultiCFTestTable(String tableName, String options) throws SQLException {
         String ddl = "create table if not exists " + tableName + "(" +
                 "   varchar_pk VARCHAR NOT NULL, " +
                 "   char_pk CHAR(5) NOT NULL, " +
@@ -1866,7 +1866,7 @@ public abstract class BaseTest {
             conn.createStatement().execute(ddl);
             conn.close();
     }
-    
+        
     // Populate the test table with data.
     protected static void populateMultiCFTestTable(String tableName) throws SQLException {
         populateMultiCFTestTable(tableName, null);

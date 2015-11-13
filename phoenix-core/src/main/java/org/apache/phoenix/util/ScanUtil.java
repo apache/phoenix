@@ -692,6 +692,13 @@ public class ScanUtil {
         return Bytes.compareTo(key, 0, nBytesToCheck, ZERO_BYTE_ARRAY, 0, nBytesToCheck) != 0;
     }
 
+    public static byte[] getTenantIdBytes(RowKeySchema schema, boolean isSalted, PName tenantId, boolean isMultiTenantTable)
+            throws SQLException {
+        return isMultiTenantTable ?
+                  getTenantIdBytes(schema, isSalted, tenantId)
+                : tenantId.getBytes();
+    }
+
     public static byte[] getTenantIdBytes(RowKeySchema schema, boolean isSalted, PName tenantId)
             throws SQLException {
         int pkPos = isSalted ? 1 : 0;

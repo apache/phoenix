@@ -17,12 +17,9 @@
  */
 package org.apache.phoenix.compile;
 
-import java.sql.ParameterMetaData;
 import java.sql.SQLException;
-import java.sql.SQLFeatureNotSupportedException;
 import java.util.Collections;
 
-import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;

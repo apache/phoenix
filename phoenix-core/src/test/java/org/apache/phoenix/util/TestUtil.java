@@ -102,8 +102,6 @@ public class TestUtil {
     public static final String DEFAULT_DATA_TABLE_FULL_NAME = SchemaUtil.getTableName(DEFAULT_SCHEMA_NAME, "T");
     public static final String DEFAULT_INDEX_TABLE_FULL_NAME = SchemaUtil.getTableName(DEFAULT_SCHEMA_NAME, "I");
     
-	public static final int NUM_MILLIS_IN_DAY = 86400000;
-
     private TestUtil() {
     }
 
@@ -214,6 +212,7 @@ public class TestUtil {
     public static final String JOIN_SUPPLIER_TABLE_DISPLAY_NAME = JOIN_SCHEMA + "." + JOIN_SUPPLIER_TABLE;
     public static final String JOIN_COITEM_TABLE_DISPLAY_NAME = JOIN_SCHEMA + "." + JOIN_COITEM_TABLE;
     public static final String BINARY_NAME = "BinaryTable";
+    public static final int NUM_MILLIS_IN_DAY = 86400000;
 
     /**
      * Read-only properties used by all tests

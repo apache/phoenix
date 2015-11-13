@@ -76,8 +76,8 @@ public class PUnsignedLongArray extends PArrayDataType<long[]> {
         if (value == null) {
             return true;
         }
-        PhoenixArray pArr = (PhoenixArray) value;
-        Object[] longArr = (Object[]) pArr.array;
+        PhoenixArray.PrimitiveLongPhoenixArray pArr = (PhoenixArray.PrimitiveLongPhoenixArray) value;
+        long[] longArr = (long[]) pArr.array;
         for (Object i : longArr) {
             if (!super.isCoercibleTo(PUnsignedLong.INSTANCE, i)) {
                 return false;
