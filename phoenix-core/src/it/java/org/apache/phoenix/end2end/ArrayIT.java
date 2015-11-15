@@ -2679,4 +2679,30 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         assertEquals(conn.createArrayOf("INTEGER", new Integer[]{5, 6}), rs.getArray(4));
         assertEquals(3, rs.getInt(5));
     }
+
+    @Test
+    public void testCharPrimaryKey() throws SQLException{
+        long ts = nextTimestamp();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String ddl = "CREATE TABLE TEST5(testCharArray CHAR(3)[], CONSTRAINT test_pk PRIMARY KEY(testCharArray)) DEFAULT_COLUMN_FAMILY='T'";
+        conn.createStatement().execute(ddl);
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
+        conn = DriverManager.getConnection(getUrl(), props);
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO TEST5 VALUES (ARRAY['aaa', 'bbb', 'ccc'])");
+        stmt.execute();
+        conn.commit();
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
+        conn = DriverManager.getConnection(getUrl(), props);
+        ResultSet rs;
+        stmt = conn.prepareStatement("SELECT testCharArray from TEST5");
+        rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertEquals(conn.createArrayOf("CHAR", new String[]{"aaa", "bbb", "ccc"}), rs.getArray(1));
+    }
 }
