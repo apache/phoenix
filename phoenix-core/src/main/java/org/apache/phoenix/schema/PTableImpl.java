@@ -579,7 +579,7 @@ public class PTableImpl implements PTable {
                         // once we require tables to have been upgraded
                         byteValue = StringUtil.padChar(byteValue, maxLength);
                     }
-                } else if (maxLength != null && byteValue.length > maxLength) {
+                } else if (maxLength != null && !type.isArrayType() && byteValue.length > maxLength) {
                     throw new DataExceedsCapacityException(name.getString() + "." + column.getName().getString() + " may not exceed " + maxLength + " bytes (" + SchemaUtil.toString(type, byteValue) + ")");
                 }
                 os.write(byteValue, 0, byteValue.length);
