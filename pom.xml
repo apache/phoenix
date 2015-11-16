@@ -343,6 +343,7 @@
             <id>validate</id>
             <phase>validate</phase>
             <configuration>
+              <skip>true</skip>
               <configLocation>${top.dir}/src/main/config/checkstyle/checker.xml</configLocation>
               <suppressionsLocation>${top.dir}/src/main/config/checkstyle/suppressions.xml</suppressionsLocation>
               <consoleOutput>true</consoleOutput>
