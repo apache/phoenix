@@ -39,10 +39,14 @@
   </containerDescriptorHandlers>
   <dependencySets>
     <dependencySet>
-      <outputDirectory>/</outputDirectory>
-      <useProjectArtifact>true</useProjectArtifact>
       <unpack>true</unpack>
       <scope>runtime</scope>
+      <outputDirectory>/</outputDirectory>
+      <includes>
+        <include>org.apache.phoenix:phoenix-server</include>
+        <include>org.apache.phoenix:phoenix-server-client</include>
+        <include>org.apache.calcite:*</include>
+      </includes>
     </dependencySet>
   </dependencySets>
 </assembly>
