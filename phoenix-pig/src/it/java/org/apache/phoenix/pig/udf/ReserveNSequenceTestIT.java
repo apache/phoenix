@@ -17,8 +17,6 @@
  */
 package org.apache.phoenix.pig.udf;
 
-import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
-import static org.apache.phoenix.util.TestUtil.LOCALHOST;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
@@ -29,17 +27,12 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Properties;
 
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.HConstants;
-import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
+import org.apache.phoenix.pig.BasePigIT;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.pig.data.Tuple;
-import org.apache.pig.data.TupleFactory;
 import org.apache.pig.impl.util.UDFContext;
 import org.junit.After;
-import org.junit.AfterClass;
 import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -47,35 +40,31 @@ import org.junit.rules.ExpectedException;
 /**
  * Test class to run all the Pig Sequence UDF integration tests against a virtual map reduce cluster.
  */
-public class ReserveNSequenceTestIT extends BaseHBaseManagedTimeIT {
+public class ReserveNSequenceTestIT extends BasePigIT {
 
     private static final String CREATE_SEQUENCE_SYNTAX = "CREATE SEQUENCE %s START WITH %s INCREMENT BY %s MINVALUE %s MAXVALUE %s CACHE %s";
     private static final String SEQUENCE_NAME = "my_schema.my_sequence";
     private static final long MAX_VALUE = 10;
 
-    private static TupleFactory TF;
-    private static Connection globalConn;
-    private static String zkQuorum;
-    private static Configuration conf;
     private static UDFContext udfContext;
 
     @Rule
     public ExpectedException thrown = ExpectedException.none();
 
-    @BeforeClass
-    public static void setUpBeforeClass() throws Exception {
-        conf = getTestClusterConfig();
-        zkQuorum = LOCALHOST + JDBC_PROTOCOL_SEPARATOR + getZKClientPort(getTestClusterConfig());
-        conf.set(HConstants.ZOOKEEPER_QUORUM, zkQuorum);
-        globalConn = DriverManager.getConnection(getUrl());
-        // Pig variables
-        TF = TupleFactory.getInstance();
+    @Override
+    @Before
+    public void setUp() throws Exception {
+        super.setUp();
+        createSequence(conn);
+        createUdfContext();
     }
 
-    @Before
-    public void setUp() throws SQLException {
-        createSequence(globalConn);
-        createUdfContext();
+    @Override
+    @After
+    public void tearDown() throws Exception {
+        udfContext.reset();
+        dropSequence(conn);
+        super.tearDown();
     }
 
     @Test
@@ -161,7 +150,7 @@ public class ReserveNSequenceTestIT extends BaseHBaseManagedTimeIT {
             doTest(tenantConn, props);
 
             // validate global sequence value is still set to 1
-            assertEquals(1L, getNextSequenceValue(globalConn));
+            assertEquals(1L, getNextSequenceValue(conn));
         } finally {
             dropSequence(tenantConn);
         }
@@ -174,27 +163,27 @@ public class ReserveNSequenceTestIT extends BaseHBaseManagedTimeIT {
      */
     @Test
     public void testMultipleTuples() throws Exception {
-        Tuple tuple = TF.newTuple(2);
+        Tuple tuple = tupleFactory.newTuple(2);
         tuple.set(0, 2L);
         tuple.set(1, SEQUENCE_NAME);
 
-        final String tentantId = globalConn.getClientInfo(PhoenixRuntime.TENANT_ID_ATTRIB);
+        final String tentantId = conn.getClientInfo(PhoenixRuntime.TENANT_ID_ATTRIB);
         ReserveNSequence udf = new ReserveNSequence(zkQuorum, tentantId);
 
         for (int i = 0; i < 2; i++) {
             udf.exec(tuple);
         }
-        long nextValue = getNextSequenceValue(globalConn);
+        long nextValue = getNextSequenceValue(conn);
         assertEquals(5L, nextValue);
     }
     
     private void doTest(UDFTestProperties props) throws Exception {
-        doTest(globalConn, props);
+        doTest(conn, props);
     }
 
     private void doTest(Connection conn, UDFTestProperties props) throws Exception {
         setCurrentValue(conn, props.getCurrentValue());
-        Tuple tuple = TF.newTuple(3);
+        Tuple tuple = tupleFactory.newTuple(3);
         tuple.set(0, props.getNumToReserve());
         tuple.set(1, props.getSequenceName());
         tuple.set(2, zkQuorum);
@@ -249,17 +238,6 @@ public class ReserveNSequenceTestIT extends BaseHBaseManagedTimeIT {
         String ddl = new StringBuilder().append("DROP SEQUENCE ").append(SEQUENCE_NAME).toString();
         conn.createStatement().execute(ddl);
         conn.commit();
-    }
-
-    @After
-    public void tearDown() throws Exception {
-        udfContext.reset();
-        dropSequence(globalConn);
-    }
-
-    @AfterClass
-    public static void tearDownAfterClass() throws Exception {
-        globalConn.close();
     }
 
     /**
