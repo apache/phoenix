@@ -108,6 +108,10 @@
 			</resource>
 			<resource>
 				<directory>config</directory>
+				<excludes>
+					<exclude>**/*.sql</exclude>
+					<exclude>**/*.xml</exclude>
+				</excludes>
 			</resource>
 		</resources>
 		<testResources>
@@ -177,11 +181,6 @@
 							<descriptors>
 								<!-- Produces minimal Pherf jar -->
 								<descriptor>src/main/assembly/minimal.xml</descriptor>
-								<!-- Produces standalone zip that bundles all required dependencies -->
-								<descriptor>src/main/assembly/standalone.xml</descriptor>
-								<!-- Produces cluster zip with minimal Pherf jar. Setting HBase classpath 
-									in env.sh is required for this configuration -->
-								<descriptor>src/main/assembly/cluster.xml</descriptor>
 							</descriptors>
 						</configuration>
 					</execution>
