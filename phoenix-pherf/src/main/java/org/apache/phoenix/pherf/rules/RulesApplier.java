@@ -130,7 +130,7 @@ public class RulesApplier {
             prefix = column.getPrefix();
         }
 
-        if (prefix.length() >= length) {
+        if ((prefix.length() >= length) && (length > 0)) {
             logger.warn("You are attempting to generate data with a prefix (" + prefix + ") "
                     + "That is longer than expected overall field length (" + length + "). "
                     + "This will certainly lead to unexpected data values.");

@@ -37,7 +37,7 @@ public class PherfConstants {
     public static final String RESOURCE_SCENARIO = "/scenario";
     public static final String
             SCENARIO_ROOT_PATTERN =
-            ".*" + PherfConstants.RESOURCE_SCENARIO.substring(1) + ".*";
+            		".*" + PherfConstants.RESOURCE_SCENARIO.substring(1) + ".*" + PherfConstants.RESOURCE_SCENARIO.substring(1) + ".*";
     public static final String SCHEMA_ROOT_PATTERN = ".*";
     public static final String PHERF_PROPERTIES = "pherf.properties";
 
