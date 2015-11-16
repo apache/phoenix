@@ -76,7 +76,6 @@
       <version>${calcite.version}</version>
     </dependency>
     <dependency>
-      <!-- TODO: really don't need all of Phoenix, just the thick client. -->
       <groupId>org.apache.phoenix</groupId>
       <artifactId>phoenix-core</artifactId>
     </dependency>
