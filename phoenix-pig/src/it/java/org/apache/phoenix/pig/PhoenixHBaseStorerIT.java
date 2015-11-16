@@ -21,6 +21,7 @@ package org.apache.phoenix.pig;
 
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
 import static org.apache.phoenix.util.TestUtil.LOCALHOST;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -30,9 +31,17 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.Collection;
+import java.util.Map;
+import java.util.Properties;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
+import org.apache.phoenix.end2end.Shadower;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.pig.ExecType;
 import org.apache.pig.PigServer;
@@ -44,42 +53,49 @@ import org.apache.pig.data.Tuple;
 import org.apache.pig.data.TupleFactory;
 import org.joda.time.DateTime;
 import org.junit.After;
-import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 
 
 public class PhoenixHBaseStorerIT extends BaseHBaseManagedTimeIT {
+    private TupleFactory tupleFactory;
+    private String zkQuorum;
+    private Connection conn;
+    private PigServer pigServer;
 
-    private static TupleFactory tupleFactory;
-    private static Connection conn;
-    private static PigServer pigServer;
-    private static String zkQuorum;
-    
     @BeforeClass
-    public static void setUpBeforeClass() throws Exception {
-        conn = DriverManager.getConnection(getUrl());
-        zkQuorum = LOCALHOST + JDBC_PROTOCOL_SEPARATOR + getZKClientPort(getTestClusterConfig());
-        // Pig variables
-        tupleFactory = TupleFactory.getInstance();
+    @Shadower(classBeingShadowed = BaseHBaseManagedTimeIT.class)
+    public static void doSetup() throws Exception {
+        Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
+        props.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
+        // Must update config before starting server
+        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
     
     @Before
     public void setUp() throws Exception {
-        pigServer = new PigServer(ExecType.LOCAL, getTestClusterConfig());
-    }
-    
-    @After
-    public void tearDown() throws Exception {
-         pigServer.shutdown();
+        Configuration conf = getTestClusterConfig();
+        conf.set(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
+        pigServer = new PigServer(ExecType.LOCAL, conf);
+        tupleFactory = TupleFactory.getInstance();
+
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        conn = DriverManager.getConnection(getUrl(), props);
+        zkQuorum = LOCALHOST + JDBC_PROTOCOL_SEPARATOR + getZKClientPort(conf);
     }
 
-    @AfterClass
-    public static void tearDownAfterClass() throws Exception {
-        conn.close();
+    @After
+    public void tearDown() throws Exception {
+        if(conn != null) {
+            conn.close();
+        }
+        if (pigServer != null) {
+            pigServer.shutdown();
+        }
     }
 
     /**

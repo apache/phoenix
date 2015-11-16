@@ -33,12 +33,18 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
+import org.apache.phoenix.end2end.Shadower;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.pig.ExecType;
 import org.apache.pig.PigServer;
@@ -50,9 +56,11 @@ import org.apache.pig.impl.logicalLayer.schema.Schema;
 import org.apache.pig.impl.logicalLayer.schema.Schema.FieldSchema;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Maps;
 
 /**
  * 
@@ -71,12 +79,33 @@ public class PhoenixHBaseLoaderIT extends BaseHBaseManagedTimeIT {
     private Connection conn;
     private PigServer pigServer;
 
+    @BeforeClass
+    @Shadower(classBeingShadowed = BaseHBaseManagedTimeIT.class)
+    public static void doSetup() throws Exception {
+        Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
+        props.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
+        // Must update config before starting server
+        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+    }
+    
     @Before
     public void setUp() throws Exception {
+        Configuration conf = getTestClusterConfig();
+        conf.set(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
+        pigServer = new PigServer(ExecType.LOCAL, conf);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         conn = DriverManager.getConnection(getUrl(), props);
-        zkQuorum = LOCALHOST + JDBC_PROTOCOL_SEPARATOR + getZKClientPort(getTestClusterConfig());
-        pigServer = new PigServer(ExecType.LOCAL, getTestClusterConfig());
+        zkQuorum = LOCALHOST + JDBC_PROTOCOL_SEPARATOR + getZKClientPort(conf);
+    }
+
+    @After
+    public void tearDown() throws Exception {
+        if(conn != null) {
+            conn.close();
+        }
+        if (pigServer != null) {
+            pigServer.shutdown();
+        }
     }
 
     /**
@@ -717,14 +746,6 @@ public class PhoenixHBaseLoaderIT extends BaseHBaseManagedTimeIT {
         assertEquals(expectedList.size(), actualList.size());
 	}
     
-    @After
-    public void tearDown() throws Exception {
-        if(conn != null) {
-            conn.close();
-        }
-        pigServer.shutdown();
-    }
-
     private void dropTable(String tableFullName) throws SQLException {
       Preconditions.checkNotNull(conn);
       conn.createStatement().execute(String.format("DROP TABLE IF EXISTS %s",tableFullName));
