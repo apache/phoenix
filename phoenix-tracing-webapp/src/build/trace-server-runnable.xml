@@ -39,10 +39,12 @@
   </containerDescriptorHandlers>
   <dependencySets>
     <dependencySet>
-      <outputDirectory>/</outputDirectory>
-      <useProjectArtifact>true</useProjectArtifact>
       <unpack>true</unpack>
-      <scope>provided</scope>
+      <outputDirectory>/</outputDirectory>
+      <includes>
+        <include>org.apache.phoenix:phoenix-tracing-webapp</include>
+        <include>org.eclipse.jetty:*</include>
+      </includes>
     </dependencySet>
   </dependencySets>
   <fileSets>
