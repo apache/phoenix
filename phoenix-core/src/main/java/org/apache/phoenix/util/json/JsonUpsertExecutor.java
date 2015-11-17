@@ -15,17 +15,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.util.csv;
+package org.apache.phoenix.util.json;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import javax.annotation.Nullable;
 
-import org.apache.commons.csv.CSVRecord;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.types.PDataType;
@@ -37,43 +38,57 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.CaseFormat;
 import com.google.common.base.Function;
 
-/** {@link UpsertExecutor} over {@link CSVRecord}s. */
-public class CsvUpsertExecutor extends UpsertExecutor<CSVRecord, String> {
+/** {@link UpsertExecutor} over {@link Map} objects, as parsed from JSON. */
+public class JsonUpsertExecutor extends UpsertExecutor<Map<?, ?>, Object> {
 
-    private static final Logger LOG = LoggerFactory.getLogger(CsvUpsertExecutor.class);
-
-    protected final String arrayElementSeparator;
+    protected static final Logger LOG = LoggerFactory.getLogger(JsonUpsertExecutor.class);
 
     /** Testing constructor. Do not use in prod. */
     @VisibleForTesting
-    protected CsvUpsertExecutor(Connection conn, List<ColumnInfo> columnInfoList,
-            PreparedStatement stmt, UpsertListener<CSVRecord> upsertListener,
-            String arrayElementSeparator) {
+    protected JsonUpsertExecutor(Connection conn, List<ColumnInfo> columnInfoList,
+            PreparedStatement stmt, UpsertListener<Map<?, ?>> upsertListener) {
         super(conn, columnInfoList, stmt, upsertListener);
-        this.arrayElementSeparator = arrayElementSeparator;
         finishInit();
     }
 
-    public CsvUpsertExecutor(Connection conn, String tableName,
-            List<ColumnInfo> columnInfoList, UpsertListener<CSVRecord> upsertListener,
-            String arrayElementSeparator) {
+    public JsonUpsertExecutor(Connection conn, String tableName, List<ColumnInfo> columnInfoList,
+            UpsertExecutor.UpsertListener<Map<?, ?>> upsertListener) {
         super(conn, tableName, columnInfoList, upsertListener);
-        this.arrayElementSeparator = arrayElementSeparator;
         finishInit();
     }
 
     @Override
-    protected void execute(CSVRecord csvRecord) {
+    protected void execute(Map<?, ?> record) {
+        int fieldIndex = 0;
+        String colName = null;
         try {
-            if (csvRecord.size() < conversionFunctions.size()) {
-                String message = String.format("CSV record does not have enough values (has %d, but needs %d)",
-                        csvRecord.size(), conversionFunctions.size());
+            if (record.size() < conversionFunctions.size()) {
+                String message = String.format("JSON record does not have enough values (has %d, but needs %d)",
+                        record.size(), conversionFunctions.size());
                 throw new IllegalArgumentException(message);
             }
-            for (int fieldIndex = 0; fieldIndex < conversionFunctions.size(); fieldIndex++) {
-                Object sqlValue = conversionFunctions.get(fieldIndex).apply(csvRecord.get(fieldIndex));
+            for (fieldIndex = 0; fieldIndex < conversionFunctions.size(); fieldIndex++) {
+                colName = CaseFormat.UPPER_UNDERSCORE.to(
+                        CaseFormat.LOWER_UNDERSCORE, columnInfos.get(fieldIndex).getColumnName());
+                if (colName.contains(".")) {
+                    StringBuilder sb = new StringBuilder();
+                    String[] parts = colName.split("\\.");
+                    // assume first part is the column family name; omita
+                    for (int i = 1; i < parts.length; i++) {
+                        sb.append(parts[i]);
+                        if (i != parts.length - 1) {
+                            sb.append(".");
+                        }
+                    }
+                    colName = sb.toString();
+                }
+                if (colName.contains("\"")) {
+                    colName = colName.replace("\"", "");
+                }
+                Object sqlValue = conversionFunctions.get(fieldIndex).apply(record.get(colName));
                 if (sqlValue != null) {
                     preparedStatement.setObject(fieldIndex + 1, sqlValue);
                 } else {
@@ -86,19 +101,29 @@ public class CsvUpsertExecutor extends UpsertExecutor<CSVRecord, String> {
             if (LOG.isDebugEnabled()) {
                 // Even though this is an error we only log it with debug logging because we're notifying the
                 // listener, and it can do its own logging if needed
-                LOG.debug("Error on CSVRecord " + csvRecord, e);
+                LOG.debug("Error on record " + record + ", fieldIndex " + fieldIndex + ", colName " + colName, e);
             }
-            upsertListener.errorOnRecord(csvRecord, e);
+            upsertListener.errorOnRecord(record, new Exception("fieldIndex: " + fieldIndex + ", colName " + colName, e));
         }
     }
 
     @Override
-    protected Function<String, Object> createConversionFunction(PDataType dataType) {
+    public void close() throws IOException {
+        try {
+            preparedStatement.close();
+        } catch (SQLException e) {
+            // An exception while closing the prepared statement is most likely a sign of a real problem, so we don't
+            // want to hide it with closeQuietly or something similar
+            throw new RuntimeException(e);
+        }
+    }
+
+    @Override
+    protected Function<Object, Object> createConversionFunction(PDataType dataType) {
         if (dataType.isArrayType()) {
             return new ArrayDatatypeConversionFunction(
-                    new StringToArrayConverter(
+                    new ObjectToArrayConverter(
                             conn,
-                            arrayElementSeparator,
                             PDataType.fromTypeId(dataType.getSqlType() - PDataType.ARRAY_TYPE_BASE)));
         } else {
             return new SimpleDatatypeConversionFunction(dataType, this.conn);
@@ -108,7 +133,7 @@ public class CsvUpsertExecutor extends UpsertExecutor<CSVRecord, String> {
     /**
      * Performs typed conversion from String values to a given column value type.
      */
-    static class SimpleDatatypeConversionFunction implements Function<String, Object> {
+    static class SimpleDatatypeConversionFunction implements Function<Object, Object> {
 
         private final PDataType dataType;
         private final DateUtil.DateTimeParser dateTimeParser;
@@ -121,7 +146,7 @@ public class CsvUpsertExecutor extends UpsertExecutor<CSVRecord, String> {
                 throw new RuntimeException(e);
             }
             this.dataType = dataType;
-            if(dataType.isCoercibleTo(PTimestamp.INSTANCE)) {
+            if (dataType.isCoercibleTo(PTimestamp.INSTANCE)) {
                 // TODO: move to DateUtil
                 String dateFormat;
                 int dateSqlType = dataType.getResultSetSqlType();
@@ -133,7 +158,7 @@ public class CsvUpsertExecutor extends UpsertExecutor<CSVRecord, String> {
                             DateUtil.DEFAULT_TIME_FORMAT);
                 } else {
                     dateFormat = props.getProperty(QueryServices.TIMESTAMP_FORMAT_ATTRIB,
-                            DateUtil.DEFAULT_TIMESTAMP_FORMAT);                    
+                            DateUtil.DEFAULT_TIMESTAMP_FORMAT);
                 }
                 String timeZoneId = props.getProperty(QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB,
                         QueryServicesOptions.DEFAULT_DATE_FORMAT_TIMEZONE);
@@ -145,34 +170,35 @@ public class CsvUpsertExecutor extends UpsertExecutor<CSVRecord, String> {
 
         @Nullable
         @Override
-        public Object apply(@Nullable String input) {
-            if (input == null || input.isEmpty()) {
+        public Object apply(@Nullable Object input) {
+            if (input == null) {
                 return null;
             }
-            if (dateTimeParser != null) {
-                long epochTime = dateTimeParser.parseDateTime(input);
+            if (dateTimeParser != null && input instanceof String) {
+                final String s = (String) input;
+                long epochTime = dateTimeParser.parseDateTime(s);
                 byte[] byteValue = new byte[dataType.getByteSize()];
                 dataType.getCodec().encodeLong(epochTime, byteValue, 0);
                 return dataType.toObject(byteValue);
             }
-            return dataType.toObject(input);
+            return dataType.toObject(input, dataType);
         }
     }
 
     /**
      * Converts string representations of arrays into Phoenix arrays of the correct type.
      */
-    private static class ArrayDatatypeConversionFunction implements Function<String, Object> {
+    private static class ArrayDatatypeConversionFunction implements Function<Object, Object> {
 
-        private final StringToArrayConverter arrayConverter;
+        private final ObjectToArrayConverter arrayConverter;
 
-        private ArrayDatatypeConversionFunction(StringToArrayConverter arrayConverter) {
+        private ArrayDatatypeConversionFunction(ObjectToArrayConverter arrayConverter) {
             this.arrayConverter = arrayConverter;
         }
 
         @Nullable
         @Override
-        public Object apply(@Nullable String input) {
+        public Object apply(@Nullable Object input) {
             try {
                 return arrayConverter.toArray(input);
             } catch (SQLException e) {
@@ -180,5 +206,4 @@ public class CsvUpsertExecutor extends UpsertExecutor<CSVRecord, String> {
             }
         }
     }
-
 }
