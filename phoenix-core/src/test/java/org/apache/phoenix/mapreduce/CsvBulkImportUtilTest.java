@@ -17,9 +17,6 @@
  */
 package org.apache.phoenix.mapreduce;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
-
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -29,11 +26,10 @@ import java.util.List;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
-import org.apache.phoenix.schema.types.PInteger;
-import org.apache.phoenix.util.ColumnInfo;
 import org.junit.Test;
 
-import com.google.common.collect.ImmutableList;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 
 public class CsvBulkImportUtilTest {
 
@@ -41,16 +37,11 @@ public class CsvBulkImportUtilTest {
     public void testInitCsvImportJob() throws IOException {
         Configuration conf = new Configuration();
 
-        String tableName = "SCHEMANAME.TABLENAME";
         char delimiter = '\001';
         char quote = '\002';
         char escape = '!';
 
-        List<ColumnInfo> columnInfoList = ImmutableList.of(
-                new ColumnInfo("MYCOL", PInteger.INSTANCE.getSqlType()));
-
-        CsvBulkImportUtil.initCsvImportJob(
-                conf, tableName, delimiter, quote, escape, null, columnInfoList, true);
+        CsvBulkImportUtil.initCsvImportJob(conf, delimiter, quote, escape, null);
 
         // Serialize and deserialize the config to ensure that there aren't any issues
         // with non-printable characters as delimiters
@@ -61,7 +52,6 @@ public class CsvBulkImportUtilTest {
         Configuration deserialized = new Configuration();
         deserialized.addResource(new FileInputStream(tempFile));
 
-        assertEquals(tableName, deserialized.get(CsvToKeyValueMapper.TABLE_NAME_CONFKEY));
         assertEquals(Character.valueOf('\001'),
                 CsvBulkImportUtil.getCharacter(deserialized, CsvToKeyValueMapper.FIELD_DELIMITER_CONFKEY));
         assertEquals(Character.valueOf('\002'),
@@ -69,8 +59,6 @@ public class CsvBulkImportUtilTest {
         assertEquals(Character.valueOf('!'),
                 CsvBulkImportUtil.getCharacter(deserialized, CsvToKeyValueMapper.ESCAPE_CHAR_CONFKEY));
         assertNull(deserialized.get(CsvToKeyValueMapper.ARRAY_DELIMITER_CONFKEY));
-        assertEquals(columnInfoList, CsvToKeyValueMapper.buildColumnInfoList(deserialized));
-        assertEquals(true, deserialized.getBoolean(CsvToKeyValueMapper.IGNORE_INVALID_ROW_CONFKEY, false));
 
         tempFile.delete();
     }

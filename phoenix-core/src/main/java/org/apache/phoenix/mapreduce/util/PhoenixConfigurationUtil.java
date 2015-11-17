@@ -23,13 +23,6 @@ import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 
-import com.google.common.base.Function;
-import com.google.common.base.Joiner;
-import com.google.common.base.Preconditions;
-import com.google.common.base.Splitter;
-import com.google.common.collect.Iterables;
-import com.google.common.collect.Lists;
-
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -41,12 +34,16 @@ import org.apache.hadoop.mapreduce.lib.db.DBInputFormat.NullDBWritable;
 import org.apache.hadoop.mapreduce.lib.db.DBWritable;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.mapreduce.CsvToKeyValueMapper.DefaultImportPreUpsertKeyValueProcessor;
+import org.apache.phoenix.mapreduce.FormatToKeyValueMapper;
 import org.apache.phoenix.mapreduce.ImportPreUpsertKeyValueProcessor;
 import org.apache.phoenix.mapreduce.PhoenixInputFormat;
 import org.apache.phoenix.util.ColumnInfo;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
+
+import com.google.common.base.Joiner;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 
 import static org.apache.commons.lang.StringUtils.isNotEmpty;
 
@@ -419,7 +416,7 @@ public final class PhoenixConfigurationUtil {
         Class<? extends ImportPreUpsertKeyValueProcessor> processorClass = null;
         try {
             processorClass = conf.getClass(
-                    UPSERT_HOOK_CLASS_CONFKEY, DefaultImportPreUpsertKeyValueProcessor.class,
+                    UPSERT_HOOK_CLASS_CONFKEY, FormatToKeyValueMapper.DefaultImportPreUpsertKeyValueProcessor.class,
                     ImportPreUpsertKeyValueProcessor.class);
         } catch (Exception e) {
             throw new IllegalStateException("Couldn't load upsert hook class", e);

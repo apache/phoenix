@@ -24,7 +24,8 @@ import java.util.List;
 /**
  * A listener hook to process KeyValues that are being written to HFiles for bulk import.
  * Implementing this interface and configuring it via the {@link
- * CsvToKeyValueMapper#UPSERT_HOOK_CLASS_CONFKEY} configuration key.
+ * org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil#UPSERT_HOOK_CLASS_CONFKEY}
+ * configuration key.
  * <p/>
  * The intention of such a hook is to allow coproccessor-style operations to be peformed on
  * data that is being bulk-loaded via MapReduce.

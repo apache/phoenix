@@ -23,33 +23,32 @@ import java.util.TreeSet;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.mapreduce.KeyValueSortReducer;
 import org.apache.hadoop.mapreduce.Reducer;
-import org.apache.phoenix.mapreduce.bulkload.CsvTableRowkeyPair;
+import org.apache.phoenix.mapreduce.bulkload.TableRowkeyPair;
 
 /**
- * Reducer class for the CSVBulkLoad job. 
+ * Reducer class for the bulkload jobs.
  * Performs similar functionality to {@link KeyValueSortReducer}
- * 
  */
-public class CsvToKeyValueReducer extends Reducer<CsvTableRowkeyPair,KeyValue,CsvTableRowkeyPair,KeyValue> {
-    
+public class FormatToKeyValueReducer
+    extends Reducer<TableRowkeyPair,KeyValue,TableRowkeyPair,KeyValue> {
+
     @Override
-    protected void reduce(CsvTableRowkeyPair key, Iterable<KeyValue> values,
-            Reducer<CsvTableRowkeyPair, KeyValue, CsvTableRowkeyPair, KeyValue>.Context context)
-                    throws IOException, InterruptedException {
+    protected void reduce(TableRowkeyPair key, Iterable<KeyValue> values,
+        Reducer<TableRowkeyPair, KeyValue, TableRowkeyPair, KeyValue>.Context context)
+        throws IOException, InterruptedException {
         TreeSet<KeyValue> map = new TreeSet<KeyValue>(KeyValue.COMPARATOR);
         for (KeyValue kv: values) {
-          try {
-            map.add(kv.clone());
-          } catch (CloneNotSupportedException e) {
-            throw new java.io.IOException(e);
-          }
+            try {
+                map.add(kv.clone());
+            } catch (CloneNotSupportedException e) {
+                throw new java.io.IOException(e);
+            }
         }
         context.setStatus("Read " + map.getClass());
         int index = 0;
         for (KeyValue kv: map) {
-          context.write(key, kv);
-          if (++index % 100 == 0) context.setStatus("Wrote " + index);
+            context.write(key, kv);
+            if (++index % 100 == 0) context.setStatus("Wrote " + index);
         }
     }
-
 }
