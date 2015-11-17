@@ -17,20 +17,29 @@
  */
 package org.apache.phoenix.mapreduce;
 
+import java.util.Arrays;
+import java.util.Collection;
+
 import org.apache.commons.cli.CommandLine;
-import org.junit.Before;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import static org.junit.Assert.assertEquals;
 
-public class CsvBulkLoadToolTest {
+@RunWith(Parameterized.class)
+public class BulkLoadToolTest {
 
-    private CsvBulkLoadTool bulkLoadTool;
-
-    @Before
-    public void setUp() {
-        bulkLoadTool = new CsvBulkLoadTool();
+    @Parameterized.Parameters
+    public static Collection<Object[]> params() {
+        return Arrays.asList(new Object[][]{
+                { new CsvBulkLoadTool() },
+                { new JsonBulkLoadTool() },
+        });
     }
+
+    @Parameterized.Parameter(value = 0)
+    public AbstractBulkLoadTool bulkLoadTool;
 
     @Test
     public void testParseOptions() {
