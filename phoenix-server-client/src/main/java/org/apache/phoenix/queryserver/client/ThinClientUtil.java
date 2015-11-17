@@ -21,6 +21,9 @@ package org.apache.phoenix.queryserver.client;
  * Utilities for thin clients.
  */
 public final class ThinClientUtil {
+  // The default serialization is also defined in QueryServicesOptions. phoenix-server-client
+  // currently doesn't depend on phoenix-core so we have to deal with the duplication.
+  private static final String DEFAULT_SERIALIZATION = "PROTOBUF";
 
   private ThinClientUtil() {}
 
@@ -29,7 +32,11 @@ public final class ThinClientUtil {
   }
 
   public static String getConnectionUrl(String protocol, String hostname, int port) {
-    String urlFmt = Driver.CONNECT_STRING_PREFIX + "url=%s://%s:%s";
-    return String.format(urlFmt, protocol, hostname, port);
+    return getConnectionUrl(protocol, hostname, port, DEFAULT_SERIALIZATION);
+  }
+
+  public static String getConnectionUrl(String protocol, String hostname, int port, String serialization) {
+    String urlFmt = Driver.CONNECT_STRING_PREFIX + "url=%s://%s:%s;serialization=%s";
+    return String.format(urlFmt, protocol, hostname, port, serialization);
   }
 }
