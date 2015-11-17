@@ -516,4 +516,11 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
     val df = sqlContext.load("org.apache.phoenix.spark", Map("table" -> "TEST_DECIMAL", "zkUrl" -> quorumAddress))
     assert(df.select("COL1").first().getDecimal(0) == BigDecimal("123.456789").bigDecimal)
   }
+
+  test("Can load small and tiny integeger types (PHOENIX-2426)") {
+    val sqlContext = new SQLContext(sc)
+    val df = sqlContext.load("org.apache.phoenix.spark", Map("table" -> "TEST_SMALL_TINY", "zkUrl" -> quorumAddress))
+    assert(df.select("COL1").first().getShort(0).toInt == 32767)
+    assert(df.select("COL2").first().getByte(0).toInt == 127)
+  }
 }
