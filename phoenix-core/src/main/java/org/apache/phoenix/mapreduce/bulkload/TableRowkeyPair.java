@@ -31,29 +31,24 @@ import com.google.common.base.Preconditions;
 
 
 /**
- * A WritableComparable to hold the table name and the rowkey. 
- *
+ * A WritableComparable to hold the table name and the rowkey.
  */
-public class CsvTableRowkeyPair implements WritableComparable<CsvTableRowkeyPair> {
+public class TableRowkeyPair implements WritableComparable<TableRowkeyPair> {
 
     /* The qualified table name */
     private String tableName;
-    
+
     /* The rowkey for the record */
     private ImmutableBytesWritable rowkey;
-    
+
     /**
      * Default constructor
      */
-    public CsvTableRowkeyPair() {
+    public TableRowkeyPair() {
         super();
     }
-    
-    /**
-     * @param tableName
-     * @param rowkey
-     */
-    public CsvTableRowkeyPair(String tableName, ImmutableBytesWritable rowkey) {
+
+    public TableRowkeyPair(String tableName, ImmutableBytesWritable rowkey) {
         super();
         Preconditions.checkNotNull(tableName);
         Preconditions.checkNotNull(rowkey);
@@ -91,7 +86,7 @@ public class CsvTableRowkeyPair implements WritableComparable<CsvTableRowkeyPair
     }
 
     @Override
-    public int compareTo(CsvTableRowkeyPair other) {
+    public int compareTo(TableRowkeyPair other) {
         String otherTableName = other.getTableName();
         if(this.tableName.equals(otherTableName)) {
             return this.rowkey.compareTo(other.getRowkey());
@@ -100,12 +95,12 @@ public class CsvTableRowkeyPair implements WritableComparable<CsvTableRowkeyPair
         }
     }
     
-    /** Comparator optimized for <code>CsvTableRowkeyPair</code>. */
+    /** Comparator optimized for <code>TableRowkeyPair</code>. */
     public static class Comparator extends WritableComparator {
         private BytesWritable.Comparator comparator = new BytesWritable.Comparator();
         
         public Comparator() {
-            super(CsvTableRowkeyPair.class);
+            super(TableRowkeyPair.class);
         }
 
         @Override
@@ -133,7 +128,7 @@ public class CsvTableRowkeyPair implements WritableComparable<CsvTableRowkeyPair
     }
  
     static { 
-        WritableComparator.define(CsvTableRowkeyPair.class, new Comparator());
+        WritableComparator.define(TableRowkeyPair.class, new Comparator());
     }
 
 }
