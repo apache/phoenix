@@ -18,6 +18,7 @@
 
 package org.apache.phoenix.pherf.result;
 
+import org.apache.commons.io.FileUtils;
 import org.apache.phoenix.pherf.PherfConstants;
 import org.apache.phoenix.pherf.result.file.ResultFileDetails;
 import org.apache.phoenix.pherf.result.impl.CSVFileResultHandler;
@@ -146,6 +147,17 @@ public class ResultUtil {
         File baseDir = new File(directory);
         if (!baseDir.exists()) {
             baseDir.mkdir();
+        }
+    }
+    
+    /**
+     * Utility method to delete directory
+     * @throws IOException 
+     */
+    public void deleteDir(String directory) throws IOException {
+        File baseDir = new File(directory);
+        if (baseDir.exists()) {
+            FileUtils.deleteDirectory(baseDir);
         }
     }
 
