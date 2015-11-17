@@ -50,8 +50,9 @@ public class PhoenixTable extends AbstractTable implements TranslatableTable {
       this.pTable = Preconditions.checkNotNull(pTable);
       List<Integer> pkPositions = Lists.<Integer> newArrayList();
       List<RelFieldCollation> fieldCollations = Lists.<RelFieldCollation> newArrayList();
-      for (PColumn column : pTable.getPKColumns()) {
-          int position = column.getPosition();
+      int start = getStartingColumnPosition(pTable);
+      for (PColumn column : pTable.getPKColumns().subList(start, pTable.getPKColumns().size())) {
+          int position = column.getPosition() - start;
           SortOrder sortOrder = column.getSortOrder();
           pkPositions.add(position);
           fieldCollations.add(new RelFieldCollation(position, sortOrder == SortOrder.ASC ? Direction.ASCENDING : Direction.DESCENDING));

@@ -268,6 +268,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
         initJoinTableValues(url, null, null);
         initArrayTable();
         initSaltedTables();
+        initMultiTenantTables();
         createIndices(
                 "CREATE INDEX IDX1 ON aTable (a_string) INCLUDE (b_string, x_integer)",
                 "CREATE INDEX IDX2 ON aTable (b_string) INCLUDE (a_string, y_integer)",
@@ -393,6 +394,39 @@ public class CalciteIT extends BaseClientManagedTimeIT {
         } catch (TableAlreadyExistsException e) {
         }
         conn.close();        
+    }
+    
+    protected static final String MULTI_TENANT_TABLE = "multitenant_test_table";
+    
+    protected void initMultiTenantTables() throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            conn.createStatement().execute(
+                    "CREATE TABLE " + MULTI_TENANT_TABLE + " (tenant_id VARCHAR NOT NULL, id VARCHAR NOT NULL, col0 INTEGER, col1 INTEGER CONSTRAINT pk PRIMARY KEY (tenant_id, id)) MULTI_TENANT=true");
+            PreparedStatement stmt = conn.prepareStatement(
+                    "UPSERT INTO " + MULTI_TENANT_TABLE
+                    + " VALUES(?, ?, ?, ?)");
+            stmt.setString(1, "10");
+            stmt.setString(2, "2");
+            stmt.setInt(3, 3);
+            stmt.setInt(4, 4);
+            stmt.execute();
+            stmt.setString(1, "15");
+            stmt.setString(2, "3");
+            stmt.setInt(3, 4);
+            stmt.setInt(4, 5);
+            stmt.execute();
+            stmt.setString(1, "20");
+            stmt.setString(2, "4");
+            stmt.setInt(3, 5);
+            stmt.setInt(4, 6);
+            stmt.execute();
+            conn.commit();
+        } catch (TableAlreadyExistsException e) {
+        } finally {
+            conn.close();
+        }
     }
     
     @Test public void testTableScan() throws Exception {
@@ -1520,6 +1554,17 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                            "      PhoenixTableScan(table=[[phoenix, IDXSALTED_SALTED_TEST_TABLE]], filter=[<(CAST($0):INTEGER, 6)])\n")
                 .resultIs(new Object[][] {
                         {2, 3, 4, 5, 2, 3, 4, 5}})
+                .close();
+    }
+    
+    @Test public void testMultiTenant() {
+        Properties props = getConnectionProps(false);
+        props.setProperty("TenantId", "15");
+        start(props).sql("select * from " + MULTI_TENANT_TABLE)
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                           "  PhoenixTableScan(table=[[phoenix, MULTITENANT_TEST_TABLE]])\n")
+                .resultIs(new Object[][] {
+                        {"3", 4, 5}})
                 .close();
     }
 

@@ -96,7 +96,9 @@ public class PhoenixSchema implements Schema {
             while (rs.next()) {
                 String tableName = rs.getString(PhoenixDatabaseMetaData.TABLE_NAME);
                 String tableType = rs.getString(PhoenixDatabaseMetaData.TABLE_TYPE);
-                if (!tableType.equals(PTableType.VIEW.getValue().getString())) {
+                String viewType = rs.getString(PhoenixDatabaseMetaData.VIEW_TYPE);
+                if (!tableType.equals(PTableType.VIEW.getValue().getString())
+                        || ViewType.MAPPED.name().equals(viewType)) {
                     ColumnResolver x = FromCompiler.getResolver(
                             NamedTableNode.create(
                                     null,
@@ -107,7 +109,6 @@ public class PhoenixSchema implements Schema {
                     tableMap.put(tableName, tables.get(0).getTable());
                 } else {
                     String viewSql = rs.getString(PhoenixDatabaseMetaData.VIEW_STATEMENT);
-                    String viewType = rs.getString(PhoenixDatabaseMetaData.VIEW_TYPE);
                     viewDefMap.put(tableName, new ViewDef(viewSql, viewType.equals(ViewType.UPDATABLE.name())));
                 }
             }

@@ -239,20 +239,21 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
             StatementContext context = new StatementContext(stmt, resolver, new Scan(), new SequenceManager(stmt));
             SelectStatement select = SelectStatement.SELECT_ONE;
             ImmutableIntList columnRefList = implementor.getCurrentContext().columnRefList;
+            Expression filterExpr = LiteralExpression.newConstant(Boolean.TRUE);
             Expression dynamicFilter = null;
             if (filter != null) {
                 ImmutableBitSet bitSet = InputFinder.analyze(filter).inputBitSet.addAll(columnRefList).build();
                 columnRefList = ImmutableIntList.copyOf(bitSet.asList());
-                Expression filterExpr = CalciteUtils.toExpression(filter, implementor);
-                filterExpr = WhereOptimizer.pushKeyExpressionsToScan(context, select, filterExpr);
-                WhereCompiler.setScanFilter(context, select, filterExpr, true, false);
-                // TODO This is not absolutely strict. We may have a filter like:
-                // pk = '0' and pk = $cor0 where $cor0 happens to get a sample value
-                // as '0', thus making the below test return false and adding an
-                // unnecessary dynamic filter. This would only be a performance bug though.
-                if (!context.getScanRanges().equals(this.scanRanges)) {
-                    dynamicFilter = filterExpr;
-                }
+                filterExpr = CalciteUtils.toExpression(filter, implementor);
+            }
+            filterExpr = WhereOptimizer.pushKeyExpressionsToScan(context, select, filterExpr);
+            WhereCompiler.setScanFilter(context, select, filterExpr, true, false);
+            // TODO This is not absolutely strict. We may have a filter like:
+            // pk = '0' and pk = $cor0 where $cor0 happens to get a sample value
+            // as '0', thus making the below test return false and adding an
+            // unnecessary dynamic filter. This would only be a performance bug though.
+            if (filter != null && !context.getScanRanges().equals(this.scanRanges)) {
+                dynamicFilter = filterExpr;
             }
             projectColumnFamilies(context.getScan(), phoenixTable.getTable(), columnRefList);
             if (implementor.getCurrentContext().forceProject) {
