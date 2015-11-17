@@ -68,6 +68,8 @@ import static org.apache.phoenix.query.QueryServices.THREAD_TIMEOUT_MS_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.USE_BYTE_BASED_REGEX_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.USE_INDEXES_ATTRIB;
 
+import java.util.HashSet;
+import java.util.Set;
 import java.util.Map.Entry;
 
 import org.apache.hadoop.conf.Configuration;
@@ -203,6 +205,20 @@ public class QueryServicesOptions {
     
     public static final boolean DEFAULT_RETURN_SEQUENCE_VALUES = false;
     public static final String DEFAULT_EXTRA_JDBC_ARGUMENTS = "";
+
+    // QueryServer defaults -- ensure ThinClientUtil is also updated since phoenix-server-client
+    // doesn't depend on phoenix-core.
+    public static final String DEFAULT_QUERY_SERVER_SERIALIZATION = "PROTOBUF";
+    public static final int DEFAULT_QUERY_SERVER_HTTP_PORT = 8765;
+    @SuppressWarnings("serial")
+    public static final Set<String> DEFAULT_QUERY_SERVER_SKIP_WORDS = new HashSet<String>() {
+      {
+        add("secret");
+        add("passwd");
+        add("password");
+        add("credential");
+      }
+    };
 
     private final Configuration config;
 
