@@ -102,7 +102,7 @@ public class ParallelIterators extends BaseResultIterators {
                 @Override
                 public PeekingResultIterator call() throws Exception {
                     long startTime = System.currentTimeMillis();
-                    ResultIterator scanner = new TableResultIterator(context, tableRef, scan, scanMetrics);
+                    ResultIterator scanner = new TableResultIterator(mutationState, tableRef, scan, scanMetrics);
                     if (logger.isDebugEnabled()) {
                         logger.debug(LogUtil.addCustomAnnotations("Id: " + scanId + ", Time: " + (System.currentTimeMillis() - startTime) + "ms, Scan: " + scan, ScanUtil.getCustomAnnotations(scan)));
                     }

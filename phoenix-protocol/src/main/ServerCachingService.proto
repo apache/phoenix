@@ -37,6 +37,7 @@ message AddServerCacheRequest {
   required bytes cacheId  = 2;
   required ImmutableBytesWritable cachePtr = 3;
   required ServerCacheFactory cacheFactory = 4;
+  optional bytes txState = 5;
 }
 
 message AddServerCacheResponse {

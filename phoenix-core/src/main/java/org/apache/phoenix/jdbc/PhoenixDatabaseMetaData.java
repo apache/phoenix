@@ -301,6 +301,9 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
     private static final String TENANT_POS_SHIFT = "TENANT_POS_SHIFT";
     private static final byte[] TENANT_POS_SHIFT_BYTES = Bytes.toBytes(TENANT_POS_SHIFT);
 
+    public static final String TRANSACTIONAL = "TRANSACTIONAL";
+    public static final byte[] TRANSACTIONAL_BYTES = Bytes.toBytes(TRANSACTIONAL);
+
     private final PhoenixConnection connection;
     private final ResultSet emptyResultSet;
     public static final int MAX_LOCAL_SI_VERSION_DISALLOW = VersionUtil.encodeVersion("0", "98", "8");

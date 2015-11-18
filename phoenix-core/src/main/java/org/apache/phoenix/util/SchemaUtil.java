@@ -30,7 +30,7 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Properties;
+import java.util.Map;
 
 import javax.annotation.Nullable;
 
@@ -51,13 +51,13 @@ import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PDatum;
-import org.apache.phoenix.schema.PMetaData;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
 import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.TableProperty;
 import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
@@ -262,6 +262,9 @@ public class SchemaUtil {
 
     public static String getMetaDataEntityName(String schemaName, String tableName, String familyName, String columnName) {
         if ((schemaName == null || schemaName.isEmpty()) && (tableName == null || tableName.isEmpty())) {
+            if (columnName == null || columnName.isEmpty()) {
+                return familyName;
+            }
             return getName(familyName, columnName, false);
         }
         if ((familyName == null || familyName.isEmpty()) && (columnName == null || columnName.isEmpty())) {
@@ -388,6 +391,11 @@ public class SchemaUtil {
     public static byte[] getEmptyColumnFamily(PTable table) {
         List<PColumnFamily> families = table.getColumnFamilies();
         return families.isEmpty() ? table.getDefaultFamilyName() == null ? QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES : table.getDefaultFamilyName().getBytes() : families.get(0).getName().getBytes();
+    }
+
+    public static String getEmptyColumnFamilyAsString(PTable table) {
+        List<PColumnFamily> families = table.getColumnFamilies();
+        return families.isEmpty() ? table.getDefaultFamilyName() == null ? QueryConstants.DEFAULT_COLUMN_FAMILY : table.getDefaultFamilyName().getString() : families.get(0).getName().getString();
     }
 
     public static ImmutableBytesPtr getEmptyColumnFamilyPtr(PTable table) {
@@ -517,15 +525,10 @@ public class SchemaUtil {
     }
 
     protected static PhoenixConnection addMetaDataColumn(PhoenixConnection conn, long scn, String columnDef) throws SQLException {
-        String url = conn.getURL();
-        Properties props = conn.getClientInfo();
-        PMetaData metaData = conn.getMetaDataCache();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(scn));
         PhoenixConnection metaConnection = null;
-
         Statement stmt = null;
         try {
-            metaConnection = new PhoenixConnection(conn.getQueryServices(), url, props, metaData);
+            metaConnection = new PhoenixConnection(conn.getQueryServices(), conn, scn);
             try {
                 stmt = metaConnection.createStatement();
                 stmt.executeUpdate("ALTER TABLE SYSTEM.\"TABLE\" ADD IF NOT EXISTS " + columnDef);
@@ -710,6 +713,16 @@ public class SchemaUtil {
     public static String getQuotedFullColumnName(@Nullable String columnFamilyName, String columnName) {
         checkArgument(!isNullOrEmpty(columnName), "Column name cannot be null or empty");
         return columnFamilyName == null ? ("\"" + columnName + "\"") : ("\"" + columnFamilyName + "\"" + QueryConstants.NAME_SEPARATOR + "\"" + columnName + "\"");
+    }
+
+    public static boolean hasHTableDescriptorProps(Map<String, Object> tableProps) {
+        int pTablePropCount = 0;
+        for (String prop : tableProps.keySet()) {
+            if (TableProperty.isPhoenixTableProperty(prop)) {
+                pTablePropCount++;
+            }
+        }
+        return tableProps.size() - pTablePropCount > 0;
     }
     
     /**
