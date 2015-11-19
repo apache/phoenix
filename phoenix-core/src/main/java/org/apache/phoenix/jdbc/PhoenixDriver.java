@@ -20,11 +20,9 @@ package org.apache.phoenix.jdbc;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
-import java.util.Collection;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -35,7 +33,6 @@ import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.query.ConnectionlessQueryServicesImpl;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesImpl;
-import org.apache.phoenix.util.SQLCloseables;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -184,20 +181,10 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
             }
             finally {
                 if (!success) {
-                    try {
-                        connectionQueryServices.close();
-                    } catch (SQLException e) {
-                        if (sqlE == null) {
-                            sqlE = e;
-                        } else {
-                            sqlE.setNextException(e);
-                        }
-                    } finally {
-                        // Remove from map, as initialization failed
-                        connectionQueryServicesMap.remove(normalizedConnInfo);
-                        if (sqlE != null) {
-                            throw sqlE;
-                        }
+                    // Remove from map, as initialization failed
+                    connectionQueryServicesMap.remove(normalizedConnInfo);
+                    if (sqlE != null) {
+                        throw sqlE;
                     }
                 }
             }
@@ -229,25 +216,11 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
             closeLock.writeLock().unlock();
         }
 
-        try {
-            Collection<ConnectionQueryServices> connectionQueryServices = connectionQueryServicesMap.values();
+        if (services != null) {
             try {
-                SQLCloseables.closeAll(connectionQueryServices);
+                services.close();
             } finally {
-                connectionQueryServices.clear();
-            }
-        } finally {
-            if (services != null) {
-                try {
-                    services.close();
-                } finally {
-                    ExecutorService executor = services.getExecutor();
-                    // Even if something wrong happened while closing services above, we still
-                    // want to set it to null. Otherwise, we will end up having a possibly non-working
-                    // services instance. 
-                    services = null;
-                    executor.shutdown();
-                }
+                services = null;
             }
         }
     }
