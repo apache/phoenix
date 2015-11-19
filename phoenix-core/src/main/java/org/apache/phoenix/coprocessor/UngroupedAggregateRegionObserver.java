@@ -28,6 +28,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.security.PrivilegedExceptionAction;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -54,6 +55,7 @@ import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScanType;
 import org.apache.hadoop.hbase.regionserver.Store;
+import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
@@ -642,11 +644,10 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
 
 
     @Override
-    public void postSplit(ObserverContext<RegionCoprocessorEnvironment> e, Region l, Region r)
-            throws IOException {
-        Region region = e.getEnvironment().getRegion();
-        TableName table = region.getRegionInfo().getTable();
-        StatisticsCollector stats = null;
+    public void postSplit(final ObserverContext<RegionCoprocessorEnvironment> e, final Region l,
+        final Region r) throws IOException {
+        final Region region = e.getEnvironment().getRegion();
+        final TableName table = region.getRegionInfo().getTable();
         try {
             boolean useCurrentTime =
                     e.getEnvironment().getConfiguration().getBoolean(QueryServices.STATS_USE_CURRENT_TIME_ATTRIB,
@@ -654,15 +655,25 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
             // Provides a means of clients controlling their timestamps to not use current time
             // when background tasks are updating stats. Instead we track the max timestamp of
             // the cells and use that.
-            long clientTimeStamp = useCurrentTime ? TimeKeeper.SYSTEM.getCurrentTime() : StatisticsCollector.NO_TIMESTAMP;
-            stats = new StatisticsCollector(e.getEnvironment(), table.getNameAsString(), clientTimeStamp);
-            stats.splitStats(region, l, r);
+            final long clientTimeStamp = useCurrentTime ? TimeKeeper.SYSTEM.getCurrentTime() :
+              StatisticsCollector.NO_TIMESTAMP;
+            User.runAsLoginUser(new PrivilegedExceptionAction<Void>() {
+              @Override
+              public Void run() throws Exception {
+                StatisticsCollector stats = new StatisticsCollector(e.getEnvironment(),
+                  table.getNameAsString(), clientTimeStamp);
+                try {
+                  stats.splitStats(region, l, r);
+                  return null;
+                } finally {
+                  if (stats != null) stats.close();
+                }
+              }
+            });
         } catch (IOException ioe) {
             if(logger.isWarnEnabled()) {
                 logger.warn("Error while collecting stats during split for " + table,ioe);
             }
-        } finally {
-            if (stats != null) stats.close();
         }
     }
 
