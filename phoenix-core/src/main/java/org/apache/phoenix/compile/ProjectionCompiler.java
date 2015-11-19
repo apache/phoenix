@@ -364,6 +364,9 @@ public class ProjectionCompiler {
                 if (statement.isAggregate()) {
                     ExpressionCompiler.throwNonAggExpressionInAggException(node.toString());
                 }
+                if (tableRef == TableRef.EMPTY_TABLE_REF) {
+                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.NO_TABLE_SPECIFIED_FOR_WILDCARD_SELECT).build().buildException();
+                }
                 isWildcard = true;
                 if (tableRef.getTable().getType() == PTableType.INDEX && ((WildcardParseNode)node).isRewrite()) {
                 	projectAllIndexColumns(context, tableRef, resolveColumn, projectedExpressions, projectedColumns, targetColumns);
@@ -382,6 +385,9 @@ public class ProjectionCompiler {
                     projectAllTableColumns(context, tRef, true, projectedExpressions, projectedColumns, targetColumns);
                 }                
             } else if (node instanceof  FamilyWildcardParseNode){
+                if (tableRef == TableRef.EMPTY_TABLE_REF) {
+                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.NO_TABLE_SPECIFIED_FOR_WILDCARD_SELECT).build().buildException();
+                }
                 // Project everything for SELECT cf.*
                 String cfName = ((FamilyWildcardParseNode) node).getName();
                 // Delay projecting to scan, as when any other column in the column family gets
