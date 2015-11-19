@@ -1985,9 +1985,27 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
      public void testFailNoFromClauseSelect() throws Exception {
          Connection conn = DriverManager.getConnection(getUrl());
          try {
-             conn.createStatement().executeQuery("SELECT foo, bar");
-             fail("Should have got ColumnNotFoundException");
-         } catch (ColumnNotFoundException e) {            
+             try {
+                 conn.createStatement().executeQuery("SELECT foo, bar");
+                 fail("Should have got ColumnNotFoundException");
+             } catch (ColumnNotFoundException e) {            
+             }
+             
+             try {
+                 conn.createStatement().executeQuery("SELECT *");
+                 fail("Should have got SQLException");
+             } catch (SQLException e) {
+                 assertEquals(SQLExceptionCode.NO_TABLE_SPECIFIED_FOR_WILDCARD_SELECT.getErrorCode(), e.getErrorCode());
+             }
+             
+             try {
+                 conn.createStatement().executeQuery("SELECT A.*");
+                 fail("Should have got SQLException");
+             } catch (SQLException e) {
+                 assertEquals(SQLExceptionCode.NO_TABLE_SPECIFIED_FOR_WILDCARD_SELECT.getErrorCode(), e.getErrorCode());
+             }
+         } finally {
+             conn.close();
          }
      }
 
