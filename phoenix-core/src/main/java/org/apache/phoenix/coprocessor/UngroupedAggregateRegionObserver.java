@@ -103,6 +103,8 @@ import org.apache.phoenix.util.TimeKeeper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import co.cask.tephra.TxConstants;
+
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 
@@ -401,6 +403,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
                               Delete delete = new Delete(firstKV.getRowArray(),
                                   firstKV.getRowOffset(), firstKV.getRowLength(),ts);
                               mutations.add(delete);
+                              // force tephra to ignore this deletes
+                              delete.setAttribute(TxConstants.TX_ROLLBACK_ATTRIBUTE_KEY, new byte[0]);
                             } else if (isUpsert) {
                                 Arrays.fill(values, null);
                                 int i = 0;
@@ -460,6 +464,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
                                         results.get(0).getRowOffset(),
                                         results.get(0).getRowLength());
                                     delete.deleteColumns(deleteCF,  deleteCQ, ts);
+                                    // force tephra to ignore this deletes
+                                    delete.setAttribute(TxConstants.TX_ROLLBACK_ATTRIBUTE_KEY, new byte[0]);
                                     mutations.add(delete);
                                 }
                             }

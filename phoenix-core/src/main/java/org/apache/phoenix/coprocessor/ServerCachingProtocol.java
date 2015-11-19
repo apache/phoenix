@@ -36,18 +36,19 @@ import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
  */
 public interface ServerCachingProtocol {
     public static interface ServerCacheFactory extends Writable {
-        public Closeable newCache(ImmutableBytesWritable cachePtr, MemoryChunk chunk) throws SQLException;
+        public Closeable newCache(ImmutableBytesWritable cachePtr, byte[] txState, MemoryChunk chunk) throws SQLException;
     }
     /**
      * Add the cache to the region server cache.  
      * @param tenantId the tenantId or null if not applicable
      * @param cacheId unique identifier of the cache
      * @param cachePtr pointer to the byte array of the cache
+     * @param txState TODO
      * @param cacheFactory factory that converts from byte array to object representation on the server side
      * @return true on success and otherwise throws
      * @throws SQLException 
      */
-    public boolean addServerCache(byte[] tenantId, byte[] cacheId, ImmutableBytesWritable cachePtr, ServerCacheFactory cacheFactory) throws SQLException;
+    public boolean addServerCache(byte[] tenantId, byte[] cacheId, ImmutableBytesWritable cachePtr, byte[] txState, ServerCacheFactory cacheFactory) throws SQLException;
     /**
      * Remove the cache from the region server cache.  Called upon completion of
      * the operation when cache is no longer needed.
