@@ -180,9 +180,6 @@ public class WriteWorkload implements Workload {
         } else {
         	logger.info("Phoenix table stats update not requested.");
         }
-
-        // always update stats for Phoenix base tables
-        updatePhoenixStats(scenario.getTableName(), scenario);
     }
 
     private List<Future> getBatches(DataLoadThreadTime dataLoadThreadTime, Scenario scenario)
@@ -230,18 +227,6 @@ public class WriteWorkload implements Workload {
                 + sumDuration + ") Ms");
         dataLoadTimeSummary
                 .add(scenario.getTableName(), sumRows, (int) (System.currentTimeMillis() - start));
-    }
-
-    /**
-     * TODO Move this method to PhoenixUtil
-     * Update Phoenix table stats
-     *
-     * @param tableName
-     * @throws Exception
-     */
-    public void updatePhoenixStats(String tableName, Scenario scenario) throws Exception {
-        logger.info("Updating stats for " + tableName);
-        pUtil.executeStatement("UPDATE STATISTICS " + tableName, scenario);
     }
 
     public Future<Info> upsertData(final Scenario scenario, final List<Column> columns,
