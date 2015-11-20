@@ -598,17 +598,6 @@ public abstract class BaseTest {
         utility = new HBaseTestingUtility(conf);
         try {
             utility.startMiniCluster(NUM_SLAVES_BASE);
-            // add shutdown hook to kill the mini cluster
-            Runtime.getRuntime().addShutdownHook(new Thread() {
-                @Override
-                public void run() {
-                    try {
-                        if (utility != null) utility.shutdownMiniCluster();
-                    } catch (Exception e) {
-                        logger.warn("Exception caught when shutting down mini cluster", e);
-                    }
-                }
-            });
             return getLocalClusterUrl(utility);
         } catch (Throwable t) {
             throw new RuntimeException(t);
