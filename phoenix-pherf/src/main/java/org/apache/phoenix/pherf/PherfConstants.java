@@ -23,9 +23,14 @@ import java.io.InputStream;
 import java.util.Properties;
 
 public class PherfConstants {
-    public enum GeneratePhoenixStats {
+    public static enum GeneratePhoenixStats {
         YES,
         NO
+    }
+    
+    public static enum CompareType {
+        MINIMUM,
+        AVERAGE
     }
 
     private static PherfConstants instance = null;

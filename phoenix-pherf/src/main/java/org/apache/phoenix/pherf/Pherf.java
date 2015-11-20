@@ -30,6 +30,7 @@ import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.apache.commons.cli.PosixParser;
+import org.apache.phoenix.pherf.PherfConstants.CompareType;
 import org.apache.phoenix.pherf.PherfConstants.GeneratePhoenixStats;
 import org.apache.phoenix.pherf.configuration.XMLConfigParser;
 import org.apache.phoenix.pherf.jmx.MonitorManager;
@@ -86,7 +87,8 @@ public class Pherf {
         options.addOption("stats", false,
                 "Update Phoenix Statistics after data is loaded with -l argument");
 		options.addOption("label", true, "Label a run. Result file name will be suffixed with specified label");
-		options.addOption("compare", true, "Specify labeled runs to compare against current run");
+		options.addOption("compare", true, "Specify labeled run(s) to compare");
+		options.addOption("useAverageCompareType", false, "Compare results with Average query time instead of default is Minimum query time.");
     }
 
     private final String zookeeper;
@@ -106,6 +108,7 @@ public class Pherf {
     private final GeneratePhoenixStats generateStatistics;
     private final String label;
     private final String compareResults;
+    private final CompareType compareType;
 
     public Pherf(String[] args) throws Exception {
         CommandLineParser parser = new PosixParser();
@@ -151,6 +154,7 @@ public class Pherf {
         properties.setProperty("pherf. default.dataloader.threadpool", writerThreadPoolSize);
         label = command.getOptionValue("label", null);
         compareResults = command.getOptionValue("compare", null);
+        compareType = command.hasOption("useAverageCompareType") ? CompareType.AVERAGE : CompareType.MINIMUM;
 
         if ((command.hasOption("h") || (args == null || args.length == 0)) && !command
                 .hasOption("listFiles")) {
@@ -199,7 +203,7 @@ public class Pherf {
             // Compare results and exit  
 			if (null != compareResults) {
 				logger.info("\nStarting to compare results and exiting for " + compareResults);
-				new GoogleChartGenerator(compareResults).readAndRender();
+				new GoogleChartGenerator(compareResults, compareType).readAndRender();
 				return;
             }
             
