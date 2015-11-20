@@ -39,7 +39,6 @@ import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.util.Addressing;
 import org.apache.hadoop.hbase.zookeeper.ZKConfig;
 import org.apache.phoenix.iterate.ResultIterator;
-import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.HintNode.Hint;
@@ -304,18 +303,11 @@ public final class QueryUtil {
     public static String getConnectionUrl(Properties props, Configuration conf)
             throws ClassNotFoundException, SQLException {
         // TODO: props is ignored!
-        // make sure we load the phoenix driver
-        // TODO: remove this - it doesn't belong here
-        // The driver should be loaded outside of this call as we might
-        // be using the test driver.
-        Class.forName(PhoenixDriver.class.getName());
-
         // read the hbase properties from the configuration
         String server = ZKConfig.getZKQuorumServersString(conf);
         // could be a comma-separated list
         String[] rawServers = server.split(",");
         List<String> servers = new ArrayList<String>(rawServers.length);
-        boolean first = true;
         int port = -1;
         for (String serverPort : rawServers) {
             try {
