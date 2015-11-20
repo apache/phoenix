@@ -81,8 +81,6 @@
                 <descriptor>src/build/client-minimal.xml</descriptor>
                <!-- build the phoenix server side jar, that includes phoenix-hadoopX-compat, phoenix-hadoop-compat and antlr -->
                 <descriptor>src/build/server.xml</descriptor>
-               <!-- build the phoenix server side jar, that includes phoenix-hadoopX-compat and phoenix-hadoop-compat. -->
-                <descriptor>src/build/server-without-antlr.xml</descriptor>
               </descriptors>
             </configuration>
           </execution>
