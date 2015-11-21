@@ -20,9 +20,8 @@ package org.apache.phoenix.rpc;
 import static org.apache.phoenix.util.TestUtil.INDEX_DATA_SCHEMA;
 import static org.apache.phoenix.util.TestUtil.MUTABLE_INDEX_DATA_TABLE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-import static org.junit.Assert.assertEquals;
+import static org.apache.phoenix.util.TestUtil.TRANSACTIONAL_DATA_TABLE;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.anyLong;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Matchers.isNull;
@@ -30,32 +29,25 @@ import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
-import java.math.BigDecimal;
 import java.sql.Connection;
-import java.sql.Date;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.Map;
 import java.util.Properties;
 
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
-import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.types.PVarchar;
-import org.apache.phoenix.util.DateUtil;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Test;
 import org.mockito.Mockito;
-
-import com.google.common.collect.Maps;
 
 /**
  * Verifies the number of rpcs calls from {@link MetaDataClient} updateCache() 
@@ -68,86 +60,76 @@ public class UpdateCacheIT extends BaseHBaseManagedTimeIT {
     @Before
     public void setUp() throws SQLException {
         ensureTableCreated(getUrl(), MUTABLE_INDEX_DATA_TABLE);
+        ensureTableCreated(getUrl(), TRANSACTIONAL_DATA_TABLE);
     }
 
-	@BeforeClass
-    @Shadower(classBeingShadowed = BaseHBaseManagedTimeIT.class)
-    public static void doSetup() throws Exception {
-        Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+    @Test
+    public void testUpdateCacheForTxnTable() throws Exception {
+        helpTestUpdateCache(true, null);
+    }
+    
+    @Test
+    public void testUpdateCacheForNonTxnTable() throws Exception {
+        helpTestUpdateCache(false, null);
     }
 	
-	public static void validateRowKeyColumns(ResultSet rs, int i) throws SQLException {
-		assertTrue(rs.next());
-		assertEquals(rs.getString(1), "varchar" + String.valueOf(i));
-		assertEquals(rs.getString(2), "char" + String.valueOf(i));
-		assertEquals(rs.getInt(3), i);
-		assertEquals(rs.getInt(4), i);
-		assertEquals(rs.getBigDecimal(5), new BigDecimal(i*0.5d));
-		Date date = new Date(DateUtil.parseDate("2015-01-01 00:00:00").getTime() + (i - 1) * NUM_MILLIS_IN_DAY);
-		assertEquals(rs.getDate(6), date);
-	}
-	
-	public static void setRowKeyColumns(PreparedStatement stmt, int i) throws SQLException {
-        // insert row
-        stmt.setString(1, "varchar" + String.valueOf(i));
-        stmt.setString(2, "char" + String.valueOf(i));
-        stmt.setInt(3, i);
-        stmt.setLong(4, i);
-        stmt.setBigDecimal(5, new BigDecimal(i*0.5d));
-        Date date = new Date(DateUtil.parseDate("2015-01-01 00:00:00").getTime() + (i - 1) * NUM_MILLIS_IN_DAY);
-        stmt.setDate(6, date);
-    }
-	
-	@Test
-	public void testUpdateCache() throws Exception {
-		String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + MUTABLE_INDEX_DATA_TABLE;
+	public static void helpTestUpdateCache(boolean isTransactional, Long scn) throws Exception {
+	    String tableName = isTransactional ? TRANSACTIONAL_DATA_TABLE : MUTABLE_INDEX_DATA_TABLE;
+	    String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + tableName;
 		String selectSql = "SELECT * FROM "+fullTableName;
 		// use a spyed ConnectionQueryServices so we can verify calls to getTable
 		ConnectionQueryServices connectionQueryServices = Mockito.spy(driver.getConnectionQueryServices(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)));
 		Properties props = new Properties();
 		props.putAll(PhoenixEmbeddedDriver.DEFFAULT_PROPS.asMap());
+		if (scn!=null) {
+            props.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(scn));
+        }
 		Connection conn = connectionQueryServices.connect(getUrl(), props);
 		try {
 			conn.setAutoCommit(false);
-			ResultSet rs = conn.createStatement().executeQuery(selectSql);
-	     	assertFalse(rs.next());
-	     	reset(connectionQueryServices);
-	     	
 	        String upsert = "UPSERT INTO " + fullTableName + "(varchar_pk, char_pk, int_pk, long_pk, decimal_pk, date_pk) VALUES(?, ?, ?, ?, ?, ?)";
 	        PreparedStatement stmt = conn.prepareStatement(upsert);
 			// upsert three rows
-	        setRowKeyColumns(stmt, 1);
+	        TestUtil.setRowKeyColumns(stmt, 1);
 			stmt.execute();
-			setRowKeyColumns(stmt, 2);
+			TestUtil.setRowKeyColumns(stmt, 2);
 			stmt.execute();
-			setRowKeyColumns(stmt, 3);
+			TestUtil.setRowKeyColumns(stmt, 3);
 			stmt.execute();
 			conn.commit();
-			// verify only one rpc to getTable occurs after commit is called
-			verify(connectionQueryServices, times(1)).getTable((PName)isNull(), eq(PVarchar.INSTANCE.toBytes(INDEX_DATA_SCHEMA)), eq(PVarchar.INSTANCE.toBytes(MUTABLE_INDEX_DATA_TABLE)), anyLong(), anyLong());
-			reset(connectionQueryServices);
+			// verify only one rpc to fetch table metadata, 
+            verify(connectionQueryServices).getTable((PName)isNull(), eq(PVarchar.INSTANCE.toBytes(INDEX_DATA_SCHEMA)), eq(PVarchar.INSTANCE.toBytes(tableName)), anyLong(), anyLong());
+            reset(connectionQueryServices);
+            
+            if (scn!=null) {
+                // advance scn so that we can see the data we just upserted
+                props.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(scn+2));
+                conn = connectionQueryServices.connect(getUrl(), props);
+            }
 			
-			rs = conn.createStatement().executeQuery(selectSql);
-			validateRowKeyColumns(rs, 1);
-			validateRowKeyColumns(rs, 2);
-			validateRowKeyColumns(rs, 3);
+            ResultSet rs = conn.createStatement().executeQuery(selectSql);
+			TestUtil.validateRowKeyColumns(rs, 1);
+			TestUtil.validateRowKeyColumns(rs, 2);
+			TestUtil.validateRowKeyColumns(rs, 3);
 	        assertFalse(rs.next());
 	        
 	        rs = conn.createStatement().executeQuery(selectSql);
-	        validateRowKeyColumns(rs, 1);
-	        validateRowKeyColumns(rs, 2);
-	        validateRowKeyColumns(rs, 3);
+	        TestUtil.validateRowKeyColumns(rs, 1);
+	        TestUtil.validateRowKeyColumns(rs, 2);
+	        TestUtil.validateRowKeyColumns(rs, 3);
 	        assertFalse(rs.next());
 	        
 	        rs = conn.createStatement().executeQuery(selectSql);
-	        validateRowKeyColumns(rs, 1);
-	        validateRowKeyColumns(rs, 2);
-	        validateRowKeyColumns(rs, 3);
+	        TestUtil.validateRowKeyColumns(rs, 1);
+	        TestUtil.validateRowKeyColumns(rs, 2);
+	        TestUtil.validateRowKeyColumns(rs, 3);
 	        assertFalse(rs.next());
-	        conn.commit();
-	        // there should be one rpc to getTable per query
-	        verify(connectionQueryServices, times(3)).getTable((PName)isNull(), eq(PVarchar.INSTANCE.toBytes(INDEX_DATA_SCHEMA)), eq(PVarchar.INSTANCE.toBytes(MUTABLE_INDEX_DATA_TABLE)), anyLong(), anyLong());
+	        
+	        // for non-transactional tables without a scn : verify one rpc to getTable occurs *per* query
+            // for non-transactional tables with a scn : verify *only* one rpc occurs
+            // for transactional tables : verify *only* one rpc occurs
+            int numRpcs = isTransactional || scn!=null ? 1 : 3; 
+            verify(connectionQueryServices, times(numRpcs)).getTable((PName)isNull(), eq(PVarchar.INSTANCE.toBytes(INDEX_DATA_SCHEMA)), eq(PVarchar.INSTANCE.toBytes(tableName)), anyLong(), anyLong());
 		}
         finally {
         	conn.close();
