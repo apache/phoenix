@@ -31,13 +31,16 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.KeyValueSchema.KeyValueSchemaBuilder;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.collect.Lists;
 
 public class PhoenixRelImplementorImpl implements PhoenixRel.Implementor {
     private final RuntimeContext runtimeContext;
 	private TableRef tableRef;
+	private List<PColumn> mappedColumns;
 	private Stack<ImplementorContext> contextStack;
 	
 	public PhoenixRelImplementorImpl(RuntimeContext runtimeContext) {
@@ -52,17 +55,14 @@ public class PhoenixRelImplementorImpl implements PhoenixRel.Implementor {
 
 	@Override
 	public ColumnExpression newColumnExpression(int index) {
-	    int pos = index + PhoenixTable.getStartingColumnPosition(this.tableRef.getTable());
-		ColumnRef colRef = new ColumnRef(this.tableRef, pos);
+		ColumnRef colRef = new ColumnRef(this.tableRef, this.mappedColumns.get(index).getPosition());
 		return colRef.newColumnExpression();
 	}
     
     @SuppressWarnings("rawtypes")
     @Override
     public Expression newFieldAccessExpression(String variableId, int index, PDataType type) {
-        TableRef variableDef = runtimeContext.getCorrelateVariableDef(variableId);
-        int pos = index + PhoenixTable.getStartingColumnPosition(variableDef.getTable());
-        Expression fieldAccessExpr = new ColumnRef(variableDef, pos).newColumnExpression();
+        Expression fieldAccessExpr = runtimeContext.newCorrelateVariableReference(variableId, index);
         return new CorrelateVariableFieldAccessExpression(runtimeContext, variableId, fieldAccessExpr);
     }
     
@@ -74,6 +74,7 @@ public class PhoenixRelImplementorImpl implements PhoenixRel.Implementor {
     @Override
 	public void setTableRef(TableRef tableRef) {
 		this.tableRef = tableRef;
+		this.mappedColumns = PhoenixTable.getMappedColumns(tableRef.getTable());
 	}
     
     @Override
@@ -99,9 +100,10 @@ public class PhoenixRelImplementorImpl implements PhoenixRel.Implementor {
     @Override
     public PTable createProjectedTable() {
         List<ColumnRef> sourceColumnRefs = Lists.<ColumnRef> newArrayList();
-        int start = getCurrentContext().retainPKColumns ? 0 : PhoenixTable.getStartingColumnPosition(getTableRef().getTable());
-        for (int i = start; i < getTableRef().getTable().getColumns().size(); i++) {
-            sourceColumnRefs.add(new ColumnRef(getTableRef(), getTableRef().getTable().getColumns().get(i).getPosition()));
+        List<PColumn> columns = getCurrentContext().retainPKColumns ?
+                  getTableRef().getTable().getColumns() : mappedColumns;
+        for (PColumn column : columns) {
+            sourceColumnRefs.add(new ColumnRef(getTableRef(), column.getPosition()));
         }
         
         try {
@@ -112,12 +114,26 @@ public class PhoenixRelImplementorImpl implements PhoenixRel.Implementor {
     }
     
     @Override
+    public TupleProjector createTupleProjector() {
+        KeyValueSchemaBuilder builder = new KeyValueSchemaBuilder(0);
+        List<Expression> exprs = Lists.<Expression> newArrayList();
+        for (PColumn column : mappedColumns) {
+            if (!SchemaUtil.isPKColumn(column) || !getCurrentContext().retainPKColumns) {
+                Expression expr = new ColumnRef(tableRef, column.getPosition()).newColumnExpression();
+                exprs.add(expr);
+                builder.addField(expr);                
+            }
+        }
+        
+        return new TupleProjector(builder.build(), exprs.toArray(new Expression[exprs.size()]));
+    }
+    
+    @Override
     public RowProjector createRowProjector() {
         List<ColumnProjector> columnProjectors = Lists.<ColumnProjector>newArrayList();
-        int start = PhoenixTable.getStartingColumnPosition(getTableRef().getTable());
-        for (int i = start; i < getTableRef().getTable().getColumns().size(); i++) {
-            PColumn column = getTableRef().getTable().getColumns().get(i);
-            Expression expr = newColumnExpression(i - start); // Do not use column.position() here.
+        for (int i = 0; i < mappedColumns.size(); i++) {
+            PColumn column = mappedColumns.get(i);
+            Expression expr = newColumnExpression(i); // Do not use column.position() here.
             columnProjectors.add(new ExpressionProjector(column.getName().getString(), getTableRef().getTable().getName().getString(), expr, false));
         }
         // TODO get estimate row size

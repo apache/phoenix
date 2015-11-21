@@ -124,7 +124,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
             }
         }
 
-        public Sql explainIs(String expected) {
+        public Sql explainIs(String expected) throws SQLException {
             final List<Object[]> list = getResult("explain plan for " + sql);
             if (list.size() != 1) {
                 fail("explain should return 1 row, got " + list.size());
@@ -135,52 +135,40 @@ public class CalciteIT extends BaseClientManagedTimeIT {
         }
 
 
-        public boolean execute() {
-            try {
-                final Statement statement = start.getConnection().createStatement();
-                final boolean execute = statement.execute(sql);
-                statement.close();
-                return execute;
-            } catch (SQLException e) {
-                throw new RuntimeException(e);
-            }
+        public boolean execute() throws SQLException {
+            final Statement statement = start.getConnection().createStatement();
+            final boolean execute = statement.execute(sql);
+            statement.close();
+            return execute;
         }
 
-        public List<Object[]> getResult(String sql) {
-            try {
-                final Statement statement = start.getConnection().createStatement();
-                final ResultSet resultSet = statement.executeQuery(sql);
-                List<Object[]> list = getResult(resultSet);
-                resultSet.close();
-                statement.close();
-                return list;
-            } catch (SQLException e) {
-                throw new RuntimeException(e);
-            }
+        public List<Object[]> getResult(String sql) throws SQLException {
+            final Statement statement = start.getConnection().createStatement();
+            final ResultSet resultSet = statement.executeQuery(sql);
+            List<Object[]> list = getResult(resultSet);
+            resultSet.close();
+            statement.close();
+            return list;
         }
 
         public void close() {
             start.close();
         }
 
-        public Sql resultIs(Object[]... expected) {
-            try {
-                final Statement statement = start.getConnection().createStatement();
-                final ResultSet resultSet = statement.executeQuery(sql);
-                for (int i = 0; i < expected.length; i++) {
-                    assertTrue(resultSet.next());
-                    Object[] row = expected[i];
-                    for (int j = 0; j < row.length; j++) {
-                        assertEquals(row[j], resultSet.getObject(j + 1));
-                    }
-                }        
-                assertFalse(resultSet.next());
-                resultSet.close();
-                statement.close();
-                return this;
-            } catch (SQLException e) {
-                throw new RuntimeException(e);
-            }
+        public Sql resultIs(Object[]... expected) throws SQLException {
+            final Statement statement = start.getConnection().createStatement();
+            final ResultSet resultSet = statement.executeQuery(sql);
+            for (int i = 0; i < expected.length; i++) {
+                assertTrue(resultSet.next());
+                Object[] row = expected[i];
+                for (int j = 0; j < row.length; j++) {
+                    assertEquals(row[j], resultSet.getObject(j + 1));
+                }
+            }        
+            assertFalse(resultSet.next());
+            resultSet.close();
+            statement.close();
+            return this;
         }
     }
 
@@ -397,6 +385,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
     }
     
     protected static final String MULTI_TENANT_TABLE = "multitenant_test_table";
+    protected static final String MULTI_TENANT_VIEW = "multitenant_test_view";
     
     protected void initMultiTenantTables() throws SQLException {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -422,6 +411,13 @@ public class CalciteIT extends BaseClientManagedTimeIT {
             stmt.setInt(3, 5);
             stmt.setInt(4, 6);
             stmt.execute();
+            conn.commit();
+            
+            conn.close();
+            props.setProperty("TenantId", "10");
+            conn = DriverManager.getConnection(getUrl(), props);
+            conn.createStatement().execute("CREATE VIEW " + MULTI_TENANT_VIEW
+                    + " AS select * from " + MULTI_TENANT_TABLE);
             conn.commit();
         } catch (TableAlreadyExistsException e) {
         } finally {
@@ -665,7 +661,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                 .close();
     }
     
-    @Test public void testAggregate() {
+    @Test public void testAggregate() throws Exception {
         start(false).sql("select count(b_string) from atable")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixServerAggregate(group=[{}], EXPR$0=[COUNT($3)])\n" +
@@ -788,7 +784,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                 .close();
     }
     
-    @Test public void testDistinct() {
+    @Test public void testDistinct() throws Exception {
         start(false).sql("select distinct a_string from aTable")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixServerAggregate(group=[{2}], isOrdered=[false])\n" +
@@ -800,7 +796,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                 .close();
     }
     
-    @Test public void testSort() {
+    @Test public void testSort() throws Exception {
         start(false).sql("select organization_id, entity_id, a_string from aTable order by a_string, entity_id")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixServerSort(sort0=[$2], sort1=[$1], dir0=[ASC], dir1=[ASC])\n" +
@@ -930,7 +926,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                 .close();
     }
     
-    @Test public void testSortWithLimit() {
+    @Test public void testSortWithLimit() throws Exception {
         start(false).sql("select organization_id, entity_id, a_string from aTable order by a_string, entity_id limit 5")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixLimit(fetch=[5])\n" +
@@ -1043,7 +1039,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                 .close();
     }
     
-    @Test public void testLimit() {
+    @Test public void testLimit() throws Exception {
         start(false).sql("select organization_id, entity_id, a_string from aTable limit 5")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixLimit(fetch=[5])\n" +
@@ -1107,7 +1103,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                 .close();
     }
 
-    @Test public void testScalarSubquery() {
+    @Test public void testScalarSubquery() throws Exception {
         start(false).sql("select \"item_id\", name, (select max(quantity) sq \n"
             + "from " + JOIN_ORDER_TABLE_FULL_NAME + " o where o.\"item_id\" = i.\"item_id\")\n"
             + "from " + JOIN_ITEM_TABLE_FULL_NAME + " i")
@@ -1151,7 +1147,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                .close();;
     }
     
-    @Test public void testIndex() {
+    @Test public void testIndex() throws Exception {
         start(true).sql("select * from aTable where b_string = 'b'")
             .explainIs("PhoenixToEnumerableConverter\n" +
                        "  PhoenixServerProject(ORGANIZATION_ID=[$1], ENTITY_ID=[$2], A_STRING=[$3], B_STRING=[$0], A_INTEGER=[$4], A_DATE=[$5], A_TIME=[$6], A_TIMESTAMP=[$7], X_DECIMAL=[$8], X_LONG=[$9], X_INTEGER=[$10], Y_INTEGER=[$11], A_BYTE=[$12], A_SHORT=[$13], A_FLOAT=[$14], A_DOUBLE=[$15], A_UNSIGNED_FLOAT=[$16], A_UNSIGNED_DOUBLE=[$17])\n" +
@@ -1200,7 +1196,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
             .close();
     }
     
-    @Test public void testValues() {
+    @Test public void testValues() throws Exception {
         start(false).sql("select p0+p1 from (values (2, 1)) as t(p0, p1)")
             .explainIs("PhoenixToEnumerableConverter\n" +
                        "  PhoenixClientProject(EXPR$0=[+($0, $1)])\n" +
@@ -1214,7 +1210,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
             .close();
     }
     
-    @Test public void testUnion() {
+    @Test public void testUnion() throws Exception {
         start(false).sql("select entity_id from atable where a_string = 'a' union all select entity_id from atable where a_string = 'b'")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixUnion(all=[true])\n" +
@@ -1269,7 +1265,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                 .close();
     }
     
-    @Test public void testUnnest() {
+    @Test public void testUnnest() throws Exception {
         start(false).sql("SELECT t.s FROM UNNEST((SELECT scores FROM " + SCORES_TABLE_NAME + ")) AS t(s)")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixUncollect\n" +
@@ -1301,7 +1297,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                 .close();
     }
     
-    @Test public void testCorrelateAndDecorrelation() {
+    @Test public void testCorrelateAndDecorrelation() throws Exception {
         Properties correlProps = getConnectionProps(false);
         correlProps.setProperty("forceDecorrelate", Boolean.FALSE.toString());
         Properties decorrelProps = getConnectionProps(false);
@@ -1470,7 +1466,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
         start(decorrelProps).sql(q6).explainIs(p6Decorrelated).resultIs(r6).close();
     }
     
-    @Test public void testInValueList() {
+    @Test public void testInValueList() throws Exception {
         start(false).sql("select entity_id from aTable where organization_id = '00D300000000XHP' and entity_id in ('00A123122312312', '00A223122312312', '00B523122312312', '00B623122312312', '00C923122312312')")
             .explainIs("PhoenixToEnumerableConverter\n" +
                        "  PhoenixServerProject(ENTITY_ID=[$1])\n" +
@@ -1484,7 +1480,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
             .close();
     }
     
-    @Test public void testSelectFromView() {
+    @Test public void testSelectFromView() throws Exception {
         start(false).sql("select * from v")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'a')])\n")
@@ -1496,7 +1492,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                 .close();
     }
     
-    @Test public void testSaltedIndex() {
+    @Test public void testSaltedIndex() throws Exception {
         start(true).sql("select count(*) from " + NOSALT_TABLE_NAME + " where col0 > 3")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixServerAggregate(group=[{}], EXPR$0=[COUNT()])\n" +
@@ -1557,8 +1553,25 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                 .close();
     }
     
-    @Test public void testMultiTenant() {
+    @Test public void testMultiTenant() throws Exception {
         Properties props = getConnectionProps(false);
+        start(props).sql("select * from " + MULTI_TENANT_TABLE)
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                           "  PhoenixTableScan(table=[[phoenix, MULTITENANT_TEST_TABLE]])\n")
+                .resultIs(new Object[][] {
+                        {"10", "2", 3, 4},
+                        {"15", "3", 4, 5},
+                        {"20", "4", 5, 6}})
+                .close();
+        
+        try {
+            start(props).sql("select * from " + MULTI_TENANT_VIEW)
+                .explainIs("")
+                .close();
+            fail("Should have got SQLException.");
+        } catch (SQLException e) {
+        }
+        
         props.setProperty("TenantId", "15");
         start(props).sql("select * from " + MULTI_TENANT_TABLE)
                 .explainIs("PhoenixToEnumerableConverter\n" +
@@ -1566,19 +1579,36 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                 .resultIs(new Object[][] {
                         {"3", 4, 5}})
                 .close();
+        
+        try {
+            start(props).sql("select * from " + MULTI_TENANT_VIEW)
+                .explainIs("")
+                .close();
+            fail("Should have got SQLException.");
+        } catch (SQLException e) {
+        }
+
+        props.setProperty("TenantId", "10");
+        start(props).sql("select * from " + MULTI_TENANT_VIEW)
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                           "  PhoenixTableScan(table=[[phoenix, MULTITENANT_TEST_TABLE]])\n")
+                .resultIs(new Object[][] {
+                        {"2", 3, 4}})
+                .close();
     }
 
-    /** Tests a simple command that is defined in Phoenix's extended SQL parser. */
+    /** Tests a simple command that is defined in Phoenix's extended SQL parser. 
+     * @throws Exception */
     @Ignore
-    @Test public void testCommit() {
+    @Test public void testCommit() throws Exception {
         start(false).sql("commit").execute();
     }
 
-    @Test public void testCreateView() {
+    @Test public void testCreateView() throws Exception {
         start(false).sql("create view v as select * from (values (1, 'a'), (2, 'b')) as t(x, y)").execute();
     }
 
-    @Test public void testConnectJoinHsqldb() {
+    @Test public void testConnectJoinHsqldb() throws Exception {
         final Start start = new Start(getConnectionProps(false)) {
             @Override
             Connection createConnection() throws Exception {

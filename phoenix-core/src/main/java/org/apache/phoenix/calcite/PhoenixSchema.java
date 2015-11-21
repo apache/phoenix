@@ -21,6 +21,7 @@ import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.ViewType;
+import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.IndexUtil;
@@ -81,7 +82,9 @@ public class PhoenixSchema implements Schema {
             Set<String> subSchemaNames = Sets.newHashSet();
             while (rs.next()) {
                 String schemaName = rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM);
-                subSchemaNames.add(schemaName == null ? "" : schemaName);
+                if (schemaName != null) {
+                    subSchemaNames.add(schemaName);
+                }
             }
             return subSchemaNames;
         } catch (SQLException e) {
@@ -106,15 +109,46 @@ public class PhoenixSchema implements Schema {
                                     ImmutableList.<ColumnDef>of()), pc);
                     final List<TableRef> tables = x.getTables();
                     assert tables.size() == 1;
-                    tableMap.put(tableName, tables.get(0).getTable());
+                    PTable pTable = tables.get(0).getTable();
+                    if (pc.getTenantId() == null && pTable.isMultiTenant()) {
+                        pTable = fixTableMultiTenancy(pTable);
+                    }
+                    tableMap.put(tableName, pTable);
                 } else {
-                    String viewSql = rs.getString(PhoenixDatabaseMetaData.VIEW_STATEMENT);
-                    viewDefMap.put(tableName, new ViewDef(viewSql, viewType.equals(ViewType.UPDATABLE.name())));
+                    boolean isMultiTenant = rs.getBoolean(PhoenixDatabaseMetaData.MULTI_TENANT);
+                    if (pc.getTenantId() != null || !isMultiTenant) {
+                        String viewSql = rs.getString(PhoenixDatabaseMetaData.VIEW_STATEMENT);
+                        if (viewSql == null) {
+                            String q = "select " + PhoenixDatabaseMetaData.COLUMN_FAMILY
+                                    + " from " + PhoenixDatabaseMetaData.SYSTEM_CATALOG
+                                    + " where " + PhoenixDatabaseMetaData.TABLE_SCHEM
+                                    + (schemaName == null ? " is null" : " = '" + schemaName + "'")
+                                    + " and " + PhoenixDatabaseMetaData.TABLE_NAME
+                                    + " = '" + tableName + "'"
+                                    + " and " + PhoenixDatabaseMetaData.COLUMN_FAMILY + " is not null";
+                            ResultSet rs2 = pc.createStatement().executeQuery(q);
+                            if (!rs2.next()) {
+                                throw new SQLException("View link not found for " + tableName);
+                            }
+                            String parentTableName = rs2.getString(PhoenixDatabaseMetaData.COLUMN_FAMILY);
+                            viewSql = "select * from " + parentTableName;
+                        }
+                        viewDefMap.put(tableName, new ViewDef(viewSql, viewType.equals(ViewType.UPDATABLE.name())));
+                    }
                 }
             }
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
+    }
+    
+    private PTable fixTableMultiTenancy(PTable table) throws SQLException {
+        return PTableImpl.makePTable(
+                table.getTenantId(), table.getSchemaName(), table.getTableName(), table.getType(), table.getIndexState(), table.getTimeStamp(),
+                table.getSequenceNumber(), table.getPKName(), table.getBucketNum(), PTableImpl.getColumnsToClone(table), table.getParentSchemaName(), table.getParentTableName(),
+                table.getIndexes(), table.isImmutableRows(), table.getPhysicalNames(), table.getDefaultFamilyName(), table.getViewStatement(),
+                table.isWALDisabled(), false, table.getStoreNulls(), table.getViewType(), table.getViewIndexId(), table.getIndexType(),
+                table.getTableStats(), table.getBaseColumnCount(), table.rowKeyOrderOptimizable());
     }
 
     private static Schema create(String name, Map<String, Object> operand) {
@@ -210,8 +244,7 @@ public class PhoenixSchema implements Schema {
             CalciteSchema calciteSchema) {
         StringBuffer sb = new StringBuffer();
         sb.append("SELECT");
-        for (int i = PhoenixTable.getStartingColumnPosition(index); i < index.getColumns().size(); i++) {
-            PColumn column = index.getColumns().get(i);
+        for (PColumn column : PhoenixTable.getMappedColumns(index)) {
             String indexColumnName = column.getName().getString();
             String dataColumnName = IndexUtil.getDataColumnName(indexColumnName);
             sb.append(",").append("\"").append(dataColumnName).append("\"");

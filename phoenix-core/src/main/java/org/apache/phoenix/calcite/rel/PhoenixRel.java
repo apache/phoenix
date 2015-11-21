@@ -73,6 +73,7 @@ public interface PhoenixRel extends RelNode {
     ImplementorContext popContext();
     ImplementorContext getCurrentContext();
     PTable createProjectedTable();
+    TupleProjector createTupleProjector();
     RowProjector createRowProjector();
     TupleProjector project(List<Expression> exprs);
   }

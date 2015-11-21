@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.execute;
 
+import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.Tuple;
 
@@ -24,7 +25,7 @@ public interface RuntimeContext {
 
     public abstract void defineCorrelateVariable(String variableId, TableRef def);
 
-    public abstract TableRef getCorrelateVariableDef(String variableId);
+    public abstract Expression newCorrelateVariableReference(String variableId, int index);
 
     public abstract void setCorrelateVariableValue(String variableId, Tuple value);
 

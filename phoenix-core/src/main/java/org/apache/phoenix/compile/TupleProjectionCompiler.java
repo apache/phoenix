@@ -178,8 +178,8 @@ public class TupleProjectionCompiler {
                     null, table.getTimeStamp(), table.getSequenceNumber(), table.getPKName(),
                     retainPKColumns ? table.getBucketNum() : null, projectedColumns, null,
                     null, Collections.<PTable>emptyList(), table.isImmutableRows(), Collections.<PName>emptyList(), null, null,
-                    table.isWALDisabled(), table.isMultiTenant(), table.getStoreNulls(), table.getViewType(), table.getViewIndexId(),
-                    null, table.rowKeyOrderOptimizable());
+                    table.isWALDisabled(), retainPKColumns ? table.isMultiTenant() : false, table.getStoreNulls(), table.getViewType(),
+                    retainPKColumns ? table.getViewIndexId() : null, null, table.rowKeyOrderOptimizable());
     }
 
     // For extracting column references from single select statement

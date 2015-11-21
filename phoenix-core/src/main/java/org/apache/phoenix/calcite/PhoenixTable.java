@@ -37,25 +37,44 @@ import com.google.common.collect.Lists;
  */
 public class PhoenixTable extends AbstractTable implements TranslatableTable {
   public final PTable pTable;
+  public final List<PColumn> mappedColumns;
   public final ImmutableBitSet pkBitSet;
   public final RelCollation collation;
   public final PhoenixConnection pc;
   
-  public static int getStartingColumnPosition(PTable pTable) {
-      return (pTable.getBucketNum() == null ? 0 : 1) + (pTable.isMultiTenant() ? 1 : 0) + (pTable.getViewIndexId() == null ? 0 : 1);
+  public static List<PColumn> getMappedColumns(PTable pTable) {
+      if (pTable.getBucketNum() == null
+              && !pTable.isMultiTenant()
+              && pTable.getViewIndexId() == null) {
+          return pTable.getColumns();
+      }
+      
+      List<PColumn> columns = Lists.newArrayList(pTable.getColumns());
+      if (pTable.getViewIndexId() != null) {
+          columns.remove((pTable.getBucketNum() == null ? 0 : 1) + (pTable.isMultiTenant() ? 1 : 0));
+      }
+      if (pTable.isMultiTenant()) {
+          columns.remove(pTable.getBucketNum() == null ? 0 : 1);
+      }
+      if (pTable.getBucketNum() != null) {
+          columns.remove(0);
+      }
+      return columns;
   }
 
   public PhoenixTable(PhoenixConnection pc, PTable pTable) {
       this.pc = Preconditions.checkNotNull(pc);
       this.pTable = Preconditions.checkNotNull(pTable);
+      this.mappedColumns = getMappedColumns(pTable);
       List<Integer> pkPositions = Lists.<Integer> newArrayList();
       List<RelFieldCollation> fieldCollations = Lists.<RelFieldCollation> newArrayList();
-      int start = getStartingColumnPosition(pTable);
-      for (PColumn column : pTable.getPKColumns().subList(start, pTable.getPKColumns().size())) {
-          int position = column.getPosition() - start;
-          SortOrder sortOrder = column.getSortOrder();
-          pkPositions.add(position);
-          fieldCollations.add(new RelFieldCollation(position, sortOrder == SortOrder.ASC ? Direction.ASCENDING : Direction.DESCENDING));
+      for (int i = 0; i < mappedColumns.size(); i++) {
+          PColumn column = mappedColumns.get(i);
+          if (SchemaUtil.isPKColumn(column)) {
+              SortOrder sortOrder = column.getSortOrder();
+              pkPositions.add(i);
+              fieldCollations.add(new RelFieldCollation(i, sortOrder == SortOrder.ASC ? Direction.ASCENDING : Direction.DESCENDING));
+          }
       }
       this.pkBitSet = ImmutableBitSet.of(pkPositions);
       this.collation = RelCollationTraitDef.INSTANCE.canonize(RelCollations.of(fieldCollations));
@@ -69,8 +88,8 @@ public class PhoenixTable extends AbstractTable implements TranslatableTable {
     @Override
     public RelDataType getRowType(RelDataTypeFactory typeFactory) {
         final RelDataTypeFactory.FieldInfoBuilder builder = typeFactory.builder();
-        for (int i = getStartingColumnPosition(pTable); i < pTable.getColumns().size(); i++) {
-            PColumn pColumn = pTable.getColumns().get(i);
+        for (int i = 0; i < mappedColumns.size(); i++) {
+            PColumn pColumn = mappedColumns.get(i);
             final PDataType baseType = 
                     pColumn.getDataType().isArrayType() ?
                             PDataType.fromTypeId(pColumn.getDataType().getSqlType() - PDataType.ARRAY_TYPE_BASE) 

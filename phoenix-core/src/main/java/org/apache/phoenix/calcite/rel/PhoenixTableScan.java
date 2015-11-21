@@ -41,19 +41,14 @@ import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.schema.ColumnRef;
-import org.apache.phoenix.schema.KeyValueSchema.KeyValueSchemaBuilder;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.util.SchemaUtil;
-
 import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableList.Builder;
-import com.google.common.collect.Lists;
 
 /**
  * Scan of a Phoenix table.
@@ -257,7 +252,7 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
             }
             projectColumnFamilies(context.getScan(), phoenixTable.getTable(), columnRefList);
             if (implementor.getCurrentContext().forceProject) {
-                TupleProjector tupleProjector = createTupleProjector(implementor);
+                TupleProjector tupleProjector = implementor.createTupleProjector();
                 TupleProjector.serializeProjectorIntoScan(context.getScan(), tupleProjector);
                 PTable projectedTable = implementor.createProjectedTable();
                 implementor.setTableRef(new TableRef(projectedTable));
@@ -273,22 +268,6 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
-    }
-    
-    private TupleProjector createTupleProjector(Implementor implementor) {
-        KeyValueSchemaBuilder builder = new KeyValueSchemaBuilder(0);
-        List<Expression> exprs = Lists.<Expression> newArrayList();
-        TableRef tableRef = implementor.getTableRef();
-        for (int i = PhoenixTable.getStartingColumnPosition(tableRef.getTable()); i < tableRef.getTable().getColumns().size(); i++) {
-            PColumn column = tableRef.getTable().getColumns().get(i);
-            if (!SchemaUtil.isPKColumn(column) || !implementor.getCurrentContext().retainPKColumns) {
-                Expression expr = new ColumnRef(tableRef, column.getPosition()).newColumnExpression();
-                exprs.add(expr);
-                builder.addField(expr);                
-            }
-        }
-        
-        return new TupleProjector(builder.build(), exprs.toArray(new Expression[exprs.size()]));
     }
     
     private void projectColumnFamilies(Scan scan, PTable table, ImmutableIntList columnRefList) {
