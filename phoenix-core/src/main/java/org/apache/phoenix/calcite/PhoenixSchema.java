@@ -20,9 +20,11 @@ import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTable.LinkType;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.IndexUtil;
 
@@ -102,18 +104,22 @@ public class PhoenixSchema implements Schema {
                 String viewType = rs.getString(PhoenixDatabaseMetaData.VIEW_TYPE);
                 if (!tableType.equals(PTableType.VIEW.getValue().getString())
                         || ViewType.MAPPED.name().equals(viewType)) {
-                    ColumnResolver x = FromCompiler.getResolver(
-                            NamedTableNode.create(
-                                    null,
-                                    TableName.create(schemaName, tableName),
-                                    ImmutableList.<ColumnDef>of()), pc);
-                    final List<TableRef> tables = x.getTables();
-                    assert tables.size() == 1;
-                    PTable pTable = tables.get(0).getTable();
-                    if (pc.getTenantId() == null && pTable.isMultiTenant()) {
-                        pTable = fixTableMultiTenancy(pTable);
+                    try {
+                        ColumnResolver x = FromCompiler.getResolver(
+                                NamedTableNode.create(
+                                        null,
+                                        TableName.create(schemaName, tableName),
+                                        ImmutableList.<ColumnDef>of()), pc);
+                        final List<TableRef> tables = x.getTables();
+                        assert tables.size() == 1;
+                        PTable pTable = tables.get(0).getTable();
+                        if (pc.getTenantId() == null && pTable.isMultiTenant()) {
+                            pTable = fixTableMultiTenancy(pTable);
+                        }
+                        tableMap.put(tableName, pTable);
+                    } catch (TableNotFoundException e) {
+                        // Multi-tenant table with non-tenant-specific connection.
                     }
-                    tableMap.put(tableName, pTable);
                 } else {
                     boolean isMultiTenant = rs.getBoolean(PhoenixDatabaseMetaData.MULTI_TENANT);
                     if (pc.getTenantId() != null || !isMultiTenant) {
@@ -125,7 +131,10 @@ public class PhoenixSchema implements Schema {
                                     + (schemaName == null ? " is null" : " = '" + schemaName + "'")
                                     + " and " + PhoenixDatabaseMetaData.TABLE_NAME
                                     + " = '" + tableName + "'"
-                                    + " and " + PhoenixDatabaseMetaData.COLUMN_FAMILY + " is not null";
+                                    + " and " + PhoenixDatabaseMetaData.COLUMN_FAMILY
+                                    + " is not null"
+                                    + " and " + PhoenixDatabaseMetaData.LINK_TYPE
+                                    + " = " + LinkType.PHYSICAL_TABLE.getSerializedValue();
                             ResultSet rs2 = pc.createStatement().executeQuery(q);
                             if (!rs2.next()) {
                                 throw new SQLException("View link not found for " + tableName);
@@ -234,13 +243,13 @@ public class PhoenixSchema implements Schema {
     public void defineIndexesAsMaterializations(CalciteSchema calciteSchema) {
         List<String> path = calciteSchema.path(null);
         for (PTable table : tableMap.values()) {
-            for (PTable index : table.getIndexes()) {
-                addMaterialization(table, index, path, calciteSchema);
+            if (table.getType() == PTableType.INDEX) {
+                addMaterialization(table, path, calciteSchema);
             }
         }
     }
     
-    protected void addMaterialization(PTable table, PTable index, List<String> path,
+    protected void addMaterialization(PTable index, List<String> path,
             CalciteSchema calciteSchema) {
         StringBuffer sb = new StringBuffer();
         sb.append("SELECT");
@@ -251,7 +260,7 @@ public class PhoenixSchema implements Schema {
             sb.append(" ").append("\"").append(indexColumnName).append("\"");
         }
         sb.setCharAt(6, ' '); // replace first comma with space.
-        sb.append(" FROM ").append("\"").append(table.getTableName().getString()).append("\"");
+        sb.append(" FROM ").append("\"").append(index.getParentName().getString()).append("\"");
         MaterializationService.instance().defineMaterialization(
                 calciteSchema, null, sb.toString(), path, index.getTableName().getString(), true, true);        
     }

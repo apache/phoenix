@@ -177,7 +177,8 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
                 filteredRowCount = 1.0;
             } else if (scanRanges.getBoundPkColumnCount() > 0) {
                 // TODO
-                filteredRowCount = rowCount * RelMetadataQuery.getSelectivity(this, filter);
+                int pkCount = scanRanges.getBoundPkColumnCount();
+                filteredRowCount = rowCount * Math.pow(RelMetadataQuery.getSelectivity(this, filter), pkCount);
             }
         }
         if (filteredRowCount != null) {
@@ -241,8 +242,8 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
                 columnRefList = ImmutableIntList.copyOf(bitSet.asList());
                 filterExpr = CalciteUtils.toExpression(filter, implementor);
             }
-            filterExpr = WhereOptimizer.pushKeyExpressionsToScan(context, select, filterExpr);
-            WhereCompiler.setScanFilter(context, select, filterExpr, true, false);
+            Expression rem = WhereOptimizer.pushKeyExpressionsToScan(context, select, filterExpr);
+            WhereCompiler.setScanFilter(context, select, rem, true, false);
             // TODO This is not absolutely strict. We may have a filter like:
             // pk = '0' and pk = $cor0 where $cor0 happens to get a sample value
             // as '0', thus making the below test return false and adding an

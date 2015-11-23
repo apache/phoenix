@@ -40,6 +40,7 @@ import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ScanUtil.BytesComparator;
 import org.apache.phoenix.util.SchemaUtil;
 
+import com.google.common.base.Objects;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
@@ -572,6 +573,53 @@ public class ScanRanges {
         }
 
         return count;
+    }
+    
+    @Override
+    public boolean equals(Object o) {
+        if (!(o instanceof ScanRanges))
+            return false;
+        if (this == o)
+            return true;
+        
+        ScanRanges that = (ScanRanges) o;
+        return Objects.equal(this.filter, that.filter)
+                && Objects.equal(this.ranges, that.ranges)
+                && Arrays.equals(this.slotSpan, that.slotSpan)
+                && Objects.equal(this.schema, that.schema)
+                && this.isPointLookup == that.isPointLookup
+                && this.isSalted == that.isSalted
+                && this.useSkipScanFilter == that.useSkipScanFilter
+                && Objects.equal(this.scanRange, that.scanRange)
+                && Objects.equal(this.minMaxRange, that.minMaxRange);
+    }
+    
+    @Override
+    public int hashCode() {
+        int prime = 31;
+        int result = (this.isPointLookup ? 1 : 0)
+                + ((this.isSalted ? 1 : 0) * 2)
+                + ((this.useSkipScanFilter ? 1 : 0) * 4);
+        if (this.filter != null) {
+            result = result * prime + this.filter.hashCode();
+        }
+        if (this.ranges != null) {
+            result = result * prime + this.ranges.hashCode();
+        }
+        if (this.slotSpan != null) {
+            result = result * prime + Arrays.hashCode(this.slotSpan);
+        }
+        if (this.schema != null) {
+            result = result * prime + this.schema.hashCode();
+        }
+        if (this.scanRange != null) {
+            result = result * prime + this.scanRange.hashCode();
+        }
+        if (this.minMaxRange != null) {
+            result = result * prime + this.minMaxRange.hashCode();
+        }
+        
+        return result;
     }
 
     @Override
