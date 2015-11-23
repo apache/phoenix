@@ -23,6 +23,7 @@ import static org.apache.phoenix.util.LogUtil.addCustomAnnotations;
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -66,6 +67,7 @@ import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PArrayDataType;
 import org.apache.phoenix.schema.types.PBoolean;
@@ -75,6 +77,7 @@ import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 
 public class HashJoinPlan extends DelegateQueryPlan {
     private static final Log LOG = LogFactory.getLog(HashJoinPlan.class);
@@ -83,6 +86,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
     private final HashJoinInfo joinInfo;
     private final SubPlan[] subPlans;
     private final boolean recompileWhereClause;
+    private final Set<TableRef> tableRefs;
     private final int maxServerCacheTimeToLive;
     private List<SQLCloseable> dependencies;
     private HashCacheClient hashClient;
@@ -114,8 +118,18 @@ public class HashJoinPlan extends DelegateQueryPlan {
         this.joinInfo = joinInfo;
         this.subPlans = subPlans;
         this.recompileWhereClause = recompileWhereClause;
+        this.tableRefs = Sets.newHashSetWithExpectedSize(subPlans.length + plan.getSourceRefs().size());
+        this.tableRefs.addAll(plan.getSourceRefs());
+        for (SubPlan subPlan : subPlans) {
+            tableRefs.addAll(subPlan.getInnerPlan().getSourceRefs());
+        }
         this.maxServerCacheTimeToLive = plan.getContext().getConnection().getQueryServices().getProps().getInt(
                 QueryServices.MAX_SERVER_CACHE_TIME_TO_LIVE_MS_ATTRIB, QueryServicesOptions.DEFAULT_MAX_SERVER_CACHE_TIME_TO_LIVE_MS);
+    }
+    
+    @Override
+    public Set<TableRef> getSourceRefs() {
+        return tableRefs;
     }
     
     @Override
@@ -251,6 +265,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
         public void postProcess(Object result, HashJoinPlan parent) throws SQLException;
         public List<String> getPreSteps(HashJoinPlan parent) throws SQLException;
         public List<String> getPostSteps(HashJoinPlan parent) throws SQLException;
+        public QueryPlan getInnerPlan();
     }
     
     public static class WhereClauseSubPlan implements SubPlan {
@@ -320,6 +335,11 @@ public class HashJoinPlan extends DelegateQueryPlan {
         @Override
         public List<String> getPostSteps(HashJoinPlan parent) throws SQLException {
             return Collections.<String>emptyList();
+        }
+
+        @Override
+        public QueryPlan getInnerPlan() {
+            return plan;
         }
     }
     
@@ -411,7 +431,12 @@ public class HashJoinPlan extends DelegateQueryPlan {
                     + " IN (" + keyRangeRhsExpression.toString() + ")";
             return Collections.<String> singletonList(step);
         }
-        
+
+
+        @Override
+        public QueryPlan getInnerPlan() {
+            return plan;
+        }
     }
 }
 
