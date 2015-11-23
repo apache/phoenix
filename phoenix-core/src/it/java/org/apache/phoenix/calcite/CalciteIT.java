@@ -396,35 +396,39 @@ public class CalciteIT extends BaseClientManagedTimeIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             conn.createStatement().execute(
-                    "CREATE TABLE " + MULTI_TENANT_TABLE + " (tenant_id VARCHAR NOT NULL, id VARCHAR NOT NULL, col0 INTEGER, col1 INTEGER CONSTRAINT pk PRIMARY KEY (tenant_id, id)) MULTI_TENANT=true");
+                    "CREATE TABLE " + MULTI_TENANT_TABLE + " (tenant_id VARCHAR NOT NULL, id VARCHAR NOT NULL, col0 INTEGER, col1 INTEGER, col2 INTEGER CONSTRAINT pk PRIMARY KEY (tenant_id, id)) MULTI_TENANT=true");
             PreparedStatement stmt = conn.prepareStatement(
                     "UPSERT INTO " + MULTI_TENANT_TABLE
-                    + " VALUES(?, ?, ?, ?)");
+                    + " VALUES(?, ?, ?, ?, ?)");
             stmt.setString(1, "10");
             stmt.setString(2, "2");
             stmt.setInt(3, 3);
             stmt.setInt(4, 4);
+            stmt.setInt(5, 5);
             stmt.execute();
             stmt.setString(1, "15");
             stmt.setString(2, "3");
             stmt.setInt(3, 4);
             stmt.setInt(4, 5);
+            stmt.setInt(5, 6);
             stmt.execute();
             stmt.setString(1, "20");
             stmt.setString(2, "4");
             stmt.setInt(3, 5);
             stmt.setInt(4, 6);
+            stmt.setInt(5, 7);
             stmt.execute();
             stmt.setString(1, "20");
             stmt.setString(2, "5");
             stmt.setInt(3, 6);
             stmt.setInt(4, 7);
+            stmt.setInt(5, 8);
             stmt.execute();
             conn.commit();
             
             conn.createStatement().execute(
                     "CREATE INDEX " + MULTI_TENANT_TABLE_INDEX
-                    + " ON " + MULTI_TENANT_TABLE + "(col0) INCLUDE (col1)");
+                    + " ON " + MULTI_TENANT_TABLE + "(col1) INCLUDE (col0, col2)");
             conn.commit();
             
             conn.close();
@@ -443,7 +447,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
             props.setProperty("TenantId", "20");
             conn = DriverManager.getConnection(getUrl(), props);
             conn.createStatement().execute("CREATE VIEW " + MULTI_TENANT_VIEW2
-                    + " AS select * from " + MULTI_TENANT_TABLE + " where col1 > 6");
+                    + " AS select * from " + MULTI_TENANT_TABLE + " where col2 > 7");
             conn.commit();
             
             conn.createStatement().execute(
@@ -572,15 +576,15 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                            "        PhoenixServerProject(supplier_id=[$0], NAME=[$1])\n" +
                            "          PhoenixTableScan(table=[[phoenix, Join, SupplierTable]], scanOrder=[FORWARD])\n")
                 .resultIs(new Object[][] {
-                        {null, null, "0000000003", "S3"},
-                        {null, null, "0000000004", "S4"},
                         {"0000000001", "T1", "0000000001", "S1"},
                         {"0000000002", "T2", "0000000001", "S1"},
                         {"0000000003", "T3", "0000000002", "S2"},
                         {"0000000004", "T4", "0000000002", "S2"},
                         {"0000000005", "T5", "0000000005", "S5"},
                         {"0000000006", "T6", "0000000006", "S6"},
-                        {"invalid001", "INVALID-1", null, null}})
+                        {"invalid001", "INVALID-1", null, null},
+                        {null, null, "0000000003", "S3"},
+                        {null, null, "0000000004", "S4"}})
                 .close();
         
         start(false).sql("select t1.entity_id, t2.a_string, t1.organization_id from aTable t1 join aTable t2 on t1.organization_id = t2.organization_id and t1.entity_id = t2.entity_id")
@@ -1590,19 +1594,19 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixTableScan(table=[[phoenix, MULTITENANT_TEST_TABLE]])\n")
                 .resultIs(new Object[][] {
-                        {"10", "2", 3, 4},
-                        {"15", "3", 4, 5},
-                        {"20", "4", 5, 6},
-                        {"20", "5", 6, 7}})
+                        {"10", "2", 3, 4, 5},
+                        {"15", "3", 4, 5, 6},
+                        {"20", "4", 5, 6, 7},
+                        {"20", "5", 6, 7, 8}})
                 .close();
         
-        start(props).sql("select * from " + MULTI_TENANT_TABLE + " where tenant_id = '20' and col0 > 1")
+        start(props).sql("select * from " + MULTI_TENANT_TABLE + " where tenant_id = '20' and col1 > 1")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixServerProject(TENANT_ID=[$0], ID=[$2], COL0=[CAST($1):INTEGER], COL1=[$3])\n" +
+                           "  PhoenixServerProject(TENANT_ID=[$0], ID=[$2], COL0=[$3], COL1=[CAST($1):INTEGER], COL2=[$4])\n" +
                            "    PhoenixTableScan(table=[[phoenix, IDX_MULTITENANT_TEST_TABLE]], filter=[AND(=(CAST($0):VARCHAR(2) CHARACTER SET \"ISO-8859-1\" COLLATE \"ISO-8859-1$en_US$primary\" NOT NULL, '20'), >(CAST($1):INTEGER, 1))])\n")
                 .resultIs(new Object[][] {
-                        {"20", "4", 5, 6},
-                        {"20", "5", 6, 7}})
+                        {"20", "4", 5, 6, 7},
+                        {"20", "5", 6, 7, 8}})
                 .close();
         
         try {
@@ -1618,15 +1622,15 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixTableScan(table=[[phoenix, MULTITENANT_TEST_TABLE]])\n")
                 .resultIs(new Object[][] {
-                        {"3", 4, 5}})
+                        {"3", 4, 5, 6}})
                 .close();
         
-        start(props).sql("select * from " + MULTI_TENANT_TABLE + " where col0 > 1")
+        start(props).sql("select * from " + MULTI_TENANT_TABLE + " where col1 > 1")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixServerProject(ID=[$1], COL0=[CAST($0):INTEGER], COL1=[$2])\n" +
+                           "  PhoenixServerProject(ID=[$1], COL0=[$2], COL1=[CAST($0):INTEGER], COL2=[$3])\n" +
                            "    PhoenixTableScan(table=[[phoenix, IDX_MULTITENANT_TEST_TABLE]], filter=[>(CAST($0):INTEGER, 1)])\n")
                 .resultIs(new Object[][] {
-                        {"3", 4, 5}})
+                        {"3", 4, 5, 6}})
                 .close();
         
         try {
@@ -1642,15 +1646,15 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixTableScan(table=[[phoenix, MULTITENANT_TEST_TABLE]])\n")
                 .resultIs(new Object[][] {
-                        {"2", 3, 4}})
+                        {"2", 3, 4, 5}})
                 .close();
         
-        start(props).sql("select * from " + MULTI_TENANT_TABLE + " where col0 > 1")
+        start(props).sql("select * from " + MULTI_TENANT_TABLE + " where col1 > 1")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixServerProject(ID=[$1], COL0=[CAST($0):INTEGER], COL1=[$2])\n" +
+                           "  PhoenixServerProject(ID=[$1], COL0=[$2], COL1=[CAST($0):INTEGER], COL2=[$3])\n" +
                            "    PhoenixTableScan(table=[[phoenix, IDX_MULTITENANT_TEST_TABLE]], filter=[>(CAST($0):INTEGER, 1)])\n")
                 .resultIs(new Object[][] {
-                        {"2", 3, 4}})
+                        {"2", 3, 4, 5}})
                 .close();
         
         start(props).sql("select id, col0 from " + MULTI_TENANT_TABLE + " where col0 > 1")
@@ -1672,19 +1676,26 @@ public class CalciteIT extends BaseClientManagedTimeIT {
         props.setProperty("TenantId", "20");
         start(props).sql("select * from " + MULTI_TENANT_VIEW2)
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixTableScan(table=[[phoenix, MULTITENANT_TEST_TABLE]], filter=[>($2, 6)])\n")
+                           "  PhoenixTableScan(table=[[phoenix, MULTITENANT_TEST_TABLE]], filter=[>($3, 7)])\n")
                 .resultIs(new Object[][] {
-                        {"5", 6, 7}})
+                        {"5", 6, 7, 8}})
                 .close();
         
-        // TODO disable this test case for now. FilterToProjectUnifyRule might be buggy.
-        //start(props).sql("select id, col0 from " + MULTI_TENANT_VIEW2 + " where col0 > 1")
-        //        .explainIs("PhoenixToEnumerableConverter\n" +
-        //                   "  PhoenixServerProject(ID=[$1], COL0=[CAST($0):INTEGER])\n" +
-        //                   "    PhoenixTableScan(table=[[phoenix, IDX_MULTITENANT_TEST_VIEW2]], filter=[>(CAST($0):INTEGER, 1)])\n")
-        //        .resultIs(new Object[][] {
-        //                {"5", 6}})
-        //        .close();
+        start(props).sql("select id, col0 from " + MULTI_TENANT_VIEW2 + " where col0 > 1")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                           "  PhoenixServerProject(ID=[$1], COL0=[CAST($0):INTEGER])\n" +
+                           "    PhoenixTableScan(table=[[phoenix, IDX_MULTITENANT_TEST_VIEW2]], filter=[>(CAST($0):INTEGER, 1)])\n")
+                .resultIs(new Object[][] {
+                        {"5", 6}})
+                .close();
+        
+        start(props).sql("select id, col0 from " + MULTI_TENANT_VIEW2 + " order by col0")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                           "  PhoenixServerProject(ID=[$1], COL0=[CAST($0):INTEGER])\n" +
+                           "    PhoenixTableScan(table=[[phoenix, IDX_MULTITENANT_TEST_VIEW2]], scanOrder=[FORWARD])\n")
+                .resultIs(new Object[][] {
+                        {"5", 6}})
+                .close();
     }
 
     /** Tests a simple command that is defined in Phoenix's extended SQL parser. 

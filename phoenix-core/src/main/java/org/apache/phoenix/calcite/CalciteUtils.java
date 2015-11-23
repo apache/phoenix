@@ -11,6 +11,7 @@ import org.apache.calcite.rel.RelCollation;
 import org.apache.calcite.rel.RelCollations;
 import org.apache.calcite.rel.RelFieldCollation;
 import org.apache.calcite.rel.RelFieldCollation.Direction;
+import org.apache.calcite.rel.RelFieldCollation.NullDirection;
 import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexCorrelVariable;
@@ -171,7 +172,18 @@ public class CalciteUtils {
             default:
                 assert false : "Shouldn't have come accross non Phoenix directions";
             }
-            fieldCollations.add(new RelFieldCollation(fieldCollation.getFieldIndex(), dir, fieldCollation.nullDirection));
+            NullDirection nullDir = null;
+            switch (fieldCollation.nullDirection) {
+            case FIRST:
+                nullDir = NullDirection.LAST;
+                break;
+            case LAST:
+                nullDir = NullDirection.FIRST;
+                break;
+            default:
+                nullDir = NullDirection.UNSPECIFIED;
+            }
+            fieldCollations.add(new RelFieldCollation(fieldCollation.getFieldIndex(), dir, nullDir));
         }
         return RelCollations.of(fieldCollations);
     }
