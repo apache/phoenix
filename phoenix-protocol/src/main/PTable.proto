@@ -86,4 +86,5 @@ message PTable {
   optional bool storeNulls = 24;
   optional int32 baseColumnCount = 25;
   optional bool rowKeyOrderOptimizable = 26;
+  optional bool transactional = 27;
 }

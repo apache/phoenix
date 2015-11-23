@@ -22,8 +22,11 @@ import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.execute.MutationState;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.monitoring.CombinableMetric;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.Tuple;
@@ -39,7 +42,7 @@ import org.apache.phoenix.util.ServerUtil;
  * 
  * @since 0.1
  */
-public class TableResultIterator extends ExplainTable implements ResultIterator {
+public class TableResultIterator implements ResultIterator {
 	public enum ScannerCreation {IMMEDIATE, DELAYED};
 	
     private final Scan scan;
@@ -47,8 +50,8 @@ public class TableResultIterator extends ExplainTable implements ResultIterator 
     private volatile ResultIterator delegate;
     private final CombinableMetric scanMetrics;
     
-    public TableResultIterator(StatementContext context, TableRef tableRef, CombinableMetric scanMetrics) throws SQLException {
-        this(context, tableRef, context.getScan(), scanMetrics);
+    public TableResultIterator(MutationState mutationState, Scan scan, TableRef tableRef, CombinableMetric scanMetrics) throws SQLException {
+        this(mutationState, tableRef, scan, scanMetrics);
     }
 
     /*
@@ -75,15 +78,15 @@ public class TableResultIterator extends ExplainTable implements ResultIterator 
         return delegate;
     }
     
-    public TableResultIterator(StatementContext context, TableRef tableRef, Scan scan, CombinableMetric scanMetrics) throws SQLException {
-        this(context, tableRef, scan, scanMetrics, ScannerCreation.IMMEDIATE);
+    public TableResultIterator(MutationState mutationState, TableRef tableRef, Scan scan, CombinableMetric scanMetrics) throws SQLException {
+        this(mutationState, tableRef, scan, scanMetrics, ScannerCreation.IMMEDIATE);
     }
 
-    public TableResultIterator(StatementContext context, TableRef tableRef, Scan scan, CombinableMetric scanMetrics, ScannerCreation creationMode) throws SQLException {
-        super(context, tableRef);
+    public TableResultIterator(MutationState mutationState, TableRef tableRef, Scan scan, CombinableMetric scanMetrics, ScannerCreation creationMode) throws SQLException {
         this.scan = scan;
         this.scanMetrics = scanMetrics;
-        htable = context.getConnection().getQueryServices().getTable(tableRef.getTable().getPhysicalName().getBytes());
+        PTable table = tableRef.getTable();
+        htable = mutationState.getHTable(table);
         if (creationMode == ScannerCreation.IMMEDIATE) {
         	getDelegate(false);
         }
@@ -109,8 +112,11 @@ public class TableResultIterator extends ExplainTable implements ResultIterator 
 
     @Override
     public void explain(List<String> planSteps) {
-        StringBuilder buf = new StringBuilder();
-        explain(buf.toString(),planSteps);
+    	try {
+			getDelegate(false).explain(planSteps);
+		} catch (SQLException e) {
+			throw new RuntimeException(e);
+		}
     }
 
 	@Override

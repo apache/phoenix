@@ -59,6 +59,10 @@
         <include>org.apache.htrace:htrace-core</include>
         <include>io.netty:netty-all</include>
         <include>commons-codec:commons-codec</include>
+        <include>co.cask.tephra:tephra*</include>
+        <include>org.apache.twill:twill*</include>
+        <include>org.apache.thrift:*</include>
+        <include>com.google.code.gson:gson*</include>
       </includes>
     </dependencySet>
 

@@ -23,13 +23,16 @@ import java.util.Collections;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
-import com.google.common.cache.*;
 import org.apache.phoenix.coprocessor.ServerCachingProtocol.ServerCacheFactory;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.memory.MemoryManager;
 import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
 import org.apache.phoenix.util.Closeables;
+
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.RemovalListener;
+import com.google.common.cache.RemovalNotification;
 
 /**
  * 
@@ -80,11 +83,11 @@ public class TenantCacheImpl implements TenantCache {
     }
     
     @Override
-    public Closeable addServerCache(ImmutableBytesPtr cacheId, ImmutableBytesWritable cachePtr, ServerCacheFactory cacheFactory) throws SQLException {
-        MemoryChunk chunk = this.getMemoryManager().allocate(cachePtr.getLength());
+    public Closeable addServerCache(ImmutableBytesPtr cacheId, ImmutableBytesWritable cachePtr, byte[] txState, ServerCacheFactory cacheFactory) throws SQLException {
+        MemoryChunk chunk = this.getMemoryManager().allocate(cachePtr.getLength() + txState.length);
         boolean success = false;
         try {
-            Closeable element = cacheFactory.newCache(cachePtr, chunk);
+            Closeable element = cacheFactory.newCache(cachePtr, txState, chunk);
             getServerCaches().put(cacheId, element);
             success = true;
             return element;
