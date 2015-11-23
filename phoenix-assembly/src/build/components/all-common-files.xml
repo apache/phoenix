@@ -40,6 +40,12 @@
         <include>*.py</include>
         <include>*.sh</include>
       </includes>
+      <excludes>
+        <!-- The sandbox doesn't work with the binary distribution, and it
+             would complicate things a lot to make it work there, so we just
+             exclude it. -->
+        <exclude>*sandbox*</exclude>
+      </excludes>
     </fileSet>
     <!-- Copy the non-executable files from the bin directory -->
     <fileSet>
@@ -50,6 +56,10 @@
       <excludes>
         <exclude>*.py*</exclude>
         <exclude>*.sh*</exclude>
+        <!-- The sandbox doesn't work with the binary distribution, and it
+             would complicate things a lot to make it work there, so we just
+             exclude it. -->
+        <exclude>*sandbox*</exclude>
       </excludes>
     </fileSet>
     <fileSet>

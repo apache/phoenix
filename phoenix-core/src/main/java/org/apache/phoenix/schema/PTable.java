@@ -307,13 +307,14 @@ public interface PTable extends PMetaDataEntity {
     PName getPhysicalName();
     boolean isImmutableRows();
 
-    void getIndexMaintainers(ImmutableBytesWritable ptr, PhoenixConnection connection);
+    boolean getIndexMaintainers(ImmutableBytesWritable ptr, PhoenixConnection connection);
     IndexMaintainer getIndexMaintainer(PTable dataTable, PhoenixConnection connection);
     PName getDefaultFamilyName();
 
     boolean isWALDisabled();
     boolean isMultiTenant();
     boolean getStoreNulls();
+    boolean isTransactional();
 
     ViewType getViewType();
     String getViewStatement();

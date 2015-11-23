@@ -78,6 +78,7 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.ScanUtil;
 
@@ -323,8 +324,12 @@ public class DeleteCompiler {
                 // - read-only VIEW 
                 // - transactional table with a connection having an SCN
                 // TODO: SchemaUtil.isReadOnly(PTable, connection)?
-                if ( table.getType() == PTableType.VIEW && table.getViewType().isReadOnly() ) {
+                if (table.getType() == PTableType.VIEW && table.getViewType().isReadOnly()) {
                     throw new ReadOnlyTableException(schemaName,tableName);
+                }
+                else if (table.isTransactional() && connection.getSCN() != null) {
+                   throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_SPECIFY_SCN_FOR_TXN_TABLE).setSchemaName(schemaName)
+                   .setTableName(tableName).build().buildException();
                 }
                 
                 immutableIndex = getNonDisabledImmutableIndexes(tableRefToBe);
@@ -332,7 +337,7 @@ public class DeleteCompiler {
                 noQueryReqd = !hasLimit;
                 // Can't run on same server for transactional data, as we need the row keys for the data
                 // that is being upserted for conflict detection purposes.
-                runOnServer = isAutoCommit && noQueryReqd;
+                runOnServer = isAutoCommit && noQueryReqd && !table.isTransactional();
                 HintNode hint = delete.getHint();
                 if (runOnServer && !delete.getHint().hasHint(Hint.USE_INDEX_OVER_DATA_TABLE)) {
                     hint = HintNode.create(hint, Hint.USE_DATA_OVER_INDEX_TABLE);
@@ -363,8 +368,8 @@ public class DeleteCompiler {
                 QueryCompiler compiler = new QueryCompiler(statement, select, resolverToBe, Collections.<PColumn>emptyList(), parallelIteratorFactory, new SequenceManager(statement));
                 dataPlanToBe = compiler.compile();
                 queryPlans = Lists.newArrayList(mayHaveImmutableIndexes
-                        ? optimizer.getApplicablePlans(statement, select, resolverToBe, Collections.<PColumn>emptyList(), parallelIteratorFactory)
-                        : optimizer.getBestPlan(statement, select, resolverToBe, Collections.<PColumn>emptyList(), parallelIteratorFactory));
+                        ? optimizer.getApplicablePlans(dataPlanToBe, statement, select, resolverToBe, Collections.<PColumn>emptyList(), parallelIteratorFactory)
+                        : optimizer.getBestPlan(dataPlanToBe, statement, select, resolverToBe, Collections.<PColumn>emptyList(), parallelIteratorFactory));
                 if (mayHaveImmutableIndexes) { // FIXME: this is ugly
                     // Lookup the table being deleted from in the cache, as it's possible that the
                     // optimizer updated the cache if it found indexes that were out of date.
@@ -538,11 +543,12 @@ public class DeleteCompiler {
                         ImmutableBytesWritable ptr = context.getTempPtr();
                         PTable table = tableRef.getTable();
                         table.getIndexMaintainers(ptr, context.getConnection());
+                        byte[] txState = table.isTransactional() ? connection.getMutationState().encodeTransaction() : ByteUtil.EMPTY_BYTE_ARRAY;
                         ServerCache cache = null;
                         try {
                             if (ptr.getLength() > 0) {
                                 IndexMetaDataCacheClient client = new IndexMetaDataCacheClient(connection, tableRef);
-                                cache = client.addIndexMetadataCache(context.getScanRanges(), ptr);
+                                cache = client.addIndexMetadataCache(context.getScanRanges(), ptr, txState);
                                 byte[] uuidValue = cache.getId();
                                 context.getScan().setAttribute(PhoenixIndexCodec.INDEX_UUID, uuidValue);
                             }

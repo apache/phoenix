@@ -27,6 +27,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.SortedMap;
 
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.end2end.Shadower;
@@ -670,7 +671,7 @@ public class SkipScanBigFilterTest extends BaseConnectionlessQueryTest {
                 return table.getTimeStamp()+1;
             }
         });
-        conn.unwrap(PhoenixConnection.class).addTable(tableWithStats);
+        conn.unwrap(PhoenixConnection.class).addTable(tableWithStats, System.currentTimeMillis());
 
         String query = "SELECT count(1) cnt,\n" + 
                 "       coalesce(SUM(impressions), 0.0) AS \"impressions\",\n" + 
