@@ -172,8 +172,8 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     }
 
     @Override
-    public boolean isMutableIndexWALCodecInstalled() {
-        return getDelegate().isMutableIndexWALCodecInstalled();
+    public boolean hasIndexWALCodec() {
+        return getDelegate().hasIndexWALCodec();
     }
 
     @Override

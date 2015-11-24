@@ -2674,7 +2674,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         // The last byte is used to communicate whether or not mutable secondary indexing
         // was configured properly.
         version =
-                MetaDataUtil.encodeMutableIndexConfiguredProperly(version,
+                MetaDataUtil.encodeHasIndexWALCodec(version,
                     IndexManagementUtil.isWALEditCodecSet(this.env.getConfiguration()));
 
         builder.setVersion(version);
