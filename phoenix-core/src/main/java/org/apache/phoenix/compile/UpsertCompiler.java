@@ -182,7 +182,7 @@ public class UpsertCompiler {
                 if (isAutoCommit && rowCount % batchSize == 0) {
                     MutationState state = new MutationState(tableRef, mutation, 0, maxSize, connection);
                     connection.getMutationState().join(state);
-                    connection.commit();
+                    connection.getMutationState().send();
                     mutation.clear();
                 }
             }
@@ -292,8 +292,12 @@ public class UpsertCompiler {
                 // Cannot update:
                 // - read-only VIEW 
                 // - transactional table with a connection having an SCN 
-                if ( table.getType() == PTableType.VIEW && table.getViewType().isReadOnly() ) {
+                if (table.getType() == PTableType.VIEW && table.getViewType().isReadOnly()) {
                     throw new ReadOnlyTableException(schemaName,tableName);
+                }
+                else if (table.isTransactional() && connection.getSCN() != null) {
+                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_SPECIFY_SCN_FOR_TXN_TABLE).setSchemaName(schemaName)
+                    .setTableName(tableName).build().buildException();
                 }
                 boolean isSalted = table.getBucketNum() != null;
                 isTenantSpecific = table.isMultiTenant() && connection.getTenantId() != null;
@@ -463,7 +467,7 @@ public class UpsertCompiler {
                         // so we might be able to run it entirely on the server side.
                         // For a table with row timestamp column, we can't guarantee that the row key will reside in the
                         // region space managed by region servers. So we bail out on executing on server side.
-                        runOnServer = sameTable && isAutoCommit && !(table.isImmutableRows() && !table.getIndexes().isEmpty()) && table.getRowTimestampColPos() == -1;
+                        runOnServer = sameTable && isAutoCommit && !table.isTransactional() && !(table.isImmutableRows() && !table.getIndexes().isEmpty()) && table.getRowTimestampColPos() == -1;
                     }
                     // If we may be able to run on the server, add a hint that favors using the data table
                     // if all else is equal.
@@ -678,12 +682,13 @@ public class UpsertCompiler {
                             ImmutableBytesWritable ptr = context.getTempPtr();
                             PTable table = tableRef.getTable();
                             table.getIndexMaintainers(ptr, context.getConnection());
+                            byte[] txState = table.isTransactional() ? connection.getMutationState().encodeTransaction() : ByteUtil.EMPTY_BYTE_ARRAY;
 
                             ServerCache cache = null;
                             try {
                                 if (ptr.getLength() > 0) {
                                     IndexMetaDataCacheClient client = new IndexMetaDataCacheClient(connection, tableRef);
-                                    cache = client.addIndexMetadataCache(context.getScanRanges(), ptr);
+                                    cache = client.addIndexMetadataCache(context.getScanRanges(), ptr, txState);
                                     byte[] uuidValue = cache.getId();
                                     scan.setAttribute(PhoenixIndexCodec.INDEX_UUID, uuidValue);
                                 }

@@ -138,7 +138,7 @@ public class PhoenixIndexImportDirectMapper extends
 
     private void writeBatch(MutationState mutationState, Context context) throws IOException,
             SQLException, InterruptedException {
-        final Iterator<Pair<byte[], List<Mutation>>> iterator = mutationState.toMutations(true);
+        final Iterator<Pair<byte[], List<Mutation>>> iterator = mutationState.toMutations(true, null);
         while (iterator.hasNext()) {
             Pair<byte[], List<Mutation>> mutationPair = iterator.next();
 

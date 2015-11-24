@@ -3218,6 +3218,16 @@ public final class PTableProtos {
      * <code>optional bool rowKeyOrderOptimizable = 26;</code>
      */
     boolean getRowKeyOrderOptimizable();
+
+    // optional bool transactional = 27;
+    /**
+     * <code>optional bool transactional = 27;</code>
+     */
+    boolean hasTransactional();
+    /**
+     * <code>optional bool transactional = 27;</code>
+     */
+    boolean getTransactional();
   }
   /**
    * Protobuf type {@code PTable}
@@ -3416,6 +3426,11 @@ public final class PTableProtos {
             case 208: {
               bitField0_ |= 0x00200000;
               rowKeyOrderOptimizable_ = input.readBool();
+              break;
+            }
+            case 216: {
+              bitField0_ |= 0x00400000;
+              transactional_ = input.readBool();
               break;
             }
           }
@@ -3980,6 +3995,22 @@ public final class PTableProtos {
       return rowKeyOrderOptimizable_;
     }
 
+    // optional bool transactional = 27;
+    public static final int TRANSACTIONAL_FIELD_NUMBER = 27;
+    private boolean transactional_;
+    /**
+     * <code>optional bool transactional = 27;</code>
+     */
+    public boolean hasTransactional() {
+      return ((bitField0_ & 0x00400000) == 0x00400000);
+    }
+    /**
+     * <code>optional bool transactional = 27;</code>
+     */
+    public boolean getTransactional() {
+      return transactional_;
+    }
+
     private void initFields() {
       schemaNameBytes_ = com.google.protobuf.ByteString.EMPTY;
       tableNameBytes_ = com.google.protobuf.ByteString.EMPTY;
@@ -4007,6 +4038,7 @@ public final class PTableProtos {
       storeNulls_ = false;
       baseColumnCount_ = 0;
       rowKeyOrderOptimizable_ = false;
+      transactional_ = false;
     }
     private byte memoizedIsInitialized = -1;
     public final boolean isInitialized() {
@@ -4152,6 +4184,9 @@ public final class PTableProtos {
       if (((bitField0_ & 0x00200000) == 0x00200000)) {
         output.writeBool(26, rowKeyOrderOptimizable_);
       }
+      if (((bitField0_ & 0x00400000) == 0x00400000)) {
+        output.writeBool(27, transactional_);
+      }
       getUnknownFields().writeTo(output);
     }
 
@@ -4269,6 +4304,10 @@ public final class PTableProtos {
       if (((bitField0_ & 0x00200000) == 0x00200000)) {
         size += com.google.protobuf.CodedOutputStream
           .computeBoolSize(26, rowKeyOrderOptimizable_);
+      }
+      if (((bitField0_ & 0x00400000) == 0x00400000)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeBoolSize(27, transactional_);
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSerializedSize = size;
@@ -4411,6 +4450,11 @@ public final class PTableProtos {
         result = result && (getRowKeyOrderOptimizable()
             == other.getRowKeyOrderOptimizable());
       }
+      result = result && (hasTransactional() == other.hasTransactional());
+      if (hasTransactional()) {
+        result = result && (getTransactional()
+            == other.getTransactional());
+      }
       result = result &&
           getUnknownFields().equals(other.getUnknownFields());
       return result;
@@ -4527,6 +4571,10 @@ public final class PTableProtos {
       if (hasRowKeyOrderOptimizable()) {
         hash = (37 * hash) + ROWKEYORDEROPTIMIZABLE_FIELD_NUMBER;
         hash = (53 * hash) + hashBoolean(getRowKeyOrderOptimizable());
+      }
+      if (hasTransactional()) {
+        hash = (37 * hash) + TRANSACTIONAL_FIELD_NUMBER;
+        hash = (53 * hash) + hashBoolean(getTransactional());
       }
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
@@ -4704,6 +4752,8 @@ public final class PTableProtos {
         bitField0_ = (bitField0_ & ~0x01000000);
         rowKeyOrderOptimizable_ = false;
         bitField0_ = (bitField0_ & ~0x02000000);
+        transactional_ = false;
+        bitField0_ = (bitField0_ & ~0x04000000);
         return this;
       }
 
@@ -4852,6 +4902,10 @@ public final class PTableProtos {
           to_bitField0_ |= 0x00200000;
         }
         result.rowKeyOrderOptimizable_ = rowKeyOrderOptimizable_;
+        if (((from_bitField0_ & 0x04000000) == 0x04000000)) {
+          to_bitField0_ |= 0x00400000;
+        }
+        result.transactional_ = transactional_;
         result.bitField0_ = to_bitField0_;
         onBuilt();
         return result;
@@ -5023,6 +5077,9 @@ public final class PTableProtos {
         }
         if (other.hasRowKeyOrderOptimizable()) {
           setRowKeyOrderOptimizable(other.getRowKeyOrderOptimizable());
+        }
+        if (other.hasTransactional()) {
+          setTransactional(other.getTransactional());
         }
         this.mergeUnknownFields(other.getUnknownFields());
         return this;
@@ -6694,6 +6751,39 @@ public final class PTableProtos {
         return this;
       }
 
+      // optional bool transactional = 27;
+      private boolean transactional_ ;
+      /**
+       * <code>optional bool transactional = 27;</code>
+       */
+      public boolean hasTransactional() {
+        return ((bitField0_ & 0x04000000) == 0x04000000);
+      }
+      /**
+       * <code>optional bool transactional = 27;</code>
+       */
+      public boolean getTransactional() {
+        return transactional_;
+      }
+      /**
+       * <code>optional bool transactional = 27;</code>
+       */
+      public Builder setTransactional(boolean value) {
+        bitField0_ |= 0x04000000;
+        transactional_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>optional bool transactional = 27;</code>
+       */
+      public Builder clearTransactional() {
+        bitField0_ = (bitField0_ & ~0x04000000);
+        transactional_ = false;
+        onChanged();
+        return this;
+      }
+
       // @@protoc_insertion_point(builder_scope:PTable)
     }
 
@@ -6740,7 +6830,7 @@ public final class PTableProtos {
       "leStats\022\013\n\003key\030\001 \002(\014\022\016\n\006values\030\002 \003(\014\022\033\n\023" +
       "guidePostsByteCount\030\003 \001(\003\022\025\n\rkeyBytesCou",
       "nt\030\004 \001(\003\022\027\n\017guidePostsCount\030\005 \001(\005\022!\n\013pGu" +
-      "idePosts\030\006 \001(\0132\014.PGuidePosts\"\357\004\n\006PTable\022" +
+      "idePosts\030\006 \001(\0132\014.PGuidePosts\"\206\005\n\006PTable\022" +
       "\027\n\017schemaNameBytes\030\001 \002(\014\022\026\n\016tableNameByt" +
       "es\030\002 \002(\014\022\036\n\ttableType\030\003 \002(\0162\013.PTableType" +
       "\022\022\n\nindexState\030\004 \001(\t\022\026\n\016sequenceNumber\030\005" +
@@ -6756,10 +6846,11 @@ public final class PTableProtos {
       "wIndexId\030\025 \001(\005\022\021\n\tindexType\030\026 \001(\014\022\026\n\016sta" +
       "tsTimeStamp\030\027 \001(\003\022\022\n\nstoreNulls\030\030 \001(\010\022\027\n" +
       "\017baseColumnCount\030\031 \001(\005\022\036\n\026rowKeyOrderOpt" +
-      "imizable\030\032 \001(\010*A\n\nPTableType\022\n\n\006SYSTEM\020\000" +
-      "\022\010\n\004USER\020\001\022\010\n\004VIEW\020\002\022\t\n\005INDEX\020\003\022\010\n\004JOIN\020" +
-      "\004B@\n(org.apache.phoenix.coprocessor.gene",
-      "ratedB\014PTableProtosH\001\210\001\001\240\001\001"
+      "imizable\030\032 \001(\010\022\025\n\rtransactional\030\033 \001(\010*A\n" +
+      "\nPTableType\022\n\n\006SYSTEM\020\000\022\010\n\004USER\020\001\022\010\n\004VIE" +
+      "W\020\002\022\t\n\005INDEX\020\003\022\010\n\004JOIN\020\004B@\n(org.apache.p",
+      "hoenix.coprocessor.generatedB\014PTableProt" +
+      "osH\001\210\001\001\240\001\001"
     };
     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
       new com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner() {
@@ -6783,7 +6874,7 @@ public final class PTableProtos {
           internal_static_PTable_fieldAccessorTable = new
             com.google.protobuf.GeneratedMessage.FieldAccessorTable(
               internal_static_PTable_descriptor,
-              new java.lang.String[] { "SchemaNameBytes", "TableNameBytes", "TableType", "IndexState", "SequenceNumber", "TimeStamp", "PkNameBytes", "BucketNum", "Columns", "Indexes", "IsImmutableRows", "GuidePosts", "DataTableNameBytes", "DefaultFamilyName", "DisableWAL", "MultiTenant", "ViewType", "ViewStatement", "PhysicalNames", "TenantId", "ViewIndexId", "IndexType", "StatsTimeStamp", "StoreNulls", "BaseColumnCount", "RowKeyOrderOptimizable", });
+              new java.lang.String[] { "SchemaNameBytes", "TableNameBytes", "TableType", "IndexState", "SequenceNumber", "TimeStamp", "PkNameBytes", "BucketNum", "Columns", "Indexes", "IsImmutableRows", "GuidePosts", "DataTableNameBytes", "DefaultFamilyName", "DisableWAL", "MultiTenant", "ViewType", "ViewStatement", "PhysicalNames", "TenantId", "ViewIndexId", "IndexType", "StatsTimeStamp", "StoreNulls", "BaseColumnCount", "RowKeyOrderOptimizable", "Transactional", });
           return null;
         }
       };

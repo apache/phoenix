@@ -48,17 +48,28 @@ public class ImmutableIndexIT extends BaseHBaseManagedTimeIT {
 	
 	private final boolean localIndex;
 	private final String tableDDLOptions;
+	private final String tableName;
+    private final String indexName;
+    private final String fullTableName;
+    private final String fullIndexName;
 	
-	public ImmutableIndexIT(boolean localIndex) {
+	public ImmutableIndexIT(boolean localIndex, boolean transactional) {
 		this.localIndex = localIndex;
 		StringBuilder optionBuilder = new StringBuilder("IMMUTABLE_ROWS=true");
+		if (transactional) {
+			optionBuilder.append(", TRANSACTIONAL=true");
+		}
 		this.tableDDLOptions = optionBuilder.toString();
+		this.tableName = TestUtil.DEFAULT_DATA_TABLE_NAME + ( transactional ?  "_TXN" : "");
+        this.indexName = "IDX" + ( transactional ?  "_TXN" : "");
+        this.fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+        this.fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
 	}
 	
-	@Parameters(name="localIndex = {0}")
+	@Parameters(name="localIndex = {0} , transactional = {1}")
     public static Collection<Boolean[]> data() {
         return Arrays.asList(new Boolean[][] {     
-                 { false}, { true }
+                 { false, false }, { false, true }, { true, false }, { true, true }
            });
     }
    
@@ -67,11 +78,6 @@ public class ImmutableIndexIT extends BaseHBaseManagedTimeIT {
     	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
 	        conn.setAutoCommit(false);
-	        // create unique table and index names for each parameterized test
-	        String tableName = TestUtil.DEFAULT_DATA_TABLE_NAME + "_" + System.currentTimeMillis();
-	        String indexName = "IDX"  + "_" + System.currentTimeMillis();
-	        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
-	        String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
 	        String ddl ="CREATE TABLE " + fullTableName + BaseTest.TEST_TABLE_SCHEMA + tableDDLOptions;
 	        Statement stmt = conn.createStatement();
 	        stmt.execute(ddl);
