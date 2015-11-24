@@ -33,7 +33,6 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -44,20 +43,33 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
 	
 	private final boolean localIndex;
 	private final String tableDDLOptions;
+	private final String tableName;
+    private final String indexName;
+    private final String fullTableName;
+    private final String fullIndexName;
 	
-	public IndexIT(boolean localIndex, boolean mutable) {
+	public IndexIT(boolean localIndex, boolean mutable, boolean transactional) {
 		this.localIndex = localIndex;
 		StringBuilder optionBuilder = new StringBuilder();
 		if (!mutable) 
 			optionBuilder.append(" IMMUTABLE_ROWS=true ");
+		if (transactional) {
+			if (!(optionBuilder.length()==0))
+				optionBuilder.append(",");
+			optionBuilder.append(" TRANSACTIONAL=true ");
+		}
 		this.tableDDLOptions = optionBuilder.toString();
+		this.tableName = TestUtil.DEFAULT_DATA_TABLE_NAME + ( transactional ?  "_TXN" : "");
+        this.indexName = "IDX" + ( transactional ?  "_TXN" : "");
+        this.fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+        this.fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
 	}
 	
-	@Parameters(name="localIndex = {0} , mutable = {1}")
+	@Parameters(name="localIndex = {0} , mutable = {1} , transactional = {2}")
     public static Collection<Boolean[]> data() {
         return Arrays.asList(new Boolean[][] {     
-                 { false, false }, { false, true },
-                 { true, false }, { true, true }
+                 { false, false, false }, { false, false, true }, { false, true, false }, { false, true, true }, 
+                 { true, false, false }, { true, false, true }, { true, true, false }, { true, true, true }
            });
     }
 
@@ -66,10 +78,6 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
 	        conn.setAutoCommit(false);
-	        // create unique table and index names for each parameterized test
-	        String tableName = TestUtil.DEFAULT_DATA_TABLE_NAME + "_" + System.currentTimeMillis();
-	        String indexName = "IDX"  + "_" + System.currentTimeMillis();
-	        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
 	        String ddl ="CREATE TABLE " + fullTableName + BaseTest.TEST_TABLE_SCHEMA + tableDDLOptions;
 	        Statement stmt = conn.createStatement();
 	        stmt.execute(ddl);
@@ -122,16 +130,10 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
     }
     
     @Test
-    @Ignore("Failing due to zero byte incorrectly being stripped from row key") // FIXME: fixed in master, so remove this ignore tag when merged.
     public void testDeleteFromAllPKColumnIndex() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
 	        conn.setAutoCommit(false);
-	        // create unique table and index names for each parameterized test
-	        String tableName = TestUtil.DEFAULT_DATA_TABLE_NAME + "_" + System.currentTimeMillis();
-	        String indexName = "IDX"  + "_" + System.currentTimeMillis();
-	        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
-	        String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
 	        String ddl ="CREATE TABLE " + fullTableName + BaseTest.TEST_TABLE_SCHEMA + tableDDLOptions;
 	        Statement stmt = conn.createStatement();
 	        stmt.execute(ddl);
@@ -185,11 +187,6 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testDeleteFromNonPKColumnIndex() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        // create unique table and index names for each parameterized test
-        String tableName = TestUtil.DEFAULT_DATA_TABLE_NAME + "_" + System.currentTimeMillis();
-        String indexName = "IDX"  + "_" + System.currentTimeMillis();
-        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
-        String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
         String ddl ="CREATE TABLE " + fullTableName + BaseTest.TEST_TABLE_SCHEMA + tableDDLOptions;
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
 	        conn.setAutoCommit(false);
@@ -242,10 +239,6 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
     	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
     	try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
 	        conn.setAutoCommit(false);
-	        // create unique table and index names for each parameterized test
-	        String tableName = TestUtil.DEFAULT_DATA_TABLE_NAME + "_" + System.currentTimeMillis();
-	        String indexName = "IDX"  + "_" + System.currentTimeMillis();
-	        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
 	        String ddl ="CREATE TABLE " + fullTableName + BaseTest.TEST_TABLE_SCHEMA + tableDDLOptions;
 	        Statement stmt = conn.createStatement();
 	        stmt.execute(ddl);
@@ -264,10 +257,6 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
     	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
     	try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
 	        conn.setAutoCommit(false);
-	        // create unique table and index names for each parameterized test
-	        String tableName = TestUtil.DEFAULT_DATA_TABLE_NAME + "_" + System.currentTimeMillis();
-	        String indexName = "IDX"  + "_" + System.currentTimeMillis();
-	        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
 	        String ddl ="CREATE TABLE " + fullTableName + BaseTest.TEST_TABLE_SCHEMA + tableDDLOptions;
 	        Statement stmt = conn.createStatement();
 	        stmt.execute(ddl);
@@ -291,10 +280,6 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
     	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
     	try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
 	        conn.setAutoCommit(false);
-	        // create unique table and index names for each parameterized test
-	        String tableName = TestUtil.DEFAULT_DATA_TABLE_NAME + "_" + System.currentTimeMillis();
-	        String indexName = "IDX"  + "_" + System.currentTimeMillis();
-	        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
 	        String ddl ="CREATE TABLE " + fullTableName + BaseTest.TEST_TABLE_SCHEMA + tableDDLOptions;
 	        Statement stmt = conn.createStatement();
 	        stmt.execute(ddl);
@@ -319,11 +304,6 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
 	        conn.setAutoCommit(false);
 	        String query;
             ResultSet rs;
-	        // create unique table and index names for each parameterized test
-	        String tableName = TestUtil.DEFAULT_DATA_TABLE_NAME + "_" + System.currentTimeMillis();
-	        String indexName = "IDX"  + "_" + System.currentTimeMillis();
-	        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
-	        String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
 	        String ddl ="CREATE TABLE " + fullTableName 
 	        		+ " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) DEFAULT_COLUMN_FAMILY='A'" + (!tableDDLOptions.isEmpty() ? "," + tableDDLOptions : "");
 	        Statement stmt = conn.createStatement();
@@ -361,11 +341,6 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
     	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
 	        conn.setAutoCommit(false);
-	        // create unique table and index names for each parameterized test
-	        String tableName = TestUtil.DEFAULT_DATA_TABLE_NAME + "_" + System.currentTimeMillis();
-	        String indexName = "IDX"  + "_" + System.currentTimeMillis();
-	        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
-	        String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
             Date date = new Date(System.currentTimeMillis());
             
             createMultiCFTestTable(fullTableName, tableDDLOptions);
@@ -423,12 +398,6 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
 	        conn.setAutoCommit(false);
 	        String query;
 	        ResultSet rs;
-	        // create unique table and index names for each parameterized test
-	        String tableName = TestUtil.DEFAULT_DATA_TABLE_NAME + "_" + System.currentTimeMillis();
-	        String indexName = "IDX"  + "_" + System.currentTimeMillis();
-	        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
-	        String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
-	        
 	        String ddl = "CREATE TABLE " + fullTableName + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) " + tableDDLOptions;
 			conn.createStatement().execute(ddl);
 	        query = "SELECT * FROM " + fullTableName;
@@ -504,12 +473,6 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
 	        conn.setAutoCommit(false);
 	        String query;
 	        ResultSet rs;
-	        // create unique table and index names for each parameterized test
-	        String tableName = TestUtil.DEFAULT_DATA_TABLE_NAME + "_" + System.currentTimeMillis();
-	        String indexName = "IDX"  + "_" + System.currentTimeMillis();
-	        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
-	        String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
-	        
 	        String ddl = "CREATE TABLE " + fullTableName + " (k VARCHAR NOT NULL PRIMARY KEY, a.v1 VARCHAR, a.v2 VARCHAR, b.v1 VARCHAR) " + tableDDLOptions;
 			conn.createStatement().execute(ddl);
 	        query = "SELECT * FROM " + fullTableName;
@@ -567,12 +530,6 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
 	        conn.setAutoCommit(false);
 	        String query;
 	        ResultSet rs;
-	        // create unique table and index names for each parameterized test
-	        String tableName = TestUtil.DEFAULT_DATA_TABLE_NAME + "_" + System.currentTimeMillis();
-	        String indexName = "IDX"  + "_" + System.currentTimeMillis();
-	        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
-	        String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
-    
 	        // make sure that the tables are empty, but reachable
 	        conn.createStatement().execute(
 	          "CREATE TABLE " + fullTableName
@@ -629,34 +586,29 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testMultipleUpdatesAcrossRegions() throws Exception {
     	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    	String testTable = fullTableName+"_MULTIPLE_UPDATES";
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
 	        conn.setAutoCommit(false);
 	        String query;
 	        ResultSet rs;
-	        // create unique table and index names for each parameterized test
-	        String tableName = TestUtil.DEFAULT_DATA_TABLE_NAME + "_" + System.currentTimeMillis();
-	        String indexName = "IDX"  + "_" + System.currentTimeMillis();
-	        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
-	        String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
-    
 	        // make sure that the tables are empty, but reachable
 	        conn.createStatement().execute(
-	          "CREATE TABLE " + fullTableName
+	          "CREATE TABLE " + testTable
 	              + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) "  + HTableDescriptor.MAX_FILESIZE + "=1, " + HTableDescriptor.MEMSTORE_FLUSHSIZE + "=1 " 
 	        		  + (!tableDDLOptions.isEmpty() ? "," + tableDDLOptions : "") + "SPLIT ON ('b')");
-	        query = "SELECT * FROM " + fullTableName;
+	        query = "SELECT * FROM " + testTable;
 	        rs = conn.createStatement().executeQuery(query);
 	        assertFalse(rs.next());
 	
 	        conn.createStatement().execute(
-	  	          "CREATE " + (localIndex ? "LOCAL " : "") + "INDEX " + indexName + " ON " + fullTableName + " (v1, v2)");
+	  	          "CREATE " + (localIndex ? "LOCAL " : "") + "INDEX " + indexName + " ON " + testTable + " (v1, v2)");
 	        query = "SELECT * FROM " + fullIndexName;
 	        rs = conn.createStatement().executeQuery(query);
 	        assertFalse(rs.next());
 	    
 	        // load some data into the table
 	        PreparedStatement stmt =
-	            conn.prepareStatement("UPSERT INTO " + fullTableName + " VALUES(?,?,?)");
+	            conn.prepareStatement("UPSERT INTO " + testTable + " VALUES(?,?,?)");
 	        stmt.setString(1, "a");
 	        stmt.setString(2, "x");
 	        stmt.setString(3, "1");
@@ -688,10 +640,10 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
 	        assertEquals("c", rs.getString(3));
 	        assertFalse(rs.next());
 	
-	        query = "SELECT * FROM " + fullTableName;
+	        query = "SELECT * FROM " + testTable;
 	        rs = conn.createStatement().executeQuery("EXPLAIN " + query);
 	        if (localIndex) {
-	            assertEquals("CLIENT PARALLEL 2-WAY RANGE SCAN OVER _LOCAL_IDX_" + fullTableName+" [-32768]\n"
+	            assertEquals("CLIENT PARALLEL 2-WAY RANGE SCAN OVER _LOCAL_IDX_" + testTable+" [-32768]\n"
 	                       + "    SERVER FILTER BY FIRST KEY ONLY\n"
 	                       + "CLIENT MERGE SORT",
 	                QueryUtil.getExplainPlan(rs));
@@ -726,12 +678,6 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
 	        conn.setAutoCommit(false);
 	        String query;
 	        ResultSet rs;
-	        // create unique table and index names for each parameterized test
-	        String tableName = TestUtil.DEFAULT_DATA_TABLE_NAME + "_" + System.currentTimeMillis();
-	        String indexName = "IDX"  + "_" + System.currentTimeMillis();
-	        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
-	        String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
-	        
             conn.createStatement().execute("CREATE TABLE " + fullTableName + " (k VARCHAR NOT NULL PRIMARY KEY, \"V1\" VARCHAR, \"v2\" VARCHAR)"+tableDDLOptions);
             query = "SELECT * FROM "+fullTableName;
             rs = conn.createStatement().executeQuery(query);
@@ -815,11 +761,6 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
 	        conn.setAutoCommit(false);
 	        String query;
 	        ResultSet rs;
-	        // create unique table and index names for each parameterized test
-	        String tableName = TestUtil.DEFAULT_DATA_TABLE_NAME + "_" + System.currentTimeMillis();
-	        String indexName = "IDX"  + "_" + System.currentTimeMillis();
-	        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
-	        
 	        String ddl = "CREATE TABLE " + fullTableName +"  (PK1 CHAR(2) NOT NULL PRIMARY KEY, CF1.COL1 BIGINT) " + tableDDLOptions;
 	        conn.createStatement().execute(ddl);
 	        ddl = "CREATE " + (localIndex ? "LOCAL " : "") + "INDEX " + indexName + " ON " + fullTableName + "(COL1)";
@@ -838,11 +779,6 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
 	        conn.setAutoCommit(false);
 	        String query;
 	        ResultSet rs;
-	        // create unique table and index names for each parameterized test
-	        String tableName = TestUtil.DEFAULT_DATA_TABLE_NAME + "_" + System.currentTimeMillis();
-	        String indexName = "IDX"  + "_" + System.currentTimeMillis();
-	        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
-	        String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
             Date date = new Date(System.currentTimeMillis());
             
             createMultiCFTestTable(fullTableName, tableDDLOptions);

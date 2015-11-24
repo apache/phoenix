@@ -272,6 +272,13 @@ public class MetaDataUtil {
         return false;
     }
     
+    public static boolean isTransactional(Mutation m, KeyValueBuilder builder, ImmutableBytesWritable ptr) {
+        if (getMutationValue(m, PhoenixDatabaseMetaData.TRANSACTIONAL_BYTES, builder, ptr)) {
+            return Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(ptr));
+        }
+        return false;
+    }
+    
     public static boolean isSalted(Mutation m, KeyValueBuilder builder, ImmutableBytesWritable ptr) {
         return MetaDataUtil.getMutationValue(m, PhoenixDatabaseMetaData.SALT_BUCKETS_BYTES, builder, ptr);
     }

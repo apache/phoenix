@@ -48,6 +48,7 @@ import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.ScanUtil;
+import org.apache.phoenix.util.TransactionUtil;
 
 import com.google.common.collect.Lists;
 
@@ -179,7 +180,14 @@ public class PostDDLCompiler {
                         };
                         PhoenixStatement statement = new PhoenixStatement(connection);
                         StatementContext context = new StatementContext(statement, resolver, scan, new SequenceManager(statement));
-                        ScanUtil.setTimeRange(scan, timestamp);
+                        long ts = timestamp;
+                        // FIXME: DDL operations aren't transactional, so we're basing the timestamp on a server timestamp.
+                        // Not sure what the fix should be. We don't need conflict detection nor filtering of invalid transactions
+                        // in this case, so maybe this is ok.
+                        if (tableRef.getTable().isTransactional()) {
+                            ts = TransactionUtil.convertToNanoseconds(ts);
+                        }
+                        ScanUtil.setTimeRange(scan, ts);
                         if (emptyCF != null) {
                             scan.setAttribute(BaseScannerRegionObserver.EMPTY_CF, emptyCF);
                         }

@@ -22,6 +22,8 @@ import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 
+import co.cask.tephra.Transaction;
+
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.cache.GlobalCache;
@@ -46,8 +48,10 @@ public class PhoenixIndexMetaData implements IndexMetaData {
         byte[] uuid = attributes.get(PhoenixIndexCodec.INDEX_UUID);
         if (uuid == null) { return IndexMetaDataCache.EMPTY_INDEX_META_DATA_CACHE; }
         byte[] md = attributes.get(PhoenixIndexCodec.INDEX_MD);
+        byte[] txState = attributes.get(BaseScannerRegionObserver.TX_STATE);
         if (md != null) {
             final List<IndexMaintainer> indexMaintainers = IndexMaintainer.deserialize(md);
+            final Transaction txn = MutationState.decodeTransaction(txState);
             return new IndexMetaDataCache() {
 
                 @Override
@@ -56,6 +60,11 @@ public class PhoenixIndexMetaData implements IndexMetaData {
                 @Override
                 public List<IndexMaintainer> getIndexMaintainers() {
                     return indexMaintainers;
+                }
+
+                @Override
+                public Transaction getTransaction() {
+                    return txn;
                 }
 
             };
@@ -78,6 +87,10 @@ public class PhoenixIndexMetaData implements IndexMetaData {
     public PhoenixIndexMetaData(RegionCoprocessorEnvironment env, Map<String,byte[]> attributes) throws IOException {
         this.indexMetaDataCache = getIndexMetaData(env, attributes);
         this.attributes = attributes;
+    }
+    
+    public Transaction getTransaction() {
+        return indexMetaDataCache.getTransaction();
     }
     
     public List<IndexMaintainer> getIndexMaintainers() {

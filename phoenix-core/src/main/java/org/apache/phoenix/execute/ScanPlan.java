@@ -151,7 +151,7 @@ public class ScanPlan extends BaseQueryPlan {
             return spoolingResultIteratorFactory;
         } else {
             return new ChunkedResultIterator.ChunkedResultIteratorFactory(
-                    spoolingResultIteratorFactory, table);
+                    spoolingResultIteratorFactory, context.getConnection().getMutationState(), table);
         }
     }
 

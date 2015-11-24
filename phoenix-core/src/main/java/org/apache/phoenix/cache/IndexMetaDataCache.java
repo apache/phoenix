@@ -23,6 +23,8 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 
+import co.cask.tephra.Transaction;
+
 import org.apache.phoenix.index.IndexMaintainer;
 
 public interface IndexMetaDataCache extends Closeable {
@@ -36,6 +38,13 @@ public interface IndexMetaDataCache extends Closeable {
         public List<IndexMaintainer> getIndexMaintainers() {
             return Collections.emptyList();
         }
+
+        @Override
+        public Transaction getTransaction() {
+            return null;
+        }
+        
     };
     public List<IndexMaintainer> getIndexMaintainers();
+    public Transaction getTransaction();
 }
