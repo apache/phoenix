@@ -200,8 +200,6 @@ import org.apache.phoenix.util.UpgradeUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import co.cask.tephra.TxConstants;
-
 import com.google.common.base.Objects;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.ListMultimap;
@@ -209,6 +207,8 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.primitives.Ints;
+
+import co.cask.tephra.TxConstants;
 
 public class MetaDataClient {
     private static final Logger logger = LoggerFactory.getLogger(MetaDataClient.class);
@@ -1181,7 +1181,7 @@ public class MetaDataClient {
                     if (hbaseVersion < PhoenixDatabaseMetaData.MUTABLE_SI_VERSION_THRESHOLD) {
                         throw new SQLExceptionInfo.Builder(SQLExceptionCode.NO_MUTABLE_INDEXES).setTableName(indexTableName.getTableName()).build().buildException();
                     }
-                    if (!connection.getQueryServices().isMutableIndexWALCodecInstalled() && !dataTable.isTransactional()) {
+                    if (!connection.getQueryServices().hasIndexWALCodec() && !dataTable.isTransactional()) {
                         throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_MUTABLE_INDEX_CONFIG).setTableName(indexTableName.getTableName()).build().buildException();
                     }
                 }
@@ -2716,7 +2716,7 @@ public class MetaDataClient {
                             throw new SQLExceptionInfo.Builder(SQLExceptionCode.NO_MUTABLE_INDEXES)
                             .setSchemaName(schemaName).setTableName(tableName).build().buildException();
                         }
-                        if (connection.getQueryServices().isMutableIndexWALCodecInstalled() && !table.isTransactional()) {
+                        if (!connection.getQueryServices().hasIndexWALCodec() && !table.isTransactional()) {
                             throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_MUTABLE_INDEX_CONFIG)
                             .setSchemaName(schemaName).setTableName(tableName).build().buildException();
                         }

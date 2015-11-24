@@ -107,14 +107,14 @@ public class MetaDataUtil {
     }
     
     // TODO: generalize this to use two bytes to return a SQL error code instead
-    public static long encodeMutableIndexConfiguredProperly(long version, boolean isValid) {
+    public static long encodeHasIndexWALCodec(long version, boolean isValid) {
         if (!isValid) {
             return version | 1;
         }
         return version;
     }
     
-    public static boolean decodeMutableIndexConfiguredProperly(long version) {
+    public static boolean decodeHasIndexWALCodec(long version) {
         return (version & 0xF) == 0;
     }
 
