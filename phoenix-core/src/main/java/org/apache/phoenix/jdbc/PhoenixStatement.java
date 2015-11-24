@@ -34,6 +34,7 @@ import java.text.Format;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -260,6 +261,12 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
                     final long startTime = System.currentTimeMillis();
                     try {
 						QueryPlan plan = stmt.compilePlan(PhoenixStatement.this, Sequence.ValueOp.VALIDATE_SEQUENCE);
+                        // Send mutations to hbase, so they are visible to subsequent reads.
+                        // Use original plan for data table so that data and immutable indexes will be sent
+                        // TODO: for joins, we need to iterate through all tables, but we need the original table,
+                        // not the projected table, so plan.getContext().getResolver().getTables() won't work.
+                        Iterator<TableRef> tableRefs = plan.getSourceRefs().iterator();
+                        connection.getMutationState().sendUncommitted(tableRefs);
                         plan = connection.getQueryServices().getOptimizer().optimize(PhoenixStatement.this, plan);
                          // this will create its own trace internally, so we don't wrap this
                          // whole thing in tracing
@@ -319,6 +326,12 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
                             try {
                                 MutationState state = connection.getMutationState();
                                 MutationPlan plan = stmt.compilePlan(PhoenixStatement.this, Sequence.ValueOp.VALIDATE_SEQUENCE);
+                                if (plan.getTargetRef() != null && plan.getTargetRef().getTable() != null && plan.getTargetRef().getTable().isTransactional()) {
+                                    state.startTransaction();
+                                }
+                                Iterator<TableRef> tableRefs = plan.getSourceRefs().iterator();
+                                state.sendUncommitted(tableRefs);
+                                state.checkpointIfNeccessary(plan);
                                 MutationState lastState = plan.execute();
                                 state.join(lastState);
                                 if (connection.getAutoCommit()) {
