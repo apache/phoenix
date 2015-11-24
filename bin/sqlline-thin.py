@@ -57,7 +57,15 @@ def cleanup_url(url):
 def get_serialization():
     default_serialization='PROTOBUF'
     env=os.environ.copy()
-    hbase_cmd = phoenix_utils.which('hbase')
+    if os.name == 'posix':
+      hbase_exec_name = 'hbase'
+    elif os.name == 'nt':
+      hbase_exec_name = 'hbase.cmd'
+    else:
+      print 'Unknown platform "%s", defaulting to HBase executable of "hbase"' % os.name
+      hbase_exec_name = 'hbase'
+
+    hbase_cmd = phoenix_utils.which(hbase_exec_name)
     if hbase_cmd is None:
         print 'Failed to find hbase executable on PATH, defaulting serialization to %s.' % default_serialization
         return default_serialization
@@ -141,7 +149,7 @@ java_cmd = java + ' -cp "' + phoenix_utils.hbase_conf_dir + os.pathsep + phoenix
     os.pathsep + phoenix_utils.hadoop_conf + os.pathsep + phoenix_utils.hadoop_classpath + '" -Dlog4j.configuration=file:' + \
     os.path.join(phoenix_utils.current_dir, "log4j.properties") + \
     " sqlline.SqlLine -d org.apache.phoenix.queryserver.client.Driver " + \
-    " -u jdbc:phoenix:thin:url='" + url + ";serialization=" + serialization + "'" + \
+    " -u \"jdbc:phoenix:thin:url=" + url + ";serialization=" + serialization + "\"" + \
     " -n none -p none --color=" + colorSetting + " --fastConnect=false --verbose=true " + \
     " --isolation=TRANSACTION_READ_COMMITTED " + sqlfile
 
