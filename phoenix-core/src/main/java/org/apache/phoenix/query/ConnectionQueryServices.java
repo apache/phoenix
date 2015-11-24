@@ -90,7 +90,7 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
 
     void clearTableRegionCache(byte[] tableName) throws SQLException;
 
-    boolean isMutableIndexWALCodecInstalled();
+    boolean hasIndexWALCodec();
     
     long createSequence(String tenantId, String schemaName, String sequenceName, long startWith, long incrementBy, long cacheSize, long minValue, long maxValue, boolean cycle, long timestamp) throws SQLException;
     long dropSequence(String tenantId, String schemaName, String sequenceName, long timestamp) throws SQLException;

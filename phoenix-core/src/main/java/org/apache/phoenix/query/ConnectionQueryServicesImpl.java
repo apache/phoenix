@@ -173,12 +173,6 @@ import org.apache.twill.zookeeper.ZKClients;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import co.cask.tephra.TransactionSystemClient;
-import co.cask.tephra.TxConstants;
-import co.cask.tephra.distributed.PooledClientProvider;
-import co.cask.tephra.distributed.TransactionServiceClient;
-import co.cask.tephra.hbase11.coprocessor.TransactionProcessor;
-
 import com.google.common.base.Joiner;
 import com.google.common.base.Throwables;
 import com.google.common.cache.Cache;
@@ -216,7 +210,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     // Lowest HBase version on the cluster.
     private int lowestClusterHBaseVersion = Integer.MAX_VALUE;
-    private boolean isMutableIndexWALCodecInstalled = true;
+    private boolean hasIndexWALCodec = true;
 
     @GuardedBy("connectionCountLock")
     private int connectionCount = 0;
@@ -1052,11 +1046,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     	}
     }
 
-    private static boolean isInvalidMutableIndexConfig(Long serverVersion) {
+    private static boolean hasIndexWALCodec(Long serverVersion) {
         if (serverVersion == null) {
-            return false;
+            return true;
         }
-        return !MetaDataUtil.decodeMutableIndexConfiguredProperly(serverVersion);
+        return MetaDataUtil.decodeHasIndexWALCodec(serverVersion);
     }
 
     private static boolean isCompatible(Long serverVersion) {
@@ -1108,7 +1102,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     buf.append(name);
                     buf.append(';');
                 }
-                isMutableIndexWALCodecInstalled &= !isInvalidMutableIndexConfig(result.getValue());
+                hasIndexWALCodec &= hasIndexWALCodec(result.getValue());
                 if (minHBaseVersion > MetaDataUtil.decodeHBaseVersion(result.getValue())) {
                     minHBaseVersion = MetaDataUtil.decodeHBaseVersion(result.getValue());
                 }
@@ -2490,8 +2484,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     @Override
-    public boolean isMutableIndexWALCodecInstalled() {
-        return isMutableIndexWALCodecInstalled;
+    public boolean hasIndexWALCodec() {
+        return hasIndexWALCodec;
     }
 
     /**
