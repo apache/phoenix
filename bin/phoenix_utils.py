@@ -85,8 +85,11 @@ def setPath():
         # else fall back to HBASE_HOME
         if os.getenv('HBASE_HOME'):
             hbase_conf_dir = os.path.join(os.getenv('HBASE_HOME'), "conf")
+        elif os.name == 'posix':
+            # default to the bigtop configuration dir
+            hbase_conf_dir = '/etc/hbase/conf'
         else:
-            # default to pwd
+            # Try to provide something valid
             hbase_conf_dir = '.'
     global hbase_conf_path # keep conf_path around for backward compatibility
     hbase_conf_path = hbase_conf_dir
@@ -114,7 +117,15 @@ def setPath():
     phoenix_test_jar_path = os.path.join(current_dir, "..", "phoenix-core", "target","*")
 
     global hadoop_conf
-    hadoop_conf = os.getenv('HADOOP_CONF_DIR', '')
+    hadoop_conf = os.getenv('HADOOP_CONF_DIR', None)
+    if not hadoop_conf:
+        if os.name == 'posix':
+            # Try to provide a sane configuration directory for Hadoop if not otherwise provided.
+            # If there's no jaas file specified by the caller, this is necessary when Kerberos is enabled.
+            hadoop_conf = '/etc/hadoop/conf'
+        else:
+            # Try to provide something valid..
+            hadoop_conf = '.'
 
     global hadoop_classpath
     if (os.name != 'nt'):
