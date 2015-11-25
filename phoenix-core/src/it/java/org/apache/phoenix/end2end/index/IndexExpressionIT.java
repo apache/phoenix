@@ -151,7 +151,7 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeIT {
             // verify that the query does a range scan on the index table
             ResultSet rs = stmt.executeQuery("EXPLAIN " + whereSql);
             assertEquals(
-                    localIndex ? "CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_INDEX_TEST."
+                    localIndex ? "CLIENT PARALLEL 1-WAY RANGE SCAN OVER INDEX_TEST."
                             + dataTableName
                             + " [-32768,'VARCHAR1_CHAR1 _A.VARCHAR1_B.CHAR1   ',3,'2015-01-02 00:00:00.000',1,420,156,800,000,1,420,156,800,000]\nCLIENT MERGE SORT"
                             : "CLIENT PARALLEL 1-WAY RANGE SCAN OVER INDEX_TEST.IDX ['VARCHAR1_CHAR1 _A.VARCHAR1_B.CHAR1   ',3,'2015-01-02 00:00:00.000',1,420,156,800,000,1,420,156,800,000]",
@@ -173,7 +173,7 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeIT {
                     + "from "
                     + fullDataTableName;
             rs = conn.createStatement().executeQuery("EXPLAIN " + indexSelectSql);
-            assertEquals(localIndex ? "CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_" + fullDataTableName
+            assertEquals(localIndex ? "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + fullDataTableName
                     + " [-32768]\nCLIENT MERGE SORT" : "CLIENT PARALLEL 1-WAY FULL SCAN OVER INDEX_TEST.IDX",
                     QueryUtil.getExplainPlan(rs));
             rs = conn.createStatement().executeQuery(indexSelectSql);
@@ -478,7 +478,7 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeIT {
                     + " GROUP BY (int_col1+int_col2)";
             ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + groupBySql);
             String expectedPlan = "CLIENT PARALLEL 1-WAY "
-                    + (localIndex ? "RANGE SCAN OVER _LOCAL_IDX_" + fullDataTableName + " [-32768]"
+                    + (localIndex ? "RANGE SCAN OVER " + fullDataTableName + " [-32768]"
                             : "FULL SCAN OVER INDEX_TEST.IDX")
                     + "\n    SERVER FILTER BY FIRST KEY ONLY\n    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [TO_BIGINT(\"(A.INT_COL1 + B.INT_COL2)\")]\nCLIENT MERGE SORT";
             assertEquals(expectedPlan, QueryUtil.getExplainPlan(rs));
@@ -529,7 +529,7 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeIT {
             String sql = "SELECT distinct int_col1+1 FROM " + fullDataTableName + " where int_col1+1 > 0";
             ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + sql);
             String expectedPlan = "CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
-                    + (localIndex ? "_LOCAL_IDX_" + fullDataTableName + " [-32768,0] - [-32768,*]"
+                    + (localIndex ? fullDataTableName + " [-32768,0] - [-32768,*]"
                             : "INDEX_TEST.IDX [0] - [*]")
                     + "\n    SERVER FILTER BY FIRST KEY ONLY\n    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [TO_BIGINT(\"(A.INT_COL1 + 1)\")]\nCLIENT MERGE SORT";
             assertEquals(expectedPlan, QueryUtil.getExplainPlan(rs));
@@ -581,7 +581,7 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeIT {
             String sql = "SELECT int_col1+1 FROM " + fullDataTableName + " where int_col1+1 IN (2)";
             ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + sql);
             assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
-                    + (localIndex ? "_LOCAL_IDX_" + fullDataTableName + " [-32768,2]\n    SERVER FILTER BY FIRST KEY ONLY\nCLIENT MERGE SORT"
+                    + (localIndex ? fullDataTableName + " [-32768,2]\n    SERVER FILTER BY FIRST KEY ONLY\nCLIENT MERGE SORT"
                             : "INDEX_TEST.IDX [2]\n    SERVER FILTER BY FIRST KEY ONLY"), QueryUtil.getExplainPlan(rs));
             rs = conn.createStatement().executeQuery(sql);
             assertTrue(rs.next());
@@ -629,7 +629,7 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeIT {
             String sql = "SELECT int_col1+1 AS foo FROM " + fullDataTableName + " ORDER BY foo";
             ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + sql);
             assertEquals("CLIENT PARALLEL 1-WAY "
-                    + (localIndex ? "RANGE SCAN OVER _LOCAL_IDX_" + fullDataTableName
+                    + (localIndex ? "RANGE SCAN OVER " + fullDataTableName
                             + " [-32768]\n    SERVER FILTER BY FIRST KEY ONLY\nCLIENT MERGE SORT"
                             : "FULL SCAN OVER INDEX_TEST.IDX\n    SERVER FILTER BY FIRST KEY ONLY"),
                     QueryUtil.getExplainPlan(rs));
@@ -694,7 +694,7 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeIT {
             query = "SELECT (\"V1\" || '_' || \"v2\"), k, \"V1\", \"v2\"  FROM cs WHERE (\"V1\" || '_' || \"v2\") = 'x_1'";
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
             if(localIndex){
-                assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_CS [-32768,'x_1']\n"
+                assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER CS [-32768,'x_1']\n"
                            + "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
             } else {
                 assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER ICS ['x_1']", QueryUtil.getExplainPlan(rs));
@@ -716,7 +716,7 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeIT {
             query = "SELECT \"V1\", \"V1\" as foo1, (\"V1\" || '_' || \"v2\") as foo, (\"V1\" || '_' || \"v2\") as \"Foo1\", (\"V1\" || '_' || \"v2\") FROM cs ORDER BY foo";
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
             if(localIndex){
-                assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_CS [-32768]\nCLIENT MERGE SORT",
+                assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER CS [-32768]\nCLIENT MERGE SORT",
                     QueryUtil.getExplainPlan(rs));
             } else {
                 assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER ICS", QueryUtil.getExplainPlan(rs));
@@ -790,7 +790,7 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeIT {
             String sql = "SELECT int_col1+1, int_col2 FROM " + fullDataTableName + " WHERE int_col1+1=2";
             ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + sql);
             assertEquals("CLIENT PARALLEL 1-WAY "
-                    + (localIndex ? "RANGE SCAN OVER _LOCAL_IDX_" + fullDataTableName
+                    + (localIndex ? "RANGE SCAN OVER " + fullDataTableName
                             + " [-32768,2]\n    SERVER FILTER BY FIRST KEY ONLY\nCLIENT MERGE SORT" : "FULL SCAN OVER "
                             + fullDataTableName + "\n    SERVER FILTER BY (A.INT_COL1 + 1) = 2"),
                     QueryUtil.getExplainPlan(rs));
@@ -1162,7 +1162,7 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeIT {
 	        rs = conn.createStatement().executeQuery("EXPLAIN " + query);
 	        String queryPlan = QueryUtil.getExplainPlan(rs);
 	        if (local) {
-	            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_T [-32768,173]\n" + "CLIENT MERGE SORT",
+	            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER T [-32768,173]\n" + "CLIENT MERGE SORT",
 	                    queryPlan);
 	        } else {
 	            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_T [" + Short.MIN_VALUE + ",173]", queryPlan);
@@ -1181,7 +1181,7 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeIT {
 	        query = "SELECT k1, k2, s1||'_'||s2 FROM v WHERE (s1||'_'||s2)='foo2_bar2'";
 	        rs = conn.createStatement().executeQuery("EXPLAIN " + query);
 	        if (local) {
-	            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_T [" + (Short.MIN_VALUE + 1)
+	            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER T [" + (Short.MIN_VALUE + 1)
 	                    + ",'foo2_bar2']\n" + "    SERVER FILTER BY FIRST KEY ONLY\n" + "CLIENT MERGE SORT",
 	                    QueryUtil.getExplainPlan(rs));
 	        } else {
@@ -1324,7 +1324,7 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeIT {
 			rs = conn.createStatement().executeQuery("EXPLAIN " + query);
 			if (localIndex) {
 				assertEquals(
-						"CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_T [-32768,'id:id1']\n"
+						"CLIENT PARALLEL 1-WAY RANGE SCAN OVER T [-32768,'id:id1']\n"
 								+ "    SERVER FILTER BY FIRST KEY ONLY\nCLIENT MERGE SORT",
 						QueryUtil.getExplainPlan(rs));
 			} else {

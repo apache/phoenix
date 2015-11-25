@@ -293,4 +293,10 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
             throws SQLException {
         return getDelegate().dropFunction(tableMetadata, ifExists);
     }
+
+	@Override
+	public HRegionLocation getTableRegionLocation(byte[] tableName, byte[] row)
+			throws SQLException {
+		return getDelegate().getTableRegionLocation(tableName, row);
+	}
 }

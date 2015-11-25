@@ -53,6 +53,7 @@ import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.parse.AlterIndexStatement;
 import org.apache.phoenix.parse.ParseNodeFactory;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PIndexState;
@@ -80,6 +81,9 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
         HRegionInfo childRegion = region.getRegionInfo();
         byte[] splitKey = null;
         if (reader == null && r != null) {
+            if(!p.toString().contains(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
+                return super.preStoreFileReaderOpen(ctx, fs, p, in, size, cacheConf, r, reader);
+            }
             Scan scan = MetaTableAccessor.getScanForTableName(tableName);
             SingleColumnValueFilter scvf = null;
             if (Reference.isTopFileRegion(r.getFileRegion())) {
@@ -110,7 +114,9 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
                             MetaTableAccessor.getRegionsFromMergeQualifier(ctx.getEnvironment()
                                     .getRegionServerServices().getConnection(),
                                 region.getRegionInfo().getRegionName());
-                    if (mergeRegions == null || mergeRegions.getFirst() == null) return reader;
+                    if (mergeRegions == null || mergeRegions.getFirst() == null) {
+                        return reader;
+                    }    
                     byte[] splitRow =
                             CellUtil.cloneRow(KeyValue.createKeyValueFromKey(r.getSplitKey()));
                     // We need not change any thing in first region data because first region start key
@@ -136,8 +142,7 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
             try {
                 conn = QueryUtil.getConnection(ctx.getEnvironment().getConfiguration()).unwrap(
                             PhoenixConnection.class);
-                String userTableName = MetaDataUtil.getUserTableName(tableName.getNameAsString());
-                PTable dataTable = PhoenixRuntime.getTable(conn, userTableName);
+                PTable dataTable = PhoenixRuntime.getTable(conn, tableName.getNameAsString());
                 List<PTable> indexes = dataTable.getIndexes();
                 Map<ImmutableBytesWritable, IndexMaintainer> indexMaintainers =
                         new HashMap<ImmutableBytesWritable, IndexMaintainer>();
@@ -171,59 +176,6 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
         return reader;
     }
     
-    @Override
-    public InternalScanner preCompactScannerOpen(ObserverContext<RegionCoprocessorEnvironment> c,
-            Store store, List<? extends KeyValueScanner> scanners, ScanType scanType,
-            long earliestPutTs, InternalScanner s, CompactionRequest request) throws IOException {
-        InternalScanner internalScanner = super.preCompactScannerOpen(c, store, scanners, scanType, earliestPutTs, s, request);
-        Collection<StoreFile> files = request.getFiles();
-        storeFilesCount = 0;
-        compactedFilesCount = 0;
-        for(StoreFile file:files) {
-            if(!file.isReference()) {
-                return internalScanner;
-            }
-        }
-        storeFilesCount = files.size();
-        return internalScanner;
-    }
-
-    @Override
-    public void postCompact(ObserverContext<RegionCoprocessorEnvironment> e, Store store,
-            StoreFile resultFile) throws IOException {
-        super.postCompact(e, store, resultFile);
-        if(storeFilesCount > 0) compactedFilesCount++;
-        if(compactedFilesCount == storeFilesCount) {
-            PhoenixConnection conn = null;
-            try {
-                conn = QueryUtil.getConnection(e.getEnvironment().getConfiguration()).unwrap(
-                    PhoenixConnection.class);
-                MetaDataClient client = new MetaDataClient(conn);
-                String userTableName = MetaDataUtil.getUserTableName(e.getEnvironment().getRegion().getTableDesc().getNameAsString());
-                PTable dataTable = PhoenixRuntime.getTable(conn, userTableName);
-                List<PTable> indexes = dataTable.getIndexes();
-                for (PTable index : indexes) {
-                    if (index.getIndexType() == IndexType.LOCAL) {
-                        AlterIndexStatement indexStatement = FACTORY.alterIndex(FACTORY.namedTable(null,
-                            org.apache.phoenix.parse.TableName.create(index.getSchemaName().getString(), index.getTableName().getString())),
-                            dataTable.getTableName().getString(), false, PIndexState.ACTIVE);
-                        client.alterIndex(indexStatement);
-                    }
-                }
-                conn.commit();
-            } catch (ClassNotFoundException ex) {
-            } catch (SQLException ex) {
-            } finally {
-                if (conn != null) {
-                    try {
-                        conn.close();
-                    } catch (SQLException ex) {
-                    }
-                }
-            }
-        }
-    }
-
     private byte[][] getViewConstants(PTable dataTable) {
         int dataPosOffset = (dataTable.getBucketNum() != null ? 1 : 0) + (dataTable.isMultiTenant() ? 1 : 0);
         byte[][] viewConstants = null;

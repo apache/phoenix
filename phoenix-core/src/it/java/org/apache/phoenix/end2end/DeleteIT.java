@@ -160,7 +160,7 @@ public class DeleteIT extends BaseHBaseManagedTimeIT {
         if (createIndex) {
             if (local) {
                 conn.createStatement().execute("CREATE LOCAL INDEX IF NOT EXISTS local_idx ON IntIntKeyTest(j)");
-                indexName = MetaDataUtil.getLocalIndexTableName("INTINTKEYTEST");
+                indexName = "INTINTKEYTEST";
             } else {
                 conn.createStatement().execute("CREATE INDEX IF NOT EXISTS idx ON IntIntKeyTest(j)");
             }
@@ -186,7 +186,9 @@ public class DeleteIT extends BaseHBaseManagedTimeIT {
         PreparedStatement stmt;
         conn.setAutoCommit(autoCommit);
         deleteStmt = "DELETE FROM IntIntKeyTest WHERE i >= ? and i < ?";
-        assertIndexUsed(conn, deleteStmt, Arrays.<Object>asList(5,10), indexName, false);
+        if(!local) {
+            assertIndexUsed(conn, deleteStmt, Arrays.<Object>asList(5,10), indexName, false);
+        }
         stmt = conn.prepareStatement(deleteStmt);
         stmt.setInt(1, 5);
         stmt.setInt(2, 10);
@@ -204,7 +206,9 @@ public class DeleteIT extends BaseHBaseManagedTimeIT {
         
         deleteStmt = "DELETE FROM IntIntKeyTest WHERE j IS NULL";
         stmt = conn.prepareStatement(deleteStmt);
-        assertIndexUsed(conn, deleteStmt, indexName, createIndex);
+        if(!local) {
+            assertIndexUsed(conn, deleteStmt, indexName, createIndex);
+        }
         stmt.execute();
         if (!autoCommit) {
             conn.commit();

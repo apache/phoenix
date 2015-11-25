@@ -121,7 +121,7 @@ public class TestIndexWriter {
     KillServerOnFailurePolicy policy = new KillServerOnFailurePolicy();
     policy.setup(stop, abort);
     IndexWriter writer = new IndexWriter(committer, policy);
-    writer.write(indexUpdates);
+    writer.write(indexUpdates, false);
     assertTrue("Writer returned before the table batch completed! Likely a race condition tripped",
       completed[0]);
     writer.stop(this.testName.getTableNameString() + " finished");
@@ -195,7 +195,7 @@ public class TestIndexWriter {
     policy.setup(stop, abort);
     IndexWriter writer = new IndexWriter(committer, policy);
     try {
-      writer.write(indexUpdates);
+      writer.write(indexUpdates, false);
       fail("Should not have successfully completed all index writes");
     } catch (SingleIndexWriteFailureException e) {
       LOG.info("Correctly got a failure to reach the index", e);
@@ -268,7 +268,7 @@ public class TestIndexWriter {
       @Override
       public void run() {
         try {
-          writer.write(indexUpdates);
+          writer.write(indexUpdates, false);
         } catch (IndexWriteException e) {
           failedWrite[0] = true;
         }

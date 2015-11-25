@@ -23,7 +23,6 @@ import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
 import java.io.PrintWriter;
 import java.sql.Connection;
@@ -205,7 +204,7 @@ public class CsvBulkLoadToolIT {
 
         Statement stmt = conn.createStatement();
         stmt.execute("CREATE TABLE TABLE6 (ID INTEGER NOT NULL PRIMARY KEY, " +
-                "FIRST_NAME VARCHAR, LAST_NAME VARCHAR)");
+                "FIRST_NAME VARCHAR, LAST_NAME VARCHAR) SPLIT ON (1,2)");
         String ddl = "CREATE LOCAL INDEX TABLE6_IDX ON TABLE6 "
                 + " (FIRST_NAME ASC)";
         stmt.execute(ddl);
@@ -221,16 +220,18 @@ public class CsvBulkLoadToolIT {
 
         CsvBulkLoadTool csvBulkLoadTool = new CsvBulkLoadTool();
         csvBulkLoadTool.setConf(hbaseTestUtil.getConfiguration());
-        try {
-            csvBulkLoadTool.run(new String[] {
-                    "--input", "/tmp/input3.csv",
-                    "--table", "table6",
-                    "--zookeeper", zkQuorum});
-            fail("Csv bulk load currently has issues with local indexes.");
-        } catch( UnsupportedOperationException ise) {
-            assertEquals("Local indexes not supported by CSV Bulk Loader",ise.getMessage());
-        }
-        
+        csvBulkLoadTool.run(new String[] {
+                "--input", "/tmp/input3.csv",
+                "--table", "table6",
+                "--zookeeper", zkQuorum});
+        ResultSet rs = stmt.executeQuery("SELECT * FROM TABLE6");
+        assertTrue(rs.next());
+        rs = stmt.executeQuery("SELECT FIRST_NAME FROM TABLE6 where FIRST_NAME='FirstName 1'");
+        assertTrue(rs.next());
+        assertEquals("FirstName 1", rs.getString(1));
+
+        rs.close();
+        stmt.close();
     }
 
     @Test
@@ -238,7 +239,7 @@ public class CsvBulkLoadToolIT {
         testImportOneIndexTable("TABLE4", false);
     }
 
-    //@Test
+    @Test
     public void testImportOneLocalIndexTable() throws Exception {
         testImportOneIndexTable("TABLE5", true);
     }
@@ -248,7 +249,7 @@ public class CsvBulkLoadToolIT {
         String indexTableName = String.format("%s_IDX", tableName);
         Statement stmt = conn.createStatement();
         stmt.execute("CREATE TABLE " + tableName + "(ID INTEGER NOT NULL PRIMARY KEY, "
-                + "FIRST_NAME VARCHAR, LAST_NAME VARCHAR)");
+                + "FIRST_NAME VARCHAR, LAST_NAME VARCHAR) SPLIT ON(1,2)");
         String ddl =
                 "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX " + indexTableName + " ON "
                         + tableName + "(FIRST_NAME ASC)";
@@ -269,9 +270,11 @@ public class CsvBulkLoadToolIT {
                 "--index-table", indexTableName,
                 "--zookeeper", zkQuorum });
         assertEquals(0, exitCode);
-
-        ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName);
-        assertFalse(rs.next());
+        ResultSet rs = null;
+        if(!localIndex) {
+            rs = stmt.executeQuery("SELECT * FROM " + tableName);
+            assertFalse(rs.next());
+        }
         rs = stmt.executeQuery("SELECT FIRST_NAME FROM " + tableName + " where FIRST_NAME='FirstName 1'");
         assertTrue(rs.next());
         assertEquals("FirstName 1", rs.getString(1));

@@ -25,11 +25,13 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Abortable;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.Stoppable;
+import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.phoenix.hbase.index.CapturingAbortable;
+import org.apache.phoenix.hbase.index.exception.IndexWriteException;
 import org.apache.phoenix.hbase.index.exception.MultiIndexWriteFailureException;
 import org.apache.phoenix.hbase.index.exception.SingleIndexWriteFailureException;
 import org.apache.phoenix.hbase.index.parallel.EarlyExitFailure;
@@ -110,7 +112,14 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
     }
 
     @Override
-    public void write(Multimap<HTableInterfaceReference, Mutation> toWrite) throws MultiIndexWriteFailureException {
+    public void write(Multimap<HTableInterfaceReference, Mutation> toWrite)
+            throws IndexWriteException {
+        write(toWrite, false);
+    }
+
+    @Override
+    public void write(Multimap<HTableInterfaceReference, Mutation> toWrite,
+            final boolean allowLocalUpdates) throws MultiIndexWriteFailureException {
         Set<Entry<HTableInterfaceReference, Collection<Mutation>>> entries = toWrite.asMap().entrySet();
         TaskBatch<Boolean> tasks = new TaskBatch<Boolean>(entries.size());
         List<HTableInterfaceReference> tables = new ArrayList<HTableInterfaceReference>(entries.size());
@@ -154,14 +163,18 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
                             // Also, checking the prefix of the table name to determine if this is a local
                             // index is pretty hacky. If we're going to keep this, we should revisit that
                             // as well.
-                            if (tableReference.getTableName().startsWith(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX)) {
-                                Region indexRegion = IndexUtil.getIndexRegion(env);
-                                if (indexRegion != null) {
-                                    throwFailureIfDone();
-                                    indexRegion.batchMutate(mutations.toArray(new Mutation[mutations.size()]),
+                            if (tableReference.getTableName().equals(
+                                env.getRegion().getTableDesc().getNameAsString())) {
+                                throwFailureIfDone();
+                                if(allowLocalUpdates) {
+                                    for (Mutation m : mutations) {
+                                        m.setDurability(Durability.SKIP_WAL);
+                                    }
+                                    env.getRegion().batchMutate(
+                                        mutations.toArray(new Mutation[mutations.size()]),
                                         HConstants.NO_NONCE, HConstants.NO_NONCE);
-                                    return Boolean.TRUE;
-                                }
+                                } 
+                                return Boolean.TRUE;
                             }
                         } catch (IOException ignord) {
                             // when it's failed we fall back to the standard & slow way
