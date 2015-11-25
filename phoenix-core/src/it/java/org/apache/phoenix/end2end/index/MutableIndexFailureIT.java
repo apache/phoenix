@@ -35,6 +35,7 @@ import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Timer;
 import java.util.TimerTask;
@@ -80,6 +81,8 @@ import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
+
+import com.google.common.collect.Maps;
 /**
  * 
  * Test for failure of region server to write to index table.
@@ -131,7 +134,9 @@ public class MutableIndexFailureIT extends BaseTest {
         String clientPort = util.getConfiguration().get(QueryServices.ZOOKEEPER_PORT_ATTRIB);
         url = JDBC_PROTOCOL + JDBC_PROTOCOL_SEPARATOR + LOCALHOST + JDBC_PROTOCOL_SEPARATOR + clientPort
                 + JDBC_PROTOCOL_TERMINATOR + PHOENIX_TEST_DRIVER_URL_PARAM;
-        driver = initAndRegisterDriver(url, ReadOnlyProps.EMPTY_PROPS);
+        Map<String,String> props = Maps.newHashMapWithExpectedSize(1);
+        props.put(QueryServices.TRANSACTIONS_ENABLED, Boolean.toString(true));
+        driver = initAndRegisterDriver(url, new ReadOnlyProps(props.entrySet().iterator()));
         clusterInitialized = true;
         setupTxManager();
     }

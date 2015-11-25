@@ -333,7 +333,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 User.login(config, HBASE_CLIENT_KEYTAB, HBASE_CLIENT_PRINCIPAL, null);
                 logger.info("Successfull login to secure cluster!!");
             }
-            initTxServiceClient();
+			boolean transactionsEnabled = config.getBoolean(
+					QueryServices.TRANSACTIONS_ENABLED,
+					QueryServicesOptions.DEFAULT_TRANSACTIONS_ENABLED);
+			// only initialize the tx service client if needed
+			if (transactionsEnabled) {
+				initTxServiceClient();
+			}
             this.connection = HBaseFactoryProvider.getHConnectionFactory().createConnection(this.config);
         } catch (IOException e) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_ESTABLISH_CONNECTION)

@@ -193,6 +193,8 @@ public class QueryServicesOptions {
     // We'll also need this for transactions to work correctly
     public static final boolean DEFAULT_AUTO_COMMIT = false;
     public static final boolean DEFAULT_TRANSACTIONAL = false;
+    public static final boolean DEFAULT_TABLE_ISTRANSACTIONAL = false;
+    public static final boolean DEFAULT_TRANSACTIONS_ENABLED = false;
     public static final boolean DEFAULT_IS_GLOBAL_METRICS_ENABLED = true;
     
     private static final String DEFAULT_CLIENT_RPC_CONTROLLER_FACTORY = ClientRpcControllerFactory.class.getName();
