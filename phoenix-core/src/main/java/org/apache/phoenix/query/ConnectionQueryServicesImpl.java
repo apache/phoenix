@@ -294,7 +294,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 .maximumSize(MAX_TABLE_STATS_CACHE_ENTRIES)
                 .expireAfterWrite(halfStatsUpdateFreq, TimeUnit.MILLISECONDS)
                 .build();
-        this.returnSequenceValues = config.getBoolean(QueryServices.RETURN_SEQUENCE_VALUES_ATTRIB, QueryServicesOptions.DEFAULT_RETURN_SEQUENCE_VALUES);
+        this.returnSequenceValues = props.getBoolean(QueryServices.RETURN_SEQUENCE_VALUES_ATTRIB, QueryServicesOptions.DEFAULT_RETURN_SEQUENCE_VALUES);
     }
 
     @Override
@@ -308,7 +308,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                   ZKClients.reWatchOnExpire(
                     ZKClients.retryOnFailure(
                       ZKClientService.Builder.of(zkQuorumServersString)
-                        .setSessionTimeout(config.getInt(HConstants.ZK_SESSION_TIMEOUT, HConstants.DEFAULT_ZK_SESSION_TIMEOUT))
+                        .setSessionTimeout(props.getInt(HConstants.ZK_SESSION_TIMEOUT, HConstants.DEFAULT_ZK_SESSION_TIMEOUT))
                         .build(),
                       RetryStrategies.exponentialDelay(500, 2000, TimeUnit.MILLISECONDS)
                     )
@@ -332,7 +332,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 User.login(config, HBASE_CLIENT_KEYTAB, HBASE_CLIENT_PRINCIPAL, null);
                 logger.info("Successfull login to secure cluster!!");
             }
-			boolean transactionsEnabled = config.getBoolean(
+			boolean transactionsEnabled = props.getBoolean(
 					QueryServices.TRANSACTIONS_ENABLED,
 					QueryServicesOptions.DEFAULT_TRANSACTIONS_ENABLED);
 			// only initialize the tx service client if needed
@@ -921,7 +921,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         boolean tableExist = true;
         try {
             final String quorum = ZKConfig.getZKQuorumServersString(config);
-            final String znode = config.get(HConstants.ZOOKEEPER_ZNODE_PARENT);
+            final String znode = this.props.get(HConstants.ZOOKEEPER_ZNODE_PARENT);
             logger.debug("Found quorum: " + quorum + ":" + znode);
             admin = new HBaseAdmin(config);
             try {
@@ -1183,7 +1183,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private void ensureViewIndexTableCreated(byte[] physicalTableName, Map<String,Object> tableProps, List<Pair<byte[],Map<String,Object>>> families, byte[][] splits, long timestamp) throws SQLException {
         Long maxFileSize = (Long)tableProps.get(HTableDescriptor.MAX_FILESIZE);
         if (maxFileSize == null) {
-            maxFileSize = this.config.getLong(HConstants.HREGION_MAX_FILESIZE, HConstants.DEFAULT_MAX_FILE_SIZE);
+            maxFileSize = this.props.getLong(HConstants.HREGION_MAX_FILESIZE, HConstants.DEFAULT_MAX_FILE_SIZE);
         }
         byte[] physicalIndexName = MetaDataUtil.getViewIndexPhysicalName(physicalTableName);
 
@@ -1191,7 +1191,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         // Get percentage to use from table props first and then fallback to config
         Integer indexMaxFileSizePercProp = (Integer)tableProps.remove(QueryServices.INDEX_MAX_FILESIZE_PERC_ATTRIB);
         if (indexMaxFileSizePercProp == null) {
-            indexMaxFileSizePerc = config.getInt(QueryServices.INDEX_MAX_FILESIZE_PERC_ATTRIB, QueryServicesOptions.DEFAULT_INDEX_MAX_FILESIZE_PERC);
+            indexMaxFileSizePerc = this.props.getInt(QueryServices.INDEX_MAX_FILESIZE_PERC_ATTRIB, QueryServicesOptions.DEFAULT_INDEX_MAX_FILESIZE_PERC);
         } else {
             indexMaxFileSizePerc = indexMaxFileSizePercProp;
         }
