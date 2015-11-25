@@ -80,7 +80,9 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_STATEMENT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE;
 import static org.apache.phoenix.query.QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT;
 import static org.apache.phoenix.query.QueryServices.DROP_METADATA_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.TRANSACTIONS_ENABLED;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_DROP_METADATA;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_TRANSACTIONS_ENABLED;
 import static org.apache.phoenix.schema.PTable.ViewType.MAPPED;
 import static org.apache.phoenix.schema.PTableType.TABLE;
 import static org.apache.phoenix.schema.PTableType.VIEW;
@@ -451,7 +453,7 @@ public class MetaDataClient {
         }
         
         boolean defaultTransactional = connection.getQueryServices().getProps().getBoolean(
-							                QueryServices.DEFAULT_TRANSACTIONAL_ATTRIB,
+							                QueryServices.DEFAULT_TABLE_ISTRANSACTIONAL_ATTRIB,
 							                QueryServicesOptions.DEFAULT_TRANSACTIONAL);
         // start a txn if all table are transactional by default or if we found the table in the cache and it is transactional
         // TODO if system tables become transactional remove the check 
@@ -1689,11 +1691,20 @@ public class MetaDataClient {
             if (parent == null) {
                 if (transactionalProp == null) {
                     transactional = connection.getQueryServices().getProps().getBoolean(
-                                    QueryServices.DEFAULT_TRANSACTIONAL_ATTRIB,
+                                    QueryServices.DEFAULT_TABLE_ISTRANSACTIONAL_ATTRIB,
                                     QueryServicesOptions.DEFAULT_TRANSACTIONAL);
                 } else {
                     transactional = transactionalProp;
                 }
+            }
+            boolean transactionsEnabled = connection.getQueryServices().getProps().getBoolean(
+											QueryServices.TRANSACTIONS_ENABLED,
+											QueryServicesOptions.DEFAULT_TRANSACTIONS_ENABLED);
+            // can't create a transactional table if transactions are not enabled
+            if (!transactionsEnabled && transactional) {
+                throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_CREATE_TXN_TABLE_IF_TXNS_DISABLED)
+                .setSchemaName(schemaName).setTableName(tableName)
+                .build().buildException();
             }
             tableProps.put(PhoenixDatabaseMetaData.TRANSACTIONAL, transactional);
             if (transactional) {
@@ -2626,6 +2637,14 @@ public class MetaDataClient {
                         // delete markers.
                         if (!isTransactional) {
                             throw new SQLExceptionInfo.Builder(SQLExceptionCode.TX_MAY_NOT_SWITCH_TO_NON_TX)
+                            .setSchemaName(schemaName).setTableName(tableName).build().buildException();
+                        }
+                        // cannot create a transactional table if transactions are disabled
+                        boolean transactionsEnabled = connection.getQueryServices().getProps().getBoolean(
+								QueryServices.TRANSACTIONS_ENABLED,
+								QueryServicesOptions.DEFAULT_TRANSACTIONS_ENABLED);
+                        if (!transactionsEnabled) {
+                        	throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_ALTER_TO_BE_TXN_IF_TXNS_DISABLED)
                             .setSchemaName(schemaName).setTableName(tableName).build().buildException();
                         }
                         timeStamp = TransactionUtil.getTableTimestamp(connection, isTransactional);
