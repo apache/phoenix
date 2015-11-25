@@ -2126,7 +2126,25 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.ROWTIMESTAMP_COL_INVALID_TYPE.getErrorCode(), e.getErrorCode());
         }
-        
-        
     }
+
+    @Test
+    public void testQueryWithSCN() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(1000));
+        props.put(QueryServices.TRANSACTIONS_ENABLED, Boolean.TRUE.toString());
+        try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
+            try {
+                conn.createStatement().execute(
+                                "CREATE TABLE t (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR) TRANSACTIONAL=true");
+                fail();
+            } catch (SQLException e) {
+                assertEquals("Unexpected Exception",
+                        SQLExceptionCode.CANNOT_START_TRANSACTION_WITH_SCN_SET
+                                .getErrorCode(), e.getErrorCode());
+            }
+        }
+    }
+
+
 }
