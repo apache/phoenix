@@ -100,9 +100,10 @@ public class TxWriteFailureIT extends BaseTest {
 				+ JDBC_PROTOCOL_SEPARATOR + clientPort
 				+ JDBC_PROTOCOL_TERMINATOR + PHOENIX_TEST_DRIVER_URL_PARAM;
 
-		Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
+		Map<String, String> props = Maps.newHashMapWithExpectedSize(2);
 		// Must update config before starting server
-		props.put(QueryServices.DEFAULT_TRANSACTIONAL_ATTRIB, Boolean.toString(true));
+		props.put(QueryServices.DEFAULT_TABLE_ISTRANSACTIONAL_ATTRIB, Boolean.toString(true));
+		props.put(QueryServices.TRANSACTIONS_ENABLED, Boolean.toString(true));
 		driver = initAndRegisterDriver(url, new ReadOnlyProps(props.entrySet().iterator()));
 		clusterInitialized = true;
 		setupTxManager();
