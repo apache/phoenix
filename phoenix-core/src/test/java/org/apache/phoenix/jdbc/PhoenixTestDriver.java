@@ -20,6 +20,7 @@ package org.apache.phoenix.jdbc;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Properties;
+import java.util.concurrent.ThreadPoolExecutor;
 
 import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
@@ -109,11 +110,13 @@ public class PhoenixTestDriver extends PhoenixEmbeddedDriver {
         }
         closed = true;
         try {
-            connectionQueryServices.close();
+            if (connectionQueryServices != null) connectionQueryServices.close();
         } finally {
+            ThreadPoolExecutor executor = queryServices.getExecutor();
             try {
                 queryServices.close();
             } finally {
+                if (executor != null) executor.shutdown();
                 connectionQueryServices = null;
             }
         }
