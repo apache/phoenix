@@ -61,10 +61,16 @@ public class ConnectionQueryServicesTestImpl extends ConnectionQueryServicesImpl
     @Override
     public void close() throws SQLException {
         try {
-            // Attempt to fix apparent memory leak...
             clearCache();
         } finally {
-            super.close();
+            try {
+                // Since ConnectionQueryServicesTestImpl is a singleton
+                // during testing, attempt to stop the Zookeeper client
+                // service when the driver is closed.
+                if (zkClientService != null) zkClientService.stopAndWait();
+            } finally {
+                super.close();
+            }
         }
     }
 }
