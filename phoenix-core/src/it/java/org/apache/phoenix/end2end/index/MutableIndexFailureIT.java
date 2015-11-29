@@ -95,6 +95,7 @@ import com.google.common.collect.Maps;
 
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
+@Ignore // see PHOENIX-2458 
 public class MutableIndexFailureIT extends BaseTest {
     private static final int NUM_SLAVES = 4;
     private static PhoenixTestDriver driver;
