@@ -202,11 +202,9 @@
         <artifactId>maven-failsafe-plugin</artifactId>
       </plugin>
       <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-dependency-plugin</artifactId>
         <version>${maven-dependency-plugin.version}</version>
-      </plugin>
-      <plugin>
-        <artifactId>maven-dependency-plugin</artifactId>
         <executions>
           <execution>
             <!-- generates the file that will be used by the sandbox script in the dev env -->
