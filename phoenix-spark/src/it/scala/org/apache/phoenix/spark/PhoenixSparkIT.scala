@@ -27,7 +27,9 @@ import org.apache.spark.sql.{Row, SaveMode, execution, SQLContext}
 import org.apache.spark.sql.types._
 import org.apache.spark.{SparkConf, SparkContext}
 import org.joda.time.DateTime
-import org.scalatest._
+import org.scalatest.Matchers
+import org.scalatest.junit.JUnitSuite
+import _root_.org.junit._
 import org.apache.phoenix.spark._
 
 import scala.collection.mutable.ListBuffer
@@ -37,24 +39,12 @@ import scala.collection.mutable.ListBuffer
   -Xmx1536m -XX:MaxPermSize=512m -XX:ReservedCodeCacheSize=512m
  */
 
-// Helper object to access the protected abstract static methods hidden in BaseHBaseManagedTimeIT
-object PhoenixSparkITHelper extends BaseHBaseManagedTimeIT {
-  def getTestClusterConfig = BaseHBaseManagedTimeIT.getTestClusterConfig
-  def doSetup = {
-    // The @ClassRule doesn't seem to be getting picked up, force creation here before setup
-    BaseTest.tmpFolder.create()
-    BaseHBaseManagedTimeIT.doSetup()
-  }
-  def doTeardown = BaseHBaseManagedTimeIT.doTeardown()
-  def getUrl = BaseTest.getUrl
-}
-
-class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
+class PhoenixSparkIT extends BaseHBaseManagedTimeIT with Matchers {
   var conn: Connection = _
   var sc: SparkContext = _
 
   lazy val hbaseConfiguration = {
-    val conf = PhoenixSparkITHelper.getTestClusterConfig
+    val conf = BaseHBaseManagedTimeIT.getTestClusterConfig
     // The zookeeper quorum address defaults to "localhost" which is incorrect, let's fix it
     val quorum = conf.get("hbase.zookeeper.quorum")
     val clientPort = conf.get("hbase.zookeeper.property.clientPort")
@@ -67,10 +57,9 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
     hbaseConfiguration.get(HConstants.ZOOKEEPER_QUORUM)
   }
 
-  override def beforeAll() {
-    PhoenixSparkITHelper.doSetup
-
-    conn = DriverManager.getConnection(PhoenixSparkITHelper.getUrl)
+  @Before
+  def doSetup() {
+    conn = DriverManager.getConnection(BaseTest.getUrl)
     conn.setAutoCommit(true)
 
     // each SQL statement used to set up Phoenix must be on a single line. Yes, that
@@ -94,13 +83,14 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
     sc = new SparkContext(conf)
   }
 
-  override def afterAll() {
+  @After
+  def doTeardown() {
     conn.close()
     sc.stop()
-    PhoenixSparkITHelper.doTeardown
   }
 
-  test("Can convert Phoenix schema") {
+  @Test
+  def testCanConvertPhoenixSchema() {
     val phoenixSchema = List(
       new ColumnInfo("varcharColumn", PVarchar.INSTANCE.getSqlType)
     )
@@ -115,7 +105,8 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
     catalystSchema shouldEqual expected
   }
 
-  test("Can create schema RDD and execute query") {
+  @Test
+  def testCanCreateSchemaRDDAndExecuteQuery() {
     val sqlContext = new SQLContext(sc)
 
     val df1 = sqlContext.phoenixTableAsDataFrame("TABLE1", Array("ID", "COL1"), conf = hbaseConfiguration)
@@ -137,7 +128,8 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
     count shouldEqual 6L
   }
 
-  test("Can create schema RDD and execute query on case sensitive table (no config)") {
+  @Test
+  def testCanCreateSchemaRDDAndExecuteQueryOnCaseSensitiveTableNoConfig() {
     val sqlContext = new SQLContext(sc)
 
 
@@ -155,7 +147,8 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
     count shouldEqual 2L
   }
 
-  test("Can create schema RDD and execute constrained query") {
+  @Test
+  def testCanCreateSchemaRDDAndExecuteConstrainedQuery() {
     val sqlContext = new SQLContext(sc)
 
     val df1 = sqlContext.phoenixTableAsDataFrame("TABLE1", Array("ID", "COL1"),
@@ -179,7 +172,8 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
     count shouldEqual 1L
   }
 
-  test("Using a predicate referring to a non-existent column should fail") {
+  @Test
+  def testUsingAPredicateReferringTANonExistentColumnShouldFail() {
     intercept[Exception] {
       val sqlContext = new SQLContext(sc)
 
@@ -198,7 +192,8 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
     }.getCause shouldBe a[ColumnNotFoundException]
   }
 
-  test("Can create schema RDD with predicate that will never match") {
+  @Test
+  def testCanCreateSchemaRDDWithPredicateThatWillNeverMatch() {
     val sqlContext = new SQLContext(sc)
 
     val df1 = sqlContext.phoenixTableAsDataFrame(
@@ -216,7 +211,8 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
     count shouldEqual 0L
   }
 
-  test("Can create schema RDD with complex predicate") {
+  @Test
+  def testCanCreateSchemaRDDWithComplexPredicate() {
     val sqlContext = new SQLContext(sc)
 
     val df1 = sqlContext.phoenixTableAsDataFrame(
@@ -237,7 +233,8 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
     count shouldEqual 0L
   }
 
-  test("Can query an array table") {
+  @Test
+  def testCanQueryAnArrayTable() {
     val sqlContext = new SQLContext(sc)
 
     val df1 = sqlContext.phoenixTableAsDataFrame("ARRAY_TEST_TABLE", Array("ID", "VCARRAY"),
@@ -257,7 +254,8 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
     count shouldEqual 1L
   }
 
-  test("Can read a table as an RDD") {
+  @Test
+  def testCanReadATableAsAnRDD() {
     val rdd1 = sc.phoenixTableAsRDD("ARRAY_TEST_TABLE", Seq("ID", "VCARRAY"),
       conf = hbaseConfiguration)
 
@@ -270,7 +268,8 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
     count shouldEqual 1L
   }
 
-  test("Can save to phoenix table") {
+  @Test
+  def testCanSaveToPhoenixTable() {
     val sqlContext = new SQLContext(sc)
 
     val dataSet = List((1L, "1", 1), (2L, "2", 2), (3L, "3", 3))
@@ -297,7 +296,8 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
     }
   }
 
-  test("Can save Java and Joda dates to Phoenix (no config)") {
+  @Test
+  def testCanSaveJavaAndJodaDatesToPhoenixNoConfig() {
     val dt = new DateTime()
     val date = new Date()
 
@@ -323,7 +323,8 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
     results(1).getTime shouldEqual date.getTime
   }
 
-  test("Can infer schema without defining columns") {
+  @Test
+  def testCanInferSchemaWithoutDefiningColumns() {
     val sqlContext = new SQLContext(sc)
     val df = sqlContext.phoenixTableAsDataFrame("TABLE2", Seq(), conf = hbaseConfiguration)
     df.schema("ID").dataType shouldEqual LongType
@@ -331,7 +332,8 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
     df.schema("t2col1").dataType shouldEqual StringType
   }
 
-  test("Spark SQL can use Phoenix as a data source with no schema specified") {
+  @Test
+  def testSparkSQLCanUsePhoenixAsADataSourceWithNoSchemaSpecified() {
     val sqlContext = new SQLContext(sc)
     val df = sqlContext.load("org.apache.phoenix.spark", Map("table" -> "TABLE1",
       "zkUrl" -> quorumAddress))
@@ -340,7 +342,8 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
     df.schema("COL1").dataType shouldEqual StringType
   }
 
-  test("Spark SQL can use Phoenix as a data source with PrunedFilteredScan") {
+  @Test
+  def testSparkSQLCanUsePhoenixAsADataSourceWithPrunedFilteredScan() {
     val sqlContext = new SQLContext(sc)
     val df = sqlContext.load("org.apache.phoenix.spark", Map("table" -> "TABLE1",
       "zkUrl" -> quorumAddress))
@@ -358,7 +361,8 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
      */
   }
 
-  test("Can persist a dataframe using 'DataFrame.saveToPhoenix'") {
+  @Test
+  def testCanPersistADataframeUsingDataFrameSaveToPhoenix() {
     // Load from TABLE1
     val sqlContext = new SQLContext(sc)
     val df = sqlContext.load("org.apache.phoenix.spark", Map("table" -> "TABLE1",
@@ -381,7 +385,8 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
     results.toList shouldEqual checkResults
   }
 
-  test("Can persist a dataframe using 'DataFrame.save()") {
+  @Test
+  def testCanPersistADataframeUsingDataFrameSave() {
     // Clear TABLE1_COPY
     var stmt = conn.createStatement()
     stmt.executeUpdate("DELETE FROM TABLE1_COPY")
@@ -409,7 +414,8 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
     results.toList shouldEqual checkResults
   }
 
-  test("Can save arrays back to phoenix") {
+  @Test
+  def testCanSaveArraysBackToPhoenix() {
     val dataSet = List((2L, Array("String1", "String2", "String3")))
 
     sc
@@ -430,7 +436,8 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
     sqlArray shouldEqual dataSet(0)._2
   }
 
-  test("Can read from table with schema and escaped table name") {
+  @Test
+  def testCanReadFromTableWithSchemaAndEscapedTableName() {
     // Manually escape
     val rdd1 = sc.phoenixTableAsRDD(
       "CUSTOM_ENTITY.\"z02\"",
@@ -453,7 +460,8 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
 
   }
 
-  test("Ensure DataFrame field normalization (PHOENIX-2196)") {
+  @Test
+  def testEnsureDataFrameFieldNormalization_PHOENIX2196() {
     val rdd1 = sc
       .parallelize(Seq((1L,1L,"One"),(2L,2L,"Two")))
       .map(p => Row(p._1, p._2, p._3))
@@ -470,8 +478,9 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
 
     df.saveToPhoenix("TABLE2", zkUrl = Some(quorumAddress))
   }
-  
-  test("Ensure Dataframe supports LIKE and IN filters (PHOENIX-2328)") {
+
+  @Test
+  def testEnsureDataframeSupportsLIKEAndINFilters_PHOENIX2328() {
     val sqlContext = new SQLContext(sc)
     val df = sqlContext.load("org.apache.phoenix.spark", Map("table" -> "TABLE1",
       "zkUrl" -> quorumAddress))
@@ -515,13 +524,15 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
     res9.count() shouldEqual 2
   }
 
-  test("Can load decimal types with accurate precision and scale (PHOENIX-2288)") {
+  @Test
+  def testCanLoadDecimalTypesWithAccuratePrecisionAndScale_PHOENIX2288() {
     val sqlContext = new SQLContext(sc)
     val df = sqlContext.load("org.apache.phoenix.spark", Map("table" -> "TEST_DECIMAL", "zkUrl" -> quorumAddress))
     assert(df.select("COL1").first().getDecimal(0) == BigDecimal("123.456789").bigDecimal)
   }
 
-  test("Can load small and tiny integeger types (PHOENIX-2426)") {
+  @Test
+  def testCanLoadSmallAndTinyIntegerTypes_PHOENIX2426() {
     val sqlContext = new SQLContext(sc)
     val df = sqlContext.load("org.apache.phoenix.spark", Map("table" -> "TEST_SMALL_TINY", "zkUrl" -> quorumAddress))
     assert(df.select("COL1").first().getShort(0).toInt == 32767)

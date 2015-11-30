@@ -534,6 +534,7 @@
           <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
           <junitxml>.</junitxml>
           <filereports>WDF TestSuite.txt</filereports>
+          <jUnitClasses>org.apache.phoenix.spark.PhoenixSparkIT</jUnitClasses>
         </configuration>
         <executions>
           <execution>
