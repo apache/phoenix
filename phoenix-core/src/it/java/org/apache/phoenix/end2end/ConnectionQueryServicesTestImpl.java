@@ -67,7 +67,7 @@ public class ConnectionQueryServicesTestImpl extends ConnectionQueryServicesImpl
                 // Since ConnectionQueryServicesTestImpl is a singleton
                 // during testing, attempt to stop the Zookeeper client
                 // service when the driver is closed.
-                if (zkClientService != null) zkClientService.stopAndWait();
+                // if (zkClientService != null) zkClientService.stopAndWait();
             } finally {
                 super.close();
             }
