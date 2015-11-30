@@ -40,7 +40,11 @@ import scala.collection.mutable.ListBuffer
 // Helper object to access the protected abstract static methods hidden in BaseHBaseManagedTimeIT
 object PhoenixSparkITHelper extends BaseHBaseManagedTimeIT {
   def getTestClusterConfig = BaseHBaseManagedTimeIT.getTestClusterConfig
-  def doSetup = BaseHBaseManagedTimeIT.doSetup()
+  def doSetup = {
+    // The @ClassRule doesn't seem to be getting picked up, force creation here before setup
+    BaseTest.tmpFolder.create()
+    BaseHBaseManagedTimeIT.doSetup()
+  }
   def doTeardown = BaseHBaseManagedTimeIT.doTeardown()
   def getUrl = BaseTest.getUrl
 }
