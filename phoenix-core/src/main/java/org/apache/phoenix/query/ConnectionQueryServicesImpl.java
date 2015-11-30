@@ -225,7 +225,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     private HConnection connection;
     private TransactionServiceClient txServiceClient;
-    protected volatile ZKClientService zkClientService;
     private volatile boolean initialized;
     private volatile int nSequenceSaltBuckets;
 
@@ -311,7 +310,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     
     private void initTxServiceClient() {
         String zkQuorumServersString = connectionInfo.getZookeeperQuorum()+":"+connectionInfo.getPort();
-        zkClientService = ZKClientServices.delegate(
+        ZKClientService zkClientService = ZKClientServices.delegate(
                   ZKClients.reWatchOnExpire(
                     ZKClients.retryOnFailure(
                       ZKClientService.Builder.of(zkQuorumServersString)
