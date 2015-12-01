@@ -22,29 +22,23 @@ package org.apache.phoenix.execute;
 import static com.google.common.collect.Lists.newArrayList;
 import static com.google.common.collect.Sets.newHashSet;
 import static java.util.Collections.singletonList;
-import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL;
-import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
-import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
-import static org.apache.phoenix.util.PhoenixRuntime.PHOENIX_TEST_DRIVER_URL_PARAM;
-import static org.apache.phoenix.util.TestUtil.LOCALHOST;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
 import java.io.IOException;
 import java.sql.Connection;
-import java.sql.Driver;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HBaseIOException;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
@@ -54,14 +48,13 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
 import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.end2end.BaseOwnClusterIT;
 import org.apache.phoenix.hbase.index.Indexer;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -76,7 +69,9 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 
 @RunWith(Parameterized.class)
-public class PartialCommitIT extends BaseTest {
+// Needs to extend BaseOwnClusterIT (and not BaseOwnClusterHBaseManagedTimeIT since table data 
+// is created and populated once in the constructor 
+public class PartialCommitIT extends BaseOwnClusterIT {
     
 	private final String A_SUCESS_TABLE;
 	private final String B_FAILURE_TABLE;
@@ -88,26 +83,16 @@ public class PartialCommitIT extends BaseTest {
     private static final byte[] ROW_TO_FAIL_UPSERT_BYTES = Bytes.toBytes("fail me upsert");
     private static final byte[] ROW_TO_FAIL_DELETE_BYTES = Bytes.toBytes("fail me delete");
     private static final HBaseTestingUtility TEST_UTIL = new HBaseTestingUtility();
-    private static Driver driver;
     
     @BeforeClass
-    public static void setupCluster() throws Exception {
-      Configuration conf = TEST_UTIL.getConfiguration();
-      setUpConfigForMiniCluster(conf);
-      conf.setClass("hbase.coprocessor.region.classes", FailingRegionObserver.class, RegionObserver.class);
-      conf.setBoolean("hbase.coprocessor.abortonerror", false);
-      conf.setBoolean(Indexer.CHECK_VERSION_CONF_KEY, false);
-      TEST_UTIL.startMiniCluster();
-      String clientPort = TEST_UTIL.getConfiguration().get(QueryServices.ZOOKEEPER_PORT_ATTRIB);
-      url = JDBC_PROTOCOL + JDBC_PROTOCOL_SEPARATOR + LOCALHOST + JDBC_PROTOCOL_SEPARATOR + clientPort
-              + JDBC_PROTOCOL_TERMINATOR + PHOENIX_TEST_DRIVER_URL_PARAM;
-
-      Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
-      // Must update config before starting server
-      driver = initAndRegisterDriver(url, ReadOnlyProps.EMPTY_PROPS);
-      clusterInitialized = true;
-      setupTxManager();
-      createTablesWithABitOfData();
+    public static void doSetup() throws Exception {
+        Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(10);
+        serverProps.put("hbase.coprocessor.region.classes", FailingRegionObserver.class.getName());
+        serverProps.put("hbase.coprocessor.abortonerror", "false");
+        serverProps.put(Indexer.CHECK_VERSION_CONF_KEY, "false");
+        Map<String, String> clientProps = Collections.singletonMap(QueryServices.TRANSACTIONS_ENABLED, "true");
+        setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
+        createTablesWithABitOfData();
     }
     
     @Parameters(name="transactional = {0}")

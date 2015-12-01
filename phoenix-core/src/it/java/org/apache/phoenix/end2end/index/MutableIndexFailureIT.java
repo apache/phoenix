@@ -17,11 +17,6 @@
  */
 package org.apache.phoenix.end2end.index;
 
-import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL;
-import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
-import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
-import static org.apache.phoenix.util.PhoenixRuntime.PHOENIX_TEST_DRIVER_URL_PARAM;
-import static org.apache.phoenix.util.TestUtil.LOCALHOST;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -34,6 +29,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -43,11 +39,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseCluster;
-import org.apache.hadoop.hbase.HBaseConfiguration;
-import org.apache.hadoop.hbase.HBaseTestingUtility;
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.ServerName;
@@ -55,14 +47,9 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.TableNotFoundException;
 import org.apache.hadoop.hbase.Waiter;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.coprocessor.CoprocessorHost;
-import org.apache.hadoop.hbase.master.LoadBalancer;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.end2end.BaseOwnClusterHBaseManagedTimeIT;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
-import org.apache.phoenix.hbase.index.balancer.IndexLoadBalancer;
-import org.apache.phoenix.hbase.index.master.IndexMasterObserver;
-import org.apache.phoenix.jdbc.PhoenixTestDriver;
-import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTableType;
@@ -73,9 +60,7 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TestUtil;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Ignore;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
@@ -95,11 +80,7 @@ import com.google.common.collect.Maps;
 
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
-@Ignore // see PHOENIX-2458 
-public class MutableIndexFailureIT extends BaseTest {
-    private static final int NUM_SLAVES = 4;
-    private static PhoenixTestDriver driver;
-    private static HBaseTestingUtility util;
+public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
     private Timer scheduleTimer;
 
     private String tableName;
@@ -113,63 +94,34 @@ public class MutableIndexFailureIT extends BaseTest {
     public MutableIndexFailureIT(boolean transactional) {
         this.transactional = transactional;
         this.tableDDLOptions = transactional ? " TRANSACTIONAL=true " : "";
-        this.tableName = TestUtil.DEFAULT_DATA_TABLE_NAME;
+        this.tableName = TestUtil.DEFAULT_DATA_TABLE_NAME + (transactional ? "_TXN" : "");
         this.indexName = "IDX";
         this.fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
         this.fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
     }
     
-    @Before
-    public void doSetup() throws Exception {
-        Configuration conf = HBaseConfiguration.create();
-        setUpConfigForMiniCluster(conf);
-        conf.setInt("hbase.client.retries.number", 2);
-        conf.setInt("hbase.client.pause", 5000);
-        conf.setInt("hbase.balancer.period", Integer.MAX_VALUE);
-        conf.setLong(QueryServices.INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_TIME_ATTRIB, 0);
-        conf.set(CoprocessorHost.MASTER_COPROCESSOR_CONF_KEY, IndexMasterObserver.class.getName());
-        conf.setClass(HConstants.HBASE_MASTER_LOADBALANCER_CLASS, IndexLoadBalancer.class,
-            LoadBalancer.class);
-        util = new HBaseTestingUtility(conf);
-        util.startMiniCluster(NUM_SLAVES);
-        String clientPort = util.getConfiguration().get(QueryServices.ZOOKEEPER_PORT_ATTRIB);
-        url = JDBC_PROTOCOL + JDBC_PROTOCOL_SEPARATOR + LOCALHOST + JDBC_PROTOCOL_SEPARATOR + clientPort
-                + JDBC_PROTOCOL_TERMINATOR + PHOENIX_TEST_DRIVER_URL_PARAM;
-        Map<String,String> props = Maps.newHashMapWithExpectedSize(1);
-        props.put(QueryServices.TRANSACTIONS_ENABLED, Boolean.toString(true));
-        driver = initAndRegisterDriver(url, new ReadOnlyProps(props.entrySet().iterator()));
-        clusterInitialized = true;
-        setupTxManager();
+    @BeforeClass
+    public static void doSetup() throws Exception {
+        Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(10);
+        serverProps.put("hbase.client.retries.number", "2");
+        serverProps.put("hbase.client.pause", "5000");
+        serverProps.put("hbase.balancer.period", String.valueOf(Integer.MAX_VALUE));
+        serverProps.put(QueryServices.INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_TIME_ATTRIB, "0");
+        Map<String, String> clientProps = Collections.singletonMap(QueryServices.TRANSACTIONS_ENABLED, "true");
+        NUM_SLAVES_BASE = 4;
+        setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
     }
     
     @Parameters(name = "transactional = {0}")
     public static Collection<Boolean[]> data() {
         return Arrays.asList(new Boolean[][] { { false }, { true } });
     }
-    
-    @After
-    public void tearDown() throws Exception {
-        try {
-            destroyDriver(driver);
-        } finally {
-            try {
-                if(scheduleTimer != null){
-                    scheduleTimer.cancel();
-                    scheduleTimer = null;
-                }
-            } finally {
-                util.shutdownMiniCluster();
-            }
-        }
-    }
 
-    @Ignore("See PHOENIX-2331")
     @Test(timeout=300000)
     public void testWriteFailureDisablesLocalIndex() throws Exception {
         helpTestWriteFailureDisablesIndex(true);
     }
  
-    @Ignore("See PHOENIX-2332")
     @Test(timeout=300000)
     public void testWriteFailureDisablesIndex() throws Exception {
         helpTestWriteFailureDisablesIndex(false);
@@ -219,7 +171,7 @@ public class MutableIndexFailureIT extends BaseTest {
             TableName indexTable =
                     TableName.valueOf(localIndex ? MetaDataUtil
                             .getLocalIndexTableName(fullTableName) : fullIndexName);
-            HBaseAdmin admin = this.util.getHBaseAdmin();
+            HBaseAdmin admin = this.getUtility().getHBaseAdmin();
             HTableDescriptor indexTableDesc = admin.getTableDescriptor(indexTable);
             try{
               admin.disableTable(indexTable);
@@ -382,9 +334,9 @@ public class MutableIndexFailureIT extends BaseTest {
                 // find a RS which doesn't has CATALOG table
                 TableName catalogTable = TableName.valueOf("SYSTEM.CATALOG");
                 TableName indexTable = TableName.valueOf(fullIndexName);
-                final HBaseCluster cluster = this.util.getHBaseCluster();
+                final HBaseCluster cluster = this.getUtility().getHBaseCluster();
                 Collection<ServerName> rss = cluster.getClusterStatus().getServers();
-                HBaseAdmin admin = this.util.getHBaseAdmin();
+                HBaseAdmin admin = this.getUtility().getHBaseAdmin();
                 List<HRegionInfo> regions = admin.getTableRegions(catalogTable);
                 ServerName catalogRS = cluster.getServerHoldingRegion(regions.get(0).getRegionName());
                 ServerName metaRS = cluster.getServerHoldingMeta();
@@ -403,7 +355,7 @@ public class MutableIndexFailureIT extends BaseTest {
                 final HRegionInfo indexRegion = regions.get(0);
                 final ServerName dstRS = rsToBeKilled;
                 admin.move(indexRegion.getEncodedNameAsBytes(), Bytes.toBytes(rsToBeKilled.getServerName()));
-                this.util.waitFor(30000, 200, new Waiter.Predicate<Exception>() {
+                this.getUtility().waitFor(30000, 200, new Waiter.Predicate<Exception>() {
                     @Override
                     public boolean evaluate() throws Exception {
                       ServerName sn = cluster.getServerHoldingRegion(indexRegion.getRegionName());
@@ -418,10 +370,10 @@ public class MutableIndexFailureIT extends BaseTest {
                 Thread.sleep(100);
                 
                 // kill RS hosting index table
-                this.util.getHBaseCluster().killRegionServer(rsToBeKilled);
+                this.getUtility().getHBaseCluster().killRegionServer(rsToBeKilled);
                 
                 // wait for index table completes recovery
-                this.util.waitUntilAllRegionsAssigned(indexTable);
+                this.getUtility().waitUntilAllRegionsAssigned(indexTable);
                 
                 // Verify the metadata for index is correct.       
                 do {
@@ -434,8 +386,6 @@ public class MutableIndexFailureIT extends BaseTest {
                   }
                 } while(true);
                 this.scheduleTimer.cancel();
-                
-                assertEquals(cluster.getClusterStatus().getDeadServers(), 1);
             }
     }
     

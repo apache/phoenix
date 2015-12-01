@@ -17,11 +17,6 @@
  */
 package org.apache.phoenix.end2end.index.txn;
 
-import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL;
-import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
-import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
-import static org.apache.phoenix.util.PhoenixRuntime.PHOENIX_TEST_DRIVER_URL_PARAM;
-import static org.apache.phoenix.util.TestUtil.LOCALHOST;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -37,21 +32,17 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.Properties;
 
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HBaseIOException;
-import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
 import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.end2end.BaseOwnClusterHBaseManagedTimeIT;
 import org.apache.phoenix.hbase.index.Indexer;
-import org.apache.phoenix.jdbc.PhoenixTestDriver;
-import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
@@ -66,11 +57,8 @@ import org.junit.runners.Parameterized.Parameters;
 import com.google.common.collect.Maps;
 
 @RunWith(Parameterized.class)
-public class TxWriteFailureIT extends BaseTest {
+public class TxWriteFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
 	
-    private static PhoenixTestDriver driver;
-    private static final HBaseTestingUtility TEST_UTIL = new HBaseTestingUtility();
-
     private static final String SCHEMA_NAME = "S";
     private static final String DATA_TABLE_NAME = "T";
     private static final String INDEX_TABLE_NAME = "I";
@@ -85,29 +73,18 @@ public class TxWriteFailureIT extends BaseTest {
 		this.localIndex = localIndex;
 		this.mutable = mutable;
 	}
-
+	
 	@BeforeClass
-	public static void setupCluster() throws Exception {
-		Configuration conf = TEST_UTIL.getConfiguration();
-		setUpConfigForMiniCluster(conf);
-		conf.setClass("hbase.coprocessor.region.classes", FailingRegionObserver.class, RegionObserver.class);
-		conf.setBoolean("hbase.coprocessor.abortonerror", false);
-		conf.setBoolean(Indexer.CHECK_VERSION_CONF_KEY, false);
-		TEST_UTIL.startMiniCluster();
-		String clientPort = TEST_UTIL.getConfiguration().get(
-				QueryServices.ZOOKEEPER_PORT_ATTRIB);
-		url = JDBC_PROTOCOL + JDBC_PROTOCOL_SEPARATOR + LOCALHOST
-				+ JDBC_PROTOCOL_SEPARATOR + clientPort
-				+ JDBC_PROTOCOL_TERMINATOR + PHOENIX_TEST_DRIVER_URL_PARAM;
-
-		Map<String, String> props = Maps.newHashMapWithExpectedSize(2);
-		// Must update config before starting server
-		props.put(QueryServices.DEFAULT_TABLE_ISTRANSACTIONAL_ATTRIB, Boolean.toString(true));
-		props.put(QueryServices.TRANSACTIONS_ENABLED, Boolean.toString(true));
-		driver = initAndRegisterDriver(url, new ReadOnlyProps(props.entrySet().iterator()));
-		clusterInitialized = true;
-		setupTxManager();
-	}
+    public static void doSetup() throws Exception {
+        Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(3);
+        serverProps.put("hbase.coprocessor.region.classes", FailingRegionObserver.class.getName());
+        serverProps.put("hbase.coprocessor.abortonerror", "false");
+        serverProps.put(Indexer.CHECK_VERSION_CONF_KEY, "false");
+        Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(10);
+        clientProps.put(QueryServices.DEFAULT_TABLE_ISTRANSACTIONAL_ATTRIB, "true");
+        clientProps.put(QueryServices.TRANSACTIONS_ENABLED, "true");
+        setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
+    }
 	
 	@Parameters(name="localIndex = {0} , mutable = {1}")
     public static Collection<Boolean[]> data() {
