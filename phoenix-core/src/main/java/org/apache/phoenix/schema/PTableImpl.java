@@ -697,12 +697,15 @@ public class PTableImpl implements PTable {
             newMutations();
         }
 
-        @SuppressWarnings("deprecation")
         private void newMutations() {
-            this.setValues = new Put(this.key);
-            this.unsetValues = new Delete(this.key);
-            this.setValues.setWriteToWAL(!isWALDisabled());
-            this.unsetValues.setWriteToWAL(!isWALDisabled());
+            Put put = new Put(this.key);
+            Delete delete = new Delete(this.key);
+            if (isWALDisabled()) {
+                put.setDurability(Durability.SKIP_WAL);
+                delete.setDurability(Durability.SKIP_WAL);
+            }
+            this.setValues = put;
+            this.unsetValues = delete;
        }
 
         @Override
@@ -781,6 +784,7 @@ public class PTableImpl implements PTable {
             }
         }
 
+        @SuppressWarnings("deprecation")
         @Override
         public void delete() {
             newMutations();
@@ -800,8 +804,7 @@ public class PTableImpl implements PTable {
                 }
                 deleteRow = delete;
             }
-            // No need to write to the WAL for indexes
-            if (PTableImpl.this.getType() == PTableType.INDEX) {
+            if (isWALDisabled()) {
                 deleteRow.setDurability(Durability.SKIP_WAL);
             }
         }
