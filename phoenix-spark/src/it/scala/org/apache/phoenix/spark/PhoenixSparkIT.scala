@@ -16,19 +16,17 @@ package org.apache.phoenix.spark
 import java.sql.{Connection, DriverManager}
 import java.util.Date
 
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.hbase.{HBaseConfiguration, HConstants, HBaseTestingUtility}
+import org.apache.hadoop.hbase.{HConstants}
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT
 import org.apache.phoenix.query.BaseTest
-import org.apache.phoenix.schema.{TableNotFoundException, ColumnNotFoundException}
+import org.apache.phoenix.schema.{ColumnNotFoundException}
 import org.apache.phoenix.schema.types.PVarchar
 import org.apache.phoenix.util.{SchemaUtil, ColumnInfo}
-import org.apache.spark.sql.{SaveMode, execution, SQLContext}
-import org.apache.spark.sql.types.{LongType, DataType, StringType, StructField}
+import org.apache.spark.sql.{Row, SaveMode, SQLContext}
+import org.apache.spark.sql.types._
 import org.apache.spark.{SparkConf, SparkContext}
 import org.joda.time.DateTime
 import org.scalatest._
-import org.apache.phoenix.spark._
 
 import scala.collection.mutable.ListBuffer
 
@@ -447,5 +445,107 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
 
     count shouldEqual 1L
 
+  }
+
+  test("Can save arrays from custom dataframes back to phoenix") {
+    val dataSet = List(Row(2L, Array("String1", "String2", "String3"), Array(1, 2, 3)))
+
+    val sqlContext = new SQLContext(sc)
+
+    val schema = StructType(
+      Seq(StructField("ID", LongType, nullable = false),
+        StructField("VCARRAY", ArrayType(StringType)),
+        StructField("INTARRAY", ArrayType(IntegerType))))
+
+    val rowRDD = sc.parallelize(dataSet)
+
+    // Apply the schema to the RDD.
+    val df = sqlContext.createDataFrame(rowRDD, schema)
+
+    df.write
+      .format("org.apache.phoenix.spark")
+      .options(Map("table" -> "ARRAYBUFFER_TEST_TABLE", "zkUrl" -> quorumAddress))
+      .mode(SaveMode.Overwrite)
+      .save()
+
+    // Load the results back
+    val stmt = conn.createStatement()
+    val rs = stmt.executeQuery("SELECT VCARRAY, INTARRAY FROM ARRAYBUFFER_TEST_TABLE WHERE ID = 2")
+    rs.next()
+    val stringArray = rs.getArray(1).getArray().asInstanceOf[Array[String]]
+    val intArray = rs.getArray(2).getArray().asInstanceOf[Array[Int]]
+
+    // Verify the arrays are equal
+    stringArray shouldEqual dataSet(0).getAs[Array[String]](1)
+    intArray shouldEqual dataSet(0).getAs[Array[Int]](2)
+  }
+
+  test("Can save arrays of AnyVal type back to phoenix") {
+    val dataSet = List((2L, Array(1, 2, 3), Array(1L, 2L, 3L)))
+
+    sc
+      .parallelize(dataSet)
+      .saveToPhoenix(
+        "ARRAY_ANYVAL_TEST_TABLE",
+        Seq("ID", "INTARRAY", "BIGINTARRAY"),
+        zkUrl = Some(quorumAddress)
+      )
+
+    // Load the results back
+    val stmt = conn.createStatement()
+    val rs = stmt.executeQuery("SELECT INTARRAY, BIGINTARRAY FROM ARRAY_ANYVAL_TEST_TABLE WHERE ID = 2")
+    rs.next()
+    val intArray = rs.getArray(1).getArray().asInstanceOf[Array[Int]]
+    val longArray = rs.getArray(2).getArray().asInstanceOf[Array[Long]]
+
+    // Verify the arrays are equal
+    intArray shouldEqual dataSet(0)._2
+    longArray shouldEqual dataSet(0)._3
+  }
+
+  test("Can save arrays of Byte type back to phoenix") {
+    val dataSet = List((2L, Array(1.toByte, 2.toByte, 3.toByte)))
+
+    sc
+      .parallelize(dataSet)
+      .saveToPhoenix(
+        "ARRAY_BYTE_TEST_TABLE",
+        Seq("ID", "BYTEARRAY"),
+        zkUrl = Some(quorumAddress)
+      )
+
+    // Load the results back
+    val stmt = conn.createStatement()
+    val rs = stmt.executeQuery("SELECT BYTEARRAY FROM ARRAY_BYTE_TEST_TABLE WHERE ID = 2")
+    rs.next()
+    val byteArray = rs.getArray(1).getArray().asInstanceOf[Array[Byte]]
+
+    // Verify the arrays are equal
+    byteArray shouldEqual dataSet(0)._2
+  }
+
+  test("Can save binary types back to phoenix") {
+    val dataSet = List((2L, Array[Byte](1), Array[Byte](1,2,3), Array[Array[Byte]](Array[Byte](1), Array[Byte](2))))
+
+    sc
+      .parallelize(dataSet)
+      .saveToPhoenix(
+        "VARBINARY_TEST_TABLE",
+        Seq("ID", "BIN", "VARBIN", "BINARRAY"),
+        zkUrl = Some(quorumAddress)
+      )
+
+    // Load the results back
+    val stmt = conn.createStatement()
+    val rs = stmt.executeQuery("SELECT BIN, VARBIN, BINARRAY FROM VARBINARY_TEST_TABLE WHERE ID = 2")
+    rs.next()
+    val byte = rs.getBytes("BIN")
+    val varByte = rs.getBytes("VARBIN")
+    val varByteArray = rs.getArray("BINARRAY").getArray().asInstanceOf[Array[Array[Byte]]]
+
+    // Verify the arrays are equal
+    byte shouldEqual dataSet(0)._2
+    varByte shouldEqual dataSet(0)._3
+    varByteArray shouldEqual dataSet(0)._4
   }
 }
