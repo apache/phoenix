@@ -32,6 +32,7 @@ import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -49,6 +50,7 @@ import com.google.common.collect.Maps;
 public class IndexIT extends BaseHBaseManagedTimeIT {
 	
 	private final boolean localIndex;
+    private final boolean transactional;
 	private final String tableDDLOptions;
 	private final String tableName;
     private final String indexName;
@@ -57,6 +59,7 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
 	
 	public IndexIT(boolean localIndex, boolean mutable, boolean transactional) {
 		this.localIndex = localIndex;
+		this.transactional = transactional;
 		StringBuilder optionBuilder = new StringBuilder();
 		if (!mutable) 
 			optionBuilder.append(" IMMUTABLE_ROWS=true ");
@@ -196,6 +199,88 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
 	        assertFalse(rs.next());
 	        
 	        conn.createStatement().execute("DROP INDEX " + indexName + " ON " + fullTableName);
+        }
+    }
+    
+    @Test
+    public void testCreateIndexAfterUpsertStarted() throws Exception {
+        if (transactional) { // FIXME: PHOENIX-2446
+            return;
+        }
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn1 = DriverManager.getConnection(getUrl(), props)) {
+            conn1.setAutoCommit(false);
+            String ddl ="CREATE TABLE " + fullTableName + BaseTest.TEST_TABLE_SCHEMA + tableDDLOptions;
+            Statement stmt = conn1.createStatement();
+            stmt.execute(ddl);
+            BaseTest.populateTestTable(fullTableName);
+
+            ResultSet rs;
+            
+            rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM " + fullTableName);
+            assertTrue(rs.next());
+            assertEquals(3,rs.getInt(1));
+
+            try (Connection conn2 = DriverManager.getConnection(getUrl(), props)) {
+                
+                String upsert = "UPSERT INTO " + fullTableName
+                        + " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                PreparedStatement pstmt = conn2.prepareStatement(upsert);
+                pstmt.setString(1, "varchar4");
+                pstmt.setString(2, "char4");
+                pstmt.setInt(3, 4);
+                pstmt.setLong(4, 4L);
+                pstmt.setBigDecimal(5, new BigDecimal(4.0));
+                Date date = DateUtil.parseDate("2015-01-01 00:00:00");
+                pstmt.setDate(6, date);
+                pstmt.setString(7, "varchar_a");
+                pstmt.setString(8, "chara");
+                pstmt.setInt(9, 2);
+                pstmt.setLong(10, 2L);
+                pstmt.setBigDecimal(11, new BigDecimal(2.0));
+                pstmt.setDate(12, date);
+                pstmt.setString(13, "varchar_b");
+                pstmt.setString(14, "charb");
+                pstmt.setInt(15, 3);
+                pstmt.setLong(16, 3L);
+                pstmt.setBigDecimal(17, new BigDecimal(3.0));
+                pstmt.setDate(18, date);
+                pstmt.executeUpdate();
+                
+                ddl = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX " + indexName + " ON " + fullTableName
+                        + " (long_pk, varchar_pk)"
+                        + " INCLUDE (long_col1, long_col2)";
+                stmt.execute(ddl);
+                
+                /*
+                 * Commit upsert after index created through different connection.
+                 * This forces conn2 (which doesn't know about the index yet) to update the metadata
+                 * at commit time, recognize the new index, and generate the correct metadata (or index
+                 * rows for immutable indexes).
+                 * 
+                 * FIXME: PHOENIX-2446. For transactional data, this is problematic because the index
+                 * gets a timestamp *after* the commit timestamp of conn2 and thus won't be seen during
+                 * the commit. Also, when the index is being built, the data hasn't yet been committed
+                 * and thus won't be part of the initial index build.
+                 */
+                conn2.commit();
+                
+                rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM " + fullIndexName);
+                assertTrue(rs.next());
+                assertEquals(4,rs.getInt(1));
+                
+                String query = "SELECT /*+ NO_INDEX */ long_pk FROM " + fullTableName;
+                rs = conn1.createStatement().executeQuery(query);
+                assertTrue(rs.next());
+                assertEquals(1L, rs.getLong(1));
+                assertTrue(rs.next());
+                assertEquals(2L, rs.getLong(1));
+                assertTrue(rs.next());
+                assertEquals(3L, rs.getLong(1));
+                assertTrue(rs.next());
+                assertEquals(4L, rs.getLong(1));
+                assertFalse(rs.next());
+            }
         }
     }
     

@@ -84,6 +84,12 @@ import org.apache.phoenix.util.TransactionUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.common.base.Predicate;
+import com.google.common.collect.Iterators;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
+
 import co.cask.tephra.Transaction;
 import co.cask.tephra.Transaction.VisibilityLevel;
 import co.cask.tephra.TransactionAware;
@@ -92,12 +98,6 @@ import co.cask.tephra.TransactionContext;
 import co.cask.tephra.TransactionFailureException;
 import co.cask.tephra.TransactionSystemClient;
 import co.cask.tephra.hbase10.TransactionAwareHTable;
-
-import com.google.common.base.Predicate;
-import com.google.common.collect.Iterators;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
 
 /**
  * 
@@ -745,10 +745,10 @@ public class MutationState implements SQLCloseable {
 	            if (table.isTransactional()) {
 	                uncommittedPhysicalNames.add(table.getPhysicalName().getString());
 	            }
-	            table.getIndexMaintainers(indexMetaDataPtr, connection);
 	            boolean isDataTable = true;
 	            // Validate as we go if transactional since we can undo if a problem occurs (which is unlikely)
 	            long serverTimestamp = serverTimeStamps == null ? validate(tableRef, valuesMap) : serverTimeStamps[i++];
+                table.getIndexMaintainers(indexMetaDataPtr, connection);
 	            Iterator<Pair<byte[],List<Mutation>>> mutationsIterator = addRowMutations(tableRef, valuesMap, serverTimestamp, false, sendAll);
 	            while (mutationsIterator.hasNext()) {
 	                Pair<byte[],List<Mutation>> pair = mutationsIterator.next();
