@@ -1318,6 +1318,61 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         }
     }
     
+    @Test
+    public void testUpsertSelectWithFixedWidthNullByteSizeArray() throws Exception {
+        long ts = nextTimestamp();
+        Properties props = new Properties();
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute(
+                "create table t1 (id bigint not null primary key, ca char(3)[])");
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute("upsert into t1 values (1, ARRAY['aaa', 'bbb'])");
+        conn.commit();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 15));
+        conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute(
+                "upsert into t1(id, ca) select id, ARRAY['ccc', 'ddd'] from t1 WHERE id = 1");
+        conn.commit();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
+        conn = DriverManager.getConnection(getUrl(), props);
+        ResultSet rs = conn.createStatement().executeQuery("select * from t1");
+
+        assertTrue(rs.next());
+        assertEquals(1, rs.getLong(1));
+        assertEquals("['ccc', 'ddd']", rs.getArray(2).toString());
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 25));
+        conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute(
+                "create table t2 (id bigint not null primary key, ba binary(4)[])");
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
+        conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute("upsert into t2 values (2, ARRAY[1, 27])");
+        conn.commit();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 35));
+        conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute(
+                "upsert into t2(id, ba) select id, ARRAY[54, 1024] from t2 WHERE id = 2");
+        conn.commit();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
+        conn = DriverManager.getConnection(getUrl(), props);
+        rs = conn.createStatement().executeQuery("select * from t2");
+
+        assertTrue(rs.next());
+        assertEquals(2, rs.getLong(1));
+        assertEquals("[[128,0,0,54], [128,0,4,0]]", rs.getArray(2).toString());
+    }
+
     private static Connection getConnection(long ts) throws SQLException {
         Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));

@@ -78,12 +78,12 @@ import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeySchema;
+import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.tuple.Tuple;
@@ -323,7 +323,7 @@ public class ProjectionCompiler {
                 if (expression.getDataType() != null && !expression.getDataType().isCastableTo(targetType)) {
                     throw new ArgumentTypeMismatchException(targetType, expression.getDataType(), "column: " + targetColumn);
                 }
-                expression = CoerceExpression.create(expression, targetType);
+                expression = CoerceExpression.create(expression, targetType, targetColumn.getSortOrder(), targetColumn.getMaxLength());
             }
         }
         return expression;
