@@ -285,23 +285,28 @@ public class QueryCompiler {
             JoinType[] joinTypes = new JoinType[count];
             PTable[] tables = new PTable[count];
             int[] fieldPositions = new int[count];
-            HashSubPlan[] subPlans = new HashSubPlan[count];
+            StatementContext[] subContexts = new StatementContext[count];
+            QueryPlan[] subPlans = new QueryPlan[count];
+            HashSubPlan[] hashPlans = new HashSubPlan[count];
             fieldPositions[0] = projectedTable.getColumns().size() - projectedTable.getPKColumns().size();
             for (int i = 0; i < count; i++) {
                 JoinSpec joinSpec = joinSpecs.get(i);
                 Scan subScan = ScanUtil.newScan(originalScan);
-                StatementContext subContext = new StatementContext(statement, context.getResolver(), subScan, new SequenceManager(statement));
-                QueryPlan joinPlan = compileJoinQuery(subContext, binds, joinSpec.getJoinTable(), true, true, null);
+                subContexts[i] = new StatementContext(statement, context.getResolver(), subScan, new SequenceManager(statement));
+                subPlans[i] = compileJoinQuery(subContexts[i], binds, joinSpec.getJoinTable(), true, true, null);
                 boolean hasPostReference = joinSpec.getJoinTable().hasPostReference();
                 if (hasPostReference) {
-                    tables[i] = subContext.getResolver().getTables().get(0).getTable();
+                    tables[i] = subContexts[i].getResolver().getTables().get(0).getTable();
                     projectedTable = JoinCompiler.joinProjectedTables(projectedTable, tables[i], joinSpec.getType());
                 } else {
                     tables[i] = null;
                 }
+            }
+            for (int i = 0; i < count; i++) {
+                JoinSpec joinSpec = joinSpecs.get(i);
                 context.setResolver(FromCompiler.getResolverForProjectedTable(projectedTable, context.getConnection(), query.getUdfParseNodes()));
                 joinIds[i] = new ImmutableBytesPtr(emptyByteArray); // place-holder
-                Pair<List<Expression>, List<Expression>> joinConditions = joinSpec.compileJoinConditions(context, subContext, true);
+                Pair<List<Expression>, List<Expression>> joinConditions = joinSpec.compileJoinConditions(context, subContexts[i], true);
                 joinExpressions[i] = joinConditions.getFirst();
                 List<Expression> hashExpressions = joinConditions.getSecond();
                 Pair<Expression, Expression> keyRangeExpressions = new Pair<Expression, Expression>(null, null);
@@ -312,7 +317,7 @@ public class QueryCompiler {
                 if (i < count - 1) {
                     fieldPositions[i + 1] = fieldPositions[i] + (tables[i] == null ? 0 : (tables[i].getColumns().size() - tables[i].getPKColumns().size()));
                 }
-                subPlans[i] = new HashSubPlan(i, joinPlan, optimized ? null : hashExpressions, joinSpec.isSingleValueOnly(), keyRangeLhsExpression, keyRangeRhsExpression);
+                hashPlans[i] = new HashSubPlan(i, subPlans[i], optimized ? null : hashExpressions, joinSpec.isSingleValueOnly(), keyRangeLhsExpression, keyRangeRhsExpression);
             }
             TupleProjector.serializeProjectorIntoScan(context.getScan(), tupleProjector);
             QueryPlan plan = compileSingleFlatQuery(context, query, binds, asSubquery, !asSubquery && joinTable.isAllLeftJoin(), null, !table.isSubselect() && projectPKColumns ? tupleProjector : null, true);
@@ -322,7 +327,7 @@ public class QueryCompiler {
                 limit = plan.getLimit();
             }
             HashJoinInfo joinInfo = new HashJoinInfo(projectedTable, joinIds, joinExpressions, joinTypes, starJoinVector, tables, fieldPositions, postJoinFilterExpression, limit);
-            return HashJoinPlan.create(joinTable.getStatement(), plan, joinInfo, subPlans);
+            return HashJoinPlan.create(joinTable.getStatement(), plan, joinInfo, hashPlans);
         }
         
         JoinSpec lastJoinSpec = joinSpecs.get(joinSpecs.size() - 1);
