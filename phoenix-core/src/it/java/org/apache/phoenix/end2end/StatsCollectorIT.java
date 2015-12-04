@@ -59,27 +59,40 @@ public class StatsCollectorIT extends StatsCollectorAbstractIT {
         props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20));
         props.put(QueryServices.EXPLAIN_CHUNK_COUNT_ATTRIB, Boolean.TRUE.toString());
         props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(1024));
+        props.put(QueryServices.TRANSACTIONS_ENABLED, Boolean.toString(true));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 
     @Test
-    public void testUpdateStatsForTheTable() throws Throwable {
-        Connection conn;
+    public void testUpdateStatsForNonTxnTable() throws Throwable {
+        helpTestUpdateStats(false);
+    }
+    
+    @Test
+    public void testUpdateStatsForTxnTable() throws Throwable {
+        helpTestUpdateStats(true);
+    }
+
+	private void helpTestUpdateStats(boolean transactional) throws SQLException, IOException,
+			InterruptedException {
+		Connection conn;
         PreparedStatement stmt;
         ResultSet rs;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = "T" + (transactional ? "_TXN" : "");
         // props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute(
-                "CREATE TABLE t ( k VARCHAR, a_string_array VARCHAR(100) ARRAY[4], b_string_array VARCHAR(100) ARRAY[4] \n"
-                        + " CONSTRAINT pk PRIMARY KEY (k, b_string_array DESC)) \n");
+                "CREATE TABLE " + tableName +" ( k VARCHAR, a_string_array VARCHAR(100) ARRAY[4], b_string_array VARCHAR(100) ARRAY[4] \n"
+                        + " CONSTRAINT pk PRIMARY KEY (k, b_string_array DESC))" 
+                		+ (transactional ? " TRANSACTIONAL=true" : ""));
         String[] s;
         Array array;
-        conn = upsertValues(props, "t");
+        conn = upsertValues(props, tableName);
         // CAll the update statistics query here. If already major compaction has run this will not get executed.
-        stmt = conn.prepareStatement("UPDATE STATISTICS T");
+        stmt = conn.prepareStatement("UPDATE STATISTICS " + tableName);
         stmt.execute();
-        stmt = upsertStmt(conn, "t");
+        stmt = upsertStmt(conn, tableName);
         stmt.setString(1, "z");
         s = new String[] { "xyz", "def", "ghi", "jkll", null, null, "xxx" };
         array = conn.createArrayOf("VARCHAR", s);
@@ -91,12 +104,12 @@ public class StatsCollectorIT extends StatsCollectorAbstractIT {
         conn.close();
         conn = DriverManager.getConnection(getUrl(), props);
         // This analyze would not work
-        stmt = conn.prepareStatement("UPDATE STATISTICS T");
+        stmt = conn.prepareStatement("UPDATE STATISTICS " + tableName);
         stmt.execute();
-        rs = conn.createStatement().executeQuery("SELECT k FROM T");
+        rs = conn.createStatement().executeQuery("SELECT k FROM " + tableName);
         assertTrue(rs.next());
         conn.close();
-    }
+	}
 
     @Test
     public void testUpdateStatsWithMultipleTables() throws Throwable {
