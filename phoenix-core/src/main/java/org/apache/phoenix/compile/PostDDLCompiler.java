@@ -21,6 +21,7 @@ import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
 
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
@@ -184,7 +185,7 @@ public class PostDDLCompiler {
                         // FIXME: DDL operations aren't transactional, so we're basing the timestamp on a server timestamp.
                         // Not sure what the fix should be. We don't need conflict detection nor filtering of invalid transactions
                         // in this case, so maybe this is ok.
-                        if (tableRef.getTable().isTransactional()) {
+                        if (ts!=HConstants.LATEST_TIMESTAMP && tableRef.getTable().isTransactional()) {
                             ts = TransactionUtil.convertToNanoseconds(ts);
                         }
                         ScanUtil.setTimeRange(scan, ts);
