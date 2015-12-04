@@ -1805,7 +1805,22 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         return columnKey;
     }
     
-    MetaDataMutationResult addRowsToChildViews(PTable basePhysicalTable, List<Mutation> tableMetadata, List<Mutation> mutationsForAddingColumnsToViews, byte[] schemaName, byte[] tableName,
+    private boolean switchAttribute(PTable table, boolean currAttribute, List<Mutation> tableMetaData, byte[] attrQualifier) {
+        for (Mutation m : tableMetaData) {
+            if (m instanceof Put) {
+                Put p = (Put)m;
+                List<Cell> cells = p.get(TABLE_FAMILY_BYTES, attrQualifier);
+                if (cells != null && cells.size() > 0) {
+                    Cell cell = cells.get(0);
+                    boolean newAttribute = (boolean)PBoolean.INSTANCE.toObject(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength()); 
+                    return currAttribute != newAttribute;
+                }
+            }
+        }
+        return false;
+    }
+    
+    private MetaDataMutationResult addRowsToChildViews(PTable basePhysicalTable, List<Mutation> tableMetadata, List<Mutation> mutationsForAddingColumnsToViews, byte[] schemaName, byte[] tableName,
             List<ImmutableBytesPtr> invalidateList, long clientTimeStamp, TableViewFinderResult childViewsResult,
             Region region, List<RowLock> locks) throws IOException, SQLException {
         List<PutWithOrdinalPosition> columnPutsForBaseTable = new ArrayList<>(tableMetadata.size());
@@ -2043,6 +2058,15 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             if (view.rowKeyOrderOptimizable()) {
                 UpgradeUtil.addRowKeyOrderOptimizableCell(mutationsForAddingColumnsToViews, viewKey, clientTimeStamp);
             }
+            
+            // if switching from from non tx to tx
+            if (!basePhysicalTable.isTransactional() && switchAttribute(basePhysicalTable, basePhysicalTable.isTransactional(), tableMetadata, TRANSACTIONAL_BYTES)) {
+            	invalidateList.add(new ImmutableBytesPtr(viewKey));
+            	Put put = new Put(viewKey);
+                put.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                		TRANSACTIONAL_BYTES, clientTimeStamp, PBoolean.INSTANCE.toBytes(true));
+                mutationsForAddingColumnsToViews.add(put);
+            }
         }
         return null;
     }
@@ -2267,7 +2291,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                             if (!childViewsResult.allViewsInSingleRegion() 
                                     || table.getBaseColumnCount() == 0 
                                     || !request.hasClientVersion()
-                                    || switchTenancy(table, tableMetaData)) {
+                                    || switchAttribute(table, table.isMultiTenant(), tableMetaData, MULTI_TENANT_BYTES)) {
                                 return new MetaDataMutationResult(MutationCode.UNALLOWED_TABLE_MUTATION,
                                         EnvironmentEdgeManager.currentTimeMillis(), null);
                             } else {
@@ -2353,21 +2377,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     }
                     tableMetaData.addAll(mutationsForAddingColumnsToViews);
                     return null;
-                }
-
-                private boolean switchTenancy(PTable table, List<Mutation> tableMetaData) {
-                    for (Mutation m : tableMetaData) {
-                        if (m instanceof Put) {
-                            Put p = (Put)m;
-                            List<Cell> cells = p.get(TABLE_FAMILY_BYTES, MULTI_TENANT_BYTES);
-                            if (cells != null && cells.size() > 0) {
-                                Cell cell = cells.get(0);
-                                boolean isMutlitenantProp = (boolean)PBoolean.INSTANCE.toObject(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength()); 
-                                return table.isMultiTenant() != isMutlitenantProp;
-                            }
-                        }
-                    }
-                    return false;
                 }
             });
             if (result != null) {
