@@ -1,0 +1,24 @@
+<div class="jumbotron">
+  <h1>{{page.title}}</h1>
+</div>
+
+<div ng-controller="AccordionDemoCtrl">
+ <accordion close-others="oneAtATime">
+    <accordion-group is-open="status.isFirstOpen" is-disabled="status.isFirstDisabled" >
+     <accordion-heading>
+     Controller Panel
+     <i class="pull-right glyphicon" ng-class="{'glyphicon-chevron-down': status.open, 'glyphicon-chevron-right': !status.open}"></i>
+     </accordion-heading>
+      <div class="col-md-4">
+        <label>Chart Type</label><br>
+        <div class="btn-group">
+          <label class="btn btn-primary" ng-model="checkModel.left" ng-click="setChartType('PieChart')">Pie</label>
+          <label class="btn btn-primary" ng-model="checkModel.middle" ng-click="setChartType('LineChart')">Line</label>
+          <label class="btn btn-primary" ng-model="checkModel.right" ng-click="setChartType('BarChart')">Bar</label>
+          <label class="btn btn-primary" ng-model="checkModel.left" ng-click="setChartType('AreaChart')">Area</label>
+        </div>
+      </div>
+    </accordion-group>
+</accordion>
+</div>
+<div google-chart chart="chartObject" style="{{cssStyle}}"></div>

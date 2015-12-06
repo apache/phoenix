@@ -1,0 +1,149 @@
+0 info it worked if it ends with ok
+1 verbose cli [ 'node', '/usr/local/bin/npm', 'install' ]
+2 info using npm@2.11.2
+3 info using node@v0.10.25
+4 verbose node symlink /usr/bin/node
+5 verbose readDependencies loading dependencies from /home/pc/Apache/nishani/4.4-HBase-0.98/phoenix/phoenix-tracing-webapp/src/main/webapp/package.json
+6 warn package.json apache-phoenix-tracing-app@0.0.1 No README data
+7 verbose install where, deps [ '/home/pc/Apache/nishani/4.4-HBase-0.98/phoenix/phoenix-tracing-webapp/src/main/webapp',
+7 verbose install   [ 'http-server' ] ]
+8 verbose install where, peers [ '/home/pc/Apache/nishani/4.4-HBase-0.98/phoenix/phoenix-tracing-webapp/src/main/webapp',
+8 verbose install   [] ]
+9 verbose installManyTop reading for lifecycle /home/pc/Apache/nishani/4.4-HBase-0.98/phoenix/phoenix-tracing-webapp/src/main/webapp/package.json
+10 info preinstall apache-phoenix-tracing-app@0.0.1
+11 verbose readDependencies loading dependencies from /home/pc/Apache/nishani/4.4-HBase-0.98/phoenix/phoenix-tracing-webapp/src/main/webapp/package.json
+12 silly cache add args [ 'http-server@^0.6.1', null ]
+13 verbose cache add spec http-server@^0.6.1
+14 silly cache add parsed spec { raw: 'http-server@^0.6.1',
+14 silly cache add   scope: null,
+14 silly cache add   name: 'http-server',
+14 silly cache add   rawSpec: '^0.6.1',
+14 silly cache add   spec: '>=0.6.1 <0.7.0',
+14 silly cache add   type: 'range' }
+15 silly addNamed http-server@>=0.6.1 <0.7.0
+16 verbose addNamed ">=0.6.1 <0.7.0" is a valid semver range for http-server
+17 silly addNameRange { name: 'http-server', range: '>=0.6.1 <0.7.0', hasData: false }
+18 silly mapToRegistry name http-server
+19 silly mapToRegistry using default registry
+20 silly mapToRegistry registry https://registry.npmjs.org/
+21 silly mapToRegistry uri https://registry.npmjs.org/http-server
+22 verbose addNameRange registry:https://registry.npmjs.org/http-server not in flight; fetching
+23 verbose request uri https://registry.npmjs.org/http-server
+24 verbose request no auth needed
+25 info attempt registry request try #1 at 22:16:41
+26 verbose request id afe804f2972010d3
+27 verbose etag "1HJ5GERQ4MOZZFBBC55YOW6V1"
+28 http request GET https://registry.npmjs.org/http-server
+29 http 304 https://registry.npmjs.org/http-server
+30 silly get cb [ 304,
+30 silly get   { date: 'Tue, 28 Jul 2015 16:46:38 GMT',
+30 silly get     via: '1.1 varnish',
+30 silly get     'cache-control': 'max-age=60',
+30 silly get     etag: '"1HJ5GERQ4MOZZFBBC55YOW6V1"',
+30 silly get     age: '17',
+30 silly get     connection: 'keep-alive',
+30 silly get     'x-served-by': 'cache-sin6924-SIN',
+30 silly get     'x-cache': 'HIT',
+30 silly get     'x-cache-hits': '1',
+30 silly get     'x-timer': 'S1438101998.716579,VS0,VE0',
+30 silly get     vary: 'Accept' } ]
+31 verbose etag https://registry.npmjs.org/http-server from cache
+32 verbose get saving http-server to /home/pc/.npm/registry.npmjs.org/http-server/.cache.json
+33 silly addNameRange number 2 { name: 'http-server', range: '>=0.6.1 <0.7.0', hasData: true }
+34 silly addNameRange versions [ 'http-server',
+34 silly addNameRange   [ '0.1.0',
+34 silly addNameRange     '0.1.1',
+34 silly addNameRange     '0.1.3',
+34 silly addNameRange     '0.2.1',
+34 silly addNameRange     '0.2.2',
+34 silly addNameRange     '0.2.3',
+34 silly addNameRange     '0.2.4',
+34 silly addNameRange     '0.2.5',
+34 silly addNameRange     '0.2.6',
+34 silly addNameRange     '0.2.9',
+34 silly addNameRange     '0.3.0',
+34 silly addNameRange     '0.4.0',
+34 silly addNameRange     '0.4.1',
+34 silly addNameRange     '0.5.0',
+34 silly addNameRange     '0.5.1',
+34 silly addNameRange     '0.5.2',
+34 silly addNameRange     '0.5.3',
+34 silly addNameRange     '0.5.5',
+34 silly addNameRange     '0.6.0',
+34 silly addNameRange     '0.6.1',
+34 silly addNameRange     '0.7.0',
+34 silly addNameRange     '0.7.1',
+34 silly addNameRange     '0.7.2',
+34 silly addNameRange     '0.7.3',
+34 silly addNameRange     '0.7.4',
+34 silly addNameRange     '0.7.5',
+34 silly addNameRange     '0.8.0' ] ]
+35 silly addNamed http-server@0.6.1
+36 verbose addNamed "0.6.1" is a plain semver version for http-server
+37 silly cache afterAdd http-server@0.6.1
+38 verbose afterAdd /home/pc/.npm/http-server/0.6.1/package/package.json not in flight; writing
+39 verbose afterAdd /home/pc/.npm/http-server/0.6.1/package/package.json written
+40 silly install resolved [ { name: 'http-server',
+40 silly install resolved     version: '0.6.1',
+40 silly install resolved     author: { name: 'Nodejitsu', email: 'support@nodejitsu.com' },
+40 silly install resolved     description: 'a simple zero-configuration command-line http server',
+40 silly install resolved     main: './lib/http-server',
+40 silly install resolved     repository:
+40 silly install resolved      { type: 'git',
+40 silly install resolved        url: 'git://github.com/nodeapps/http-server.git' },
+40 silly install resolved     keywords: [ 'cli', 'command' ],
+40 silly install resolved     scripts:
+40 silly install resolved      { start: 'node ./bin/http-server',
+40 silly install resolved        test: 'vows --spec --isolate' },
+40 silly install resolved     contributors:
+40 silly install resolved      [ [Object],
+40 silly install resolved        [Object],
+40 silly install resolved        [Object],
+40 silly install resolved        [Object],
+40 silly install resolved        [Object],
+40 silly install resolved        [Object],
+40 silly install resolved        [Object],
+40 silly install resolved        [Object] ],
+40 silly install resolved     dependencies:
+40 silly install resolved      { colors: '0.6.x',
+40 silly install resolved        optimist: '0.5.x',
+40 silly install resolved        union: '0.3.x',
+40 silly install resolved        ecstatic: '0.4.x',
+40 silly install resolved        portfinder: '0.2.x',
+40 silly install resolved        opener: '~1.3.0' },
+40 silly install resolved     devDependencies: { vows: '0.7.x', request: '2.21.x' },
+40 silly install resolved     bugs: { url: 'https://github.com/nodeapps/http-server/issues' },
+40 silly install resolved     licenses: [ [Object] ],
+40 silly install resolved     analyze: false,
+40 silly install resolved     preferGlobal: 'true',
+40 silly install resolved     bin: { 'http-server': './bin/http-server' },
+40 silly install resolved     readme: '# http-server: a command-line http server\n\n`http-server` is a simple, zero-configuration command-line http server.  It is powerful enough for production usage, but it\'s simple and hackable enough to be used for testing, local development, and learning.\n\n![](https://github.com/nodeapps/http-server/raw/master/screenshots/public.png)\n\n# Installing globally:\n\nInstallation via `npm`.  If you don\'t have `npm` yet:\n\n     curl https://npmjs.org/install.sh | sh\n     \nOnce you have `npm`:\n\n     npm install http-server -g\n     \nThis will install `http-server` globally so that it may be run from the command line.\n\n## Usage:\n\n     http-server [path] [options]\n\n`[path]` defaults to `./public` if the folder exists, and `./` otherwise.\n\n# Installing as a node app\n\n     mkdir myapp\n     cd myapp/\n     jitsu install http-server\n\n*If you do not have `jitsu` installed you can install it via `npm install jitsu -g`*\n\n## Usage\n\n### Starting http-server locally\n\n     node bin/http-server\n\n*Now you can visit http://localhost:8080 to view your server*\n\n### Deploy http-server to nodejitsu\n\n     jitsu deploy\n\n*You will now be prompted for a `subdomain` to deploy your application on*\n\n## Available Options:\n\n`-p` Port to listen for connections on (defaults to 8080)\n\n`-a` Address to bind to (defaults to \'0.0.0.0\')\n\n`-d` Show directory listings (defaults to \'True\')\n\n`-i` Display autoIndex (defaults to \'True\')\n\n`-e` or `--ext` Default file extension (defaults to \'html\')\n\n`-s` or `--silent` In silent mode, log messages aren\'t logged to the console.\n\n`-h` or `--help` Displays a list of commands and exits.\n\n`-c` Set cache time (in seconds) for cache-control max-age header, e.g. -c10 for 10 seconds. To disable caching, use -c-1.\n',
+40 silly install resolved     readmeFilename: 'README.md',
+40 silly install resolved     homepage: 'https://github.com/nodeapps/http-server#readme',
+40 silly install resolved     _id: 'http-server@0.6.1',
+40 silly install resolved     _from: 'http-server@>=0.6.1 <0.7.0' } ]
+41 info install http-server@0.6.1 into /home/pc/Apache/nishani/4.4-HBase-0.98/phoenix/phoenix-tracing-webapp/src/main/webapp
+42 info installOne http-server@0.6.1
+43 verbose installOne of http-server to /home/pc/Apache/nishani/4.4-HBase-0.98/phoenix/phoenix-tracing-webapp/src/main/webapp not in flight; installing
+44 warn locking Error: EACCES, open '/home/pc/.npm/_locks/http-server-69140a90810f6961.lock'
+44 warn locking  /home/pc/.npm/_locks/http-server-69140a90810f6961.lock failed { [Error: EACCES, open '/home/pc/.npm/_locks/http-server-69140a90810f6961.lock']
+44 warn locking   errno: 3,
+44 warn locking   code: 'EACCES',
+44 warn locking   path: '/home/pc/.npm/_locks/http-server-69140a90810f6961.lock' }
+45 verbose stack Error: Attempt to unlock /home/pc/Apache/nishani/4.4-HBase-0.98/phoenix/phoenix-tracing-webapp/src/main/webapp/node_modules/http-server, which hasn't been locked
+45 verbose stack     at unlock (/usr/local/lib/node_modules/npm/lib/utils/locker.js:66:11)
+45 verbose stack     at cb (/usr/local/lib/node_modules/npm/lib/install.js:1017:5)
+45 verbose stack     at /usr/local/lib/node_modules/npm/lib/install.js:1021:20
+45 verbose stack     at /usr/local/lib/node_modules/npm/lib/utils/locker.js:40:9
+45 verbose stack     at cb (/usr/local/lib/node_modules/npm/node_modules/lockfile/lockfile.js:149:38)
+45 verbose stack     at /usr/local/lib/node_modules/npm/node_modules/lockfile/lockfile.js:177:38
+45 verbose stack     at Object.oncomplete (fs.js:107:15)
+46 verbose cwd /home/pc/Apache/nishani/4.4-HBase-0.98/phoenix/phoenix-tracing-webapp/src/main/webapp
+47 error Linux 3.13.0-37-generic
+48 error argv "node" "/usr/local/bin/npm" "install"
+49 error node v0.10.25
+50 error npm  v2.11.2
+51 error Attempt to unlock /home/pc/Apache/nishani/4.4-HBase-0.98/phoenix/phoenix-tracing-webapp/src/main/webapp/node_modules/http-server, which hasn't been locked
+52 error If you need help, you may report this error at:
+52 error     <https://github.com/npm/npm/issues>
+53 verbose exit [ 1, true ]
