@@ -58,7 +58,7 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import co.cask.tephra.hbase98.coprocessor.TransactionProcessor;
+import co.cask.tephra.hbase10.coprocessor.TransactionProcessor;
 
 import com.google.common.base.Objects;
 import com.google.common.collect.Maps;
