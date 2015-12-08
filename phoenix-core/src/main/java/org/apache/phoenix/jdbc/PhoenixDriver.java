@@ -23,16 +23,26 @@ import java.sql.SQLException;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import javax.annotation.concurrent.GuardedBy;
 
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.query.ConnectionlessQueryServicesImpl;
+import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesImpl;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -64,7 +74,38 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
                 Runtime.getRuntime().addShutdownHook(new Thread() {
                     @Override
                     public void run() {
-                        closeInstance(INSTANCE);
+                        final Configuration config =
+                            HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
+                        final ExecutorService svc = Executors.newSingleThreadExecutor();
+                        Future<?> future = svc.submit(new Runnable() {
+                            @Override
+                            public void run() {
+                                closeInstance(INSTANCE);
+                            }
+                        });
+
+                        // Pull the timeout value (default 5s).
+                        long millisBeforeShutdown = config.getLong(
+                                QueryServices.DRIVER_SHUTDOWN_TIMEOUT_MS,
+                                QueryServicesOptions.DEFAULT_DRIVER_SHUTDOWN_TIMEOUT_MS);
+
+                        // Close with a timeout. If this is running, we know the JVM wants to
+                        // go down. There may be other threads running that are holding the lock.
+                        // We don't want to be blocked on them (for the normal HBase retry policy).
+                        //
+                        // We don't care about any exceptions, we're going down anyways.
+                        try {
+                            future.get(millisBeforeShutdown, TimeUnit.MILLISECONDS);
+                        } catch (ExecutionException e) {
+                            logger.warn("Failed to close instance", e);
+                        } catch (InterruptedException e) {
+                            logger.warn("Interrupted waiting to close instance", e);
+                        } catch (TimeoutException e) {
+                            logger.warn("Timed out waiting to close instance", e);
+                        }
+
+                        // We're going down, but try to clean up.
+                        svc.shutdown();
                     }
                 });
 
