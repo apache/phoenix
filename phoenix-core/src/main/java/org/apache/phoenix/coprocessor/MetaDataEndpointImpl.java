@@ -1837,7 +1837,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         }
         // Sort the puts by ordinal position 
         Collections.sort(columnPutsForBaseTable);
-        assert columnPutsForBaseTable.size() > 0;
         for (Result viewResult : childViewsResult.getResults()) {
             short deltaNumPkColsSoFar = 0;
             short columnsAddedToView = 0;
