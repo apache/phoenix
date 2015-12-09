@@ -870,6 +870,33 @@ public class ArrayIT extends BaseClientManagedTimeIT {
     }
 
     @Test
+    public void testArrayWithVarCharArray() throws Exception {
+        Connection conn;
+        PreparedStatement stmt;
+        ResultSet rs;
+        long ts = nextTimestamp();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute("CREATE TABLE t ( k VARCHAR PRIMARY KEY, a VARCHAR ARRAY[])");
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
+        conn = DriverManager.getConnection(getUrl(), props);
+        stmt = conn.prepareStatement("UPSERT INTO t VALUES('a',ARRAY['a',null])");
+        int res = stmt.executeUpdate();
+        assertEquals(1, res);
+        conn.commit();
+        conn.close();
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
+        conn = DriverManager.getConnection(getUrl(), props);
+        rs = conn.createStatement().executeQuery("SELECT ARRAY_ELEM(a,2) FROM t");
+        assertTrue(rs.next());
+        assertEquals(null, rs.getString(1));
+        conn.close();
+    }
+
+    @Test
     public void testArraySelectSingleArrayElemWithCast() throws Exception {
         Connection conn;
         PreparedStatement stmt;
