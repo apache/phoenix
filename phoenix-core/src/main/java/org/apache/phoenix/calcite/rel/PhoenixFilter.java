@@ -6,12 +6,15 @@ import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptCost;
 import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelTraitSet;
+import org.apache.calcite.plan.RelOptUtil.InputFinder;
 import org.apache.calcite.rel.RelCollation;
 import org.apache.calcite.rel.RelCollationTraitDef;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Filter;
 import org.apache.calcite.rel.metadata.RelMdCollation;
 import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.util.ImmutableBitSet;
+import org.apache.calcite.util.ImmutableIntList;
 import org.apache.phoenix.calcite.CalciteUtils;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.QueryPlan;
@@ -56,7 +59,12 @@ public class PhoenixFilter extends Filter implements PhoenixRel {
     }
 
     public QueryPlan implement(Implementor implementor) {
+        ImmutableIntList columnRefList = implementor.getCurrentContext().columnRefList;
+        ImmutableBitSet bitSet = InputFinder.analyze(condition).inputBitSet.addAll(columnRefList).build();
+        columnRefList = ImmutableIntList.copyOf(bitSet.asList());
+        implementor.pushContext(implementor.getCurrentContext().withColumnRefList(columnRefList));
         QueryPlan plan = implementor.visitInput(0, (PhoenixRel) getInput());
+        implementor.popContext();
         Expression expr = CalciteUtils.toExpression(condition, implementor);
         return new ClientScanPlan(plan.getContext(), plan.getStatement(), plan.getTableRef(),
                 plan.getProjector(), null, expr, OrderBy.EMPTY_ORDER_BY, plan);

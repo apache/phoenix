@@ -7,18 +7,22 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.calcite.avatica.util.ByteString;
+import org.apache.calcite.plan.RelOptTable;
+import org.apache.calcite.prepare.Prepare;
 import org.apache.calcite.rel.RelCollation;
 import org.apache.calcite.rel.RelCollations;
 import org.apache.calcite.rel.RelFieldCollation;
 import org.apache.calcite.rel.RelFieldCollation.Direction;
 import org.apache.calcite.rel.RelFieldCollation.NullDirection;
 import org.apache.calcite.rel.core.JoinRelType;
+import org.apache.calcite.rel.core.Project;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexCorrelVariable;
 import org.apache.calcite.rex.RexFieldAccess;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.rex.RexVisitorImpl;
 import org.apache.calcite.sql.SemiJoinType;
 import org.apache.calcite.sql.SqlAggFunction;
 import org.apache.calcite.sql.SqlFunction;
@@ -27,6 +31,7 @@ import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.util.NlsString;
+import org.apache.calcite.util.Util;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.calcite.rel.PhoenixRel.Implementor;
@@ -82,6 +87,7 @@ import org.apache.phoenix.expression.function.SumAggregateFunction;
 import org.apache.phoenix.expression.function.TrimFunction;
 import org.apache.phoenix.expression.function.UpperFunction;
 import org.apache.phoenix.parse.JoinTableNode.JoinType;
+import org.apache.phoenix.parse.SequenceValueParseNode;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TypeMismatchException;
@@ -775,6 +781,28 @@ public class CalciteUtils {
                 }
             }
         });
+        EXPRESSION_MAP.put(SqlKind.CURRENT_VALUE, new ExpressionFactory() {
+            @Override
+            public Expression newExpression(RexNode node, Implementor implementor) {
+                RexCall call = (RexCall) node;
+                RexLiteral operand = (RexLiteral) call.getOperands().get(0);
+                List<String> name = Util.stringToList((String) operand.getValue2());
+                RelOptTable table = Prepare.CatalogReader.THREAD_LOCAL.get().getTable(name);
+                PhoenixSequence seq = table.unwrap(PhoenixSequence.class);
+                return implementor.newSequenceExpression(seq, SequenceValueParseNode.Op.CURRENT_VALUE);
+            }
+        });
+        EXPRESSION_MAP.put(SqlKind.NEXT_VALUE, new ExpressionFactory() {
+            @Override
+            public Expression newExpression(RexNode node, Implementor implementor) {
+                RexCall call = (RexCall) node;
+                RexLiteral operand = (RexLiteral) call.getOperands().get(0);
+                List<String> name = Util.stringToList((String) operand.getValue2());
+                RelOptTable table = Prepare.CatalogReader.THREAD_LOCAL.get().getTable(name);
+                PhoenixSequence seq = table.unwrap(PhoenixSequence.class);
+                return implementor.newSequenceExpression(seq, SequenceValueParseNode.Op.NEXT_VALUE);
+            }
+        });
         // TODO: SqlKind.CASE
 	}
 	
@@ -916,4 +944,49 @@ public class CalciteUtils {
 	public static interface FunctionFactory {
 	    public FunctionExpression newFunction(SqlFunction sqlFunc, List<Expression> args);
 	}
+	
+	public static boolean hasSequenceValueCall(Project project) {
+		SequenceValueFinder seqFinder = new SequenceValueFinder();
+		for (RexNode node : project.getProjects()) {
+			node.accept(seqFinder);
+			if (seqFinder.sequenceValueCall != null) {
+				return true;
+			}
+		}
+		
+		return false;
+	}
+	
+	public static PhoenixSequence findSequence(Project project) {
+        SequenceValueFinder seqFinder = new SequenceValueFinder();
+        for (RexNode node : project.getProjects()) {
+            node.accept(seqFinder);
+            if (seqFinder.sequenceValueCall != null) {
+                RexLiteral operand =
+                		(RexLiteral) seqFinder.sequenceValueCall.getOperands().get(0);
+                List<String> name = Util.stringToList((String) operand.getValue2());
+                RelOptTable table = Prepare.CatalogReader.THREAD_LOCAL.get().getTable(name);
+                return table.unwrap(PhoenixSequence.class);
+            }
+        }
+        
+        return null;
+	}
+    
+    private static class SequenceValueFinder extends RexVisitorImpl<Void> {
+        private RexCall sequenceValueCall;
+
+        private SequenceValueFinder() {
+            super(true);
+        }
+        
+        public Void visitCall(RexCall call) {
+            if (sequenceValueCall == null
+                    && (call.getKind() == SqlKind.CURRENT_VALUE
+                        || call.getKind() == SqlKind.NEXT_VALUE)) {
+                sequenceValueCall = call;
+            }
+            return null;
+        }
+    }
 }

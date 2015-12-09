@@ -10,6 +10,12 @@ import org.apache.calcite.linq4j.tree.Expression;
 import org.apache.calcite.materialize.MaterializationService;
 import org.apache.calcite.schema.*;
 import org.apache.calcite.schema.impl.ViewTable;
+import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.ResultScanner;
+import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.filter.KeyOnlyFilter;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -17,6 +23,7 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.parse.ColumnDef;
 import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.TableName;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
@@ -28,6 +35,7 @@ import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.IndexUtil;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.DriverManager;
@@ -62,6 +70,7 @@ public class PhoenixSchema implements Schema {
     protected final Map<String, PTable> tableMap;
     protected final Map<String, ViewDef> viewDefMap;
     protected final Map<String, Function> functionMap;
+    protected final Map<String, PhoenixSequence> sequenceMap;
     
     private PhoenixSchema(String name, String schemaName, PhoenixConnection pc) {
         this.name = name;
@@ -71,7 +80,9 @@ public class PhoenixSchema implements Schema {
         this.tableMap = Maps.<String, PTable> newHashMap();
         this.viewDefMap = Maps.<String, ViewDef> newHashMap();
         this.functionMap = Maps.<String, Function> newHashMap();
+        this.sequenceMap = Maps.<String, PhoenixSequence> newHashMap();
         loadTables();
+        loadSequences();
         this.subSchemaNames = schemaName == null ? 
                   ImmutableSet.<String> copyOf(loadSubSchemaNames()) 
                 : Collections.<String> emptySet();
@@ -159,6 +170,49 @@ public class PhoenixSchema implements Schema {
                 table.isWALDisabled(), false, table.getStoreNulls(), table.getViewType(), table.getViewIndexId(), table.getIndexType(),
                 table.getTableStats(), table.getBaseColumnCount(), table.rowKeyOrderOptimizable());
     }
+    
+    private void loadSequences() {
+        try {
+            int nSeperators = 1; //pc.getQueryServices().getSequenceSaltBuckets() <= 0 ? 1 : 2;
+            HTableInterface hTable = pc.getQueryServices().getTable(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_BYTES);
+            Scan scan = new Scan();
+            scan.setFilter(new KeyOnlyFilter());
+            ResultScanner scanner = hTable.getScanner(scan);
+            Result next = scanner.next();
+            while (next != null) {
+                byte[] key = next.getRow();
+                int nSkipped = 0;
+                while (nSkipped < nSeperators) {
+                    int index = Bytes.indexOf(key, QueryConstants.SEPARATOR_BYTE_ARRAY);
+                    if (index >= 0) {
+                        nSkipped++;
+                        int offset = index + QueryConstants.SEPARATOR_BYTE_ARRAY.length;
+                        key = Bytes.copy(key, offset, key.length - offset);
+                    } else {
+                        break;
+                    }
+                }
+                if (nSkipped != nSeperators) {
+                    throw new RuntimeException("Unrecognized sequence key: '" + key + "'");
+                }
+                int index = Bytes.indexOf(key, QueryConstants.SEPARATOR_BYTE_ARRAY);
+                if (index < 0) {
+                    throw new RuntimeException("Unrecognized sequence key: '" + key + "'");
+                }
+                if ((schemaName == null && index == 0)
+                        || (schemaName != null && schemaName.equals(Bytes.toString(key, 0, index)))) {
+                    int offset = index + QueryConstants.SEPARATOR_BYTE_ARRAY.length;
+                    String sequenceName = Bytes.toString(key, offset, key.length - offset);
+                    sequenceMap.put(sequenceName, new PhoenixSequence(schemaName, sequenceName, pc));
+                }
+                next = scanner.next();
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
 
     private static Schema create(String name, Map<String, Object> operand) {
         String url = (String) operand.get("url");
@@ -183,12 +237,16 @@ public class PhoenixSchema implements Schema {
     @Override
     public Table getTable(String name) {
         PTable table = tableMap.get(name);
-        return table == null ? null : new PhoenixTable(pc, table);
+        if (table != null) {
+            return new PhoenixTable(pc, table);
+        }
+        PhoenixSequence sequence = sequenceMap.get(name);
+        return sequence;
     }
 
     @Override
     public Set<String> getTableNames() {
-        return tableMap.keySet();
+        return Sets.union(tableMap.keySet(), sequenceMap.keySet());
     }
 
     @Override

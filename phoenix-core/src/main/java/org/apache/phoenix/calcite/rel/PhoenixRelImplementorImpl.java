@@ -7,12 +7,15 @@ import java.util.Stack;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.calcite.CalciteUtils;
+import org.apache.phoenix.calcite.PhoenixSequence;
 import org.apache.phoenix.calcite.PhoenixTable;
 import org.apache.phoenix.calcite.rel.PhoenixRel.ImplementorContext;
 import org.apache.phoenix.compile.ColumnProjector;
 import org.apache.phoenix.compile.ExpressionProjector;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
+import org.apache.phoenix.compile.SequenceManager;
+import org.apache.phoenix.compile.SequenceValueExpression;
 import org.apache.phoenix.compile.TupleProjectionCompiler;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.execute.RuntimeContext;
@@ -21,6 +24,8 @@ import org.apache.phoenix.expression.ColumnExpression;
 import org.apache.phoenix.expression.CorrelateVariableFieldAccessExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.ParseNodeFactory;
+import org.apache.phoenix.parse.SequenceValueParseNode;
+import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.KeyValueSchema;
 import org.apache.phoenix.schema.PColumn;
@@ -42,6 +47,7 @@ public class PhoenixRelImplementorImpl implements PhoenixRel.Implementor {
 	private TableRef tableRef;
 	private List<PColumn> mappedColumns;
 	private Stack<ImplementorContext> contextStack;
+	private SequenceManager sequenceManager;
 	
 	public PhoenixRelImplementorImpl(RuntimeContext runtimeContext) {
 	    this.runtimeContext = runtimeContext;
@@ -67,6 +73,17 @@ public class PhoenixRelImplementorImpl implements PhoenixRel.Implementor {
     }
     
     @Override
+    public SequenceValueExpression newSequenceExpression(PhoenixSequence seq, SequenceValueParseNode.Op op) {
+        PName tenantName = seq.pc.getTenantId();
+        TableName tableName = TableName.create(seq.schemaName, seq.sequenceName);
+        try {
+            return sequenceManager.newSequenceReference(tenantName, tableName, null, op);
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+    }
+    
+    @Override
     public RuntimeContext getRuntimeContext() {
         return runtimeContext;
     }
@@ -80,6 +97,11 @@ public class PhoenixRelImplementorImpl implements PhoenixRel.Implementor {
     @Override
     public TableRef getTableRef() {
         return this.tableRef;
+    }
+    
+    @Override
+    public void setSequenceManager(SequenceManager sequenceManager) {
+        this.sequenceManager = sequenceManager;
     }
 
     @Override

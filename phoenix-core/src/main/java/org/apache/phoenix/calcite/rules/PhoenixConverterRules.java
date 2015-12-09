@@ -81,8 +81,7 @@ public class PhoenixConverterRules {
         PhoenixServerSortRule.SERVERJOIN,
         PhoenixLimitRule.INSTANCE,
         PhoenixFilterRule.INSTANCE,
-        PhoenixClientProjectRule.SERVERJOIN,
-        PhoenixClientProjectRule.CLIENT,
+        PhoenixClientProjectRule.INSTANCE,
         PhoenixServerProjectRule.INSTANCE,
         PhoenixClientAggregateRule.INSTANCE,
         PhoenixServerAggregateRule.SERVER,
@@ -106,8 +105,7 @@ public class PhoenixConverterRules {
         PhoenixServerSortRule.SERVERJOIN,
         PhoenixLimitRule.INSTANCE,
         PhoenixFilterRule.CONVERTIBLE,
-        PhoenixClientProjectRule.CONVERTIBLE_SERVERJOIN,
-        PhoenixClientProjectRule.CONVERTIBLE_CLIENT,
+        PhoenixClientProjectRule.CONVERTIBLE,
         PhoenixServerProjectRule.CONVERTIBLE,
         PhoenixClientAggregateRule.CONVERTIBLE,
         PhoenixServerAggregateRule.CONVERTIBLE_SERVER,
@@ -301,30 +299,14 @@ public class PhoenixConverterRules {
             }            
         };
         
-        private static final PhoenixClientProjectRule SERVERJOIN =
-                new PhoenixClientProjectRule(
-                        Predicates.<LogicalProject>alwaysTrue(),
-                        PhoenixConvention.SERVERJOIN);
-        private static final PhoenixClientProjectRule CLIENT =
-                new PhoenixClientProjectRule(
-                        Predicates.<LogicalProject>alwaysTrue(),
-                        PhoenixConvention.CLIENT);
-        private static final PhoenixClientProjectRule CONVERTIBLE_SERVERJOIN =
-                new PhoenixClientProjectRule(
-                        IS_CONVERTIBLE,
-                        PhoenixConvention.SERVERJOIN);
-        private static final PhoenixClientProjectRule CONVERTIBLE_CLIENT =
-                new PhoenixClientProjectRule(
-                        IS_CONVERTIBLE,
-                        PhoenixConvention.CLIENT);
+        private static final PhoenixClientProjectRule INSTANCE =
+                new PhoenixClientProjectRule(Predicates.<LogicalProject>alwaysTrue());
+        private static final PhoenixClientProjectRule CONVERTIBLE =
+                new PhoenixClientProjectRule(IS_CONVERTIBLE);
         
-        private final Convention inputConvention;
-
-        private PhoenixClientProjectRule(Predicate<LogicalProject> predicate, Convention inputConvention) {
+        private PhoenixClientProjectRule(Predicate<LogicalProject> predicate) {
             super(LogicalProject.class, predicate, Convention.NONE, 
-                    PhoenixConvention.CLIENT,
-                    "PhoenixClientProjectRule:" + inputConvention);
-            this.inputConvention = inputConvention;
+                    PhoenixConvention.CLIENT, "PhoenixClientProjectRule");
         }
 
         public RelNode convert(RelNode rel) {
@@ -332,7 +314,7 @@ public class PhoenixConverterRules {
             return PhoenixClientProject.create(
                 convert(
                         project.getInput(), 
-                        project.getInput().getTraitSet().replace(inputConvention)), 
+                        project.getInput().getTraitSet().replace(PhoenixConvention.GENERIC)), 
                 project.getProjects(),
                 project.getRowType());
         }
@@ -351,9 +333,16 @@ public class PhoenixConverterRules {
             }            
         };
         
-        private static final PhoenixServerProjectRule INSTANCE = new PhoenixServerProjectRule(Predicates.<LogicalProject>alwaysTrue());
+        private static Predicate<LogicalProject> NO_SEQUENCE = new Predicate<LogicalProject>() {
+            @Override
+            public boolean apply(LogicalProject input) {
+                return !CalciteUtils.hasSequenceValueCall(input);
+            }            
+        };
+        
+        private static final PhoenixServerProjectRule INSTANCE = new PhoenixServerProjectRule(NO_SEQUENCE);
 
-        private static final PhoenixServerProjectRule CONVERTIBLE = new PhoenixServerProjectRule(IS_CONVERTIBLE);
+        private static final PhoenixServerProjectRule CONVERTIBLE = new PhoenixServerProjectRule(Predicates.and(NO_SEQUENCE, IS_CONVERTIBLE));
 
         private PhoenixServerProjectRule(Predicate<LogicalProject> predicate) {
             super(LogicalProject.class, predicate, Convention.NONE, 

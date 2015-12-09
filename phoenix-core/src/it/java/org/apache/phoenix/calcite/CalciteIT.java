@@ -21,6 +21,7 @@ import com.google.common.collect.Lists;
 
 import org.apache.calcite.config.CalciteConnectionProperty;
 import org.apache.phoenix.end2end.BaseClientManagedTimeIT;
+import org.apache.phoenix.schema.SequenceAlreadyExistsException;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -261,7 +262,8 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                 "CREATE INDEX IDX1 ON aTable (a_string) INCLUDE (b_string, x_integer)",
                 "CREATE INDEX IDX2 ON aTable (b_string) INCLUDE (a_string, y_integer)",
                 "CREATE INDEX IDX_FULL ON aTable (b_string) INCLUDE (a_string, a_integer, a_date, a_time, a_timestamp, x_decimal, x_long, x_integer, y_integer, a_byte, a_short, a_float, a_double, a_unsigned_float, a_unsigned_double)",
-                "CREATE VIEW v AS SELECT * from aTable where a_string = 'a'");
+                "CREATE VIEW v AS SELECT * from aTable where a_string = 'a'",
+                "CREATE SEQUENCE seq START WITH 1 INCREMENT BY 1");
         final Connection connection = DriverManager.getConnection(url);
         connection.createStatement().execute("UPDATE STATISTICS ATABLE");
         connection.createStatement().execute("UPDATE STATISTICS " + JOIN_CUSTOMER_TABLE_FULL_NAME);
@@ -284,6 +286,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
             try {
                 conn.createStatement().execute(ddl);
             } catch (TableAlreadyExistsException e) {
+            } catch (SequenceAlreadyExistsException e) {                
             }
         }
         conn.close();        
@@ -1695,6 +1698,45 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                            "    PhoenixTableScan(table=[[phoenix, IDX_MULTITENANT_TEST_VIEW2]], scanOrder=[FORWARD])\n")
                 .resultIs(new Object[][] {
                         {"5", 6}})
+                .close();
+    }
+    
+    @Test public void testSequence() throws Exception {
+        start(false).sql("select NEXT VALUE FOR seq, c0 from (values (1), (1)) as t(c0)")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                           "  PhoenixClientProject(EXPR$0=[NEXT_VALUE('\"SEQ\"')], C0=[$0])\n" +
+                           "    PhoenixValues(tuples=[[{ 1 }, { 1 }]])\n")
+                .resultIs(new Object[][]{
+                        {1L, 1},
+                        {2L, 1}})
+                .close();
+
+        start(false).sql("select NEXT VALUE FOR seq, entity_id from aTable where a_string = 'a'")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                           "  PhoenixClientProject(EXPR$0=[NEXT_VALUE('\"SEQ\"')], ENTITY_ID=[$1])\n" +
+                           "    PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'a')])\n")
+                .resultIs(new Object[][]{
+                        {3L, "00A123122312312"},
+                        {4L, "00A223122312312"},
+                        {5L, "00A323122312312"},
+                        {6L, "00A423122312312"}})
+                .close();
+        
+        start(false).sql("SELECT NEXT VALUE FOR seq, item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\"")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                           "  PhoenixClientProject(EXPR$0=[NEXT_VALUE('\"SEQ\"')], item_id=[$0], NAME=[$1], supplier_id=[$3], NAME0=[$4])\n" +
+                           "    PhoenixServerJoin(condition=[=($2, $3)], joinType=[inner])\n" +
+                           "      PhoenixServerProject(item_id=[$0], NAME=[$1], supplier_id=[$5])\n" +
+                           "        PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
+                           "      PhoenixServerProject(supplier_id=[$0], NAME=[$1])\n" +
+                           "        PhoenixTableScan(table=[[phoenix, Join, SupplierTable]])\n")
+                .resultIs(new Object[][] {
+                        {7L, "0000000001", "T1", "0000000001", "S1"}, 
+                        {8L, "0000000002", "T2", "0000000001", "S1"}, 
+                        {9L, "0000000003", "T3", "0000000002", "S2"}, 
+                        {10L, "0000000004", "T4", "0000000002", "S2"},
+                        {11L, "0000000005", "T5", "0000000005", "S5"},
+                        {12L, "0000000006", "T6", "0000000006", "S6"}})
                 .close();
     }
 

@@ -119,25 +119,29 @@ public class SequenceManager {
             return dstSequenceValues[index];
         }
     }
-
+    
     public SequenceValueExpression newSequenceReference(SequenceValueParseNode node) throws SQLException {
         PName tenantName = statement.getConnection().getTenantId();
-        String tenantId = tenantName == null ? null : tenantName.getString();
         TableName tableName = node.getTableName();
+        ParseNode numToAllocateNode = node.getNumToAllocateNode();        
+        return newSequenceReference(tenantName, tableName, numToAllocateNode, node.getOp());
+    }
+    
+    public SequenceValueExpression newSequenceReference(PName tenantName,
+            TableName tableName, ParseNode numToAllocateNode, SequenceValueParseNode.Op op) throws SQLException {
+        String tenantId = tenantName == null ? null : tenantName.getString();
         int nSaltBuckets = statement.getConnection().getQueryServices().getSequenceSaltBuckets();
-        ParseNode numToAllocateNode = node.getNumToAllocateNode();
-        
         long numToAllocate = determineNumToAllocate(tableName, numToAllocateNode);
         SequenceKey key = new SequenceKey(tenantId, tableName.getSchemaName(), tableName.getTableName(), nSaltBuckets);
         SequenceValueExpression expression = sequenceMap.get(key);
         if (expression == null) {
             int index = sequenceMap.size();
-            expression = new SequenceValueExpression(key, node.getOp(), index, numToAllocate);
+            expression = new SequenceValueExpression(key, op, index, numToAllocate);
             sequenceMap.put(key, expression);
-        } else if (expression.op != node.getOp() || expression.getNumToAllocate() < numToAllocate) {
+        } else if (expression.op != op || expression.getNumToAllocate() < numToAllocate) {
             // Keep the maximum allocation size we see in a statement
             SequenceValueExpression oldExpression = expression;
-            expression = new SequenceValueExpression(key, node.getOp(), expression.getIndex(), Math.max(expression.getNumToAllocate(), numToAllocate));
+            expression = new SequenceValueExpression(key, op, expression.getIndex(), Math.max(expression.getNumToAllocate(), numToAllocate));
             if (oldExpression.getNumToAllocate() < numToAllocate) {
                 // If we found a NEXT VALUE expression with a higher number to allocate
                 // We override the original expression
@@ -145,7 +149,7 @@ public class SequenceManager {
             }
         } 
         // If we see a NEXT and a CURRENT, treat the CURRENT just like a NEXT
-        if (node.getOp() == Op.NEXT_VALUE) {
+        if (op == Op.NEXT_VALUE) {
             isNextSequence.set(expression.getIndex());
         }
            
