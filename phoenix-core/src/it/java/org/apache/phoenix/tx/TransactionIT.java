@@ -548,4 +548,28 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
         assertTrue(conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, "DEMO")).isTransactional());
         assertTrue(conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, "DEMO_IDX")).isTransactional());
     }
+    
+    @Test
+    public void testRowTimestampDisabled() throws SQLException {
+    	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+	        conn.setAutoCommit(false);
+	        Statement stmt = conn.createStatement();
+	        try {
+	        	stmt.execute("CREATE TABLE DEMO(k VARCHAR, v VARCHAR, d DATE NOT NULL, CONSTRAINT PK PRIMARY KEY(k,d ROW_TIMESTAMP)) TRANSACTIONAL=true");
+	        	fail();
+	        }
+        	catch(SQLException e) {
+        		assertEquals(SQLExceptionCode.CANNOT_CREATE_TXN_TABLE_WITH_ROW_TIMESTAMP.getErrorCode(), e.getErrorCode());
+        	}
+	        stmt.execute("CREATE TABLE DEMO(k VARCHAR, v VARCHAR, d DATE NOT NULL, CONSTRAINT PK PRIMARY KEY(k,d ROW_TIMESTAMP))");
+	        try {
+	        	stmt.execute("ALTER TABLE DEMO SET TRANSACTIONAL=true");
+	        	fail();
+	        }
+        	catch(SQLException e) {
+        		assertEquals(SQLExceptionCode.CANNOT_ALTER_TO_BE_TXN_WITH_ROW_TIMESTAMP.getErrorCode(), e.getErrorCode());
+        	}
+        }
+    }
 }
