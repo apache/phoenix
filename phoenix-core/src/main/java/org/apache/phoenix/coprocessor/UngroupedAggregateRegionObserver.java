@@ -278,6 +278,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
         long rowCount = 0;
         final RegionScanner innerScanner = theScanner;
         region.startRegionOperation();
+        boolean updateStats = stats != null;
+        boolean success = false;
         try {
             synchronized (innerScanner) {
                 do {
@@ -286,7 +288,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
                     // since this is an indication of whether or not there are more values after the
                     // ones returned
                     hasMore = innerScanner.nextRaw(results);
-                    if (stats != null) {
+                    if (updateStats) {
                         stats.collectStatistics(results);
                     }
                     if (!results.isEmpty()) {
@@ -516,10 +518,11 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
                         hasAny = true;
                     }
                 } while (hasMore);
+                success = true;
             }
         } finally {
             try {
-                if (stats != null) {
+                if (success && updateStats) {
                     try {
                         stats.updateStatistic(region);
                     } finally {
