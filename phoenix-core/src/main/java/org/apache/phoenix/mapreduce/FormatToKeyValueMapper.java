@@ -128,6 +128,9 @@ public abstract class FormatToKeyValueMapper<RECORD> extends Mapper<LongWritable
     @SuppressWarnings("deprecation")
     @Override
     protected void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
+        if (conn == null) {
+            throw new RuntimeException("Connection not initialized.");
+        }
         try {
             RECORD record = null;
             try {
@@ -171,7 +174,9 @@ public abstract class FormatToKeyValueMapper<RECORD> extends Mapper<LongWritable
     @Override
     protected void cleanup(Context context) throws IOException, InterruptedException {
         try {
-            conn.close();
+            if (conn != null) {
+                conn.close();
+            }
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
