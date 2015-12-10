@@ -1718,6 +1718,14 @@ public class MetaDataClient {
                 .setSchemaName(schemaName).setTableName(tableName)
                 .build().buildException();
             }
+            // can't create a transactional table if it has a row timestamp column
+            if (pkConstraint.getNumColumnsWithRowTimestamp()>0 && transactional) {
+            	throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_CREATE_TXN_TABLE_WITH_ROW_TIMESTAMP)
+                .setSchemaName(schemaName).setTableName(tableName)
+                .build().buildException();
+            }
+            
+            
             tableProps.put(PhoenixDatabaseMetaData.TRANSACTIONAL, transactional);
             if (transactional) {
                 // If TTL set, use Tephra TTL property name instead
@@ -2666,6 +2674,12 @@ public class MetaDataClient {
                         if (!transactionsEnabled) {
                         	throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_ALTER_TO_BE_TXN_IF_TXNS_DISABLED)
                             .setSchemaName(schemaName).setTableName(tableName).build().buildException();
+                        }
+                        // cannot make a table transactional if it has a row timestamp column
+                        if (SchemaUtil.hasRowTimestampColumn(table)) {
+                        	throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_ALTER_TO_BE_TXN_WITH_ROW_TIMESTAMP)
+                            .setSchemaName(schemaName).setTableName(tableName)
+                            .build().buildException();
                         }
                         timeStamp = TransactionUtil.getTableTimestamp(connection, isTransactional);
                         changingPhoenixTableProperty = true;

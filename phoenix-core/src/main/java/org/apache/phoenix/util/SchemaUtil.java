@@ -886,4 +886,8 @@ public class SchemaUtil {
         }
         return columnInfoList;
     }
+    
+    public static boolean hasRowTimestampColumn(PTable table) {
+    	return table.getRowTimestampColPos()>0;
+    }
 }
