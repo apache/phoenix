@@ -36,9 +36,13 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.Timestamp;
+import java.text.SimpleDateFormat;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
 
+import org.apache.calcite.avatica.util.ArrayImpl;
 import org.apache.calcite.config.CalciteConnectionProperty;
 import org.apache.phoenix.end2end.BaseClientManagedTimeIT;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
@@ -54,8 +58,7 @@ import com.google.common.collect.Lists;
  * Integration test for queries powered by Calcite.
  */
 public class CalciteIT extends BaseClientManagedTimeIT {
-    public static final String ATABLE_NAME = "ATABLE";
-
+    
     public static Start start(boolean materializationEnabled) {
         return new Start(getConnectionProps(materializationEnabled));
     }
@@ -170,9 +173,16 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                 assertTrue(resultSet.next());
                 Object[] row = expected[i];
                 for (int j = 0; j < row.length; j++) {
-                    assertEquals(row[j], resultSet.getObject(j + 1));
+                    Object obj = resultSet.getObject(j + 1);
+                    if (obj instanceof ArrayImpl) {
+                        assertEquals(
+                                Arrays.toString((Object[]) row[j]),
+                                obj.toString());
+                    } else {
+                        assertEquals(row[j], obj);
+                    }
                 }
-            }        
+            }
             assertFalse(resultSet.next());
             resultSet.close();
             statement.close();
@@ -259,7 +269,7 @@ public class CalciteIT extends BaseClientManagedTimeIT {
     @Before
     public void initTable() throws Exception {
         final String url = getUrl();
-        ensureTableCreated(url, ATABLE_NAME);
+        ensureTableCreated(url, "ATABLE");
         initATableValues(getOrganizationId(), null, url);
         initJoinTableValues(url, null, null);
         initArrayTable();
@@ -457,6 +467,8 @@ public class CalciteIT extends BaseClientManagedTimeIT {
         }
     }
     
+    private SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+    
     @Test public void testTableScan() throws Exception {
         start(false).sql("select * from aTable where a_string = 'a'")
                 .explainIs("PhoenixToEnumerableConverter\n" +
@@ -466,6 +478,19 @@ public class CalciteIT extends BaseClientManagedTimeIT {
                           {"00D300000000XHP", "00A223122312312", "a"}, 
                           {"00D300000000XHP", "00A323122312312", "a"}, 
                           {"00D300000000XHP", "00A423122312312", "a"}})
+                .close();
+        
+        // FIXME: Should be 14:22:56 instead. Wrong due to time zone.
+        start(false).sql("select \"DATE\" from " + JOIN_ORDER_TABLE_FULL_NAME + " where \"order_id\" = '000000000000001'")
+                .resultIs(new Object[][]{
+                        {new Timestamp(format.parse("2013-11-22 19:22:56").getTime())}})
+                .close();
+        
+        start(false).sql("select student_id, scores from " + SCORES_TABLE_NAME)
+                .resultIs(new Object[][] {
+                        {1, new Integer[] {85, 80, 82}},
+                        {2, null},
+                        {3, new Integer[] {87, 88, 80}}})
                 .close();
     }
     
