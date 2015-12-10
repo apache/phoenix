@@ -64,6 +64,7 @@ public class CsvToKeyValueMapper extends FormatToKeyValueMapper<CSVRecord> {
 
     @Override
     protected void setup(Context context) throws IOException, InterruptedException {
+        super.setup(context);
         Configuration conf = context.getConfiguration();
         lineParser = new CsvLineParser(
                 CsvBulkImportUtil.getCharacter(conf, FIELD_DELIMITER_CONFKEY),

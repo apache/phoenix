@@ -228,7 +228,7 @@ public class CsvBulkLoadToolIT {
                     "--zookeeper", zkQuorum});
             fail("Csv bulk load currently has issues with local indexes.");
         } catch( UnsupportedOperationException ise) {
-            assertEquals("Local indexes not supported by CSV Bulk Loader",ise.getMessage());
+            assertEquals("Local indexes not supported by Bulk Loader",ise.getMessage());
         }
         
     }
