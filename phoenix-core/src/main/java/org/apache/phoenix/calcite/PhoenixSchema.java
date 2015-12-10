@@ -10,12 +10,6 @@ import org.apache.calcite.linq4j.tree.Expression;
 import org.apache.calcite.materialize.MaterializationService;
 import org.apache.calcite.schema.*;
 import org.apache.calcite.schema.impl.ViewTable;
-import org.apache.hadoop.hbase.client.HTableInterface;
-import org.apache.hadoop.hbase.client.Result;
-import org.apache.hadoop.hbase.client.ResultScanner;
-import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.filter.KeyOnlyFilter;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -23,7 +17,6 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.parse.ColumnDef;
 import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.TableName;
-import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
@@ -35,7 +28,6 @@ import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.IndexUtil;
 
-import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.DriverManager;
@@ -98,6 +90,19 @@ public class PhoenixSchema implements Schema {
                 if (schemaName != null) {
                     subSchemaNames.add(schemaName);
                 }
+            }
+            // TODO FIXME: Remove this after PHOENIX-2489.
+            String tenantId = pc.getTenantId() == null ? null : pc.getTenantId().getString();
+            String q = "select " + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA
+                    + " from " + PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_ESCAPED
+                    + " where " + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA
+                    + " is not null"
+                    + " and " + PhoenixDatabaseMetaData.TENANT_ID
+                    + (tenantId == null ? " is null" : " = '" + tenantId + "'");
+            rs = pc.createStatement().executeQuery(q);
+            while (rs.next()) {
+                String schemaName = rs.getString(1);
+                subSchemaNames.add(schemaName);
             }
             return subSchemaNames;
         } catch (SQLException e) {
@@ -173,43 +178,20 @@ public class PhoenixSchema implements Schema {
     
     private void loadSequences() {
         try {
-            int nSeperators = 1; //pc.getQueryServices().getSequenceSaltBuckets() <= 0 ? 1 : 2;
-            HTableInterface hTable = pc.getQueryServices().getTable(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_BYTES);
-            Scan scan = new Scan();
-            scan.setFilter(new KeyOnlyFilter());
-            ResultScanner scanner = hTable.getScanner(scan);
-            Result next = scanner.next();
-            while (next != null) {
-                byte[] key = next.getRow();
-                int nSkipped = 0;
-                while (nSkipped < nSeperators) {
-                    int index = Bytes.indexOf(key, QueryConstants.SEPARATOR_BYTE_ARRAY);
-                    if (index >= 0) {
-                        nSkipped++;
-                        int offset = index + QueryConstants.SEPARATOR_BYTE_ARRAY.length;
-                        key = Bytes.copy(key, offset, key.length - offset);
-                    } else {
-                        break;
-                    }
-                }
-                if (nSkipped != nSeperators) {
-                    throw new RuntimeException("Unrecognized sequence key: '" + key + "'");
-                }
-                int index = Bytes.indexOf(key, QueryConstants.SEPARATOR_BYTE_ARRAY);
-                if (index < 0) {
-                    throw new RuntimeException("Unrecognized sequence key: '" + key + "'");
-                }
-                if ((schemaName == null && index == 0)
-                        || (schemaName != null && schemaName.equals(Bytes.toString(key, 0, index)))) {
-                    int offset = index + QueryConstants.SEPARATOR_BYTE_ARRAY.length;
-                    String sequenceName = Bytes.toString(key, offset, key.length - offset);
-                    sequenceMap.put(sequenceName, new PhoenixSequence(schemaName, sequenceName, pc));
-                }
-                next = scanner.next();
+            // TODO FIXME: Do this in loadTables() after PHOENIX-2489.
+            String tenantId = pc.getTenantId() == null ? null : pc.getTenantId().getString();
+            String q = "select " + PhoenixDatabaseMetaData.SEQUENCE_NAME
+                    + " from " + PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_ESCAPED
+                    + " where " + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA
+                    + (schemaName == null ? " is null" : " = '" + schemaName + "'")
+                    + " and " + PhoenixDatabaseMetaData.TENANT_ID
+                    + (tenantId == null ? " is null" : " = '" + tenantId + "'");
+            ResultSet rs = pc.createStatement().executeQuery(q);
+            while (rs.next()) {
+                String sequenceName = rs.getString(1);
+                sequenceMap.put(sequenceName, new PhoenixSequence(schemaName, sequenceName, pc));
             }
         } catch (SQLException e) {
-            throw new RuntimeException(e);
-        } catch (IOException e) {
             throw new RuntimeException(e);
         }
     }

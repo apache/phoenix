@@ -17,11 +17,30 @@
  */
 package org.apache.phoenix.calcite;
 
-import com.google.common.collect.Lists;
+import static org.apache.phoenix.util.TestUtil.JOIN_CUSTOMER_TABLE_FULL_NAME;
+import static org.apache.phoenix.util.TestUtil.JOIN_ITEM_TABLE_FULL_NAME;
+import static org.apache.phoenix.util.TestUtil.JOIN_ORDER_TABLE_FULL_NAME;
+import static org.apache.phoenix.util.TestUtil.JOIN_SUPPLIER_TABLE_FULL_NAME;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import java.io.File;
+import java.io.FileWriter;
+import java.io.PrintWriter;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.List;
+import java.util.Properties;
 
 import org.apache.calcite.config.CalciteConnectionProperty;
 import org.apache.phoenix.end2end.BaseClientManagedTimeIT;
-import org.apache.phoenix.schema.SequenceAlreadyExistsException;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -29,19 +48,7 @@ import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
 
-import java.io.File;
-import java.io.FileWriter;
-import java.io.PrintWriter;
-import java.sql.*;
-import java.util.List;
-import java.util.Properties;
-
-import static org.apache.phoenix.util.TestUtil.JOIN_CUSTOMER_TABLE_FULL_NAME;
-import static org.apache.phoenix.util.TestUtil.JOIN_ITEM_TABLE_FULL_NAME;
-import static org.apache.phoenix.util.TestUtil.JOIN_ORDER_TABLE_FULL_NAME;
-import static org.apache.phoenix.util.TestUtil.JOIN_SUPPLIER_TABLE_FULL_NAME;
-import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-import static org.junit.Assert.*;
+import com.google.common.collect.Lists;
 
 /**
  * Integration test for queries powered by Calcite.
@@ -258,13 +265,13 @@ public class CalciteIT extends BaseClientManagedTimeIT {
         initArrayTable();
         initSaltedTables();
         initMultiTenantTables();
-        createIndices(
-                "CREATE INDEX IDX1 ON aTable (a_string) INCLUDE (b_string, x_integer)",
-                "CREATE INDEX IDX2 ON aTable (b_string) INCLUDE (a_string, y_integer)",
-                "CREATE INDEX IDX_FULL ON aTable (b_string) INCLUDE (a_string, a_integer, a_date, a_time, a_timestamp, x_decimal, x_long, x_integer, y_integer, a_byte, a_short, a_float, a_double, a_unsigned_float, a_unsigned_double)",
-                "CREATE VIEW v AS SELECT * from aTable where a_string = 'a'",
-                "CREATE SEQUENCE seq START WITH 1 INCREMENT BY 1");
         final Connection connection = DriverManager.getConnection(url);
+        connection.createStatement().execute("CREATE INDEX IF NOT EXISTS IDX1 ON aTable (a_string) INCLUDE (b_string, x_integer)");
+        connection.createStatement().execute("CREATE INDEX IF NOT EXISTS IDX2 ON aTable (b_string) INCLUDE (a_string, y_integer)");
+        connection.createStatement().execute("CREATE INDEX IF NOT EXISTS IDX_FULL ON aTable (b_string) INCLUDE (a_string, a_integer, a_date, a_time, a_timestamp, x_decimal, x_long, x_integer, y_integer, a_byte, a_short, a_float, a_double, a_unsigned_float, a_unsigned_double)");
+        connection.createStatement().execute("CREATE VIEW IF NOT EXISTS v AS SELECT * from aTable where a_string = 'a'");
+        connection.createStatement().execute("CREATE SEQUENCE IF NOT EXISTS seq0 START WITH 1 INCREMENT BY 1");
+        connection.createStatement().execute("CREATE SEQUENCE IF NOT EXISTS my.seq1 START WITH 2 INCREMENT BY 2");
         connection.createStatement().execute("UPDATE STATISTICS ATABLE");
         connection.createStatement().execute("UPDATE STATISTICS " + JOIN_CUSTOMER_TABLE_FULL_NAME);
         connection.createStatement().execute("UPDATE STATISTICS " + JOIN_ITEM_TABLE_FULL_NAME);
@@ -277,19 +284,6 @@ public class CalciteIT extends BaseClientManagedTimeIT {
         connection.createStatement().execute("UPDATE STATISTICS IDX2");
         connection.createStatement().execute("UPDATE STATISTICS IDX_FULL");
         connection.close();
-    }
-    
-    protected void createIndices(String... indexDDL) throws Exception {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        for (String ddl : indexDDL) {
-            try {
-                conn.createStatement().execute(ddl);
-            } catch (TableAlreadyExistsException e) {
-            } catch (SequenceAlreadyExistsException e) {                
-            }
-        }
-        conn.close();        
     }
     
     protected static final String SCORES_TABLE_NAME = "scores";
@@ -1702,41 +1696,41 @@ public class CalciteIT extends BaseClientManagedTimeIT {
     }
     
     @Test public void testSequence() throws Exception {
-        start(false).sql("select NEXT VALUE FOR seq, c0 from (values (1), (1)) as t(c0)")
+        start(false).sql("select NEXT VALUE FOR seq0, c0 from (values (1), (1)) as t(c0)")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixClientProject(EXPR$0=[NEXT_VALUE('\"SEQ\"')], C0=[$0])\n" +
+                           "  PhoenixClientProject(EXPR$0=[NEXT_VALUE('\"SEQ0\"')], C0=[$0])\n" +
                            "    PhoenixValues(tuples=[[{ 1 }, { 1 }]])\n")
                 .resultIs(new Object[][]{
                         {1L, 1},
                         {2L, 1}})
                 .close();
 
-        start(false).sql("select NEXT VALUE FOR seq, entity_id from aTable where a_string = 'a'")
+        start(false).sql("select NEXT VALUE FOR my.seq1, entity_id from aTable where a_string = 'a'")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixClientProject(EXPR$0=[NEXT_VALUE('\"SEQ\"')], ENTITY_ID=[$1])\n" +
+                           "  PhoenixClientProject(EXPR$0=[NEXT_VALUE('\"MY\".\"SEQ1\"')], ENTITY_ID=[$1])\n" +
                            "    PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'a')])\n")
                 .resultIs(new Object[][]{
-                        {3L, "00A123122312312"},
+                        {2L, "00A123122312312"},
                         {4L, "00A223122312312"},
-                        {5L, "00A323122312312"},
-                        {6L, "00A423122312312"}})
+                        {6L, "00A323122312312"},
+                        {8L, "00A423122312312"}})
                 .close();
         
-        start(false).sql("SELECT NEXT VALUE FOR seq, item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\"")
+        start(false).sql("SELECT NEXT VALUE FOR seq0, item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\"")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixClientProject(EXPR$0=[NEXT_VALUE('\"SEQ\"')], item_id=[$0], NAME=[$1], supplier_id=[$3], NAME0=[$4])\n" +
+                           "  PhoenixClientProject(EXPR$0=[NEXT_VALUE('\"SEQ0\"')], item_id=[$0], NAME=[$1], supplier_id=[$3], NAME0=[$4])\n" +
                            "    PhoenixServerJoin(condition=[=($2, $3)], joinType=[inner])\n" +
                            "      PhoenixServerProject(item_id=[$0], NAME=[$1], supplier_id=[$5])\n" +
                            "        PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
                            "      PhoenixServerProject(supplier_id=[$0], NAME=[$1])\n" +
                            "        PhoenixTableScan(table=[[phoenix, Join, SupplierTable]])\n")
                 .resultIs(new Object[][] {
-                        {7L, "0000000001", "T1", "0000000001", "S1"}, 
-                        {8L, "0000000002", "T2", "0000000001", "S1"}, 
-                        {9L, "0000000003", "T3", "0000000002", "S2"}, 
-                        {10L, "0000000004", "T4", "0000000002", "S2"},
-                        {11L, "0000000005", "T5", "0000000005", "S5"},
-                        {12L, "0000000006", "T6", "0000000006", "S6"}})
+                        {3L, "0000000001", "T1", "0000000001", "S1"}, 
+                        {4L, "0000000002", "T2", "0000000001", "S1"}, 
+                        {5L, "0000000003", "T3", "0000000002", "S2"}, 
+                        {6L, "0000000004", "T4", "0000000002", "S2"},
+                        {7L, "0000000005", "T5", "0000000005", "S5"},
+                        {8L, "0000000006", "T6", "0000000006", "S6"}})
                 .close();
     }
 
