@@ -65,6 +65,7 @@ else:
 java_cmd = java +' -Xms512m -Xmx3072m  -cp "' + phoenix_utils.pherf_conf_path + os.pathsep + phoenix_utils.hbase_conf_dir + os.pathsep + phoenix_utils.phoenix_client_jar + os.pathsep + phoenix_utils.phoenix_pherf_jar + \
     '" -Dlog4j.configuration=file:' + \
     os.path.join(phoenix_utils.current_dir, "log4j.properties") + \
+    ' -Dlogback.configurationFile=file:' + os.path.join(phoenix_utils.current_dir, "logback.xml") + \
     " org.apache.phoenix.pherf.Pherf " + args 
 
 exitcode = subprocess.call(java_cmd, shell=True)

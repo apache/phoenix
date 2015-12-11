@@ -65,6 +65,7 @@ else:
 java_cmd = java +' -cp "' + phoenix_utils.hbase_conf_dir + os.pathsep + phoenix_utils.phoenix_client_jar + \
     os.pathsep + phoenix_utils.hadoop_conf + os.pathsep + phoenix_utils.hadoop_classpath + '" -Dlog4j.configuration=file:' + \
     os.path.join(phoenix_utils.current_dir, "log4j.properties") + \
+    ' -Dlogback.configurationFile=file:' + os.path.join(phoenix_utils.current_dir, 'logback.xml') + \
     " org.apache.phoenix.util.PhoenixRuntime " + args 
 
 exitcode = subprocess.call(java_cmd, shell=True)

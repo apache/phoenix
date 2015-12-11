@@ -90,6 +90,7 @@ if os.name == 'nt':
 java_cmd = java + ' -cp "' + phoenix_utils.hbase_conf_dir + os.pathsep + phoenix_utils.phoenix_client_jar + os.pathsep + phoenix_utils.hadoop_common_jar + os.pathsep + phoenix_utils.hadoop_hdfs_jar + \
     os.pathsep + phoenix_utils.hadoop_conf + os.pathsep + phoenix_utils.hadoop_classpath + '" -Dlog4j.configuration=file:' + \
     os.path.join(phoenix_utils.current_dir, "log4j.properties") + \
+    ' -Dlogback.configurationFile=file:' + os.path.join(phoenix_utils.current_dir, 'logback.xml') + \
     " sqlline.SqlLine -d org.apache.phoenix.jdbc.PhoenixDriver \
 -u jdbc:phoenix:" + phoenix_utils.shell_quote([sys.argv[1]]) + \
     " -n none -p none --color=" + colorSetting + " --fastConnect=false --verbose=true \
