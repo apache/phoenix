@@ -119,6 +119,7 @@ else:
 java_cmd = '%(java)s -cp ' + hbase_config_path + os.pathsep + phoenix_utils.phoenix_traceserver_jar + os.pathsep + phoenix_utils.phoenix_client_jar + \
     " -Dproc_phoenixtraceserver" + \
     " -Dlog4j.configuration=file:" + os.path.join(phoenix_utils.current_dir, "log4j.properties") + \
+    " -Dlogback.configurationFile=file:" + os.path.join(phoenix_utils.current_dir, "logback.xml") + \
     " -Dpsql.root.logger=%(root_logger)s" + \
     " -Dpsql.log.dir=%(log_dir)s" + \
     " -Dpsql.log.file=%(log_file)s" + \
