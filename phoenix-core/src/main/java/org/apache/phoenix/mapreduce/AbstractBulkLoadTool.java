@@ -74,7 +74,7 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
     protected static final Logger LOG = LoggerFactory.getLogger(AbstractBulkLoadTool.class);
 
     static final Option ZK_QUORUM_OPT = new Option("z", "zookeeper", true, "Supply zookeeper connection details (optional)");
-    static final Option INPUT_PATH_OPT = new Option("i", "input", true, "Input path (mandatory)");
+    static final Option INPUT_PATH_OPT = new Option("i", "input", true, "Input path(s) (comma-separated, mandatory)");
     static final Option OUTPUT_PATH_OPT = new Option("o", "output", true, "Output path for temporary HFiles (optional)");
     static final Option SCHEMA_NAME_OPT = new Option("s", "schema", true, "Phoenix schema name (optional)");
     static final Option TABLE_NAME_OPT = new Option("t", "table", true, "Phoenix table name (mandatory)");
@@ -219,7 +219,7 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
             conn.close();
         }
 
-        final Path inputPath = new Path(cmdLine.getOptionValue(INPUT_PATH_OPT.getOpt()));
+        final String inputPaths = cmdLine.getOptionValue(INPUT_PATH_OPT.getOpt());
         final Path outputPath;
         if (cmdLine.hasOption(OUTPUT_PATH_OPT.getOpt())) {
             outputPath = new Path(cmdLine.getOptionValue(OUTPUT_PATH_OPT.getOpt()));
@@ -249,18 +249,18 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
             tablesToBeLoaded.add(targetIndexRef);
         }
 
-        return submitJob(conf, tableName, inputPath, outputPath, tablesToBeLoaded);
+        return submitJob(conf, tableName, inputPaths, outputPath, tablesToBeLoaded);
     }
 
     /**
      * Submits the jobs to the cluster.
      * Loads the HFiles onto the respective tables.
      */
-    public int submitJob(final Configuration conf, final String qualifiedTableName, final Path inputPath,
-                         final Path outputPath , List<TargetTableRef> tablesToBeLoaded) {
+    public int submitJob(final Configuration conf, final String qualifiedTableName,
+        final String inputPaths, final Path outputPath, List<TargetTableRef> tablesToBeLoaded) {
         try {
             Job job = new Job(conf, "Phoenix MapReduce import for " + qualifiedTableName);
-            FileInputFormat.addInputPath(job, inputPath);
+            FileInputFormat.addInputPaths(job, inputPaths);
             FileOutputFormat.setOutputPath(job, outputPath);
 
             job.setInputFormatClass(TextInputFormat.class);
@@ -278,7 +278,7 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
             // give subclasses their hook
             setupJob(job);
 
-            LOG.info("Running MapReduce import job from {} to {}", inputPath, outputPath);
+            LOG.info("Running MapReduce import job from {} to {}", inputPaths, outputPath);
             boolean success = job.waitForCompletion(true);
 
             if (success) {
@@ -292,7 +292,7 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
             }
             return 0;
         } catch(Exception e) {
-            LOG.error("Error {} occurred submitting BulkLoad ",e.getMessage());
+            LOG.error("Error occurred submitting BulkLoad ", e);
             return -1;
         }
 

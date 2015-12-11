@@ -686,7 +686,7 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
                conf.set(tableName, tableDefns);
                
                TargetTableRef tbl = TargetTableRefFunctions.FROM_JSON.apply(tableDefns);
-               LOG.error(" the table logical name is "+ tbl.getLogicalName());
+               LOG.info(" the table logical name is "+ tbl.getLogicalName());
            }
        }
     
