@@ -53,15 +53,18 @@ def findFileInPathWithoutRecursion(pattern, path):
 
     return ""
 
-def which(file):
+def which(command):
     for path in os.environ["PATH"].split(os.pathsep):
-        if os.path.exists(os.path.join(path, file)):
-            return os.path.join(path, file)
+        if os.path.exists(os.path.join(path, command)):
+            return os.path.join(path, command)
     return None
 
-def findClasspath(file):
-    aPath = which(file)
-    command = "%s%s" %(aPath, ' classpath')
+def findClasspath(command_name):
+    command_path = which(command_name)
+    if command_path is None:
+        # We don't have this command, so we can't get its classpath
+        return ''
+    command = "%s%s" %(command_path, ' classpath')
     return subprocess.Popen(command, shell=True, stdout=subprocess.PIPE).stdout.read()
 
 def setPath():
