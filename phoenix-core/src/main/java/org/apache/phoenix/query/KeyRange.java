@@ -35,7 +35,6 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ScanUtil.BytesComparator;
 
 import com.google.common.base.Function;
-import com.google.common.collect.ComparisonChain;
 import com.google.common.collect.Lists;
 
 import edu.umd.cs.findbugs.annotations.NonNull;
@@ -82,18 +81,27 @@ public class KeyRange implements Writable {
     };
     public static final Comparator<KeyRange> COMPARATOR = new Comparator<KeyRange>() {
         @Override public int compare(KeyRange o1, KeyRange o2) {
-            return ComparisonChain.start()
-                     .compareFalseFirst(o2.lowerUnbound(), o1.lowerUnbound())
-                    .compare(o1.getLowerRange(), o2.getLowerRange(), Bytes.BYTES_COMPARATOR)
-                    // we want o1 lower inclusive to come before o2 lower inclusive, but
-                    // false comes before true, so we have to negate
-                    .compareFalseFirst(o2.isLowerInclusive(), o1.isLowerInclusive())
-                    // for the same lower bounding, we want a finite upper bound to
-                    // be ordered before an infinite upper bound
-                    .compareFalseFirst(o1.upperUnbound(), o2.upperUnbound())
-                    .compare(o1.getUpperRange(), o2.getUpperRange(), Bytes.BYTES_COMPARATOR)
-                    .compareFalseFirst(o2.isUpperInclusive(), o1.isUpperInclusive())
-                    .result();
+            int result = Boolean.compare(o2.lowerUnbound(), o1.lowerUnbound());
+            if (result != 0) {
+                return result;
+            }
+            result = Bytes.BYTES_COMPARATOR.compare(o1.getLowerRange(), o2.getLowerRange());
+            if (result != 0) {
+                return result;
+            }
+            result = Boolean.compare(o2.isLowerInclusive(), o1.isLowerInclusive());
+            if (result != 0) {
+                return result;
+            }
+            result = Boolean.compare(o1.upperUnbound(), o2.upperUnbound());
+            if (result != 0) {
+                return result;
+            }
+            result = Bytes.BYTES_COMPARATOR.compare(o1.getUpperRange(), o2.getUpperRange());
+            if (result != 0) {
+                return result;
+            }
+            return Boolean.compare(o2.isUpperInclusive(), o1.isUpperInclusive());
         }
     };
 

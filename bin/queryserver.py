@@ -67,6 +67,7 @@ else:
 # HBase configuration folder path (where hbase-site.xml reside) for
 # HBase/Phoenix client side property override
 hbase_config_path = phoenix_utils.hbase_conf_dir
+hadoop_config_path = phoenix_utils.hadoop_conf
 
 # default paths ## TODO: add windows support
 java_home = os.getenv('JAVA_HOME')
@@ -118,7 +119,8 @@ else:
 
 #    " -Xdebug -Xrunjdwp:transport=dt_socket,address=5005,server=y,suspend=n " + \
 #    " -XX:+UnlockCommercialFeatures -XX:+FlightRecorder -XX:FlightRecorderOptions=defaultrecording=true,dumponexit=true" + \
-java_cmd = '%(java)s -cp ' + hbase_config_path + os.pathsep + phoenix_utils.phoenix_queryserver_jar + \
+java_cmd = '%(java)s -cp ' + hbase_config_path + os.pathsep + hadoop_config_path + os.pathsep + \
+    phoenix_utils.phoenix_queryserver_jar + os.pathsep + phoenix_utils.phoenix_client_jar + \
     " -Dproc_phoenixserver" + \
     " -Dlog4j.configuration=file:" + os.path.join(phoenix_utils.current_dir, "log4j.properties") + \
     " -Dpsql.root.logger=%(root_logger)s" + \

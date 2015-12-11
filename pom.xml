@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.apache.phoenix</groupId>
   <artifactId>phoenix</artifactId>
-  <version>4.6.0-HBase-1.1-SNAPSHOT</version>
+  <version>4.7.0-HBase-1.1-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Apache Phoenix</name>
   <description>A SQL layer over HBase</description>
@@ -31,6 +31,7 @@
     <module>phoenix-pherf</module>
     <module>phoenix-spark</module>
     <module>phoenix-assembly</module>
+    <module>phoenix-tracing-webapp</module>
   </modules>
 
   <repositories>
@@ -97,7 +98,7 @@
     <commons-logging.version>1.2</commons-logging.version>
     <commons-csv.version>1.0</commons-csv.version>
     <sqlline.version>1.1.8</sqlline.version>
-    <guava.version>12.0.1</guava.version>
+    <guava.version>13.0.1</guava.version>
     <jackson.version>1.8.8</jackson.version>
     <flume.version>1.4.0</flume.version>
     <findbugs.version>1.3.2</findbugs.version>
@@ -110,6 +111,8 @@
     <jodatime.version>2.7</jodatime.version>
     <joni.version>2.1.2</joni.version>
     <calcite.version>1.6.0-SNAPSHOT</calcite.version>
+    <jettyVersion>8.1.7.v20120910</jettyVersion>
+    <tephra.version>0.6.3</tephra.version>
 
     <!-- Test Dependencies -->
     <mockito-all.version>1.8.5</mockito-all.version>
@@ -118,13 +121,13 @@
     <!-- Plugin versions -->
     <maven-eclipse-plugin.version>2.9</maven-eclipse-plugin.version>
     <maven-build-helper-plugin.version>1.9.1</maven-build-helper-plugin.version>
-    <maven-surefire-plugin.version>2.18</maven-surefire-plugin.version>
-    <maven-failsafe-plugin.version>2.18</maven-failsafe-plugin.version>
+    <maven-surefire-plugin.version>2.19</maven-surefire-plugin.version>
+    <maven-failsafe-plugin.version>2.19</maven-failsafe-plugin.version>
     
     <maven-dependency-plugin.version>2.1</maven-dependency-plugin.version>
     <maven.assembly.version>2.5.2</maven.assembly.version>
     <maven.rat.version>0.8</maven.rat.version>
-    
+
     <!-- Plugin options -->
     <numForkedUT>3</numForkedUT>
     <numForkedIT>5</numForkedIT>
@@ -340,6 +343,7 @@
             <id>validate</id>
             <phase>validate</phase>
             <configuration>
+              <skip>true</skip>
               <configLocation>${top.dir}/src/main/config/checkstyle/checker.xml</configLocation>
               <suppressionsLocation>${top.dir}/src/main/config/checkstyle/suppressions.xml</suppressionsLocation>
               <consoleOutput>true</consoleOutput>

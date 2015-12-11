@@ -24,8 +24,6 @@ import java.sql.ResultSet;
 import java.util.Calendar;
 import java.util.Date;
 
-import org.apache.phoenix.pherf.PherfConstants.RunMode;
-
 import org.apache.phoenix.pherf.result.DataModelResult;
 import org.apache.phoenix.pherf.result.ResultManager;
 import org.apache.phoenix.pherf.result.RunTime;
@@ -59,19 +57,20 @@ class MultiThreadedRunner implements Runnable {
      * @param executionDurationInMs
      */
     MultiThreadedRunner(String threadName, Query query, DataModelResult dataModelResult,
-            ThreadTime threadTime, long numberOfExecutions, long executionDurationInMs) {
+            ThreadTime threadTime, long numberOfExecutions, long executionDurationInMs, boolean writeRuntimeResults) {
         this.query = query;
         this.threadName = threadName;
         this.threadTime = threadTime;
         this.dataModelResult = dataModelResult;
         this.numberOfExecutions = numberOfExecutions;
         this.executionDurationInMs = executionDurationInMs;
-        this.resultManager = new ResultManager(dataModelResult.getName(), RunMode.PERFORMANCE);
+       	this.resultManager = new ResultManager(dataModelResult.getName(), writeRuntimeResults);
     }
 
     /**
      * Executes run for a minimum of number of execution or execution duration
      */
+    @Override
     public void run() {
         logger.info("\n\nThread Starting " + threadName + " ; " + query.getStatement() + " for "
                 + numberOfExecutions + "times\n\n");
@@ -90,6 +89,10 @@ class MultiThreadedRunner implements Runnable {
                 e.printStackTrace();
             }
         }
+
+        // Make sure all result have been dumped before exiting
+        resultManager.flush();
+
         logger.info("\n\nThread exiting." + threadName + "\n\n");
     }
 

@@ -27,6 +27,7 @@ import static org.apache.phoenix.query.QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB
 import static org.apache.phoenix.query.QueryServices.DELAY_FOR_SCHEMA_UPDATE_CHECK;
 import static org.apache.phoenix.query.QueryServices.DROP_METADATA_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.EXPLAIN_CHUNK_COUNT_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.GLOBAL_METRICS_ENABLED;
 import static org.apache.phoenix.query.QueryServices.GROUPBY_MAX_CACHE_SIZE_ATTRIB;
@@ -67,6 +68,8 @@ import static org.apache.phoenix.query.QueryServices.THREAD_TIMEOUT_MS_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.USE_BYTE_BASED_REGEX_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.USE_INDEXES_ATTRIB;
 
+import java.util.HashSet;
+import java.util.Set;
 import java.util.Map.Entry;
 
 import org.apache.hadoop.conf.Configuration;
@@ -106,6 +109,7 @@ public class QueryServicesOptions {
     public static final boolean DEFAULT_USE_INDEXES = true; // Use indexes
     public static final boolean DEFAULT_IMMUTABLE_ROWS = false; // Tables rows may be updated
     public static final boolean DEFAULT_DROP_METADATA = true; // Drop meta data also.
+    public static final long DEFAULT_DRIVER_SHUTDOWN_TIMEOUT_MS = 5  * 1000; // Time to wait in ShutdownHook to exit gracefully.
 
     public final static int DEFAULT_MUTATE_BATCH_SIZE = 1000; // Batch size for UPSERT SELECT and DELETE
 	// The only downside of it being out-of-sync is that the parallelization of the scan won't be as balanced as it could be.
@@ -113,7 +117,7 @@ public class QueryServicesOptions {
     public static final int DEFAULT_SCAN_CACHE_SIZE = 1000;
     public static final int DEFAULT_MAX_INTRA_REGION_PARALLELIZATION = DEFAULT_MAX_QUERY_CONCURRENCY;
     public static final int DEFAULT_DISTINCT_VALUE_COMPRESS_THRESHOLD = 1024 * 1024 * 1; // 1 Mb
-    public static final int DEFAULT_INDEX_MUTATE_BATCH_SIZE_THRESHOLD = 5;
+    public static final int DEFAULT_INDEX_MUTATE_BATCH_SIZE_THRESHOLD = 3;
     public static final long DEFAULT_MAX_SPOOL_TO_DISK_BYTES = 1024000000;
     // Only the first chunked batches are fetched in parallel, so this default
     // should be on the relatively bigger side of things. Bigger means more
@@ -187,7 +191,11 @@ public class QueryServicesOptions {
     public static final boolean DEFAULT_STORE_NULLS = false;
 
     // TODO Change this to true as part of PHOENIX-1543
+    // We'll also need this for transactions to work correctly
     public static final boolean DEFAULT_AUTO_COMMIT = false;
+    public static final boolean DEFAULT_TRANSACTIONAL = false;
+    public static final boolean DEFAULT_TABLE_ISTRANSACTIONAL = false;
+    public static final boolean DEFAULT_TRANSACTIONS_ENABLED = false;
     public static final boolean DEFAULT_IS_GLOBAL_METRICS_ENABLED = true;
     
     private static final String DEFAULT_CLIENT_RPC_CONTROLLER_FACTORY = ClientRpcControllerFactory.class.getName();
@@ -199,6 +207,24 @@ public class QueryServicesOptions {
     public static final boolean DEFAULT_ALLOW_USER_DEFINED_FUNCTIONS = false;
     public static final boolean DEFAULT_REQUEST_LEVEL_METRICS_ENABLED = false;
     public static final boolean DEFAULT_ALLOW_VIEWS_ADD_NEW_CF_BASE_TABLE = true;
+    public static final int DEFAULT_MAX_VERSIONS_TRANSACTIONAL = Integer.MAX_VALUE;
+    
+    public static final boolean DEFAULT_RETURN_SEQUENCE_VALUES = false;
+    public static final String DEFAULT_EXTRA_JDBC_ARGUMENTS = "";
+
+    // QueryServer defaults -- ensure ThinClientUtil is also updated since phoenix-server-client
+    // doesn't depend on phoenix-core.
+    public static final String DEFAULT_QUERY_SERVER_SERIALIZATION = "PROTOBUF";
+    public static final int DEFAULT_QUERY_SERVER_HTTP_PORT = 8765;
+    @SuppressWarnings("serial")
+    public static final Set<String> DEFAULT_QUERY_SERVER_SKIP_WORDS = new HashSet<String>() {
+      {
+        add("secret");
+        add("passwd");
+        add("password");
+        add("credential");
+      }
+    };
 
     private final Configuration config;
 
@@ -542,6 +568,11 @@ public class QueryServicesOptions {
 
     public QueryServicesOptions setForceRowKeyOrder(boolean forceRowKeyOrder) {
         config.setBoolean(FORCE_ROW_KEY_ORDER_ATTRIB, forceRowKeyOrder);
+        return this;
+    }
+    
+    public QueryServicesOptions setExtraJDBCArguments(String extraArgs) {
+        config.set(EXTRA_JDBC_ARGUMENTS_ATTRIB, extraArgs);
         return this;
     }
 }

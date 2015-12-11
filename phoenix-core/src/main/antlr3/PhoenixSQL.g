@@ -125,6 +125,7 @@ tokens
     REPLACE = 'replace';
     LIST = 'list';
     JARS='jars';
+    ROW_TIMESTAMP='row_timestamp';
 }
 
 
@@ -471,16 +472,17 @@ drop_sequence_node returns [DropSequenceStatement ret]
     ;
 
 pk_constraint returns [PrimaryKeyConstraint ret]
-    :   COMMA? CONSTRAINT n=identifier PRIMARY KEY LPAREN cols=col_name_with_sort_order_list RPAREN { $ret = factory.primaryKey(n,cols); }
+    :   COMMA? CONSTRAINT n=identifier PRIMARY KEY LPAREN cols=col_name_with_sort_order_rowtimestamp_list RPAREN { $ret = factory.primaryKey(n,cols); }
     ;
 
-col_name_with_sort_order_list returns [List<Pair<ColumnName, SortOrder>> ret]
-@init{ret = new ArrayList<Pair<ColumnName, SortOrder>>(); }
-    :   p=col_name_with_sort_order {$ret.add(p);}  (COMMA p = col_name_with_sort_order {$ret.add(p);} )*
+col_name_with_sort_order_rowtimestamp_list returns [List<ColumnDefInPkConstraint> ret]
+@init{ret = new ArrayList<ColumnDefInPkConstraint>(); }
+    :   p=col_name_with_sort_order_rowtimestamp {$ret.add(p);}  (COMMA p = col_name_with_sort_order_rowtimestamp {$ret.add(p);} )*
 ;
-
-col_name_with_sort_order returns [Pair<ColumnName, SortOrder> ret]
-    :   f=identifier (order=ASC|order=DESC)? {$ret = Pair.newPair(factory.columnName(f), order == null ? SortOrder.getDefault() : SortOrder.fromDDLValue(order.getText()));}
+ 
+col_name_with_sort_order_rowtimestamp returns [ColumnDefInPkConstraint ret]
+    :   f=identifier (order=ASC|order=DESC)? (rr=ROW_TIMESTAMP)?
+        { $ret = factory.columnDefInPkConstraint(factory.columnName(f), order == null ? SortOrder.getDefault() : SortOrder.fromDDLValue(order.getText()), rr != null); }
 ;
 
 ik_constraint returns [IndexKeyConstraint ret]
@@ -609,12 +611,13 @@ column_defs returns [List<ColumnDef> ret]
 ;
 
 column_def returns [ColumnDef ret]
-    :   c=column_name dt=identifier (LPAREN l=NUMBER (COMMA s=NUMBER)? RPAREN)? ar=ARRAY? (lsq=LSQUARE (a=NUMBER)? RSQUARE)? (nn=NOT? n=NULL)? (pk=PRIMARY KEY (order=ASC|order=DESC)?)?
+    :   c=column_name dt=identifier (LPAREN l=NUMBER (COMMA s=NUMBER)? RPAREN)? ar=ARRAY? (lsq=LSQUARE (a=NUMBER)? RSQUARE)? (nn=NOT? n=NULL)? (pk=PRIMARY KEY (order=ASC|order=DESC)? rr=ROW_TIMESTAMP?)?
         { $ret = factory.columnDef(c, dt, ar != null || lsq != null, a == null ? null :  Integer.parseInt( a.getText() ), nn!=null ? Boolean.FALSE : n!=null ? Boolean.TRUE : null, 
             l == null ? null : Integer.parseInt( l.getText() ),
             s == null ? null : Integer.parseInt( s.getText() ),
             pk != null, 
-            order == null ? SortOrder.getDefault() : SortOrder.fromDDLValue(order.getText()) ); }
+            order == null ? SortOrder.getDefault() : SortOrder.fromDDLValue(order.getText()),
+            rr != null); }
     ;
 
 dyn_column_defs returns [List<ColumnDef> ret]
@@ -628,7 +631,8 @@ dyn_column_def returns [ColumnDef ret]
             l == null ? null : Integer.parseInt( l.getText() ),
             s == null ? null : Integer.parseInt( s.getText() ),
             false, 
-            SortOrder.getDefault()); }
+            SortOrder.getDefault(),
+            false); }
     ;
 
 dyn_column_name_or_def returns [ColumnDef ret]
@@ -637,7 +641,8 @@ dyn_column_name_or_def returns [ColumnDef ret]
             l == null ? null : Integer.parseInt( l.getText() ),
             s == null ? null : Integer.parseInt( s.getText() ),
             false, 
-            SortOrder.getDefault()); }
+            SortOrder.getDefault(),
+            false); }
     ;
 
 subquery_expression returns [ParseNode ret]

@@ -23,6 +23,7 @@ import static org.apache.phoenix.util.TestUtil.closeConnection;
 import static org.apache.phoenix.util.TestUtil.closeStatement;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -35,6 +36,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
@@ -42,6 +44,8 @@ import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeepDeletedCells;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -51,6 +55,8 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -58,6 +64,8 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import com.google.common.collect.Lists;
 
 /**
  *
@@ -724,7 +732,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
 
     private void asssertIsWALDisabled(Connection conn, String fullTableName, boolean expectedValue) throws SQLException {
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        assertEquals(expectedValue, pconn.getMetaDataCache().getTable(new PTableKey(pconn.getTenantId(), fullTableName)).isWALDisabled());
+        assertEquals(expectedValue, pconn.getTable(new PTableKey(pconn.getTenantId(), fullTableName)).isWALDisabled());
     }
 
     @Test
@@ -964,6 +972,115 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         conn1.createStatement().execute(ddl);
         ddl = "ALTER TABLE T ADD STRING_ARRAY1 VARCHAR[]";
         conn1.createStatement().execute(ddl);
+        conn1.close();
+    }
+
+    @Test
+    public void testAddMultipleColumns() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String ddl = "CREATE TABLE T (\n"
+                +"ID VARCHAR(15) PRIMARY KEY,\n"
+                +"COL1 BIGINT)";
+        Connection conn1 = DriverManager.getConnection(getUrl(), props);
+        conn1.createStatement().execute(ddl);
+        conn1.createStatement().execute("CREATE INDEX I ON T(COL1)");
+        
+        ddl = "ALTER TABLE T ADD COL2 VARCHAR PRIMARY KEY, COL3 VARCHAR PRIMARY KEY";
+        conn1.createStatement().execute(ddl);
+        ResultSet rs = conn1.getMetaData().getColumns("", "", "T", null);
+        assertTrue(rs.next());
+        assertEquals("ID",rs.getString(4));
+        assertTrue(rs.next());
+        assertEquals("COL1",rs.getString(4));
+        assertTrue(rs.next());
+        assertEquals("COL2",rs.getString(4));
+        assertTrue(rs.next());
+        assertEquals("COL3",rs.getString(4));
+        assertFalse(rs.next());
+        
+        rs = conn1.createStatement().executeQuery("SELECT COLUMN_COUNT FROM SYSTEM.CATALOG\n"
+                + "WHERE TENANT_ID IS NULL AND\n"
+                + "TABLE_SCHEM IS NULL AND TABLE_NAME = 'T' AND\n"
+                + "COLUMN_FAMILY IS NULL AND COLUMN_NAME IS NULL");
+        assertTrue(rs.next());
+        assertEquals(4,rs.getInt(1));
+        assertFalse(rs.next());
+
+        rs = conn1.createStatement().executeQuery("SELECT COLUMN_COUNT FROM SYSTEM.CATALOG\n"
+                + "WHERE TENANT_ID IS NULL AND\n"
+                + "TABLE_SCHEM IS NULL AND TABLE_NAME = 'I' AND\n"
+                + "COLUMN_FAMILY IS NULL AND COLUMN_NAME IS NULL");
+        assertTrue(rs.next());
+        assertEquals(4,rs.getInt(1));
+        assertFalse(rs.next());
+        
+        conn1.createStatement().execute("UPSERT INTO T VALUES ('a',2,'a','b')");
+        conn1.createStatement().execute("UPSERT INTO T VALUES ('b',3,'b','c')");
+        conn1.createStatement().execute("UPSERT INTO T VALUES ('c',4,'c','c')");
+        conn1.commit();
+        
+        rs = conn1.createStatement().executeQuery("SELECT ID,COL1 FROM T WHERE COL1=3");
+        assertTrue(rs.next());
+        assertEquals("b",rs.getString(1));
+        assertEquals(3,rs.getLong(2));
+        assertFalse(rs.next());
+        
+        conn1.close();
+    }
+
+
+    @Test
+    public void testDropMultipleColumns() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String ddl = "CREATE TABLE T (\n"
+                + "ID VARCHAR(15) PRIMARY KEY,\n"
+                + "COL1 BIGINT,"
+                + "COL2 BIGINT,"
+                + "COL3 BIGINT,"
+                + "COL4 BIGINT)";
+        Connection conn1 = DriverManager.getConnection(getUrl(), props);
+        conn1.createStatement().execute(ddl);
+        conn1.createStatement().execute("CREATE INDEX I ON T(COL1) INCLUDE (COL2,COL3,COL4)");
+        
+        ddl = "ALTER TABLE T DROP COLUMN COL2, COL3";
+        conn1.createStatement().execute(ddl);
+        ResultSet rs = conn1.getMetaData().getColumns("", "", "T", null);
+        assertTrue(rs.next());
+        assertEquals("ID",rs.getString(4));
+        assertTrue(rs.next());
+        assertEquals("COL1",rs.getString(4));
+        assertTrue(rs.next());
+        assertEquals("COL4",rs.getString(4));
+        assertFalse(rs.next());
+        
+        rs = conn1.createStatement().executeQuery("SELECT COLUMN_COUNT FROM SYSTEM.CATALOG\n"
+                + "WHERE TENANT_ID IS NULL AND\n"
+                + "TABLE_SCHEM IS NULL AND TABLE_NAME = 'T' AND\n"
+                + "COLUMN_FAMILY IS NULL AND COLUMN_NAME IS NULL");
+        assertTrue(rs.next());
+        assertEquals(3,rs.getInt(1));
+        assertFalse(rs.next());
+
+        rs = conn1.createStatement().executeQuery("SELECT COLUMN_COUNT FROM SYSTEM.CATALOG\n"
+                + "WHERE TENANT_ID IS NULL AND\n"
+                + "TABLE_SCHEM IS NULL AND TABLE_NAME = 'I' AND\n"
+                + "COLUMN_FAMILY IS NULL AND COLUMN_NAME IS NULL");
+        assertTrue(rs.next());
+        assertEquals(3,rs.getInt(1));
+        assertFalse(rs.next());
+        
+        conn1.createStatement().execute("UPSERT INTO T VALUES ('a',2, 20)");
+        conn1.createStatement().execute("UPSERT INTO T VALUES ('b',3, 30)");
+        conn1.createStatement().execute("UPSERT INTO T VALUES ('c',4, 40)");
+        conn1.commit();
+        
+        rs = conn1.createStatement().executeQuery("SELECT ID,COL1,COL4 FROM T WHERE COL1=3");
+        assertTrue(rs.next());
+        assertEquals("b",rs.getString(1));
+        assertEquals(3,rs.getLong(2));
+        assertEquals(30,rs.getLong(3));
+        assertFalse(rs.next());
+        
         conn1.close();
     }
 
@@ -1323,7 +1440,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
 
     private static void assertImmutableRows(Connection conn, String fullTableName, boolean expectedValue) throws SQLException {
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        assertEquals(expectedValue, pconn.getMetaDataCache().getTable(new PTableKey(pconn.getTenantId(), fullTableName)).isImmutableRows());
+        assertEquals(expectedValue, pconn.getTable(new PTableKey(pconn.getTenantId(), fullTableName)).isImmutableRows());
     }
 
     @Test
@@ -1983,7 +2100,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             ddl = "ALTER TABLE TESTCHANGEPHOENIXPROPS SET MULTI_TENANT = true";
             conn.createStatement().execute(ddl);
             // check metadata cache is updated with MULTI_TENANT = true
-            PTable t = conn.unwrap(PhoenixConnection.class).getMetaDataCache().getTable(new PTableKey(null, "TESTCHANGEPHOENIXPROPS"));
+            PTable t = conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, "TESTCHANGEPHOENIXPROPS"));
             assertTrue(t.isMultiTenant());
             
             // check table metadata updated server side
@@ -1998,5 +2115,93 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             conn.close();
         }
     }
+    
+    @Test
+    public void testDeclaringColumnAsRowTimestamp() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute("CREATE TABLE T1 (PK1 DATE NOT NULL, PK2 VARCHAR NOT NULL, KV1 VARCHAR CONSTRAINT PK PRIMARY KEY(PK1 ROW_TIMESTAMP, PK2)) ");
+            PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class); 
+            PTable table = phxConn.getTable(new PTableKey(phxConn.getTenantId(), "T1"));
+            // Assert that the column shows up as row time stamp in the cache.
+            assertTrue(table.getColumn("PK1").isRowTimestamp());
+            assertFalse(table.getColumn("PK2").isRowTimestamp());
+            assertIsRowTimestampSet("T1", "PK1");
+            
+            conn.createStatement().execute("CREATE TABLE T6 (PK1 VARCHAR, PK2 DATE PRIMARY KEY ROW_TIMESTAMP, KV1 VARCHAR, KV2 INTEGER)");
+            table = phxConn.getTable(new PTableKey(phxConn.getTenantId(), "T6"));
+            // Assert that the column shows up as row time stamp in the cache.
+            assertFalse(table.getColumn("PK1").isRowTimestamp());
+            assertTrue(table.getColumn("PK2").isRowTimestamp());
+            assertIsRowTimestampSet("T6", "PK2");
+            
+            // Create an index on a table has a row time stamp pk column. The column should show up as a row time stamp column for the index too. 
+            conn.createStatement().execute("CREATE INDEX T6_IDX ON T6 (KV1) include (KV2)");
+            PTable indexTable = phxConn.getTable(new PTableKey(phxConn.getTenantId(), "T6_IDX"));
+            String indexColName = IndexUtil.getIndexColumnName(table.getColumn("PK2"));
+            // Assert that the column shows up as row time stamp in the cache.
+            assertTrue(indexTable.getColumn(indexColName).isRowTimestamp());
+            assertIsRowTimestampSet("T6_IDX", indexColName);
+            
+            // Creating a view with a row_timestamp column in its pk constraint is not allowed
+            try {
+                conn.createStatement().execute("CREATE VIEW T6_VIEW (KV3 VARCHAR, KV4 DATE, KV5 INTEGER, CONSTRAINT PK PRIMARY KEY (KV3, KV4 ROW_TIMESTAMP) ) AS SELECT * FROM T6");
+                fail("Creating a view with a row_timestamp column in its pk constraint is not allowed");
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.ROWTIMESTAMP_NOT_ALLOWED_ON_VIEW.getErrorCode(), e.getErrorCode());
+            }
+            
+            // Make sure that the base table column declared as row_timestamp is also row_timestamp for view
+            conn.createStatement().execute("CREATE VIEW T6_VIEW (KV3 VARCHAR, KV4 VARCHAR, KV5 INTEGER, CONSTRAINT PK PRIMARY KEY (KV3, KV4) ) AS SELECT * FROM T6");
+            PTable view = phxConn.getTable(new PTableKey(phxConn.getTenantId(), "T6_VIEW"));
+            assertNotNull(view.getPKColumn("PK2"));
+            assertTrue(view.getPKColumn("PK2").isRowTimestamp());
+        }
+    }
+    
+    private void assertIsRowTimestampSet(String tableName, String columnName) throws SQLException {
+        String sql = "SELECT IS_ROW_TIMESTAMP FROM SYSTEM.CATALOG WHERE TABLE_SCHEM IS NULL AND TABLE_NAME = ? AND COLUMN_FAMILY IS NULL AND COLUMN_NAME = ?";
+        try(Connection conn = DriverManager.getConnection(getUrl())) {
+            PreparedStatement stmt = conn.prepareStatement(sql);
+            stmt.setString(1, tableName);
+            stmt.setString(2, columnName);
+            ResultSet rs = stmt.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(true, rs.getBoolean(1));
+        }
+    }
+    
+    @Test
+    public void testAddingRowTimestampColumnNotAllowedViaAlterTable() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute("CREATE TABLE T1 (PK1 VARCHAR NOT NULL, PK2 VARCHAR NOT NULL, KV1 VARCHAR CONSTRAINT PK PRIMARY KEY(PK1, PK2)) ");
+            // adding a new pk column that is also row_timestamp is not allowed
+            try {
+                conn.createStatement().execute("ALTER TABLE T1 ADD PK3 DATE PRIMARY KEY ROW_TIMESTAMP");
+                fail("Altering table to add a PK column as row_timestamp column should fail");
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.ROWTIMESTAMP_CREATE_ONLY.getErrorCode(), e.getErrorCode());
+            }
+        }
+    }
+    
+	@Test
+	public void testCreatingTxnTableFailsIfTxnsDisabled() throws Exception {
+		try (Connection conn = DriverManager.getConnection(getUrl())) {
+			// creating a transactional table should fail if transactions are disabled
+			try {
+				conn.createStatement().execute("CREATE TABLE DEMO1(k INTEGER PRIMARY KEY, v VARCHAR) TRANSACTIONAL=true");
+			} catch (SQLException e) {
+				assertEquals(SQLExceptionCode.CANNOT_CREATE_TXN_TABLE_IF_TXNS_DISABLED.getErrorCode(), e.getErrorCode());
+			}
+			// altering a table to be transactional  should fail if transactions are disabled
+			conn.createStatement().execute("CREATE TABLE DEMO2(k INTEGER PRIMARY KEY, v VARCHAR)");
+			try {
+				conn.createStatement().execute("ALTER TABLE DEMO2 SET TRANSACTIONAL=true");
+			} catch (SQLException e) {
+				assertEquals(SQLExceptionCode.CANNOT_ALTER_TO_BE_TXN_IF_TXNS_DISABLED.getErrorCode(), e.getErrorCode());
+			}
+		}
+	}
+    
 }
  

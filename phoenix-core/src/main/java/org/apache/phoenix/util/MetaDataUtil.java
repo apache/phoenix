@@ -107,14 +107,14 @@ public class MetaDataUtil {
     }
     
     // TODO: generalize this to use two bytes to return a SQL error code instead
-    public static long encodeMutableIndexConfiguredProperly(long version, boolean isValid) {
+    public static long encodeHasIndexWALCodec(long version, boolean isValid) {
         if (!isValid) {
             return version | 1;
         }
         return version;
     }
     
-    public static boolean decodeMutableIndexConfiguredProperly(long version) {
+    public static boolean decodeHasIndexWALCodec(long version) {
         return (version & 0xF) == 0;
     }
 
@@ -267,6 +267,13 @@ public class MetaDataUtil {
     
     public static boolean isMultiTenant(Mutation m, KeyValueBuilder builder, ImmutableBytesWritable ptr) {
         if (getMutationValue(m, PhoenixDatabaseMetaData.MULTI_TENANT_BYTES, builder, ptr)) {
+            return Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(ptr));
+        }
+        return false;
+    }
+    
+    public static boolean isTransactional(Mutation m, KeyValueBuilder builder, ImmutableBytesWritable ptr) {
+        if (getMutationValue(m, PhoenixDatabaseMetaData.TRANSACTIONAL_BYTES, builder, ptr)) {
             return Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(ptr));
         }
         return false;

@@ -79,7 +79,8 @@ public class WriteWorkload implements Workload {
 
     public WriteWorkload(PhoenixUtil phoenixUtil, XMLConfigParser parser, Scenario scenario, GeneratePhoenixStats generateStatistics)
             throws Exception {
-        this(phoenixUtil, PherfConstants.create().getProperties(PherfConstants.PHERF_PROPERTIES),
+        this(phoenixUtil, PherfConstants.create().getProperties(PherfConstants.PHERF_PROPERTIES,
+                false),
                 parser, scenario, generateStatistics);
     }
 
@@ -163,7 +164,10 @@ public class WriteWorkload implements Workload {
             DataLoadThreadTime dataLoadThreadTime, Scenario scenario) throws Exception {
         logger.info("\nLoading " + scenario.getRowCount() + " rows for " + scenario.getTableName());
         long start = System.currentTimeMillis();
-
+        
+        // Execute any Scenario DDL before running workload
+        pUtil.executeScenarioDdl(scenario);
+        
         List<Future> writeBatches = getBatches(dataLoadThreadTime, scenario);
 
         waitForBatches(dataLoadTimeSummary, scenario, start, writeBatches);
@@ -176,9 +180,6 @@ public class WriteWorkload implements Workload {
         } else {
         	logger.info("Phoenix table stats update not requested.");
         }
-
-        // always update stats for Phoenix base tables
-        updatePhoenixStats(scenario.getTableName(), scenario);
     }
 
     private List<Future> getBatches(DataLoadThreadTime dataLoadThreadTime, Scenario scenario)
@@ -226,18 +227,6 @@ public class WriteWorkload implements Workload {
                 + sumDuration + ") Ms");
         dataLoadTimeSummary
                 .add(scenario.getTableName(), sumRows, (int) (System.currentTimeMillis() - start));
-    }
-
-    /**
-     * TODO Move this method to PhoenixUtil
-     * Update Phoenix table stats
-     *
-     * @param tableName
-     * @throws Exception
-     */
-    public void updatePhoenixStats(String tableName, Scenario scenario) throws Exception {
-        logger.info("Updating stats for " + tableName);
-        pUtil.executeStatement("UPDATE STATISTICS " + tableName, scenario);
     }
 
     public Future<Info> upsertData(final Scenario scenario, final List<Column> columns,

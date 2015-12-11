@@ -18,6 +18,7 @@
 package org.apache.phoenix.iterate;
 
 import java.sql.SQLException;
+import java.util.Collections;
 import java.util.List;
 
 import org.apache.hadoop.hbase.client.Scan;
@@ -66,7 +67,10 @@ public class UnionResultIterators implements ResultIterators {
 
     @Override
     public List<KeyRange> getSplits() {
-        return splits;
+        if (splits == null)
+            return Collections.emptyList();
+        else
+            return splits;
     }
 
     @Override
@@ -113,7 +117,10 @@ public class UnionResultIterators implements ResultIterators {
     
     @Override
     public List<List<Scan>> getScans() {
-        return scans;
+        if (scans == null)
+            return Collections.emptyList();
+        else
+            return scans;
     }
 
     @Override

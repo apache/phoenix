@@ -18,10 +18,6 @@
 
 package org.apache.phoenix.pherf;
 
-import com.jcabi.jdbc.JdbcSession;
-import com.jcabi.jdbc.Outcome;
-
-import org.apache.phoenix.pherf.PherfConstants.GeneratePhoenixStats;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
@@ -35,21 +31,23 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import com.jcabi.jdbc.JdbcSession;
+import com.jcabi.jdbc.Outcome;
+
+import org.apache.phoenix.pherf.PherfConstants.GeneratePhoenixStats;
 import org.apache.phoenix.pherf.configuration.Column;
 import org.apache.phoenix.pherf.configuration.DataModel;
 import org.apache.phoenix.pherf.configuration.DataTypeMapping;
 import org.apache.phoenix.pherf.configuration.Scenario;
 import org.apache.phoenix.pherf.rules.DataValue;
 import org.apache.phoenix.pherf.rules.RulesApplier;
+import org.apache.phoenix.pherf.util.PhoenixUtil;
 import org.apache.phoenix.pherf.workload.QueryExecutor;
 import org.apache.phoenix.pherf.workload.Workload;
 import org.apache.phoenix.pherf.workload.WorkloadExecutor;
 import org.apache.phoenix.pherf.workload.WriteWorkload;
 import org.junit.Before;
 import org.junit.Test;
-
-import com.jcabi.jdbc.JdbcSession;
-import com.jcabi.jdbc.Outcome;
 
 public class DataIngestIT extends ResultBaseTestIT {
 
@@ -78,7 +76,8 @@ public class DataIngestIT extends ResultBaseTestIT {
             WorkloadExecutor executor = new WorkloadExecutor();
             executor.add(loader);
             executor.get();
-
+            executor.shutdown();
+            
             RulesApplier rulesApplier = loader.getRulesApplier();
             List<Map> modelList = rulesApplier.getModelList();
             assertTrue("Could not generate the modelList", modelList.size() > 0);
@@ -102,10 +101,12 @@ public class DataIngestIT extends ResultBaseTestIT {
             }
 
             // Run some queries
-            Workload query = new QueryExecutor(parser, util, executor.getPool());
+            executor = new WorkloadExecutor();
+            Workload query = new QueryExecutor(parser, util, executor);
             executor.add(query);
             executor.get();
-
+            executor.shutdown();
+            PhoenixUtil.create().deleteTables("ALL");
         } catch (Exception e) {
             fail("We had an exception: " + e.getMessage());
         }
@@ -122,8 +123,7 @@ public class DataIngestIT extends ResultBaseTestIT {
         dataModels.add(dataModel);
         QueryExecutor
                 qe =
-                new QueryExecutor(parser, util, executor.getPool(), dataModels, null, false,
-                        PherfConstants.RunMode.PERFORMANCE);
+                new QueryExecutor(parser, util, executor, dataModels, null, false);
         executor.add(qe);
         Scenario scenario = parser.getScenarioByName("testScenarioRW");
 
@@ -177,6 +177,26 @@ public class DataIngestIT extends ResultBaseTestIT {
         assertExpectedNumberOfRecordsWritten(scenario);
     }
 
+    
+    @Test
+    public void testMultiTenantScenarioRunBeforeWriteWorkload() throws Exception {
+        // Arrange
+        Scenario scenario = parser.getScenarioByName("testMTDdlWriteScenario");
+        WorkloadExecutor executor = new WorkloadExecutor();
+        executor.add(new WriteWorkload(util, parser, scenario, GeneratePhoenixStats.NO));
+        
+        // Act
+        try {
+            // Wait for data to load up.
+            executor.get();
+            executor.shutdown();
+        } catch (Exception e) {
+            fail("Failed to load data. An exception was thrown: " + e.getMessage());
+        }
+
+        assertExpectedNumberOfRecordsWritten(scenario);
+    }
+    
     private void assertExpectedNumberOfRecordsWritten(Scenario scenario) throws Exception,
             SQLException {
         Connection connection = util.getConnection(scenario.getTenantId());

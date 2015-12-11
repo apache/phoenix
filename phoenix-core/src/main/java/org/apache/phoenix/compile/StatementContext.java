@@ -28,7 +28,6 @@ import java.util.TimeZone;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -80,8 +79,6 @@ public class StatementContext {
 
     private TableRef currentTable;
     private List<Pair<byte[], byte[]>> whereConditionColumns;
-    private TimeRange scanTimeRange = null;
-
     private Map<SelectStatement, Object> subqueryResults;
     private final ReadMetricQueue readMetricsQueue;
     private final OverAllQueryMetrics overAllQueryMetrics;
@@ -255,7 +252,8 @@ public class StatementContext {
 
     public long getCurrentTime() throws SQLException {
         long ts = this.getCurrentTable().getTimeStamp();
-        if (ts != QueryConstants.UNSET_TIMESTAMP) {
+        // if the table is transactional then it is only resolved once per query, so we can't use the table timestamp
+        if (!this.getCurrentTable().getTable().isTransactional() && ts != QueryConstants.UNSET_TIMESTAMP) {
             return ts;
         }
         if (currentTime != QueryConstants.UNSET_TIMESTAMP) {
@@ -284,14 +282,6 @@ public class StatementContext {
 
     public List<Pair<byte[], byte[]>> getWhereCoditionColumns() {
         return whereConditionColumns;
-    }
-
-    public void setScanTimeRange(TimeRange value){
-    	this.scanTimeRange = value;
-    }
-
-    public TimeRange getScanTimeRange() {
-    	return this.scanTimeRange;
     }
 
     public boolean isSubqueryResultAvailable(SelectStatement select) {

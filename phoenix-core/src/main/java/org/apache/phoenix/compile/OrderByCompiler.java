@@ -27,6 +27,7 @@ import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderPreservingTracker.Ordering;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.parse.LiteralParseNode;
@@ -82,7 +83,8 @@ public class OrderByCompiler {
     public static OrderBy compile(StatementContext context,
                                   SelectStatement statement,
                                   GroupBy groupBy, Integer limit, 
-                                  RowProjector projector,
+                                  RowProjector rowProjector,
+                                  TupleProjector tupleProjector,
                                   boolean isInRowKeyOrder) throws SQLException {
         List<OrderByNode> orderByNodes = statement.getOrderBy();
         if (orderByNodes.isEmpty()) {
@@ -91,19 +93,19 @@ public class OrderByCompiler {
         ExpressionCompiler compiler = new ExpressionCompiler(context, groupBy);
         // accumulate columns in ORDER BY
         OrderPreservingTracker tracker = 
-                new OrderPreservingTracker(context, groupBy, Ordering.ORDERED, orderByNodes.size());
+                new OrderPreservingTracker(context, groupBy, Ordering.ORDERED, orderByNodes.size(), tupleProjector);
         LinkedHashSet<OrderByExpression> orderByExpressions = Sets.newLinkedHashSetWithExpectedSize(orderByNodes.size());
         for (OrderByNode node : orderByNodes) {
             ParseNode parseNode = node.getNode();
             Expression expression = null;
             if (parseNode instanceof LiteralParseNode && ((LiteralParseNode)parseNode).getType() == PInteger.INSTANCE){
                 Integer index = (Integer)((LiteralParseNode)parseNode).getValue();
-                int size = projector.getColumnProjectors().size();
+                int size = rowProjector.getColumnProjectors().size();
                 if (index > size || index <= 0 ) {
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.PARAM_INDEX_OUT_OF_BOUND)
                     .build().buildException();
                 }
-                expression = projector.getColumnProjector(index-1).getExpression();
+                expression = rowProjector.getColumnProjector(index-1).getExpression();
             } else {
                 expression = node.getNode().accept(compiler);
                 // Detect mix of aggregate and non aggregates (i.e. ORDER BY txns, SUM(txns)

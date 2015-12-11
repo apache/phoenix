@@ -45,4 +45,5 @@ public interface PDatum {
      * @return The SortOrder for this column, never null
      */
     SortOrder getSortOrder();
+    
 }

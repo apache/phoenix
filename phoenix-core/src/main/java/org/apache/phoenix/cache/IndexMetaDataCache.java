@@ -19,10 +19,32 @@
 package org.apache.phoenix.cache;
 
 import java.io.Closeable;
+import java.io.IOException;
+import java.util.Collections;
 import java.util.List;
+
+import co.cask.tephra.Transaction;
 
 import org.apache.phoenix.index.IndexMaintainer;
 
 public interface IndexMetaDataCache extends Closeable {
+    public static final IndexMetaDataCache EMPTY_INDEX_META_DATA_CACHE = new IndexMetaDataCache() {
+
+        @Override
+        public void close() throws IOException {
+        }
+
+        @Override
+        public List<IndexMaintainer> getIndexMaintainers() {
+            return Collections.emptyList();
+        }
+
+        @Override
+        public Transaction getTransaction() {
+            return null;
+        }
+        
+    };
     public List<IndexMaintainer> getIndexMaintainers();
+    public Transaction getTransaction();
 }

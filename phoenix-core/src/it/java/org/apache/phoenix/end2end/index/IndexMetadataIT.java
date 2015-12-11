@@ -28,6 +28,7 @@ import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
+import java.sql.Date;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -39,12 +40,14 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
@@ -100,7 +103,7 @@ public class IndexMetadataIT extends BaseHBaseManagedTimeIT {
         String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
         conn.createStatement().executeQuery("SELECT count(*) FROM " + fullTableName).next(); // client side cache will update
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        pconn.getMetaDataCache().getTable(new PTableKey(pconn.getTenantId(), fullTableName)).getIndexMaintainers(ptr, pconn);
+        pconn.getTable(new PTableKey(pconn.getTenantId(), fullTableName)).getIndexMaintainers(ptr, pconn);
         assertTrue(ptr.getLength() > 0);
     }
     
@@ -109,7 +112,7 @@ public class IndexMetadataIT extends BaseHBaseManagedTimeIT {
         String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
         conn.createStatement().executeQuery("SELECT count(*) FROM " + fullTableName).next(); // client side cache will update
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        pconn.getMetaDataCache().getTable(new PTableKey(pconn.getTenantId(), fullTableName)).getIndexMaintainers(ptr, pconn);
+        pconn.getTable(new PTableKey(pconn.getTenantId(), fullTableName)).getIndexMaintainers(ptr, pconn);
         assertTrue(ptr.getLength() == 0);
     }
     
@@ -469,5 +472,42 @@ public class IndexMetadataIT extends BaseHBaseManagedTimeIT {
         } finally {
             conn.close();
         }
+    }
+    
+    @Test
+    public void testAsyncCreatedDate() throws Exception {
+        Date d0 = new Date(System.currentTimeMillis());
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(false);
+        String ddl = "create table test_table (k varchar primary key, v1 varchar, v2 varchar, v3 varchar)";
+        PreparedStatement stmt = conn.prepareStatement(ddl);
+        stmt.execute();
+        
+        ddl = "CREATE INDEX IDX1 ON test_table (v1) ASYNC";
+        stmt = conn.prepareStatement(ddl);
+        stmt.execute();
+        ddl = "CREATE INDEX IDX2 ON test_table (v2) ASYNC";
+        stmt = conn.prepareStatement(ddl);
+        stmt.execute();
+        ddl = "CREATE INDEX IDX3 ON test_table (v3)";
+        stmt = conn.prepareStatement(ddl);
+        stmt.execute();
+        
+        ResultSet rs = conn.createStatement().executeQuery(
+            "select table_name, " + PhoenixDatabaseMetaData.ASYNC_CREATED_DATE + " " +
+            "from system.catalog (" + PhoenixDatabaseMetaData.ASYNC_CREATED_DATE + " " + PDate.INSTANCE.getSqlTypeName() + ") " +
+            "where " + PhoenixDatabaseMetaData.ASYNC_CREATED_DATE + " is not null " +
+            "order by " + PhoenixDatabaseMetaData.ASYNC_CREATED_DATE
+        );
+        assertTrue(rs.next());
+        assertEquals("IDX1", rs.getString(1));
+        Date d1 = rs.getDate(2);
+        assertTrue(d1.after(d0));
+        assertTrue(rs.next());
+        assertEquals("IDX2", rs.getString(1));
+        Date d2 = rs.getDate(2);
+        assertTrue(d2.after(d1));
+        assertFalse(rs.next());
     }
 }

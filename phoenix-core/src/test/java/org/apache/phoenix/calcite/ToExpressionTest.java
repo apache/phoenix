@@ -67,7 +67,7 @@ public class ToExpressionTest extends BaseConnectionlessQueryTest {
 	        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
 
 	        conn.createStatement().execute(ddl);
-	        this.table = pc.getMetaDataCache().getTable(new PTableKey(null,tableName));
+	        this.table = pc.getMetaDataCache().getTableRef(new PTableKey(null,tableName)).getTable();
 	        SelectStatement select = new SQLParser(sql).parseQuery();
 	        ColumnResolver resolver = FromCompiler.getResolverForQuery(select, pc);
 	        this.phoenixExpr = getter.getParseNode(select).accept(new ExpressionCompiler(new StatementContext(stmt, resolver)));

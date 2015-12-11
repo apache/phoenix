@@ -78,12 +78,12 @@ import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeySchema;
+import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.tuple.Tuple;
@@ -184,11 +184,11 @@ public class ProjectionCompiler {
         String tableName = index.getParentName().getString();
         PTable dataTable = null;
         try {
-        	dataTable = conn.getMetaDataCache().getTable(new PTableKey(tenantId, tableName));
+        	dataTable = conn.getTable(new PTableKey(tenantId, tableName));
         } catch (TableNotFoundException e) {
             if (tenantId != null) { 
             	// Check with null tenantId 
-            	dataTable = conn.getMetaDataCache().getTable(new PTableKey(null, tableName));
+            	dataTable = conn.getTable(new PTableKey(null, tableName));
             }
             else {
             	throw e;
@@ -279,7 +279,7 @@ public class ProjectionCompiler {
         PTable index = tableRef.getTable();
         PhoenixConnection conn = context.getConnection();
         String tableName = index.getParentName().getString();
-        PTable table = conn.getMetaDataCache().getTable(new PTableKey(conn.getTenantId(), tableName));
+        PTable table = conn.getTable(new PTableKey(conn.getTenantId(), tableName));
         PColumnFamily pfamily = table.getColumnFamily(cfName);
         for (PColumn column : pfamily.getColumns()) {
             String indexColName = IndexUtil.getIndexColumnName(column);
@@ -323,7 +323,7 @@ public class ProjectionCompiler {
                 if (expression.getDataType() != null && !expression.getDataType().isCastableTo(targetType)) {
                     throw new ArgumentTypeMismatchException(targetType, expression.getDataType(), "column: " + targetColumn);
                 }
-                expression = CoerceExpression.create(expression, targetType);
+                expression = CoerceExpression.create(expression, targetType, targetColumn.getSortOrder(), targetColumn.getMaxLength());
             }
         }
         return expression;
@@ -364,6 +364,9 @@ public class ProjectionCompiler {
                 if (statement.isAggregate()) {
                     ExpressionCompiler.throwNonAggExpressionInAggException(node.toString());
                 }
+                if (tableRef == TableRef.EMPTY_TABLE_REF) {
+                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.NO_TABLE_SPECIFIED_FOR_WILDCARD_SELECT).build().buildException();
+                }
                 isWildcard = true;
                 if (tableRef.getTable().getType() == PTableType.INDEX && ((WildcardParseNode)node).isRewrite()) {
                 	projectAllIndexColumns(context, tableRef, resolveColumn, projectedExpressions, projectedColumns, targetColumns);
@@ -382,6 +385,9 @@ public class ProjectionCompiler {
                     projectAllTableColumns(context, tRef, true, projectedExpressions, projectedColumns, targetColumns);
                 }                
             } else if (node instanceof  FamilyWildcardParseNode){
+                if (tableRef == TableRef.EMPTY_TABLE_REF) {
+                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.NO_TABLE_SPECIFIED_FOR_WILDCARD_SELECT).build().buildException();
+                }
                 // Project everything for SELECT cf.*
                 String cfName = ((FamilyWildcardParseNode) node).getName();
                 // Delay projecting to scan, as when any other column in the column family gets

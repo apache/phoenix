@@ -36,7 +36,7 @@ public class PherfTest {
     public void testUnknownOption() {
         String[] args = {"-drop", "all", "-q", "-m","-bsOption"};
 
-        // Makes sure that System.exit(1) is called. Release is a required param.
+        // Makes sure that System.exit(1) is called.
         exit.expectSystemExitWithStatus(1);
         Pherf.main(args);
     }

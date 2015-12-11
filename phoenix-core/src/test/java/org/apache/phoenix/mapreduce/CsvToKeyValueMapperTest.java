@@ -17,25 +17,13 @@
  */
 package org.apache.phoenix.mapreduce;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-
 import java.io.IOException;
-import java.util.List;
 
 import org.apache.commons.csv.CSVRecord;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.KeyValue;
-import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
-import org.apache.phoenix.schema.types.PInteger;
-import org.apache.phoenix.schema.types.PIntegerArray;
-import org.apache.phoenix.schema.types.PUnsignedInt;
-import org.apache.phoenix.util.ColumnInfo;
 import org.junit.Test;
 
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Lists;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 public class CsvToKeyValueMapperTest {
 
@@ -61,73 +49,5 @@ public class CsvToKeyValueMapperTest {
         assertEquals(";two\\", parsed.get(1));
         assertTrue(parsed.isConsistent());
         assertEquals(1, parsed.getRecordNumber());
-    }
-
-
-    @Test
-    public void testBuildColumnInfoList() {
-        List<ColumnInfo> columnInfoList = ImmutableList.of(
-                new ColumnInfo("idCol", PInteger.INSTANCE.getSqlType()),
-                new ColumnInfo("unsignedIntCol", PUnsignedInt.INSTANCE.getSqlType()),
-                new ColumnInfo("stringArrayCol", PIntegerArray.INSTANCE.getSqlType()));
-
-        Configuration conf = new Configuration();
-        CsvToKeyValueMapper.configureColumnInfoList(conf, columnInfoList);
-        List<ColumnInfo> fromConfig = CsvToKeyValueMapper.buildColumnInfoList(conf);
-
-        assertEquals(columnInfoList, fromConfig);
-    }
-
-    @Test
-    public void testBuildColumnInfoList_ContainingNulls() {
-        // A null value in the column info list means "skip that column in the input"
-        List<ColumnInfo> columnInfoListWithNull = Lists.newArrayList(
-                new ColumnInfo("idCol", PInteger.INSTANCE.getSqlType()),
-                null,
-                new ColumnInfo("unsignedIntCol", PUnsignedInt.INSTANCE.getSqlType()),
-                new ColumnInfo("stringArrayCol", PIntegerArray.INSTANCE.getSqlType()));
-
-        Configuration conf = new Configuration();
-        CsvToKeyValueMapper.configureColumnInfoList(conf, columnInfoListWithNull);
-        List<ColumnInfo> fromConfig = CsvToKeyValueMapper.buildColumnInfoList(conf);
-
-        assertEquals(columnInfoListWithNull, fromConfig);
-    }
-
-    @Test
-    public void testLoadPreUpdateProcessor() {
-        Configuration conf = new Configuration();
-        conf.setClass(PhoenixConfigurationUtil.UPSERT_HOOK_CLASS_CONFKEY, MockUpsertProcessor.class,
-                ImportPreUpsertKeyValueProcessor.class);
-
-        ImportPreUpsertKeyValueProcessor processor = PhoenixConfigurationUtil.loadPreUpsertProcessor(conf);
-        assertEquals(MockUpsertProcessor.class, processor.getClass());
-    }
-
-    @Test
-    public void testLoadPreUpdateProcessor_NotConfigured() {
-
-        Configuration conf = new Configuration();
-        ImportPreUpsertKeyValueProcessor processor = PhoenixConfigurationUtil.loadPreUpsertProcessor(conf);
-
-        assertEquals(CsvToKeyValueMapper.DefaultImportPreUpsertKeyValueProcessor.class,
-                processor.getClass());
-    }
-
-    @Test(expected=IllegalStateException.class)
-    public void testLoadPreUpdateProcessor_ClassNotFound() {
-        Configuration conf = new Configuration();
-        conf.set(PhoenixConfigurationUtil.UPSERT_HOOK_CLASS_CONFKEY, "MyUndefinedClass");
-
-        PhoenixConfigurationUtil.loadPreUpsertProcessor(conf);
-    }
-
-
-    static class MockUpsertProcessor implements ImportPreUpsertKeyValueProcessor {
-
-        @Override
-        public List<KeyValue> preUpsert(byte[] rowKey, List<KeyValue> keyValues) {
-            throw new UnsupportedOperationException("Not yet implemented");
-        }
     }
 }

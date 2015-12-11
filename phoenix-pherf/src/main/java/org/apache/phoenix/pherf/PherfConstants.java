@@ -18,12 +18,23 @@
 
 package org.apache.phoenix.pherf;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.Properties;
 
 public class PherfConstants {
+    public static enum GeneratePhoenixStats {
+        YES,
+        NO
+    }
+    
+    public static enum CompareType {
+        MINIMUM,
+        AVERAGE
+    }
+
     private static PherfConstants instance = null;
-    private Properties properties = null;
+    private static Properties instanceProperties = null;
 
     public static final int DEFAULT_THREAD_POOL_SIZE = 10;
     public static final int DEFAULT_BATCH_SIZE = 1000;
@@ -31,7 +42,7 @@ public class PherfConstants {
     public static final String RESOURCE_SCENARIO = "/scenario";
     public static final String
             SCENARIO_ROOT_PATTERN =
-            ".*" + PherfConstants.RESOURCE_SCENARIO.substring(1) + ".*";
+            		".*" + PherfConstants.RESOURCE_SCENARIO.substring(1) + ".*" + PherfConstants.RESOURCE_SCENARIO.substring(1) + ".*";
     public static final String SCHEMA_ROOT_PATTERN = ".*";
     public static final String PHERF_PROPERTIES = "pherf.properties";
 
@@ -62,16 +73,6 @@ public class PherfConstants {
     public static final int MONITOR_FREQUENCY = 5000;
     public static final String MONITOR_FILE_NAME = "STATS_MONITOR";
 
-    public static enum GeneratePhoenixStats {
-        YES,
-        NO
-    }
-    
-    public static enum RunMode {
-        PERFORMANCE,
-        FUNCTIONAL
-    }
-
     private PherfConstants() {
     }
 
@@ -82,12 +83,27 @@ public class PherfConstants {
         return instance;
     }
 
-    public Properties getProperties(final String fileName) throws Exception {
-        if (properties != null) {
-            return properties;
+    /**
+     * Get a {@link Properties} object based on the file name
+     * @param fileName      Name of the file
+     * @param getDefault    True if you want to use the properties that may have been loaded into
+     *                      the instance. use false if you want to reload the passed file.
+     * @return {@link Properties}
+     * @throws Exception
+     */
+    public Properties getProperties(final String fileName, boolean getDefault) throws Exception {
+
+        if (instanceProperties == null) {
+            instanceProperties = loadProperties(fileName);
+        } else {
+            return getDefault ? instanceProperties : loadProperties(fileName);
         }
 
-        properties = new Properties();
+        return instanceProperties;
+    }
+
+    private Properties loadProperties(String fileName) throws IOException{
+        Properties properties = new Properties();
         InputStream is = null;
         try {
             is = getClass().getClassLoader().getResourceAsStream(fileName);
@@ -109,7 +125,7 @@ public class PherfConstants {
     public String getProperty(final String fileName, String property) {
         String value = null;
         try {
-            value = getProperties(fileName).getProperty(property);
+            value = getProperties(fileName, false).getProperty(property);
         } catch (Exception e) {
             e.printStackTrace();
         }

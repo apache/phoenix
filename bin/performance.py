@@ -22,6 +22,7 @@
 import os
 import subprocess
 import sys
+import tempfile
 import phoenix_utils
 
 def queryex(description, statement):
@@ -54,9 +55,9 @@ rowcount = sys.argv[2]
 table = "PERFORMANCE_" + sys.argv[2]
 
 # helper variable and functions
-ddl = "ddl.sql"
-data = "data.csv"
-qry = "query.sql"
+ddl = tempfile.mkstemp(prefix='ddl_', suffix='.sql')[1]
+data = tempfile.mkstemp(prefix='data_', suffix='.csv')[1]
+qry = tempfile.mkstemp(prefix='query_', suffix='.sql')[1]
 statements = ""
 
 phoenix_utils.setPath()
@@ -97,7 +98,8 @@ queryex("4 - Truncate + Group By", "SELECT TRUNC(DATE,'DAY') DAY FROM %s GROUP B
 queryex("5 - Filter + Count", "SELECT COUNT(1) FROM %s WHERE CORE<10;" % (table))
 
 print "\nGenerating and upserting data..."
-exitcode = subprocess.call('java -jar %s %s' % (phoenix_utils.testjar, rowcount), shell=True)
+exitcode = subprocess.call('java -jar %s %s %s' % (phoenix_utils.testjar, data, rowcount),
+                           shell=True)
 if exitcode != 0:
     sys.exit(exitcode)
 

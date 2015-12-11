@@ -28,6 +28,7 @@ import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.HTablePool;
+import org.apache.hadoop.hbase.client.RetriesExhaustedWithDetailsException;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -66,7 +67,9 @@ public class ServerUtil {
         } else if (t instanceof IOException) {
             // If the IOException does not wrap any exception, then bubble it up.
             Throwable cause = t.getCause();
-            if (cause == null || cause instanceof IOException) {
+            if (cause instanceof RetriesExhaustedWithDetailsException)
+            	return new DoNotRetryIOException(t.getMessage(), cause);
+            else if (cause == null || cause instanceof IOException) {
                 return (IOException) t;
             }
             // Else assume it's been wrapped, so throw as DoNotRetryIOException to prevent client hanging while retrying
@@ -116,21 +119,16 @@ public class ServerUtil {
     }
 
     private static SQLException parseRemoteException(Throwable t) {
-        	String message = t.getLocalizedMessage();
-        	if (message != null) {
+        String message = t.getLocalizedMessage();
+        if (message != null) {
             // If the message matches the standard pattern, recover the SQLException and throw it.
             Matcher matcher = PATTERN.matcher(t.getLocalizedMessage());
             if (matcher.find()) {
                 int statusCode = Integer.parseInt(matcher.group(1));
-                SQLExceptionCode code;
-                try {
-                    code = SQLExceptionCode.fromErrorCode(statusCode);
-                } catch (SQLException e) {
-                    return e;
-                }
-                return new SQLExceptionInfo.Builder(code).setMessage(matcher.group()).build().buildException();
+                SQLExceptionCode code = SQLExceptionCode.fromErrorCode(statusCode);
+                return new SQLExceptionInfo.Builder(code).setMessage(matcher.group()).setRootCause(t).build().buildException();
             }
-        	}
+        }
         return null;
     }
 

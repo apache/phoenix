@@ -1302,5 +1302,29 @@ public class SequenceIT extends BaseClientManagedTimeIT {
         assertEquals(2, rs.getInt(1));
         assertEquals(5, rs.getInt(2));        
     }
+    
+    @Test
+    public void testReturnAllSequencesNotCalledForNoOpenConnections() throws Exception {
+        nextConnection();
+        conn.createStatement().execute("CREATE SEQUENCE alpha.zeta START WITH 3 INCREMENT BY 2 CACHE 5");
+        nextConnection();
+        String query = "SELECT NEXT VALUE FOR alpha.zeta FROM SYSTEM.\"SEQUENCE\"";
+        ResultSet rs = conn.prepareStatement(query).executeQuery();
+        assertTrue(rs.next());
+        assertEquals(3, rs.getInt(1));
+        assertFalse(rs.next());
+        rs = conn.prepareStatement(query).executeQuery();
+        assertTrue(rs.next());
+        assertEquals(5, rs.getInt(1));
+        assertFalse(rs.next());
+        conn.close();
+        
+        // verify that calling close() does not return sequence values back to the server
+        query = "SELECT CURRENT_VALUE FROM SYSTEM.\"SEQUENCE\" WHERE SEQUENCE_SCHEMA='ALPHA' AND SEQUENCE_NAME='ZETA'";
+        rs = conn.prepareStatement(query).executeQuery();
+        assertTrue(rs.next());
+        assertEquals(13, rs.getInt(1));
+        assertFalse(rs.next());
+    }
 
 }

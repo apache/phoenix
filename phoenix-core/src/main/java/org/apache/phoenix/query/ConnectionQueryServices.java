@@ -44,6 +44,8 @@ import org.apache.phoenix.schema.SequenceAllocation;
 import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.stats.PTableStats;
 
+import co.cask.tephra.TransactionSystemClient;
+
 
 public interface ConnectionQueryServices extends QueryServices, MetaDataMutated {
     public static final int INITIAL_META_DATA_TABLE_CAPACITY = 100;
@@ -88,7 +90,7 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
 
     void clearTableRegionCache(byte[] tableName) throws SQLException;
 
-    boolean hasInvalidIndexConfiguration();
+    boolean hasIndexWALCodec();
     
     long createSequence(String tenantId, String schemaName, String sequenceName, long startWith, long incrementBy, long cacheSize, long minValue, long maxValue, boolean cycle, long timestamp) throws SQLException;
     long dropSequence(String tenantId, String schemaName, String sequenceName, long timestamp) throws SQLException;
@@ -116,4 +118,6 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
     
     public void clearCache() throws SQLException;
     public int getSequenceSaltBuckets();
+
+    TransactionSystemClient getTransactionSystemClient();
 }

@@ -211,6 +211,8 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
     public static final byte[] VIEW_INDEX_ID_BYTES = Bytes.toBytes(VIEW_INDEX_ID);
     public static final String BASE_COLUMN_COUNT = "BASE_COLUMN_COUNT";
     public static final byte[] BASE_COLUMN_COUNT_BYTES = Bytes.toBytes(BASE_COLUMN_COUNT);
+    public static final String IS_ROW_TIMESTAMP = "IS_ROW_TIMESTAMP";
+    public static final byte[] IS_ROW_TIMESTAMP_BYTES = Bytes.toBytes(IS_ROW_TIMESTAMP);
 
     public static final String TABLE_FAMILY = QueryConstants.DEFAULT_COLUMN_FAMILY;
     public static final byte[] TABLE_FAMILY_BYTES = QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
@@ -298,6 +300,11 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
 
     private static final String TENANT_POS_SHIFT = "TENANT_POS_SHIFT";
     private static final byte[] TENANT_POS_SHIFT_BYTES = Bytes.toBytes(TENANT_POS_SHIFT);
+
+    public static final String TRANSACTIONAL = "TRANSACTIONAL";
+    public static final byte[] TRANSACTIONAL_BYTES = Bytes.toBytes(TRANSACTIONAL);
+
+    public static final String ASYNC_CREATED_DATE = "ASYNC_CREATED_DATE";
 
     private final PhoenixConnection connection;
     private final ResultSet emptyResultSet;

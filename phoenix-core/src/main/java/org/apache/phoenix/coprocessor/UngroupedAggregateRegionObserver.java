@@ -28,6 +28,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.security.PrivilegedExceptionAction;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -54,6 +55,7 @@ import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScanType;
 import org.apache.hadoop.hbase.regionserver.Store;
+import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
@@ -102,6 +104,8 @@ import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TimeKeeper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import co.cask.tephra.TxConstants;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
@@ -274,6 +278,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
         long rowCount = 0;
         final RegionScanner innerScanner = theScanner;
         region.startRegionOperation();
+        boolean updateStats = stats != null;
+        boolean success = false;
         try {
             synchronized (innerScanner) {
                 do {
@@ -282,7 +288,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
                     // since this is an indication of whether or not there are more values after the
                     // ones returned
                     hasMore = innerScanner.nextRaw(results);
-                    if (stats != null) {
+                    if (updateStats) {
                         stats.collectStatistics(results);
                     }
                     if (!results.isEmpty()) {
@@ -401,6 +407,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
                               Delete delete = new Delete(firstKV.getRowArray(),
                                   firstKV.getRowOffset(), firstKV.getRowLength(),ts);
                               mutations.add(delete);
+                              // force tephra to ignore this deletes
+                              delete.setAttribute(TxConstants.TX_ROLLBACK_ATTRIBUTE_KEY, new byte[0]);
                             } else if (isUpsert) {
                                 Arrays.fill(values, null);
                                 int i = 0;
@@ -460,6 +468,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
                                         results.get(0).getRowOffset(),
                                         results.get(0).getRowLength());
                                     delete.deleteColumns(deleteCF,  deleteCQ, ts);
+                                    // force tephra to ignore this deletes
+                                    delete.setAttribute(TxConstants.TX_ROLLBACK_ATTRIBUTE_KEY, new byte[0]);
                                     mutations.add(delete);
                                 }
                             }
@@ -508,10 +518,11 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
                         hasAny = true;
                     }
                 } while (hasMore);
+                success = true;
             }
         } finally {
             try {
-                if (stats != null) {
+                if (success && updateStats) {
                     try {
                         stats.updateStatistic(region);
                     } finally {
@@ -642,11 +653,10 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
 
 
     @Override
-    public void postSplit(ObserverContext<RegionCoprocessorEnvironment> e, Region l, Region r)
-            throws IOException {
-        Region region = e.getEnvironment().getRegion();
-        TableName table = region.getRegionInfo().getTable();
-        StatisticsCollector stats = null;
+    public void postSplit(final ObserverContext<RegionCoprocessorEnvironment> e, final Region l,
+        final Region r) throws IOException {
+        final Region region = e.getEnvironment().getRegion();
+        final TableName table = region.getRegionInfo().getTable();
         try {
             boolean useCurrentTime =
                     e.getEnvironment().getConfiguration().getBoolean(QueryServices.STATS_USE_CURRENT_TIME_ATTRIB,
@@ -654,15 +664,25 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
             // Provides a means of clients controlling their timestamps to not use current time
             // when background tasks are updating stats. Instead we track the max timestamp of
             // the cells and use that.
-            long clientTimeStamp = useCurrentTime ? TimeKeeper.SYSTEM.getCurrentTime() : StatisticsCollector.NO_TIMESTAMP;
-            stats = new StatisticsCollector(e.getEnvironment(), table.getNameAsString(), clientTimeStamp);
-            stats.splitStats(region, l, r);
+            final long clientTimeStamp = useCurrentTime ? TimeKeeper.SYSTEM.getCurrentTime() :
+              StatisticsCollector.NO_TIMESTAMP;
+            User.runAsLoginUser(new PrivilegedExceptionAction<Void>() {
+              @Override
+              public Void run() throws Exception {
+                StatisticsCollector stats = new StatisticsCollector(e.getEnvironment(),
+                  table.getNameAsString(), clientTimeStamp);
+                try {
+                  stats.splitStats(region, l, r);
+                  return null;
+                } finally {
+                  if (stats != null) stats.close();
+                }
+              }
+            });
         } catch (IOException ioe) {
             if(logger.isWarnEnabled()) {
                 logger.warn("Error while collecting stats during split for " + table,ioe);
             }
-        } finally {
-            if (stats != null) stats.close();
         }
     }
 

@@ -26,7 +26,7 @@
   <parent>
     <groupId>org.apache.phoenix</groupId>
     <artifactId>phoenix</artifactId>
-    <version>4.6.0-HBase-1.1-SNAPSHOT</version>
+    <version>4.7.0-HBase-1.1-SNAPSHOT</version>
   </parent>
   <artifactId>phoenix-assembly</artifactId>
   <name>Phoenix Assembly</name>
@@ -81,8 +81,6 @@
                 <descriptor>src/build/client-minimal.xml</descriptor>
                <!-- build the phoenix server side jar, that includes phoenix-hadoopX-compat, phoenix-hadoop-compat and antlr -->
                 <descriptor>src/build/server.xml</descriptor>
-               <!-- build the phoenix server side jar, that includes phoenix-hadoopX-compat and phoenix-hadoop-compat. -->
-                <descriptor>src/build/server-without-antlr.xml</descriptor>
               </descriptors>
             </configuration>
           </execution>

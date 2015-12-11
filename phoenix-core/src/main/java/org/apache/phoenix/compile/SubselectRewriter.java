@@ -127,6 +127,22 @@ public class SubselectRewriter extends ParseNodeRewriter {
             }
         }
         
+        if (select.isDistinct()) {
+            if (subselect.getLimit() != null || subselect.isAggregate() || subselect.isDistinct()) {
+                return select;
+            }
+            isDistinctRewrite = true;
+            orderByRewrite = null;
+        }
+        
+        if (select.isAggregate()) {
+            if (subselect.getLimit() != null || subselect.isAggregate() || subselect.isDistinct()) {
+                return select;
+            }
+            isAggregateRewrite = true;
+            orderByRewrite = null;
+        }
+        
         List<ParseNode> groupBy = select.getGroupBy();
         if (!groupBy.isEmpty()) {
             if (subselect.getLimit() != null || subselect.isAggregate() || subselect.isDistinct()) {
@@ -139,6 +155,7 @@ public class SubselectRewriter extends ParseNodeRewriter {
             if (select.getHaving() != null) {
                 havingRewrite = select.getHaving().accept(this);
             }
+            orderByRewrite = null;
         }
         
         List<AliasedNode> selectNodes = select.getSelect();
@@ -188,20 +205,6 @@ public class SubselectRewriter extends ParseNodeRewriter {
         HintNode hint = select.getHint();
         if (hint != null) {
             hintRewrite = hintRewrite == null ? hint : HintNode.combine(hint, hintRewrite);
-        }
-        
-        if (select.isDistinct()) {
-            if (subselect.getLimit() != null || subselect.isAggregate() || subselect.isDistinct()) {
-                return select;
-            }
-            isDistinctRewrite = true;
-        }
-        
-        if (select.isAggregate()) {
-            if (subselect.getLimit() != null || subselect.isAggregate() || subselect.isDistinct()) {
-                return select;
-            }
-            isAggregateRewrite = true;
         }
         
         return NODE_FACTORY.select(subselect.getFrom(), hintRewrite, isDistinctRewrite, selectNodesRewrite, whereRewrite, groupByRewrite, 

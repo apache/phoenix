@@ -22,6 +22,7 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.compile.ExplainPlan;
@@ -36,10 +37,13 @@ import org.apache.phoenix.iterate.MergeSortTopNResultIterator;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.iterate.UnionResultIterators;
+import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.SQLCloseable;
+
+import com.google.common.collect.Sets;
 
 
 public class UnionPlan implements QueryPlan {
@@ -196,5 +200,19 @@ public class UnionPlan implements QueryPlan {
         return new UnionPlan(this.parentContext, this.statement, this.tableRef, this.projector,
             limit, this.orderBy, this.groupBy, this.plans, this.paramMetaData);
     }
-}
 
+	@Override
+	public Operation getOperation() {
+		return statement.getOperation();
+	}
+
+	@Override
+	public Set<TableRef> getSourceRefs() {
+		// TODO is this correct?
+		Set<TableRef> sources = Sets.newHashSetWithExpectedSize(plans.size());
+		for (QueryPlan plan : plans) {
+			sources.addAll(plan.getSourceRefs());
+		}
+		return sources;
+	}
+}

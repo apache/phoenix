@@ -26,22 +26,22 @@ import java.util.GregorianCalendar;
 import java.util.Random;
 
 public class GeneratePerformanceData {
-    private static final String FILENAME = "data.csv";
-
     public static void main(String[] args) throws FileNotFoundException, IOException {
         String[] host = {"NA","CS","EU"};
         String[] domain = {"Salesforce.com","Apple.com","Google.com"};
         String[] feature = {"Login","Report","Dashboard"};
         Calendar now = GregorianCalendar.getInstance();
-        FileOutputStream fostream = new FileOutputStream(FILENAME);
+        Random random = new Random();
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+        if (args.length != 2) {
+            System.out.println("Data file name and row count must be specified as arguments");
+            return;
+        }
+        String dataFile = args[0];
+        int rowCount = Integer.parseInt(args[1]);
+        FileOutputStream fostream = null;
         try {
-            Random random = new Random();
-            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-            if (args.length < 1) {
-                System.out.println("Row count must be specified as argument");
-                return;
-            }
-            int rowCount = Integer.parseInt(args[0]);
+            fostream = new FileOutputStream(dataFile);
             for (int i=0; i<rowCount; i++) {
                 now.add(Calendar.SECOND, 1);
                 fostream.write((host[random.nextInt(host.length)] + "," + 

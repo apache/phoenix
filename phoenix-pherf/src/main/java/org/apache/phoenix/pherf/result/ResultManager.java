@@ -19,33 +19,71 @@
 package org.apache.phoenix.pherf.result;
 
 import org.apache.phoenix.pherf.PherfConstants;
-import org.apache.phoenix.pherf.PherfConstants.RunMode;
 import org.apache.phoenix.pherf.result.file.ResultFileDetails;
-import org.apache.phoenix.pherf.result.impl.CSVResultHandler;
+import org.apache.phoenix.pherf.result.impl.CSVFileResultHandler;
 import org.apache.phoenix.pherf.result.impl.ImageResultHandler;
 import org.apache.phoenix.pherf.result.impl.XMLResultHandler;
+import org.apache.phoenix.util.InstanceResolver;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.List;
 
 public class ResultManager {
+    private static final Logger logger = LoggerFactory.getLogger(ResultManager.class);
+
     private final List<ResultHandler> resultHandlers;
     private final ResultUtil util;
-    private final PherfConstants.RunMode runMode;
+    private static final List<ResultHandler> defaultHandlers;
+    private static final List<ResultHandler> minimalHandlers;
+    
+    static {
+        defaultHandlers = new ArrayList<>();
+        XMLResultHandler xmlResultHandler = new XMLResultHandler();
+        xmlResultHandler.setResultFileDetails(ResultFileDetails.XML);
+        defaultHandlers.add(xmlResultHandler);
 
-    public ResultManager(String fileNameSeed, PherfConstants.RunMode runMode) {
-        this(runMode, Arrays.asList(new XMLResultHandler(fileNameSeed, ResultFileDetails.XML),
-                new ImageResultHandler(fileNameSeed, ResultFileDetails.IMAGE),
-                new CSVResultHandler(fileNameSeed, runMode == RunMode.PERFORMANCE ?
-                        ResultFileDetails.CSV_DETAILED_PERFORMANCE :
-                        ResultFileDetails.CSV_DETAILED_FUNCTIONAL),
-                new CSVResultHandler(fileNameSeed, ResultFileDetails.CSV_AGGREGATE_PERFORMANCE)));
+        ImageResultHandler imageResultHandler = new ImageResultHandler();
+        imageResultHandler.setResultFileDetails(ResultFileDetails.IMAGE);
+        defaultHandlers.add(imageResultHandler);
+
+        ResultHandler handlerAgg = new CSVFileResultHandler();
+        handlerAgg.setResultFileDetails(ResultFileDetails.CSV_AGGREGATE_PERFORMANCE);
+        defaultHandlers.add(handlerAgg);
+
+        ResultHandler handlerDet = new CSVFileResultHandler();
+        handlerDet.setResultFileDetails(ResultFileDetails.CSV_DETAILED_PERFORMANCE);
+        defaultHandlers.add(handlerDet);
+    }
+    
+    static {
+    	minimalHandlers = new ArrayList<>();
+        ImageResultHandler imageResultHandler = new ImageResultHandler();
+        imageResultHandler.setResultFileDetails(ResultFileDetails.IMAGE);
+        minimalHandlers.add(imageResultHandler);
     }
 
-    public ResultManager(PherfConstants.RunMode runMode, List<ResultHandler> resultHandlers) {
+    public ResultManager(String fileNameSeed) {
+        this(fileNameSeed, true);
+    }
+    
+    @SuppressWarnings("unchecked")
+	public ResultManager(String fileNameSeed, boolean writeRuntimeResults) {
+        this(fileNameSeed, writeRuntimeResults ?
+        		InstanceResolver.get(ResultHandler.class, defaultHandlers) :
+        		InstanceResolver.get(ResultHandler.class, minimalHandlers));
+    }
+
+    public ResultManager(String fileNameSeed, List<ResultHandler> resultHandlers) {
         this.resultHandlers = resultHandlers;
         util = new ResultUtil();
-        this.runMode = runMode;
+
+        for (ResultHandler resultHandler : resultHandlers) {
+            if (resultHandler.getResultFileName() == null) {
+                resultHandler.setResultFileName(fileNameSeed);
+            }
+        }
     }
 
     /**
@@ -59,7 +97,7 @@ public class ResultManager {
             util.ensureBaseResultDirExists();
             final DataModelResult dataModelResultCopy = new DataModelResult(result);
             for (ResultHandler handler : resultHandlers) {
-                util.write(handler, dataModelResultCopy, runMode);
+                util.write(handler, dataModelResultCopy);
             }
         } finally {
             for (ResultHandler handler : resultHandlers) {
@@ -84,13 +122,13 @@ public class ResultManager {
     public synchronized void write(List<DataModelResult> dataModelResults) throws Exception {
         util.ensureBaseResultDirExists();
 
-        CSVResultHandler detailsCSVWriter = null;
+        CSVFileResultHandler detailsCSVWriter = null;
         try {
-            detailsCSVWriter =
-                    new CSVResultHandler(PherfConstants.COMBINED_FILE_NAME,
-                            ResultFileDetails.CSV_DETAILED_PERFORMANCE);
+            detailsCSVWriter = new CSVFileResultHandler();
+            detailsCSVWriter.setResultFileDetails(ResultFileDetails.CSV_DETAILED_PERFORMANCE);
+            detailsCSVWriter.setResultFileName(PherfConstants.COMBINED_FILE_NAME);
             for (DataModelResult dataModelResult : dataModelResults) {
-                util.write(detailsCSVWriter, dataModelResult, runMode);
+                util.write(detailsCSVWriter, dataModelResult);
             }
         } finally {
             if (detailsCSVWriter != null) {
@@ -98,5 +136,25 @@ public class ResultManager {
                 detailsCSVWriter.close();
             }
         }
+    }
+
+    /**
+     * Allows for flushing all the {@link org.apache.phoenix.pherf.result.ResultHandler}
+     * @throws Exception
+     */
+    public synchronized void flush(){
+        for (ResultHandler handler : resultHandlers) {
+            try {
+                handler.flush();
+            } catch (Exception e) {
+                e.printStackTrace();
+                logger.warn("Could not flush handler: "
+                        + handler.getResultFileName() + " : " + e.getMessage());
+            }
+        }
+    }
+
+    public List<ResultHandler> getResultHandlers() {
+        return resultHandlers;
     }
 }

@@ -30,6 +30,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.htrace.TraceScope;
@@ -52,6 +53,7 @@ import org.apache.phoenix.iterate.ParallelIteratorFactory;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.parse.ParseNodeFactory;
@@ -72,6 +74,7 @@ import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.ScanUtil;
 
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 
 
@@ -88,6 +91,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
     protected static final long DEFAULT_ESTIMATED_SIZE = 10 * 1024; // 10 K
     
     protected final TableRef tableRef;
+    protected final Set<TableRef> tableRefs;
     protected final StatementContext context;
     protected final FilterableStatement statement;
     protected final RowProjector projection;
@@ -111,6 +115,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
         this.context = context;
         this.statement = statement;
         this.tableRef = table;
+        this.tableRefs = ImmutableSet.of(table);
         this.projection = projection;
         this.paramMetaData = paramMetaData;
         this.limit = limit;
@@ -120,6 +125,12 @@ public abstract class BaseQueryPlan implements QueryPlan {
         this.dynamicFilter = dynamicFilter;
     }
 
+
+	@Override
+	public Operation getOperation() {
+		return Operation.QUERY;
+	}
+	
     @Override
     public boolean isDegenerate() {
         return context.getScanRanges() == ScanRanges.NOTHING;
@@ -140,6 +151,11 @@ public abstract class BaseQueryPlan implements QueryPlan {
     @Override
     public TableRef getTableRef() {
         return tableRef;
+    }
+
+    @Override
+    public Set<TableRef> getSourceRefs() {
+        return tableRefs;
     }
 
     @Override
@@ -201,27 +217,32 @@ public abstract class BaseQueryPlan implements QueryPlan {
             scan.setSmall(true);
         }
         
-        // Set producer on scan so HBase server does round robin processing
-        //setProducer(scan);
-        // Set the time range on the scan so we don't get back rows newer than when the statement was compiled
-        // The time stamp comes from the server at compile time when the meta data
-        // is resolved.
-        // TODO: include time range in explain plan?
         PhoenixConnection connection = context.getConnection();
 
         // set read consistency
         if (table.getType() != PTableType.SYSTEM) {
             scan.setConsistency(connection.getConsistency());
         }
-        if (context.getScanTimeRange() == null) {
-          Long scn = connection.getSCN();
-          if (scn == null) {
-            scn = context.getCurrentTime();
-          }
-          ScanUtil.setTimeRange(scan, scn);
-        } else {
-            ScanUtil.setTimeRange(scan, context.getScanTimeRange());
-        }
+        // TODO fix this in PHOENIX-2415 Support ROW_TIMESTAMP with transactional tables
+        if (!table.isTransactional()) {
+	                // Get the time range of row_timestamp column
+	        TimeRange rowTimestampRange = context.getScanRanges().getRowTimestampRange();
+	        // Get the already existing time range on the scan.
+	        TimeRange scanTimeRange = scan.getTimeRange();
+	        Long scn = connection.getSCN();
+	        if (scn == null) {
+	            scn = context.getCurrentTime();
+	        }
+	        try {
+	            TimeRange timeRangeToUse = ScanUtil.intersectTimeRange(rowTimestampRange, scanTimeRange, scn);
+	            if (timeRangeToUse == null) {
+	                return ResultIterator.EMPTY_ITERATOR;
+	            }
+	            scan.setTimeRange(timeRangeToUse.getMin(), timeRangeToUse.getMax());
+	        } catch (IOException e) {
+	            throw new RuntimeException(e);
+	        }
+	    }
         byte[] tenantIdBytes;
         if( table.isMultiTenant() == true ) {
             tenantIdBytes = connection.getTenantId() == null ? null :
@@ -251,13 +272,15 @@ public abstract class BaseQueryPlan implements QueryPlan {
                 KeyValueSchema schema = ProjectedColumnExpression.buildSchema(dataColumns);
                 // Set key value schema of the data columns.
                 serializeSchemaIntoScan(scan, schema);
-                String parentSchema = table.getParentSchemaName().getString();
-                String parentTable = table.getParentTableName().getString();
+                PTable parentTable = context.getCurrentTable().getTable();
+                String parentSchemaName = parentTable.getParentSchemaName().getString();
+                String parentTableName = parentTable.getParentTableName().getString();
                 final ParseNodeFactory FACTORY = new ParseNodeFactory();
+                // TODO: is it necessary to re-resolve the table?
                 TableRef dataTableRef =
                         FromCompiler.getResolver(
-                            FACTORY.namedTable(null, TableName.create(parentSchema, parentTable)),
-                            context.getConnection()).resolveTable(parentSchema, parentTable);
+                            FACTORY.namedTable(null, TableName.create(parentSchemaName, parentTableName)),
+                            context.getConnection()).resolveTable(parentSchemaName, parentTableName);
                 PTable dataTable = dataTableRef.getTable();
                 // Set index maintainer of the local index.
                 serializeIndexMaintainerIntoScan(scan, dataTable);
@@ -294,7 +317,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
         return (scope.getSpan() != null) ? new TracingIterator(scope, iterator) : iterator;
     }
 
-    private void serializeIndexMaintainerIntoScan(Scan scan, PTable dataTable) {
+    private void serializeIndexMaintainerIntoScan(Scan scan, PTable dataTable) throws SQLException {
         PName name = context.getCurrentTable().getTable().getName();
         List<PTable> indexes = Lists.newArrayListWithExpectedSize(1);
         for (PTable index : dataTable.getIndexes()) {
@@ -306,6 +329,9 @@ public abstract class BaseQueryPlan implements QueryPlan {
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         IndexMaintainer.serialize(dataTable, ptr, indexes, context.getConnection());
         scan.setAttribute(BaseScannerRegionObserver.LOCAL_INDEX_BUILD, ByteUtil.copyKeyBytesIfNecessary(ptr));
+        if (dataTable.isTransactional()) {
+            scan.setAttribute(BaseScannerRegionObserver.TX_STATE, context.getConnection().getMutationState().encodeTransaction());
+        }
     }
 
     private void serializeViewConstantsIntoScan(Scan scan, PTable dataTable) {
@@ -421,7 +447,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
     @Override
     public ExplainPlan getExplainPlan() throws SQLException {
         if (context.getScanRanges() == ScanRanges.NOTHING) {
-            return new ExplainPlan(Collections.singletonList("DEGENERATE SCAN OVER " + tableRef.getTable().getName().getString()));
+            return new ExplainPlan(Collections.singletonList("DEGENERATE SCAN OVER " + getTableRef().getTable().getName().getString()));
         }
         
         // Optimize here when getting explain plan, as queries don't get optimized until after compilation

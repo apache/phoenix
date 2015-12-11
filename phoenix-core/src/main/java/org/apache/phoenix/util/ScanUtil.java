@@ -511,7 +511,7 @@ public class ScanUtil {
         }
     }
     
-    public static ScanRanges newScanRanges(List<Mutation> mutations) throws SQLException {
+    public static ScanRanges newScanRanges(List<? extends Mutation> mutations) throws SQLException {
         List<KeyRange> keys = Lists.newArrayListWithExpectedSize(mutations.size());
         for (Mutation m : mutations) {
             keys.add(PVarbinary.INSTANCE.getKeyRange(m.getRow()));
@@ -692,6 +692,13 @@ public class ScanUtil {
         return Bytes.compareTo(key, 0, nBytesToCheck, ZERO_BYTE_ARRAY, 0, nBytesToCheck) != 0;
     }
 
+    public static byte[] getTenantIdBytes(RowKeySchema schema, boolean isSalted, PName tenantId, boolean isMultiTenantTable)
+            throws SQLException {
+        return isMultiTenantTable ?
+                  getTenantIdBytes(schema, isSalted, tenantId)
+                : tenantId.getBytes();
+    }
+
     public static byte[] getTenantIdBytes(RowKeySchema schema, boolean isSalted, PName tenantId)
             throws SQLException {
         int pkPos = isSalted ? 1 : 0;
@@ -742,4 +749,38 @@ public class ScanUtil {
     public static boolean shouldRowsBeInRowKeyOrder(OrderBy orderBy, StatementContext context) {
         return forceRowKeyOrder(context) || orderBy == FWD_ROW_KEY_ORDER_BY || orderBy == REV_ROW_KEY_ORDER_BY;
     }
+    
+    public static TimeRange intersectTimeRange(TimeRange rowTimestampColRange, TimeRange scanTimeRange, Long scn) throws IOException, SQLException {
+        long scnToUse = scn == null ? HConstants.LATEST_TIMESTAMP : scn;
+        long lowerRangeToBe = 0;
+        long upperRangeToBe = scnToUse;
+        if (rowTimestampColRange != null) {
+            long minRowTimestamp = rowTimestampColRange.getMin();
+            long maxRowTimestamp = rowTimestampColRange.getMax();
+            if ((lowerRangeToBe > maxRowTimestamp) || (upperRangeToBe < minRowTimestamp)) {
+                return null; // degenerate
+            } else {
+                // there is an overlap of ranges
+                lowerRangeToBe = Math.max(lowerRangeToBe, minRowTimestamp);
+                upperRangeToBe = Math.min(upperRangeToBe, maxRowTimestamp);
+            }
+        }
+        if (scanTimeRange != null) {
+            long minScanTimeRange = scanTimeRange.getMin();
+            long maxScanTimeRange = scanTimeRange.getMax();
+            if ((lowerRangeToBe > maxScanTimeRange) || (upperRangeToBe < lowerRangeToBe)) {
+                return null; // degenerate
+            } else {
+                // there is an overlap of ranges
+                lowerRangeToBe = Math.max(lowerRangeToBe, minScanTimeRange);
+                upperRangeToBe = Math.min(upperRangeToBe, maxScanTimeRange);
+            }
+        }
+        return new TimeRange(lowerRangeToBe, upperRangeToBe);
+    }
+    
+    public static boolean isDefaultTimeRange(TimeRange range) {
+        return range.getMin() == 0 && range.getMax() == Long.MAX_VALUE;
+    }
+
 }

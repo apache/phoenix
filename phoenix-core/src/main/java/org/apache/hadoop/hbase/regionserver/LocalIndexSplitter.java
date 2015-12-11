@@ -28,6 +28,7 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.PairOfSameType;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -45,6 +46,7 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
 import java.io.IOException;
+import java.security.PrivilegedExceptionAction;
 import java.sql.SQLException;
 import java.util.List;
 
@@ -66,7 +68,7 @@ public class LocalIndexSplitter extends BaseRegionObserver {
         if (SchemaUtil.isSystemTable(tableDesc.getName())) {
             return;
         }
-        RegionServerServices rss = ctx.getEnvironment().getRegionServerServices();
+        final RegionServerServices rss = ctx.getEnvironment().getRegionServerServices();
         if (tableDesc.getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES) == null
                 || !Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(tableDesc
                         .getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES)))) {
@@ -100,7 +102,13 @@ public class LocalIndexSplitter extends BaseRegionObserver {
                     return;
                 }
                 ((HRegion)indexRegion).forceSplit(splitKey);
-                daughterRegions = st.stepsBeforePONR(rss, rss, false);
+                User.runAsLoginUser(new PrivilegedExceptionAction<Void>() {
+                  @Override
+                  public Void run() throws Exception {                  
+                    daughterRegions = st.stepsBeforePONR(rss, rss, false);
+                    return null;
+                  }
+                });
                 HRegionInfo copyOfParent = new HRegionInfo(indexRegion.getRegionInfo());
                 copyOfParent.setOffline(true);
                 copyOfParent.setSplit(true);

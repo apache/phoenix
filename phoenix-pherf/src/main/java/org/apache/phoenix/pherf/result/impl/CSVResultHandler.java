@@ -15,72 +15,38 @@
  *   See the License for the specific language governing permissions and
  *   limitations under the License.
  */
-
 package org.apache.phoenix.pherf.result.impl;
 
-import org.apache.commons.csv.CSVFormat;
-import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVPrinter;
-import org.apache.commons.csv.CSVRecord;
-import org.apache.phoenix.pherf.PherfConstants;
 import org.apache.phoenix.pherf.result.Result;
-import org.apache.phoenix.pherf.result.ResultHandler;
 import org.apache.phoenix.pherf.result.ResultUtil;
-import org.apache.phoenix.pherf.result.ResultValue;
-import org.apache.phoenix.pherf.result.file.ResultFileDetails;
 
-import java.io.File;
 import java.io.IOException;
-import java.io.PrintWriter;
-import java.nio.charset.Charset;
-import java.util.ArrayList;
-import java.util.List;
 
-/**
- * TODO Doc this class. Note that each instance that has a non unique file name will overwrite the last
- */
-public class CSVResultHandler implements ResultHandler {
+public abstract class CSVResultHandler extends DefaultResultHandler {
+    protected final ResultUtil util;
+    protected volatile CSVPrinter csvPrinter = null;
+    protected volatile boolean isClosed = true;
 
-    private final ResultUtil util;
-    private final ResultFileDetails resultFileDetails;
-    private final String resultFileName;
-    private volatile CSVPrinter csvPrinter = null;
-    private volatile boolean isClosed = true;
-
-    public CSVResultHandler(String resultFileName, ResultFileDetails resultFileDetails) {
-        this(resultFileName, resultFileDetails, true);
-    }
-
-    public CSVResultHandler(String resultFileName, ResultFileDetails resultFileDetails,
-            boolean generateFullFileName) {
+    public CSVResultHandler() {
         this.util = new ResultUtil();
-        PherfConstants constants = PherfConstants.create();
-        String resultDir = constants.getProperty("pherf.default.results.dir");
-
-        this.resultFileName =
-                generateFullFileName ?
-                        resultDir + PherfConstants.PATH_SEPARATOR + PherfConstants.RESULT_PREFIX
-                                + resultFileName + util.getSuffix() + resultFileDetails
-                                .getExtension().toString() :
-                        resultFileName;
-        this.resultFileDetails = resultFileDetails;
     }
 
-    @Override public synchronized void write(Result result) throws IOException {
-        util.ensureBaseResultDirExists();
-
-        open(result);
+    @Override
+    public synchronized void write(Result result) throws IOException {
         csvPrinter.printRecord(result.getResultValues());
         flush();
     }
 
-    @Override public synchronized void flush() throws IOException {
+    @Override
+    public synchronized void flush() throws IOException {
         if (csvPrinter != null) {
             csvPrinter.flush();
         }
     }
 
-    @Override public synchronized void close() throws IOException {
+    @Override
+    public synchronized void close() throws IOException {
         if (csvPrinter != null) {
             csvPrinter.flush();
             csvPrinter.close();
@@ -88,51 +54,15 @@ public class CSVResultHandler implements ResultHandler {
         }
     }
 
-    @Override public synchronized List<Result> read() throws IOException {
-        CSVParser parser = null;
-        util.ensureBaseResultDirExists();
-        try {
-            File file = new File(resultFileName);
-            parser = CSVParser.parse(file, Charset.defaultCharset(), CSVFormat.DEFAULT);
-            List<CSVRecord> records = parser.getRecords();
-            List<Result> results = new ArrayList<>();
-            String header = null;
-            for (CSVRecord record : records) {
-
-                // First record is the CSV Header
-                if (record.getRecordNumber() == 1) {
-                    header = record.toString();
-                    continue;
-                }
-                List<ResultValue> resultValues = new ArrayList<>();
-                for (String val : record.toString().split(PherfConstants.RESULT_FILE_DELIMETER)) {
-                    resultValues.add(new ResultValue(val));
-                }
-                Result result = new Result(resultFileDetails, header, resultValues);
-                results.add(result);
-            }
-            return results;
-        } finally {
-            parser.close();
-        }
-    }
-
-    private void open(Result result) throws IOException {
-        // Check if already so we only open one writer
-        if (csvPrinter != null) {
-            return;
-        }
-        csvPrinter = new CSVPrinter(new PrintWriter(resultFileName), CSVFormat.DEFAULT);
-        Object[] records = result.getHeader().split(PherfConstants.RESULT_FILE_DELIMETER);
-        csvPrinter.printRecord(records);
-        isClosed = false;
-    }
-
-    @Override public synchronized boolean isClosed() {
+    @Override
+    public synchronized boolean isClosed() {
         return isClosed;
     }
 
-    @Override public ResultFileDetails getResultFileDetails() {
-        return resultFileDetails;
-    }
+    /**
+     * This method is meant to open the connection to the target CSV location
+     * @param header {@link String} Comma separated list of header values for CSV
+     * @throws IOException
+     */
+    protected abstract void open(String header) throws IOException;
 }

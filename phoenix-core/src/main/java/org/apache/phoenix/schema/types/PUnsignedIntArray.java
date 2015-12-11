@@ -76,8 +76,8 @@ public class PUnsignedIntArray extends PArrayDataType<int[]> {
         if (value == null) {
             return true;
         }
-        PhoenixArray pArr = (PhoenixArray) value;
-        Object[] intArr = (Object[]) pArr.array;
+        PhoenixArray.PrimitiveIntPhoenixArray pArr = (PhoenixArray.PrimitiveIntPhoenixArray) value;
+        int[] intArr = (int[]) pArr.array;
         for (Object i : intArr) {
             if (!super.isCoercibleTo(PUnsignedInt.INSTANCE, i)) {
                 return false;

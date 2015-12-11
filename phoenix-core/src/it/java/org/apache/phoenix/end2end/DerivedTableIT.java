@@ -102,6 +102,7 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER ATABLE_DERIVED_IDX\n" +
                 "    SERVER AGGREGATE INTO DISTINCT ROWS BY [\"A_STRING\", \"B_STRING\"]\n" +
                 "CLIENT MERGE SORT\n" +
+                "CLIENT SORTED BY [A]\n" +
                 "CLIENT AGGREGATE INTO DISTINCT ROWS BY [A]\n" +
                 "CLIENT DISTINCT ON [COLLECTDISTINCT(B)]"}});
         testCases.add(new String[][] {
@@ -117,6 +118,7 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
                 "CLIENT PARALLEL 4-WAY FULL SCAN OVER ATABLE\n" +
                 "    SERVER AGGREGATE INTO DISTINCT ROWS BY [A_STRING, B_STRING]\n" +
                 "CLIENT MERGE SORT\n" +
+                "CLIENT SORTED BY [A]\n" +
                 "CLIENT AGGREGATE INTO DISTINCT ROWS BY [A]\n" +
                 "CLIENT DISTINCT ON [COLLECTDISTINCT(B)]"}});
         return testCases;
@@ -330,6 +332,22 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
             
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
             assertEquals(plans[1], QueryUtil.getExplainPlan(rs));
+            
+            // (orderby) groupby
+            query = "SELECT a_string, count(*) FROM (SELECT * FROM aTable order by a_integer) AS t where a_byte != 8 group by a_string";
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(A_VALUE,rs.getString(1));
+            assertEquals(4,rs.getInt(2));
+            assertTrue (rs.next());
+            assertEquals(B_VALUE,rs.getString(1));
+            assertEquals(3,rs.getInt(2));
+            assertTrue (rs.next());
+            assertEquals(C_VALUE,rs.getString(1));
+            assertEquals(1,rs.getInt(2));
+
+            assertFalse(rs.next());
         } finally {
             conn.close();
         }
@@ -670,6 +688,15 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
             
             // count (subquery)
             query = "SELECT count(*) FROM (SELECT * FROM aTable WHERE (organization_id, entity_id) in (SELECT organization_id, entity_id FROM aTable WHERE a_byte != 8)) AS t";
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(8,rs.getInt(1));
+
+            assertFalse(rs.next());
+            
+            // count (orderby)
+            query = "SELECT count(a_byte) FROM (SELECT * FROM aTable order by a_integer) AS t where a_byte != 8";
             statement = conn.prepareStatement(query);
             rs = statement.executeQuery();
             assertTrue (rs.next());

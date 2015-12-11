@@ -18,11 +18,25 @@
 
 package org.apache.phoenix.pherf;
 
-import org.apache.commons.cli.*;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+import java.util.Properties;
+
+import org.apache.commons.cli.CommandLine;
+import org.apache.commons.cli.CommandLineParser;
+import org.apache.commons.cli.HelpFormatter;
+import org.apache.commons.cli.Options;
+import org.apache.commons.cli.ParseException;
+import org.apache.commons.cli.PosixParser;
+import org.apache.phoenix.pherf.PherfConstants.CompareType;
 import org.apache.phoenix.pherf.PherfConstants.GeneratePhoenixStats;
 import org.apache.phoenix.pherf.configuration.XMLConfigParser;
 import org.apache.phoenix.pherf.jmx.MonitorManager;
+import org.apache.phoenix.pherf.result.ResultUtil;
 import org.apache.phoenix.pherf.schema.SchemaReader;
+import org.apache.phoenix.pherf.util.GoogleChartGenerator;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
 import org.apache.phoenix.pherf.util.ResourceList;
 import org.apache.phoenix.pherf.workload.QueryExecutor;
@@ -32,12 +46,6 @@ import org.apache.phoenix.pherf.workload.WriteWorkload;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-import java.util.Properties;
-
 public class Pherf {
     private static final Logger logger = LoggerFactory.getLogger(Pherf.class);
     private static final Options options = new Options();
@@ -45,6 +53,8 @@ public class Pherf {
 
     static {
         options.addOption("disableSchemaApply", false, "Set to disable schema from being applied.");
+		options.addOption("disableRuntimeResult", false,
+				"Set to disable writing detailed CSV file during query execution. Those will eventually get written at the end of query execution.");
         options.addOption("z", "zookeeper", true,
                 "HBase Zookeeper address for connection. Default: localhost");
         options.addOption("q", "query", false, "Executes multi-threaded query sets");
@@ -76,6 +86,9 @@ public class Pherf {
         options.addOption("d", "debug", false, "Put tool in debug mode");
         options.addOption("stats", false,
                 "Update Phoenix Statistics after data is loaded with -l argument");
+		options.addOption("label", true, "Label a run. Result file name will be suffixed with specified label");
+		options.addOption("compare", true, "Specify labeled run(s) to compare");
+		options.addOption("useAverageCompareType", false, "Compare results with Average query time instead of default is Minimum query time.");
     }
 
     private final String zookeeper;
@@ -86,13 +99,16 @@ public class Pherf {
     private final boolean preLoadData;
     private final String dropPherfTablesRegEx;
     private final boolean executeQuerySets;
-    private final boolean exportCSV;
-    private final boolean diff;
+    private final boolean isFunctional;
     private final boolean monitor;
     private final int rowCountOverride;
     private final boolean listFiles;
     private final boolean applySchema;
+    private final boolean writeRuntimeResults;
     private final GeneratePhoenixStats generateStatistics;
+    private final String label;
+    private final String compareResults;
+    private final CompareType compareType;
 
     public Pherf(String[] args) throws Exception {
         CommandLineParser parser = new PosixParser();
@@ -106,7 +122,7 @@ public class Pherf {
             System.exit(1);
         }
 
-        properties = PherfConstants.create().getProperties(PherfConstants.PHERF_PROPERTIES);
+        properties = PherfConstants.create().getProperties(PherfConstants.PHERF_PROPERTIES, false);
         dropPherfTablesRegEx = command.getOptionValue("drop", null);
         monitor = command.hasOption("m");
         String
@@ -122,10 +138,10 @@ public class Pherf {
         executeQuerySets = command.hasOption("q");
         zookeeper = command.getOptionValue("z", "localhost");
         queryHint = command.getOptionValue("hint", null);
-        exportCSV = command.hasOption("export");
-        diff = command.hasOption("diff");
+        isFunctional = command.hasOption("diff");
         listFiles = command.hasOption("listFiles");
         applySchema = !command.hasOption("disableSchemaApply");
+        writeRuntimeResults = !command.hasOption("disableRuntimeResult");
         scenarioFile =
                 command.hasOption("scenarioFile") ? command.getOptionValue("scenarioFile") : null;
         schemaFile = command.hasOption("schemaFile") ? command.getOptionValue("schemaFile") : null;
@@ -136,6 +152,9 @@ public class Pherf {
                 command.getOptionValue("writerThreadSize",
                         properties.getProperty("pherf.default.dataloader.threadpool"));
         properties.setProperty("pherf. default.dataloader.threadpool", writerThreadPoolSize);
+        label = command.getOptionValue("label", null);
+        compareResults = command.getOptionValue("compare", null);
+        compareType = command.hasOption("useAverageCompareType") ? CompareType.AVERAGE : CompareType.MINIMUM;
 
         if ((command.hasOption("h") || (args == null || args.length == 0)) && !command
                 .hasOption("listFiles")) {
@@ -144,6 +163,7 @@ public class Pherf {
         }
         PhoenixUtil.setZookeeper(zookeeper);
         PhoenixUtil.setRowCountOverride(rowCountOverride);
+        ResultUtil.setFileSuffix(label);
     }
 
     public static void main(String[] args) {
@@ -158,7 +178,7 @@ public class Pherf {
     public void run() throws Exception {
         MonitorManager monitorManager = null;
         List<Workload> workloads = new ArrayList<>();
-        WorkloadExecutor workloadExecutor = new WorkloadExecutor(properties, workloads);
+        WorkloadExecutor workloadExecutor = new WorkloadExecutor(properties, workloads, !isFunctional);
         try {
             if (listFiles) {
                 ResourceList list = new ResourceList(PherfConstants.RESOURCE_DATAMODEL);
@@ -179,6 +199,14 @@ public class Pherf {
                 }
                 return;
             }
+            
+            // Compare results and exit  
+			if (null != compareResults) {
+				logger.info("\nStarting to compare results and exiting for " + compareResults);
+				new GoogleChartGenerator(compareResults, compareType).readAndRender();
+				return;
+            }
+            
             XMLConfigParser parser = new XMLConfigParser(scenarioFile);
 
             // Drop tables with PHERF schema and regex comparison
@@ -224,10 +252,8 @@ public class Pherf {
                 logger.info("\nStarting to apply Execute Queries...");
 
                 workloadExecutor
-                        .add(new QueryExecutor(parser, phoenixUtil, workloadExecutor.getPool(),
-                                parser.getDataModels(), queryHint, exportCSV, diff ?
-                                PherfConstants.RunMode.FUNCTIONAL :
-                                PherfConstants.RunMode.PERFORMANCE));
+                        .add(new QueryExecutor(parser, phoenixUtil, workloadExecutor, parser.getDataModels(), queryHint,
+                                isFunctional, writeRuntimeResults));
 
             } else {
                 logger.info(

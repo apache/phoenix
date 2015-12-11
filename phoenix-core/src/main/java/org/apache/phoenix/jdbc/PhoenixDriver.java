@@ -20,22 +20,29 @@ package org.apache.phoenix.jdbc;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
-import java.util.Collection;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import javax.annotation.concurrent.GuardedBy;
 
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.query.ConnectionlessQueryServicesImpl;
+import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesImpl;
-import org.apache.phoenix.util.SQLCloseables;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -67,7 +74,38 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
                 Runtime.getRuntime().addShutdownHook(new Thread() {
                     @Override
                     public void run() {
-                        closeInstance(INSTANCE);
+                        final Configuration config =
+                            HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
+                        final ExecutorService svc = Executors.newSingleThreadExecutor();
+                        Future<?> future = svc.submit(new Runnable() {
+                            @Override
+                            public void run() {
+                                closeInstance(INSTANCE);
+                            }
+                        });
+
+                        // Pull the timeout value (default 5s).
+                        long millisBeforeShutdown = config.getLong(
+                                QueryServices.DRIVER_SHUTDOWN_TIMEOUT_MS,
+                                QueryServicesOptions.DEFAULT_DRIVER_SHUTDOWN_TIMEOUT_MS);
+
+                        // Close with a timeout. If this is running, we know the JVM wants to
+                        // go down. There may be other threads running that are holding the lock.
+                        // We don't want to be blocked on them (for the normal HBase retry policy).
+                        //
+                        // We don't care about any exceptions, we're going down anyways.
+                        try {
+                            future.get(millisBeforeShutdown, TimeUnit.MILLISECONDS);
+                        } catch (ExecutionException e) {
+                            logger.warn("Failed to close instance", e);
+                        } catch (InterruptedException e) {
+                            logger.warn("Interrupted waiting to close instance", e);
+                        } catch (TimeoutException e) {
+                            logger.warn("Timed out waiting to close instance", e);
+                        }
+
+                        // We're going down, but try to clean up.
+                        svc.shutdown();
                     }
                 });
 
@@ -165,7 +203,7 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
             ConnectionQueryServices connectionQueryServices = connectionQueryServicesMap.get(normalizedConnInfo);
             if (connectionQueryServices == null) {
                 if (normalizedConnInfo.isConnectionless()) {
-                    connectionQueryServices = new ConnectionlessQueryServicesImpl(services, normalizedConnInfo);
+                    connectionQueryServices = new ConnectionlessQueryServicesImpl(services, normalizedConnInfo, info);
                 } else {
                     connectionQueryServices = new ConnectionQueryServicesImpl(services, normalizedConnInfo, info);
                 }
@@ -184,20 +222,10 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
             }
             finally {
                 if (!success) {
-                    try {
-                        connectionQueryServices.close();
-                    } catch (SQLException e) {
-                        if (sqlE == null) {
-                            sqlE = e;
-                        } else {
-                            sqlE.setNextException(e);
-                        }
-                    } finally {
-                        // Remove from map, as initialization failed
-                        connectionQueryServicesMap.remove(normalizedConnInfo);
-                        if (sqlE != null) {
-                            throw sqlE;
-                        }
+                    // Remove from map, as initialization failed
+                    connectionQueryServicesMap.remove(normalizedConnInfo);
+                    if (sqlE != null) {
+                        throw sqlE;
                     }
                 }
             }
@@ -229,25 +257,11 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
             closeLock.writeLock().unlock();
         }
 
-        try {
-            Collection<ConnectionQueryServices> connectionQueryServices = connectionQueryServicesMap.values();
+        if (services != null) {
             try {
-                SQLCloseables.closeAll(connectionQueryServices);
+                services.close();
             } finally {
-                connectionQueryServices.clear();
-            }
-        } finally {
-            if (services != null) {
-                try {
-                    services.close();
-                } finally {
-                    ExecutorService executor = services.getExecutor();
-                    // Even if something wrong happened while closing services above, we still
-                    // want to set it to null. Otherwise, we will end up having a possibly non-working
-                    // services instance. 
-                    services = null;
-                    executor.shutdown();
-                }
+                services = null;
             }
         }
     }

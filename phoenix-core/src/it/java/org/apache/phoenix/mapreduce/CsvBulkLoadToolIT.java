@@ -17,13 +17,6 @@
  */
 package org.apache.phoenix.mapreduce;
 
-import static org.apache.phoenix.query.BaseTest.setUpConfigForMiniCluster;
-import static org.apache.phoenix.query.QueryServices.DATE_FORMAT_ATTRIB;
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
-
 import java.io.PrintWriter;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -37,13 +30,22 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.jdbc.PhoenixDriver;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.QueryUtil;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
+
+import static org.apache.phoenix.query.BaseTest.setUpConfigForMiniCluster;
+import static org.apache.phoenix.query.QueryServices.DATE_FORMAT_ATTRIB;
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 @Category(NeedsOwnMiniClusterTest.class)
 public class CsvBulkLoadToolIT {
@@ -58,10 +60,14 @@ public class CsvBulkLoadToolIT {
         hbaseTestUtil = new HBaseTestingUtility();
         Configuration conf = hbaseTestUtil.getConfiguration();
         setUpConfigForMiniCluster(conf);
+        // Since we're using the real PhoenixDriver in this test, remove the
+        // extra JDBC argument that causes the test driver to be used.
+        conf.set(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
         hbaseTestUtil.startMiniCluster();
         hbaseTestUtil.startMiniMapReduceCluster();
 
         Class.forName(PhoenixDriver.class.getName());
+        DriverManager.registerDriver(PhoenixDriver.INSTANCE);
         zkQuorum = "localhost:" + hbaseTestUtil.getZkCluster().getClientPort();
         conn = DriverManager.getConnection(PhoenixRuntime.JDBC_PROTOCOL
                 + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum);
@@ -70,19 +76,15 @@ public class CsvBulkLoadToolIT {
     @AfterClass
     public static void tearDownAfterClass() throws Exception {
         try {
-            conn.close();
+            if (conn != null) conn.close();
         } finally {
             try {
-                PhoenixDriver.INSTANCE.close();
+                DriverManager.deregisterDriver(PhoenixDriver.INSTANCE);
             } finally {
                 try {
-                    DriverManager.deregisterDriver(PhoenixDriver.INSTANCE);
-                } finally {                    
-                    try {
-                        hbaseTestUtil.shutdownMiniMapReduceCluster();
-                    } finally {
-                        hbaseTestUtil.shutdownMiniCluster();
-                    }
+                    hbaseTestUtil.shutdownMiniMapReduceCluster();
+                } finally {
+                    hbaseTestUtil.shutdownMiniCluster();
                 }
             }
         }
@@ -92,7 +94,7 @@ public class CsvBulkLoadToolIT {
     public void testBasicImport() throws Exception {
 
         Statement stmt = conn.createStatement();
-        stmt.execute("CREATE TABLE TABLE1 (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, T DATE)");
+        stmt.execute("CREATE TABLE TABLE1 (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, T DATE) SPLIT ON (1,2)");
 
         FileSystem fs = FileSystem.get(hbaseTestUtil.getConfiguration());
         FSDataOutputStream outputStream = fs.create(new Path("/tmp/input1.csv"));
@@ -219,35 +221,16 @@ public class CsvBulkLoadToolIT {
 
         CsvBulkLoadTool csvBulkLoadTool = new CsvBulkLoadTool();
         csvBulkLoadTool.setConf(hbaseTestUtil.getConfiguration());
-        int exitCode = csvBulkLoadTool.run(new String[] {
-                "--input", "/tmp/input3.csv",
-                "--table", "table6",
-                "--zookeeper", zkQuorum});
-        assertEquals(0, exitCode);
-
-        ResultSet rs = stmt.executeQuery("SELECT id, FIRST_NAME FROM TABLE6 where first_name='FirstName 2'");
-        assertTrue(rs.next());
-        assertEquals(2, rs.getInt(1));
-        assertEquals("FirstName 2", rs.getString(2));
-
-        rs.close();
-        rs =
-                stmt.executeQuery("EXPLAIN SELECT id, FIRST_NAME FROM TABLE6 where first_name='FirstName 2'");
-        assertEquals(
-            "CLIENT 1-CHUNK PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_TABLE6 [-32768,'FirstName 2']\n"
-                    + "    SERVER FILTER BY FIRST KEY ONLY", QueryUtil.getExplainPlan(rs));
-        rs.close();
-        rs = stmt.executeQuery("SELECT id, LAST_NAME FROM TABLE6 where last_name='LastName 2'");
-        assertTrue(rs.next());
-        assertEquals(2, rs.getInt(1));
-        assertEquals("LastName 2", rs.getString(2));
-        rs.close();
-        rs =
-                stmt.executeQuery("EXPLAIN SELECT id, LAST_NAME FROM TABLE6 where last_name='LastName 2'");
-        assertEquals(
-            "CLIENT 1-CHUNK PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_TABLE6 [-32767,'LastName 2']\n"
-                    + "    SERVER FILTER BY FIRST KEY ONLY", QueryUtil.getExplainPlan(rs));
-        stmt.close();
+        try {
+            csvBulkLoadTool.run(new String[] {
+                    "--input", "/tmp/input3.csv",
+                    "--table", "table6",
+                    "--zookeeper", zkQuorum});
+            fail("Csv bulk load currently has issues with local indexes.");
+        } catch( UnsupportedOperationException ise) {
+            assertEquals("Local indexes not supported by Bulk Loader",ise.getMessage());
+        }
+        
     }
 
     @Test
@@ -255,7 +238,7 @@ public class CsvBulkLoadToolIT {
         testImportOneIndexTable("TABLE4", false);
     }
 
-    @Test
+    //@Test
     public void testImportOneLocalIndexTable() throws Exception {
         testImportOneIndexTable("TABLE5", true);
     }

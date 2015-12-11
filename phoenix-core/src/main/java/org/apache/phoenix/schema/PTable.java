@@ -307,13 +307,14 @@ public interface PTable extends PMetaDataEntity {
     PName getPhysicalName();
     boolean isImmutableRows();
 
-    void getIndexMaintainers(ImmutableBytesWritable ptr, PhoenixConnection connection);
+    boolean getIndexMaintainers(ImmutableBytesWritable ptr, PhoenixConnection connection);
     IndexMaintainer getIndexMaintainer(PTable dataTable, PhoenixConnection connection);
     PName getDefaultFamilyName();
 
     boolean isWALDisabled();
     boolean isMultiTenant();
     boolean getStoreNulls();
+    boolean isTransactional();
 
     ViewType getViewType();
     String getViewStatement();
@@ -332,4 +333,10 @@ public interface PTable extends PMetaDataEntity {
      * @return true if optimizations row key order optimizations are possible
      */
     boolean rowKeyOrderOptimizable();
+    
+    /**
+     * @return Position of the column with {@link PColumn#isRowTimestamp()} as true. 
+     * -1 if there is no such column.
+     */
+    int getRowTimestampColPos();
 }

@@ -162,8 +162,8 @@ public class DelegateTable implements PTable {
     }
 
     @Override
-    public void getIndexMaintainers(ImmutableBytesWritable ptr, PhoenixConnection connection) {
-        delegate.getIndexMaintainers(ptr, connection);
+    public boolean getIndexMaintainers(ImmutableBytesWritable ptr, PhoenixConnection connection) {
+        return delegate.getIndexMaintainers(ptr, connection);
     }
 
     @Override
@@ -238,6 +238,10 @@ public class DelegateTable implements PTable {
     }
 
     @Override
+    public boolean isTransactional() {
+        return delegate.isTransactional();
+    }
+
     public int getBaseColumnCount() {
         return delegate.getBaseColumnCount();
     }
@@ -245,5 +249,15 @@ public class DelegateTable implements PTable {
     @Override
     public boolean rowKeyOrderOptimizable() {
         return delegate.rowKeyOrderOptimizable();
+    }
+
+    @Override
+    public int getRowTimestampColPos() {
+        return delegate.getRowTimestampColPos();
+    }
+    
+    @Override
+    public String toString() {
+        return delegate.toString();
     }
 }

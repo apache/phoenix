@@ -55,6 +55,7 @@ import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.filter.ColumnProjectionFilter;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.parse.FilterableStatement;
@@ -104,6 +105,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
     private final byte[] physicalTableName;
     private final QueryPlan plan;
     protected final String scanId;
+    protected final MutationState mutationState;
     private final ParallelScanGrouper scanGrouper;
     // TODO: too much nesting here - breakup into new classes.
     private final List<List<List<Pair<Scan,Future<PeekingResultIterator>>>>> allFutures;
@@ -202,6 +204,9 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         this.plan = plan;
         this.scanGrouper = scanGrouper;
         StatementContext context = plan.getContext();
+        // Clone MutationState as the one on the connection will change if auto commit is on
+        // yet we need the original one with the original transaction from TableResultIterator.
+        this.mutationState = new MutationState(context.getConnection().getMutationState());
         TableRef tableRef = plan.getTableRef();
         PTable table = tableRef.getTable();
         physicalTableName = table.getPhysicalName().getBytes();
@@ -305,12 +310,18 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
 
     @Override
     public List<KeyRange> getSplits() {
-        return splits;
+        if (splits == null)
+            return Collections.emptyList();
+        else
+            return splits;
     }
 
     @Override
     public List<List<Scan>> getScans() {
-        return scans;
+        if (scans == null)
+            return Collections.emptyList();
+        else
+            return scans;
     }
 
     private static List<byte[]> toBoundaries(List<HRegionLocation> regionLocations) {
@@ -395,9 +406,10 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         return buf.toString();
     }
     
-    private List<Scan> addNewScan(List<List<Scan>> parallelScans, List<Scan> scans, Scan scan, byte[] startKey, boolean crossedRegionBoundary) {
+    private List<Scan> addNewScan(List<List<Scan>> parallelScans, List<Scan> scans, Scan scan, byte[] startKey, boolean crossedRegionBoundary, HRegionLocation regionLocation) {
         boolean startNewScan = scanGrouper.shouldStartNewScan(plan, scans, startKey, crossedRegionBoundary);
         if (scan != null) {
+            scan.setAttribute(BaseScannerRegionObserver.SCAN_REGION_SERVER, regionLocation.getServerName().getVersionedBytes());
         	scans.add(scan);
         }
         if (startNewScan && !scans.isEmpty()) {
@@ -470,15 +482,16 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             } else {
                 endKey = regionBoundaries.get(regionIndex);
             }
+            HRegionLocation regionLocation = regionLocations.get(regionIndex);
             if (isLocalIndex) {
-                HRegionInfo regionInfo = regionLocations.get(regionIndex).getRegionInfo();
+                HRegionInfo regionInfo = regionLocation.getRegionInfo();
                 endRegionKey = regionInfo.getEndKey();
                 keyOffset = ScanUtil.getRowKeyOffset(regionInfo.getStartKey(), endRegionKey);
             }
             while (guideIndex < gpsSize
                     && (Bytes.compareTo(currentGuidePost = gps.get(guideIndex), endKey) <= 0 || endKey.length == 0)) {
                 Scan newScan = scanRanges.intersectScan(scan, currentKey, currentGuidePost, keyOffset, false);
-                scans = addNewScan(parallelScans, scans, newScan, currentGuidePost, false);
+                scans = addNewScan(parallelScans, scans, newScan, currentGuidePost, false, regionLocation);
                 currentKey = currentGuidePost;
                 guideIndex++;
             }
@@ -490,7 +503,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     scans.get(scans.size()-1).setAttribute(EXPECTED_UPPER_REGION_KEY, endRegionKey);
                 }
             }
-            scans = addNewScan(parallelScans, scans, newScan, endKey, true);
+            scans = addNewScan(parallelScans, scans, newScan, endKey, true, regionLocation);
             currentKey = endKey;
             regionIndex++;
         }
@@ -531,8 +544,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         final List<List<Pair<Scan,Future<PeekingResultIterator>>>> futures = Lists.newArrayListWithExpectedSize(numScans);
         allFutures.add(futures);
         SQLException toThrow = null;
-        // Get query time out from Statement and convert from seconds back to milliseconds
-        int queryTimeOut = context.getStatement().getQueryTimeout() * 1000;
+        int queryTimeOut = context.getStatement().getQueryTimeoutInMillis();
         final long startTime = System.currentTimeMillis();
         final long maxQueryEndTime = startTime + queryTimeOut;
         try {

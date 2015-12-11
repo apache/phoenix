@@ -75,7 +75,7 @@ import com.google.common.collect.Multimap;
  * 
  * @since 2.1
  */
-public class PhoenixIndexFailurePolicy extends  KillServerOnFailurePolicy {
+public class PhoenixIndexFailurePolicy extends KillServerOnFailurePolicy {
     private static final Log LOG = LogFactory.getLog(PhoenixIndexFailurePolicy.class);
     private RegionCoprocessorEnvironment env;
 

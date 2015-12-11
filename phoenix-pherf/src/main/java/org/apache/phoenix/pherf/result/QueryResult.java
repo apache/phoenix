@@ -18,16 +18,23 @@
 
 package org.apache.phoenix.pherf.result;
 
-import org.apache.phoenix.pherf.PherfConstants.RunMode;
 import org.apache.phoenix.pherf.configuration.Query;
+import org.apache.phoenix.pherf.result.file.ResultFileDetails;
+import org.apache.phoenix.pherf.util.PhoenixUtil;
 import org.apache.phoenix.util.DateUtil;
 
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
 public class QueryResult extends Query {
-    private List<ThreadTime> threadTimes = new ArrayList<ThreadTime>();
+    private List<ThreadTime> threadTimes = new ArrayList<>();
+    private static PhoenixUtil pUtil = PhoenixUtil.create();
+    
+    public QueryResult() {
+        super();
+    }
 
     public synchronized List<ThreadTime> getThreadTimes() {
         return this.threadTimes;
@@ -45,9 +52,6 @@ public class QueryResult extends Query {
         this.setDdl(query.getDdl());
         this.setQueryGroup(query.getQueryGroup());
         this.setId(query.getId());
-    }
-
-    @SuppressWarnings("unused") public QueryResult() {
     }
 
     public Date getStartTime() {
@@ -105,21 +109,40 @@ public class QueryResult extends Query {
         rowValues.add(new ResultValue(util.convertNull(String.valueOf(getAvgRunTimeInMs()))));
         rowValues.add(new ResultValue(util.convertNull(String.valueOf(getAvgMinRunTimeInMs()))));
         rowValues.add(new ResultValue(util.convertNull(String.valueOf(getRunCount()))));
+        rowValues.add(new ResultValue(util.convertNull(String.valueOf(getExplainPlan()))));
+        rowValues.add(new ResultValue(util.convertNull(String.valueOf(getResultRowCount()))));
         return rowValues;
     }
-
-    private int getRunCount() {
-        int totalRunCount = 0;
+    
+    private String getExplainPlan() {
+    	try {
+			return pUtil.getExplainPlan(this);
+		} catch (SQLException e) {
+			e.printStackTrace();
+		}
+    	return null;
+    }
+    
+    private long getResultRowCount() {
+        long resultRowCount = -1;
         for (ThreadTime tt : getThreadTimes()) {
-            totalRunCount += tt.getRunCount();
+        	for (int i = 0; i < tt.getRunTimesInMs().size(); i++) {
+        		if (resultRowCount == -1) {
+        			resultRowCount = tt.getRunTimesInMs().get(i).getResultRowCount();
+        		} else {
+        			if (resultRowCount != tt.getRunTimesInMs().get(i).getResultRowCount()) {
+        				return -1;
+        			}
+        		}
+        	}
         }
-        return totalRunCount;
+        return resultRowCount;
     }
 
-    public List<List<ResultValue>> getCsvDetailedRepresentation(ResultUtil util, RunMode runMode) {
+    public List<List<ResultValue>> getCsvDetailedRepresentation(ResultUtil util, ResultFileDetails details) {
         List<List<ResultValue>> rows = new ArrayList<>();
         for (ThreadTime tt : getThreadTimes()) {
-            for (List<ResultValue> runTime : runMode == RunMode.PERFORMANCE ?
+            for (List<ResultValue> runTime : details.isPerformance() ?
                     tt.getCsvPerformanceRepresentation(util) :
                     tt.getCsvFunctionalRepresentation(util)) {
                 List<ResultValue> rowValues = new ArrayList<>();
@@ -132,6 +155,14 @@ public class QueryResult extends Query {
             }
         }
         return rows;
+    }
+
+    private int getRunCount() {
+        int totalRunCount = 0;
+        for (ThreadTime tt : getThreadTimes()) {
+            totalRunCount += tt.getRunCount();
+        }
+        return totalRunCount;
     }
 
     private String getStartTimeText() {

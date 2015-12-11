@@ -159,7 +159,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             String query = "CREATE TABLE t1 (k integer not null primary key, a.k decimal, b.k decimal)";
             conn.createStatement().execute(query);
             PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-            PColumn c = pconn.getMetaDataCache().getTable(new PTableKey(pconn.getTenantId(), "T1")).getColumn("K");
+            PColumn c = pconn.getTable(new PTableKey(pconn.getTenantId(), "T1")).getColumn("K");
             assertTrue(SchemaUtil.isPKColumn(c));
         } finally {
             conn.close();
@@ -1170,7 +1170,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     
     private void assertImmutableRows(Connection conn, String fullTableName, boolean expectedValue) throws SQLException {
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        assertEquals(expectedValue, pconn.getMetaDataCache().getTable(new PTableKey(pconn.getTenantId(), fullTableName)).isImmutableRows());
+        assertEquals(expectedValue, pconn.getTable(new PTableKey(pconn.getTenantId(), fullTableName)).isImmutableRows());
     }
     
     @Test
@@ -1482,7 +1482,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
                 statement.execute("create local index my_idx on example (fn) DEFAULT_COLUMN_FAMILY='F'");
                 fail();
             } catch (SQLException e) {
-                assertEquals(SQLExceptionCode.VIEW_WITH_PROPERTIES.getErrorCode(),e.getErrorCode());
+                assertEquals(SQLExceptionCode.DEFAULT_COLUMN_FAMILY_ON_SHARED_TABLE.getErrorCode(),e.getErrorCode());
             }
             statement.execute("create local index my_idx on example (fn)");
        } finally {
@@ -1985,9 +1985,27 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
      public void testFailNoFromClauseSelect() throws Exception {
          Connection conn = DriverManager.getConnection(getUrl());
          try {
-             conn.createStatement().executeQuery("SELECT foo, bar");
-             fail("Should have got ColumnNotFoundException");
-         } catch (ColumnNotFoundException e) {            
+             try {
+                 conn.createStatement().executeQuery("SELECT foo, bar");
+                 fail("Should have got ColumnNotFoundException");
+             } catch (ColumnNotFoundException e) {            
+             }
+             
+             try {
+                 conn.createStatement().executeQuery("SELECT *");
+                 fail("Should have got SQLException");
+             } catch (SQLException e) {
+                 assertEquals(SQLExceptionCode.NO_TABLE_SPECIFIED_FOR_WILDCARD_SELECT.getErrorCode(), e.getErrorCode());
+             }
+             
+             try {
+                 conn.createStatement().executeQuery("SELECT A.*");
+                 fail("Should have got SQLException");
+             } catch (SQLException e) {
+                 assertEquals(SQLExceptionCode.NO_TABLE_SPECIFIED_FOR_WILDCARD_SELECT.getErrorCode(), e.getErrorCode());
+             }
+         } finally {
+             conn.close();
          }
      }
 
@@ -2068,4 +2086,65 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             conn.close();
         }
     }
+    
+    @Test
+    public void testAddingRowTimestampColumn() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        // Column of type VARCHAR cannot be declared as ROW_TIMESTAMP
+        try {
+            conn.createStatement().execute("CREATE TABLE T1 (PK1 VARCHAR NOT NULL, PK2 VARCHAR NOT NULL, KV1 VARCHAR CONSTRAINT PK PRIMARY KEY(PK1, PK2 ROW_TIMESTAMP)) ");
+            fail("Varchar column cannot be added as row_timestamp");
+        } catch(SQLException e) {
+            assertEquals(SQLExceptionCode.ROWTIMESTAMP_COL_INVALID_TYPE.getErrorCode(), e.getErrorCode());
+        }
+        // Column of type INTEGER cannot be declared as ROW_TIMESTAMP
+        try {
+            conn.createStatement().execute("CREATE TABLE T1 (PK1 VARCHAR NOT NULL, PK2 INTEGER NOT NULL, KV1 VARCHAR CONSTRAINT PK PRIMARY KEY(PK1, PK2 ROW_TIMESTAMP)) ");
+            fail("Integer column cannot be added as row_timestamp");
+        } catch(SQLException e) {
+            assertEquals(SQLExceptionCode.ROWTIMESTAMP_COL_INVALID_TYPE.getErrorCode(), e.getErrorCode());
+        }
+        // Column of type DOUBLE cannot be declared as ROW_TIMESTAMP
+        try {
+            conn.createStatement().execute("CREATE TABLE T1 (PK1 VARCHAR NOT NULL, PK2 DOUBLE NOT NULL, KV1 VARCHAR CONSTRAINT PK PRIMARY KEY(PK1, PK2 ROW_TIMESTAMP)) ");
+            fail("Double column cannot be added as row_timestamp");
+        } catch(SQLException e) {
+            assertEquals(SQLExceptionCode.ROWTIMESTAMP_COL_INVALID_TYPE.getErrorCode(), e.getErrorCode());
+        }
+        // Invalid - two columns declared as row_timestamp in pk constraint
+        try {
+            conn.createStatement().execute("CREATE TABLE T2 (PK1 DATE NOT NULL, PK2 DATE NOT NULL, KV1 VARCHAR CONSTRAINT PK PRIMARY KEY(PK1 ROW_TIMESTAMP , PK2 ROW_TIMESTAMP)) ");
+            fail("Creating table with two row_timestamp columns should fail");
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.ROWTIMESTAMP_ONE_PK_COL_ONLY.getErrorCode(), e.getErrorCode());
+        }
+        
+        // Invalid because only (unsigned)date, time, long, (unsigned)timestamp are valid data types for column to be declared as row_timestamp
+        try {
+            conn.createStatement().execute("CREATE TABLE T5 (PK1 VARCHAR PRIMARY KEY ROW_TIMESTAMP, PK2 VARCHAR, KV1 VARCHAR)");
+            fail("Creating table with a key value column as row_timestamp should fail");
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.ROWTIMESTAMP_COL_INVALID_TYPE.getErrorCode(), e.getErrorCode());
+        }
+    }
+
+    @Test
+    public void testQueryWithSCN() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(1000));
+        props.put(QueryServices.TRANSACTIONS_ENABLED, Boolean.TRUE.toString());
+        try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
+            try {
+                conn.createStatement().execute(
+                                "CREATE TABLE t (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR) TRANSACTIONAL=true");
+                fail();
+            } catch (SQLException e) {
+                assertEquals("Unexpected Exception",
+                        SQLExceptionCode.CANNOT_START_TRANSACTION_WITH_SCN_SET
+                                .getErrorCode(), e.getErrorCode());
+            }
+        }
+    }
+
+
 }
