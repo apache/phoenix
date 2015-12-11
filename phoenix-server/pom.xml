@@ -110,7 +110,6 @@
       <groupId>co.cask.tephra</groupId>
       <artifactId>tephra-core</artifactId>
       <type>test-jar</type>
-      <version>${tephra.version}</version>
       <scope>test</scope>
     </dependency>
   </dependencies>
