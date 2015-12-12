@@ -24,11 +24,13 @@ import java.util.List;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
-import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.regionserver.Region;
+import org.apache.hadoop.hbase.regionserver.ScannerContext;
+import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 
 /**
@@ -41,14 +43,16 @@ public class StatisticsScanner implements InternalScanner {
     private Region region;
     private StatisticsCollector tracker;
     private ImmutableBytesPtr family;
+    private Pair<HRegionInfo, HRegionInfo> mergeRegions;
 
     public StatisticsScanner(StatisticsCollector tracker, StatisticsWriter stats, Region region,
-            InternalScanner delegate, ImmutableBytesPtr family) {
+            InternalScanner delegate, ImmutableBytesPtr family, Pair<HRegionInfo, HRegionInfo> mergeRegions) {
         this.tracker = tracker;
         this.stats = stats;
         this.delegate = delegate;
         this.region = region;
         this.family = family;
+        this.mergeRegions = mergeRegions;
     }
 
     @Override
@@ -84,6 +88,22 @@ public class StatisticsScanner implements InternalScanner {
             // update the statistics table
             // Just verify if this if fine
             ArrayList<Mutation> mutations = new ArrayList<Mutation>();
+            if (mergeRegions != null) {
+                if (mergeRegions.getFirst() != null) {
+                    if (LOG.isDebugEnabled()) {
+                        LOG.debug("Deleting stale stats for the region "
+                                + mergeRegions.getFirst().getRegionNameAsString() + " as part of major compaction");
+                    }
+                    stats.deleteStats(mergeRegions.getFirst().getRegionName(), tracker, family, mutations);
+                }
+                if (mergeRegions.getSecond() != null) {
+                    if (LOG.isDebugEnabled()) {
+                        LOG.debug("Deleting stale stats for the region "
+                                + mergeRegions.getSecond().getRegionNameAsString() + " as part of major compaction");
+                    }
+                    stats.deleteStats(mergeRegions.getSecond().getRegionName(), tracker, family, mutations);
+                }
+            }
             if (LOG.isDebugEnabled()) {
                 LOG.debug("Deleting the stats for the region " + region.getRegionInfo().getRegionNameAsString()
                         + " as part of major compaction");
@@ -116,9 +136,7 @@ public class StatisticsScanner implements InternalScanner {
                     if (toThrow == null) toThrow = e;
                     LOG.error("Error while closing the scanner", e);
                 } finally {
-                    if (toThrow != null) {
-                        throw toThrow;
-                    }
+                    if (toThrow != null) { throw toThrow; }
                 }
             }
         }

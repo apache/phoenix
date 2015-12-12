@@ -26,6 +26,7 @@ import java.util.Map;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -215,13 +216,14 @@ public class StatisticsCollector {
         }
     }
 
-    public InternalScanner createCompactionScanner(Region region, Store store, InternalScanner s) throws IOException {
+    public InternalScanner createCompactionScanner(Region region, Store store, InternalScanner s,
+            Pair<HRegionInfo, HRegionInfo> mergeRegions) throws IOException {
         // See if this is for Major compaction
         if (logger.isDebugEnabled()) {
             logger.debug("Compaction scanner created for stats");
         }
         ImmutableBytesPtr cfKey = new ImmutableBytesPtr(store.getFamily().getName());
-        return getInternalScanner(region, store, s, cfKey);
+        return getInternalScanner(region, store, s, cfKey, mergeRegions);
     }
 
     public void splitStats(Region parent, Region left, Region right) {
@@ -243,9 +245,9 @@ public class StatisticsCollector {
         }
     }
 
-    protected InternalScanner getInternalScanner(Region region, Store store,
-            InternalScanner internalScan, ImmutableBytesPtr family) {
-        return new StatisticsScanner(this, statsTable, region, internalScan, family);
+    protected InternalScanner getInternalScanner(Region region, Store store, InternalScanner internalScan,
+            ImmutableBytesPtr family, Pair<HRegionInfo, HRegionInfo> mergeRegions) {
+        return new StatisticsScanner(this, statsTable, region, internalScan, family, mergeRegions);
     }
 
     public void clear() {

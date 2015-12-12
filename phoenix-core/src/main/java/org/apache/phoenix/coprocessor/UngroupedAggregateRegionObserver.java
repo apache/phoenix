@@ -41,7 +41,9 @@ import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.MetaTableAccessor;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -57,6 +59,7 @@ import org.apache.hadoop.hbase.regionserver.ScanType;
 import org.apache.hadoop.hbase.regionserver.Store;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.exception.DataExceedsCapacityException;
@@ -622,28 +625,34 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
     }
 
     @Override
-    public InternalScanner preCompact(ObserverContext<RegionCoprocessorEnvironment> c,
-        final Store store, InternalScanner scanner, final ScanType scanType)
-        throws IOException {
+    public InternalScanner preCompact(ObserverContext<RegionCoprocessorEnvironment> c, final Store store,
+            InternalScanner scanner, final ScanType scanType) throws IOException {
         TableName table = c.getEnvironment().getRegion().getRegionInfo().getTable();
         InternalScanner internalScanner = scanner;
         if (scanType.equals(ScanType.COMPACT_DROP_DELETES)) {
             try {
-                boolean useCurrentTime =
-                        c.getEnvironment().getConfiguration().getBoolean(QueryServices.STATS_USE_CURRENT_TIME_ATTRIB,
-                                QueryServicesOptions.DEFAULT_STATS_USE_CURRENT_TIME);
+                boolean useCurrentTime = c.getEnvironment().getConfiguration().getBoolean(
+                        QueryServices.STATS_USE_CURRENT_TIME_ATTRIB,
+                        QueryServicesOptions.DEFAULT_STATS_USE_CURRENT_TIME);
+                Connection conn = c.getEnvironment().getRegionServerServices().getConnection();
+                Pair<HRegionInfo, HRegionInfo> mergeRegions = null;
+                if(store.hasReferences()) {
+                    mergeRegions = MetaTableAccessor.getRegionsFromMergeQualifier(conn,
+                        c.getEnvironment().getRegion().getRegionInfo().getRegionName());
+                }
                 // Provides a means of clients controlling their timestamps to not use current time
                 // when background tasks are updating stats. Instead we track the max timestamp of
                 // the cells and use that.
-                long clientTimeStamp = useCurrentTime ? TimeKeeper.SYSTEM.getCurrentTime() : StatisticsCollector.NO_TIMESTAMP;
-                StatisticsCollector stats = new StatisticsCollector(
-                        c.getEnvironment(), table.getNameAsString(),
+                long clientTimeStamp = useCurrentTime ? TimeKeeper.SYSTEM.getCurrentTime()
+                        : StatisticsCollector.NO_TIMESTAMP;
+                StatisticsCollector stats = new StatisticsCollector(c.getEnvironment(), table.getNameAsString(),
                         clientTimeStamp, store.getFamily().getName());
-                internalScanner = stats.createCompactionScanner(c.getEnvironment().getRegion(), store, scanner);
+                internalScanner = stats.createCompactionScanner(c.getEnvironment().getRegion(), store, scanner,
+                        mergeRegions);
             } catch (IOException e) {
                 // If we can't reach the stats table, don't interrupt the normal
                 // compaction operation, just log a warning.
-                if(logger.isWarnEnabled()) {
+                if (logger.isWarnEnabled()) {
                     logger.warn("Unable to collect stats for " + table, e);
                 }
             }
