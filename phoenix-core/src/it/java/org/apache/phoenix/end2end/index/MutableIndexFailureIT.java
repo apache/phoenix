@@ -61,7 +61,6 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
@@ -118,14 +117,12 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
         return Arrays.asList(new Boolean[][] { { false }, { true } });
     }
 
-    @Ignore("See PHOENIX-2331")
-    @Test(timeout=300000)
+    @Test
     public void testWriteFailureDisablesLocalIndex() throws Exception {
         helpTestWriteFailureDisablesIndex(true);
     }
  
-    @Ignore("See PHOENIX-2332")
-    @Test(timeout=300000)
+    @Test
     public void testWriteFailureDisablesIndex() throws Exception {
         helpTestWriteFailureDisablesIndex(false);
     }
@@ -299,7 +296,7 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
             }
         }
         
-        @Test(timeout=300000)
+        @Test
         public void testWriteFailureWithRegionServerDown() throws Exception {
             String query;
             ResultSet rs;
