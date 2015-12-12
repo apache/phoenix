@@ -81,6 +81,7 @@ import com.google.common.collect.Maps;
 
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
+@Ignore("See PHOENIX-2332")
 public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
     private Timer scheduleTimer;
 
