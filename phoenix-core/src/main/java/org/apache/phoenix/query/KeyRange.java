@@ -119,15 +119,30 @@ public class KeyRange implements Writable {
         return getKeyRange(lowerRange, true, upperRange, false);
     }
 
-    // TODO: make non public and move to org.apache.phoenix.type soon
-    public static KeyRange getKeyRange(byte[] lowerRange, boolean lowerInclusive,
+    private static KeyRange getSingleton(byte[] lowerRange, boolean lowerInclusive,
             byte[] upperRange, boolean upperInclusive) {
         if (lowerRange == null || upperRange == null) {
             return EMPTY_RANGE;
         }
-        // Need to treat null differently for a point range
-        if (lowerRange.length == 0 && upperRange.length == 0 && lowerInclusive && upperInclusive) {
-            return IS_NULL_RANGE;
+        if (lowerRange.length == 0 && upperRange.length == 0) {
+            // Need singleton to represent NULL range so it gets treated differently
+            // than an unbound RANGE.
+            return lowerInclusive && upperInclusive ? IS_NULL_RANGE : EVERYTHING_RANGE;
+        }
+        if (lowerRange.length != 0 && upperRange.length != 0) {
+            int cmp = Bytes.compareTo(lowerRange, upperRange);
+            if (cmp > 0 || (cmp == 0 && !(lowerInclusive && upperInclusive))) {
+                return EMPTY_RANGE;
+            }
+        }
+        return null;
+    }
+    
+    public static KeyRange getKeyRange(byte[] lowerRange, boolean lowerInclusive,
+            byte[] upperRange, boolean upperInclusive) {
+        KeyRange range = getSingleton(lowerRange, lowerInclusive, upperRange, upperInclusive);
+        if (range != null) {
+            return range;
         }
         boolean unboundLower = false;
         boolean unboundUpper = false;
@@ -142,20 +157,23 @@ public class KeyRange implements Writable {
             unboundUpper = true;
         }
 
-        if (unboundLower && unboundUpper) {
-            return EVERYTHING_RANGE;
-        }
-        if (!unboundLower && !unboundUpper) {
-            int cmp = Bytes.compareTo(lowerRange, upperRange);
-            if (cmp > 0 || (cmp == 0 && !(lowerInclusive && upperInclusive))) {
-                return EMPTY_RANGE;
-            }
-        }
         return new KeyRange(lowerRange, unboundLower ? false : lowerInclusive,
                 upperRange, unboundUpper ? false : upperInclusive);
     }
 
-    public KeyRange() {
+    public static KeyRange read(DataInput input) throws IOException {
+        KeyRange range = new KeyRange();
+        range.readFields(input);
+        // Translate to singleton after reading
+        KeyRange singletonRange = getSingleton(range.lowerRange, range.lowerInclusive, range.upperRange, range.upperInclusive);
+        if (singletonRange != null) {
+            return singletonRange;
+        }
+        // Otherwise, just keep the range we read
+        return range;
+    }
+    
+    private KeyRange() {
         this.lowerRange = DEGENERATE_KEY;
         this.lowerInclusive = false;
         this.upperRange = DEGENERATE_KEY;
