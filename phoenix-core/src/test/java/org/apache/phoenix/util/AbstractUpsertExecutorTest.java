@@ -58,7 +58,8 @@ public abstract class AbstractUpsertExecutorTest<R, F> extends BaseConnectionles
                 new ColumnInfo("ID", Types.BIGINT),
                 new ColumnInfo("NAME", Types.VARCHAR),
                 new ColumnInfo("AGE", Types.INTEGER),
-                new ColumnInfo("VALUES", PIntegerArray.INSTANCE.getSqlType()));
+                new ColumnInfo("VALUES", PIntegerArray.INSTANCE.getSqlType()),
+                new ColumnInfo("BEARD", Types.BOOLEAN));
 
         preparedStatement = mock(PreparedStatement.class);
         upsertListener = mock(UpsertExecutor.UpsertListener.class);
@@ -72,7 +73,8 @@ public abstract class AbstractUpsertExecutorTest<R, F> extends BaseConnectionles
 
     @Test
     public void testExecute() throws Exception {
-        getUpsertExecutor().execute(createRecord(123L, "NameValue", 42, Arrays.asList(1, 2, 3)));
+        getUpsertExecutor().execute(createRecord(123L, "NameValue", 42,
+                Arrays.asList(1, 2, 3), true));
 
         verify(upsertListener).upsertDone(1L);
         verifyNoMoreInteractions(upsertListener);
@@ -81,6 +83,7 @@ public abstract class AbstractUpsertExecutorTest<R, F> extends BaseConnectionles
         verify(preparedStatement).setObject(2, "NameValue");
         verify(preparedStatement).setObject(3, Integer.valueOf(42));
         verify(preparedStatement).setObject(4, PArrayDataType.instantiatePhoenixArray(PInteger.INSTANCE, new Object[]{1,2,3}));
+        verify(preparedStatement).setObject(5, Boolean.TRUE);
         verify(preparedStatement).execute();
         verifyNoMoreInteractions(preparedStatement);
     }
@@ -96,7 +99,8 @@ public abstract class AbstractUpsertExecutorTest<R, F> extends BaseConnectionles
 
     @Test
     public void testExecute_TooManyFields() throws Exception {
-        R recordWithTooManyFields = createRecord(123L, "NameValue", 42, Arrays.asList(1, 2, 3), "Garbage");
+        R recordWithTooManyFields = createRecord(123L, "NameValue", 42, Arrays.asList(1, 2, 3),
+                true, "Garbage");
         getUpsertExecutor().execute(recordWithTooManyFields);
 
         verify(upsertListener).upsertDone(1L);
@@ -106,13 +110,15 @@ public abstract class AbstractUpsertExecutorTest<R, F> extends BaseConnectionles
         verify(preparedStatement).setObject(2, "NameValue");
         verify(preparedStatement).setObject(3, Integer.valueOf(42));
         verify(preparedStatement).setObject(4, PArrayDataType.instantiatePhoenixArray(PInteger.INSTANCE, new Object[]{1,2,3}));
+        verify(preparedStatement).setObject(5, Boolean.TRUE);
         verify(preparedStatement).execute();
         verifyNoMoreInteractions(preparedStatement);
     }
 
     @Test
     public void testExecute_NullField() throws Exception {
-        getUpsertExecutor().execute(createRecord(123L, "NameValue", null, Arrays.asList(1, 2, 3)));
+        getUpsertExecutor().execute(createRecord(123L, "NameValue", null,
+                Arrays.asList(1, 2, 3), false));
 
         verify(upsertListener).upsertDone(1L);
         verifyNoMoreInteractions(upsertListener);
@@ -121,13 +127,15 @@ public abstract class AbstractUpsertExecutorTest<R, F> extends BaseConnectionles
         verify(preparedStatement).setObject(2, "NameValue");
         verify(preparedStatement).setNull(3, columnInfoList.get(2).getSqlType());
         verify(preparedStatement).setObject(4, PArrayDataType.instantiatePhoenixArray(PInteger.INSTANCE, new Object[]{1,2,3}));
+        verify(preparedStatement).setObject(5, Boolean.FALSE);
         verify(preparedStatement).execute();
         verifyNoMoreInteractions(preparedStatement);
     }
 
     @Test
     public void testExecute_InvalidType() throws Exception {
-        R recordWithInvalidType = createRecord(123L, "NameValue", "ThisIsNotANumber", Arrays.asList(1, 2, 3));
+        R recordWithInvalidType = createRecord(123L, "NameValue", "ThisIsNotANumber",
+                Arrays.asList(1, 2, 3), true);
         getUpsertExecutor().execute(recordWithInvalidType);
 
         verify(upsertListener).errorOnRecord(eq(recordWithInvalidType), any(Throwable.class));

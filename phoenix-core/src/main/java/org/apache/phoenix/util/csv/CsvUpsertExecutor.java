@@ -28,6 +28,7 @@ import javax.annotation.Nullable;
 import org.apache.commons.csv.CSVRecord;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.util.ColumnInfo;
@@ -154,6 +155,20 @@ public class CsvUpsertExecutor extends UpsertExecutor<CSVRecord, String> {
                 byte[] byteValue = new byte[dataType.getByteSize()];
                 dataType.getCodec().encodeLong(epochTime, byteValue, 0);
                 return dataType.toObject(byteValue);
+            } else if (dataType == PBoolean.INSTANCE) {
+                switch (input.toLowerCase()) {
+                    case "true":
+                    case "t":
+                    case "1":
+                        return Boolean.TRUE;
+                    case "false":
+                    case "f":
+                    case "0":
+                        return Boolean.FALSE;
+                    default:
+                        throw new RuntimeException("Invalid boolean value: '" + input
+                                + "', must be one of ['true','t','1','false','f','0']");
+                }
             }
             return dataType.toObject(input);
         }
