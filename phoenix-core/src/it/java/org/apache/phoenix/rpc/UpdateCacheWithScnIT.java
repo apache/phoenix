@@ -35,7 +35,7 @@ public class UpdateCacheWithScnIT extends BaseClientManagedTimeIT {
 	
 	@Test
 	public void testUpdateCacheWithScn() throws Exception {
-		UpdateCacheIT.helpTestUpdateCache(false, ts+2);
+		UpdateCacheIT.helpTestUpdateCache(false, false, ts+2);
 	}
 
 }
