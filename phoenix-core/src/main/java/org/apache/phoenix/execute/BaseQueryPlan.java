@@ -28,6 +28,7 @@ import java.util.Set;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.io.TimeRange;
@@ -58,6 +59,7 @@ import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.TableName;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.KeyValueSchema;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PName;
@@ -203,7 +205,8 @@ public abstract class BaseQueryPlan implements QueryPlan {
         // Set miscellaneous scan attributes. This is the last chance to set them before we
         // clone the scan for each parallelized chunk.
         Scan scan = context.getScan();
-        PTable table = context.getCurrentTable().getTable();
+        TableRef tableRef = context.getCurrentTable();
+        PTable table = tableRef.getTable();
         
         if (dynamicFilter != null) {
             WhereCompiler.compile(context, statement, null, Collections.singletonList(dynamicFilter), false, null);            
@@ -231,7 +234,12 @@ public abstract class BaseQueryPlan implements QueryPlan {
 	        TimeRange scanTimeRange = scan.getTimeRange();
 	        Long scn = connection.getSCN();
 	        if (scn == null) {
-	            scn = context.getCurrentTime();
+	            // If we haven't resolved the time at the beginning of compilation, don't
+	            // force the lookup on the server, but use HConstants.LATEST_TIMESTAMP instead.
+	            scn = tableRef.getTimeStamp();
+	            if (scn == QueryConstants.UNSET_TIMESTAMP) {
+	                scn = HConstants.LATEST_TIMESTAMP;
+	            }
 	        }
 	        try {
 	            TimeRange timeRangeToUse = ScanUtil.intersectTimeRange(rowTimestampRange, scanTimeRange, scn);
