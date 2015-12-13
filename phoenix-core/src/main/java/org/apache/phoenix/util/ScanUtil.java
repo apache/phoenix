@@ -375,7 +375,7 @@ public class ScanUtil {
              * incrementing the key value itself, and thus bumping it up too much.
              */
             boolean inclusiveUpper = range.isUpperInclusive() && bound == Bound.UPPER;
-            boolean exclusiveLower = !range.isLowerInclusive() && bound == Bound.LOWER;
+            boolean exclusiveLower = !range.isLowerInclusive() && bound == Bound.LOWER && range != KeyRange.EVERYTHING_RANGE;
             boolean exclusiveUpper = !range.isUpperInclusive() && bound == Bound.UPPER;
             // If we are setting the upper bound of using inclusive single key, we remember 
             // to increment the key if we exit the loop after this iteration.
