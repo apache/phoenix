@@ -580,8 +580,7 @@ public class SkipScanFilter extends FilterBase implements Writable {
             List<KeyRange> orClause = Lists.newArrayListWithExpectedSize(orLen);
             slots.add(orClause);
             for (int j=0; j<orLen; j++) {
-                KeyRange range = new KeyRange();
-                range.readFields(in);
+                KeyRange range = KeyRange.read(in);
                 orClause.add(range);
             }
         }
