@@ -121,6 +121,55 @@ public class GroupByCaseIT extends BaseHBaseManagedTimeIT {
     }
     
     @Test
+    public void testBooleanInGroupBy() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String ddl = " create table bool_gb(id varchar primary key,v1 boolean, v2 integer, v3 integer)";
+
+        createTestTable(getUrl(), ddl);
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO bool_gb(id,v2,v3) VALUES(?,?,?)");
+        stmt.setString(1, "a");
+        stmt.setInt(2, 1);
+        stmt.setInt(3, 1);
+        stmt.execute();
+        stmt.close();
+        stmt = conn.prepareStatement("UPSERT INTO bool_gb VALUES(?,?,?,?)");
+        stmt.setString(1, "b");
+        stmt.setBoolean(2, false);
+        stmt.setInt(3, 2);
+        stmt.setInt(4, 2);
+        stmt.execute();
+        stmt.setString(1, "c");
+        stmt.setBoolean(2, true);
+        stmt.setInt(3, 3);
+        stmt.setInt(4, 3);
+        stmt.execute();
+        conn.commit();
+
+        String[] gbs = {"v1,v2,v3","v1,v3,v2","v2,v1,v3"};
+        for (String gb : gbs) {
+            ResultSet rs = conn.createStatement().executeQuery("SELECT v1, v2, v3 from bool_gb group by " + gb);
+            assertTrue(rs.next());
+            assertEquals(false,rs.getBoolean("v1"));
+            assertTrue(rs.wasNull());
+            assertEquals(1,rs.getInt("v2"));
+            assertEquals(1,rs.getInt("v3"));
+            assertTrue(rs.next());
+            assertEquals(false,rs.getBoolean("v1"));
+            assertFalse(rs.wasNull());
+            assertEquals(2,rs.getInt("v2"));
+            assertEquals(2,rs.getInt("v3"));
+            assertTrue(rs.next());
+            assertEquals(true,rs.getBoolean("v1"));
+            assertEquals(3,rs.getInt("v2"));
+            assertEquals(3,rs.getInt("v3"));
+            assertFalse(rs.next());
+            rs.close();
+        }
+        conn.close();
+    }
+    
+    @Test
     public void testScanUri() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
