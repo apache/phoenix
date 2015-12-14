@@ -61,6 +61,7 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
@@ -99,7 +100,7 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
         this.fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
         this.fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
     }
-    
+
     @BeforeClass
     public static void doSetup() throws Exception {
         Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(10);
@@ -111,7 +112,7 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
         NUM_SLAVES_BASE = 4;
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
     }
-    
+
     @Parameters(name = "transactional = {0}")
     public static Collection<Boolean[]> data() {
         return Arrays.asList(new Boolean[][] { { false }, { true } });
@@ -121,12 +122,12 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
     public void testWriteFailureDisablesLocalIndex() throws Exception {
         helpTestWriteFailureDisablesIndex(true);
     }
- 
+
     @Test
     public void testWriteFailureDisablesIndex() throws Exception {
         helpTestWriteFailureDisablesIndex(false);
     }
-    
+
     public void helpTestWriteFailureDisablesIndex(boolean localIndex) throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = driver.connect(url, props)) {
@@ -138,21 +139,21 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
             query = "SELECT * FROM " + fullTableName;
             rs = conn.createStatement().executeQuery(query);
             assertFalse(rs.next());
-    
+
             if(localIndex) {
                 conn.createStatement().execute(
-                    "CREATE LOCAL INDEX " + indexName + " ON " + fullTableName + " (v1) INCLUDE (v2)");
+                        "CREATE LOCAL INDEX " + indexName + " ON " + fullTableName + " (v1) INCLUDE (v2)");
                 conn.createStatement().execute(
-                    "CREATE LOCAL INDEX " + indexName+ "_2" + " ON " + fullTableName + " (v2) INCLUDE (v1)");
+                        "CREATE LOCAL INDEX " + indexName+ "_2" + " ON " + fullTableName + " (v2) INCLUDE (v1)");
             } else {
                 conn.createStatement().execute(
-                    "CREATE INDEX " + indexName + " ON " + fullTableName + " (v1) INCLUDE (v2)");
+                        "CREATE INDEX " + indexName + " ON " + fullTableName + " (v1) INCLUDE (v2)");
             }
-                
+
             query = "SELECT * FROM " + fullIndexName;
             rs = conn.createStatement().executeQuery(query);
             assertFalse(rs.next());
-    
+
             // Verify the metadata for index is correct.
             rs = conn.getMetaData().getTables(null, StringUtil.escapeLike(TestUtil.DEFAULT_SCHEMA_NAME), indexName,
                     new String[] { PTableType.INDEX.toString() });
@@ -160,24 +161,24 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
             assertEquals(indexName, rs.getString(3));
             assertEquals(PIndexState.ACTIVE.toString(), rs.getString("INDEX_STATE"));
             assertFalse(rs.next());
-            
+
             PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + fullTableName + " VALUES(?,?,?)");
             stmt.setString(1, "a");
             stmt.setString(2, "x");
             stmt.setString(3, "1");
             stmt.execute();
             conn.commit();
-    
+
             TableName indexTable =
                     TableName.valueOf(localIndex ? MetaDataUtil
                             .getLocalIndexTableName(fullTableName) : fullIndexName);
             HBaseAdmin admin = this.getUtility().getHBaseAdmin();
             HTableDescriptor indexTableDesc = admin.getTableDescriptor(indexTable);
             try{
-              admin.disableTable(indexTable);
-              admin.deleteTable(indexTable);
+                admin.disableTable(indexTable);
+                admin.deleteTable(indexTable);
             } catch (TableNotFoundException ignore) {}
-    
+
             stmt = conn.prepareStatement("UPSERT INTO " + fullTableName + " VALUES(?,?,?)");
             stmt.setString(1, "a2");
             stmt.setString(2, "x2");
@@ -194,7 +195,7 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
             else {
                 conn.commit();
             }
-    
+
             // Verify the metadata for index is correct.
             rs = conn.getMetaData().getTables(null, StringUtil.escapeLike(TestUtil.DEFAULT_SCHEMA_NAME), indexName,
                     new String[] { PTableType.INDEX.toString() });
@@ -206,13 +207,13 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
             assertFalse(rs.next());
             if(localIndex) {
                 rs = conn.getMetaData().getTables(null, StringUtil.escapeLike(TestUtil.DEFAULT_SCHEMA_NAME), indexName + "_2",
-                    new String[] { PTableType.INDEX.toString() });
+                        new String[] { PTableType.INDEX.toString() });
                 assertTrue(rs.next());
                 assertEquals(indexName + "_2", rs.getString(3));
                 assertEquals(indexState.toString(), rs.getString("INDEX_STATE"));
                 assertFalse(rs.next());
             }
-    
+
             // if the table is transactional the write to the index table will fail because the
             // index has not been disabled
             if (!transactional) {
@@ -224,7 +225,7 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
                 stmt.execute();
                 conn.commit();
             }
-            
+
             if (transactional) {
                 // if the table was transactional there should be 1 row (written before the index
                 // was disabled)
@@ -254,27 +255,27 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
                 assertEquals("3", rs.getString(1));
                 assertFalse(rs.next());
             }
-            
+
             // recreate index table
             admin.createTable(indexTableDesc);
             do {
-              Thread.sleep(15 * 1000); // sleep 15 secs
-              rs = conn.getMetaData().getTables(null, StringUtil.escapeLike(TestUtil.DEFAULT_SCHEMA_NAME), indexName,
-                  new String[] { PTableType.INDEX.toString() });
-              assertTrue(rs.next());
-              if(PIndexState.ACTIVE.toString().equals(rs.getString("INDEX_STATE"))){
-                  break;
-              }
-              if(localIndex) {
-                  rs = conn.getMetaData().getTables(null, StringUtil.escapeLike(TestUtil.DEFAULT_SCHEMA_NAME), indexName + "_2",
-                      new String[] { PTableType.INDEX.toString() });
-                  assertTrue(rs.next());
-                  if(PIndexState.ACTIVE.toString().equals(rs.getString("INDEX_STATE"))){
-                      break;
-                  }
-              }
+                Thread.sleep(15 * 1000); // sleep 15 secs
+                rs = conn.getMetaData().getTables(null, StringUtil.escapeLike(TestUtil.DEFAULT_SCHEMA_NAME), indexName,
+                        new String[] { PTableType.INDEX.toString() });
+                assertTrue(rs.next());
+                if(PIndexState.ACTIVE.toString().equals(rs.getString("INDEX_STATE"))){
+                    break;
+                }
+                if(localIndex) {
+                    rs = conn.getMetaData().getTables(null, StringUtil.escapeLike(TestUtil.DEFAULT_SCHEMA_NAME), indexName + "_2",
+                            new String[] { PTableType.INDEX.toString() });
+                    assertTrue(rs.next());
+                    if(PIndexState.ACTIVE.toString().equals(rs.getString("INDEX_STATE"))){
+                        break;
+                    }
+                }
             } while(true);
-            
+
             // Verify UPSERT on data table still work after index table is recreated
             stmt = conn.prepareStatement("UPSERT INTO " + fullTableName + " VALUES(?,?,?)");
             stmt.setString(1, "a4");
@@ -293,105 +294,106 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
             // from where we failed and the oldest
             // index row has been deleted when we dropped the index table during test
             assertEquals(transactional ? 1 : 3, rs.getInt(1));
-            }
         }
-        
-        @Test
-        public void testWriteFailureWithRegionServerDown() throws Exception {
-            String query;
-            ResultSet rs;
-    
-            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-            try (Connection conn = driver.connect(url, props);) {
-                conn.setAutoCommit(false);
-                conn.createStatement().execute(
-                        "CREATE TABLE " + fullTableName + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) "+tableDDLOptions);
-                query = "SELECT * FROM " + fullTableName;
-                rs = conn.createStatement().executeQuery(query);
-                assertFalse(rs.next());
-        
-                conn.createStatement().execute(
-                        "CREATE INDEX " + indexName + " ON " + fullTableName + " (v1) INCLUDE (v2)");
-                query = "SELECT * FROM " + fullIndexName;
-                rs = conn.createStatement().executeQuery(query);
-                assertFalse(rs.next());
-        
-                // Verify the metadata for index is correct.
+    }
+
+    @Ignore("See PHOENIX-2332")
+    @Test
+    public void testWriteFailureWithRegionServerDown() throws Exception {
+        String query;
+        ResultSet rs;
+
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = driver.connect(url, props);) {
+            conn.setAutoCommit(false);
+            conn.createStatement().execute(
+                    "CREATE TABLE " + fullTableName + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) "+tableDDLOptions);
+            query = "SELECT * FROM " + fullTableName;
+            rs = conn.createStatement().executeQuery(query);
+            assertFalse(rs.next());
+
+            conn.createStatement().execute(
+                    "CREATE INDEX " + indexName + " ON " + fullTableName + " (v1) INCLUDE (v2)");
+            query = "SELECT * FROM " + fullIndexName;
+            rs = conn.createStatement().executeQuery(query);
+            assertFalse(rs.next());
+
+            // Verify the metadata for index is correct.
+            rs = conn.getMetaData().getTables(null, StringUtil.escapeLike(TestUtil.DEFAULT_SCHEMA_NAME), indexName,
+                    new String[] { PTableType.INDEX.toString() });
+            assertTrue(rs.next());
+            assertEquals(indexName, rs.getString(3));
+            assertEquals(PIndexState.ACTIVE.toString(), rs.getString("INDEX_STATE"));
+            assertFalse(rs.next());
+
+            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + fullTableName + " VALUES(?,?,?)");
+            stmt.setString(1, "a");
+            stmt.setString(2, "x");
+            stmt.setString(3, "1");
+            stmt.execute();
+            conn.commit();
+
+            // find a RS which doesn't has CATALOG table
+            TableName catalogTable = TableName.valueOf("SYSTEM.CATALOG");
+            TableName indexTable = TableName.valueOf(fullIndexName);
+            final HBaseCluster cluster = this.getUtility().getHBaseCluster();
+            Collection<ServerName> rss = cluster.getClusterStatus().getServers();
+            HBaseAdmin admin = this.getUtility().getHBaseAdmin();
+            List<HRegionInfo> regions = admin.getTableRegions(catalogTable);
+            ServerName catalogRS = cluster.getServerHoldingRegion(regions.get(0).getRegionName());
+            ServerName metaRS = cluster.getServerHoldingMeta();
+            ServerName rsToBeKilled = null;
+
+            // find first RS isn't holding META or CATALOG table
+            for(ServerName curRS : rss) {
+                if(!curRS.equals(catalogRS) && !metaRS.equals(curRS)) {
+                    rsToBeKilled = curRS;
+                    break;
+                }
+            }
+            assertTrue(rsToBeKilled != null);
+
+            regions = admin.getTableRegions(indexTable);
+            final HRegionInfo indexRegion = regions.get(0);
+            final ServerName dstRS = rsToBeKilled;
+            admin.move(indexRegion.getEncodedNameAsBytes(), Bytes.toBytes(rsToBeKilled.getServerName()));
+            this.getUtility().waitFor(30000, 200, new Waiter.Predicate<Exception>() {
+                @Override
+                public boolean evaluate() throws Exception {
+                    ServerName sn = cluster.getServerHoldingRegion(indexRegion.getRegionName());
+                    return (sn != null && sn.equals(dstRS));
+                }
+            });
+
+            // use timer sending updates in every 10ms
+            this.scheduleTimer = new Timer(true);
+            this.scheduleTimer.schedule(new SendingUpdatesScheduleTask(conn, fullTableName), 0, 10);
+            // let timer sending some updates
+            Thread.sleep(100);
+
+            // kill RS hosting index table
+            this.getUtility().getHBaseCluster().killRegionServer(rsToBeKilled);
+
+            // wait for index table completes recovery
+            this.getUtility().waitUntilAllRegionsAssigned(indexTable);
+
+            // Verify the metadata for index is correct.       
+            do {
+                Thread.sleep(15 * 1000); // sleep 15 secs
                 rs = conn.getMetaData().getTables(null, StringUtil.escapeLike(TestUtil.DEFAULT_SCHEMA_NAME), indexName,
                         new String[] { PTableType.INDEX.toString() });
                 assertTrue(rs.next());
-                assertEquals(indexName, rs.getString(3));
-                assertEquals(PIndexState.ACTIVE.toString(), rs.getString("INDEX_STATE"));
-                assertFalse(rs.next());
-                
-                PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + fullTableName + " VALUES(?,?,?)");
-                stmt.setString(1, "a");
-                stmt.setString(2, "x");
-                stmt.setString(3, "1");
-                stmt.execute();
-                conn.commit();
-                
-                // find a RS which doesn't has CATALOG table
-                TableName catalogTable = TableName.valueOf("SYSTEM.CATALOG");
-                TableName indexTable = TableName.valueOf(fullIndexName);
-                final HBaseCluster cluster = this.getUtility().getHBaseCluster();
-                Collection<ServerName> rss = cluster.getClusterStatus().getServers();
-                HBaseAdmin admin = this.getUtility().getHBaseAdmin();
-                List<HRegionInfo> regions = admin.getTableRegions(catalogTable);
-                ServerName catalogRS = cluster.getServerHoldingRegion(regions.get(0).getRegionName());
-                ServerName metaRS = cluster.getServerHoldingMeta();
-                ServerName rsToBeKilled = null;
-                
-                // find first RS isn't holding META or CATALOG table
-                for(ServerName curRS : rss) {
-                    if(!curRS.equals(catalogRS) && !metaRS.equals(curRS)) {
-                        rsToBeKilled = curRS;
-                        break;
-                    }
+                if(PIndexState.ACTIVE.toString().equals(rs.getString("INDEX_STATE"))){
+                    break;
                 }
-                assertTrue(rsToBeKilled != null);
-                
-                regions = admin.getTableRegions(indexTable);
-                final HRegionInfo indexRegion = regions.get(0);
-                final ServerName dstRS = rsToBeKilled;
-                admin.move(indexRegion.getEncodedNameAsBytes(), Bytes.toBytes(rsToBeKilled.getServerName()));
-                this.getUtility().waitFor(30000, 200, new Waiter.Predicate<Exception>() {
-                    @Override
-                    public boolean evaluate() throws Exception {
-                      ServerName sn = cluster.getServerHoldingRegion(indexRegion.getRegionName());
-                      return (sn != null && sn.equals(dstRS));
-                    }
-                  });
-                
-                // use timer sending updates in every 10ms
-                this.scheduleTimer = new Timer(true);
-                this.scheduleTimer.schedule(new SendingUpdatesScheduleTask(conn, fullTableName), 0, 10);
-                // let timer sending some updates
-                Thread.sleep(100);
-                
-                // kill RS hosting index table
-                this.getUtility().getHBaseCluster().killRegionServer(rsToBeKilled);
-                
-                // wait for index table completes recovery
-                this.getUtility().waitUntilAllRegionsAssigned(indexTable);
-                
-                // Verify the metadata for index is correct.       
-                do {
-                  Thread.sleep(15 * 1000); // sleep 15 secs
-                  rs = conn.getMetaData().getTables(null, StringUtil.escapeLike(TestUtil.DEFAULT_SCHEMA_NAME), indexName,
-                      new String[] { PTableType.INDEX.toString() });
-                  assertTrue(rs.next());
-                  if(PIndexState.ACTIVE.toString().equals(rs.getString("INDEX_STATE"))){
-                      break;
-                  }
-                } while(true);
-                this.scheduleTimer.cancel();
-            }
+            } while(true);
+            this.scheduleTimer.cancel();
+        }
     }
-    
+
     static class SendingUpdatesScheduleTask extends TimerTask {
         private static final Log LOG = LogFactory.getLog(SendingUpdatesScheduleTask.class);
-        
+
         // inProgress is to prevent timer from invoking a new task while previous one is still
         // running
         private final static AtomicInteger inProgress = new AtomicInteger(0);
@@ -408,7 +410,7 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
             if(inProgress.get() > 0){
                 return;
             }
-            
+
             try {
                 inProgress.incrementAndGet();
                 inserts++;
@@ -425,5 +427,5 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
             }
         }
     }
-    
+
 }
