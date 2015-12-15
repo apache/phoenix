@@ -38,4 +38,12 @@
       <scope>runtime</scope>
     </dependencySet>
   </dependencySets>
+  <files>
+    <file>
+      <!-- Specify this file directly to make sure we don't get the file
+           with the same path/name from Avatica. -->
+      <source>src/main/resources/META-INF/services/java.sql.Driver</source>
+      <outputDirectory>/META-INF/services/</outputDirectory>
+    </file>
+  </files>
 </assembly>
