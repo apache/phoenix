@@ -162,6 +162,8 @@ public class MutationState implements SQLCloseable {
 					.getQueryServices().getTransactionSystemClient();
 			this.txContext = new TransactionContext(txServiceClient);
 		} else {
+			// this code path is only used while running child scans, we can't pass the txContext to child scans
+			// as it is not thread safe, so we use the tx member variable
 			txAwares = Lists.newArrayList();
 			txContext = null;
 		}
