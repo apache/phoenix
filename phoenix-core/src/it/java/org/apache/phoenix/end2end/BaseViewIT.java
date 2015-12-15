@@ -27,6 +27,8 @@ import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
@@ -34,19 +36,48 @@ import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameters;
 
 import com.google.common.collect.Maps;
 
-
+@RunWith(Parameterized.class)
 public abstract class BaseViewIT extends BaseOwnClusterHBaseManagedTimeIT {
+	
+	protected String tableName;
+	protected String fullTableName;
+	protected String tableDDLOptions;
+	protected String tableSuffix;
+	protected boolean transactional;
 
     @BeforeClass
     public static void doSetup() throws Exception {
-        Map<String,String> props = Maps.newHashMapWithExpectedSize(1);
+        Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
         props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Integer.toString(20));
         props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(1024));
+        props.put(QueryServices.TRANSACTIONS_ENABLED, Boolean.toString(true));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+    }
+    
+    public BaseViewIT( boolean transactional) {
+		StringBuilder optionBuilder = new StringBuilder();
+		this.transactional = transactional;
+		if (transactional) {
+			optionBuilder.append(" TRANSACTIONAL=true ");
+		}
+		this.tableDDLOptions = optionBuilder.toString();
+		tableSuffix = transactional ?  "_TXN" : "";
+		this.tableName = TestUtil.DEFAULT_DATA_TABLE_NAME + tableSuffix;
+        this.fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+	}
+    
+    @Parameters(name="transactional = {0}")
+    public static Collection<Boolean> data() {
+        return Arrays.asList(new Boolean[] { false, true });
     }
     
     protected void testUpdatableViewWithIndex(Integer saltBuckets, boolean localIndex) throws Exception {
@@ -56,17 +87,22 @@ public abstract class BaseViewIT extends BaseOwnClusterHBaseManagedTimeIT {
 
     protected void testUpdatableView(Integer saltBuckets) throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String ddl = "CREATE TABLE t (k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, k3 DECIMAL, s VARCHAR CONSTRAINT pk PRIMARY KEY (k1, k2, k3))" + (saltBuckets == null ? "" : (" SALT_BUCKETS="+saltBuckets));
+		if (saltBuckets!=null) {
+			if (tableDDLOptions.length()!=0)
+				tableDDLOptions+=",";
+			tableDDLOptions+=(" SALT_BUCKETS="+saltBuckets);
+		}
+        String ddl = "CREATE TABLE " + fullTableName + " (k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, k3 DECIMAL, s VARCHAR CONSTRAINT pk PRIMARY KEY (k1, k2, k3))" + tableDDLOptions;
         conn.createStatement().execute(ddl);
-        ddl = "CREATE VIEW v AS SELECT * FROM t WHERE k1 = 1";
+        ddl = "CREATE VIEW v AS SELECT * FROM " + fullTableName + " WHERE k1 = 1";
         conn.createStatement().execute(ddl);
         for (int i = 0; i < 10; i++) {
-            conn.createStatement().execute("UPSERT INTO t VALUES(" + (i % 4) + "," + (i+100) + "," + (i > 5 ? 2 : 1) + ")");
+            conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES(" + (i % 4) + "," + (i+100) + "," + (i > 5 ? 2 : 1) + ")");
         }
         conn.commit();
         ResultSet rs;
         
-        rs = conn.createStatement().executeQuery("SELECT count(*) FROM t");
+        rs = conn.createStatement().executeQuery("SELECT count(*) FROM " + fullTableName);
         assertTrue(rs.next());
         assertEquals(10, rs.getInt(1));
         rs = conn.createStatement().executeQuery("SELECT count(*) FROM v");
@@ -132,14 +168,14 @@ public abstract class BaseViewIT extends BaseOwnClusterHBaseManagedTimeIT {
         rs = conn.createStatement().executeQuery("EXPLAIN " + query);
         String queryPlan = QueryUtil.getExplainPlan(rs);
         if (localIndex) {
-            assertEquals("CLIENT PARALLEL "+ (saltBuckets == null ? 1 : saltBuckets)  +"-WAY RANGE SCAN OVER _LOCAL_IDX_T [-32768,51]\n"
+            assertEquals("CLIENT PARALLEL "+ (saltBuckets == null ? 1 : saltBuckets)  +"-WAY RANGE SCAN OVER _LOCAL_IDX_" + tableName +" [-32768,51]\n"
                     + "    SERVER FILTER BY FIRST KEY ONLY\n"
                     + "CLIENT MERGE SORT",
                 queryPlan);
         } else {
             assertEquals(saltBuckets == null
-                    ? "CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_T [" + Short.MIN_VALUE + ",51]"
-                            : "CLIENT PARALLEL " + saltBuckets + "-WAY RANGE SCAN OVER _IDX_T [0," + Short.MIN_VALUE + ",51]\nCLIENT MERGE SORT",
+                    ? "CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_" + tableName +" [" + Short.MIN_VALUE + ",51]"
+                            : "CLIENT PARALLEL " + saltBuckets + "-WAY RANGE SCAN OVER _IDX_T" + (transactional ? "_TXN" : "") + " [0," + Short.MIN_VALUE + ",51]\nCLIENT MERGE SORT",
                             queryPlan);
         }
 
@@ -154,7 +190,7 @@ public abstract class BaseViewIT extends BaseOwnClusterHBaseManagedTimeIT {
         assertEquals(saltBuckets == null ? 1 : 3, splits.size());
         
         // analyze table should analyze all view data
-        analyzeTable(conn, "t");        
+        analyzeTable(conn, tableName);        
         splits = getAllSplits(conn, "i2");
         assertEquals(saltBuckets == null ? 6 : 8, splits.size());
 
@@ -168,14 +204,14 @@ public abstract class BaseViewIT extends BaseOwnClusterHBaseManagedTimeIT {
         assertFalse(rs.next());
         rs = conn.createStatement().executeQuery("EXPLAIN " + query);
         if (localIndex) {
-            assertEquals("CLIENT PARALLEL "+ (saltBuckets == null ? 1 : saltBuckets)  +"-WAY RANGE SCAN OVER _LOCAL_IDX_T [" + (Short.MIN_VALUE+1) + ",'foo']\n"
+            assertEquals("CLIENT PARALLEL "+ (saltBuckets == null ? 1 : saltBuckets)  +"-WAY RANGE SCAN OVER _LOCAL_IDX_" + tableName +" [" + (Short.MIN_VALUE+1) + ",'foo']\n"
                     + "    SERVER FILTER BY FIRST KEY ONLY\n"
                     + "CLIENT MERGE SORT",QueryUtil.getExplainPlan(rs));
         } else {
             assertEquals(saltBuckets == null
-                    ? "CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_T [" + (Short.MIN_VALUE+1) + ",'foo']\n"
+                    ? "CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_" + tableName +" [" + (Short.MIN_VALUE+1) + ",'foo']\n"
                             + "    SERVER FILTER BY FIRST KEY ONLY"
-                            : "CLIENT PARALLEL " + saltBuckets + "-WAY RANGE SCAN OVER _IDX_T [0," + (Short.MIN_VALUE+1) + ",'foo']\n"
+                            : "CLIENT PARALLEL " + saltBuckets + "-WAY RANGE SCAN OVER _IDX_T" + (transactional ? "_TXN" : "") + " [0," + (Short.MIN_VALUE+1) + ",'foo']\n"
                                     + "    SERVER FILTER BY FIRST KEY ONLY\n"
                                     + "CLIENT MERGE SORT",
                             QueryUtil.getExplainPlan(rs));

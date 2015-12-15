@@ -21,8 +21,12 @@ import org.junit.Test;
 
 
 public class SaltedViewIT extends BaseViewIT {
-    
-    /**
+
+	public SaltedViewIT(boolean transactional) {
+		super(transactional);
+	}
+
+	/**
      * Salted tests must be in their own test file to ensure that the underlying
      * table is dropped. Otherwise, the splits may not be performed.
      * TODO: we should throw in that case

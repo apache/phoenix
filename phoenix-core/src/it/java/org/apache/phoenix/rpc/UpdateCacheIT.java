@@ -168,7 +168,7 @@ public class UpdateCacheIT extends BaseHBaseManagedTimeIT {
 	        // for non-transactional tables without a scn : verify one rpc to getTable occurs *per* query
             // for non-transactional tables with a scn : verify *only* one rpc occurs
             // for transactional tables : verify *only* one rpc occurs
-	        // for non-transactional, system tables : verify non rpc occurs
+	        // for non-transactional, system tables : verify no rpc occurs
             int numRpcs = isSystem ? 0 : (isTransactional || scn!=null ? 1 : 3); 
             verify(connectionQueryServices, times(numRpcs)).getTable((PName)isNull(), eq(PVarchar.INSTANCE.toBytes(schemaName)), eq(PVarchar.INSTANCE.toBytes(tableName)), anyLong(), anyLong());
 		}

@@ -938,7 +938,15 @@ public class MetaDataClient {
              * since it may not represent a "real" table in the case of the view indexes of a base table.
              */
             PostDDLCompiler compiler = new PostDDLCompiler(connection);
-            TableRef tableRef = new TableRef(null, logicalTable, clientTimeStamp, false);
+            //even if table is transactional, while calculating stats we scan the table non-transactionally to 
+            //view all the data belonging to the table
+            PTable nonTxnLogicalTable = new DelegateTable(logicalTable) {
+                @Override
+                public boolean isTransactional() {
+                    return false;
+                }
+            };
+            TableRef tableRef = new TableRef(null, nonTxnLogicalTable, clientTimeStamp, false);
             MutationPlan plan = compiler.compile(Collections.singletonList(tableRef), null, null, null, clientTimeStamp);
             Scan scan = plan.getContext().getScan();
             scan.setCacheBlocks(false);
@@ -1562,7 +1570,7 @@ public class MetaDataClient {
             long clientTimeStamp = scn == null ? HConstants.LATEST_TIMESTAMP : scn;
             boolean multiTenant = false;
             boolean storeNulls = false;
-            boolean transactional = false;
+            boolean transactional = (parent!= null) ? parent.isTransactional() : false;
             Integer saltBucketNum = null;
             String defaultFamilyName = null;
             boolean isImmutableRows = false;
@@ -1571,7 +1579,6 @@ public class MetaDataClient {
             boolean rowKeyOrderOptimizable = true;
             Long timestamp = null;
             if (parent != null && tableType == PTableType.INDEX) {
-            	transactional = parent.isTransactional();
                 timestamp = TransactionUtil.getTableTimestamp(connection, transactional);
                 storeNulls = parent.getStoreNulls();
                 if (tableType == PTableType.INDEX) {
