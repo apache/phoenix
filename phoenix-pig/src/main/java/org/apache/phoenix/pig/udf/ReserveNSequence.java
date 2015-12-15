@@ -77,7 +77,6 @@ public class ReserveNSequence extends EvalFunc<Long> {
         }
         ResultSet rs = null;
         try {
-            connection = ConnectionUtil.getOutputConnection(configuration);
             String sql = getNextNSequenceSelectStatement(Long.valueOf(numToReserve), sequenceName);
             rs = connection.createStatement().executeQuery(sql);
             Preconditions.checkArgument(rs.next());
@@ -87,14 +86,6 @@ public class ReserveNSequence extends EvalFunc<Long> {
             return startIndex;
         } catch (SQLException e) {
             throw new IOException("Caught exception while processing row." + e.getMessage(), e);
-        } finally {
-            try {
-                if (connection != null) {
-                    connection.close();
-                }
-            } catch (SQLException e) {
-                throw new IOException("Caught exception while closing connection", e);
-            }
         }
     }
     
