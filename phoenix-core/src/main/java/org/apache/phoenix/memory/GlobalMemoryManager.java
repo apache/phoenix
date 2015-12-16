@@ -21,15 +21,15 @@ import org.apache.http.annotation.GuardedBy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 /**
- * 
+ *
  * Global memory manager to track course grained memory usage across all requests.
  *
- * 
+ *
  * @since 0.1
  */
 public class GlobalMemoryManager implements MemoryManager {
     private static final Logger logger = LoggerFactory.getLogger(GlobalMemoryManager.class);
-    
+
     private final Object sync = new Object();
     private final long maxMemoryBytes;
     private final int maxWaitMs;
@@ -46,7 +46,7 @@ public class GlobalMemoryManager implements MemoryManager {
         this.maxWaitMs = maxWaitMs;
         this.usedMemoryBytes = 0;
     }
-    
+
     @Override
     public long getAvailableMemory() {
         synchronized(sync) {
@@ -75,7 +75,7 @@ public class GlobalMemoryManager implements MemoryManager {
                 try {
                     long remainingWaitTimeMs = maxWaitMs - (System.currentTimeMillis() - startTimeMs);
                     if (remainingWaitTimeMs <= 0) { // Ran out of time waiting for some memory to get freed up
-                        throw new InsufficientMemoryException("Requested memory of " + minBytes + " bytes could not be allocated from remaining memory of " + usedMemoryBytes + " bytes from global pool of " + maxMemoryBytes + " bytes after waiting for " + maxWaitMs + "ms.");
+                        throw new InsufficientMemoryException("Requested memory of " + minBytes + " bytes could not be allocated. Using memory of " + usedMemoryBytes + " bytes from global pool of " + maxMemoryBytes + " bytes after waiting for " + maxWaitMs + "ms.");
                     }
                     sync.wait(remainingWaitTimeMs);
                 } catch (InterruptedException ie) {
@@ -106,7 +106,7 @@ public class GlobalMemoryManager implements MemoryManager {
     protected MemoryChunk newMemoryChunk(long sizeBytes) {
         return new GlobalMemoryChunk(sizeBytes);
     }
-    
+
     private class GlobalMemoryChunk implements MemoryChunk {
         private volatile long size;
 
@@ -123,7 +123,7 @@ public class GlobalMemoryManager implements MemoryManager {
                 return size; // TODO: does this need to be synchronized?
             }
         }
-        
+
         @Override
         public void resize(long nBytes) {
             if (nBytes < 0) {
@@ -141,7 +141,7 @@ public class GlobalMemoryManager implements MemoryManager {
                 }
             }
         }
-        
+
         /**
          * Check that MemoryChunk has previously been closed.
          */
@@ -159,7 +159,7 @@ public class GlobalMemoryManager implements MemoryManager {
                 super.finalize();
             }
         }
-        
+
         @Override
         public void close() {
             synchronized(sync) {
@@ -170,4 +170,4 @@ public class GlobalMemoryManager implements MemoryManager {
         }
     }
 }
- 
+
