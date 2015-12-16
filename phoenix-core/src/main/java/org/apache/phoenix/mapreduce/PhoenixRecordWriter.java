@@ -55,7 +55,6 @@ public class PhoenixRecordWriter<T extends DBWritable>  extends RecordWriter<Nul
     @Override
     public void close(TaskAttemptContext context) throws IOException, InterruptedException {
         try {
-            statement.executeBatch();
             conn.commit();
          } catch (SQLException e) {
              LOG.error("SQLException while performing the commit for the task.");
@@ -77,10 +76,9 @@ public class PhoenixRecordWriter<T extends DBWritable>  extends RecordWriter<Nul
         try {
             record.write(statement);
             numRecords++;
-            statement.addBatch();
+            statement.execute();
             if (numRecords % batchSize == 0) {
                 LOG.debug("commit called on a batch of size : " + batchSize);
-                statement.executeBatch();
                 conn.commit();
             }
         } catch (SQLException e) {
