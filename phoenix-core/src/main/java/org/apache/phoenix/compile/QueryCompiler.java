@@ -542,7 +542,7 @@ public class QueryCompiler {
         Set<SubqueryParseNode> subqueries = Sets.<SubqueryParseNode> newHashSet();
         Expression where = WhereCompiler.compile(context, select, viewWhere, subqueries);
         context.setResolver(resolver); // recover resolver
-        RowProjector projector = ProjectionCompiler.compile(context, select, groupBy, asSubquery ? Collections.<PDatum>emptyList() : targetColumns);
+        RowProjector projector = ProjectionCompiler.compile(context, select, groupBy, asSubquery ? Collections.<PDatum>emptyList() : targetColumns, where);
         OrderBy orderBy = OrderByCompiler.compile(context, select, groupBy, limit, projector, groupBy == GroupBy.EMPTY_GROUP_BY ? innerPlanTupleProjector : null, isInRowKeyOrder); 
         // Final step is to build the query plan
         if (!asSubquery) {

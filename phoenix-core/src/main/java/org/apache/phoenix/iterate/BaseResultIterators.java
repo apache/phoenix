@@ -25,6 +25,7 @@ import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -158,32 +159,38 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         } else {
             FilterableStatement statement = plan.getStatement();
             RowProjector projector = plan.getProjector();
-            boolean keyOnlyFilter = familyMap.isEmpty() && context.getWhereCoditionColumns().isEmpty();
-            if (projector.isProjectEmptyKeyValue()) {
+            boolean keyOnlyFilter = familyMap.isEmpty() && context.getWhereConditionColumns().isEmpty();
+            if (!projector.projectEverything()) {
                 // If nothing projected into scan and we only have one column family, just allow everything
                 // to be projected and use a FirstKeyOnlyFilter to skip from row to row. This turns out to
                 // be quite a bit faster.
                 // Where condition columns also will get added into familyMap
                 // When where conditions are present, we can not add FirstKeyOnlyFilter at beginning.
-                if (familyMap.isEmpty() && context.getWhereCoditionColumns().isEmpty()
+                if (familyMap.isEmpty() && context.getWhereConditionColumns().isEmpty()
                         && table.getColumnFamilies().size() == 1) {
                     // Project the one column family. We must project a column family since it's possible
                     // that there are other non declared column families that we need to ignore.
                     scan.addFamily(table.getColumnFamilies().get(0).getName().getBytes());
                 } else {
-                    byte[] ecf = SchemaUtil.getEmptyColumnFamily(table);
-                    // Project empty key value unless the column family containing it has
-                    // been projected in its entirety.
-                    if (!familyMap.containsKey(ecf) || familyMap.get(ecf) != null) {
-                        scan.addColumn(ecf, QueryConstants.EMPTY_COLUMN_BYTES);
+                    if (projector.projectEveryRow()) {
+                        byte[] ecf = SchemaUtil.getEmptyColumnFamily(table);
+                        // Project empty key value unless the column family containing it has
+                        // been projected in its entirety.
+                        if (!familyMap.containsKey(ecf) || familyMap.get(ecf) != null) {
+                            scan.addColumn(ecf, QueryConstants.EMPTY_COLUMN_BYTES);
+                        }
                     }
                 }
-            } else if (table.getViewType() == ViewType.MAPPED) {
-                // Since we don't have the empty key value in MAPPED tables, we must select all CFs in HRS. But only the
-                // selected column values are returned back to client
-                for (PColumnFamily family : table.getColumnFamilies()) {
-                    scan.addFamily(family.getName().getBytes());
-                }
+                if (table.getViewType() == ViewType.MAPPED) {
+                    if (projector.projectEveryRow()) {
+                        // Since we don't have the empty key value in MAPPED tables, 
+                        // we must select all CFs in HRS. However, only the
+                        // selected column values are returned back to client.
+                        for (PColumnFamily family : table.getColumnFamilies()) {
+                            scan.addFamily(family.getName().getBytes());
+                        }
+                    }
+            } 
             }
             // Add FirstKeyOnlyFilter if there are no references to key value columns
             if (keyOnlyFilter) {
@@ -236,7 +243,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     new TreeMap<ImmutableBytesPtr, NavigableSet<ImmutableBytesPtr>>();
             Set<byte[]> conditionOnlyCfs = new TreeSet<byte[]>(Bytes.BYTES_COMPARATOR);
             int referencedCfCount = familyMap.size();
-            for (Pair<byte[], byte[]> whereCol : context.getWhereCoditionColumns()) {
+            for (Pair<byte[], byte[]> whereCol : context.getWhereConditionColumns()) {
                 if (!(familyMap.containsKey(whereCol.getFirst()))) {
                     referencedCfCount++;
                 }
@@ -267,7 +274,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 }
             }
             // Making sure that where condition CFs are getting scanned at HRS.
-            for (Pair<byte[], byte[]> whereCol : context.getWhereCoditionColumns()) {
+            for (Pair<byte[], byte[]> whereCol : context.getWhereConditionColumns()) {
                 if (useOptimization) {
                     if (!(familyMap.containsKey(whereCol.getFirst()))) {
                         scan.addFamily(whereCol.getFirst());
@@ -350,7 +357,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         return guideIndex;
     }
     
-    private List<byte[]> getGuidePosts() {
+    private List<byte[]> getGuidePosts(Set<byte[]> whereConditions) {
         /*
          *  Don't use guide posts if:
          *  1) We're doing a point lookup, as HBase is fast enough at those
@@ -368,28 +375,39 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         byte[] defaultCF = SchemaUtil.getEmptyColumnFamily(getTable());
         if (table.getColumnFamilies().isEmpty()) {
             // For sure we can get the defaultCF from the table
-            if (guidePostMap.get(defaultCF) != null) {
-                gps = guidePostMap.get(defaultCF).getGuidePosts();
-            }
+            gps = getDefaultFamilyGuidePosts(guidePostMap, defaultCF);
         } else {
-            Scan scan = context.getScan();
-            if (scan.getFamilyMap().size() > 0 && !scan.getFamilyMap().containsKey(defaultCF)) {
-                // If default CF is not used in scan, use first CF referenced in scan
-                GuidePostsInfo guidePostsInfo = guidePostMap.get(scan.getFamilyMap().keySet().iterator().next());
-                if (guidePostsInfo != null) {
-                    gps = guidePostsInfo.getGuidePosts();
+            byte[] familyInWhere = null;
+            if (!whereConditions.isEmpty()) {
+              if (whereConditions.contains(defaultCF)) {
+                gps = getDefaultFamilyGuidePosts(guidePostMap, defaultCF);
+              } else {
+                familyInWhere = whereConditions.iterator().next();
+                if(familyInWhere != null) {
+                  GuidePostsInfo guidePostsInfo = guidePostMap.get(familyInWhere);
+                  if (guidePostsInfo != null) {
+                      gps = guidePostsInfo.getGuidePosts();
+                  } else {
+                    // As there are no guideposts collected for the where family we go with the default CF
+                    gps = getDefaultFamilyGuidePosts(guidePostMap, defaultCF);
+                  }
                 }
+              }
             } else {
-                // Otherwise, favor use of default CF.
-                if (guidePostMap.get(defaultCF) != null) {
-                    gps = guidePostMap.get(defaultCF).getGuidePosts();
-                }
+              gps = getDefaultFamilyGuidePosts(guidePostMap, defaultCF);
             }
         }
         if (gps == null) {
             return Collections.emptyList();
         }
         return gps;
+    }
+
+    private List<byte[]> getDefaultFamilyGuidePosts(Map<byte[], GuidePostsInfo> guidePostMap, byte[] defaultCF) {
+      if (guidePostMap.get(defaultCF) != null) {
+          return guidePostMap.get(defaultCF).getGuidePosts();
+      }
+      return null;
     }
     
     private static String toString(List<byte[]> gps) {
@@ -439,7 +457,11 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         PTable table = getTable();
         boolean isSalted = table.getBucketNum() != null;
         boolean isLocalIndex = table.getIndexType() == IndexType.LOCAL;
-        List<byte[]> gps = getGuidePosts();
+        HashSet<byte[]> whereConditions = new HashSet<byte[]>(context.getWhereConditionColumns().size());
+        for(Pair<byte[], byte[]> where : context.getWhereConditionColumns()) {
+          whereConditions.add(where.getFirst());
+        }
+        List<byte[]> gps = getGuidePosts(whereConditions);
         if (logger.isDebugEnabled()) {
             logger.debug("Guideposts: " + toString(gps));
         }
