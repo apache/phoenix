@@ -543,13 +543,31 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         // contain them all (for example if work was rejected from the queue)
         Queue<PeekingResultIterator> allIterators = new ConcurrentLinkedQueue<>();
         List<PeekingResultIterator> iterators = new ArrayList<PeekingResultIterator>(numScans);
+        ScanWrapper previousScan = new ScanWrapper(null);
         return getIterators(scans, services, isLocalIndex, allIterators, iterators, isReverse, maxQueryEndTime,
-                splits.size());
+                splits.size(), previousScan);
     }
 
-    private List<PeekingResultIterator> getIterators(List<List<Scan>> scan, ConnectionQueryServices services, boolean isLocalIndex,
-        Queue<PeekingResultIterator> allIterators, List<PeekingResultIterator> iterators, boolean isReverse, long maxQueryEndTime, int splitSize)
-                throws SQLException {
+    class ScanWrapper {
+        Scan scan;
+
+        public Scan getScan() {
+            return scan;
+        }
+
+        public void setScan(Scan scan) {
+            this.scan = scan;
+        }
+
+        public ScanWrapper(Scan scan) {
+            this.scan = scan;
+        }
+
+    }
+
+    private List<PeekingResultIterator> getIterators(List<List<Scan>> scan, ConnectionQueryServices services,
+            boolean isLocalIndex, Queue<PeekingResultIterator> allIterators, List<PeekingResultIterator> iterators,
+            boolean isReverse, long maxQueryEndTime, int splitSize, ScanWrapper previousScan) throws SQLException {
         boolean success = false;
         final List<List<Pair<Scan,Future<PeekingResultIterator>>>> futures = Lists.newArrayListWithExpectedSize(splitSize);
         allFutures.add(futures);
@@ -566,8 +584,22 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                         if (timeOutForScan < 0) {
                             throw new SQLExceptionInfo.Builder(SQLExceptionCode.OPERATION_TIMED_OUT).setMessage(". Query couldn't be completed in the alloted time: " + queryTimeOut + " ms").build().buildException(); 
                         }
+                        if (isLocalIndex && previousScan != null && previousScan.getScan() != null
+                                && ((!isReverse && Bytes.compareTo(scanPair.getFirst().getStartRow(),
+                                        previousScan.getScan().getStopRow()) < 0)
+                                || (isReverse && Bytes.compareTo(scanPair.getFirst().getStartRow(),
+                                        previousScan.getScan().getStopRow()) > 0)
+                                || (scanPair.getFirst().getAttribute(EXPECTED_UPPER_REGION_KEY) != null
+                                        && previousScan.getScan().getAttribute(EXPECTED_UPPER_REGION_KEY) != null
+                                        && Bytes.compareTo(scanPair.getFirst().getAttribute(EXPECTED_UPPER_REGION_KEY),
+                                                previousScan.getScan()
+                                                        .getAttribute(EXPECTED_UPPER_REGION_KEY)) == 0))) {
+
+                            continue;
+                        }
                         PeekingResultIterator iterator = scanPair.getSecond().get(timeOutForScan, TimeUnit.MILLISECONDS);
                         concatIterators.add(iterator);
+                        previousScan.setScan(scanPair.getFirst());
                     } catch (ExecutionException e) {
                         try { // Rethrow as SQLException
                             throw ServerUtil.parseServerException(e);
@@ -590,7 +622,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                             addIterator(iterators, concatIterators);
                             concatIterators = Lists.newArrayList();
                             getIterators(newNestedScans, services, isLocalIndex, allIterators, iterators, isReverse,
-                                    maxQueryEndTime, newNestedScans.size());
+                                    maxQueryEndTime, newNestedScans.size(), previousScan);
                         }
                     }
                 }
