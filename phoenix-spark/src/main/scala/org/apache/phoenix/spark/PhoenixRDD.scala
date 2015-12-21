@@ -13,9 +13,12 @@
  */
 package org.apache.phoenix.spark
 
+import java.sql.DriverManager
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hbase.{HBaseConfiguration, HConstants}
 import org.apache.hadoop.io.NullWritable
+import org.apache.phoenix.jdbc.PhoenixDriver
 import org.apache.phoenix.mapreduce.PhoenixInputFormat
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil
 import org.apache.phoenix.schema.types._
@@ -31,6 +34,9 @@ class PhoenixRDD(sc: SparkContext, table: String, columns: Seq[String],
                  predicate: Option[String] = None, zkUrl: Option[String] = None,
                  @transient conf: Configuration)
   extends RDD[PhoenixRecordWritable](sc, Nil) with Logging {
+
+  // Make sure to register the Phoenix driver
+  DriverManager.registerDriver(new PhoenixDriver)
 
   @transient lazy val phoenixConf = {
     getPhoenixConfiguration

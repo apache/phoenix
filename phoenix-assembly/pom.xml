@@ -64,6 +64,23 @@
               </descriptors>
             </configuration>
           </execution>
+          <!-- Due to SPARK-8332 and Calcite's fasterxml dependency, we need a custom spark client -->
+          <execution>
+            <id>client-spark</id>
+            <phase>package</phase>
+            <goals>
+              <goal>single</goal>
+            </goals>
+            <configuration>
+              <finalName>phoenix-${project.version}</finalName>
+              <attach>false</attach>
+              <appendAssemblyId>true</appendAssemblyId>
+              <descriptors>
+                <!-- build the phoenix spark client jar -->
+                <descriptor>src/build/client-spark.xml</descriptor>
+              </descriptors>
+            </configuration>
+          </execution>
           <execution>
             <id>client-minimal</id>
             <phase>package</phase>
