@@ -25,7 +25,6 @@ import java.util.List;
 import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.visitor.CloneNonDeterministicExpressionVisitor;
-import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.util.SchemaUtil;
 
@@ -50,12 +49,13 @@ public class RowProjector {
     private final boolean allCaseSensitive;
     private final boolean someCaseSensitive;
     private final int estimatedSize;
+    private final boolean isProjectAll;
     private final boolean isProjectEmptyKeyValue;
     private final boolean cloneRequired;
     private final boolean hasUDFs;
     
     public RowProjector(RowProjector projector, boolean isProjectEmptyKeyValue) {
-        this(projector.getColumnProjectors(), projector.getEstimatedRowByteSize(), isProjectEmptyKeyValue, projector.hasUDFs);
+        this(projector.getColumnProjectors(), projector.getEstimatedRowByteSize(), isProjectEmptyKeyValue, projector.hasUDFs, projector.isProjectAll);
     }
     /**
      * Construct RowProjector based on a list of ColumnProjectors.
@@ -65,7 +65,7 @@ public class RowProjector {
      * @param estimatedRowSize 
      */
     public RowProjector(List<? extends ColumnProjector> columnProjectors, int estimatedRowSize, boolean isProjectEmptyKeyValue) {
-        this(columnProjectors, estimatedRowSize, isProjectEmptyKeyValue, false);
+        this(columnProjectors, estimatedRowSize, isProjectEmptyKeyValue, false, false);
     }
     /**
      * Construct RowProjector based on a list of ColumnProjectors.
@@ -76,7 +76,7 @@ public class RowProjector {
      * @param isProjectEmptyKeyValue
      * @param hasUDFs
      */
-    public RowProjector(List<? extends ColumnProjector> columnProjectors, int estimatedRowSize, boolean isProjectEmptyKeyValue, boolean hasUDFs) {
+    public RowProjector(List<? extends ColumnProjector> columnProjectors, int estimatedRowSize, boolean isProjectEmptyKeyValue, boolean hasUDFs, boolean isProjectAll) {
         this.columnProjectors = Collections.unmodifiableList(columnProjectors);
         int position = columnProjectors.size();
         reverseIndex = ArrayListMultimap.<String, Integer>create();
@@ -95,6 +95,7 @@ public class RowProjector {
         this.someCaseSensitive = someCaseSensitive;
         this.estimatedSize = estimatedRowSize;
         this.isProjectEmptyKeyValue = isProjectEmptyKeyValue;
+        this.isProjectAll = isProjectAll;
         this.hasUDFs = hasUDFs;
         boolean hasPerInvocationExpression = false;
         if (!hasUDFs) {
@@ -129,12 +130,15 @@ public class RowProjector {
             }
         }
         return new RowProjector(clonedColProjectors, 
-                this.getEstimatedRowByteSize(),
-                this.isProjectEmptyKeyValue(), this.hasUDFs);
+                this.estimatedSize, this.isProjectEmptyKeyValue, this.hasUDFs, this.isProjectAll);
     }
 
-    public boolean isProjectEmptyKeyValue() {
+    public boolean projectEveryRow() {
         return isProjectEmptyKeyValue;
+    }
+    
+    public boolean projectEverything() {
+        return isProjectAll;
     }
     
     public List<? extends ColumnProjector> getColumnProjectors() {

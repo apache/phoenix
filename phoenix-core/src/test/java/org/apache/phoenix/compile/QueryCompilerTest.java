@@ -441,6 +441,12 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         return plan.getContext().getScan();
     }
     
+    private Scan projectQuery(String query) throws SQLException {
+        QueryPlan plan = getQueryPlan(query, Collections.emptyList());
+        plan.iterator(); // Forces projection
+        return plan.getContext().getScan();
+    }
+    
     private QueryPlan getQueryPlan(String query, List<Object> binds) throws SQLException {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -449,7 +455,8 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             for (Object bind : binds) {
                 statement.setObject(1, bind);
             }
-            return statement.compileQuery(query);
+            QueryPlan plan = statement.compileQuery(query);
+            return plan;
         } finally {
             conn.close();
         }
@@ -2146,5 +2153,29 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         }
     }
 
+    private static void assertFamilies(Scan s, String... families) {
+        assertEquals(families.length, s.getFamilyMap().size());
+        for (String fam : families) {
+            byte[] cf = Bytes.toBytes(fam);
+            assertTrue("Expected to contain " + fam, s.getFamilyMap().containsKey(cf));
+        }
+    }
+    
+    @Test
+    public void testProjection() throws SQLException {
+        Connection conn = DriverManager.getConnection(getUrl());
+        try {
+            conn.createStatement().execute("CREATE TABLE t(k INTEGER PRIMARY KEY, a.v1 VARCHAR, b.v2 VARCHAR, c.v3 VARCHAR)");
+            assertFamilies(projectQuery("SELECT k FROM t"), "A");
+            assertFamilies(projectQuery("SELECT k FROM t WHERE k = 5"), "A");
+            assertFamilies(projectQuery("SELECT v2 FROM t WHERE k = 5"), "A", "B");
+            assertFamilies(projectQuery("SELECT v2 FROM t WHERE v2 = 'a'"), "B");
+            assertFamilies(projectQuery("SELECT v3 FROM t WHERE v2 = 'a'"), "B", "C");
+            assertFamilies(projectQuery("SELECT v3 FROM t WHERE v2 = 'a' AND v3 is null"), "A", "B", "C");
+        } finally {
+            conn.close();
+        }
+    }
+    
 
 }

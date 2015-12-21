@@ -490,20 +490,20 @@ public class TestUtil {
     }
     
     public static List<KeyRange> getAllSplits(Connection conn, String tableName) throws SQLException {
-        return getSplits(conn, tableName, null, null, null, null);
+        return getSplits(conn, tableName, null, null, null, null, null);
     }
     
-    public static List<KeyRange> getAllSplits(Connection conn, String tableName, String where) throws SQLException {
-        return getSplits(conn, tableName, null, null, null, where);
+    public static List<KeyRange> getAllSplits(Connection conn, String tableName, String where, String selectClause) throws SQLException {
+        return getSplits(conn, tableName, null, null, null, where, selectClause);
     }
     
-    public static List<KeyRange> getSplits(Connection conn, String tableName, String pkCol, byte[] lowerRange, byte[] upperRange, String whereClauseSuffix) throws SQLException {
+    public static List<KeyRange> getSplits(Connection conn, String tableName, String pkCol, byte[] lowerRange, byte[] upperRange, String whereClauseSuffix, String selectClause) throws SQLException {
         String whereClauseStart = 
                 (lowerRange == null && upperRange == null ? "" : 
                     " WHERE " + ((lowerRange != null ? (pkCol + " >= ? " + (upperRange != null ? " AND " : "")) : "") 
                               + (upperRange != null ? (pkCol + " < ?") : "" )));
         String whereClause = whereClauseSuffix == null ? whereClauseStart : whereClauseStart.length() == 0 ? (" WHERE " + whereClauseSuffix) : (" AND " + whereClauseSuffix);
-        String query = "SELECT /*+ NO_INDEX */ COUNT(*) FROM " + tableName + whereClause;
+        String query = "SELECT /*+ NO_INDEX */ "+selectClause+" FROM " + tableName + whereClause;
         PhoenixPreparedStatement pstmt = conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class);
         if (lowerRange != null) {
             pstmt.setBytes(1, lowerRange);
@@ -548,7 +548,7 @@ public class TestUtil {
     }
 
     public static List<KeyRange> getSplits(Connection conn, byte[] lowerRange, byte[] upperRange) throws SQLException {
-        return getSplits(conn, STABLE_NAME, STABLE_PK_NAME, lowerRange, upperRange, null);
+        return getSplits(conn, STABLE_NAME, STABLE_PK_NAME, lowerRange, upperRange, null, "COUNT(*)");
     }
 
     public static List<KeyRange> getAllSplits(Connection conn) throws SQLException {
