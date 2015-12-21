@@ -103,6 +103,7 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TimeKeeper;
+import org.apache.hadoop.hbase.catalog.MetaReader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
