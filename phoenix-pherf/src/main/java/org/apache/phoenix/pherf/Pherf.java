@@ -254,11 +254,17 @@ public class Pherf {
             // Schema and Data Load
             if (preLoadData) {
                 logger.info("\nStarting Data Load...");
-                WriteWorkload workload = new WriteWorkload(parser, generateStatistics);
-                workloadExecutor.add(workload);
+                Workload workload = new WriteWorkload(parser, generateStatistics);
+                try {
+                    workloadExecutor.add(workload);
 
-                // Wait for dataLoad to complete
-                workloadExecutor.get(workload);
+                    // Wait for dataLoad to complete
+                    workloadExecutor.get(workload);
+                } finally {
+                    if (null != workload) {
+                        workload.complete();
+                    }
+                }
             } else {
                 logger.info(
                         "\nSKIPPED: Data Load and schema creation as -l argument not specified");
@@ -290,10 +296,6 @@ public class Pherf {
             if (workloadExecutor != null) {
                 logger.info("Run completed. Shutting down thread pool.");
                 workloadExecutor.shutdown();
-                if (preLoadData) {
-                	System.exit(0);
-                }
-                
             }
         }
     }
