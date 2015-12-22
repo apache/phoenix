@@ -35,6 +35,7 @@ import java.util.Map;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.HColumnDescriptor;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.ConnectionQueryServices;
@@ -241,8 +242,9 @@ public class StatsCollectorIT extends StatsCollectorAbstractIT {
         ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
         HBaseAdmin admin = services.getAdmin();
         try {
-            admin.flush(tableName);
-            admin.majorCompact(tableName);
+            TableName t = TableName.valueOf(tableName);
+            admin.flush(t);
+            admin.majorCompact(t);
             Thread.sleep(10000); // FIXME: how do we know when compaction is done?
         } finally {
             admin.close();

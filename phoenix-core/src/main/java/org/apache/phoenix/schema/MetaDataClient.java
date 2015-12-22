@@ -904,7 +904,13 @@ public class MetaDataClient {
                 }
             }
         }
-        return new MutationState((int)rowCount, connection);
+        final long count = rowCount;
+        return new MutationState(1, connection) {
+            @Override
+            public long getUpdateCount() {
+                return count;
+            }
+        };
     }
 
     private long updateStatisticsInternal(PName physicalName, PTable logicalTable, Map<String, Object> statsProps) throws SQLException {
