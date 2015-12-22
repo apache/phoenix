@@ -18,6 +18,7 @@
 
 package org.apache.phoenix.pherf.util;
 
+import org.apache.commons.lang3.StringUtils;
 import org.apache.phoenix.pherf.exception.PherfException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -108,7 +109,7 @@ public class ResourceList {
             final String element,
             final Pattern pattern) {
         final List<String> retVal = new ArrayList<>();
-        if (element.equals("")) {
+        if (StringUtils.isBlank(element)) {
             return retVal;
         }
         final File file = new File(element);

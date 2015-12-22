@@ -134,6 +134,7 @@ public class WriteWorkload implements Workload {
     }
 
     @Override public void complete() {
+        pool.shutdownNow();
     }
 
     public Runnable execute() throws Exception {
