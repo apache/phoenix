@@ -93,6 +93,7 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
     public static final String GUIDEPOST_PER_REGION = "_GUIDEPOST_PER_REGION";
     public static final String UPGRADE_DESC_ROW_KEY = "_UPGRADE_DESC_ROW_KEY";
     public static final String SCAN_REGION_SERVER = "_SCAN_REGION_SERVER";
+    public static final String RUN_UPDATE_STATS_ASYNC = "_RunUpdateStatsAsync";
     
     /**
      * Attribute name used to pass custom annotations in Scans and Mutations (later). Custom annotations
@@ -170,7 +171,7 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
             if (!isRegionObserverFor(scan)) {
                 return s;
             }
-            boolean success =false;
+            boolean success = false;
             // Save the current span. When done with the child span, reset the span back to
             // what it was. Otherwise, this causes the thread local storing the current span
             // to not be reset back to null causing catastrophic infinite loops

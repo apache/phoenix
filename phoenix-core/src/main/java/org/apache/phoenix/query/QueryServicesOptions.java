@@ -22,6 +22,7 @@ import static org.apache.phoenix.query.QueryServices.ALLOW_VIEWS_ADD_NEW_CF_BASE
 import static org.apache.phoenix.query.QueryServices.CALL_QUEUE_PRODUCER_ATTRIB_NAME;
 import static org.apache.phoenix.query.QueryServices.CALL_QUEUE_ROUND_ROBIN_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.COLLECT_REQUEST_LEVEL_METRICS;
+import static org.apache.phoenix.query.QueryServices.COMMIT_STATS_ASYNC;
 import static org.apache.phoenix.query.QueryServices.DATE_FORMAT_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.DELAY_FOR_SCHEMA_UPDATE_CHECK;
@@ -54,6 +55,7 @@ import static org.apache.phoenix.query.QueryServices.REGIONSERVER_INFO_PORT_ATTR
 import static org.apache.phoenix.query.QueryServices.REGIONSERVER_LEASE_PERIOD_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.ROW_KEY_ORDER_SALTED_TABLE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.RPC_TIMEOUT_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.RUN_UPDATE_STATS_ASYNC;
 import static org.apache.phoenix.query.QueryServices.SCAN_CACHE_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.SCAN_RESULT_CHUNK_SIZE;
 import static org.apache.phoenix.query.QueryServices.SEQUENCE_CACHE_SIZE_ATTRIB;
@@ -172,6 +174,9 @@ public class QueryServicesOptions {
     // compression we're getting)
     public static final long DEFAULT_STATS_GUIDEPOST_WIDTH_BYTES = 3* 100 * 1024 *1024;
     public static final boolean DEFAULT_STATS_USE_CURRENT_TIME = true;
+    public static final boolean DEFAULT_RUN_UPDATE_STATS_ASYNC = true;
+    public static final boolean DEFAULT_COMMIT_STATS_ASYNC = true;
+    public static final int DEFAULT_STATS_POOL_SIZE = 4;
 
     public static final boolean DEFAULT_USE_REVERSE_SCAN = true;
 
@@ -247,6 +252,8 @@ public class QueryServicesOptions {
         Configuration config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
         QueryServicesOptions options = new QueryServicesOptions(config)
             .setIfUnset(STATS_USE_CURRENT_TIME_ATTRIB, DEFAULT_STATS_USE_CURRENT_TIME)
+            .setIfUnset(RUN_UPDATE_STATS_ASYNC, DEFAULT_RUN_UPDATE_STATS_ASYNC)
+            .setIfUnset(COMMIT_STATS_ASYNC, DEFAULT_COMMIT_STATS_ASYNC)
             .setIfUnset(KEEP_ALIVE_MS_ATTRIB, DEFAULT_KEEP_ALIVE_MS)
             .setIfUnset(THREAD_POOL_SIZE_ATTRIB, DEFAULT_THREAD_POOL_SIZE)
             .setIfUnset(QUEUE_SIZE_ATTRIB, DEFAULT_QUEUE_SIZE)
@@ -573,6 +580,16 @@ public class QueryServicesOptions {
     
     public QueryServicesOptions setExtraJDBCArguments(String extraArgs) {
         config.set(EXTRA_JDBC_ARGUMENTS_ATTRIB, extraArgs);
+        return this;
+    }
+
+    public QueryServicesOptions setRunUpdateStatsAsync(boolean flag) {
+        config.setBoolean(RUN_UPDATE_STATS_ASYNC, flag);
+        return this;
+    }
+
+    public QueryServicesOptions setCommitStatsAsync(boolean flag) {
+        config.setBoolean(COMMIT_STATS_ASYNC, flag);
         return this;
     }
 }

@@ -216,14 +216,14 @@ public class StatisticsCollector {
         }
     }
 
-    public InternalScanner createCompactionScanner(Region region, Store store, InternalScanner s,
+    public InternalScanner createCompactionScanner(RegionCoprocessorEnvironment env, Store store, InternalScanner s,
             Pair<HRegionInfo, HRegionInfo> mergeRegions) throws IOException {
         // See if this is for Major compaction
         if (logger.isDebugEnabled()) {
             logger.debug("Compaction scanner created for stats");
         }
         ImmutableBytesPtr cfKey = new ImmutableBytesPtr(store.getFamily().getName());
-        return getInternalScanner(region, store, s, cfKey, mergeRegions);
+        return getInternalScanner(env, store, s, cfKey, mergeRegions);
     }
 
     public void splitStats(Region parent, Region left, Region right) {
@@ -245,9 +245,9 @@ public class StatisticsCollector {
         }
     }
 
-    protected InternalScanner getInternalScanner(Region region, Store store, InternalScanner internalScan,
+    protected InternalScanner getInternalScanner(RegionCoprocessorEnvironment env, Store store, InternalScanner internalScan,
             ImmutableBytesPtr family, Pair<HRegionInfo, HRegionInfo> mergeRegions) {
-        return new StatisticsScanner(this, statsTable, region, internalScan, family, mergeRegions);
+        return new StatisticsScanner(this, statsTable, env, internalScan, family, mergeRegions);
     }
 
     public void clear() {
