@@ -32,11 +32,9 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.memory.ChildMemoryManager;
 import org.apache.phoenix.memory.GlobalMemoryManager;
-import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PMetaDataEntity;
-import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.SizedUtil;
 
 import com.google.common.cache.Cache;
@@ -53,13 +51,13 @@ import com.google.common.cache.Weigher;
  * @since 0.1
  */
 public class GlobalCache extends TenantCacheImpl {
-    private static GlobalCache INSTANCE; 
+    private static volatile GlobalCache INSTANCE; 
     
     private final Configuration config;
     // TODO: Use Guava cache with auto removal after lack of access 
     private final ConcurrentMap<ImmutableBytesWritable,TenantCache> perTenantCacheMap = new ConcurrentHashMap<ImmutableBytesWritable,TenantCache>();
     // Cache for lastest PTable for a given Phoenix table
-    private Cache<ImmutableBytesPtr,PMetaDataEntity> metaDataCache;
+    private volatile Cache<ImmutableBytesPtr,PMetaDataEntity> metaDataCache;
     
     public void clearTenantCache() {
         perTenantCacheMap.clear();
@@ -177,4 +175,5 @@ public class GlobalCache extends TenantCacheImpl {
             return super.hashCode();
         }
     }
+    
 }
