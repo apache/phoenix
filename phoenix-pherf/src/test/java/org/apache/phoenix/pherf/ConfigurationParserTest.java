@@ -76,6 +76,7 @@ public class ConfigurationParserTest extends ResultBaseTest {
                             && (dataMappingColumns.get(6).getDataValues().size() > 0));
 
             assertDateValue(dataMappingColumns);
+            assertCurrentDateValue(dataMappingColumns);
 
             // Validate column mappings
             for (Column column : dataMappingColumns) {
@@ -155,6 +156,21 @@ public class ConfigurationParserTest extends ResultBaseTest {
                 // Third rule should have min/max set
                 assertNotNull(dataMapping.getDataValues().get(2).getMinValue());
                 assertNotNull(dataMapping.getDataValues().get(2).getMaxValue());
+                return;
+            }
+        }
+        fail("We should have found a Rule value that matched.");
+    }
+
+    private void assertCurrentDateValue(List<Column> dataMappingColumns) {
+        for (Column dataMapping : dataMappingColumns) {
+            if ((dataMapping.getType() == DataTypeMapping.DATE) && (dataMapping.getName()
+                    .equals("PRESENT_DATE"))) {
+                //First rule should have use current date value set
+                assertNotNull(dataMapping.getDataValues().get(0).getUseCurrentDate());
+
+                //Second rule should have use current date value set
+                assertNotNull(dataMapping.getDataValues().get(1).getUseCurrentDate());
                 return;
             }
         }
