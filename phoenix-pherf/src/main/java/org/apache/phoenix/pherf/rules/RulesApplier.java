@@ -198,7 +198,7 @@ public class RulesApplier {
                     data = pickDataValueFromList(dataValues);
                     // Check if date has right format or not
                     data.setValue(checkDatePattern(data.getValue()));
-                } else {
+                } else if (column.getUseCurrentDate() != true){
                     int minYear = column.getMinValue();
                     int maxYear = column.getMaxValue();
                     Preconditions.checkArgument((minYear > 0) && (maxYear > 0), "min and max values need to be set in configuration");
@@ -207,6 +207,9 @@ public class RulesApplier {
                     data = new DataValue(column.getType(), dt);
                     data.setMaxValue(String.valueOf(minYear));
                     data.setMinValue(String.valueOf(maxYear));
+                } else {
+                    String dt = getCurrentDate();
+                    data = new DataValue(column.getType(), dt);
                 }
                 break;
             default:
@@ -242,6 +245,12 @@ public class RulesApplier {
         return fmtr.print(dt);
     }
 
+    public String getCurrentDate() {
+        DateTimeFormatter fmtr = DateTimeFormat.forPattern(PherfConstants.DEFAULT_DATE_PATTERN);
+        DateTime dt = new DateTime(PherfConstants.DEFAULT_TIME_ZONE);
+        return fmtr.print(dt);
+    }
+
     /**
      * Given an int chance [0-100] inclusive, this method will return true if a winner is selected, otherwise false.
      *
@@ -261,7 +270,8 @@ public class RulesApplier {
             int dist = value.getDistribution();
             sum += dist;
         }
-        Preconditions.checkArgument((sum == 100) || (sum == 0), "Distributions need to add up to 100 or not exist.");
+        Preconditions.checkArgument((sum == 100) || (sum == 0),
+                "Distributions need to add up to 100 or not exist.");
 
         // Spin the wheel until we get a value.
         while (generatedDataValue == null) {
@@ -290,6 +300,13 @@ public class RulesApplier {
         // Path taken when configuration specifies a specific value to be taken with the <value> tag
         if (valueRule.getValue() != null) {
             int chance = (valueRule.getDistribution() == 0) ? 100 : valueRule.getDistribution();
+            return (rndVal.nextInt(100) <= chance) ? retValue : null;
+        }
+
+        // Path taken when configuration specifies to use current date
+        if (valueRule.getUseCurrentDate() == true) {
+            int chance = (valueRule.getDistribution() == 0) ? 100 : valueRule.getDistribution();
+            retValue.setValue(getCurrentDate());
             return (rndVal.nextInt(100) <= chance) ? retValue : null;
         }
 
