@@ -124,6 +124,7 @@ public class MutationState implements SQLCloseable {
     private long sizeOffset;
     private int numRows = 0;
     private int[] uncommittedStatementIndexes = EMPTY_STATEMENT_INDEX_ARRAY;
+    private boolean isExternalTxContext = false;
     
     private final MutationMetricQueue mutationMetricQueue;
     private ReadMetricQueue readMetricQueue;
@@ -170,6 +171,7 @@ public class MutationState implements SQLCloseable {
     					.getQueryServices().getTransactionSystemClient();
     			this.txContext = new TransactionContext(txServiceClient);
 		    } else {
+		        isExternalTxContext = true;
 		        this.txContext = txContext;
 		    }
 		} else {
@@ -224,7 +226,12 @@ public class MutationState implements SQLCloseable {
             boolean hasUncommittedData = false;
             for (TableRef source : sources) {
                 String sourcePhysicalName = source.getTable().getPhysicalName().getString();
-                if (source.getTable().isTransactional() && uncommittedPhysicalNames.contains(sourcePhysicalName)) {
+                // Tracking uncommitted physical table names is an optimization that prevents us from
+                // having to do a checkpoint if no data has yet been written. If we're using an
+                // external transaction context, it's possible that data was already written at the
+                // current transaction timestamp, so we always checkpoint in that case is we're
+                // reading and writing to the same table.
+                if (source.getTable().isTransactional() && (isExternalTxContext || uncommittedPhysicalNames.contains(sourcePhysicalName))) {
                     hasUncommittedData = true;
                     break;
                 }
