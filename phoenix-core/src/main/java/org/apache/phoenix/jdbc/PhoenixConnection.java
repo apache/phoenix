@@ -106,6 +106,8 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableMap.Builder;
 import com.google.common.collect.Lists;
 
+import co.cask.tephra.TransactionContext;
+
 
 /**
  * 
@@ -124,11 +126,12 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     private final String url;
     private final ConnectionQueryServices services;
     private final Properties info;
-    private List<SQLCloseable> statements = new ArrayList<SQLCloseable>();
     private final Map<PDataType<?>, Format> formatters = new HashMap<>();
-    private final MutationState mutationState;
     private final int mutateBatchSize;
     private final Long scn;
+    private MutationState mutationState;
+    private List<SQLCloseable> statements = new ArrayList<SQLCloseable>();
+    private boolean isAutoFlush = false;
     private boolean isAutoCommit = false;
     private PMetaData metaData;
     private final PName tenantId;
@@ -158,6 +161,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     public PhoenixConnection(PhoenixConnection connection, boolean isDescRowKeyOrderUpgrade) throws SQLException {
         this(connection.getQueryServices(), connection.getURL(), connection.getClientInfo(), connection.metaData, connection.getMutationState(), isDescRowKeyOrderUpgrade);
         this.isAutoCommit = connection.isAutoCommit;
+        this.isAutoFlush = connection.isAutoFlush;
         this.sampler = connection.sampler;
         this.statementExecutionCounter = connection.statementExecutionCounter;
     }
@@ -177,6 +181,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     public PhoenixConnection(ConnectionQueryServices services, PhoenixConnection connection, long scn) throws SQLException {
         this(services, connection.getURL(), newPropsWithSCN(scn,connection.getClientInfo()), connection.metaData, connection.getMutationState(), connection.isDescVarLengthRowKeyUpgrade());
         this.isAutoCommit = connection.isAutoCommit;
+        this.isAutoFlush = connection.isAutoFlush;
         this.sampler = connection.sampler;
         this.statementExecutionCounter = connection.statementExecutionCounter;
     }
@@ -216,6 +221,8 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         Long scnParam = JDBCUtil.getCurrentSCN(url, this.info);
         checkScn(scnParam);
         this.scn = scnParam;
+        this.isAutoFlush = this.services.getProps().getBoolean(QueryServices.TRANSACTIONS_ENABLED, QueryServicesOptions.DEFAULT_TRANSACTIONS_ENABLED)
+                && this.services.getProps().getBoolean(QueryServices.AUTO_FLUSH_ATTRIB, QueryServicesOptions.DEFAULT_AUTO_FLUSH) ;
         this.isAutoCommit = JDBCUtil.getAutoCommit(
                 url, this.info,
                 this.services.getProps().getBoolean(
@@ -276,17 +283,13 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
 
     private static Properties filterKnownNonProperties(Properties info) {
         Properties prunedProperties = info;
-        if (info.contains(PhoenixRuntime.CURRENT_SCN_ATTRIB)) {
-            if (prunedProperties == info) {
-                prunedProperties = PropertiesUtil.deepCopy(info);
+        for (String property : PhoenixRuntime.CONNECTION_PROPERTIES) {
+            if (info.contains(property)) {
+                if (prunedProperties == info) {
+                    prunedProperties = PropertiesUtil.deepCopy(info);
+                }
+                prunedProperties.remove(property);
             }
-            prunedProperties.remove(PhoenixRuntime.CURRENT_SCN_ATTRIB);
-        }
-        if (info.contains(PhoenixRuntime.TENANT_ID_ATTRIB)) {
-            if (prunedProperties == info) {
-                prunedProperties = PropertiesUtil.deepCopy(info);
-            }
-            prunedProperties.remove(PhoenixRuntime.TENANT_ID_ATTRIB);
         }
         return prunedProperties;
     }
@@ -573,6 +576,35 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         return isAutoCommit;
     }
 
+    public boolean getAutoFlush() {
+        return isAutoFlush;
+    }
+
+    public void setAutoFlush(boolean autoFlush) throws SQLException {
+        if (autoFlush && !this.services.getProps().getBoolean(QueryServices.TRANSACTIONS_ENABLED, QueryServicesOptions.DEFAULT_TRANSACTIONS_ENABLED)) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.TX_MUST_BE_ENABLED_TO_SET_AUTO_FLUSH)
+            .build().buildException();
+        }
+        this.isAutoFlush = autoFlush;
+    }
+
+    public void flush() throws SQLException {
+        mutationState.sendUncommitted();
+    }
+        
+    public void setTransactionContext(TransactionContext txContext) throws SQLException {
+        if (!this.services.getProps().getBoolean(QueryServices.TRANSACTIONS_ENABLED, QueryServicesOptions.DEFAULT_TRANSACTIONS_ENABLED)) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.TX_MUST_BE_ENABLED_TO_SET_TX_CONTEXT)
+            .build().buildException();
+        }
+        this.mutationState.rollback();
+        this.mutationState = new MutationState(this.mutationState.getMaxSize(), this, txContext);
+        
+        // Write data to HBase after each statement execution as the commit may not
+        // come through Phoenix APIs.
+        setAutoFlush(true);
+    }
+    
     @Override
     public String getCatalog() throws SQLException {
         return "";

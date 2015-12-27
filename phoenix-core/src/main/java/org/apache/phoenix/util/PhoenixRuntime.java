@@ -98,14 +98,6 @@ import com.google.common.collect.Lists;
  */
 public class PhoenixRuntime {
     /**
-     * Use this connection property to control HBase timestamps
-     * by specifying your own long timestamp value at connection time. All
-     * queries will use this as the upper bound of the time range for scans
-     * and DDL, and DML will use this as t he timestamp for key values.
-     */
-    public static final String CURRENT_SCN_ATTRIB = "CurrentSCN";
-
-    /**
      * Root for the JDBC URL that the Phoenix accepts accepts.
      */
     public final static String JDBC_PROTOCOL = "jdbc:phoenix";
@@ -121,13 +113,12 @@ public class PhoenixRuntime {
     public final static String EMBEDDED_JDBC_PROTOCOL = PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
 
     /**
-     * Use this connection property to control the number of rows that are
-     * batched together on an UPSERT INTO table1... SELECT ... FROM table2.
-     * It's only used when autoCommit is true and your source table is
-     * different than your target table or your SELECT statement has a
-     * GROUP BY clause.
+     * Use this connection property to control HBase timestamps
+     * by specifying your own long timestamp value at connection time. All
+     * queries will use this as the upper bound of the time range for scans
+     * and DDL, and DML will use this as t he timestamp for key values.
      */
-    public final static String UPSERT_BATCH_SIZE_ATTRIB = "UpsertBatchSize";
+    public static final String CURRENT_SCN_ATTRIB = "CurrentSCN";
 
     /**
      * Use this connection property to help with fairness of resource allocation
@@ -139,11 +130,13 @@ public class PhoenixRuntime {
     public static final String TENANT_ID_ATTRIB = "TenantId";
 
     /**
-     * Use this connection property prefix for annotations that you want to show up in traces and log lines emitted by Phoenix.
-     * This is useful for annotating connections with information available on the client (e.g. user or session identifier) and
-     * having these annotation automatically passed into log lines and traces by Phoenix.
+     * Use this connection property to control the number of rows that are
+     * batched together on an UPSERT INTO table1... SELECT ... FROM table2.
+     * It's only used when autoCommit is true and your source table is
+     * different than your target table or your SELECT statement has a
+     * GROUP BY clause.
      */
-    public static final String ANNOTATION_ATTRIB_PREFIX = "phoenix.annotation.";
+    public final static String UPSERT_BATCH_SIZE_ATTRIB = "UpsertBatchSize";
 
     /**
      * Use this connection property to explicitly enable or disable auto-commit on a new connection.
@@ -151,6 +144,32 @@ public class PhoenixRuntime {
     public static final String AUTO_COMMIT_ATTRIB = "AutoCommit";
 
     /**
+<<<<<<< HEAD
+=======
+     * Use this connection property to explicitly set read consistency level on a new connection.
+     */
+    public static final String CONSISTENCY_ATTRIB = "Consistency";
+
+    /**
+     * Use this connection property to explicitly enable or disable request level metric collection.
+     */
+    public static final String REQUEST_METRIC_ATTRIB = "RequestMetric";
+
+    /**
+     * All Phoenix specific connection properties
+     * TODO: use enum instead
+     */
+    public final static String[] CONNECTION_PROPERTIES = {
+            CURRENT_SCN_ATTRIB,
+            TENANT_ID_ATTRIB,
+            UPSERT_BATCH_SIZE_ATTRIB,
+            AUTO_COMMIT_ATTRIB,
+            CONSISTENCY_ATTRIB,
+            REQUEST_METRIC_ATTRIB
+            };
+
+    /**
+>>>>>>> 5180ae0... PHOENIX-2411 Allow Phoenix to participate as transactional component
      * Use this as the zookeeper quorum name to have a connection-less connection. This enables
      * Phoenix-compatible HFiles to be created in a map/reduce job by creating tables,
      * upserting data into them, and getting the uncommitted state through {@link #getUncommittedData(Connection)}
@@ -158,9 +177,11 @@ public class PhoenixRuntime {
     public final static String CONNECTIONLESS = "none";
     
     /**
-     * Use this connection property to explicitly enable or disable request level metric collection.
+     * Use this connection property prefix for annotations that you want to show up in traces and log lines emitted by Phoenix.
+     * This is useful for annotating connections with information available on the client (e.g. user or session identifier) and
+     * having these annotation automatically passed into log lines and traces by Phoenix.
      */
-    public static final String REQUEST_METRIC_ATTRIB = "RequestMetric";
+    public static final String ANNOTATION_ATTRIB_PREFIX = "phoenix.annotation.";
 
     private static final String HEADER_IN_LINE = "in-line";
     private static final String SQL_FILE_EXT = ".sql";
