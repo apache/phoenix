@@ -1109,7 +1109,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         }
 
         // upsert data into base table without specifying the row timestamp column PK2
-        long upsertedTs = 5;
+        long upsertedTs = nextTimestamp();
         try (Connection conn = getConnection(upsertedTs)) {
             // Upsert select in the same table with the row_timestamp column PK2 not specified. This will end up
             // creating a new row whose timestamp is the SCN of the connection. The same SCN will be used
