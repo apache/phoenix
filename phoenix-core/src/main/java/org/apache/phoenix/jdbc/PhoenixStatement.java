@@ -1217,6 +1217,8 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
                 PhoenixPreparedStatement statement = batch.get(i);
                 returnCodes[i] = statement.execute(true) ? Statement.SUCCESS_NO_INFO : statement.getUpdateCount();
             }
+            // Flush all changes in batch if auto flush is true
+            flushIfNecessary();
             // If we make it all the way through, clear the batch
             clearBatch();
             return returnCodes;
@@ -1321,9 +1323,17 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.EXECUTE_UPDATE_WITH_NON_EMPTY_BATCH)
             .build().buildException();
         }
-        return executeMutation(stmt);
+        int updateCount = executeMutation(stmt);
+        flushIfNecessary();
+        return updateCount;
     }
 
+    private void flushIfNecessary() throws SQLException {
+        if (connection.getAutoFlush()) {
+            connection.flush();
+        }
+    }
+    
     @Override
     public boolean execute(String sql) throws SQLException {
         CompilableStatement stmt = parseStatement(sql);
@@ -1333,6 +1343,7 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
                 .build().buildException();
             }
             executeMutation(stmt);
+            flushIfNecessary();
             return false;
         }
         executeQuery(stmt);

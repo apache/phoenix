@@ -86,7 +86,7 @@ public interface QueryServices extends SQLCloseable {
     public static final String MUTATE_BATCH_SIZE_ATTRIB = "phoenix.mutate.batchSize";
     public static final String MAX_SERVER_CACHE_TIME_TO_LIVE_MS_ATTRIB = "phoenix.coprocessor.maxServerCacheTimeToLiveMs";
     
-    // Deprecated. Use FORCE_ROW_KEY_ORDER instead.
+    @Deprecated // Use FORCE_ROW_KEY_ORDER instead.
     public static final String ROW_KEY_ORDER_SALTED_TABLE_ATTRIB  = "phoenix.query.rowKeyOrderSaltedTable";
     
     public static final String USE_INDEXES_ATTRIB  = "phoenix.query.useIndexes";
@@ -164,9 +164,14 @@ public interface QueryServices extends SQLCloseable {
     public static final String DEFAULT_KEEP_DELETED_CELLS_ATTRIB = "phoenix.table.default.keep.deleted.cells";
     public static final String DEFAULT_STORE_NULLS_ATTRIB = "phoenix.table.default.store.nulls";
     public static final String DEFAULT_TABLE_ISTRANSACTIONAL_ATTRIB = "phoenix.table.istransactional.default";
-    public static final String TRANSACTIONS_ENABLED = "phoenix.transactions.enabled";
     public static final String GLOBAL_METRICS_ENABLED = "phoenix.query.global.metrics.enabled";
     
+    // Transaction related configs
+    public static final String TRANSACTIONS_ENABLED = "phoenix.transactions.enabled";
+    // Controls whether or not uncommitted data is automatically sent to HBase
+    // at the end of a statement execution when transaction state is passed through.
+    public static final String AUTO_FLUSH_ATTRIB = "phoenix.transactions.autoFlush";
+
     // rpc queue configs
     public static final String INDEX_HANDLER_COUNT_ATTRIB = "phoenix.rpc.index.handler.count";
     public static final String METADATA_HANDLER_COUNT_ATTRIB = "phoenix.rpc.metadata.handler.count";
