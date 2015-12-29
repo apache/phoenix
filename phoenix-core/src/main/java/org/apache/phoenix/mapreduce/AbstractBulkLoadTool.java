@@ -17,10 +17,14 @@
  */
 package org.apache.phoenix.mapreduce;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
-import com.google.common.base.Splitter;
-import com.google.common.collect.Lists;
+import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.HelpFormatter;
@@ -57,14 +61,10 @@ import org.apache.phoenix.util.StringUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.sql.Connection;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.ExecutionException;
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
+import com.google.common.base.Splitter;
+import com.google.common.collect.Lists;
 
 /**
  * Base tool for running MapReduce-based ingests of data.
@@ -174,8 +174,7 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
         return loadData(conf, cmdLine);
     }
 
-    private int loadData(Configuration conf, CommandLine cmdLine) throws SQLException,
-            InterruptedException, ExecutionException, ClassNotFoundException {
+    private int loadData(Configuration conf, CommandLine cmdLine) throws Exception {
         String tableName = cmdLine.getOptionValue(TABLE_NAME_OPT.getOpt());
         String schemaName = cmdLine.getOptionValue(SCHEMA_NAME_OPT.getOpt());
         String indexTableName = cmdLine.getOptionValue(INDEX_TABLE_NAME_OPT.getOpt());
@@ -255,47 +254,44 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
     /**
      * Submits the jobs to the cluster.
      * Loads the HFiles onto the respective tables.
+     * @throws Exception 
      */
     public int submitJob(final Configuration conf, final String qualifiedTableName,
-        final String inputPaths, final Path outputPath, List<TargetTableRef> tablesToBeLoaded) {
-        try {
-            Job job = new Job(conf, "Phoenix MapReduce import for " + qualifiedTableName);
-            FileInputFormat.addInputPaths(job, inputPaths);
-            FileOutputFormat.setOutputPath(job, outputPath);
+        final String inputPaths, final Path outputPath, List<TargetTableRef> tablesToBeLoaded) throws Exception {
+       
+        Job job = Job.getInstance(conf, "Phoenix MapReduce import for " + qualifiedTableName);
+        FileInputFormat.addInputPaths(job, inputPaths);
+        FileOutputFormat.setOutputPath(job, outputPath);
 
-            job.setInputFormatClass(TextInputFormat.class);
-            job.setMapOutputKeyClass(TableRowkeyPair.class);
-            job.setMapOutputValueClass(KeyValue.class);
-            job.setOutputKeyClass(TableRowkeyPair.class);
-            job.setOutputValueClass(KeyValue.class);
-            job.setReducerClass(FormatToKeyValueReducer.class);
+        job.setInputFormatClass(TextInputFormat.class);
+        job.setMapOutputKeyClass(TableRowkeyPair.class);
+        job.setMapOutputValueClass(KeyValue.class);
+        job.setOutputKeyClass(TableRowkeyPair.class);
+        job.setOutputValueClass(KeyValue.class);
+        job.setReducerClass(FormatToKeyValueReducer.class);
 
-            MultiHfileOutputFormat.configureIncrementalLoad(job, tablesToBeLoaded);
+        MultiHfileOutputFormat.configureIncrementalLoad(job, tablesToBeLoaded);
 
-            final String tableNamesAsJson = TargetTableRefFunctions.NAMES_TO_JSON.apply(tablesToBeLoaded);
-            job.getConfiguration().set(FormatToKeyValueMapper.TABLE_NAMES_CONFKEY,tableNamesAsJson);
+        final String tableNamesAsJson = TargetTableRefFunctions.NAMES_TO_JSON.apply(tablesToBeLoaded);
+        job.getConfiguration().set(FormatToKeyValueMapper.TABLE_NAMES_CONFKEY,tableNamesAsJson);
 
-            // give subclasses their hook
-            setupJob(job);
+        // give subclasses their hook
+        setupJob(job);
 
-            LOG.info("Running MapReduce import job from {} to {}", inputPaths, outputPath);
-            boolean success = job.waitForCompletion(true);
+        LOG.info("Running MapReduce import job from {} to {}", inputPaths, outputPath);
+        boolean success = job.waitForCompletion(true);
 
-            if (success) {
-                LOG.info("Loading HFiles from {}", outputPath);
-                completebulkload(conf,outputPath,tablesToBeLoaded);
-            }
-
+        if (success) {
+            LOG.info("Loading HFiles from {}", outputPath);
+            completebulkload(conf,outputPath,tablesToBeLoaded);
             LOG.info("Removing output directory {}", outputPath);
-            if (!FileSystem.get(conf).delete(outputPath, true)) {
-                LOG.error("Removing output directory {} failed", outputPath);
+            if(!FileSystem.get(conf).delete(outputPath, true)) {
+                LOG.error("Failed to delete the output directory {}", outputPath);
             }
             return 0;
-        } catch(Exception e) {
-            LOG.error("Error occurred submitting BulkLoad ", e);
+        } else {
             return -1;
         }
-
     }
 
     private void completebulkload(Configuration conf,Path outputPath , List<TargetTableRef> tablesToBeLoaded) throws Exception {
