@@ -73,30 +73,8 @@ import com.google.common.collect.Lists;
 
 /**
  *
- * JDBC DatabaseMetaData implementation of Phoenix reflecting read-only nature of driver.
- * Supported metadata methods include:
- * {@link #getTables(String, String, String, String[])}
- * {@link #getColumns(String, String, String, String)}
- * {@link #getTableTypes()}
- * {@link #getPrimaryKeys(String, String, String)}
- * {@link #getIndexInfo(String, String, String, boolean, boolean)}
- * {@link #getSchemas()}
- * {@link #getSchemas(String, String)}
- * {@link #getDatabaseMajorVersion()}
- * {@link #getDatabaseMinorVersion()}
- * {@link #getClientInfoProperties()}
- * {@link #getConnection()}
- * {@link #getDatabaseProductName()}
- * {@link #getDatabaseProductVersion()}
- * {@link #getDefaultTransactionIsolation()}
- * {@link #getDriverName()}
- * {@link #getDriverVersion()}
- * {@link #getSuperTables(String, String, String)}
- * {@link #getCatalogs()}
- * Other ResultSet methods return an empty result set.
- *
- *
- * @since 0.1
+ * JDBC DatabaseMetaData implementation of Phoenix.
+ * 
  */
 public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final int INDEX_NAME_INDEX = 4; // Shared with FAMILY_NAME_INDEX
@@ -1156,32 +1134,32 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
 
     @Override
     public boolean othersDeletesAreVisible(int type) throws SQLException {
-        return true;
+        return false;
     }
 
     @Override
     public boolean othersInsertsAreVisible(int type) throws SQLException {
-        return true;
+        return false;
     }
 
     @Override
     public boolean othersUpdatesAreVisible(int type) throws SQLException {
-        return true;
+        return false;
     }
 
     @Override
     public boolean ownDeletesAreVisible(int type) throws SQLException {
-        return false;
+        return true;
     }
 
     @Override
     public boolean ownInsertsAreVisible(int type) throws SQLException {
-        return false;
+        return true;
     }
 
     @Override
     public boolean ownUpdatesAreVisible(int type) throws SQLException {
-        return false;
+        return true;
     }
 
     @Override
@@ -1387,7 +1365,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
 
     @Override
     public boolean supportsMultipleTransactions() throws SQLException {
-        return false;
+        return true;
     }
 
     @Override
@@ -1534,12 +1512,12 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
 
     @Override
     public boolean supportsTransactionIsolationLevel(int level) throws SQLException {
-        return level == connection.getTransactionIsolation();
+        return true;
     }
 
     @Override
     public boolean supportsTransactions() throws SQLException {
-        return false;
+        return true;
     }
 
     @Override
