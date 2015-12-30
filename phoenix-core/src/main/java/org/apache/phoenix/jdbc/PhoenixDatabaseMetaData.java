@@ -98,7 +98,7 @@ import com.google.common.collect.Lists;
  *
  * @since 0.1
  */
-public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.phoenix.jdbc.Jdbc7Shim.DatabaseMetaData {
+public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final int INDEX_NAME_INDEX = 4; // Shared with FAMILY_NAME_INDEX
     public static final int FAMILY_NAME_INDEX = 4;
     public static final int COLUMN_NAME_INDEX = 3;
