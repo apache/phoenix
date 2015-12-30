@@ -274,7 +274,7 @@ public class SkipScanFilter extends FilterBase implements Writable {
         // more than we need. We can optimize this by tracking whether each range in each slot position
         // intersects.
         ReturnCode endCode = navigate(upperExclusiveKey, 0, upperExclusiveKey.length, Terminate.AT);
-        if (endCode == ReturnCode.INCLUDE) {
+        if (endCode == ReturnCode.INCLUDE || endCode == ReturnCode.INCLUDE_AND_NEXT_COL) {
             setStartKey();
             // If the upperExclusiveKey is equal to the start key, we've gone one position too far, since
             // our upper key is exclusive. In that case, go to the previous key
@@ -358,7 +358,7 @@ public class SkipScanFilter extends FilterBase implements Writable {
         // First check to see if we're in-range until we reach our end key
         if (endKeyLength > 0) {
             if (Bytes.compareTo(currentKey, offset, length, endKey, 0, endKeyLength) < 0) {
-                return ReturnCode.INCLUDE;
+                return ReturnCode.INCLUDE_AND_NEXT_COL;
             }
 
             // If key range of last slot is a single key, we can increment our position
@@ -490,7 +490,7 @@ public class SkipScanFilter extends FilterBase implements Writable {
         // up to the upper range of our last slot. We do this for ranges and single keys
         // since we potentially have multiple key values for the same row key.
         setEndKey(ptr, minOffset, i);
-        return ReturnCode.INCLUDE;
+        return ReturnCode.INCLUDE_AND_NEXT_COL;
     }
 
     private boolean allTrailingNulls(int i) {

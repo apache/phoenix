@@ -62,6 +62,7 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import com.google.common.collect.Lists;
@@ -350,6 +351,7 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
         assertFalse(rs.next());
     }
     
+    @Ignore
     @Test
     public void testNonTxToTxTableFailure() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
@@ -724,5 +726,150 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
         // written to hide it.
         Result result = htable.get(new Get(Bytes.toBytes("j")));
         assertTrue(result.isEmpty());
+    }
+
+    @Test
+    public void testCheckpointAndRollback() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(false);
+        try {
+            String fullTableName = "T";
+            Statement stmt = conn.createStatement();
+            stmt.execute("CREATE TABLE " + fullTableName + "(k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) TRANSACTIONAL=true");
+            stmt.executeUpdate("upsert into " + fullTableName + " values('x', 'a', 'a')");
+            conn.commit();
+            
+            stmt.executeUpdate("upsert into " + fullTableName + "(k,v1) SELECT k,v1||'a' FROM " + fullTableName);
+            ResultSet rs = stmt.executeQuery("select k, v1, v2 from " + fullTableName);
+            assertTrue(rs.next());
+            assertEquals("x", rs.getString(1));
+            assertEquals("aa", rs.getString(2));
+            assertEquals("a", rs.getString(3));
+            assertFalse(rs.next());
+            
+            stmt.executeUpdate("upsert into " + fullTableName + "(k,v1) SELECT k,v1||'a' FROM " + fullTableName);
+            
+            rs = stmt.executeQuery("select k, v1, v2 from " + fullTableName);
+            assertTrue(rs.next());
+            assertEquals("x", rs.getString(1));
+            assertEquals("aaa", rs.getString(2));
+            assertEquals("a", rs.getString(3));
+            assertFalse(rs.next());
+            
+            conn.rollback();
+            
+            //assert original row exists in fullTableName1
+            rs = stmt.executeQuery("select k, v1, v2 from " + fullTableName);
+            assertTrue(rs.next());
+            assertEquals("x", rs.getString(1));
+            assertEquals("a", rs.getString(2));
+            assertEquals("a", rs.getString(3));
+            assertFalse(rs.next());
+            
+        } finally {
+            conn.close();
+        }
+    }
+    
+    @Ignore("Add back once TEPHRA-162 gets fixed")
+    @Test
+    public void testInflightUpdateNotSeen() throws Exception {
+        String selectSQL = "SELECT * FROM " + FULL_TABLE_NAME;
+        try (Connection conn1 = DriverManager.getConnection(getUrl()); 
+                Connection conn2 = DriverManager.getConnection(getUrl())) {
+            conn1.setAutoCommit(false);
+            conn2.setAutoCommit(true);
+            ResultSet rs = conn1.createStatement().executeQuery(selectSQL);
+            assertFalse(rs.next());
+            
+            String upsert = "UPSERT INTO " + FULL_TABLE_NAME + "(varchar_pk, char_pk, int_pk, long_pk, decimal_pk, date_pk) VALUES(?, ?, ?, ?, ?, ?)";
+            PreparedStatement stmt = conn1.prepareStatement(upsert);
+            // upsert two rows
+            TestUtil.setRowKeyColumns(stmt, 1);
+            stmt.execute();
+            conn1.commit();
+            
+            TestUtil.setRowKeyColumns(stmt, 2);
+            stmt.execute();
+            
+            rs = conn1.createStatement().executeQuery("SELECT count(*) FROM " + FULL_TABLE_NAME + " WHERE int_col1 IS NULL");
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+            
+            upsert = "UPSERT INTO " + FULL_TABLE_NAME + "(varchar_pk, char_pk, int_pk, long_pk, decimal_pk, date_pk, int_col1) VALUES(?, ?, ?, ?, ?, ?, 1)";
+            stmt = conn1.prepareStatement(upsert);
+            TestUtil.setRowKeyColumns(stmt, 1);
+            stmt.execute();
+            
+            rs = conn1.createStatement().executeQuery("SELECT int_col1 FROM " + FULL_TABLE_NAME + " WHERE int_col1 = 1");
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+            assertFalse(rs.next());
+            
+            rs = conn2.createStatement().executeQuery("SELECT count(*) FROM " + FULL_TABLE_NAME + " WHERE int_col1 = 1");
+            assertTrue(rs.next());
+            assertEquals(0, rs.getInt(1));
+            rs = conn2.createStatement().executeQuery("SELECT * FROM " + FULL_TABLE_NAME + " WHERE int_col1 = 1");
+            assertFalse(rs.next());
+            
+            conn1.commit();
+            
+            rs = conn2.createStatement().executeQuery("SELECT count(*) FROM " + FULL_TABLE_NAME + " WHERE int_col1 = 1");
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+            rs = conn2.createStatement().executeQuery("SELECT * FROM " + FULL_TABLE_NAME + " WHERE int_col1 = 1");
+            assertTrue(rs.next());
+            assertFalse(rs.next());
+        }
+    }
+    
+    @Ignore("Add back once TEPHRA-162 gets fixed")
+    @Test
+    public void testInflightDeleteNotSeen() throws Exception {
+        String selectSQL = "SELECT * FROM " + FULL_TABLE_NAME;
+        try (Connection conn1 = DriverManager.getConnection(getUrl()); 
+                Connection conn2 = DriverManager.getConnection(getUrl())) {
+            conn1.setAutoCommit(false);
+            conn2.setAutoCommit(true);
+            ResultSet rs = conn1.createStatement().executeQuery(selectSQL);
+            assertFalse(rs.next());
+            
+            String upsert = "UPSERT INTO " + FULL_TABLE_NAME + "(varchar_pk, char_pk, int_pk, long_pk, decimal_pk, date_pk) VALUES(?, ?, ?, ?, ?, ?)";
+            PreparedStatement stmt = conn1.prepareStatement(upsert);
+            // upsert two rows
+            TestUtil.setRowKeyColumns(stmt, 1);
+            stmt.execute();
+            TestUtil.setRowKeyColumns(stmt, 2);
+            stmt.execute();
+            
+            conn1.commit();
+            
+            rs = conn1.createStatement().executeQuery("SELECT count(*) FROM " + FULL_TABLE_NAME);
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+            
+            String delete = "DELETE FROM " + FULL_TABLE_NAME + " WHERE varchar_pk = 'varchar1'";
+            stmt = conn1.prepareStatement(delete);
+            int count = stmt.executeUpdate();
+            assertEquals(1,count);
+            
+            rs = conn1.createStatement().executeQuery("SELECT count(*) FROM " + FULL_TABLE_NAME);
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+            assertFalse(rs.next());
+            
+            rs = conn2.createStatement().executeQuery("SELECT count(*) FROM " + FULL_TABLE_NAME);
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+            assertFalse(rs.next());
+            
+            conn1.commit();
+            
+            rs = conn2.createStatement().executeQuery("SELECT count(*) FROM " + FULL_TABLE_NAME);
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+            assertFalse(rs.next());
+        }
     }
 }
