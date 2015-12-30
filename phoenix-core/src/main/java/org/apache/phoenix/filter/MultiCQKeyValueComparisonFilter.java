@@ -29,8 +29,6 @@ import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
  * Filter that evaluates WHERE clause expression, used in the case where there
  * are references to multiple unique column qualifiers over one or more column families.
  *
- * 
- * @since 0.1
  */
 public class MultiCQKeyValueComparisonFilter extends MultiKeyValueComparisonFilter {
     private ImmutableBytesPtr ptr = new ImmutableBytesPtr();

@@ -402,7 +402,7 @@ public class SkipScanFilterTest extends TestCase {
             skipper.reset();
             assertFalse(skipper.filterAllRemaining());
             assertFalse(skipper.filterRowKey(kv.getBuffer(), kv.getRowOffset(), kv.getRowLength()));
-            assertEquals(kv.toString(), ReturnCode.INCLUDE, skipper.filterKeyValue(kv));
+            assertEquals(kv.toString(), ReturnCode.INCLUDE_AND_NEXT_COL, skipper.filterKeyValue(kv));
         }
 
         @Override public String toString() {
