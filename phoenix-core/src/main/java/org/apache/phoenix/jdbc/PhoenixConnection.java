@@ -643,7 +643,10 @@ public class PhoenixConnection implements Connection, MetaDataMutated {
 
     @Override
     public int getTransactionIsolation() throws SQLException {
-        return Connection.TRANSACTION_READ_COMMITTED;
+        boolean transactionsEnabled = getQueryServices().getProps().getBoolean(QueryServices.TRANSACTIONS_ENABLED, 
+                QueryServicesOptions.DEFAULT_TRANSACTIONS_ENABLED);
+        return  transactionsEnabled ?
+                Connection.TRANSACTION_SERIALIZABLE : Connection.TRANSACTION_READ_COMMITTED;
     }
 
     @Override
@@ -807,8 +810,11 @@ public class PhoenixConnection implements Connection, MetaDataMutated {
 
     @Override
     public void setTransactionIsolation(int level) throws SQLException {
-        if (level != Connection.TRANSACTION_READ_COMMITTED) {
-            throw new SQLFeatureNotSupportedException();
+        boolean transactionsEnabled = getQueryServices().getProps().getBoolean(QueryServices.TRANSACTIONS_ENABLED, 
+                QueryServicesOptions.DEFAULT_TRANSACTIONS_ENABLED);
+        if (!transactionsEnabled && (level == Connection.TRANSACTION_REPEATABLE_READ || level == Connection.TRANSACTION_SERIALIZABLE)) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.TX_MUST_BE_ENABLED_TO_SET_ISOLATION_LEVEL)
+            .build().buildException();
         }
     }
 
