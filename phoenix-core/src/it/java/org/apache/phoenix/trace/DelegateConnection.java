@@ -36,14 +36,10 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.Executor;
 
-import org.apache.phoenix.jdbc.Jdbc7Shim;
-
 /**
  * Simple {@link Connection} that just delegates to an underlying {@link Connection}.
- * @param <D> delegate type that is both a {@link Connection} and a {@link Jdbc7Shim#Connection}
  */
-public class DelegatingConnection<D extends Connection & Jdbc7Shim.Connection> implements
-        Connection, Jdbc7Shim.Connection {
+public class DelegateConnection implements Connection {
 
   @Override
   public <T> T unwrap(Class<T> iface) throws SQLException {
@@ -295,9 +291,9 @@ public class DelegatingConnection<D extends Connection & Jdbc7Shim.Connection> i
     return conn.createStruct(typeName, attributes);
   }
 
-    private D conn;
+    private Connection conn;
 
-    public DelegatingConnection(D conn) {
+    public DelegateConnection(Connection conn) {
     this.conn = conn;
   }
 
