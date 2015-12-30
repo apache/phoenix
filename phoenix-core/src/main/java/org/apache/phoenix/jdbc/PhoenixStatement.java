@@ -177,7 +177,7 @@ import com.google.common.math.IntMath;
  * 
  * @since 0.1
  */
-public class PhoenixStatement implements Statement, SQLCloseable, org.apache.phoenix.jdbc.Jdbc7Shim.Statement {
+public class PhoenixStatement implements Statement, SQLCloseable {
 	
     private static final Logger logger = LoggerFactory.getLogger(PhoenixStatement.class);
     

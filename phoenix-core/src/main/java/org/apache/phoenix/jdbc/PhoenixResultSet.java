@@ -100,7 +100,7 @@ import com.google.common.annotations.VisibleForTesting;
  *
  * @since 0.1
  */
-public class PhoenixResultSet implements ResultSet, SQLCloseable, org.apache.phoenix.jdbc.Jdbc7Shim.ResultSet {
+public class PhoenixResultSet implements ResultSet, SQLCloseable {
 
     private static final Log LOG = LogFactory.getLog(PhoenixResultSet.class);
 
