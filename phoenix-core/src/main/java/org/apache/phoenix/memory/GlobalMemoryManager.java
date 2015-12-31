@@ -151,22 +151,23 @@ public class GlobalMemoryManager implements MemoryManager {
                 if (size > 0) {
                     logger.warn("Orphaned chunk of " + size + " bytes found during finalize");
                 }
-                close();
-                // TODO: log error here, but we can't use SFDC logging
-                // because this runs in an hbase coprocessor.
-                // Create a gack-like API (talk with GridForce or HBase folks)
+                freeMemory();
             } finally {
                 super.finalize();
             }
         }
 
-        @Override
-        public void close() {
+        private void freeMemory() {
             synchronized(sync) {
                 usedMemoryBytes -= size;
                 size = 0;
                 sync.notifyAll();
             }
+        }
+        
+        @Override
+        public void close() {
+            freeMemory();
         }
     }
 }
