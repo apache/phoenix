@@ -123,7 +123,7 @@ import co.cask.tephra.TransactionContext;
  * 
  * @since 0.1
  */
-public class PhoenixConnection implements Connection, MetaDataMutated {
+public class PhoenixConnection implements Connection, MetaDataMutated, SQLCloseable {
     private final String url;
     private final ConnectionQueryServices services;
     private final Properties info;
