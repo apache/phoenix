@@ -151,7 +151,7 @@ public class GlobalMemoryManager implements MemoryManager {
                 if (size > 0) {
                     logger.warn("Orphaned chunk of " + size + " bytes found during finalize");
                 }
-                //freeMemory();
+                freeMemory();
             } finally {
                 super.finalize();
             }
