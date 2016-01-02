@@ -413,10 +413,6 @@ public class DateTimeIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testYearFunctionDate() throws SQLException {
 
-        assertEquals(2015, callYearFunction("YEAR(current_date())"));
-
-        assertEquals(2015, callYearFunction("YEAR(now())"));
-
         assertEquals(2008, callYearFunction("YEAR(TO_DATE('2008-01-01', 'yyyy-MM-dd', 'local'))"));
 
         assertEquals(2004,
