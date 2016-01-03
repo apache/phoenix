@@ -116,7 +116,7 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
 
     public PTableStats getTableStats(byte[] physicalName, long clientTimeStamp) throws SQLException;
     
-    public void clearCache() throws SQLException;
+    public long clearCache() throws SQLException;
     public int getSequenceSaltBuckets();
 
     TransactionSystemClient getTransactionSystemClient();

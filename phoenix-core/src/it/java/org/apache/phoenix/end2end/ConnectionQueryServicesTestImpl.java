@@ -81,7 +81,9 @@ public class ConnectionQueryServicesTestImpl extends ConnectionQueryServicesImpl
             Set<PhoenixConnection> connections = this.connections;
             this.connections = Sets.newHashSet();
             SQLCloseables.closeAll(connections);
-            clearCache();
+            long unfreedBytes = clearCache();
+            // FIXME: once PHOENIX-2556 is fixed, comment this back in
+            // assertEquals(0,unfreedBytes);
         } finally {
             super.close();
         }

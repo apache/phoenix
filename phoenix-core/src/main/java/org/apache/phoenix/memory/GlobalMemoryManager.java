@@ -73,6 +73,7 @@ public class GlobalMemoryManager implements MemoryManager {
         synchronized(sync) {
             while (usedMemoryBytes + minBytes > maxMemoryBytes) { // Only wait if minBytes not available
                 try {
+                    logger.debug("Waiting for " + (usedMemoryBytes + minBytes - maxMemoryBytes) + " bytes to be free");
                     long remainingWaitTimeMs = maxWaitMs - (System.currentTimeMillis() - startTimeMs);
                     if (remainingWaitTimeMs <= 0) { // Ran out of time waiting for some memory to get freed up
                         throw new InsufficientMemoryException("Requested memory of " + minBytes + " bytes could not be allocated. Using memory of " + usedMemoryBytes + " bytes from global pool of " + maxMemoryBytes + " bytes after waiting for " + maxWaitMs + "ms.");
@@ -109,12 +110,15 @@ public class GlobalMemoryManager implements MemoryManager {
 
     private class GlobalMemoryChunk implements MemoryChunk {
         private volatile long size;
+        //private volatile String stack;
 
         private GlobalMemoryChunk(long size) {
             if (size < 0) {
                 throw new IllegalStateException("Size of memory chunk must be greater than zero, but instead is " + size);
             }
             this.size = size;
+            // Useful for debugging where a piece of memory was allocated
+            // this.stack = ExceptionUtils.getStackTrace(new Throwable());
         }
 
         @Override
@@ -138,6 +142,7 @@ public class GlobalMemoryManager implements MemoryManager {
                 } else {
                     allocateBytes(nAdditionalBytes, nAdditionalBytes);
                     size = nBytes;
+                    //this.stack = ExceptionUtils.getStackTrace(new Throwable());
                 }
             }
         }
@@ -150,6 +155,7 @@ public class GlobalMemoryManager implements MemoryManager {
             try {
                 if (size > 0) {
                     logger.warn("Orphaned chunk of " + size + " bytes found during finalize");
+                    //logger.warn("Orphaned chunk of " + size + " bytes found during finalize allocated here:\n" + stack);
                 }
                 freeMemory();
             } finally {

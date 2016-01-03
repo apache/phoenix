@@ -2500,27 +2500,35 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
      * @throws SQLException
      */
     @Override
-    public void clearCache() throws SQLException {
+    public long clearCache() throws SQLException {
         try {
             SQLException sqlE = null;
             HTableInterface htable = this.getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
             try {
-                htable.coprocessorService(MetaDataService.class, HConstants.EMPTY_START_ROW,
-                        HConstants.EMPTY_END_ROW, new Batch.Call<MetaDataService, ClearCacheResponse>() {
-                    @Override
-                    public ClearCacheResponse call(MetaDataService instance) throws IOException {
-                        ServerRpcController controller = new ServerRpcController();
-                        BlockingRpcCallback<ClearCacheResponse> rpcCallback =
-                                new BlockingRpcCallback<ClearCacheResponse>();
-                        ClearCacheRequest.Builder builder = ClearCacheRequest.newBuilder();
-                        builder.setClientVersion(VersionUtil.encodeVersion(PHOENIX_MAJOR_VERSION, PHOENIX_MINOR_VERSION, PHOENIX_PATCH_NUMBER));
-                        instance.clearCache(controller, builder.build(), rpcCallback);
-                        if(controller.getFailedOn() != null) {
-                            throw controller.getFailedOn();
+                final Map<byte[], Long> results =
+                    htable.coprocessorService(MetaDataService.class, HConstants.EMPTY_START_ROW,
+                            HConstants.EMPTY_END_ROW, new Batch.Call<MetaDataService, Long>() {
+                        @Override
+                        public Long call(MetaDataService instance) throws IOException {
+                            ServerRpcController controller = new ServerRpcController();
+                            BlockingRpcCallback<ClearCacheResponse> rpcCallback =
+                                    new BlockingRpcCallback<ClearCacheResponse>();
+                            ClearCacheRequest.Builder builder = ClearCacheRequest.newBuilder();
+                            builder.setClientVersion(VersionUtil.encodeVersion(PHOENIX_MAJOR_VERSION, PHOENIX_MINOR_VERSION, PHOENIX_PATCH_NUMBER));
+                            instance.clearCache(controller, builder.build(), rpcCallback);
+                            if(controller.getFailedOn() != null) {
+                                throw controller.getFailedOn();
+                            }
+                            return rpcCallback.get().getUnfreedBytes();
                         }
-                        return rpcCallback.get();
+                      });
+                long unfreedBytes = 0;
+                for (Map.Entry<byte[],Long> result : results.entrySet()) {
+                    if (result.getValue() != null) {
+                        unfreedBytes += result.getValue();
                     }
-                  });
+                }
+                return unfreedBytes;
             } catch (IOException e) {
                 throw ServerUtil.parseServerException(e);
             } catch (Throwable e) {
@@ -2544,6 +2552,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         } catch (Exception e) {
             throw new SQLException(ServerUtil.parseServerException(e));
         }
+        return 0;
     }
 
     private void flushTable(byte[] tableName) throws SQLException {

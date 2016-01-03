@@ -2668,7 +2668,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         Cache<ImmutableBytesPtr, PMetaDataEntity> metaDataCache =
                 GlobalCache.getInstance(this.env).getMetaDataCache();
         metaDataCache.invalidateAll();
-        cache.clearTenantCache();
+        long unfreedBytes = cache.clearTenantCache();
+        ClearCacheResponse.Builder builder = ClearCacheResponse.newBuilder();
+        builder.setUnfreedBytes(unfreedBytes);
+        done.run(builder.build());
     }
 
     @Override
