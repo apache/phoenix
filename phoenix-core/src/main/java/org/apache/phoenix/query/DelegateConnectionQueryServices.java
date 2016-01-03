@@ -251,8 +251,8 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
 
 
     @Override
-    public void clearCache() throws SQLException {
-        getDelegate().clearCache();
+    public long clearCache() throws SQLException {
+        return getDelegate().clearCache();
     }
 
     @Override

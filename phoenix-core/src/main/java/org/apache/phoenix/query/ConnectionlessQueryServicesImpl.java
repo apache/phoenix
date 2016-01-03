@@ -83,12 +83,12 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.SequenceUtil;
 
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+
 import co.cask.tephra.TransactionManager;
 import co.cask.tephra.TransactionSystemClient;
 import co.cask.tephra.inmemory.InMemoryTxSystemClient;
-
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 
 
 /**
@@ -512,7 +512,8 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
 
     @Override
-    public void clearCache() throws SQLException {
+    public long clearCache() throws SQLException {
+        return 0;
     }
 
     @Override

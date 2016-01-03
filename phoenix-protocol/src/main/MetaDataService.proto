@@ -119,6 +119,7 @@ message ClearCacheRequest {
 }
 
 message ClearCacheResponse {
+  optional int64 unfreedBytes = 1;
 }
 
 message GetVersionRequest {

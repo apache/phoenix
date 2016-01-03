@@ -29,6 +29,7 @@ import org.apache.phoenix.memory.MemoryManager;
 import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
 import org.apache.phoenix.util.Closeables;
 
+import com.google.common.base.Ticker;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.RemovalListener;
@@ -45,11 +46,30 @@ import com.google.common.cache.RemovalNotification;
 public class TenantCacheImpl implements TenantCache {
     private final int maxTimeToLiveMs;
     private final MemoryManager memoryManager;
+    private final Ticker ticker;
     private volatile Cache<ImmutableBytesPtr, Closeable> serverCaches;
 
     public TenantCacheImpl(MemoryManager memoryManager, int maxTimeToLiveMs) {
+        this(memoryManager, maxTimeToLiveMs, Ticker.systemTicker());
+    }
+    
+    public TenantCacheImpl(MemoryManager memoryManager, int maxTimeToLiveMs, Ticker ticker) {
         this.memoryManager = memoryManager;
         this.maxTimeToLiveMs = maxTimeToLiveMs;
+        this.ticker = ticker;
+    }
+    
+    public Ticker getTicker() {
+        return ticker;
+    }
+    
+    // For testing
+    public void cleanUp() {
+        synchronized(this) {
+            if (serverCaches != null) {
+                serverCaches.cleanUp();
+            }
+        }
     }
     
     @Override
@@ -64,6 +84,7 @@ public class TenantCacheImpl implements TenantCache {
                 if (serverCaches == null) {
                     serverCaches = CacheBuilder.newBuilder()
                         .expireAfterAccess(maxTimeToLiveMs, TimeUnit.MILLISECONDS)
+                        .ticker(getTicker())
                         .removalListener(new RemovalListener<ImmutableBytesPtr, Closeable>(){
                             @Override
                             public void onRemoval(RemovalNotification<ImmutableBytesPtr, Closeable> notification) {
@@ -99,7 +120,12 @@ public class TenantCacheImpl implements TenantCache {
     }
     
     @Override
-    public void removeServerCache(ImmutableBytesPtr cacheId) throws SQLException {
+    public void removeServerCache(ImmutableBytesPtr cacheId) {
         getServerCaches().invalidate(cacheId);
+    }
+
+    @Override
+    public void removeAllServerCache() {
+        getServerCaches().invalidateAll();
     }
 }

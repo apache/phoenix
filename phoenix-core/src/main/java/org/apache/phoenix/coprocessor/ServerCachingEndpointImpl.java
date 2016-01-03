@@ -18,7 +18,6 @@
 package org.apache.phoenix.coprocessor;
 
 import java.io.IOException;
-import java.sql.SQLException;
 
 import org.apache.hadoop.hbase.Coprocessor;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
@@ -91,11 +90,7 @@ public class ServerCachingEndpointImpl extends ServerCachingService implements C
       tenantId = new ImmutableBytesPtr(request.getTenantId().toByteArray());
     }
     TenantCache tenantCache = GlobalCache.getTenantCache(this.env, tenantId);
-    try {
-      tenantCache.removeServerCache(new ImmutableBytesPtr(request.getCacheId().toByteArray()));
-    } catch (SQLException e) {
-      ProtobufUtil.setControllerException(controller, new IOException(e));
-    }
+    tenantCache.removeServerCache(new ImmutableBytesPtr(request.getCacheId().toByteArray()));
     RemoveServerCacheResponse.Builder responseBuilder = RemoveServerCacheResponse.newBuilder();
     responseBuilder.setReturn(true);
     RemoveServerCacheResponse result = responseBuilder.build();
