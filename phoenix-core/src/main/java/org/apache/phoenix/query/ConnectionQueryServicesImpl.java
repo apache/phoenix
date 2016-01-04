@@ -2482,7 +2482,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     
     @Override
     public MutationState updateData(MutationPlan plan) throws SQLException {
-        return plan.execute();
+        MutationState state = plan.execute();
+        plan.getContext().getConnection().commit();
+        return state;
     }
 
     @Override

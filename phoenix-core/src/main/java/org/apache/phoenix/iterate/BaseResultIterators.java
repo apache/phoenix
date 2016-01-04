@@ -700,6 +700,9 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
 
     @Override
     public void close() throws SQLException {
+        if (allFutures.isEmpty()) {
+            return;
+        }
         // Don't call cancel on already started work, as it causes the HConnection
         // to get into a funk. Instead, just cancel queued work.
         boolean cancelledWork = false;
