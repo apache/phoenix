@@ -50,12 +50,14 @@ import java.util.Map;
 import java.util.Properties;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -77,6 +79,18 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
         this.indexDDL = indexDDL;
         this.plans = plans;
     }
+    
+    @After
+    public void assertNoUnfreedMemory() throws SQLException {
+        Connection conn = DriverManager.getConnection(getUrl());
+        try {
+            long unfreedBytes = conn.unwrap(PhoenixConnection.class).getQueryServices().clearCache();
+            assertEquals(0,unfreedBytes);
+        } finally {
+            conn.close();
+        }
+    }
+    
     
     @BeforeClass
     @Shadower(classBeingShadowed = BaseHBaseManagedTimeIT.class)

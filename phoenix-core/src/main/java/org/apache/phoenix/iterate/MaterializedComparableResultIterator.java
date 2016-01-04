@@ -45,16 +45,19 @@ public class MaterializedComparableResultIterator
         this.current = delegate.peek();
     }
 
+    @Override
     public Tuple next() throws SQLException {
         Tuple next = delegate.next();
         this.current = delegate.peek();
         return next;
     }
 
+    @Override
     public Tuple peek() throws SQLException {
         return delegate.peek();
     }
 
+    @Override
     public void close() throws SQLException {
         delegate.close();
     }

@@ -704,6 +704,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         // to get into a funk. Instead, just cancel queued work.
         boolean cancelledWork = false;
         try {
+            List<Future<PeekingResultIterator>> futuresToClose = Lists.newArrayListWithExpectedSize(getSplits().size());
             for (List<List<Pair<Scan,Future<PeekingResultIterator>>>> futures : allFutures) {
                 for (List<Pair<Scan,Future<PeekingResultIterator>>> futureScans : futures) {
                     for (Pair<Scan,Future<PeekingResultIterator>> futurePair : futureScans) {
@@ -712,16 +713,35 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                         if (futurePair != null) {
                             Future<PeekingResultIterator> future = futurePair.getSecond();
                             if (future != null) {
-                                future.cancel(false);
+                                if (future.cancel(false)) {
+                                    cancelledWork = true;
+                                } else {
+                                    futuresToClose.add(future);
+                                }
                             }
                         }
                     }
+                }
+            }
+            // Wait for already started tasks to complete as we can't interrupt them without
+            // leaving our HConnection in a funky state.
+            for (Future<PeekingResultIterator> future : futuresToClose) {
+                try {
+                    PeekingResultIterator iterator = future.get();
+                    iterator.close();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new RuntimeException(e);
+                } catch (ExecutionException e) {
+                    logger.info("Failed to execute task during cancel", e);
+                    continue;
                 }
             }
         } finally {
             if (cancelledWork) {
                 context.getConnection().getQueryServices().getExecutor().purge();
             }
+            allFutures.clear();
         }
     }
 

@@ -301,6 +301,7 @@ public class ServerCacheClient {
     	ConnectionQueryServices services = connection.getQueryServices();
     	Throwable lastThrowable = null;
     	TableRef cacheUsingTableRef = cacheUsingTableRefMap.get(Bytes.mapKey(cacheId));
+    	final PTable cacheUsingTable = cacheUsingTableRef.getTable();
     	byte[] tableName = cacheUsingTableRef.getTable().getPhysicalName().getBytes();
     	HTableInterface iterateOverTable = services.getTable(tableName);
     	try {
@@ -326,7 +327,17 @@ public class ServerCacheClient {
     									new BlockingRpcCallback<RemoveServerCacheResponse>();
     							RemoveServerCacheRequest.Builder builder = RemoveServerCacheRequest.newBuilder();
     							if(connection.getTenantId() != null){
-    								builder.setTenantId(ByteStringer.wrap(connection.getTenantId().getBytes()));
+                                    try {
+                                        byte[] tenantIdBytes =
+                                                ScanUtil.getTenantIdBytes(
+                                                        cacheUsingTable.getRowKeySchema(),
+                                                        cacheUsingTable.getBucketNum()!=null,
+                                                        connection.getTenantId(),
+                                                        cacheUsingTable.isMultiTenant());
+                                        builder.setTenantId(ByteStringer.wrap(tenantIdBytes));
+                                    } catch (SQLException e) {
+                                        new IOException(e);
+                                    }
     							}
     							builder.setCacheId(ByteStringer.wrap(cacheId));
     							instance.removeServerCache(controller, builder.build(), rpcCallback);
