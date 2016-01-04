@@ -192,7 +192,6 @@ public class PhoenixMetricsSink implements MetricsSink {
     public void flush() {
         try {
             this.conn.commit();
-            this.conn.rollback();
         } catch (SQLException e) {
             LOG.error("Failed to commit changes to table", e);
         }
