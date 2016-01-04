@@ -172,7 +172,7 @@ public class DeleteCompiler {
                         MutationState indexState = new MutationState(indexTableRef, indexMutations, 0, maxSize, connection);
                         connection.getMutationState().join(indexState);
                     }
-                    connection.commit();
+                    connection.getMutationState().send();
                     mutations.clear();
                     if (indexMutations != null) {
                         indexMutations.clear();
