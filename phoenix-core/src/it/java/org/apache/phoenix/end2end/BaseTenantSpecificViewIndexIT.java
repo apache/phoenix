@@ -19,7 +19,6 @@ package org.apache.phoenix.end2end;
 
 import static com.google.common.collect.Sets.newHashSet;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -178,6 +177,5 @@ public class BaseTenantSpecificViewIndexIT extends BaseHBaseManagedTimeIT {
             Arrays.<Object>asList(1,7, valuePrefix + "v2-1"),
             Arrays.<Object>asList(1,9, valuePrefix + "v2-1"));
         assertValuesEqualsResultSet(rs,expectedResultsA);
-        assertFalse(rs.next());
     }
 }

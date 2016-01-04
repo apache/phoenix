@@ -28,15 +28,18 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.SQLTimeoutException;
 import java.util.Map;
 import java.util.Properties;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.junit.After;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -54,6 +57,17 @@ public class QueryTimeoutIT extends BaseOwnClusterHBaseManagedTimeIT {
         props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(10000));
         props.put(QueryServices.EXPLAIN_CHUNK_COUNT_ATTRIB, Boolean.TRUE.toString());
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+    }
+    
+    @After
+    public void assertNoUnfreedMemory() throws SQLException {
+        Connection conn = DriverManager.getConnection(getUrl());
+        try {
+            long unfreedBytes = conn.unwrap(PhoenixConnection.class).getQueryServices().clearCache();
+            assertEquals(0,unfreedBytes);
+        } finally {
+            conn.close();
+        }
     }
     
     @Test

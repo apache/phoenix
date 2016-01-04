@@ -79,6 +79,7 @@ import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SQLCloseable;
+import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.TransactionUtil;
 import org.cloudera.htrace.Span;
@@ -703,6 +704,8 @@ public class MutationState implements SQLCloseable {
          */
         @Override
         public void delete(List<Delete> deletes) throws IOException {
+            ServerCache cache = null;
+            SQLException sqlE = null;
             try {
                 PTable table = tableRef.getTable();
                 List<PTable> indexes = table.getIndexes();
@@ -736,12 +739,16 @@ public class MutationState implements SQLCloseable {
                         IndexMaintainer.serializeAdditional(table, indexMetaDataPtr, keyValueIndexes, connection);
                     }
                     if (attachMetaData) {
-                        setMetaDataOnMutations(tableRef, deletes, indexMetaDataPtr);
+                        cache = setMetaDataOnMutations(tableRef, deletes, indexMetaDataPtr);
                     }
                 }
                 delegate.delete(deletes);
             } catch (SQLException e) {
                 throw new IOException(e);
+            } finally {
+                if (cache != null) {
+                    SQLCloseables.closeAllQuietly(Collections.singletonList(cache));
+                }
             }
         }
     }
@@ -793,10 +800,7 @@ public class MutationState implements SQLCloseable {
 	                int retryCount = 0;
 	                boolean shouldRetry = false;
 	                do {
-	                    ServerCache cache = null;
-	                    if (isDataTable) {
-	                        cache = setMetaDataOnMutations(tableRef, mutationList, indexMetaDataPtr);
-	                    }
+	                    final ServerCache cache = isDataTable ? setMetaDataOnMutations(tableRef, mutationList, indexMetaDataPtr) : null;
 	                
 	                    // If we haven't retried yet, retry for this case only, as it's possible that
 	                    // a split will occur after we send the index metadata cache to all known
@@ -879,8 +883,6 @@ public class MutationState implements SQLCloseable {
 	                                }
 	                            } 
 	                            if (sqlE != null) {
-	                            	// clear pending mutations
-	                            	mutations.clear();
 	                                throw sqlE;
 	                            }
 	                        }
