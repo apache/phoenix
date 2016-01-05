@@ -83,11 +83,8 @@ public enum SQLExceptionCode {
     SINGLE_ROW_SUBQUERY_RETURNS_MULTIPLE_ROWS(215, "22015", "Single-row sub-query returns more than one row."),
     SUBQUERY_RETURNS_DIFFERENT_NUMBER_OF_FIELDS(216, "22016", "Sub-query must return the same number of fields as the left-hand-side expression of 'IN'."),
     AMBIGUOUS_JOIN_CONDITION(217, "22017", "Ambiguous or non-equi join condition specified. Consider using table list with where clause."),
-    CONSTRAINT_VIOLATION(218, "22018", "Constraint violation."),
+    CONSTRAINT_VIOLATION(218, "23018", "Constraint violation."),
 
-    /**
-     * Constraint Violation (errorcode 03, sqlstate 23)
-     */
     CONCURRENT_TABLE_MUTATION(301, "23000", "Concurrent modification to table.", new Factory() {
         @Override
         public SQLException newException(SQLExceptionInfo info) {
