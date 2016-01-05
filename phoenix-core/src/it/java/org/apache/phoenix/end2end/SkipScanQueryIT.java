@@ -414,4 +414,24 @@ public class SkipScanQueryIT extends BaseHBaseManagedTimeIT {
             conn.close();
         }
     }    
+    
+    @Test
+    public void testOrPKWithAndNonPK() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        try {
+            conn.createStatement().execute("create table bugTable(ID varchar primary key,company varchar)");
+            conn.setAutoCommit(true);
+            conn.createStatement().execute("upsert into bugTable values('i1','c1')");
+            conn.createStatement().execute("upsert into bugTable values('i2','c2')");
+            conn.createStatement().execute("upsert into bugTable values('i3','c3')");
+            ResultSet rs = conn.createStatement().executeQuery("select * from bugTable where ID = 'i1' or (ID = 'i2' and company = 'c3')");
+            assertTrue(rs.next());
+            assertEquals("i1", rs.getString(1));
+            assertEquals("c1", rs.getString(2));
+            assertFalse(rs.next());
+            
+        } finally {
+            conn.close();
+        }
+    }
 }
