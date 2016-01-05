@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.closeStmtAndConn;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -27,6 +28,7 @@ import java.sql.Date;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Time;
 import java.sql.Timestamp;
 import java.util.Properties;
@@ -36,6 +38,8 @@ import org.apache.phoenix.expression.function.FloorFunction;
 import org.apache.phoenix.expression.function.RoundFunction;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.DateUtil;
+import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -553,5 +557,39 @@ public class RoundFloorCeilFunctionsEnd2EndIT extends BaseHBaseManagedTimeIT {
 			conn.close();
 		}
 	}
+
+  @Test
+  public void testRoundOffFunction() throws SQLException {
+    long ts = nextTimestamp();
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+    Connection conn = DriverManager.getConnection(getUrl(), props);
+    String ddl = "create table round_test(k bigint primary key)";
+    conn.createStatement().execute(ddl);
+    conn.close();
+    
+    props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
+    conn = DriverManager.getConnection(getUrl(), props);
+    PreparedStatement stmt = conn.prepareStatement("upsert into round_test values(1380603308885)");
+    stmt.execute();
+    conn.commit();
+    conn.close();
+    
+
+    props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
+    conn = DriverManager.getConnection(getUrl(), props);
+    ResultSet rs;
+    stmt = conn.prepareStatement("select round(k/1000000,0) from round_test");
+    rs = stmt.executeQuery();
+    assertTrue(rs.next());
+    assertEquals(1380603, rs.getLong(1));
+    
+    props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
+    conn = DriverManager.getConnection(getUrl(), props);
+    stmt = conn.prepareStatement("select round(k/1000000,0) x from round_test group by x");
+    rs = stmt.executeQuery();
+    assertTrue(rs.next());
+    assertEquals(1380603, rs.getLong(1));
+  }
 
 }
