@@ -88,7 +88,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
     private final boolean recompileWhereClause;
     private final Set<TableRef> tableRefs;
     private final int maxServerCacheTimeToLive;
-    private List<SQLCloseable> dependencies;
+    private final List<SQLCloseable> dependencies = Lists.newArrayList();
     private HashCacheClient hashClient;
     private AtomicLong firstJobEndTime;
     private List<Expression> keyRangeExpressions;
@@ -96,7 +96,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
     public static HashJoinPlan create(SelectStatement statement, 
             QueryPlan plan, HashJoinInfo joinInfo, SubPlan[] subPlans) {
         if (!(plan instanceof HashJoinPlan))
-            return new HashJoinPlan(statement, plan, joinInfo, subPlans, joinInfo == null);
+            return new HashJoinPlan(statement, plan, joinInfo, subPlans, joinInfo == null, Collections.<SQLCloseable>emptyList());
         
         HashJoinPlan hashJoinPlan = (HashJoinPlan) plan;
         assert (hashJoinPlan.joinInfo == null && hashJoinPlan.delegate instanceof BaseQueryPlan);
@@ -108,12 +108,13 @@ public class HashJoinPlan extends DelegateQueryPlan {
         for (SubPlan subPlan : subPlans) {
             mergedSubPlans[i++] = subPlan;
         }
-        return new HashJoinPlan(statement, hashJoinPlan.delegate, joinInfo, mergedSubPlans, true);
+        return new HashJoinPlan(statement, hashJoinPlan.delegate, joinInfo, mergedSubPlans, true, hashJoinPlan.dependencies);
     }
     
     private HashJoinPlan(SelectStatement statement, 
-            QueryPlan plan, HashJoinInfo joinInfo, SubPlan[] subPlans, boolean recompileWhereClause) {
+            QueryPlan plan, HashJoinInfo joinInfo, SubPlan[] subPlans, boolean recompileWhereClause, List<SQLCloseable> dependencies) {
         super(plan);
+        this.dependencies.addAll(dependencies);
         this.statement = statement;
         this.joinInfo = joinInfo;
         this.subPlans = subPlans;
@@ -143,8 +144,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
         PhoenixConnection connection = getContext().getConnection();
         ConnectionQueryServices services = connection.getQueryServices();
         ExecutorService executor = services.getExecutor();
-        List<Future<Object>> futures = Lists.<Future<Object>>newArrayListWithExpectedSize(count);
-        dependencies = Lists.newArrayList();
+        List<Future<ServerCache>> futures = Lists.newArrayListWithExpectedSize(count);
         if (joinInfo != null) {
             hashClient = hashClient != null ? 
                     hashClient 
@@ -155,11 +155,12 @@ public class HashJoinPlan extends DelegateQueryPlan {
         
         for (int i = 0; i < count; i++) {
             final int index = i;
-            futures.add(executor.submit(new JobCallable<Object>() {
+            futures.add(executor.submit(new JobCallable<ServerCache>() {
 
                 @Override
-                public Object call() throws Exception {
-                    return subPlans[index].execute(HashJoinPlan.this);
+                public ServerCache call() throws Exception {
+                    ServerCache cache = subPlans[index].execute(HashJoinPlan.this);
+                    return cache;
                 }
 
                 @Override
@@ -177,7 +178,10 @@ public class HashJoinPlan extends DelegateQueryPlan {
         SQLException firstException = null;
         for (int i = 0; i < count; i++) {
             try {
-                Object result = futures.get(i).get();
+                ServerCache result = futures.get(i).get();
+                if (result != null) {
+                    dependencies.add(result);
+                }
                 subPlans[i].postProcess(result, this);
             } catch (InterruptedException e) {
                 if (firstException == null) {
@@ -261,8 +265,8 @@ public class HashJoinPlan extends DelegateQueryPlan {
     }
 
     protected interface SubPlan {
-        public Object execute(HashJoinPlan parent) throws SQLException;
-        public void postProcess(Object result, HashJoinPlan parent) throws SQLException;
+        public ServerCache execute(HashJoinPlan parent) throws SQLException;
+        public void postProcess(ServerCache result, HashJoinPlan parent) throws SQLException;
         public List<String> getPreSteps(HashJoinPlan parent) throws SQLException;
         public List<String> getPostSteps(HashJoinPlan parent) throws SQLException;
         public QueryPlan getInnerPlan();
@@ -280,7 +284,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
         }
 
         @Override
-        public Object execute(HashJoinPlan parent) throws SQLException {
+        public ServerCache execute(HashJoinPlan parent) throws SQLException {
             List<Object> values = Lists.<Object> newArrayList();
             ResultIterator iterator = plan.iterator();
             RowProjector projector = plan.getProjector();
@@ -319,7 +323,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
         }
 
         @Override
-        public void postProcess(Object result, HashJoinPlan parent) throws SQLException {
+        public void postProcess(ServerCache result, HashJoinPlan parent) throws SQLException {
         }
 
         @Override
@@ -365,7 +369,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
         }
 
         @Override
-        public Object execute(HashJoinPlan parent) throws SQLException {
+        public ServerCache execute(HashJoinPlan parent) throws SQLException {
             ScanRanges ranges = parent.delegate.getContext().getScanRanges();
             List<Expression> keyRangeRhsValues = null;
             if (keyRangeRhsExpression != null) {
@@ -387,6 +391,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
                     // Evaluate key expressions for hash join key range optimization.
                     keyRangeRhsValues.add(HashCacheClient.evaluateKeyExpression(keyRangeRhsExpression, result, plan.getContext().getTempPtr()));
                 }
+                iterator.close();
             }
             if (keyRangeRhsValues != null) {
                 parent.keyRangeExpressions.add(parent.createKeyRangeExpression(keyRangeLhsExpression, keyRangeRhsExpression, keyRangeRhsValues, plan.getContext().getTempPtr(), plan.getContext().getCurrentTable().getTable().rowKeyOrderOptimizable()));
@@ -395,12 +400,11 @@ public class HashJoinPlan extends DelegateQueryPlan {
         }
 
         @Override
-        public void postProcess(Object result, HashJoinPlan parent)
+        public void postProcess(ServerCache result, HashJoinPlan parent)
                 throws SQLException {
-            ServerCache cache = (ServerCache) result;
+            ServerCache cache = result;
             if (cache != null) {
                 parent.joinInfo.getJoinIds()[index].set(cache.getId());
-                parent.dependencies.add(cache);
             }
         }
 
