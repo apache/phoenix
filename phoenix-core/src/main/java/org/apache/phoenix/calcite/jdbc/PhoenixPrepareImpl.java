@@ -103,22 +103,27 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
         planner.addRule(new PhoenixForwardTableScanRule(PhoenixTemporarySort.class));
         planner.addRule(new PhoenixReverseTableScanRule(LogicalSort.class));
         planner.addRule(new PhoenixReverseTableScanRule(PhoenixTemporarySort.class));
-        
-        for (CalciteSchema schema : prepareContext.getRootSchema().getSubSchemaMap().values()) {
-            if (schema.schema instanceof PhoenixSchema) {
-                PhoenixSchema phoenixSchema = (PhoenixSchema) schema.schema;
-                phoenixSchema.initFunctionMap(schema);
-                if (prepareContext.config().materializationsEnabled()) {
-                    phoenixSchema.defineIndexesAsMaterializations(schema);
-                }
-                for (CalciteSchema subSchema : schema.getSubSchemaMap().values()) {
-                    PhoenixSchema phoenixSubSchema = (PhoenixSchema) subSchema.schema;
-                    phoenixSubSchema.initFunctionMap(subSchema);
-                    if (prepareContext.config().materializationsEnabled()) {
-                        phoenixSubSchema.defineIndexesAsMaterializations(subSchema);
+                
+        if (prepareContext.config().materializationsEnabled()) {
+            final CalciteSchema rootSchema = prepareContext.getRootSchema();
+            Hook.TRIMMED.add(new Function<RelNode, Object>() {
+                boolean called = false;
+                @Override
+                public Object apply(RelNode root) {
+                    if (!called) {
+                        called = true;
+                        for (CalciteSchema schema : rootSchema.getSubSchemaMap().values()) {
+                            if (schema.schema instanceof PhoenixSchema) {
+                                ((PhoenixSchema) schema.schema).defineIndexesAsMaterializations();
+                                for (CalciteSchema subSchema : schema.getSubSchemaMap().values()) {
+                                    ((PhoenixSchema) subSchema.schema).defineIndexesAsMaterializations();
+                                }
+                            }
+                        }
                     }
-                }
-            }
+                    return null;
+                }            
+            });
         }
         
         Hook.PROGRAM.add(new Function<Pair<List<Materialization>, Holder<Program>>, Object>() {

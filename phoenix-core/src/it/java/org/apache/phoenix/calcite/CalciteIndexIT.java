@@ -247,18 +247,10 @@ public class CalciteIndexIT extends BaseCalciteIT {
                         {"2", 3, 4, 5}})
                 .close();
         
-        start(props).sql("select id, col0 from " + MULTI_TENANT_TABLE + " where col0 > 1")
-                .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixServerProject(ID=[$1], COL0=[CAST($0):INTEGER])\n" +
-                           "    PhoenixTableScan(table=[[phoenix, IDX_MULTITENANT_TEST_VIEW1]], filter=[>(CAST($0):INTEGER, 1)])\n")
-                .resultIs(new Object[][] {
-                        {"2", 3}})
-                .close();
-        
         start(props).sql("select id, col0 from " + MULTI_TENANT_VIEW1 + " where col0 > 1")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixServerProject(ID=[$1], COL0=[CAST($0):INTEGER])\n" +
-                           "    PhoenixTableScan(table=[[phoenix, IDX_MULTITENANT_TEST_VIEW1]], filter=[>(CAST($0):INTEGER, 1)])\n")
+                           "    PhoenixTableScan(table=[[phoenix, S1, IDX_MULTITENANT_TEST_VIEW1]], filter=[>(CAST($0):INTEGER, 1)])\n")
                 .resultIs(new Object[][] {
                         {"2", 3}})
                 .close();
@@ -274,7 +266,7 @@ public class CalciteIndexIT extends BaseCalciteIT {
         start(props).sql("select id, col0 from " + MULTI_TENANT_VIEW2 + " where col0 > 1")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixServerProject(ID=[$1], COL0=[CAST($0):INTEGER])\n" +
-                           "    PhoenixTableScan(table=[[phoenix, IDX_MULTITENANT_TEST_VIEW2]], filter=[>(CAST($0):INTEGER, 1)])\n")
+                           "    PhoenixTableScan(table=[[phoenix, S2, IDX_MULTITENANT_TEST_VIEW2]], filter=[>(CAST($0):INTEGER, 1)])\n")
                 .resultIs(new Object[][] {
                         {"5", 6}})
                 .close();
@@ -282,7 +274,7 @@ public class CalciteIndexIT extends BaseCalciteIT {
         start(props).sql("select id, col0 from " + MULTI_TENANT_VIEW2 + " order by col0")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixServerProject(ID=[$1], COL0=[CAST($0):INTEGER])\n" +
-                           "    PhoenixTableScan(table=[[phoenix, IDX_MULTITENANT_TEST_VIEW2]], scanOrder=[FORWARD])\n")
+                           "    PhoenixTableScan(table=[[phoenix, S2, IDX_MULTITENANT_TEST_VIEW2]], scanOrder=[FORWARD])\n")
                 .resultIs(new Object[][] {
                         {"5", 6}})
                 .close();

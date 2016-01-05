@@ -357,9 +357,9 @@ public class BaseCalciteIT extends BaseClientManagedTimeIT {
     
     protected static final String MULTI_TENANT_TABLE = "multitenant_test_table";
     protected static final String MULTI_TENANT_TABLE_INDEX = "idx_multitenant_test_table";
-    protected static final String MULTI_TENANT_VIEW1 = "multitenant_test_view1";
+    protected static final String MULTI_TENANT_VIEW1 = "s1.multitenant_test_view1";
     protected static final String MULTI_TENANT_VIEW1_INDEX = "idx_multitenant_test_view1";
-    protected static final String MULTI_TENANT_VIEW2 = "multitenant_test_view2";
+    protected static final String MULTI_TENANT_VIEW2 = "s2.multitenant_test_view2";
     protected static final String MULTI_TENANT_VIEW2_INDEX = "idx_multitenant_test_view2";
     
     protected void initMultiTenantTables(String index) throws SQLException {

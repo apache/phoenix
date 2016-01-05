@@ -41,7 +41,19 @@ public class PhoenixCalciteDriver extends Driver {
 
     @Override protected String getConnectStringPrefix() {
         return CONNECT_STRING_PREFIX;
-    }    
+    }
+    
+    @Override protected String getFactoryClassName(JdbcVersion jdbcVersion) {
+        switch (jdbcVersion) {
+        case JDBC_30:
+        case JDBC_40:
+            throw new IllegalArgumentException("JDBC version not supported: "
+                    + jdbcVersion);
+        case JDBC_41:
+        default:
+            return "org.apache.calcite.jdbc.PhoenixCalciteFactory";
+        }
+    }
 
     public Connection connect(String url, Properties info) throws SQLException {
         if (!acceptsURL(url)) {
