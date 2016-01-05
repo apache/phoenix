@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.junit.Assert.assertEquals;
+
 import java.sql.SQLException;
 import java.util.Properties;
 import java.util.Set;
@@ -82,8 +84,7 @@ public class ConnectionQueryServicesTestImpl extends ConnectionQueryServicesImpl
             this.connections = Sets.newHashSet();
             SQLCloseables.closeAll(connections);
             long unfreedBytes = clearCache();
-            // FIXME: once PHOENIX-2556 is fixed, comment this back in
-            // assertEquals(0,unfreedBytes);
+            assertEquals("Found unfreed bytes in server-side cache", 0, unfreedBytes);
         } finally {
             super.close();
         }
