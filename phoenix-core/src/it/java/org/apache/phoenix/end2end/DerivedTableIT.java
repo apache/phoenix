@@ -103,7 +103,8 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
                 "CLIENT MERGE SORT\n" +
                 "CLIENT SORTED BY [A]\n" +
                 "CLIENT AGGREGATE INTO DISTINCT ROWS BY [A]\n" +
-                "CLIENT DISTINCT ON [COLLECTDISTINCT(B)]"}});
+                "CLIENT DISTINCT ON [COLLECTDISTINCT(B)]\n" + 
+                "CLIENT SORTED BY [A DESC]"}});
         testCases.add(new String[][] {
                 {}, {
                 "CLIENT PARALLEL 4-WAY FULL SCAN OVER ATABLE\n" +
@@ -119,7 +120,8 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
                 "CLIENT MERGE SORT\n" +
                 "CLIENT SORTED BY [A]\n" +
                 "CLIENT AGGREGATE INTO DISTINCT ROWS BY [A]\n" +
-                "CLIENT DISTINCT ON [COLLECTDISTINCT(B)]"}});
+                "CLIENT DISTINCT ON [COLLECTDISTINCT(B)]\n" + 
+                "CLIENT SORTED BY [A DESC]"}});
         return testCases;
     }
 
@@ -310,8 +312,8 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
             assertEquals(plans[0], QueryUtil.getExplainPlan(rs));
             
-            // distinct b (groupby a, b) groupby a
-            query = "SELECT DISTINCT COLLECTDISTINCT(t.b) FROM (SELECT b_string b, a_string a FROM aTable GROUP BY a_string, b_string) AS t GROUP BY t.a";
+            // distinct b (groupby a, b) groupby a orderby a
+            query = "SELECT DISTINCT COLLECTDISTINCT(t.b) FROM (SELECT b_string b, a_string a FROM aTable GROUP BY a_string, b_string) AS t GROUP BY t.a ORDER BY t.a DESC";
             statement = conn.prepareStatement(query);
             rs = statement.executeQuery();
             assertTrue (rs.next());
