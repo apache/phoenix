@@ -616,4 +616,30 @@ public class QueryServicesOptions {
         config.setBoolean(RENEW_LEASE_ENABLED, enable);
         return this;
     }
+    
+    public QueryServicesOptions setIndexHandlerCount(int count) {
+        config.setInt(QueryServices.INDEX_HANDLER_COUNT_ATTRIB, count);
+        return this;
+    }
+    
+    public QueryServicesOptions setMetadataHandlerCount(int count) {
+        config.setInt(QueryServices.METADATA_HANDLER_COUNT_ATTRIB, count);
+        return this;
+    }
+    
+    public QueryServicesOptions setHConnectionPoolCoreSize(int count) {
+        config.setInt(QueryServices.HCONNECTION_POOL_CORE_SIZE, count);
+        return this;
+    }
+    
+    public QueryServicesOptions setHConnectionPoolMaxSize(int count) {
+        config.setInt(QueryServices.HCONNECTION_POOL_MAX_SIZE, count);
+        return this;
+    }
+    
+    public QueryServicesOptions setMaxThreadsPerHTable(int count) {
+        config.setInt(QueryServices.HTABLE_MAX_THREADS, count);
+        return this;
+    }
+    
 }

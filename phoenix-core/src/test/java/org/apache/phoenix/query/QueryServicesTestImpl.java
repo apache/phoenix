@@ -58,6 +58,11 @@ public final class QueryServicesTestImpl extends BaseQueryServicesImpl {
     private static final boolean DEFAULT_RUN_UPDATE_STATS_ASYNC = false;
     private static final boolean DEFAULT_COMMIT_STATS_ASYNC = false;
     public static final boolean DEFAULT_RENEW_LEASE_ENABLED = false;
+    public static final int DEFAULT_INDEX_HANDLER_COUNT = 5;
+    public static final int DEFAULT_METADATA_HANDLER_COUNT = 5;
+    public static final int DEFAULT_HCONNECTION_POOL_CORE_SIZE = 10;
+    public static final int DEFAULT_HCONNECTION_POOL_MAX_SIZE = 10;
+    public static final int DEFAULT_HTABLE_MAX_THREADS = 10;
 
     
     /**
@@ -99,7 +104,12 @@ public final class QueryServicesTestImpl extends BaseQueryServicesImpl {
                 .setExtraJDBCArguments(DEFAULT_EXTRA_JDBC_ARGUMENTS)
                 .setRunUpdateStatsAsync(DEFAULT_RUN_UPDATE_STATS_ASYNC)
                 .setCommitStatsAsync(DEFAULT_COMMIT_STATS_ASYNC)
-                .setEnableRenewLease(DEFAULT_RENEW_LEASE_ENABLED);
+                .setEnableRenewLease(DEFAULT_RENEW_LEASE_ENABLED)
+                .setIndexHandlerCount(DEFAULT_INDEX_HANDLER_COUNT)
+                .setMetadataHandlerCount(DEFAULT_METADATA_HANDLER_COUNT)
+                .setHConnectionPoolCoreSize(DEFAULT_HCONNECTION_POOL_CORE_SIZE)
+                .setHConnectionPoolMaxSize(DEFAULT_HCONNECTION_POOL_MAX_SIZE)
+                .setMaxThreadsPerHTable(DEFAULT_HTABLE_MAX_THREADS);
     }
     
     public QueryServicesTestImpl(ReadOnlyProps defaultProps, ReadOnlyProps overrideProps) {
