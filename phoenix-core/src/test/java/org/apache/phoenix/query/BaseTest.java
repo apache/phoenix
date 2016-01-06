@@ -773,7 +773,7 @@ public abstract class BaseTest {
         ensureTableCreated(url, tableName, null, null);
     }
 
-    protected static void ensureTableCreated(String url, String tableName, byte[][] splits) throws SQLException {
+    public static void ensureTableCreated(String url, String tableName, byte[][] splits) throws SQLException {
         ensureTableCreated(url, tableName, splits, null);
     }
 

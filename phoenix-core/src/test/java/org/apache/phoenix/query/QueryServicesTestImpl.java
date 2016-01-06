@@ -57,6 +57,7 @@ public final class QueryServicesTestImpl extends BaseQueryServicesImpl {
     public static final String DEFAULT_EXTRA_JDBC_ARGUMENTS = PhoenixRuntime.PHOENIX_TEST_DRIVER_URL_PARAM;
     private static final boolean DEFAULT_RUN_UPDATE_STATS_ASYNC = false;
     private static final boolean DEFAULT_COMMIT_STATS_ASYNC = false;
+    public static final boolean DEFAULT_RENEW_LEASE_ENABLED = false;
 
     
     /**
@@ -97,7 +98,8 @@ public final class QueryServicesTestImpl extends BaseQueryServicesImpl {
                 .setForceRowKeyOrder(DEFAULT_FORCE_ROWKEY_ORDER)
                 .setExtraJDBCArguments(DEFAULT_EXTRA_JDBC_ARGUMENTS)
                 .setRunUpdateStatsAsync(DEFAULT_RUN_UPDATE_STATS_ASYNC)
-                .setCommitStatsAsync(DEFAULT_COMMIT_STATS_ASYNC);
+                .setCommitStatsAsync(DEFAULT_COMMIT_STATS_ASYNC)
+                .setEnableRenewLease(DEFAULT_RENEW_LEASE_ENABLED);
     }
     
     public QueryServicesTestImpl(ReadOnlyProps defaultProps, ReadOnlyProps overrideProps) {

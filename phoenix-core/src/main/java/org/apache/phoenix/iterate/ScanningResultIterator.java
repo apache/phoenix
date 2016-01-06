@@ -38,12 +38,12 @@ import org.apache.phoenix.util.ServerUtil;
 public class ScanningResultIterator implements ResultIterator {
     private final ResultScanner scanner;
     private final CombinableMetric scanMetrics;
-    
+
     public ScanningResultIterator(ResultScanner scanner, CombinableMetric scanMetrics) {
         this.scanner = scanner;
         this.scanMetrics = scanMetrics;
     }
-    
+
     @Override
     public void close() throws SQLException {
         scanner.close();
@@ -70,11 +70,11 @@ public class ScanningResultIterator implements ResultIterator {
     public void explain(List<String> planSteps) {
     }
 
-	@Override
-	public String toString() {
-		return "ScanningResultIterator [scanner=" + scanner + "]";
-	}
-	
+    @Override
+    public String toString() {
+        return "ScanningResultIterator [scanner=" + scanner + "]";
+    }
+
     private void calculateScanSize(Result result) {
         if (GlobalClientMetrics.isMetricsEnabled() || scanMetrics != NoOpRequestMetric.INSTANCE) {
             if (result != null) {
@@ -88,5 +88,10 @@ public class ScanningResultIterator implements ResultIterator {
                 GLOBAL_SCAN_BYTES.update(scanResultSize);
             }
         }
+    }
+
+
+    public ResultScanner getScanner() {
+        return scanner;
     }
 }
