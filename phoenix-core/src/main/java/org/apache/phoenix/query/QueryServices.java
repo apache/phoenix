@@ -201,6 +201,9 @@ public interface QueryServices extends SQLCloseable {
     public static final String RUN_RENEW_LEASE_FREQUENCY_INTERVAL_MILLISECONDS = "phoenix.scanner.lease.renew.interval";
     public static final String RENEW_LEASE_THRESHOLD_MILLISECONDS = "phoenix.scanner.lease.threshold";
     public static final String RENEW_LEASE_THREAD_POOL_SIZE = "phoenix.scanner.lease.pool.size";
+    public static final String HCONNECTION_POOL_CORE_SIZE = "hbase.hconnection.threads.core";
+    public static final String HCONNECTION_POOL_MAX_SIZE = "hbase.hconnection.threads.max";
+    public static final String HTABLE_MAX_THREADS = "hbase.htable.threads.max";
 
     /**
      * Get executor service used for parallel scans
