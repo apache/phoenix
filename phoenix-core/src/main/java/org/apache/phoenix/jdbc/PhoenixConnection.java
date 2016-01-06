@@ -17,12 +17,14 @@
  */
 package org.apache.phoenix.jdbc;
 
+import static com.google.common.base.Preconditions.checkNotNull;
 import static java.util.Collections.emptyMap;
 
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.io.Reader;
+import java.lang.ref.WeakReference;
 import java.sql.Array;
 import java.sql.Blob;
 import java.sql.CallableStatement;
@@ -50,7 +52,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.Executor;
+import java.util.concurrent.LinkedBlockingQueue;
 
+import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 import org.apache.hadoop.hbase.HConstants;
@@ -61,10 +65,14 @@ import org.apache.phoenix.execute.CommitException;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.expression.function.FunctionArgumentType;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
+import org.apache.phoenix.iterate.DefaultTableResultIteratorFactory;
 import org.apache.phoenix.iterate.ParallelIteratorFactory;
+import org.apache.phoenix.iterate.TableResultIterator;
+import org.apache.phoenix.iterate.TableResultIteratorFactory;
 import org.apache.phoenix.jdbc.PhoenixStatement.PhoenixStatementParser;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.query.ConnectionQueryServices;
+import org.apache.phoenix.query.ConnectionQueryServices.Feature;
 import org.apache.phoenix.query.DelegateConnectionQueryServices;
 import org.apache.phoenix.query.MetaDataMutated;
 import org.apache.phoenix.query.QueryConstants;
@@ -100,6 +108,7 @@ import org.apache.phoenix.util.SQLCloseables;
 import org.cloudera.htrace.Sampler;
 import org.cloudera.htrace.TraceScope;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Objects;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
@@ -140,13 +149,15 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     private final String timestampPattern;
     private int statementExecutionCounter;
     private TraceScope traceScope = null;
-    private boolean isClosed = false;
+    private volatile boolean isClosed = false;
     private Sampler<?> sampler;
     private boolean readOnly = false;
     private Map<String, String> customTracingAnnotations = emptyMap();
     private final boolean isRequestLevelMetricsEnabled;
     private final boolean isDescVarLengthRowKeyUpgrade;
     private ParallelIteratorFactory parallelIteratorFactory;
+    private final LinkedBlockingQueue<WeakReference<TableResultIterator>> scannerQueue;
+    private TableResultIteratorFactory tableResultIteratorFactory;
     
     static {
         Tracing.addTraceMetricsSource();
@@ -273,6 +284,8 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         // setup tracing, if its enabled
         this.sampler = Tracing.getConfiguredSampler(this);
         this.customTracingAnnotations = getImmutableCustomTracingAnnotations();
+        this.scannerQueue = new LinkedBlockingQueue<>();
+        this.tableResultIteratorFactory = new DefaultTableResultIteratorFactory();
     }
     
     private static void checkScn(Long scnParam) throws SQLException {
@@ -988,5 +1001,28 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
      */
     public void setIteratorFactory(ParallelIteratorFactory parallelIteratorFactory) {
         this.parallelIteratorFactory = parallelIteratorFactory;
+    }
+    
+    public void addIterator(@Nonnull TableResultIterator itr) {
+        if (services.supportsFeature(Feature.RENEW_LEASE)) {
+            checkNotNull(itr);
+            scannerQueue.add(new WeakReference<TableResultIterator>(itr));
+        }
+    }
+    
+    public LinkedBlockingQueue<WeakReference<TableResultIterator>> getScanners() {
+        return scannerQueue;
+    }
+    
+    @VisibleForTesting
+    @Nonnull
+    public TableResultIteratorFactory getTableResultIteratorFactory() {
+        return tableResultIteratorFactory;
+    }
+    
+    @VisibleForTesting
+    public void setTableResultIteratorFactory(TableResultIteratorFactory factory) {
+        checkNotNull(factory);
+        this.tableResultIteratorFactory = factory;
     }
 }

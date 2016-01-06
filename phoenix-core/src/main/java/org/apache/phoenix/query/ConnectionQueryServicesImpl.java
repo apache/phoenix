@@ -17,15 +17,21 @@
  */
 package org.apache.phoenix.query;
 
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.apache.hadoop.hbase.HColumnDescriptor.TTL;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_MAJOR_VERSION;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_MINOR_VERSION;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_PATCH_NUMBER;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_DROP_METADATA;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_ENABLED;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_THREAD_POOL_SIZE;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_THRESHOLD_MILLISECONDS;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RUN_RENEW_LEASE_FREQUENCY_INTERVAL_MILLISECONDS;
 import static org.apache.phoenix.util.UpgradeUtil.upgradeTo4_5_0;
 
 import java.io.IOException;
+import java.lang.ref.WeakReference;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -35,16 +41,30 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Properties;
+import java.util.Random;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.annotation.concurrent.GuardedBy;
+
+import co.cask.tephra.TransactionSystemClient;
+import co.cask.tephra.TxConstants;
+import co.cask.tephra.distributed.PooledClientProvider;
+import co.cask.tephra.distributed.TransactionServiceClient;
+import co.cask.tephra.hbase98.coprocessor.TransactionProcessor;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HColumnDescriptor;
@@ -117,6 +137,8 @@ import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.index.PhoenixIndexBuilder;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.index.PhoenixTransactionalIndexer;
+import org.apache.phoenix.iterate.TableResultIterator;
+import org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
@@ -173,20 +195,16 @@ import org.apache.twill.zookeeper.ZKClients;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Throwables;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-
-import co.cask.tephra.TransactionSystemClient;
-import co.cask.tephra.TxConstants;
-import co.cask.tephra.distributed.PooledClientProvider;
-import co.cask.tephra.distributed.TransactionServiceClient;
-import co.cask.tephra.hbase98.coprocessor.TransactionProcessor;
 
 public class ConnectionQueryServicesImpl extends DelegateQueryServices implements ConnectionQueryServices {
     private static final Logger logger = LoggerFactory.getLogger(ConnectionQueryServicesImpl.class);
@@ -229,17 +247,31 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     // setting this member variable guarded by "connectionCountLock"
     private volatile ConcurrentMap<SequenceKey,Sequence> sequenceMap = Maps.newConcurrentMap();
     private KeyValueBuilder kvBuilder;
+    private final int renewLeaseTaskFrequency;
+    private final int renewLeasePoolSize;
+    private final int renewLeaseThreshold;
+    // List of queues instead of a single queue to provide reduced contention via lock striping
+    private final List<LinkedBlockingQueue<WeakReference<PhoenixConnection>>> connectionQueues;
+    private ScheduledExecutorService renewLeaseExecutor;
+    private final boolean renewLeaseEnabled;
 
     private static interface FeatureSupported {
         boolean isSupported(ConnectionQueryServices services);
     }
     
     private final Map<Feature, FeatureSupported> featureMap = ImmutableMap.<Feature, FeatureSupported>of(
-            Feature.LOCAL_INDEX, new FeatureSupported(){
+            Feature.LOCAL_INDEX, new FeatureSupported() {
                 @Override
                 public boolean isSupported(ConnectionQueryServices services) {
                     int hbaseVersion = services.getLowestClusterHBaseVersion();
                     return hbaseVersion < PhoenixDatabaseMetaData.MIN_LOCAL_SI_VERSION_DISALLOW || hbaseVersion > PhoenixDatabaseMetaData.MAX_LOCAL_SI_VERSION_DISALLOW;
+                }
+            },
+            Feature.RENEW_LEASE, new FeatureSupported() {
+                @Override
+                public boolean isSupported(ConnectionQueryServices services) {
+                    int hbaseVersion = services.getLowestClusterHBaseVersion();
+                    return hbaseVersion >= PhoenixDatabaseMetaData.MIN_RENEW_LEASE_VERSION;
                 }
             });
     
@@ -288,13 +320,23 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         String hbaseVersion = VersionInfo.getVersion();
         this.kvBuilder = KeyValueBuilder.get(hbaseVersion);
         long halfStatsUpdateFreq = config.getLong(
-                QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB,
-                QueryServicesOptions.DEFAULT_STATS_UPDATE_FREQ_MS) / 2;
+            QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB,
+            QueryServicesOptions.DEFAULT_STATS_UPDATE_FREQ_MS) / 2;
         tableStatsCache = CacheBuilder.newBuilder()
                 .maximumSize(MAX_TABLE_STATS_CACHE_ENTRIES)
                 .expireAfterWrite(halfStatsUpdateFreq, TimeUnit.MILLISECONDS)
                 .build();
         this.returnSequenceValues = props.getBoolean(QueryServices.RETURN_SEQUENCE_VALUES_ATTRIB, QueryServicesOptions.DEFAULT_RETURN_SEQUENCE_VALUES);
+        this.renewLeaseEnabled = config.getBoolean(RENEW_LEASE_ENABLED, DEFAULT_RENEW_LEASE_ENABLED);
+        this.renewLeasePoolSize = config.getInt(RENEW_LEASE_THREAD_POOL_SIZE, DEFAULT_RENEW_LEASE_THREAD_POOL_SIZE);
+        this.renewLeaseThreshold = config.getInt(RENEW_LEASE_THRESHOLD_MILLISECONDS, DEFAULT_RENEW_LEASE_THRESHOLD_MILLISECONDS);
+        this.renewLeaseTaskFrequency = config.getInt(RUN_RENEW_LEASE_FREQUENCY_INTERVAL_MILLISECONDS, DEFAULT_RUN_RENEW_LEASE_FREQUENCY_INTERVAL_MILLISECONDS);
+        List<LinkedBlockingQueue<WeakReference<PhoenixConnection>>> list = Lists.newArrayListWithCapacity(renewLeasePoolSize);
+        for (int i = 0; i < renewLeasePoolSize; i++) {
+            LinkedBlockingQueue<WeakReference<PhoenixConnection>> queue = new LinkedBlockingQueue<WeakReference<PhoenixConnection>>();
+            list.add(queue);
+        }
+        connectionQueues = ImmutableList.copyOf(list);
     }
 
     @Override
@@ -409,6 +451,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             } finally {
                 try {
                     childServices.clear();
+                    if (renewLeaseExecutor != null) {
+                        renewLeaseExecutor.shutdownNow();
+                    }
                     synchronized (latestMetaDataLock) {
                         latestMetaData = null;
                         latestMetaDataLock.notifyAll();
@@ -2238,6 +2283,17 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             String tableName, long timestamp, String columns) throws SQLException {
         return addColumn(oldMetaConnection, tableName, timestamp, columns, true);
     }
+    
+    private static class RenewLeaseThreadFactory implements ThreadFactory {
+        private final AtomicInteger counter = new AtomicInteger(1);
+
+        @Override
+        public Thread newThread(Runnable r) {
+            Thread t = new Thread(r);
+            t.setName("Phoenix-Scanner-Renewlease-" + counter.getAndIncrement());
+            return t;
+        }
+    }
 
     @Override
     public void init(final String url, final Properties props) throws SQLException {
@@ -2435,8 +2491,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             } catch (NewerTableAlreadyExistsException e) {
                             } catch (TableAlreadyExistsException e) {
                             }
-                            
-
+                            scheduleRenewLeaseTasks();
                         } catch (Exception e) {
                             if (e instanceof SQLException) {
                                 initializationException = (SQLException)e;
@@ -2472,6 +2527,19 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             throw Throwables.propagate(e);
         }
     }
+    
+    private void scheduleRenewLeaseTasks() {
+        if (isRenewingLeasesEnabled()) {
+            renewLeaseExecutor =
+                    Executors.newScheduledThreadPool(renewLeasePoolSize,
+                        new RenewLeaseThreadFactory());
+            for (LinkedBlockingQueue<WeakReference<PhoenixConnection>> q : connectionQueues) {
+                renewLeaseExecutor.scheduleAtFixedRate(new RenewLeaseTask(q), 0,
+                    renewLeaseTaskFrequency, TimeUnit.MILLISECONDS);
+            }
+        }
+    }
+
     
     private static int getSaltBuckets(TableAlreadyExistsException e) {
         PTable table = e.getTable();
@@ -2951,6 +3019,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     @Override
     public void addConnection(PhoenixConnection connection) throws SQLException {
+        connectionQueues.get(getQueueIndex(connection)).add(new WeakReference<PhoenixConnection>(connection));
     	if (returnSequenceValues) {
 	        synchronized (connectionCountLock) {
 	            connectionCount++;
@@ -2977,6 +3046,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 	            returnAllSequences(formerSequenceMap);
 	        }
     	}
+    }
+    
+    private int getQueueIndex(PhoenixConnection conn) {
+        return ThreadLocalRandom.current().nextInt(renewLeasePoolSize);
     }
 
     @Override
@@ -3146,5 +3219,103 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     }
         }, PhoenixDatabaseMetaData.SYSTEM_FUNCTION_NAME_BYTES);
         return result;
+    }
+    
+    @VisibleForTesting
+    static class RenewLeaseTask implements Runnable {
+
+        private final LinkedBlockingQueue<WeakReference<PhoenixConnection>> connectionsQueue;
+        private final Random random = new Random();
+        private static final int MAX_WAIT_TIME = 1000;
+
+        RenewLeaseTask(LinkedBlockingQueue<WeakReference<PhoenixConnection>> queue) {
+            this.connectionsQueue = queue;
+        }
+
+        private void waitForRandomDuration() {
+            try {
+                new CountDownLatch(1).await(random.nextInt(MAX_WAIT_TIME), MILLISECONDS);
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+                logger.warn("Exception encountered while waiting before renewing leases: " + ex);
+            }
+        }
+
+        @Override
+        public void run() {
+            int numConnections = connectionsQueue.size();
+            boolean wait = true;
+            // We keep adding items to the end of the queue. So to stop the loop, iterate only up to
+            // whatever the current count is.
+            while (numConnections > 0) {
+                if (wait) {
+                    // wait for some random duration to prevent all threads from renewing lease at
+                    // the same time.
+                    waitForRandomDuration();
+                    wait = false;
+                }
+                // It is guaranteed that this poll won't hang indefinitely because this is the
+                // only thread that removes items from the queue.
+                WeakReference<PhoenixConnection> connRef = connectionsQueue.poll();
+                PhoenixConnection conn = connRef.get();
+                try {
+                    if (conn != null && !conn.isClosed()) {
+                        LinkedBlockingQueue<WeakReference<TableResultIterator>> scannerQueue =
+                                conn.getScanners();
+                        // We keep adding items to the end of the queue. So to stop the loop,
+                        // iterate only up to whatever the current count is.
+                        int numScanners = scannerQueue.size();
+                        int renewed = 0;
+                        long start = System.currentTimeMillis();
+                        while (numScanners > 0) {
+                            WeakReference<TableResultIterator> ref = scannerQueue.poll();
+                            TableResultIterator scanningItr = ref.get();
+                            if (scanningItr != null) {
+                                RenewLeaseStatus status = scanningItr.renewLease();
+                                switch (status) {
+                                case RENEWED:
+                                    renewed++;
+                                    // add it back at the tail
+                                    scannerQueue.offer(new WeakReference<TableResultIterator>(
+                                            scanningItr));
+                                    logger.info("Lease renewed for scanner: " + scanningItr);
+                                    break;
+                                case UNINITIALIZED:
+                                case THRESHOLD_NOT_REACHED:
+                                    // add it back at the tail
+                                    scannerQueue.offer(new WeakReference<TableResultIterator>(
+                                            scanningItr));
+                                    break;
+                                // if lease wasn't renewed or scanner was closed, don't add the
+                                // scanner back to the queue.
+                                case CLOSED:
+                                case NOT_RENEWED:
+                                    break;
+                                }
+                            }
+                            numScanners--;
+                        }
+                        if (renewed > 0) {
+                            logger.info("Renewed leases for " + renewed + " scanner/s in "
+                                    + (System.currentTimeMillis() - start) + " ms ");
+                        }
+                        connectionsQueue.offer(connRef);
+                    }
+                } catch (Exception e) {
+                    logger.warn("Exception encountered when renewing lease: " + e);
+                }
+                numConnections--;
+            }
+        }
+    }
+
+    @Override
+    public long getRenewLeaseThresholdMilliSeconds() {
+        return renewLeaseThreshold;
+    }
+
+    @Override
+    public boolean isRenewingLeasesEnabled() {
+        return supportsFeature(ConnectionQueryServices.Feature.RENEW_LEASE) && renewLeaseEnabled;
     }
 }

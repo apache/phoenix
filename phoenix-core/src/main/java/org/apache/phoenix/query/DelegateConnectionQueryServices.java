@@ -265,6 +265,7 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
         return getDelegate().getTransactionSystemClient();
     }
 
+    @Override
     public MetaDataMutationResult createFunction(List<Mutation> functionData, PFunction function, boolean temporary)
             throws SQLException {
         return getDelegate().createFunction(functionData, function, temporary);
@@ -292,5 +293,15 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     public MetaDataMutationResult dropFunction(List<Mutation> tableMetadata, boolean ifExists)
             throws SQLException {
         return getDelegate().dropFunction(tableMetadata, ifExists);
+    }
+
+    @Override
+    public long getRenewLeaseThresholdMilliSeconds() {
+        return getDelegate().getRenewLeaseThresholdMilliSeconds();
+    }
+
+    @Override
+    public boolean isRenewingLeasesEnabled() {
+        return getDelegate().isRenewingLeasesEnabled();
     }
 }

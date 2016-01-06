@@ -567,4 +567,14 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
             throws SQLException {
         return new MetaDataMutationResult(MutationCode.FUNCTION_ALREADY_EXISTS, 0, null);
     }
+
+    @Override
+    public long getRenewLeaseThresholdMilliSeconds() {
+        return 0;
+    }
+
+    @Override
+    public boolean isRenewingLeasesEnabled() {
+        return false;
+    }
 }

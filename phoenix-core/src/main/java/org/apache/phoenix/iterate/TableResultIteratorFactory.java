@@ -18,30 +18,12 @@
 package org.apache.phoenix.iterate;
 
 import java.sql.SQLException;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.compile.StatementContext;
-import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.monitoring.CombinableMetric;
+import org.apache.phoenix.schema.TableRef;
 
-/**
- * Iterator factory that creates {@code MockTableResultIterator}
- */
-public class MockParallelIteratorFactory implements ParallelIteratorFactory {
-    private static final AtomicInteger counter = new AtomicInteger(1);
-    private PTable table;
-    
-    @Override
-    public PeekingResultIterator newIterator(StatementContext context, ResultIterator scanner, Scan scan,
-            String physicalTableName) throws SQLException {
-        return new MockResultIterator(String.valueOf(counter.incrementAndGet()), table);
-    }
-    
-    public void setTable(PTable table) {
-        this.table = table;
-    }
-    
+public interface TableResultIteratorFactory {
+    public TableResultIterator newIterator(StatementContext context, TableRef tableRef, Scan scan, CombinableMetric scanMetrics, long renewLeaseThreshold) throws SQLException;        
 }
-
-    
-

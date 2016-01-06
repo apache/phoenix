@@ -36,11 +36,11 @@ import org.apache.phoenix.schema.tuple.Tuple;
 /**
  * Mock result iterator that returns its id as a string in a {@code Tuple} when {@link #next()} and {@link #peek()} are called. 
  */
-public class MockTableResultIterator implements PeekingResultIterator {
+public class MockResultIterator implements PeekingResultIterator {
 
     private final Tuple tuple;
 
-    public MockTableResultIterator(String id, PTable table) {
+    public MockResultIterator(String id, PTable table) {
         TupleProjector projector = new TupleProjector(table);
         List<Cell> result = new ArrayList<>();
         result.add(new KeyValue(Bytes.toBytes(id), SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, Bytes.toBytes(id)));

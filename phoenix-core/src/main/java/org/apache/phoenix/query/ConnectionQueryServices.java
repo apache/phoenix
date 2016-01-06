@@ -108,7 +108,7 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
      */
     public KeyValueBuilder getKeyValueBuilder();
     
-    public enum Feature {LOCAL_INDEX};
+    public enum Feature {LOCAL_INDEX, RENEW_LEASE};
     public boolean supportsFeature(Feature feature);
     
     public String getUserName();
@@ -120,4 +120,6 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
     public int getSequenceSaltBuckets();
 
     TransactionSystemClient getTransactionSystemClient();
+    public long getRenewLeaseThresholdMilliSeconds();
+    public boolean isRenewingLeasesEnabled();
 }
