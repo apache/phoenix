@@ -107,9 +107,10 @@ public class PhoenixRecordReader<T extends DBWritable> extends RecordReader<Null
             StatementContext ctx = queryPlan.getContext();
             ReadMetricQueue readMetrics = ctx.getReadMetricsQueue();
             String tableName = queryPlan.getTableRef().getTable().getPhysicalName().getString();
+            long renewScannerLeaseThreshold = queryPlan.getContext().getConnection().getQueryServices().getRenewLeaseThresholdMilliSeconds();
             for (Scan scan : scans) {
                 final TableResultIterator tableResultIterator = new TableResultIterator(queryPlan.getContext().getConnection().getMutationState(),
-                        queryPlan.getTableRef(), scan, readMetrics.allotMetric(SCAN_BYTES, tableName));
+                        queryPlan.getTableRef(), scan, readMetrics.allotMetric(SCAN_BYTES, tableName), renewScannerLeaseThreshold);
                 PeekingResultIterator peekingResultIterator = LookAheadResultIterator.wrap(tableResultIterator);
                 iterators.add(peekingResultIterator);
             }

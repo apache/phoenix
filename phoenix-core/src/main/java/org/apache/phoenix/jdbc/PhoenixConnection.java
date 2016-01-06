@@ -108,8 +108,14 @@ import com.google.common.collect.ImmutableMap.Builder;
 import com.google.common.collect.Lists;
 
 import co.cask.tephra.TransactionContext;
-
-
+import java.lang.ref.WeakReference;
+import java.util.concurrent.LinkedBlockingQueue;
+import javax.annotation.Nonnull;
+import org.apache.phoenix.iterate.DefaultTableResultIteratorFactory;
+import org.apache.phoenix.iterate.TableResultIterator;
+import org.apache.phoenix.iterate.TableResultIteratorFactory;
+import com.google.common.annotations.VisibleForTesting;
+import static com.google.common.base.Preconditions.checkNotNull;
 /**
  * 
  * JDBC Connection implementation of Phoenix.
@@ -141,7 +147,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     private final String timestampPattern;
     private int statementExecutionCounter;
     private TraceScope traceScope = null;
-    private boolean isClosed = false;
+    private volatile boolean isClosed = false;
     private Sampler<?> sampler;
     private boolean readOnly = false;
     private Consistency consistency = Consistency.STRONG;
@@ -150,6 +156,9 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     private final boolean isDescVarLengthRowKeyUpgrade;
     private ParallelIteratorFactory parallelIteratorFactory;
     
+    private final LinkedBlockingQueue<WeakReference<TableResultIterator>> scannerQueue;
+    private TableResultIteratorFactory tableResultIteratorFactory;
+
     static {
         Tracing.addTraceMetricsSource();
     }
@@ -278,6 +287,8 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         // setup tracing, if its enabled
         this.sampler = Tracing.getConfiguredSampler(this);
         this.customTracingAnnotations = getImmutableCustomTracingAnnotations();
+        this.scannerQueue = new LinkedBlockingQueue<>();
+        this.tableResultIteratorFactory = new DefaultTableResultIteratorFactory();
     }
     
     private static void checkScn(Long scnParam) throws SQLException {
@@ -1001,5 +1012,28 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
      */
     public void setIteratorFactory(ParallelIteratorFactory parallelIteratorFactory) {
         this.parallelIteratorFactory = parallelIteratorFactory;
+    }
+    
+    public void addIterator(@Nonnull TableResultIterator itr) {
+        if (services.supportsFeature(ConnectionQueryServices.Feature.RENEW_LEASE)) {
+            checkNotNull(itr);
+            scannerQueue.add(new WeakReference<TableResultIterator>(itr));
+        }
+    }
+
+    public LinkedBlockingQueue<WeakReference<TableResultIterator>> getScanners() {
+        return scannerQueue;
+    }
+
+    @VisibleForTesting
+    @Nonnull
+    public TableResultIteratorFactory getTableResultIteratorFactory() {
+        return tableResultIteratorFactory;
+    }
+
+    @VisibleForTesting
+    public void setTableResultIteratorFactory(TableResultIteratorFactory factory) {
+        checkNotNull(factory);
+        this.tableResultIteratorFactory = factory;
     }
 }
