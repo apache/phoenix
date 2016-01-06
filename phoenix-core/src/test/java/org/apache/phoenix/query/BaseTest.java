@@ -112,6 +112,12 @@ import java.util.concurrent.TimeUnit;
 
 import javax.annotation.Nonnull;
 
+import co.cask.tephra.TransactionManager;
+import co.cask.tephra.TxConstants;
+import co.cask.tephra.distributed.TransactionService;
+import co.cask.tephra.metrics.TxMetricsCollector;
+import co.cask.tephra.persist.InMemoryTransactionStateStorage;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
@@ -127,8 +133,8 @@ import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
 import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
 import org.apache.hadoop.hbase.ipc.controller.ServerRpcControllerFactory;
-import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.master.LoadBalancer;
+import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.regionserver.LocalIndexMerger;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.BaseClientManagedTimeIT;
@@ -162,12 +168,6 @@ import org.junit.ClassRule;
 import org.junit.rules.TemporaryFolder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import co.cask.tephra.TransactionManager;
-import co.cask.tephra.TxConstants;
-import co.cask.tephra.distributed.TransactionService;
-import co.cask.tephra.metrics.TxMetricsCollector;
-import co.cask.tephra.persist.InMemoryTransactionStateStorage;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
@@ -549,7 +549,6 @@ public abstract class BaseTest {
         if (!clusterInitialized) {
             url = setUpTestCluster(config, overrideProps);
             clusterInitialized = true;
-            setupTxManager();
         }
         return url;
     }
@@ -573,6 +572,7 @@ public abstract class BaseTest {
                 assertTrue(destroyDriver(driver));
             } finally {
                 driver = null;
+                teardownTxManager();
             }
         }
     }
@@ -594,12 +594,8 @@ public abstract class BaseTest {
                     utility.shutdownMiniCluster();
                 }
             } finally {
-                try {
-                    teardownTxManager();
-                } finally {
-                    utility = null;
-                    clusterInitialized = false;
-                }
+                utility = null;
+                clusterInitialized = false;
             }
         }
     }
@@ -612,6 +608,9 @@ public abstract class BaseTest {
         String url = checkClusterInitialized(serverProps);
         if (driver == null) {
             driver = initAndRegisterDriver(url, clientProps);
+            if (clientProps.getBoolean(QueryServices.TRANSACTIONS_ENABLED, QueryServicesOptions.DEFAULT_TRANSACTIONS_ENABLED)) {
+                setupTxManager();
+            }
         }
     }
 
@@ -712,9 +711,6 @@ public abstract class BaseTest {
         conf.setInt("dfs.datanode.handler.count", 2);
         conf.setInt("ipc.server.read.threadpool.size", 2);
         conf.setInt("ipc.server.handler.threadpool.size", 2);
-        conf.setInt("hbase.hconnection.threads.max", 2);
-        conf.setInt("hbase.hconnection.threads.core", 2);
-        conf.setInt("hbase.htable.threads.max", 2);
         conf.setInt("hbase.regionserver.hlog.syncer.count", 2);
         conf.setInt("hbase.hlog.asyncer.number", 2);
         conf.setInt("hbase.assignment.zkevent.workers", 5);
@@ -734,7 +730,8 @@ public abstract class BaseTest {
         if (oldDriver != newDriver) {
             destroyDriver(oldDriver);
         }
-        Connection conn = newDriver.connect(url, PropertiesUtil.deepCopy(TEST_PROPERTIES));
+        Properties driverProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = newDriver.connect(url, driverProps);
         conn.close();
         return newDriver;
     }
