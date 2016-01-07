@@ -18,14 +18,9 @@
 
 package org.apache.phoenix.pherf;
 
-import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
-import org.apache.phoenix.pherf.configuration.Column;
-import org.apache.phoenix.pherf.configuration.DataModel;
-import org.apache.phoenix.pherf.configuration.Scenario;
-import org.apache.phoenix.pherf.configuration.XMLConfigParser;
-import org.apache.phoenix.pherf.schema.SchemaReader;
-import org.apache.phoenix.pherf.util.PhoenixUtil;
-import org.junit.Test;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.net.URL;
 import java.nio.file.Path;
@@ -34,12 +29,22 @@ import java.sql.Connection;
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.junit.Assert.*;
+import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
+import org.apache.phoenix.pherf.configuration.Column;
+import org.apache.phoenix.pherf.configuration.DataModel;
+import org.apache.phoenix.pherf.configuration.Scenario;
+import org.apache.phoenix.pherf.configuration.XMLConfigParser;
+import org.apache.phoenix.pherf.schema.SchemaReader;
+import org.apache.phoenix.pherf.util.PhoenixUtil;
+import org.junit.Ignore;
+import org.junit.Test;
 
 public class SchemaReaderIT extends BaseHBaseManagedTimeIT {
     protected static PhoenixUtil util = PhoenixUtil.create(true);
 
-    @Test public void testSchemaReader() {
+    @Test 
+    @Ignore("Until PHOENIX-2573 is fixed")
+    public void testSchemaReader() {
         // Test for the unit test version of the schema files.
         assertApplySchemaTest();
     }

@@ -18,8 +18,18 @@
 
 package org.apache.phoenix.pherf;
 
-import com.jcabi.jdbc.JdbcSession;
-import com.jcabi.jdbc.Outcome;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
 import org.apache.phoenix.pherf.PherfConstants.GeneratePhoenixStats;
 import org.apache.phoenix.pherf.configuration.Column;
@@ -34,18 +44,11 @@ import org.apache.phoenix.pherf.workload.Workload;
 import org.apache.phoenix.pherf.workload.WorkloadExecutor;
 import org.apache.phoenix.pherf.workload.WriteWorkload;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
-
-import java.sql.Connection;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-
-import static org.junit.Assert.*;
+import com.jcabi.jdbc.JdbcSession;
+import com.jcabi.jdbc.Outcome;
 
 public class DataIngestIT extends ResultBaseTestIT {
 
@@ -59,6 +62,7 @@ public class DataIngestIT extends ResultBaseTestIT {
     }
 
     @Test
+    @Ignore("Until PHOENIX-2573 is fixed")
     public void testColumnRulesApplied() {
 
         Scenario scenario = null;
@@ -111,6 +115,7 @@ public class DataIngestIT extends ResultBaseTestIT {
     }
 
     @Test
+    @Ignore("Until PHOENIX-2573 is fixed")
     public void testRWWorkload() throws Exception {
 
         Connection connection = util.getConnection();
