@@ -30,6 +30,7 @@ import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.Test;
 
@@ -80,5 +81,21 @@ public class OrderByTest extends BaseConnectionlessQueryTest {
         assertEquals("ab", Bytes.toString(SortOrder.invert(first.getRowArray(), first.getRowOffset(), 2)));
         KeyValue second = kvs.get(1);
         assertEquals("a", Bytes.toString(SortOrder.invert(second.getRowArray(), second.getRowOffset(), 1)));
+    }
+
+    @Test
+    public void testSortOrderForSingleDescTimestampCol() throws SQLException {
+        Connection conn = DriverManager.getConnection(getUrl());
+        java.sql.Timestamp timestamp = new java.sql.Timestamp(1451913111631L);
+        conn.createStatement().execute("CREATE TABLE t (k TIMESTAMP PRIMARY KEY DESC)");
+        conn.createStatement().execute("UPSERT INTO t VALUES ('" + timestamp.toString() + "')");
+
+        Iterator<Pair<byte[],List<KeyValue>>> dataIterator = PhoenixRuntime.getUncommittedDataIterator(conn);
+        List<KeyValue> kvs = dataIterator.next().getSecond();
+        Collections.sort(kvs, KeyValue.COMPARATOR);
+        KeyValue first = kvs.get(0);
+        long millisDeserialized = PDate.INSTANCE.getCodec().decodeLong(first.getRowArray(), first.getRowOffset(), SortOrder.DESC);
+        java.sql.Timestamp timestampResult = new java.sql.Timestamp(millisDeserialized);
+        assertEquals(1451913111631L, timestampResult.getTime());
     }
 }
