@@ -139,6 +139,7 @@ public class PUnsignedSmallint extends PWholeNumber<Short> {
       checkForSufficientLength(b, o, Bytes.SIZEOF_SHORT);
       if (sortOrder == SortOrder.DESC) {
         b = SortOrder.invert(b, o, new byte[Bytes.SIZEOF_SHORT], 0, Bytes.SIZEOF_SHORT);
+        o = 0;
       }
       short v = Bytes.toShort(b, o);
       if (v < 0) {

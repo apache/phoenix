@@ -1269,6 +1269,7 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
                         offsetPos.add(byteStream.size());
                         if (sortOrder == SortOrder.DESC) {
                             SortOrder.invert(bytes, offset, bytes, offset, len);
+                            offset = 0;
                         }
                         oStream.write(bytes, offset, len);
                         oStream.write(getSeparatorByte(true, sortOrder));
@@ -1276,6 +1277,7 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
                 } else {
                     if (sortOrder == SortOrder.DESC) {
                         SortOrder.invert(bytes, offset, bytes, offset, len);
+                        offset = 0;
                     }
                     oStream.write(bytes, offset, len);
                 }
