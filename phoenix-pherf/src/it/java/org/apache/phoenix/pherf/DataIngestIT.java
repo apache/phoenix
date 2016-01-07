@@ -62,7 +62,6 @@ public class DataIngestIT extends ResultBaseTestIT {
     }
 
     @Test
-    @Ignore("Until PHOENIX-2573 is fixed")
     public void testColumnRulesApplied() {
 
         Scenario scenario = null;
@@ -115,7 +114,6 @@ public class DataIngestIT extends ResultBaseTestIT {
     }
 
     @Test
-    @Ignore("Until PHOENIX-2573 is fixed")
     public void testRWWorkload() throws Exception {
 
         Connection connection = util.getConnection();

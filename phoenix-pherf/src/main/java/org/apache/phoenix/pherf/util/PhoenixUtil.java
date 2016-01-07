@@ -147,19 +147,13 @@ public class PhoenixUtil {
         return result;
     }
 
-    public boolean executeStatement(String sql, Connection connection) {
+    public boolean executeStatement(String sql, Connection connection) throws SQLException{
         boolean result = false;
         PreparedStatement preparedStatement = null;
         try {
             preparedStatement = connection.prepareStatement(sql);
             result = preparedStatement.execute();
             connection.commit();
-        } catch (SQLException e) {
-            e.printStackTrace();
-            if(preparedStatement != null) {
-                logger.error("Failed to apply schema. Statement (" + preparedStatement.toString() + ")",
-                        e.getMessage());
-            }
         } finally {
             try {
                 if (preparedStatement != null) {

@@ -26,6 +26,7 @@ import java.net.URL;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.sql.Connection;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -36,14 +37,12 @@ import org.apache.phoenix.pherf.configuration.Scenario;
 import org.apache.phoenix.pherf.configuration.XMLConfigParser;
 import org.apache.phoenix.pherf.schema.SchemaReader;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
-import org.junit.Ignore;
 import org.junit.Test;
 
 public class SchemaReaderIT extends BaseHBaseManagedTimeIT {
     protected static PhoenixUtil util = PhoenixUtil.create(true);
 
     @Test 
-    @Ignore("Until PHOENIX-2573 is fixed")
     public void testSchemaReader() {
         // Test for the unit test version of the schema files.
         assertApplySchemaTest();
@@ -57,10 +56,13 @@ public class SchemaReaderIT extends BaseHBaseManagedTimeIT {
             List<Path> resources = new ArrayList<>(reader.getResourceList());
             assertTrue("Could not pull list of schema files.", resources.size() > 0);
             assertNotNull("Could not read schema file.", this.getClass().getResourceAsStream(
-                    PherfConstants.RESOURCE_DATAMODEL + "/" + resources.get(0).getFileName()
-                            .toString()));
+                PherfConstants.RESOURCE_DATAMODEL + "/" + resources.get(0).getFileName().toString()));
             assertNotNull("Could not read schema file.", reader.resourceToString(resources.get(0)));
-            reader.applySchema();
+            try {
+                reader.applySchema();
+            } catch (SQLException e) {
+                fail("Failed to apply schema " + e.getMessage());
+            }
 
             Connection connection = null;
             URL resourceUrl = getClass().getResource("/scenario/test_scenario.xml");
