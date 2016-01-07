@@ -2290,6 +2290,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         @Override
         public Thread newThread(Runnable r) {
             Thread t = new Thread(r);
+            t.setDaemon(true);
             t.setName("Phoenix-Scanner-Renewlease-" + counter.getAndIncrement());
             return t;
         }
