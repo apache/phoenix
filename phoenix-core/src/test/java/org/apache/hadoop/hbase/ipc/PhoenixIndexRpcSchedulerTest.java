@@ -60,7 +60,8 @@ public class PhoenixIndexRpcSchedulerTest {
         queue.poll(20, TimeUnit.SECONDS);
 
         Mockito.verify(mock, Mockito.times(2)).init(Mockito.any(Context.class));
-        Mockito.verifyNoMoreInteractions(mock);
+        scheduler.stop();
+        executor.stop();
     }
 
     /**
@@ -82,7 +83,7 @@ public class PhoenixIndexRpcSchedulerTest {
 
         Mockito.verify(mock, Mockito.times(4)).init(Mockito.any(Context.class));
         Mockito.verify(mock, Mockito.times(4)).dispatch(Mockito.any(CallRunner.class));
-        Mockito.verifyNoMoreInteractions(mock);
+        scheduler.stop();
     }
 
     private void dispatchCallWithPriority(RpcScheduler scheduler, int priority) throws Exception {
@@ -97,5 +98,6 @@ public class PhoenixIndexRpcSchedulerTest {
 
         Mockito.verify(task).getCall();
         Mockito.verifyNoMoreInteractions(task);
+        server.stop();
     }
 }
