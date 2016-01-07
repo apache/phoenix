@@ -31,16 +31,6 @@
   </formats>
   <includeBaseDirectory>false</includeBaseDirectory>
 
-  <containerDescriptorHandlers>
-    <containerDescriptorHandler>
-      <!--
-          aggregate SPI's so that things like HDFS FileSystem works in uberjar
-          http://docs.oracle.com/javase/tutorial/sound/SPI-intro.html
-      -->
-      <handlerName>metaInf-services</handlerName>
-    </containerDescriptorHandler>
-  </containerDescriptorHandlers>
-
   <componentDescriptors>
     <componentDescriptor>src/build/components-minimal.xml</componentDescriptor>
   </componentDescriptors>
@@ -59,7 +49,6 @@
         <include>commons-codec:commons-codec</include>
         <include>co.cask.tephra:tephra*</include>
         <include>org.apache.twill:twill*</include>
-        <include>org.apache.thrift:*</include>
         <include>com.google.code.gson:gson*</include>
         <!-- We use a newer version of guava than HBase - this might be an issue? -->
         <include>com.google.guava:guava</include>
@@ -75,8 +64,6 @@
         <include>commons-lang:commons-lang</include>
         <include>commons-cli:commons-cli</include>
         <include>org.apache.commons:commons-csv</include>
-        <include>org.codehaus.jackson:jackson-mapper-asl</include>
-        <include>org.codehaus.jackson:jackson-core-asl</include>
         <include>commons-collections:commons-collections</include>
         <include>joda-time:joda-time</include>
         <include>org.jruby.joni:joni</include>
