@@ -31,9 +31,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import com.jcabi.jdbc.JdbcSession;
-import com.jcabi.jdbc.Outcome;
-
 import org.apache.phoenix.pherf.PherfConstants.GeneratePhoenixStats;
 import org.apache.phoenix.pherf.configuration.Column;
 import org.apache.phoenix.pherf.configuration.DataModel;
@@ -47,7 +44,11 @@ import org.apache.phoenix.pherf.workload.Workload;
 import org.apache.phoenix.pherf.workload.WorkloadExecutor;
 import org.apache.phoenix.pherf.workload.WriteWorkload;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
+
+import com.jcabi.jdbc.JdbcSession;
+import com.jcabi.jdbc.Outcome;
 
 public class DataIngestIT extends ResultBaseTestIT {
 
@@ -61,6 +62,7 @@ public class DataIngestIT extends ResultBaseTestIT {
     }
 
     @Test
+    @Ignore("Until PHOENIX-2573 is fixed")
     public void testColumnRulesApplied() {
 
         Scenario scenario = null;
@@ -113,6 +115,7 @@ public class DataIngestIT extends ResultBaseTestIT {
     }
 
     @Test
+    @Ignore("Until PHOENIX-2573 is fixed")
     public void testRWWorkload() throws Exception {
 
         Connection connection = util.getConnection();
