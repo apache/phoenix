@@ -39,6 +39,7 @@ public class PColumnImpl implements PColumn {
     private boolean isViewReferenced;
     private String expressionStr;
     private boolean isRowTimestamp;
+    private boolean isDynamic;
     
     public PColumnImpl() {
     }
@@ -50,13 +51,13 @@ public class PColumnImpl implements PColumn {
                        Integer scale,
                        boolean nullable,
                        int position,
-                       SortOrder sortOrder, Integer arrSize, byte[] viewConstant, boolean isViewReferenced, String expressionStr, boolean isRowTimestamp) {
-        init(name, familyName, dataType, maxLength, scale, nullable, position, sortOrder, arrSize, viewConstant, isViewReferenced, expressionStr, isRowTimestamp);
+                       SortOrder sortOrder, Integer arrSize, byte[] viewConstant, boolean isViewReferenced, String expressionStr, boolean isRowTimestamp, boolean isDynamic) {
+        init(name, familyName, dataType, maxLength, scale, nullable, position, sortOrder, arrSize, viewConstant, isViewReferenced, expressionStr, isRowTimestamp, isDynamic);
     }
 
     public PColumnImpl(PColumn column, int position) {
         this(column.getName(), column.getFamilyName(), column.getDataType(), column.getMaxLength(),
-                column.getScale(), column.isNullable(), position, column.getSortOrder(), column.getArraySize(), column.getViewConstant(), column.isViewReferenced(), column.getExpressionStr(), column.isRowTimestamp());
+                column.getScale(), column.isNullable(), position, column.getSortOrder(), column.getArraySize(), column.getViewConstant(), column.isViewReferenced(), column.getExpressionStr(), column.isRowTimestamp(), column.isDynamic());
     }
 
     private void init(PName name,
@@ -68,7 +69,7 @@ public class PColumnImpl implements PColumn {
             int position,
             SortOrder sortOrder,
             Integer arrSize,
-            byte[] viewConstant, boolean isViewReferenced, String expressionStr, boolean isRowTimestamp) {
+            byte[] viewConstant, boolean isViewReferenced, String expressionStr, boolean isRowTimestamp, boolean isDynamic) {
     	Preconditions.checkNotNull(sortOrder);
         this.dataType = dataType;
         if (familyName == null) {
@@ -92,6 +93,7 @@ public class PColumnImpl implements PColumn {
         this.isViewReferenced = isViewReferenced;
         this.expressionStr = expressionStr;
         this.isRowTimestamp = isRowTimestamp;
+        this.isDynamic = isDynamic;
     }
 
     @Override
@@ -198,6 +200,11 @@ public class PColumnImpl implements PColumn {
     public boolean isRowTimestamp() {
         return isRowTimestamp;
     }
+    
+    @Override
+    public boolean isDynamic() {
+        return isDynamic;
+    }
 
     /**
      * Create a PColumn instance from PBed PColumn instance
@@ -240,8 +247,12 @@ public class PColumnImpl implements PColumn {
 	        expressionStr = column.getExpression();
         }
         boolean isRowTimestamp = column.getIsRowTimestamp();
+        boolean isDynamic = false;
+        if (column.hasIsDynamic()) {
+        	isDynamic = column.getIsDynamic();
+        }
         return new PColumnImpl(columnName, familyName, dataType, maxLength, scale, nullable, position, sortOrder,
-                arraySize, viewConstant, isViewReferenced, expressionStr, isRowTimestamp);
+                arraySize, viewConstant, isViewReferenced, expressionStr, isRowTimestamp, isDynamic);
     }
 
     public static PTableProtos.PColumn toProto(PColumn column) {

@@ -37,6 +37,7 @@ import static org.apache.phoenix.query.QueryServices.GROUPBY_SPILLABLE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.GROUPBY_SPILL_FILES_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.IMMUTABLE_ROWS_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.INDEX_MUTATE_BATCH_SIZE_THRESHOLD_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.INDEX_POPULATION_SLEEP_TIME;
 import static org.apache.phoenix.query.QueryServices.KEEP_ALIVE_MS_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MASTER_INFO_PORT_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MAX_CLIENT_METADATA_CACHE_SIZE_ATTRIB;
@@ -223,6 +224,8 @@ public class QueryServicesOptions {
     
     public static final boolean DEFAULT_RETURN_SEQUENCE_VALUES = false;
     public static final String DEFAULT_EXTRA_JDBC_ARGUMENTS = "";
+    
+    public static final long DEFAULT_INDEX_POPULATION_SLEEP_TIME = 5000;
 
     // QueryServer defaults -- ensure ThinClientUtil is also updated since phoenix-server-client
     // doesn't depend on phoenix-core.
@@ -429,7 +432,6 @@ public class QueryServicesOptions {
     public QueryServicesOptions setGroupBySpillNumSpillFiles(long num) {
         return set(GROUPBY_SPILL_FILES_ATTRIB, num);
     }
-
 
     private QueryServicesOptions set(String name, boolean value) {
         config.set(name, Boolean.toString(value));
@@ -638,6 +640,11 @@ public class QueryServicesOptions {
     
     public QueryServicesOptions setMaxThreadsPerHTable(int count) {
         config.setInt(QueryServices.HTABLE_MAX_THREADS, count);
+        return this;
+    }
+    
+    public QueryServicesOptions setDefaultIndexPopulationWaitTime(long waitTime) {
+        config.setLong(INDEX_POPULATION_SLEEP_TIME, waitTime);
         return this;
     }
     

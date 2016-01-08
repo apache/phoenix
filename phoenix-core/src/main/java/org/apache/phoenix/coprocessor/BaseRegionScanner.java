@@ -25,8 +25,12 @@ import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
 
-public abstract class BaseRegionScanner implements RegionScanner {
+public abstract class BaseRegionScanner extends DelegateRegionScanner {
 
+	public BaseRegionScanner(RegionScanner delegate) {
+		super(delegate);
+	}
+	
     @Override
     public boolean isFilterDone() {
         return false;
@@ -43,11 +47,6 @@ public abstract class BaseRegionScanner implements RegionScanner {
     @Override
     public boolean reseek(byte[] row) throws IOException {
         throw new DoNotRetryIOException("Unsupported");
-    }
-
-    @Override
-    public long getMvccReadPoint() {
-        return Long.MAX_VALUE;
     }
 
     @Override
