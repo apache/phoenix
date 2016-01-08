@@ -20,6 +20,7 @@ package org.apache.phoenix.end2end.index;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -34,6 +35,7 @@ import java.util.Properties;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -48,6 +50,7 @@ import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.end2end.Shadower;
+import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -55,6 +58,7 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -68,6 +72,7 @@ import com.google.common.collect.Maps;
 public class ImmutableIndexIT extends BaseHBaseManagedTimeIT {
 
     private final boolean localIndex;
+    private final boolean transactional;
     private final String tableDDLOptions;
     private final String tableName;
     private final String indexName;
@@ -80,6 +85,7 @@ public class ImmutableIndexIT extends BaseHBaseManagedTimeIT {
 
     public ImmutableIndexIT(boolean localIndex, boolean transactional) {
         this.localIndex = localIndex;
+        this.transactional = transactional;
         StringBuilder optionBuilder = new StringBuilder("IMMUTABLE_ROWS=true");
         if (transactional) {
             optionBuilder.append(", TRANSACTIONAL=true");
@@ -98,16 +104,55 @@ public class ImmutableIndexIT extends BaseHBaseManagedTimeIT {
         serverProps.put("hbase.coprocessor.region.classes", CreateIndexRegionObserver.class.getName());
         Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(2);
         clientProps.put(QueryServices.TRANSACTIONS_ENABLED, "true");
+        clientProps.put(QueryServices.INDEX_POPULATION_SLEEP_TIME, "15000");
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
     }
 
     @Parameters(name="localIndex = {0} , transactional = {1}")
     public static Collection<Boolean[]> data() {
-        return Arrays.asList(new Boolean[][] {     
-            { false, true }, { true, true }
-        });
+		return Arrays.asList(new Boolean[][] { 
+				{ false, false }, { false, true },
+				{ true, false }, { true, true } });
     }
 
+    @Test
+    @Ignore
+    public void testDropIfImmutableKeyValueColumn() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(false);
+            String ddl =
+                    "CREATE TABLE " + fullTableName + BaseTest.TEST_TABLE_SCHEMA + tableDDLOptions;
+            Statement stmt = conn.createStatement();
+            stmt.execute(ddl);
+            populateTestTable(fullTableName);
+            ddl =
+                    "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX " + indexName + " ON "
+                            + fullTableName + " (long_col1)";
+            stmt.execute(ddl);
+
+            ResultSet rs;
+
+            rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM " + fullTableName);
+            assertTrue(rs.next());
+            assertEquals(3, rs.getInt(1));
+            rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM " + fullIndexName);
+            assertTrue(rs.next());
+            assertEquals(3, rs.getInt(1));
+
+            conn.setAutoCommit(true);
+            String dml = "DELETE from " + fullTableName + " WHERE long_col2 = 4";
+            try {
+                conn.createStatement().execute(dml);
+                fail();
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.INVALID_FILTER_ON_IMMUTABLE_ROWS.getErrorCode(),
+                    e.getErrorCode());
+            }
+
+            conn.createStatement().execute("DROP TABLE " + fullTableName);
+        }
+    }
 
     @Test
     public void testCreateIndexDuringUpsertSelect() throws Exception {
@@ -119,8 +164,7 @@ public class ImmutableIndexIT extends BaseHBaseManagedTimeIT {
                 + " (long_pk, varchar_pk)"
                 + " INCLUDE (long_col1, long_col2)";
 
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        try {
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.setAutoCommit(false);
             Statement stmt = conn.createStatement();
             stmt.execute(ddl);
@@ -133,7 +177,6 @@ public class ImmutableIndexIT extends BaseHBaseManagedTimeIT {
             String upsertSelect = "UPSERT INTO " + TABLE_NAME + "(varchar_pk, char_pk, int_pk, long_pk, decimal_pk, date_pk) " + 
                     "SELECT varchar_pk||'_upsert_select', char_pk, int_pk, long_pk, decimal_pk, date_pk FROM "+ TABLE_NAME;    
             conn.createStatement().execute(upsertSelect);
-
             ResultSet rs;
             rs = conn.createStatement().executeQuery("SELECT /*+ NO_INDEX */ COUNT(*) FROM " + TABLE_NAME);
             assertTrue(rs.next());
@@ -141,9 +184,6 @@ public class ImmutableIndexIT extends BaseHBaseManagedTimeIT {
             rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM " + TABLE_NAME);
             assertTrue(rs.next());
             assertEquals(440,rs.getInt(1));
-        }
-        finally {
-            conn.close();
         }
     }
 
@@ -156,7 +196,7 @@ public class ImmutableIndexIT extends BaseHBaseManagedTimeIT {
             String tableName = c.getEnvironment().getRegion().getRegionInfo()
                     .getTable().getNameAsString();
             if (tableName.equalsIgnoreCase(TABLE_NAME)
-                    // create the index after the second batch of 1000 rows
+                    // create the index after the second batch  
                     && Bytes.startsWith(put.getRow(), Bytes.toBytes("varchar200_upsert_select"))) {
                 try {
                     Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -171,13 +211,14 @@ public class ImmutableIndexIT extends BaseHBaseManagedTimeIT {
     }
 
     private static class UpsertRunnable implements Runnable {
-        private static final int NUM_ROWS_IN_BATCH = 10000;
+        private static final int NUM_ROWS_IN_BATCH = 1000;
         private final String fullTableName;
 
         public UpsertRunnable(String fullTableName) {
             this.fullTableName = fullTableName;
         }
 
+        @Override
         public void run() {
             Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
@@ -190,12 +231,9 @@ public class ImmutableIndexIT extends BaseHBaseManagedTimeIT {
                         fistRowInBatch = false;
                     }
                     conn.commit();
-                    Thread.sleep(500);
                 }
             } catch (SQLException e) {
                 throw new RuntimeException(e);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
             }
         }
     }
@@ -213,10 +251,17 @@ public class ImmutableIndexIT extends BaseHBaseManagedTimeIT {
             Statement stmt = conn.createStatement();
             stmt.execute(ddl);
 
-            ExecutorService threadPool = Executors.newFixedThreadPool(numThreads);
+            ExecutorService executorService = Executors.newFixedThreadPool(numThreads, new ThreadFactory() {
+                @Override
+                public Thread newThread(Runnable r) {
+                    Thread t = Executors.defaultThreadFactory().newThread(r);
+                    t.setDaemon(true);
+                    return t;
+                }
+            });
             List<Future<?>> futureList = Lists.newArrayListWithExpectedSize(numThreads);
             for (int i =0; i<numThreads; ++i) {
-                futureList.add(threadPool.submit(new UpsertRunnable(fullTableName)));
+                futureList.add(executorService.submit(new UpsertRunnable(fullTableName)));
             }
             // upsert some rows before creating the index 
             Thread.sleep(500);
@@ -235,8 +280,8 @@ public class ImmutableIndexIT extends BaseHBaseManagedTimeIT {
             for (Future<?> future : futureList) {
                 future.cancel(true);
             }
-            threadPool.shutdownNow();
-            threadPool.awaitTermination(30, TimeUnit.SECONDS);
+            executorService.shutdownNow();
+            executorService.awaitTermination(30, TimeUnit.SECONDS);
             Thread.sleep(100);
 
             ResultSet rs;

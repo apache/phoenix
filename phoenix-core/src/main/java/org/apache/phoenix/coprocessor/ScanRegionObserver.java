@@ -252,17 +252,12 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
         } finally {
             region.closeRegionOperation();
         }
-        return new BaseRegionScanner() {
+        return new BaseRegionScanner(s) {
             private Tuple tuple = firstTuple;
 
             @Override
             public boolean isFilterDone() {
                 return tuple == null;
-            }
-
-            @Override
-            public HRegionInfo getRegionInfo() {
-                return s.getRegionInfo();
             }
 
             @Override
@@ -299,11 +294,6 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
                         chunk.close();                
                     }
                 }
-            }
-
-            @Override
-            public long getMaxResultSize() {
-                return s.getMaxResultSize();
             }
         };
     }

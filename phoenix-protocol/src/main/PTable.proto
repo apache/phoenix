@@ -48,6 +48,7 @@ message PColumn {
   optional bool viewReferenced = 11;
   optional string expression = 12;
   optional bool isRowTimestamp = 13;
+  optional bool isDynamic = 14;
 }
 
 message PTableStats {

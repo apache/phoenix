@@ -62,6 +62,7 @@ public final class QueryServicesTestImpl extends BaseQueryServicesImpl {
     public static final int DEFAULT_HCONNECTION_POOL_CORE_SIZE = 10;
     public static final int DEFAULT_HCONNECTION_POOL_MAX_SIZE = 10;
     public static final int DEFAULT_HTABLE_MAX_THREADS = 10;
+    public static final long DEFAULT_INDEX_POPULATION_WAIT_TIME = 0;
 
     
     /**
@@ -107,7 +108,8 @@ public final class QueryServicesTestImpl extends BaseQueryServicesImpl {
                 .setMetadataHandlerCount(DEFAULT_METADATA_HANDLER_COUNT)
                 .setHConnectionPoolCoreSize(DEFAULT_HCONNECTION_POOL_CORE_SIZE)
                 .setHConnectionPoolMaxSize(DEFAULT_HCONNECTION_POOL_MAX_SIZE)
-                .setMaxThreadsPerHTable(DEFAULT_HTABLE_MAX_THREADS);
+                .setMaxThreadsPerHTable(DEFAULT_HTABLE_MAX_THREADS)
+                .setDefaultIndexPopulationWaitTime(DEFAULT_INDEX_POPULATION_WAIT_TIME);
     }
     
     public QueryServicesTestImpl(ReadOnlyProps defaultProps, ReadOnlyProps overrideProps) {

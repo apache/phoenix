@@ -22,6 +22,7 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Properties;
 import java.util.TimerTask;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -252,7 +253,10 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
                     }
 
                     if (conn == null) {
-                        conn = DriverManager.getConnection(getJdbcUrl(env)).unwrap(PhoenixConnection.class);
+                    	final Properties props = new Properties();
+                    	// don't run a second index populations upsert select 
+                        props.setProperty(QueryServices.INDEX_POPULATION_SLEEP_TIME, "0"); 
+                        conn = DriverManager.getConnection(getJdbcUrl(env), props).unwrap(PhoenixConnection.class);
                     }
 
                     String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTable);
@@ -270,7 +274,7 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
                         QueryServices.INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_TIME_ATTRIB,
                         QueryServicesOptions.DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_TIME);
                     long timeStamp = Math.max(0, disabledTimeStampVal - overlapTime);
-
+                    
                     LOG.info("Starting to build index=" + indexPTable.getName() + " from timestamp=" + timeStamp);
                     client.buildPartialIndexFromTimeStamp(indexPTable, new TableRef(dataPTable, Long.MAX_VALUE, timeStamp));
 
