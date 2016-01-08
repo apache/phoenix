@@ -114,9 +114,6 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 
-import co.cask.tephra.TxConstants;
-
-import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
@@ -125,17 +122,15 @@ import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
-import org.apache.phoenix.compile.BaseMutationPlan;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.IndexExpressionCompiler;
 import org.apache.phoenix.compile.MutationPlan;
 import org.apache.phoenix.compile.PostDDLCompiler;
 import org.apache.phoenix.compile.PostIndexDDLCompiler;
-import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.compile.PostLocalIndexDDLCompiler;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.compile.StatementNormalizer;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
@@ -153,7 +148,6 @@ import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
-import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.parse.AddColumnStatement;
 import org.apache.phoenix.parse.AlterIndexStatement;
 import org.apache.phoenix.parse.ColumnDef;
@@ -209,6 +203,8 @@ import org.apache.phoenix.util.TransactionUtil;
 import org.apache.phoenix.util.UpgradeUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import co.cask.tephra.TxConstants;
 
 import com.google.common.base.Objects;
 import com.google.common.collect.Iterators;
@@ -821,7 +817,7 @@ public class MetaDataClient {
             }
 
             PColumn column = new PColumnImpl(PNameFactory.newName(columnName), familyName, def.getDataType(),
-                    def.getMaxLength(), def.getScale(), isNull, position, sortOrder, def.getArraySize(), null, false, def.getExpression(), isRowTimestamp);
+                    def.getMaxLength(), def.getScale(), isNull, position, sortOrder, def.getArraySize(), null, false, def.getExpression(), isRowTimestamp, false);
             return column;
         } catch (IllegalArgumentException e) { // Based on precondition check in constructor
             throw new SQLException(e);
@@ -1021,89 +1017,68 @@ public class MetaDataClient {
         try {
             connection.setAutoCommit(true);
             MutationPlan mutationPlan;
-
-            // For local indexes, we optimize the initial index population by *not* sending Puts over
-            // the wire for the index rows, as we don't need to do that. Instead, we tap into our
-            // region observer to generate the index rows based on the data rows as we scan
             if (index.getIndexType() == IndexType.LOCAL) {
-                try (final PhoenixStatement statement = new PhoenixStatement(connection)) {
-                    String tableName = getFullTableName(dataTableRef);
-                    String query = "SELECT count(*) FROM " + tableName;
-                    final QueryPlan plan = statement.compileQuery(query);
-                    TableRef tableRef = plan.getTableRef();
-                    // Set attribute on scan that UngroupedAggregateRegionObserver will switch on.
-                    // We'll detect that this attribute was set the server-side and write the index
-                    // rows per region as a result. The value of the attribute will be our persisted
-                    // index maintainers.
-                    // Define the LOCAL_INDEX_BUILD as a new static in BaseScannerRegionObserver
-                    Scan scan = plan.getContext().getScan();
-                    try {
-                        if(ScanUtil.isDefaultTimeRange(scan.getTimeRange())) {
-                            Long scn = connection.getSCN();
-                            if (scn == null) {
-                                scn = plan.getContext().getCurrentTime();
-                            }
-                            scan.setTimeRange(dataTableRef.getLowerBoundTimeStamp(),scn);
-                        }
-                    } catch (IOException e) {
-                        throw new SQLException(e);
-                    }
-                    ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-                    final PTable dataTable = tableRef.getTable();
-                    for(PTable idx: dataTable.getIndexes()) {
-                        if(idx.getName().equals(index.getName())) {
-                            index = idx;
-                            break;
-                        }
-                    }
-                    List<PTable> indexes = Lists.newArrayListWithExpectedSize(1);
-                    // Only build newly created index.
-                    indexes.add(index);
-                    IndexMaintainer.serialize(dataTable, ptr, indexes, plan.getContext().getConnection());
-                    scan.setAttribute(BaseScannerRegionObserver.LOCAL_INDEX_BUILD, ByteUtil.copyKeyBytesIfNecessary(ptr));
-                    // By default, we'd use a FirstKeyOnly filter as nothing else needs to be projected for count(*).
-                    // However, in this case, we need to project all of the data columns that contribute to the index.
-                    IndexMaintainer indexMaintainer = index.getIndexMaintainer(dataTable, connection);
-                    for (ColumnReference columnRef : indexMaintainer.getAllColumns()) {
-                        scan.addColumn(columnRef.getFamily(), columnRef.getQualifier());
-                    }
-
-                    // Go through MutationPlan abstraction so that we can create local indexes
-                    // with a connectionless connection (which makes testing easier).
-                    mutationPlan = new BaseMutationPlan(plan.getContext(), Operation.UPSERT) {
-
-                        @Override
-                        public MutationState execute() throws SQLException {
-                            connection.getMutationState().commitDDLFence(dataTable);
-                            Cell kv = plan.iterator().next().getValue(0);
-                            ImmutableBytesWritable tmpPtr = new ImmutableBytesWritable(kv.getValueArray(), kv.getValueOffset(), kv.getValueLength());
-                            // A single Cell will be returned with the count(*) - we decode that here
-                            long rowCount = PLong.INSTANCE.getCodec().decodeLong(tmpPtr, SortOrder.getDefault());
-                            // The contract is to return a MutationState that contains the number of rows modified. In this
-                            // case, it's the number of rows in the data table which corresponds to the number of index
-                            // rows that were added.
-                            return new MutationState(0, connection, rowCount);
-                        }
-
-                    };
-                }
+                PostLocalIndexDDLCompiler compiler =
+                        new PostLocalIndexDDLCompiler(connection, getFullTableName(dataTableRef));
+                mutationPlan = compiler.compile(index);
             } else {
                 PostIndexDDLCompiler compiler = new PostIndexDDLCompiler(connection, dataTableRef);
                 mutationPlan = compiler.compile(index);
-                try {
-                    Long scn = connection.getSCN();
+            }
+            Scan scan = mutationPlan.getContext().getScan();
+            Long scn = connection.getSCN();
+            try {
+                if (ScanUtil.isDefaultTimeRange(scan.getTimeRange())) {
                     if (scn == null) {
                         scn = mutationPlan.getContext().getCurrentTime();
                     }
-                    mutationPlan.getContext().getScan().setTimeRange(dataTableRef.getLowerBoundTimeStamp(), scn);
+                    scan.setTimeRange(dataTableRef.getLowerBoundTimeStamp(), scn);
+                }
+            } catch (IOException e) {
+                throw new SQLException(e);
+            }
+            
+            // execute index population upsert select
+            long startTime = System.currentTimeMillis();
+            MutationState state = connection.getQueryServices().updateData(mutationPlan);
+            long firstUpsertSelectTime = System.currentTimeMillis() - startTime;
+
+            // for global indexes on non transactional tables we might have to
+            // run a second index population upsert select to handle data rows
+            // that were being written on the server while the index was created
+            long sleepTime =
+                    connection
+                            .getQueryServices()
+                            .getProps()
+                            .getLong(QueryServices.INDEX_POPULATION_SLEEP_TIME,
+                                QueryServicesOptions.DEFAULT_INDEX_POPULATION_SLEEP_TIME);
+            if (!dataTableRef.getTable().isTransactional() && sleepTime > 0) {
+                long delta = sleepTime - firstUpsertSelectTime;
+                if (delta > 0) {
+                    try {
+                        Thread.sleep(delta);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.INTERRUPTED_EXCEPTION)
+                                .setRootCause(e).build().buildException();
+                    }
+                }
+                // set the min timestamp of second index upsert select some time before the index
+                // was created
+                long minTimestamp = index.getTimeStamp() - firstUpsertSelectTime;
+                try {
+                    mutationPlan.getContext().getScan().setTimeRange(minTimestamp, scn);
                 } catch (IOException e) {
                     throw new SQLException(e);
                 }
+                MutationState newMutationState =
+                        connection.getQueryServices().updateData(mutationPlan);
+                state.join(newMutationState);
             }
-            MutationState state = connection.getQueryServices().updateData(mutationPlan);
+            
             indexStatement = FACTORY.alterIndex(FACTORY.namedTable(null,
-                TableName.create(index.getSchemaName().getString(), index.getTableName().getString())),
-                dataTableRef.getTable().getTableName().getString(), false, PIndexState.ACTIVE);
+            		TableName.create(index.getSchemaName().getString(), index.getTableName().getString())),
+            		dataTableRef.getTable().getTableName().getString(), false, PIndexState.ACTIVE);
             alterIndex(indexStatement);
 
             return state;

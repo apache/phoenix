@@ -52,6 +52,7 @@ import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.IndexMetaDataCacheClient;
 import org.apache.phoenix.index.PhoenixIndexCodec;
@@ -569,7 +570,7 @@ public class MutationState implements SQLCloseable {
                 List<Mutation> indexMutations;
                 try {
                     indexMutations =
-                            IndexUtil.generateIndexData(table, index, mutationsPertainingToIndex,
+                    		IndexUtil.generateIndexData(table, index, mutationsPertainingToIndex,
                                 connection.getKeyValueBuilder(), connection);
                     // we may also have to include delete mutations for immutable tables if we are not processing all the tables in the mutations map
                     if (!sendAll) {
@@ -719,37 +720,35 @@ public class MutationState implements SQLCloseable {
         long serverTimeStamp = tableRef.getTimeStamp();
         // If we're auto committing, we've already validated the schema when we got the ColumnResolver,
         // so no need to do it again here.
-        if (!connection.getAutoCommit()) {
-            PTable table = tableRef.getTable();
-            MetaDataMutationResult result = client.updateCache(table.getSchemaName().getString(), table.getTableName().getString());
-            PTable resolvedTable = result.getTable();
-            if (resolvedTable == null) {
-                throw new TableNotFoundException(table.getSchemaName().getString(), table.getTableName().getString());
-            }
-            // Always update tableRef table as the one we've cached may be out of date since when we executed
-            // the UPSERT VALUES call and updated in the cache before this.
-            tableRef.setTable(resolvedTable);
-            long timestamp = result.getMutationTime();
-            if (timestamp != QueryConstants.UNSET_TIMESTAMP) {
-                serverTimeStamp = timestamp;
-                if (result.wasUpdated()) {
-                    // TODO: use bitset?
-                    PColumn[] columns = new PColumn[resolvedTable.getColumns().size()];
-                    for (Map.Entry<ImmutableBytesPtr,RowMutationState> rowEntry : rowKeyToColumnMap.entrySet()) {
-                        RowMutationState valueEntry = rowEntry.getValue();
-                        if (valueEntry != null) {
-                            Map<PColumn, byte[]> colValues = valueEntry.getColumnValues();
-                            if (colValues != PRow.DELETE_MARKER) {
-                                for (PColumn column : colValues.keySet()) {
-                                    columns[column.getPosition()] = column;
-                                }
+        PTable table = tableRef.getTable();
+        MetaDataMutationResult result = client.updateCache(table.getSchemaName().getString(), table.getTableName().getString());
+        PTable resolvedTable = result.getTable();
+        if (resolvedTable == null) {
+            throw new TableNotFoundException(table.getSchemaName().getString(), table.getTableName().getString());
+        }
+        // Always update tableRef table as the one we've cached may be out of date since when we executed
+        // the UPSERT VALUES call and updated in the cache before this.
+        tableRef.setTable(resolvedTable);
+        long timestamp = result.getMutationTime();
+        if (timestamp != QueryConstants.UNSET_TIMESTAMP) {
+            serverTimeStamp = timestamp;
+            if (result.wasUpdated()) {
+                List<PColumn> columns = Lists.newArrayListWithExpectedSize(table.getColumns().size());
+                for (Map.Entry<ImmutableBytesPtr,RowMutationState> rowEntry : rowKeyToColumnMap.entrySet()) {
+                    RowMutationState valueEntry = rowEntry.getValue();
+                    if (valueEntry != null) {
+                        Map<PColumn, byte[]> colValues = valueEntry.getColumnValues();
+                        if (colValues != PRow.DELETE_MARKER) {
+                            for (PColumn column : colValues.keySet()) {
+                            	if (!column.isDynamic())
+                            		columns.add(column);
                             }
                         }
                     }
-                    for (PColumn column : columns) {
-                        if (column != null) {
-                            resolvedTable.getColumnFamily(column.getFamilyName().getString()).getColumn(column.getName().getString());
-                        }
+                }
+                for (PColumn column : columns) {
+                    if (column != null) {
+                        resolvedTable.getColumnFamily(column.getFamilyName().getString()).getColumn(column.getName().getString());
                     }
                 }
             }

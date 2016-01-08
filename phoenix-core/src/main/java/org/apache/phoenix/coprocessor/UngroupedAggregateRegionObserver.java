@@ -553,22 +553,12 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         }
         final KeyValue aggKeyValue = keyValue;
 
-        RegionScanner scanner = new BaseRegionScanner() {
+        RegionScanner scanner = new BaseRegionScanner(innerScanner) {
             private boolean done = !hadAny;
-
-            @Override
-            public HRegionInfo getRegionInfo() {
-                return innerScanner.getRegionInfo();
-            }
 
             @Override
             public boolean isFilterDone() {
                 return done;
-            }
-
-            @Override
-            public void close() throws IOException {
-                innerScanner.close();
             }
 
             @Override
@@ -686,7 +676,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         final KeyValue aggKeyValue =
                 KeyValueUtil.newKeyValue(UNGROUPED_AGG_ROW_KEY, SINGLE_COLUMN_FAMILY,
                     SINGLE_COLUMN, AGG_TIMESTAMP, rowCountBytes, 0, rowCountBytes.length);
-        RegionScanner scanner = new BaseRegionScanner() {
+        RegionScanner scanner = new BaseRegionScanner(innerScanner) {
             @Override
             public HRegionInfo getRegionInfo() {
                 return region.getRegionInfo();
