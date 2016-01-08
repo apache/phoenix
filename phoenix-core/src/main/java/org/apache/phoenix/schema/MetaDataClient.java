@@ -109,6 +109,8 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 
+import co.cask.tephra.TxConstants;
+
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
@@ -210,8 +212,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.primitives.Ints;
-
-import co.cask.tephra.TxConstants;
 
 public class MetaDataClient {
     private static final Logger logger = LoggerFactory.getLogger(MetaDataClient.class);
@@ -2585,7 +2585,6 @@ public class MetaDataClient {
             Map<String, List<Pair<String, Object>>> properties = new HashMap<>(stmtProperties.size());
             TableRef tableRef = FromCompiler.getResolver(statement, connection).getTables().get(0);
 			PTable table = tableRef.getTable();
-            Long timeStamp = table.isTransactional() ? tableRef.getTimeStamp() : null;
             List<ColumnDef> columnDefs = statement.getColumnDefs();
             if (columnDefs == null) {
                 columnDefs = Collections.emptyList();
@@ -2694,11 +2693,11 @@ public class MetaDataClient {
                             .setSchemaName(schemaName).setTableName(tableName)
                             .build().buildException();
                         }
-                        timeStamp = TransactionUtil.getTableTimestamp(connection, isTransactional);
                         changingPhoenixTableProperty = true;
                         nonTxToTx = true;
                     }
                 }
+                Long timeStamp = TransactionUtil.getTableTimestamp(connection, table.isTransactional() || nonTxToTx);
 
                 int numPkColumnsAdded = 0;
                 PreparedStatement colUpsert = connection.prepareStatement(INSERT_COLUMN_ALTER_TABLE);
