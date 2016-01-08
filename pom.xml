@@ -121,8 +121,8 @@
     <!-- Plugin versions -->
     <maven-eclipse-plugin.version>2.9</maven-eclipse-plugin.version>
     <maven-build-helper-plugin.version>1.9.1</maven-build-helper-plugin.version>
-    <maven-surefire-plugin.version>2.19</maven-surefire-plugin.version>
-    <maven-failsafe-plugin.version>2.19</maven-failsafe-plugin.version>
+    <maven-surefire-plugin.version>2.19.1</maven-surefire-plugin.version>
+    <maven-failsafe-plugin.version>2.19.1</maven-failsafe-plugin.version>
     
     <maven-dependency-plugin.version>2.1</maven-dependency-plugin.version>
     <maven.assembly.version>2.5.2</maven.assembly.version>
@@ -130,7 +130,7 @@
 
     <!-- Plugin options -->
     <numForkedUT>3</numForkedUT>
-    <numForkedIT>7</numForkedIT>
+    <numForkedIT>5</numForkedIT>
     
     <!-- Set default encoding so multi-byte tests work correctly on the Mac -->
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -269,6 +269,7 @@
                  <configuration>
                  <encoding>UTF-8</encoding>
                  <forkCount>${numForkedIT}</forkCount>
+                 <runOrder>alphabetical</runOrder>
                  <reuseForks>true</reuseForks>
                  <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=128m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}"</argLine>
                  <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
@@ -285,6 +286,7 @@
                  <configuration>
                  <encoding>UTF-8</encoding>
                  <forkCount>${numForkedIT}</forkCount>
+                 <runOrder>alphabetical</runOrder>
                  <reuseForks>true</reuseForks>
                  <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=128m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}"</argLine>
                  <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
@@ -301,7 +303,8 @@
                  <configuration>
                  <encoding>UTF-8</encoding>
                  <forkCount>${numForkedIT}</forkCount>
-                 <reuseForks>true</reuseForks>
+                 <runOrder>alphabetical</runOrder>
+                 <reuseForks>false</reuseForks>
                  <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=128m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}"</argLine>
                  <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
                  <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
