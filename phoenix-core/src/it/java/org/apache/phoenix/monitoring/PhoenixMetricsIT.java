@@ -72,6 +72,8 @@ public class PhoenixMetricsIT extends BaseOwnClusterHBaseManagedTimeIT {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         // Enable request metric collection at the driver level
         props.put(QueryServices.COLLECT_REQUEST_LEVEL_METRICS, String.valueOf(true));
+        // disable renewing leases as this will force spooling to happen.
+        props.put(QueryServices.RENEW_LEASE_ENABLED, String.valueOf(false));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 

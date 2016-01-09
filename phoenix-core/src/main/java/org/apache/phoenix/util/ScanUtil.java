@@ -50,6 +50,7 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.DescVarLengthFastByteComparisons;
 import org.apache.phoenix.filter.BooleanExpressionFilter;
 import org.apache.phoenix.filter.SkipScanFilter;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.KeyRange.Bound;
 import org.apache.phoenix.query.QueryConstants;
@@ -731,14 +732,16 @@ public class ScanUtil {
         return filterIterator;
     }
     
-    public static boolean isRoundRobinPossible(OrderBy orderBy, StatementContext context) throws SQLException {
-        int fetchSize  = context.getStatement().getFetchSize();
-        /*
-         * Selecting underlying scanners in a round-robin fashion is possible if there is no ordering of rows needed,
-         * not even row key order. Also no point doing round robin of scanners if fetch size
-         * is 1.
-         */
-        return fetchSize > 1 && !shouldRowsBeInRowKeyOrder(orderBy, context) && orderBy.getOrderByExpressions().isEmpty();
+    /**
+     * Selecting underlying scanners in a round-robin fashion is possible if there is no ordering of
+     * rows needed, not even row key order. Also no point doing round robin of scanners if fetch
+     * size is 1.
+     */
+    public static boolean isRoundRobinPossible(OrderBy orderBy, StatementContext context)
+            throws SQLException {
+        int fetchSize = context.getStatement().getFetchSize();
+        return fetchSize > 1 && !shouldRowsBeInRowKeyOrder(orderBy, context)
+                && orderBy.getOrderByExpressions().isEmpty();
     }
     
     public static boolean forceRowKeyOrder(StatementContext context) {
@@ -781,6 +784,17 @@ public class ScanUtil {
     
     public static boolean isDefaultTimeRange(TimeRange range) {
         return range.getMin() == 0 && range.getMax() == Long.MAX_VALUE;
+    }
+    
+    /**
+     * @return true if scanners could be left open and records retrieved by simply advancing them on
+     *         the server side. To make sure HBase doesn't cancel the leases and close the open
+     *         scanners, we need to periodically renew leases. To look at the earliest HBase version
+     *         that supports renewing leases, see
+     *         {@link PhoenixDatabaseMetaData#MIN_RENEW_LEASE_VERSION}
+     */
+    public static boolean isPacingScannersPossible(StatementContext context) {
+        return context.getConnection().getQueryServices().isRenewingLeasesEnabled();
     }
 
 }
