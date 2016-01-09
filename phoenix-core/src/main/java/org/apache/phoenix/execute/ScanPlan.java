@@ -137,7 +137,9 @@ public class ScanPlan extends BaseQueryPlan {
     private static ParallelIteratorFactory buildResultIteratorFactory(StatementContext context,
             TableRef table, OrderBy orderBy, Integer limit, boolean allowPageFilter) throws SQLException {
 
-        if (isSerial(context, table, orderBy, limit, allowPageFilter) || ScanUtil.isRoundRobinPossible(orderBy, context)) {
+        if (isSerial(context, table, orderBy, limit, allowPageFilter)
+                || ScanUtil.isRoundRobinPossible(orderBy, context)
+                || ScanUtil.isPacingScannersPossible(context)) {
             return ParallelIteratorFactory.NOOP_FACTORY;
         }
         ParallelIteratorFactory spoolingResultIteratorFactory =

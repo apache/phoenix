@@ -57,7 +57,6 @@ public final class QueryServicesTestImpl extends BaseQueryServicesImpl {
     public static final String DEFAULT_EXTRA_JDBC_ARGUMENTS = PhoenixRuntime.PHOENIX_TEST_DRIVER_URL_PARAM;
     private static final boolean DEFAULT_RUN_UPDATE_STATS_ASYNC = false;
     private static final boolean DEFAULT_COMMIT_STATS_ASYNC = false;
-    public static final boolean DEFAULT_RENEW_LEASE_ENABLED = false;
     public static final int DEFAULT_INDEX_HANDLER_COUNT = 5;
     public static final int DEFAULT_METADATA_HANDLER_COUNT = 5;
     public static final int DEFAULT_HCONNECTION_POOL_CORE_SIZE = 10;
@@ -104,7 +103,6 @@ public final class QueryServicesTestImpl extends BaseQueryServicesImpl {
                 .setExtraJDBCArguments(DEFAULT_EXTRA_JDBC_ARGUMENTS)
                 .setRunUpdateStatsAsync(DEFAULT_RUN_UPDATE_STATS_ASYNC)
                 .setCommitStatsAsync(DEFAULT_COMMIT_STATS_ASYNC)
-                .setEnableRenewLease(DEFAULT_RENEW_LEASE_ENABLED)
                 .setIndexHandlerCount(DEFAULT_INDEX_HANDLER_COUNT)
                 .setMetadataHandlerCount(DEFAULT_METADATA_HANDLER_COUNT)
                 .setHConnectionPoolCoreSize(DEFAULT_HCONNECTION_POOL_CORE_SIZE)
