@@ -22,7 +22,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.monitoring.CombinableMetric;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.Tuple;
@@ -36,14 +36,14 @@ public class DelayedTableResultIteratorFactory implements TableResultIteratorFac
     }
     
     @Override
-    public TableResultIterator newIterator(StatementContext context, TableRef tableRef, Scan scan,
+    public TableResultIterator newIterator(MutationState mutationState, TableRef tableRef, Scan scan,
             CombinableMetric scanMetrics, long renewLeaseThreshold) throws SQLException {
-        return new DelayedTableResultIterator(context, tableRef, scan, scanMetrics, renewLeaseThreshold);
+        return new DelayedTableResultIterator(mutationState, tableRef, scan, scanMetrics, renewLeaseThreshold);
     }
     
     private class DelayedTableResultIterator extends TableResultIterator {
-        public DelayedTableResultIterator (StatementContext context, TableRef tableRef, Scan scan, CombinableMetric scanMetrics, long renewLeaseThreshold) throws SQLException {
-            super(context.getConnection().getMutationState(), tableRef, scan, scanMetrics, renewLeaseThreshold);
+        public DelayedTableResultIterator (MutationState mutationState, TableRef tableRef, Scan scan, CombinableMetric scanMetrics, long renewLeaseThreshold) throws SQLException {
+            super(mutationState, tableRef, scan, scanMetrics, renewLeaseThreshold);
         }
         
         @Override

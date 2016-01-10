@@ -98,7 +98,7 @@ public class ParallelIterators extends BaseResultIterators {
             final Scan scan = scanLocation.getScan();
             final CombinableMetric scanMetrics = readMetrics.allotMetric(MetricType.SCAN_BYTES, physicalTableName);
             final TaskExecutionMetricsHolder taskMetrics = new TaskExecutionMetricsHolder(readMetrics, physicalTableName);
-            final TableResultIterator tableResultItr = context.getConnection().getTableResultIteratorFactory().newIterator(context, tableRef, scan, scanMetrics, renewLeaseThreshold);
+            final TableResultIterator tableResultItr = context.getConnection().getTableResultIteratorFactory().newIterator(mutationState, tableRef, scan, scanMetrics, renewLeaseThreshold);
             context.getConnection().addIterator(tableResultItr);
             Future<PeekingResultIterator> future = executor.submit(Tracing.wrap(new JobCallable<PeekingResultIterator>() {
                 

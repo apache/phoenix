@@ -20,16 +20,16 @@ package org.apache.phoenix.iterate;
 import java.sql.SQLException;
 
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.monitoring.CombinableMetric;
 import org.apache.phoenix.schema.TableRef;
 
 public class DefaultTableResultIteratorFactory implements TableResultIteratorFactory {
 
     @Override
-    public TableResultIterator newIterator(StatementContext context, TableRef tableRef, Scan scan,
+    public TableResultIterator newIterator(MutationState mutationState, TableRef tableRef, Scan scan,
             CombinableMetric scanMetrics, long renewLeaseThreshold) throws SQLException {
-        return new TableResultIterator(context.getConnection().getMutationState(), tableRef, scan, scanMetrics, renewLeaseThreshold);
+        return new TableResultIterator(mutationState, tableRef, scan, scanMetrics, renewLeaseThreshold);
     }
 
 }
