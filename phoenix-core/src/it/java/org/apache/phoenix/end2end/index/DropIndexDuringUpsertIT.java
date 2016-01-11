@@ -97,6 +97,7 @@ public abstract class DropIndexDuringUpsertIT extends BaseTest {
     @After
     public void tearDown() throws Exception {
         try {
+            service.shutdownNow();
             destroyDriver(driver);
         } finally {
             util.shutdownMiniCluster();
