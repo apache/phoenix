@@ -183,10 +183,13 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
     
     @Override
     public Connection connect(String url, Properties info) throws SQLException {
+        if (!acceptsURL(url)) {
+          return null;
+        }
         try {
             closeLock.readLock().lock();
             checkClosed();
-            return super.connect(url, info);
+            return createConnection(url, info);
         } finally {
             closeLock.readLock().unlock();
         }
