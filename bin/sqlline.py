@@ -93,7 +93,7 @@ java_cmd = java + ' -cp "' + phoenix_utils.hbase_conf_dir + os.pathsep + phoenix
     " sqlline.SqlLine -d org.apache.phoenix.jdbc.PhoenixDriver \
 -u jdbc:phoenix:" + phoenix_utils.shell_quote([sys.argv[1]]) + \
     " -n none -p none --color=" + colorSetting + " --fastConnect=false --verbose=true \
---isolation=TRANSACTION_READ_COMMITTED " + sqlfile
+--incremental=false --isolation=TRANSACTION_READ_COMMITTED " + sqlfile
 
 childProc = subprocess.Popen(java_cmd, shell=True)
 #Wait for child process exit
