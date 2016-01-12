@@ -67,7 +67,7 @@ public class IndexLoadBalancerIT {
     private static HBaseAdmin admin = null;
     
     @Rule
-    public Timeout timeout = new Timeout(180, TimeUnit.SECONDS);
+    public Timeout timeout = new Timeout(300, TimeUnit.SECONDS);
 
     @BeforeClass
     public static void setupCluster() throws Exception {
