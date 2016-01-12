@@ -114,4 +114,16 @@ public class PhoenixDriverTest extends BaseConnectionlessQueryTest {
         conn.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
         conn.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
     }
+
+    @Test
+    public void testInvalidURL() throws Exception {
+      Class.forName(PhoenixDriver.class.getName());
+      PhoenixDriver d = (PhoenixDriver) DriverManager.getDriver("jdbc:phoenix");
+      d.close();
+      try {
+      DriverManager.getConnection("any text whatever you want to put here");
+      fail("Should have failed due to invalid driver");
+      } catch(Exception e) {
+      }
+    }
 }
