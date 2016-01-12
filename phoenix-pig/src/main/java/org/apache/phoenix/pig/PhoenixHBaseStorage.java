@@ -175,6 +175,7 @@ public class PhoenixHBaseStorage implements StoreFuncInterface {
         try {
             this.writer.write(null, record);
         } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
             throw new RuntimeException(e);
         }
         
