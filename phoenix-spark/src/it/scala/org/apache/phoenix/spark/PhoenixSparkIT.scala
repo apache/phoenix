@@ -626,4 +626,22 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
     varByte shouldEqual dataSet(0)._3
     varByteArray shouldEqual dataSet(0)._4
   }
+
+  test("Can load Phoenix DATE columns through DataFrame API") {
+    val sqlContext = new SQLContext(sc)
+    val df = sqlContext.read
+      .format("org.apache.phoenix.spark")
+      .options(Map("table" -> "DATE_TEST", "zkUrl" -> quorumAddress))
+      .load
+    val dt = df.select("COL1").first().getDate(0).getTime
+    val epoch = new Date().getTime
+
+    // NOTE: Spark DateType drops hour, minute, second, as per the java.sql.Date spec. Unfortunately if you want to
+    // read the full date row, you need to use the RDD integration instead. In the future we could force the schema
+    // converter to cast the date as a timestamp instead...
+
+    // Note that Spark also applies the timezone offset to the returned date epoch. Rather than perform timezone
+    // gymnastics, just make sure we're within 24H of the epoch generated just now
+    assert(Math.abs(epoch - dt) < 86400000)
+  }
 }

@@ -13,7 +13,7 @@
  */
 package org.apache.phoenix.spark
 
-import java.sql.DriverManager
+import java.sql.{Timestamp, DriverManager}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hbase.{HBaseConfiguration, HConstants}
@@ -147,7 +147,7 @@ class PhoenixRDD(sc: SparkContext, table: String, columns: Seq[String],
       if (columnInfo.getPrecision < 0) DecimalType(38, 18) else DecimalType(columnInfo.getPrecision, columnInfo.getScale)
     case t if t.isInstanceOf[PTimestamp] || t.isInstanceOf[PUnsignedTimestamp] => TimestampType
     case t if t.isInstanceOf[PTime] || t.isInstanceOf[PUnsignedTime] => TimestampType
-    case t if t.isInstanceOf[PDate] || t.isInstanceOf[PUnsignedDate] => TimestampType
+    case t if t.isInstanceOf[PDate] || t.isInstanceOf[PUnsignedDate] => DateType
     case t if t.isInstanceOf[PBoolean] => BooleanType
     case t if t.isInstanceOf[PVarbinary] || t.isInstanceOf[PBinary] => BinaryType
     case t if t.isInstanceOf[PIntegerArray] || t.isInstanceOf[PUnsignedIntArray] => ArrayType(IntegerType, containsNull = true)
