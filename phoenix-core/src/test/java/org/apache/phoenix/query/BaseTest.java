@@ -108,7 +108,13 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Properties;
 import java.util.Set;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import javax.annotation.Nonnull;
 
@@ -125,7 +131,7 @@ import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.IntegrationTestingUtility;
-import org.apache.hadoop.hbase.TableNotEnabledException;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.coprocessor.CoprocessorHost;
 import org.apache.hadoop.hbase.coprocessor.RegionServerObserver;
@@ -139,6 +145,8 @@ import org.apache.hadoop.hbase.regionserver.LocalIndexMerger;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.BaseClientManagedTimeIT;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.hbase.index.balancer.IndexLoadBalancer;
 import org.apache.phoenix.hbase.index.master.IndexMasterObserver;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -172,6 +180,7 @@ import org.slf4j.LoggerFactory;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.google.inject.util.Providers;
 
 /**
@@ -217,6 +226,11 @@ public abstract class BaseTest {
     protected static TransactionManager txManager;
     @ClassRule
     public static TemporaryFolder tmpFolder = new TemporaryFolder();
+    private static final int dropTableTimeout = 300; // 5 mins should be long enough.
+    private static final ThreadFactory factory = new ThreadFactoryBuilder().setDaemon(true)
+            .setNameFormat("DROP-TABLE-BASETEST" + "-thread-%s").build();
+    private static final ExecutorService dropHTableService = Executors
+            .newSingleThreadExecutor(factory);
     
     static {
         ImmutableMap.Builder<String,String> builder = ImmutableMap.builder();
@@ -1691,17 +1705,47 @@ public abstract class BaseTest {
             for (HTableDescriptor table : tables) {
                 String schemaName = SchemaUtil.getSchemaNameFromFullName(table.getName());
                 if (!QueryConstants.SYSTEM_SCHEMA_NAME.equals(schemaName)) {
-                    try{
-                        admin.disableTable(table.getName());
-                    } catch (TableNotEnabledException ignored){}
-                    admin.deleteTable(table.getName());
+                    disableAndDropTable(admin, table.getTableName());
                 }
             }
         } finally {
             admin.close();
         }
     }
-
+    
+    private static void disableAndDropTable(final HBaseAdmin admin, final TableName tableName)
+            throws Exception {
+        Future<Void> future = null;
+        boolean success = false;
+        try {
+            try {
+                future = dropHTableService.submit(new Callable<Void>() {
+                    @Override
+                    public Void call() throws Exception {
+                        if (admin.isTableEnabled(tableName)) {
+                            admin.disableTable(tableName);
+                            admin.deleteTable(tableName);
+                        }
+                        return null;
+                    }
+                });
+                future.get(dropTableTimeout, TimeUnit.SECONDS);
+                success = true;
+            } catch (TimeoutException e) {
+                throw new SQLExceptionInfo.Builder(SQLExceptionCode.OPERATION_TIMED_OUT)
+                .setMessage(
+                    "Not able to disable and delete table " + tableName.getNameAsString()
+                    + " in " + dropTableTimeout + " seconds.").build().buildException();
+            } catch (Exception e) {
+                throw e;
+            }
+        } finally { 
+            if (future != null && !success) {
+                future.cancel(true);
+            }
+        }
+    }
+    
     public static void assertOneOfValuesEqualsResultSet(ResultSet rs, List<List<Object>>... expectedResultsArray) throws SQLException {
         List<List<Object>> results = Lists.newArrayList();
         while (rs.next()) {

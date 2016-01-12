@@ -734,6 +734,7 @@ public class IndexSplitTransaction extends SplitTransaction {
             " files and create the references, aborting split");
       }
     } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
       throw (InterruptedIOException)new InterruptedIOException().initCause(e);
     }
 
@@ -742,6 +743,7 @@ public class IndexSplitTransaction extends SplitTransaction {
       try {
         future.get();
       } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
         throw (InterruptedIOException)new InterruptedIOException().initCause(e);
       } catch (ExecutionException e) {
         throw new IOException(e);

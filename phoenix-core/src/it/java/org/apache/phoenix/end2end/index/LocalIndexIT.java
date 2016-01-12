@@ -1002,9 +1002,11 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
             try {
                 boolean success = latch2.await(WAIT_TIME_SECONDS, TimeUnit.SECONDS);
                 assertTrue("Timed out waiting for test to complete", success);
+                super.postCompact(e, store, resultFile);
             } catch (InterruptedException e1) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException(e1);
             }
-            super.postCompact(e, store, resultFile);
         }
     }
 

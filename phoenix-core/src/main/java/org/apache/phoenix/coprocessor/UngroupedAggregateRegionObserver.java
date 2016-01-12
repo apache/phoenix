@@ -606,6 +606,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                 table = c.getEnvironment().getTable(indexTable);
                 table.batch(indexMutations);
             } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
                 ServerUtil.throwIOException(c.getEnvironment().getRegion().getRegionInfo().getRegionNameAsString(),
                     ie);
             } finally {
