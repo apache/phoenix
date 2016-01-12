@@ -126,11 +126,15 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
             return null;
         }
 
-        Properties augmentedInfo = PropertiesUtil.deepCopy(info);
-        augmentedInfo.putAll(getDefaultProps().asMap());
-        ConnectionQueryServices connectionServices = getConnectionQueryServices(url, augmentedInfo);
-        PhoenixConnection connection = connectionServices.connect(url, augmentedInfo);
-        return connection;
+        return createConnection(url, info);
+    }
+
+    protected final Connection createConnection(String url, Properties info) throws SQLException {
+      Properties augmentedInfo = PropertiesUtil.deepCopy(info);
+      augmentedInfo.putAll(getDefaultProps().asMap());
+      ConnectionQueryServices connectionServices = getConnectionQueryServices(url, augmentedInfo);
+      PhoenixConnection connection = connectionServices.connect(url, augmentedInfo);
+      return connection;
     }
 
     /**
