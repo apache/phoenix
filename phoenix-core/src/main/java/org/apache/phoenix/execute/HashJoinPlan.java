@@ -184,8 +184,9 @@ public class HashJoinPlan extends DelegateQueryPlan {
                 }
                 subPlans[i].postProcess(result, this);
             } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
                 if (firstException == null) {
-                    firstException = new SQLException("Sub plan [" + i + "] execution interrupted.", e);
+                    firstException = new SQLExceptionInfo.Builder(SQLExceptionCode.INTERRUPTED_EXCEPTION).setRootCause(e).setMessage("Sub plan [" + i + "] execution interrupted.").build().buildException();
                 }
             } catch (ExecutionException e) {
                 if (firstException == null) {

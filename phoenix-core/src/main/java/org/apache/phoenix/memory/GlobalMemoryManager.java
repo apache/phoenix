@@ -80,6 +80,7 @@ public class GlobalMemoryManager implements MemoryManager {
                     }
                     sync.wait(remainingWaitTimeMs);
                 } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
                     throw new RuntimeException("Interrupted allocation of " + minBytes + " bytes", ie);
                 }
             }

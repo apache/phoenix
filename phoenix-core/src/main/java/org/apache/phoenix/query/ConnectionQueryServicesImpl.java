@@ -55,7 +55,6 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.annotation.concurrent.GuardedBy;
 
@@ -204,6 +203,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 public class ConnectionQueryServicesImpl extends DelegateQueryServices implements ConnectionQueryServices {
     private static final Logger logger = LoggerFactory.getLogger(ConnectionQueryServicesImpl.class);
@@ -2284,18 +2284,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return addColumn(oldMetaConnection, tableName, timestamp, columns, true);
     }
     
-    private static class RenewLeaseThreadFactory implements ThreadFactory {
-        private final AtomicInteger counter = new AtomicInteger(1);
-
-        @Override
-        public Thread newThread(Runnable r) {
-            Thread t = new Thread(r);
-            t.setDaemon(true);
-            t.setName("Phoenix-Scanner-Renewlease-" + counter.getAndIncrement());
-            return t;
-        }
-    }
-
     @Override
     public void init(final String url, final Properties props) throws SQLException {
         try {
@@ -2531,9 +2519,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     
     private void scheduleRenewLeaseTasks() {
         if (isRenewingLeasesEnabled()) {
+            ThreadFactory threadFactory =
+                    new ThreadFactoryBuilder().setDaemon(true)
+                            .setNameFormat("PHOENIX-SCANNER-RENEW-LEASE" + "-thread-%s").build();
             renewLeaseExecutor =
-                    Executors.newScheduledThreadPool(renewLeasePoolSize,
-                        new RenewLeaseThreadFactory());
+                    Executors.newScheduledThreadPool(renewLeasePoolSize, threadFactory);
             for (LinkedBlockingQueue<WeakReference<PhoenixConnection>> q : connectionQueues) {
                 renewLeaseExecutor.scheduleAtFixedRate(new RenewLeaseTask(q), 0,
                     renewLeaseTaskFrequency, TimeUnit.MILLISECONDS);
@@ -3232,33 +3222,28 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             this.connectionsQueue = queue;
         }
 
-        private void waitForRandomDuration() {
-            try {
-                new CountDownLatch(1).await(random.nextInt(MAX_WAIT_TIME), MILLISECONDS);
-            } catch (InterruptedException ex) {
-                Thread.currentThread().interrupt();
-                logger.warn("Exception encountered while waiting before renewing leases: " + ex);
-            }
+        private void waitForRandomDuration() throws InterruptedException {
+            new CountDownLatch(1).await(random.nextInt(MAX_WAIT_TIME), MILLISECONDS);
         }
 
         @Override
         public void run() {
-            int numConnections = connectionsQueue.size();
-            boolean wait = true;
-            // We keep adding items to the end of the queue. So to stop the loop, iterate only up to
-            // whatever the current count is.
-            while (numConnections > 0) {
-                if (wait) {
-                    // wait for some random duration to prevent all threads from renewing lease at
-                    // the same time.
-                    waitForRandomDuration();
-                    wait = false;
-                }
-                // It is guaranteed that this poll won't hang indefinitely because this is the
-                // only thread that removes items from the queue.
-                WeakReference<PhoenixConnection> connRef = connectionsQueue.poll();
-                PhoenixConnection conn = connRef.get();
-                try {
+            try {
+                int numConnections = connectionsQueue.size();
+                boolean wait = true;
+                // We keep adding items to the end of the queue. So to stop the loop, iterate only up to
+                // whatever the current count is.
+                while (numConnections > 0) {
+                    if (wait) {
+                        // wait for some random duration to prevent all threads from renewing lease at
+                        // the same time.
+                        waitForRandomDuration();
+                        wait = false;
+                    }
+                    // It is guaranteed that this poll won't hang indefinitely because this is the
+                    // only thread that removes items from the queue.
+                    WeakReference<PhoenixConnection> connRef = connectionsQueue.poll();
+                    PhoenixConnection conn = connRef.get();
                     if (conn != null && !conn.isClosed()) {
                         LinkedBlockingQueue<WeakReference<TableResultIterator>> scannerQueue =
                                 conn.getScanners();
@@ -3286,8 +3271,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                     scannerQueue.offer(new WeakReference<TableResultIterator>(
                                             scanningItr));
                                     break;
-                                // if lease wasn't renewed or scanner was closed, don't add the
-                                // scanner back to the queue.
+                                    // if lease wasn't renewed or scanner was closed, don't add the
+                                    // scanner back to the queue.
                                 case CLOSED:
                                 case NOT_RENEWED:
                                     break;
@@ -3301,10 +3286,15 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         }
                         connectionsQueue.offer(connRef);
                     }
-                } catch (Exception e) {
-                    logger.warn("Exception encountered when renewing lease: " + e);
+                    numConnections--;
                 }
-                numConnections--;
+            } catch (InterruptedException e1) {
+                Thread.currentThread().interrupt(); // restore the interrupt status
+                logger.warn("Thread interrupted when renewing lease ", e1);
+                throw new RuntimeException(e1);
+            } catch (Exception e2) {
+                logger.warn("Exception thrown when renewing lease ", e2);
+                throw new RuntimeException(e2);
             }
         }
     }
