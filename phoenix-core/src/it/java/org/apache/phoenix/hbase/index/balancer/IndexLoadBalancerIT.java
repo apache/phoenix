@@ -454,7 +454,6 @@ public class IndexLoadBalancerIT {
 
     }
     
-    @Test
     public boolean checkForColocation(HMaster master, String tableName, String indexTableName)
             throws IOException, InterruptedException {
         List<Pair<byte[], ServerName>> uTableStartKeysAndLocations =
