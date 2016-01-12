@@ -336,7 +336,7 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
             assertEquals(plans[1], QueryUtil.getExplainPlan(rs));
             
             // (orderby) groupby
-            query = "SELECT a_string, count(*) FROM (SELECT * FROM aTable order by a_integer) AS t where a_byte != 8 group by a_string";
+            query = "SELECT t.a_string, count(*) FROM (SELECT * FROM aTable order by a_integer) AS t where a_byte != 8 group by t.a_string";
             statement = conn.prepareStatement(query);
             rs = statement.executeQuery();
             assertTrue (rs.next());
