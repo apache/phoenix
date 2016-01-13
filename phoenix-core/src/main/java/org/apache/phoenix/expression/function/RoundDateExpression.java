@@ -58,7 +58,6 @@ import com.google.common.collect.Lists;
 public class RoundDateExpression extends ScalarFunction {
     
     long divBy;
-    protected TimeUnit timeUnit;
     
     public static final String NAME = "ROUND";
     
@@ -126,7 +125,7 @@ public class RoundDateExpression extends ScalarFunction {
         Object timeUnitValue = ((LiteralExpression)children.get(1)).getValue();
         Object multiplierValue = numChildren > 2 ? ((LiteralExpression)children.get(2)).getValue() : null;
         int multiplier = multiplierValue == null ? 1 :((Number)multiplierValue).intValue();
-        timeUnit = TimeUnit.getTimeUnit(timeUnitValue != null ? timeUnitValue.toString() : null);
+        TimeUnit timeUnit = TimeUnit.getTimeUnit(timeUnitValue != null ? timeUnitValue.toString() : null);
         if(timeUnit.ordinal() < TIME_UNIT_MS.length) {
             divBy = multiplier * TIME_UNIT_MS[timeUnit.ordinal()];
         }
@@ -189,19 +188,12 @@ public class RoundDateExpression extends ScalarFunction {
     public void readFields(DataInput input) throws IOException {
         super.readFields(input);
         divBy = WritableUtils.readVLong(input);
-        if(divBy < 0) {
-            divBy = -(divBy + 1);
-            String tunit = WritableUtils.readString(input);
-            timeUnit = TimeUnit.valueOf(tunit);  
-        }
      }
 
     @Override
     public void write(DataOutput output) throws IOException {
         super.write(output);
-        // Negating the divBy is done to avoid breaking backward compatibility. refer PHOENIX-2433.
-        WritableUtils.writeVLong(output, -(divBy + 1));
-        WritableUtils.writeString(output, timeUnit.name());
+        WritableUtils.writeVLong(output, divBy);
     }
     
     @Override
