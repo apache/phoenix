@@ -109,8 +109,6 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 
-import co.cask.tephra.TxConstants;
-
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
@@ -212,6 +210,8 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.primitives.Ints;
+
+import co.cask.tephra.TxConstants;
 
 public class MetaDataClient {
     private static final Logger logger = LoggerFactory.getLogger(MetaDataClient.class);
@@ -1053,7 +1053,7 @@ public class MetaDataClient {
                         throw new SQLException(e);
                     }
                     ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-                    PTable dataTable = tableRef.getTable();
+                    final PTable dataTable = tableRef.getTable();
                     for(PTable idx: dataTable.getIndexes()) {
                         if(idx.getName().equals(index.getName())) {
                             index = idx;
@@ -1078,6 +1078,7 @@ public class MetaDataClient {
 
                         @Override
                         public MutationState execute() throws SQLException {
+                            connection.getMutationState().commitWriteFence(dataTable);
                             Cell kv = plan.iterator().next().getValue(0);
                             ImmutableBytesWritable tmpPtr = new ImmutableBytesWritable(kv.getValueArray(), kv.getValueOffset(), kv.getValueLength());
                             // A single Cell will be returned with the count(*) - we decode that here
@@ -1581,24 +1582,22 @@ public class MetaDataClient {
             if (parent != null && tableType == PTableType.INDEX) {
                 timestamp = TransactionUtil.getTableTimestamp(connection, transactional);
                 storeNulls = parent.getStoreNulls();
-                if (tableType == PTableType.INDEX) {
-	                // Index on view
-	                // TODO: Can we support a multi-tenant index directly on a multi-tenant
-	                // table instead of only a view? We don't have anywhere to put the link
-	                // from the table to the index, though.
-	                if (indexType == IndexType.LOCAL || (parent.getType() == PTableType.VIEW && parent.getViewType() != ViewType.MAPPED)) {
-	                	PName physicalName = parent.getPhysicalName();
-	                    saltBucketNum = parent.getBucketNum();
-	                    addSaltColumn = (saltBucketNum != null && indexType != IndexType.LOCAL);
-	                    defaultFamilyName = parent.getDefaultFamilyName() == null ? null : parent.getDefaultFamilyName().getString();
-	                    if (indexType == IndexType.LOCAL) {
-	                        saltBucketNum = null;
-	                        // Set physical name of local index table
-	                        physicalNames = Collections.singletonList(PNameFactory.newName(MetaDataUtil.getLocalIndexPhysicalName(physicalName.getBytes())));
-	                    } else {
-	                        // Set physical name of view index table
-	                        physicalNames = Collections.singletonList(PNameFactory.newName(MetaDataUtil.getViewIndexPhysicalName(physicalName.getBytes())));
-	                    }
+                // Index on view
+                // TODO: Can we support a multi-tenant index directly on a multi-tenant
+                // table instead of only a view? We don't have anywhere to put the link
+                // from the table to the index, though.
+                if (indexType == IndexType.LOCAL || (parent.getType() == PTableType.VIEW && parent.getViewType() != ViewType.MAPPED)) {
+                	PName physicalName = parent.getPhysicalName();
+                    saltBucketNum = parent.getBucketNum();
+                    addSaltColumn = (saltBucketNum != null && indexType != IndexType.LOCAL);
+                    defaultFamilyName = parent.getDefaultFamilyName() == null ? null : parent.getDefaultFamilyName().getString();
+                    if (indexType == IndexType.LOCAL) {
+                        saltBucketNum = null;
+                        // Set physical name of local index table
+                        physicalNames = Collections.singletonList(PNameFactory.newName(MetaDataUtil.getLocalIndexPhysicalName(physicalName.getBytes())));
+                    } else {
+                        // Set physical name of view index table
+                        physicalNames = Collections.singletonList(PNameFactory.newName(MetaDataUtil.getViewIndexPhysicalName(physicalName.getBytes())));
                     }
                 }
 

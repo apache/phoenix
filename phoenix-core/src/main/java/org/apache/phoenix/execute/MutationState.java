@@ -31,6 +31,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import javax.annotation.Nonnull;
 import javax.annotation.concurrent.Immutable;
@@ -64,9 +66,11 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PMetaData;
 import org.apache.phoenix.schema.PRow;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
+import org.apache.phoenix.schema.PTableRef;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.TableNotFoundException;
@@ -80,6 +84,7 @@ import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
+import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.TransactionUtil;
 import org.cloudera.htrace.Span;
@@ -97,10 +102,13 @@ import co.cask.tephra.Transaction;
 import co.cask.tephra.Transaction.VisibilityLevel;
 import co.cask.tephra.TransactionAware;
 import co.cask.tephra.TransactionCodec;
+import co.cask.tephra.TransactionConflictException;
 import co.cask.tephra.TransactionContext;
 import co.cask.tephra.TransactionFailureException;
 import co.cask.tephra.TransactionSystemClient;
 import co.cask.tephra.hbase98.TransactionAwareHTable;
+import co.cask.tephra.visibility.FenceWait;
+import co.cask.tephra.visibility.VisibilityFence;
 
 /**
  * 
@@ -126,6 +134,7 @@ public class MutationState implements SQLCloseable {
     private int numRows = 0;
     private int[] uncommittedStatementIndexes = EMPTY_STATEMENT_INDEX_ARRAY;
     private boolean isExternalTxContext = false;
+    private Map<TableRef, Map<ImmutableBytesPtr,RowMutationState>> txMutations;
     
     private final MutationMetricQueue mutationMetricQueue;
     private ReadMetricQueue readMetricQueue;
@@ -151,7 +160,7 @@ public class MutationState implements SQLCloseable {
     }
     
     private MutationState(long maxSize, PhoenixConnection connection, Transaction tx, TransactionContext txContext, long sizeOffset) {
-    	this(maxSize, connection, Maps.<TableRef, Map<ImmutableBytesPtr,RowMutationState>>newHashMapWithExpectedSize(connection.getMutateBatchSize()), tx, txContext);
+    	this(maxSize, connection, Maps.<TableRef, Map<ImmutableBytesPtr,RowMutationState>>newHashMapWithExpectedSize(5), tx, txContext);
         this.sizeOffset = sizeOffset;
     }
     
@@ -193,6 +202,53 @@ public class MutationState implements SQLCloseable {
     
     public long getMaxSize() {
         return maxSize;
+    }
+    
+    /**
+     * Commit a write fence when creating an index so that we can detect
+     * when a data table transaction is started before the create index
+     * but completes after it. In this case, we need to rerun the data
+     * table transaction after the index creation so that the index rows
+     * are generated. See {@link #addReadFence(PTable)} and TEPHRA-157
+     * for more information.
+     * @param dataTable the data table upon which an index is being added
+     * @throws SQLException
+     */
+    public void commitWriteFence(PTable dataTable) throws SQLException {
+        if (dataTable.isTransactional()) {
+            byte[] key = SchemaUtil.getTableKey(dataTable);
+            try {
+                FenceWait fenceWait = VisibilityFence.prepareWait(key, connection.getQueryServices().getTransactionSystemClient());
+                fenceWait.await(10000, TimeUnit.MILLISECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new SQLExceptionInfo.Builder(SQLExceptionCode.INTERRUPTED_EXCEPTION).setRootCause(e).build().buildException();
+            } catch (TimeoutException | TransactionFailureException e) {
+                throw new SQLExceptionInfo.Builder(SQLExceptionCode.TX_UNABLE_TO_GET_WRITE_FENCE)
+                .setSchemaName(dataTable.getSchemaName().getString())
+                .setTableName(dataTable.getTableName().getString())
+                .build().buildException();
+            } finally {
+                // The client expects a transaction to be in progress on the txContext while the
+                // VisibilityFence.prepareWait() starts a new tx and finishes/aborts it. After it's
+                // finished, we start a new one here.
+                // TODO: seems like an autonomous tx capability in Tephra would be useful here.
+                try {
+                    txContext.start();
+                } catch (TransactionFailureException e) {
+                    throw TransactionUtil.getTransactionFailureException(e);
+                }
+            }
+        }
+    }
+    
+    private void addReadFence(PTable dataTable) throws SQLException {
+        byte[] logicalKey = SchemaUtil.getTableKey(dataTable);
+        this.txContext.addTransactionAware(VisibilityFence.create(logicalKey));
+        byte[] physicalKey = dataTable.getPhysicalName().getBytes();
+        if (Bytes.compareTo(physicalKey, logicalKey) != 0) {
+            this.txContext.addTransactionAware(VisibilityFence.create(physicalKey));
+        }
     }
     
     public boolean checkpointIfNeccessary(MutationPlan plan) throws SQLException {
@@ -332,6 +388,12 @@ public class MutationState implements SQLCloseable {
         
         try {
             if (!isTransactionStarted()) {
+                // Clear any transactional state in case transaction was ended outside
+                // of Phoenix so we don't carry the old transaction state forward. We
+                // cannot call reset() here due to the case of having mutations and
+                // then transitioning from non transactional to transactional (which
+                // would end up clearing our uncommitted state).
+                resetTransactionalState();
                 txContext.start();
                 return true;
             }
@@ -410,6 +472,10 @@ public class MutationState implements SQLCloseable {
                 // Put the existing one back now that it's merged
                 this.mutations.put(entry.getKey(), existingRows);
             } else {
+                // Size new map at batch size as that's what it'll likely grow to.
+                Map<ImmutableBytesPtr,RowMutationState> newRows = Maps.newHashMapWithExpectedSize(connection.getMutateBatchSize());
+                newRows.putAll(entry.getValue());
+                this.mutations.put(tableRef, newRows);
                 if (!isIndex) {
                     numRows += entry.getValue().size();
                 }
@@ -705,7 +771,6 @@ public class MutationState implements SQLCloseable {
         @Override
         public void delete(List<Delete> deletes) throws IOException {
             ServerCache cache = null;
-            SQLException sqlE = null;
             try {
                 PTable table = tableRef.getTable();
                 List<PTable> indexes = table.getIndexes();
@@ -764,6 +829,7 @@ public class MutationState implements SQLCloseable {
             sendAll = true;
         }
 
+        Map<ImmutableBytesPtr, RowMutationState> valuesMap;
         List<TableRef> txTableRefs = Lists.newArrayListWithExpectedSize(mutations.size());
         // add tracing for this operation
         try (TraceScope trace = Tracing.startNewSpan(connection, "Committing mutations to tables")) {
@@ -773,7 +839,7 @@ public class MutationState implements SQLCloseable {
 	        while (tableRefIterator.hasNext()) {
 	        	// at this point we are going through mutations for each table
 	            final TableRef tableRef = tableRefIterator.next();
-	            Map<ImmutableBytesPtr, RowMutationState> valuesMap = mutations.get(tableRef);
+	            valuesMap = mutations.get(tableRef);
 	            if (valuesMap == null || valuesMap.isEmpty()) {
 	                continue;
 	            }
@@ -782,6 +848,7 @@ public class MutationState implements SQLCloseable {
 	            final PTable table = tableRef.getTable();
 	            // Track tables to which we've sent uncommitted data
 	            if (isTransactional = table.isTransactional()) {
+	                addReadFence(table);
                     txTableRefs.add(tableRef);
 	                uncommittedPhysicalNames.add(table.getPhysicalName().getString());
 	            }
@@ -832,7 +899,7 @@ public class MutationState implements SQLCloseable {
                             GLOBAL_MUTATION_BATCH_SIZE.update(numMutations);
                             
                             long startTime = System.currentTimeMillis();
-                            child.addTimelineAnnotation("Attempt " + retryCount);;
+                            child.addTimelineAnnotation("Attempt " + retryCount);
 	                        hTable.batch(mutationList);
 	                        child.stop();
 	                        child.stop();
@@ -899,6 +966,13 @@ public class MutationState implements SQLCloseable {
 	            // committed in the event of a failure.
 	            if (isTransactional) {
 	                addUncommittedStatementIndexes(valuesMap.values());
+	                if (txMutations == null) {
+	                    txMutations = Maps.newHashMapWithExpectedSize(mutations.size());
+	                }
+	                // Keep all mutations we've encountered until a commit or rollback.
+	                // This is not ideal, but there's not good way to get the values back
+	                // in the event that we need to replay the commit.
+	                txMutations.put(tableRef, valuesMap);
 	            }
                 // Remove batches as we process them
 	            if (sendAll) {
@@ -985,12 +1059,17 @@ public class MutationState implements SQLCloseable {
     public void close() throws SQLException {
     }
 
-    private void reset() {
+    private void resetState() {
+        numRows = 0;
+        this.mutations.clear();
+        resetTransactionalState();
+    }
+    
+    private void resetTransactionalState() {
         tx = null;
         txAwares.clear();
+        txMutations = null;
         uncommittedPhysicalNames.clear();
-        this.mutations.clear();
-        numRows = 0;
         uncommittedStatementIndexes = EMPTY_STATEMENT_INDEX_ARRAY;
     }
     
@@ -1004,62 +1083,121 @@ public class MutationState implements SQLCloseable {
                 }
             }
         } finally {
-            reset();
+            resetState();
         }
     }
     
     public void commit() throws SQLException {
-    	boolean sendSuccessful=false;
-    	SQLException sqlE = null;
-        try {
-            send();
-            sendSuccessful=true;
-        } catch (SQLException e) {
-            sqlE = e;
-        } finally {
+        Map<TableRef, Map<ImmutableBytesPtr,RowMutationState>> txMutations = Collections.emptyMap();
+        int retryCount = 0;
+        do {
+        	boolean sendSuccessful=false;
+        	boolean retryCommit = false;
+        	SQLException sqlE = null;
             try {
-                if (txContext != null && isTransactionStarted()) {
-                    TransactionFailureException txFailure = null;
-                    boolean finishSuccessful=false;
-                    try {
-                        if (sendSuccessful) {
-                            txContext.finish();
-                            finishSuccessful = true;
-                        }
-                    } catch (TransactionFailureException e) {
-                        txFailure = e;
-                        SQLException nextE = TransactionUtil.getTransactionFailureException(e);
-                        if (sqlE == null) {
-                            sqlE = nextE;
-                        } else {
-                            sqlE.setNextException(nextE);
-                        }
-                    } finally {
-                        // If send fails or finish fails, abort the tx
-                        if (!finishSuccessful) {
-                            try {
-                                txContext.abort(txFailure);
-                            } catch (TransactionFailureException e) {
-                                SQLException nextE = TransactionUtil.getTransactionFailureException(e);
-                                if (sqlE == null) {
-                                    sqlE = nextE;
-                                } else {
-                                    sqlE.setNextException(nextE);
+                send();
+                txMutations = this.txMutations;
+                sendSuccessful=true;
+            } catch (SQLException e) {
+                sqlE = e;
+            } finally {
+                try {
+                    if (txContext != null && isTransactionStarted()) {
+                        TransactionFailureException txFailure = null;
+                        boolean finishSuccessful=false;
+                        try {
+                            if (sendSuccessful) {
+                                txContext.finish();
+                                finishSuccessful = true;
+                            }
+                        } catch (TransactionFailureException e) {
+                            retryCommit = (e instanceof TransactionConflictException && retryCount == 0);
+                            txFailure = e;
+                            SQLException nextE = TransactionUtil.getTransactionFailureException(e);
+                            if (sqlE == null) {
+                                sqlE = nextE;
+                            } else {
+                                sqlE.setNextException(nextE);
+                            }
+                        } finally {
+                            // If send fails or finish fails, abort the tx
+                            if (!finishSuccessful) {
+                                try {
+                                    txContext.abort(txFailure);
+                                } catch (TransactionFailureException e) {
+                                    SQLException nextE = TransactionUtil.getTransactionFailureException(e);
+                                    if (sqlE == null) {
+                                        sqlE = nextE;
+                                    } else {
+                                        sqlE.setNextException(nextE);
+                                    }
                                 }
                             }
                         }
                     }
-                }
-            } finally {
-                try {
-                    reset();
                 } finally {
-                    if (sqlE != null) {
-                        throw sqlE;
+                    try {
+                        resetState();
+                    } finally {
+                        if (retryCommit) {
+                            startTransaction();
+                            try {
+                                retryCommit = wasIndexAdded(txMutations.keySet());
+                            } catch (SQLException e) {
+                                retryCommit = false;
+                                if (sqlE == null) {
+                                    sqlE = e;
+                                } else {
+                                    sqlE.setNextException(e);
+                                }
+                            }
+                        }
+                        if (sqlE != null && !retryCommit) {
+                            throw sqlE;
+                        }
                     }
                 }
             }
+            // Retry commit once if conflict occurred and index was added
+            if (!retryCommit) {
+                break;
+            }
+            retryCount++;
+            mutations.putAll(txMutations);
+        } while (true);
+    }
+
+    /**
+     * Determines whether indexes were added to mutated tables while the transaction was in progress.
+     * @return true if indexes were added and false otherwise.
+     * @throws SQLException 
+     */
+    private boolean wasIndexAdded(Set<TableRef> txTableRefs) throws SQLException {
+        MetaDataClient client = new MetaDataClient(connection);
+        PMetaData cache = connection.getMetaDataCache();
+        boolean addedIndexes = false;
+        for (TableRef tableRef : txTableRefs) {
+            PTable dataTable = tableRef.getTable();
+            List<PTable> oldIndexes;
+            PTableRef ptableRef = cache.getTableRef(dataTable.getKey());
+            oldIndexes = ptableRef.getTable().getIndexes();
+            MetaDataMutationResult result = client.updateCache(dataTable.getTenantId(), dataTable.getSchemaName().getString(), dataTable.getTableName().getString());
+            long timestamp = TransactionUtil.getResolvedTime(connection, result);
+            tableRef.setTimeStamp(timestamp);
+            if (result.getTable() == null) {
+                throw new TableNotFoundException(dataTable.getSchemaName().getString(), dataTable.getTableName().getString());
+            }
+            if (!result.wasUpdated()) {
+                continue;
+            }
+            if (!addedIndexes) {
+                // TODO: in theory we should do a deep equals check here, as it's possible
+                // that an index was dropped and recreated with the same name but different
+                // indexed/covered columns.
+                addedIndexes = (!oldIndexes.equals(result.getTable().getIndexes()));
+            }
         }
+        return addedIndexes;
     }
 
     /**

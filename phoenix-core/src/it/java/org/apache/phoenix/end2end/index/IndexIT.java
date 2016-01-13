@@ -45,6 +45,7 @@ import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.query.BaseTest;
@@ -222,15 +223,19 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testCreateIndexAfterUpsertStarted() throws Exception {
-        if (transactional) { // FIXME: PHOENIX-2446
-            return;
+        testCreateIndexAfterUpsertStarted(false, fullTableName + "1", fullIndexName + "1");
+        if (transactional) {
+            testCreateIndexAfterUpsertStarted(true, fullTableName + "2", fullIndexName + "2");
         }
+    }
+
+    private void testCreateIndexAfterUpsertStarted(boolean readOwnWrites, String fullTableName, String fullIndexName) throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn1 = DriverManager.getConnection(getUrl(), props)) {
-            conn1.setAutoCommit(false);
+            conn1.setAutoCommit(true);
             String ddl ="CREATE TABLE " + fullTableName + BaseTest.TEST_TABLE_SCHEMA + tableDDLOptions;
-            Statement stmt = conn1.createStatement();
-            stmt.execute(ddl);
+            Statement stmt1 = conn1.createStatement();
+            stmt1.execute(ddl);
             BaseTest.populateTestTable(fullTableName);
 
             ResultSet rs;
@@ -243,32 +248,40 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
                 
                 String upsert = "UPSERT INTO " + fullTableName
                         + " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-                PreparedStatement pstmt = conn2.prepareStatement(upsert);
-                pstmt.setString(1, "varchar4");
-                pstmt.setString(2, "char4");
-                pstmt.setInt(3, 4);
-                pstmt.setLong(4, 4L);
-                pstmt.setBigDecimal(5, new BigDecimal(4.0));
+                PreparedStatement pstmt2 = conn2.prepareStatement(upsert);
+                pstmt2.setString(1, "varchar4");
+                pstmt2.setString(2, "char4");
+                pstmt2.setInt(3, 4);
+                pstmt2.setLong(4, 4L);
+                pstmt2.setBigDecimal(5, new BigDecimal(4.0));
                 Date date = DateUtil.parseDate("2015-01-01 00:00:00");
-                pstmt.setDate(6, date);
-                pstmt.setString(7, "varchar_a");
-                pstmt.setString(8, "chara");
-                pstmt.setInt(9, 2);
-                pstmt.setLong(10, 2L);
-                pstmt.setBigDecimal(11, new BigDecimal(2.0));
-                pstmt.setDate(12, date);
-                pstmt.setString(13, "varchar_b");
-                pstmt.setString(14, "charb");
-                pstmt.setInt(15, 3);
-                pstmt.setLong(16, 3L);
-                pstmt.setBigDecimal(17, new BigDecimal(3.0));
-                pstmt.setDate(18, date);
-                pstmt.executeUpdate();
+                pstmt2.setDate(6, date);
+                pstmt2.setString(7, "varchar_a");
+                pstmt2.setString(8, "chara");
+                pstmt2.setInt(9, 2);
+                pstmt2.setLong(10, 2L);
+                pstmt2.setBigDecimal(11, new BigDecimal(2.0));
+                pstmt2.setDate(12, date);
+                pstmt2.setString(13, "varchar_b");
+                pstmt2.setString(14, "charb");
+                pstmt2.setInt(15, 3);
+                pstmt2.setLong(16, 3L);
+                pstmt2.setBigDecimal(17, new BigDecimal(3.0));
+                pstmt2.setDate(18, date);
+                pstmt2.executeUpdate();
                 
+                if (readOwnWrites) {
+                    String query = "SELECT long_pk FROM " + fullTableName + " WHERE long_pk=4";
+                    rs = conn2.createStatement().executeQuery(query);
+                    assertTrue(rs.next());
+                    assertFalse(rs.next());
+                }
+                
+                String indexName = SchemaUtil.getTableNameFromFullName(fullIndexName);
                 ddl = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX " + indexName + " ON " + fullTableName
                         + " (long_pk, varchar_pk)"
                         + " INCLUDE (long_col1, long_col2)";
-                stmt.execute(ddl);
+                stmt1.execute(ddl);
                 
                 /*
                  * Commit upsert after index created through different connection.
@@ -276,16 +289,18 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
                  * at commit time, recognize the new index, and generate the correct metadata (or index
                  * rows for immutable indexes).
                  * 
-                 * FIXME: PHOENIX-2446. For transactional data, this is problematic because the index
+                 * For transactional data, this is problematic because the index
                  * gets a timestamp *after* the commit timestamp of conn2 and thus won't be seen during
                  * the commit. Also, when the index is being built, the data hasn't yet been committed
-                 * and thus won't be part of the initial index build.
+                 * and thus won't be part of the initial index build (fixed by PHOENIX-2446).
                  */
                 conn2.commit();
                 
-                rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM " + fullIndexName);
+                stmt1 = conn1.createStatement();
+                rs = stmt1.executeQuery("SELECT COUNT(*) FROM " + fullTableName);
                 assertTrue(rs.next());
                 assertEquals(4,rs.getInt(1));
+                assertEquals(fullIndexName, stmt1.unwrap(PhoenixStatement.class).getQueryPlan().getTableRef().getTable().getName().getString());
                 
                 String query = "SELECT /*+ NO_INDEX */ long_pk FROM " + fullTableName;
                 rs = conn1.createStatement().executeQuery(query);
