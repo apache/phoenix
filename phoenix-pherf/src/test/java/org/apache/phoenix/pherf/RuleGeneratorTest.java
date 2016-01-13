@@ -18,6 +18,12 @@
 
 package org.apache.phoenix.pherf;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -37,13 +43,13 @@ import org.apache.phoenix.pherf.workload.WriteWorkload;
 import org.joda.time.DateTime;
 import org.joda.time.format.DateTimeFormat;
 import org.joda.time.format.DateTimeFormatter;
+import org.junit.Ignore;
 import org.junit.Test;
-
-import static org.junit.Assert.*;
 
 public class RuleGeneratorTest {
     private static final String matcherScenario = PherfConstants.SCENARIO_ROOT_PATTERN + ".xml";
 
+    @Ignore("Flapping - see PHOENIX-2592")
     @Test
     public void testDateGenerator() throws Exception {
         XMLConfigParser parser = new XMLConfigParser(matcherScenario);
