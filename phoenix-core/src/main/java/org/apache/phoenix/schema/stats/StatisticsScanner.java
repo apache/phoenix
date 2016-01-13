@@ -101,7 +101,7 @@ public class StatisticsScanner implements InternalScanner {
             collectionTracker.runTask(callable);
         }
     }
-    
+
     private class StatisticsScannerCallable implements Callable<Void> {
         @Override
         public Void call() throws IOException {
@@ -112,35 +112,20 @@ public class StatisticsScanner implements InternalScanner {
                 // update the statistics table
                 // Just verify if this if fine
                 ArrayList<Mutation> mutations = new ArrayList<Mutation>();
-                if (mergeRegions != null) {
-                    if (mergeRegions.getFirst() != null) {
-                        if (LOG.isDebugEnabled()) {
-                            LOG.debug("Deleting stale stats for the region "
-                                    + mergeRegions.getFirst().getRegionNameAsString() + " as part of major compaction");
-                        }
-                        stats.deleteStats(mergeRegions.getFirst().getRegionName(), tracker, family, mutations);
-                    }
-                    if (mergeRegions.getSecond() != null) {
-                        if (LOG.isDebugEnabled()) {
-                            LOG.debug("Deleting stale stats for the region "
-                                    + mergeRegions.getSecond().getRegionNameAsString() + " as part of major compaction");
-                        }
-                        stats.deleteStats(mergeRegions.getSecond().getRegionName(), tracker, family, mutations);
-                    }
-                }
+
                 if (LOG.isDebugEnabled()) {
                     LOG.debug("Deleting the stats for the region " + regionInfo.getRegionNameAsString()
-                        + " as part of major compaction");
+                            + " as part of major compaction");
                 }
-                stats.deleteStats(regionInfo.getRegionName(), tracker, family, mutations);
+                stats.deleteStats(region, tracker, family, mutations);
                 if (LOG.isDebugEnabled()) {
                     LOG.debug("Adding new stats for the region " + regionInfo.getRegionNameAsString()
-                        + " as part of major compaction");
+                            + " as part of major compaction");
                 }
-                stats.addStats(regionInfo.getRegionName(), tracker, family, mutations);
+                stats.addStats(tracker, family, mutations);
                 if (LOG.isDebugEnabled()) {
                     LOG.debug("Committing new stats for the region " + regionInfo.getRegionNameAsString()
-                        + " as part of major compaction");
+                            + " as part of major compaction");
                 }
                 stats.commitStats(mutations);
             } catch (IOException e) {
