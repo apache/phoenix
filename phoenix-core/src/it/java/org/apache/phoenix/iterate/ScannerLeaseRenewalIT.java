@@ -18,6 +18,7 @@
 package org.apache.phoenix.iterate;
 
 import static org.apache.hadoop.hbase.HConstants.HBASE_CLIENT_SCANNER_TIMEOUT_PERIOD;
+import static org.apache.phoenix.query.BaseTest.setUpConfigForMiniCluster;
 import static org.apache.phoenix.query.QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.RENEW_LEASE_ENABLED;
 import static org.apache.phoenix.query.QueryServices.RENEW_LEASE_THREAD_POOL_SIZE;
@@ -64,6 +65,7 @@ public class ScannerLeaseRenewalIT {
     public static void setUp() throws Exception {
         Configuration conf = HBaseConfiguration.create();
         hbaseTestUtil = new HBaseTestingUtility(conf);
+        setUpConfigForMiniCluster(conf);
         conf.setLong(HConstants.HBASE_CLIENT_SCANNER_TIMEOUT_PERIOD, LEASE_TIMEOUT_PERIOD_MILLIS);
         hbaseTestUtil.startMiniCluster();
         // establish url and quorum. Need to use PhoenixDriver and not PhoenixTestDriver
