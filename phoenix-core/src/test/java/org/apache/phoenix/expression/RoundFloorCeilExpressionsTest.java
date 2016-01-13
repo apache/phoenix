@@ -43,11 +43,11 @@ import org.apache.phoenix.expression.function.ScalarFunction;
 import org.apache.phoenix.expression.function.TimeUnit;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.query.KeyRange;
-import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.IllegalDataException;
-import org.apache.phoenix.schema.types.PDate;
-import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.DateUtil;
 import org.junit.Test;
@@ -615,5 +615,18 @@ public class RoundFloorCeilExpressionsTest {
 
         }
     }
-
+    
+    @Test
+    public void testFloorDateExpressionForWeek() throws Exception {
+        Expression dateLiteral = LiteralExpression.newConstant(DateUtil.parseDate("2016-01-07 08:17:28"), PDate.INSTANCE);
+        Expression floorDateExpression = FloorDateExpression.create(dateLiteral, TimeUnit.WEEK);
+        
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+        floorDateExpression.evaluate(null, ptr);
+        Object result = floorDateExpression.getDataType().toObject(ptr);
+        
+        assertTrue(result instanceof Date);
+        Date resultDate = (Date)result;
+        assertEquals(DateUtil.parseDate("2016-01-04 00:00:00"), resultDate);
+    }
 }
