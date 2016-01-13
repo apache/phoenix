@@ -102,7 +102,8 @@ public class RoundFloorCeilFunctionsEnd2EndIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testRoundingUpDate() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        ResultSet rs = conn.createStatement().executeQuery("SELECT ROUND(dt, 'day'), ROUND(dt, 'hour', 1), ROUND(dt, 'minute', 1), ROUND(dt, 'second', 1), ROUND(dt, 'millisecond', 1) FROM t1");
+        ResultSet rs = conn.createStatement().executeQuery("SELECT ROUND(dt, 'day'), ROUND(dt, 'hour', 1), ROUND(dt, 'minute', 1), ROUND(dt, 'second', 1), "
+                + " ROUND(dt,'week'), ROUND(dt,'month') , ROUND(dt,'year') FROM t1");
         assertTrue(rs.next());
         Date expectedDate = DateUtil.parseDate("2012-01-02 00:00:00");
         assertEquals(expectedDate, rs.getDate(1));
@@ -110,8 +111,14 @@ public class RoundFloorCeilFunctionsEnd2EndIT extends BaseHBaseManagedTimeIT {
         assertEquals(expectedDate, rs.getDate(2));
         expectedDate = DateUtil.parseDate("2012-01-01 14:25:00");
         assertEquals(expectedDate, rs.getDate(3));
-        expectedDate = DateUtil.parseDate("2012-01-01 14:25:29");
+        expectedDate = DateUtil.parseDate("2012-01-01 14:25:29"); 
         assertEquals(expectedDate, rs.getDate(4));
+        expectedDate = DateUtil.parseDate("2012-01-02 00:00:00"); 
+        assertEquals(expectedDate, rs.getDate(5));
+        expectedDate = DateUtil.parseDate("2012-01-01 00:00:00"); 
+        assertEquals(expectedDate, rs.getDate(6));
+        expectedDate = DateUtil.parseDate("2012-01-01 00:00:00"); 
+        assertEquals(expectedDate, rs.getDate(7));
     }
     
     @Test
@@ -124,7 +131,8 @@ public class RoundFloorCeilFunctionsEnd2EndIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testFloorDate() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        ResultSet rs = conn.createStatement().executeQuery("SELECT FLOOR(dt, 'day', 1), FLOOR(dt, 'hour', 1), FLOOR(dt, 'minute', 1), FLOOR(dt, 'second', 1) FROM t1");
+        ResultSet rs = conn.createStatement().executeQuery("SELECT FLOOR(dt, 'day', 1), FLOOR(dt, 'hour', 1), FLOOR(dt, 'minute', 1), FLOOR(dt, 'second', 1),"
+                + " FLOOR(dt,'week'), FLOOR(dt,'month'), FLOOR(dt,'year') FROM t1");
         assertTrue(rs.next());
         Date expectedDate = DateUtil.parseDate("2012-01-01 00:00:00");
         assertEquals(expectedDate, rs.getDate(1));
@@ -134,6 +142,12 @@ public class RoundFloorCeilFunctionsEnd2EndIT extends BaseHBaseManagedTimeIT {
         assertEquals(expectedDate, rs.getDate(3));
         expectedDate = DateUtil.parseDate("2012-01-01 14:25:28");
         assertEquals(expectedDate, rs.getDate(4));
+        expectedDate = DateUtil.parseDate("2011-12-26 00:00:00");
+        assertEquals(expectedDate, rs.getDate(5));
+        expectedDate = DateUtil.parseDate("2012-01-01 00:00:00");
+        assertEquals(expectedDate, rs.getDate(6));
+        expectedDate = DateUtil.parseDate("2012-01-01 00:00:00");
+        assertEquals(expectedDate, rs.getDate(7));
     }
     
     @Test
@@ -146,7 +160,8 @@ public class RoundFloorCeilFunctionsEnd2EndIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testCeilDate() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        ResultSet rs = conn.createStatement().executeQuery("SELECT CEIL(dt, 'day', 1), CEIL(dt, 'hour', 1), CEIL(dt, 'minute', 1), CEIL(dt, 'second', 1) FROM t1");
+        ResultSet rs = conn.createStatement().executeQuery("SELECT CEIL(dt, 'day', 1), CEIL(dt, 'hour', 1), CEIL(dt, 'minute', 1), CEIL(dt, 'second', 1), "
+                + " CEIL(dt,'week') , CEIL(dt,'month') , CEIL(dt,'year')  FROM t1");
         assertTrue(rs.next());
         //Date upserted is 2012-01-01 14:25:28.660. So we will end up bumping up in every case.
         Date expectedDate = DateUtil.parseDate("2012-01-02 00:00:00");
@@ -157,6 +172,13 @@ public class RoundFloorCeilFunctionsEnd2EndIT extends BaseHBaseManagedTimeIT {
         assertEquals(expectedDate, rs.getDate(3));
         expectedDate = DateUtil.parseDate("2012-01-01 14:25:29");
         assertEquals(expectedDate, rs.getDate(4));
+        expectedDate = DateUtil.parseDate("2012-01-02 00:00:00");
+        System.out.println(String.format(" the expected time is [%s] and the actual time is [%s]",expectedDate.getTime(),rs.getDate(5).getTime()));
+        assertEquals(expectedDate, rs.getDate(5));
+        expectedDate = DateUtil.parseDate("2012-02-01 00:00:00");
+        assertEquals(expectedDate, rs.getDate(6));
+        expectedDate = DateUtil.parseDate("2013-01-01 00:00:00");
+        assertEquals(expectedDate, rs.getDate(7));
     }
     
     @Test
@@ -197,7 +219,8 @@ public class RoundFloorCeilFunctionsEnd2EndIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testFloorTimestamp() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        ResultSet rs = conn.createStatement().executeQuery("SELECT FLOOR(ts, 'day'), FLOOR(ts, 'hour', 1), FLOOR(ts, 'minute', 1), FLOOR(ts, 'second', 1), FLOOR(ts, 'millisecond', 1) FROM t1");
+        ResultSet rs = conn.createStatement().executeQuery("SELECT FLOOR(ts, 'day'), FLOOR(ts, 'hour', 1), FLOOR(ts, 'minute', 1), FLOOR(ts, 'second', 1), "
+                + " FLOOR(ts, 'millisecond', 1) , FLOOR(ts,'week') , FLOOR(ts,'month') FROM t1");
         assertTrue(rs.next());
         Timestamp expectedTimestamp;
         expectedTimestamp = new Timestamp(DateUtil.parseDate("2012-01-01 00:00:00").getTime());
@@ -212,6 +235,10 @@ public class RoundFloorCeilFunctionsEnd2EndIT extends BaseHBaseManagedTimeIT {
         // FLOOR of "2012-01-01 14:25:28.660" + nanosPart will end up removing the nanos part. 
         expectedTimestamp = new Timestamp(DateUtil.parseDate("2012-01-01 14:25:28").getTime() + millisPart);
         assertEquals(expectedTimestamp, rs.getTimestamp(5));
+        expectedTimestamp = new Timestamp(DateUtil.parseDate("2011-12-26 00:00:00").getTime());
+        assertEquals(expectedTimestamp, rs.getTimestamp(6));
+        expectedTimestamp = new Timestamp(DateUtil.parseDate("2012-01-01 00:00:00").getTime());
+        assertEquals(expectedTimestamp, rs.getTimestamp(7));
     }
     
     @Test
@@ -222,9 +249,17 @@ public class RoundFloorCeilFunctionsEnd2EndIT extends BaseHBaseManagedTimeIT {
     }
     
     @Test
+    public void testWeekFloorTimestampInWhere() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM t1 WHERE FLOOR(ts, 'week') = to_date('2011-12-26 00:00:00')");
+        assertTrue(rs.next());
+    }
+    
+    @Test
     public void testCeilTimestamp() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        ResultSet rs = conn.createStatement().executeQuery("SELECT CEIL(ts, 'day'), CEIL(ts, 'hour', 1), CEIL(ts, 'minute', 1), CEIL(ts, 'second', 1), CEIL(ts, 'millisecond', 1) FROM t1");
+        ResultSet rs = conn.createStatement().executeQuery("SELECT CEIL(ts, 'day'), CEIL(ts, 'hour', 1), CEIL(ts, 'minute', 1), CEIL(ts, 'second', 1), CEIL(ts, 'millisecond', 1),"
+                + " CEIL(ts,'week'), CEIL(ts,'month') , CEIL(ts,'year') FROM t1");
         assertTrue(rs.next());
         Timestamp expectedTimestamp;
         expectedTimestamp = new Timestamp(DateUtil.parseDate("2012-01-02 00:00:00").getTime());
@@ -240,6 +275,12 @@ public class RoundFloorCeilFunctionsEnd2EndIT extends BaseHBaseManagedTimeIT {
         // That is, it should be  evaluated as "2012-01-01 14:25:28.661". 
         expectedTimestamp = new Timestamp(DateUtil.parseDate("2012-01-01 14:25:28").getTime() + millisPart + 1);
         assertEquals(expectedTimestamp, rs.getTimestamp(5));
+        expectedTimestamp = new Timestamp(DateUtil.parseDate("2012-01-02 00:00:00").getTime());
+        assertEquals(expectedTimestamp, rs.getTimestamp(6));
+        expectedTimestamp = new Timestamp(DateUtil.parseDate("2012-02-01 00:00:00").getTime());
+        assertEquals(expectedTimestamp, rs.getTimestamp(7));
+        expectedTimestamp = new Timestamp(DateUtil.parseDate("2013-01-01 00:00:00").getTime());
+        assertEquals(expectedTimestamp, rs.getTimestamp(8));
     }
     
     @Test
@@ -252,7 +293,8 @@ public class RoundFloorCeilFunctionsEnd2EndIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testRoundingUpTime() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        ResultSet rs = conn.createStatement().executeQuery("SELECT ROUND(t, 'day', 1), ROUND(t, 'hour', 1), ROUND(t, 'minute', 1), ROUND(t, 'second', 1) FROM t1");
+        ResultSet rs = conn.createStatement().executeQuery("SELECT ROUND(t, 'day', 1), ROUND(t, 'hour', 1), ROUND(t, 'minute', 1), ROUND(t, 'second', 1),"
+                + " ROUND(t,'week') , ROUND(t,'month') , ROUND(t,'year') FROM t1");
         assertTrue(rs.next());
         Time expectedTime = new Time(DateUtil.parseDate("2012-01-02 00:00:00").getTime());
         assertEquals(expectedTime, rs.getTime(1));
@@ -262,12 +304,19 @@ public class RoundFloorCeilFunctionsEnd2EndIT extends BaseHBaseManagedTimeIT {
         assertEquals(expectedTime, rs.getTime(3));
         expectedTime = new Time(DateUtil.parseDate("2012-01-01 14:25:29").getTime());
         assertEquals(expectedTime, rs.getTime(4));
+        expectedTime = new Time(DateUtil.parseDate("2012-01-02 00:00:00").getTime());
+        assertEquals(expectedTime, rs.getTime(5));
+        expectedTime = new Time(DateUtil.parseDate("2012-01-01 00:00:00").getTime());
+        assertEquals(expectedTime, rs.getTime(6));
+        expectedTime = new Time(DateUtil.parseDate("2012-01-01 00:00:00").getTime());
+        assertEquals(expectedTime, rs.getTime(7));
     }
     
     @Test
     public void testFloorTime() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        ResultSet rs = conn.createStatement().executeQuery("SELECT FLOOR(t, 'day', 1), FLOOR(t, 'hour', 1), FLOOR(t, 'minute', 1), FLOOR(t, 'second', 1) FROM t1");
+        ResultSet rs = conn.createStatement().executeQuery("SELECT FLOOR(t, 'day', 1), FLOOR(t, 'hour', 1), FLOOR(t, 'minute', 1), FLOOR(t, 'second', 1), "
+                + " FLOOR(t, 'week'),  FLOOR(t, 'month'), FLOOR(t, 'year') FROM t1");
         assertTrue(rs.next());
         Time expectedTime = new Time(DateUtil.parseDate("2012-01-01 00:00:00").getTime());
         assertEquals(expectedTime, rs.getTime(1));
@@ -277,12 +326,19 @@ public class RoundFloorCeilFunctionsEnd2EndIT extends BaseHBaseManagedTimeIT {
         assertEquals(expectedTime, rs.getTime(3));
         expectedTime = new Time(DateUtil.parseDate("2012-01-01 14:25:28").getTime());
         assertEquals(expectedTime, rs.getTime(4));
+        expectedTime = new Time(DateUtil.parseDate("2011-12-26 00:00:00").getTime());
+        assertEquals(expectedTime, rs.getTime(5));
+        expectedTime = new Time(DateUtil.parseDate("2012-01-01 00:00:00").getTime());
+        assertEquals(expectedTime, rs.getTime(6));
+        expectedTime = new Time(DateUtil.parseDate("2012-01-01 00:00:00").getTime());
+        assertEquals(expectedTime, rs.getTime(7));
     }
     
     @Test
     public void testCeilTime() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        ResultSet rs = conn.createStatement().executeQuery("SELECT CEIL(t, 'day', 1), CEIL(t, 'hour', 1), CEIL(t, 'minute', 1), CEIL(t, 'second', 1) FROM t1");
+        ResultSet rs = conn.createStatement().executeQuery("SELECT CEIL(t, 'day', 1), CEIL(t, 'hour', 1), CEIL(t, 'minute', 1), CEIL(t, 'second', 1),"
+                + " CEIL(t,'week') , CEIL(t,'month') , CEIL(t,'year') FROM t1");
         assertTrue(rs.next());
         Time expectedTime = new Time(DateUtil.parseDate("2012-01-02 00:00:00").getTime());
         assertEquals(expectedTime, rs.getTime(1));
@@ -292,6 +348,12 @@ public class RoundFloorCeilFunctionsEnd2EndIT extends BaseHBaseManagedTimeIT {
         assertEquals(expectedTime, rs.getTime(3));
         expectedTime = new Time(DateUtil.parseDate("2012-01-01 14:25:29").getTime());
         assertEquals(expectedTime, rs.getTime(4));
+        expectedTime = new Time(DateUtil.parseDate("2012-01-02 00:00:00").getTime());
+        assertEquals(expectedTime, rs.getTime(5));
+        expectedTime = new Time(DateUtil.parseDate("2012-02-01 00:00:00").getTime());
+        assertEquals(expectedTime, rs.getTime(6));
+        expectedTime = new Time(DateUtil.parseDate("2013-01-01 00:00:00").getTime());
+        assertEquals(expectedTime, rs.getTime(7));
     }
 
     @Test
