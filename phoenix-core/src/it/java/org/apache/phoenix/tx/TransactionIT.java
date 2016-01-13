@@ -772,7 +772,6 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
         }
     }
     
-    @Ignore("Add back once TEPHRA-162 gets fixed")
     @Test
     public void testInflightUpdateNotSeen() throws Exception {
         String selectSQL = "SELECT * FROM " + FULL_TABLE_NAME;
@@ -824,7 +823,6 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
         }
     }
     
-    @Ignore("Add back once TEPHRA-162 gets fixed")
     @Test
     public void testInflightDeleteNotSeen() throws Exception {
         String selectSQL = "SELECT * FROM " + FULL_TABLE_NAME;
