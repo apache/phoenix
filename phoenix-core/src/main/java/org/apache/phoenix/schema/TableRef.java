@@ -31,8 +31,8 @@ public class TableRef {
     public static final TableRef EMPTY_TABLE_REF = new TableRef(new PTableImpl());
     
     private PTable table;
+    private long upperBoundTimeStamp;
     private final String alias;
-    private final long upperBoundTimeStamp;
     private final long lowerBoundTimeStamp;
     private final boolean hasDynamicCols;
 
@@ -71,6 +71,10 @@ public class TableRef {
     
     public void setTable(PTable value) {
         this.table = value;
+    }
+
+    public void setTimeStamp(long timeStamp) {
+        this.upperBoundTimeStamp = timeStamp;
     }
 
     public String getTableAlias() {
