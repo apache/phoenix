@@ -48,7 +48,7 @@ import com.google.common.collect.Lists;
 /**
  * Function used to bucketize date/time values by rounding them to
  * an even increment.  Usage:
- * ROUND(<date/time col ref>,<'day'|'hour'|'minute'|'second'|'millisecond'>,<optional integer multiplier>)
+ * ROUND(<date/time col ref>,<'day'|'hour'|'minute'|'second'|'millisecond'|'week'|'month'|'year'>,<optional integer multiplier>)
  * The integer multiplier is optional and is used to do rollups to a partial time unit (i.e. 10 minute rollup)
  * The function returns a {@link org.apache.phoenix.schema.types.PDate}
 
@@ -58,6 +58,7 @@ import com.google.common.collect.Lists;
 public class RoundDateExpression extends ScalarFunction {
     
     long divBy;
+    protected TimeUnit timeUnit;
     
     public static final String NAME = "ROUND";
     
@@ -92,7 +93,23 @@ public class RoundDateExpression extends ScalarFunction {
     }
     
     public static Expression create(List<Expression> children) throws SQLException {
-        return new RoundDateExpression(children);
+        int numChildren = children.size();
+        if(numChildren < 2 || numChildren > 3) {
+            throw new IllegalArgumentException("Wrong number of arguments : " + numChildren);
+        }
+        Object timeUnitValue = ((LiteralExpression)children.get(1)).getValue();
+        TimeUnit timeUnit = TimeUnit.getTimeUnit(timeUnitValue != null ? timeUnitValue.toString() : null);
+        switch(timeUnit) {
+        case WEEK:
+            return new RoundWeekExpression(children);
+        case MONTH:
+            return new RoundMonthExpression(children);
+        case YEAR:
+            return new RoundYearExpression(children);
+         default:
+             return new RoundDateExpression(children);
+        }
+        
     }
     
     static Expression getTimeUnitExpr(TimeUnit timeUnit) throws SQLException {
@@ -106,14 +123,13 @@ public class RoundDateExpression extends ScalarFunction {
     RoundDateExpression(List<Expression> children) {
         super(children.subList(0, 1));
         int numChildren = children.size();
-        if(numChildren < 2 || numChildren > 3) {
-            throw new IllegalArgumentException("Wrong number of arguments : " + numChildren);
-        }
         Object timeUnitValue = ((LiteralExpression)children.get(1)).getValue();
         Object multiplierValue = numChildren > 2 ? ((LiteralExpression)children.get(2)).getValue() : null;
         int multiplier = multiplierValue == null ? 1 :((Number)multiplierValue).intValue();
-        TimeUnit timeUnit = TimeUnit.getTimeUnit(timeUnitValue != null ? timeUnitValue.toString() : null); 
-        divBy = multiplier * TIME_UNIT_MS[timeUnit.ordinal()];
+        timeUnit = TimeUnit.getTimeUnit(timeUnitValue != null ? timeUnitValue.toString() : null);
+        if(timeUnit.ordinal() < TIME_UNIT_MS.length) {
+            divBy = multiplier * TIME_UNIT_MS[timeUnit.ordinal()];
+        }
     }
     
     
@@ -139,7 +155,6 @@ public class RoundDateExpression extends ScalarFunction {
             PDataType dataType = getDataType();
             long time = dataType.getCodec().decodeLong(ptr, children.get(0).getSortOrder());
             long value = roundTime(time);
-            
             Date d = new Date(value);
             byte[] byteValue = dataType.toBytes(d);
             ptr.set(byteValue);
@@ -174,12 +189,19 @@ public class RoundDateExpression extends ScalarFunction {
     public void readFields(DataInput input) throws IOException {
         super.readFields(input);
         divBy = WritableUtils.readVLong(input);
-    }
+        if(divBy < 0) {
+            divBy = -(divBy + 1);
+            String tunit = WritableUtils.readString(input);
+            timeUnit = TimeUnit.valueOf(tunit);  
+        }
+     }
 
     @Override
     public void write(DataOutput output) throws IOException {
         super.write(output);
-        WritableUtils.writeVLong(output, divBy);
+        // Negating the divBy is done to avoid breaking backward compatibility. refer PHOENIX-2433.
+        WritableUtils.writeVLong(output, -(divBy + 1));
+        WritableUtils.writeString(output, timeUnit.name());
     }
     
     @Override
