@@ -84,22 +84,24 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final int SCHEMA_NAME_INDEX = 1;
     public static final int TENANT_ID_INDEX = 0;
 
-
     public static final int TYPE_INDEX = 2;
     public static final int FUNTION_NAME_INDEX = 1;
-    
 
     public static final String SYSTEM_CATALOG_SCHEMA = QueryConstants.SYSTEM_SCHEMA_NAME;
     public static final byte[] SYSTEM_CATALOG_SCHEMA_BYTES = QueryConstants.SYSTEM_SCHEMA_NAME_BYTES;
+    public static final String SYSTEM_SCHEMA_NAME = QueryConstants.SYSTEM_SCHEMA_NAME;
+    public static final byte[] SYSTEM_SCHEMA_NAME_BYTES = QueryConstants.SYSTEM_SCHEMA_NAME_BYTES;
+
     public static final String SYSTEM_CATALOG_TABLE = "CATALOG";
     public static final byte[] SYSTEM_CATALOG_TABLE_BYTES = Bytes.toBytes(SYSTEM_CATALOG_TABLE);
     public static final String SYSTEM_CATALOG = SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"";
-    public static final String SYSTEM_CATALOG_NAME = SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA, SYSTEM_CATALOG_TABLE);
+    public static final String SYSTEM_CATALOG_NAME = SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA,
+            SYSTEM_CATALOG_TABLE);
     public static final byte[] SYSTEM_CATALOG_NAME_BYTES = Bytes.toBytes(SYSTEM_CATALOG_NAME);
     public static final String SYSTEM_STATS_TABLE = "STATS";
     public static final String SYSTEM_STATS_NAME = SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA, SYSTEM_STATS_TABLE);
     public static final byte[] SYSTEM_STATS_NAME_BYTES = Bytes.toBytes(SYSTEM_STATS_NAME);
-
+    public static final byte[] SYSTEM_STATS_TABLE_BYTES = Bytes.toBytes(SYSTEM_STATS_TABLE);
     public static final String SYSTEM_CATALOG_ALIAS = "\"SYSTEM.TABLE\"";
 
     public static final String TABLE_NAME = "TABLE_NAME";
@@ -272,6 +274,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final byte[] MAX_KEY_BYTES = Bytes.toBytes(MAX_KEY);
     public static final String LAST_STATS_UPDATE_TIME = "LAST_STATS_UPDATE_TIME";
     public static final byte[] LAST_STATS_UPDATE_TIME_BYTES = Bytes.toBytes(LAST_STATS_UPDATE_TIME);
+    public static final String GUIDE_POST_KEY = "GUIDE_POST_KEY";
 
     public static final String PARENT_TENANT_ID = "PARENT_TENANT_ID";
     public static final byte[] PARENT_TENANT_ID_BYTES = Bytes.toBytes(PARENT_TENANT_ID);

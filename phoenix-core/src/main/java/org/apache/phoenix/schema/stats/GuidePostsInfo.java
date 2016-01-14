@@ -17,17 +17,11 @@
  */
 package org.apache.phoenix.schema.stats;
 
-import java.io.ByteArrayInputStream;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.io.WritableUtils;
-import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
@@ -126,7 +120,7 @@ public class GuidePostsInfo {
      * @param byteCount
      * @return
      */
-    public boolean addGuidePost(byte[] row, long byteCount) {
+    public boolean addGuidePost(byte[] row, long byteCount, long rowCount) {
         if (guidePosts.isEmpty() || Bytes.compareTo(row, guidePosts.get(guidePosts.size() - 1)) > 0) {
             List<byte[]> newGuidePosts = Lists.newArrayListWithExpectedSize(this.getGuidePosts().size() + 1);
             newGuidePosts.addAll(guidePosts);
@@ -134,93 +128,18 @@ public class GuidePostsInfo {
             this.guidePosts = ImmutableList.copyOf(newGuidePosts);
             this.byteCount += byteCount;
             this.keyByteSize += row.length;
+            this.rowCount+=rowCount;
             return true;
         }
         return false;
     }
     
-    /**
-     * Deserializes the per row guidePosts info from the value part of each cell in the SYSTEM.STATS table
-     * @param buf
-     * @param offset
-     * @param l
-     * @param rowCount
-     * @return the GuidePostsInfo instance formed by deserializing the byte[]
-     */
-    public static GuidePostsInfo deserializeGuidePostsInfo(byte[] buf, int offset, int l,
-            long rowCount) {
-        try {
-            ByteArrayInputStream bytesIn = new ByteArrayInputStream(buf, offset, l);
-            try {
-                DataInputStream in = new DataInputStream(bytesIn);
-                try {
-                    long byteCount = in.readLong();
-                    int guidepostsCount = in.readInt();
-                    List<byte[]> guidePosts = Lists.newArrayListWithExpectedSize(guidepostsCount);
-                    if (guidepostsCount > 0) {
-                        for (int i = 0; i < guidepostsCount; i++) {
-                            int length = WritableUtils.readVInt(in);
-                            byte[] gp = new byte[length];
-                            in.read(gp);
-                            if (gp.length != 0) {
-                                guidePosts.add(gp);
-                            }
-                        }
-                    }
-                    return new GuidePostsInfo(byteCount, guidePosts, rowCount);
-                } catch (IOException e) {
-                    throw new RuntimeException(e); // not possible
-                } finally {
-                    try {
-                        in.close();
-                    } catch (IOException e) {
-                        throw new RuntimeException(e); // not possible
-                    }
-                }
-            } finally {
-                bytesIn.close();
-            }
-        } catch (IOException e) {
-            throw new RuntimeException(e); // not possible
-        }
+    public boolean addGuidePost(byte[] row) {
+        return addGuidePost(row, 0, 0);
     }
 
-    /**
-     * Serailizes the guidePosts info as value in the SYSTEM.STATS table.
-     * <br>
-     * The format is,
-     * <br>
-     *  - number of bytes traversed
-     * <br>
-     *  - number of key bytes in the region
-     * <br>
-     *  - number of guideposts for that family
-     * <br> u
-     *  - [guidepostSize][guidePostsArray],[guidePostsSize][guidePostArray]
-     * @return the byte[] to be serialized in the cell
-     */
-    public byte[] serializeGuidePostsInfo() {
-        int size = guidePosts.size();
-        // We will lose precision here?
-        TrustedByteArrayOutputStream bs = new TrustedByteArrayOutputStream((int)(Bytes.SIZEOF_LONG + Bytes.SIZEOF_LONG
-                + Bytes.SIZEOF_INT + this.keyByteSize + (WritableUtils.getVIntSize(size) * size)));
-        DataOutputStream os = new DataOutputStream(bs);
-        try {
-            os.writeLong(byteCount);
-            os.writeInt(size);
-            for (byte[] element : guidePosts) {
-                WritableUtils.writeVInt(os, element.length);
-                os.write(element);
-            }
-            return bs.toByteArray();
-        } catch (IOException ioe) {
-            throw new RuntimeException(ioe); // not possible
-        } finally {
-            try {
-                os.close();
-            } catch (IOException ioe) {
-                throw new RuntimeException(ioe); // not possible
-            }
-        }
+    public boolean addGuidePost(byte[] row, long byteCount) {
+        return addGuidePost(row, byteCount, 0);
     }
+
 }
