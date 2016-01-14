@@ -74,4 +74,9 @@ public class CombinableMetricImpl implements CombinableMetric {
         return this;
     }
 
+    @Override
+    public void decrement() {
+        metric.decrement();
+    }
+
 }

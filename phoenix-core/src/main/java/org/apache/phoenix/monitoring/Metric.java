@@ -45,10 +45,15 @@ public interface Metric {
     public void change(long delta);
 
     /**
-     * Change the value of metric by 1
+     * Increase the value of metric by 1
      */
     public void increment();
-
+    
+    /**
+     * Decrease the value of metric by 1
+     */
+    public void decrement();
+    
     /**
      * @return String that represents the current state of the metric. Typically used for logging or reporting purposes.
      */
