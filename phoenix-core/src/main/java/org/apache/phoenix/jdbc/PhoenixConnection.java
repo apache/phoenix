@@ -18,6 +18,7 @@
 package org.apache.phoenix.jdbc;
 
 import static java.util.Collections.emptyMap;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_OPEN_PHOENIX_CONNECTIONS;
 
 import java.io.EOFException;
 import java.io.IOException;
@@ -66,6 +67,7 @@ import org.apache.phoenix.expression.function.FunctionArgumentType;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.iterate.ParallelIteratorFactory;
 import org.apache.phoenix.jdbc.PhoenixStatement.PhoenixStatementParser;
+import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.DelegateConnectionQueryServices;
@@ -289,6 +291,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         this.customTracingAnnotations = getImmutableCustomTracingAnnotations();
         this.scannerQueue = new LinkedBlockingQueue<>();
         this.tableResultIteratorFactory = new DefaultTableResultIteratorFactory();
+        GLOBAL_OPEN_PHOENIX_CONNECTIONS.increment();
     }
     
     private static void checkScn(Long scnParam) throws SQLException {
@@ -505,6 +508,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
             }
         } finally {
             isClosed = true;
+            GLOBAL_OPEN_PHOENIX_CONNECTIONS.decrement();
         }
     }
 
