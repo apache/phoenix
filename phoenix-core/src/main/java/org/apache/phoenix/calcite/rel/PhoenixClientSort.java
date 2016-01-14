@@ -9,6 +9,7 @@ import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelCollation;
 import org.apache.calcite.rel.RelCollationTraitDef;
 import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rex.RexNode;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.compile.FromCompiler;
@@ -43,11 +44,11 @@ public class PhoenixClientSort extends PhoenixAbstractSort {
     }
     
     @Override
-    public RelOptCost computeSelfCost(RelOptPlanner planner) {
+    public RelOptCost computeSelfCost(RelOptPlanner planner, RelMetadataQuery mq) {
         if (!getInput().getConvention().satisfies(PhoenixConvention.CLIENT))
             return planner.getCostFactory().makeInfiniteCost();
         
-        return super.computeSelfCost(planner)
+        return super.computeSelfCost(planner, mq)
                 .multiplyBy(PHOENIX_FACTOR);
     }
 

@@ -10,6 +10,7 @@ import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.AggregateCall;
+import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.util.ImmutableBitSet;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.compile.FromCompiler;
@@ -48,11 +49,11 @@ public class PhoenixClientAggregate extends PhoenixAbstractAggregate {
     }
     
     @Override
-    public RelOptCost computeSelfCost(RelOptPlanner planner) {
+    public RelOptCost computeSelfCost(RelOptPlanner planner, RelMetadataQuery mq) {
         if (!getInput().getConvention().satisfies(PhoenixConvention.CLIENT))
             return planner.getCostFactory().makeInfiniteCost();
         
-        return super.computeSelfCost(planner)
+        return super.computeSelfCost(planner, mq)
                 .multiplyBy(PHOENIX_FACTOR);
     }
 

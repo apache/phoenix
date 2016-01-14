@@ -12,6 +12,7 @@ import org.apache.calcite.rel.RelCollationTraitDef;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Filter;
 import org.apache.calcite.rel.metadata.RelMdCollation;
+import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.util.ImmutableBitSet;
 import org.apache.calcite.util.ImmutableIntList;
@@ -30,13 +31,14 @@ import com.google.common.base.Supplier;
 public class PhoenixFilter extends Filter implements PhoenixRel {
     
     public static PhoenixFilter create(final RelNode input, final RexNode condition) {
-        RelOptCluster cluster = input.getCluster();
+        final RelOptCluster cluster = input.getCluster();
+        final RelMetadataQuery mq = RelMetadataQuery.instance();
         final RelTraitSet traits =
                 cluster.traitSet().replace(PhoenixConvention.CLIENT)
                 .replaceIfs(RelCollationTraitDef.INSTANCE,
                         new Supplier<List<RelCollation>>() {
                     public List<RelCollation> get() {
-                        return RelMdCollation.filter(input);
+                        return RelMdCollation.filter(mq, input);
                     }
                 });
         return new PhoenixFilter(cluster, traits, input, condition);
@@ -51,11 +53,11 @@ public class PhoenixFilter extends Filter implements PhoenixRel {
     }
 
     @Override
-    public RelOptCost computeSelfCost(RelOptPlanner planner) {
+    public RelOptCost computeSelfCost(RelOptPlanner planner, RelMetadataQuery mq) {
         if (!getInput().getConvention().satisfies(PhoenixConvention.GENERIC))
             return planner.getCostFactory().makeInfiniteCost();
         
-        return super.computeSelfCost(planner).multiplyBy(PHOENIX_FACTOR);
+        return super.computeSelfCost(planner, mq).multiplyBy(PHOENIX_FACTOR);
     }
 
     public QueryPlan implement(Implementor implementor) {

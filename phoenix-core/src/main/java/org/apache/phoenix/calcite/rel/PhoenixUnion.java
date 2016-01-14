@@ -9,6 +9,7 @@ import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Union;
+import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
@@ -39,14 +40,14 @@ public class PhoenixUnion extends Union implements PhoenixRel {
     }
 
     @Override
-    public RelOptCost computeSelfCost(RelOptPlanner planner) {
+    public RelOptCost computeSelfCost(RelOptPlanner planner, RelMetadataQuery mq) {
         for (RelNode input : getInputs()) {
             if (!input.getConvention().satisfies(PhoenixConvention.GENERIC)) {
                 return planner.getCostFactory().makeInfiniteCost();
             }
         }
         
-        return super.computeSelfCost(planner)
+        return super.computeSelfCost(planner, mq)
                 .multiplyBy(PHOENIX_FACTOR);
     }
 

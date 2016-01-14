@@ -9,6 +9,7 @@ import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Uncollect;
+import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.execute.UnnestArrayPlan;
 import org.apache.phoenix.expression.Expression;
@@ -37,11 +38,11 @@ public class PhoenixUncollect extends Uncollect implements PhoenixRel {
     }
 
     @Override
-    public RelOptCost computeSelfCost(RelOptPlanner planner) {
+    public RelOptCost computeSelfCost(RelOptPlanner planner, RelMetadataQuery mq) {
         if (!getInput().getConvention().satisfies(PhoenixConvention.GENERIC))
             return planner.getCostFactory().makeInfiniteCost();
         
-        return super.computeSelfCost(planner).multiplyBy(PHOENIX_FACTOR);
+        return super.computeSelfCost(planner, mq).multiplyBy(PHOENIX_FACTOR);
     }
     
     @Override

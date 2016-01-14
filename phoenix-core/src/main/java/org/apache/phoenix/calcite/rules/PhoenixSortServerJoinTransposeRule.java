@@ -7,6 +7,7 @@ import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rel.metadata.RelMdUtil;
+import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.phoenix.calcite.rel.PhoenixConvention;
 import org.apache.phoenix.calcite.rel.PhoenixServerJoin;
 import org.apache.phoenix.calcite.rel.PhoenixServerSort;
@@ -44,7 +45,8 @@ public class PhoenixSortServerJoinTransposeRule extends RelOptRule {
                 return false;
             }
         }
-        if (RelMdUtil.checkInputForCollationAndLimit(
+        final RelMetadataQuery mq = RelMetadataQuery.instance();
+        if (RelMdUtil.checkInputForCollationAndLimit(mq,
                 join.getLeft(), sort.getCollation(), null, null)) {
             return false;
         }

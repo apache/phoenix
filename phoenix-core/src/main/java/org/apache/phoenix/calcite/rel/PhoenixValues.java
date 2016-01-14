@@ -22,6 +22,7 @@ import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Values;
 import org.apache.calcite.rel.metadata.RelMdCollation;
 import org.apache.calcite.rel.metadata.RelMdDistribution;
+import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.hadoop.hbase.KeyValue;
@@ -71,12 +72,13 @@ public class PhoenixValues extends Values implements PhoenixRel {
     }
     
     public static PhoenixValues create(RelOptCluster cluster, final RelDataType rowType, final ImmutableList<ImmutableList<RexLiteral>> tuples) {
+        final RelMetadataQuery mq = RelMetadataQuery.instance();
         final RelTraitSet traits =
                 cluster.traitSetOf(PhoenixConvention.CLIENT)
                 .replaceIfs(RelCollationTraitDef.INSTANCE,
                         new Supplier<List<RelCollation>>() {
                     public List<RelCollation> get() {
-                        return RelMdCollation.values(rowType, tuples);
+                        return RelMdCollation.values(mq, rowType, tuples);
                     }
                 })
                 .replaceIf(RelDistributionTraitDef.INSTANCE,
@@ -99,8 +101,8 @@ public class PhoenixValues extends Values implements PhoenixRel {
     }
 
     @Override
-    public RelOptCost computeSelfCost(RelOptPlanner planner) {
-        return super.computeSelfCost(planner).multiplyBy(PHOENIX_FACTOR);
+    public RelOptCost computeSelfCost(RelOptPlanner planner, RelMetadataQuery mq) {
+        return super.computeSelfCost(planner, mq).multiplyBy(PHOENIX_FACTOR);
     }
 
     @Override

@@ -12,6 +12,7 @@ import org.apache.calcite.rel.RelCollationTraitDef;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Correlate;
 import org.apache.calcite.rel.core.CorrelationId;
+import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.sql.SemiJoinType;
 import org.apache.calcite.util.ImmutableBitSet;
 import org.apache.calcite.util.ImmutableIntList;
@@ -31,13 +32,14 @@ public class PhoenixCorrelate extends Correlate implements PhoenixRel {
     public static PhoenixCorrelate create(final RelNode left, final RelNode right, 
             CorrelationId correlationId, ImmutableBitSet requiredColumns, 
             final SemiJoinType joinType) {
-        RelOptCluster cluster = left.getCluster();
+        final RelOptCluster cluster = left.getCluster();
+        final RelMetadataQuery mq = RelMetadataQuery.instance();
         final RelTraitSet traits =
                 cluster.traitSet().replace(PhoenixConvention.CLIENT)
                 .replaceIfs(RelCollationTraitDef.INSTANCE,
                         new Supplier<List<RelCollation>>() {
                     public List<RelCollation> get() {
-                        return PhoenixRelMdCollation.correlate(left, right, joinType);
+                        return PhoenixRelMdCollation.correlate(mq, left, right, joinType);
                     }
                 });
         return new PhoenixCorrelate(cluster, traits, left, right, correlationId,
@@ -59,12 +61,12 @@ public class PhoenixCorrelate extends Correlate implements PhoenixRel {
     }
 
     @Override
-    public RelOptCost computeSelfCost(RelOptPlanner planner) {
+    public RelOptCost computeSelfCost(RelOptPlanner planner, RelMetadataQuery mq) {
         if (!getLeft().getConvention().satisfies(PhoenixConvention.GENERIC)
                 || !getRight().getConvention().satisfies(PhoenixConvention.GENERIC))
             return planner.getCostFactory().makeInfiniteCost();
         
-        return super.computeSelfCost(planner).multiplyBy(PHOENIX_FACTOR);
+        return super.computeSelfCost(planner, mq).multiplyBy(PHOENIX_FACTOR);
     }
     
     @Override

@@ -11,6 +11,7 @@ import org.apache.calcite.rel.RelCollation;
 import org.apache.calcite.rel.RelCollationTraitDef;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.metadata.RelMdCollation;
+import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rex.RexNode;
 import org.apache.hadoop.hbase.client.Scan;
@@ -33,13 +34,14 @@ public class PhoenixClientProject extends PhoenixAbstractProject {
     
     public static PhoenixClientProject create(final RelNode input, 
             final List<? extends RexNode> projects, RelDataType rowType) {
-        RelOptCluster cluster = input.getCluster();
+        final RelOptCluster cluster = input.getCluster();
+        final RelMetadataQuery mq = RelMetadataQuery.instance();
         final RelTraitSet traits =
                 cluster.traitSet().replace(PhoenixConvention.CLIENT)
                 .replaceIfs(RelCollationTraitDef.INSTANCE,
                         new Supplier<List<RelCollation>>() {
                     public List<RelCollation> get() {
-                        return RelMdCollation.project(input, projects);
+                        return RelMdCollation.project(mq, input, projects);
                     }
                 });
         return new PhoenixClientProject(cluster, traits, input, projects, rowType);
@@ -57,11 +59,11 @@ public class PhoenixClientProject extends PhoenixAbstractProject {
     }
 
     @Override
-    public RelOptCost computeSelfCost(RelOptPlanner planner) {
+    public RelOptCost computeSelfCost(RelOptPlanner planner, RelMetadataQuery mq) {
         if (!getInput().getConvention().satisfies(PhoenixConvention.GENERIC))
             return planner.getCostFactory().makeInfiniteCost();
         
-        return super.computeSelfCost(planner)
+        return super.computeSelfCost(planner, mq)
                 .multiplyBy(PHOENIX_FACTOR);
     }
 

@@ -27,13 +27,14 @@ public class PhoenixLimit extends SingleRel implements PhoenixRel {
     public final RexNode fetch;
     
     public static PhoenixLimit create(final RelNode input, RexNode offset, RexNode fetch) {
-        RelOptCluster cluster = input.getCluster();
+        final RelOptCluster cluster = input.getCluster();
+        final RelMetadataQuery mq = RelMetadataQuery.instance();
         final RelTraitSet traits =
                 cluster.traitSet().replace(PhoenixConvention.CLIENT)
                 .replaceIfs(RelCollationTraitDef.INSTANCE,
                         new Supplier<List<RelCollation>>() {
                     public List<RelCollation> get() {
-                        return RelMdCollation.limit(input);
+                        return RelMdCollation.limit(mq, input);
                     }
                 });
         return new PhoenixLimit(cluster, traits, input, offset, fetch);
@@ -63,19 +64,19 @@ public class PhoenixLimit extends SingleRel implements PhoenixRel {
     }
 
     @Override 
-    public RelOptCost computeSelfCost(RelOptPlanner planner) {
+    public RelOptCost computeSelfCost(RelOptPlanner planner, RelMetadataQuery mq) {
         if (!getInput().getConvention().satisfies(PhoenixConvention.GENERIC))
             return planner.getCostFactory().makeInfiniteCost();
         
-        double rowCount = RelMetadataQuery.getRowCount(this);
+        double rowCount = mq.getRowCount(this);
         return planner.getCostFactory()
                 .makeCost(rowCount, 0, 0)
                 .multiplyBy(PHOENIX_FACTOR);
     }
     
     @Override 
-    public double getRows() {
-        double rows = super.getRows();        
+    public double estimateRowCount(RelMetadataQuery mq) {
+        double rows = super.estimateRowCount(mq);        
         return Math.min(RexLiteral.intValue(fetch), rows);
     }
 

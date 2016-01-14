@@ -14,26 +14,26 @@ public class PhoenixRelMdRowCount {
             ReflectiveRelMetadataProvider.reflectiveSource(
                 BuiltInMethod.ROW_COUNT.method, new PhoenixRelMdRowCount());
 
-    public Double getRowCount(Aggregate rel) {
+    public Double getRowCount(Aggregate rel, RelMetadataQuery mq) {
         if (PhoenixAbstractAggregate.isSingleValueCheckAggregate(rel)) {
-            return RelMetadataQuery.getRowCount(rel.getInput());
+            return mq.getRowCount(rel.getInput());
         }
         
         ImmutableBitSet groupKey = rel.getGroupSet();
         // rowcount is the cardinality of the group by columns
         Double distinctRowCount =
-                RelMetadataQuery.getDistinctRowCount(
+                mq.getDistinctRowCount(
                         rel.getInput(),
                         groupKey,
                         null);
         if (distinctRowCount == null) {
-            return rel.getRows();
+            return rel.estimateRowCount(mq);
         } else {
             return distinctRowCount;
         }
     }
     
-    public Double getRowCount(PhoenixLimit rel) {
-        return rel.getRows();
+    public Double getRowCount(PhoenixLimit rel, RelMetadataQuery mq) {
+        return rel.estimateRowCount(mq);
     }
 }

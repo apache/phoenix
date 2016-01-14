@@ -523,8 +523,8 @@ public class PhoenixConverterRules {
                             right, 
                             right.getTraitSet().replace(PhoenixConvention.GENERIC)),
                     join.getCondition(),
+                    join.getVariablesSet(),
                     join.getJoinType(),
-                    join.getVariablesStopped(),
                     false);
         }
     }
@@ -568,8 +568,8 @@ public class PhoenixConverterRules {
                             join.getRight(), 
                             join.getRight().getTraitSet().replace(PhoenixConvention.GENERIC)),
                     join.getCondition(),
+                    join.getVariablesSet(),
                     join.getJoinType(),
-                    join.getVariablesStopped(),
                     false);
         }
     }

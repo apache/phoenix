@@ -29,24 +29,24 @@ public class PhoenixRelMdCollation {
 
     private PhoenixRelMdCollation() { }
 
-    public ImmutableList<RelCollation> collations(PhoenixTableScan tableScan) {
+    public ImmutableList<RelCollation> collations(PhoenixTableScan tableScan, RelMetadataQuery mq) {
         return ImmutableList.copyOf(tableScan.getCollationList());
     }
 
-    public ImmutableList<RelCollation> collations(PhoenixCorrelate correlate) {
-        return ImmutableList.copyOf(correlate(correlate.getLeft(), correlate.getRight(), correlate.getJoinType()));
+    public ImmutableList<RelCollation> collations(PhoenixCorrelate correlate, RelMetadataQuery mq) {
+        return ImmutableList.copyOf(correlate(mq, correlate.getLeft(), correlate.getRight(), correlate.getJoinType()));
     }
 
-    public ImmutableList<RelCollation> collations(PhoenixLimit limit) {
-        return ImmutableList.copyOf(RelMdCollation.limit(limit.getInput()));
+    public ImmutableList<RelCollation> collations(PhoenixLimit limit, RelMetadataQuery mq) {
+        return ImmutableList.copyOf(RelMdCollation.limit(mq, limit.getInput()));
     }
 
-    public ImmutableList<RelCollation> collations(PhoenixServerJoin join) {
-        return ImmutableList.copyOf(hashJoin(join.getLeft(), join.getRight(), join.getJoinType()));
+    public ImmutableList<RelCollation> collations(PhoenixServerJoin join, RelMetadataQuery mq) {
+        return ImmutableList.copyOf(hashJoin(mq, join.getLeft(), join.getRight(), join.getJoinType()));
     }
 
-    public ImmutableList<RelCollation> collations(PhoenixClientJoin join) {
-        return ImmutableList.copyOf(PhoenixRelMdCollation.mergeJoin(join.getLeft(), join.getRight(), join.joinInfo.leftKeys, join.joinInfo.rightKeys));
+    public ImmutableList<RelCollation> collations(PhoenixClientJoin join, RelMetadataQuery mq) {
+        return ImmutableList.copyOf(PhoenixRelMdCollation.mergeJoin(mq, join.getLeft(), join.getRight(), join.joinInfo.leftKeys, join.joinInfo.rightKeys));
     }
 
     public ImmutableList<RelCollation> collations(PhoenixMergeSortUnion union) {
@@ -54,21 +54,21 @@ public class PhoenixRelMdCollation {
     }
     
     /** Helper method to determine a {@link PhoenixCorrelate}'s collation. */
-    public static List<RelCollation> correlate(RelNode left, RelNode right, SemiJoinType joinType) {
-        return RelMetadataQuery.collations(left);
+    public static List<RelCollation> correlate(RelMetadataQuery mq, RelNode left, RelNode right, SemiJoinType joinType) {
+        return mq.collations(left);
     }
     
     /** Helper method to determine a {@link PhoenixServerJoin}'s collation. */
-    public static List<RelCollation> hashJoin(RelNode left, RelNode right, JoinRelType joinType) {
-        return RelMetadataQuery.collations(left);
+    public static List<RelCollation> hashJoin(RelMetadataQuery mq, RelNode left, RelNode right, JoinRelType joinType) {
+        return mq.collations(left);
     }
 
-    public static List<RelCollation> mergeJoin(RelNode left, RelNode right,
+    public static List<RelCollation> mergeJoin(RelMetadataQuery mq, RelNode left, RelNode right,
             ImmutableIntList leftKeys, ImmutableIntList rightKeys) {
         final ImmutableList.Builder<RelCollation> builder = ImmutableList.builder();
 
         final ImmutableList<RelCollation> leftCollations =
-                RelMetadataQuery.collations(left);
+                mq.collations(left);
         for (RelCollation collation : leftCollations) {
             if (!collation.getFieldCollations().isEmpty()) {
                 builder.add(collation);
@@ -76,7 +76,7 @@ public class PhoenixRelMdCollation {
         }
         
         final ImmutableList<RelCollation> rightCollations =
-                RelMetadataQuery.collations(right);
+                mq.collations(right);
         final int leftFieldCount = left.getRowType().getFieldCount();
         for (RelCollation collation : rightCollations) {
             if (!collation.getFieldCollations().isEmpty()) {

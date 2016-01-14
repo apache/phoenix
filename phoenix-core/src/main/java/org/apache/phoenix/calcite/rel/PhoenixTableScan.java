@@ -169,8 +169,8 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
     }
 
     @Override
-    public RelOptCost computeSelfCost(RelOptPlanner planner) {
-        double rowCount = super.getRows();
+    public RelOptCost computeSelfCost(RelOptPlanner planner, RelMetadataQuery mq) {
+        double rowCount = super.estimateRowCount(mq);
         Double filteredRowCount = null;
         if (scanRanges != null) {
             if (scanRanges.isPointLookup()) {
@@ -178,7 +178,7 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
             } else if (scanRanges.getBoundPkColumnCount() > 0) {
                 // TODO
                 int pkCount = scanRanges.getBoundPkColumnCount();
-                filteredRowCount = rowCount * Math.pow(RelMetadataQuery.getSelectivity(this, filter), pkCount);
+                filteredRowCount = rowCount * Math.pow(mq.getSelectivity(this, filter), pkCount);
             }
         }
         if (filteredRowCount != null) {
@@ -209,10 +209,10 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
     }
     
     @Override
-    public double getRows() {
-        double rows = super.getRows();
+    public double estimateRowCount(RelMetadataQuery mq) {
+        double rows = super.estimateRowCount(mq);
         if (filter != null && !filter.isAlwaysTrue()) {
-            rows = rows * RelMetadataQuery.getSelectivity(this, filter);
+            rows = rows * mq.getSelectivity(this, filter);
         }
         
         return rows;

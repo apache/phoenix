@@ -12,6 +12,7 @@ import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelCollation;
 import org.apache.calcite.rel.RelCollationTraitDef;
 import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.rel.core.CorrelationId;
 import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rex.RexNode;
@@ -36,26 +37,27 @@ import com.google.common.collect.Lists;
 public class PhoenixServerJoin extends PhoenixAbstractJoin {
     
     public static PhoenixServerJoin create(final RelNode left, final RelNode right, 
-            RexNode condition, final JoinRelType joinType, 
-            Set<String> variablesStopped, boolean isSingleValueRhs) {
-        RelOptCluster cluster = left.getCluster();
+            RexNode condition, Set<CorrelationId> variablesSet,
+            final JoinRelType joinType, boolean isSingleValueRhs) {
+        final RelOptCluster cluster = left.getCluster();
+        final RelMetadataQuery mq = RelMetadataQuery.instance();
         final RelTraitSet traits =
                 cluster.traitSet().replace(PhoenixConvention.SERVERJOIN)
                 .replaceIfs(RelCollationTraitDef.INSTANCE,
                         new Supplier<List<RelCollation>>() {
                     public List<RelCollation> get() {
-                        return PhoenixRelMdCollation.hashJoin(left, right, joinType);
+                        return PhoenixRelMdCollation.hashJoin(mq, left, right, joinType);
                     }
                 });
-        return new PhoenixServerJoin(cluster, traits, left, right, condition, joinType, variablesStopped, isSingleValueRhs);
+        return new PhoenixServerJoin(cluster, traits, left, right, condition, variablesSet, joinType, isSingleValueRhs);
     }
 
     private PhoenixServerJoin(RelOptCluster cluster, RelTraitSet traits,
             RelNode left, RelNode right, RexNode condition,
-            JoinRelType joinType, Set<String> variablesStopped, 
+            Set<CorrelationId> variablesSet, JoinRelType joinType,
             boolean isSingleValueRhs) {
-        super(cluster, traits, left, right, condition, joinType,
-                variablesStopped, isSingleValueRhs);
+        super(cluster, traits, left, right, condition, variablesSet,
+                joinType, isSingleValueRhs);
     }
 
     @Override
@@ -67,13 +69,14 @@ public class PhoenixServerJoin extends PhoenixAbstractJoin {
     @Override
     public PhoenixServerJoin copy(RelTraitSet traits, RexNode condition, RelNode left,
             RelNode right, JoinRelType joinRelType, boolean semiJoinDone, boolean isSingleValueRhs) {
-        return create(left, right, condition, joinRelType, variablesStopped, isSingleValueRhs);
+        return create(left, right, condition, variablesSet, joinRelType, isSingleValueRhs);
     }
 
     @Override
-    public RelOptCost computeSelfCost(RelOptPlanner planner) {
+    public RelOptCost computeSelfCost(RelOptPlanner planner, RelMetadataQuery mq) {
         if (!getLeft().getConvention().satisfies(PhoenixConvention.SERVER)
-                || !getRight().getConvention().satisfies(PhoenixConvention.GENERIC))
+                || !getRight().getConvention().satisfies(PhoenixConvention.GENERIC)
+                || !variablesSet.isEmpty())
             return planner.getCostFactory().makeInfiniteCost();            
         
         if (joinType == JoinRelType.FULL || joinType == JoinRelType.RIGHT)
@@ -81,14 +84,14 @@ public class PhoenixServerJoin extends PhoenixAbstractJoin {
         
         //TODO return infinite cost if RHS size exceeds memory limit.
         
-        double rowCount = RelMetadataQuery.getRowCount(this);
+        double rowCount = mq.getRowCount(this);
 
-        double leftRowCount = RelMetadataQuery.getRowCount(getLeft());
+        double leftRowCount = mq.getRowCount(getLeft());
         if (Double.isInfinite(leftRowCount)) {
             rowCount = leftRowCount;
         } else {
             rowCount += leftRowCount;
-            double rightRowCount = RelMetadataQuery.getRowCount(getRight());
+            double rightRowCount = mq.getRowCount(getRight());
             if (Double.isInfinite(rightRowCount)) {
                 rowCount = rightRowCount;
             } else {

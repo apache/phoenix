@@ -35,14 +35,15 @@ public class PhoenixClientSemiJoin extends PhoenixAbstractSemiJoin implements
     
     public static PhoenixClientSemiJoin create(
             final RelNode left, final RelNode right, RexNode condition) {
-        RelOptCluster cluster = left.getCluster();
+        final RelOptCluster cluster = left.getCluster();
         final JoinInfo joinInfo = JoinInfo.of(left, right, condition);
+        final RelMetadataQuery mq = RelMetadataQuery.instance();
         final RelTraitSet traits =
                 cluster.traitSet().replace(PhoenixConvention.CLIENT)
                 .replaceIfs(RelCollationTraitDef.INSTANCE,
                         new Supplier<List<RelCollation>>() {
                     public List<RelCollation> get() {
-                        return PhoenixRelMdCollation.mergeJoin(left, right, joinInfo.leftKeys, joinInfo.rightKeys);
+                        return PhoenixRelMdCollation.mergeJoin(mq, left, right, joinInfo.leftKeys, joinInfo.rightKeys);
                     }
                 });
         return new PhoenixClientSemiJoin(cluster, traits, left, right, condition, 
@@ -63,23 +64,23 @@ public class PhoenixClientSemiJoin extends PhoenixAbstractSemiJoin implements
     }    
 
     @Override
-    public RelOptCost computeSelfCost(RelOptPlanner planner) {
+    public RelOptCost computeSelfCost(RelOptPlanner planner, RelMetadataQuery mq) {
         if (!getLeft().getConvention().satisfies(PhoenixConvention.GENERIC) 
                 || !getRight().getConvention().satisfies(PhoenixConvention.GENERIC))
             return planner.getCostFactory().makeInfiniteCost();            
         
-        if ((!leftKeys.isEmpty() && !RelCollations.contains(RelMetadataQuery.collations(getLeft()), leftKeys))
-                || (!rightKeys.isEmpty() && !RelCollations.contains(RelMetadataQuery.collations(getRight()), rightKeys)))
+        if ((!leftKeys.isEmpty() && !RelCollations.contains(mq.collations(getLeft()), leftKeys))
+                || (!rightKeys.isEmpty() && !RelCollations.contains(mq.collations(getRight()), rightKeys)))
             return planner.getCostFactory().makeInfiniteCost();
         
-        double rowCount = RelMetadataQuery.getRowCount(this);        
+        double rowCount = mq.getRowCount(this);        
 
-        double leftRowCount = RelMetadataQuery.getRowCount(getLeft());
+        double leftRowCount = mq.getRowCount(getLeft());
         if (Double.isInfinite(leftRowCount)) {
             rowCount = leftRowCount;
         } else {
             rowCount += leftRowCount;
-            double rightRowCount = RelMetadataQuery.getRowCount(getRight());
+            double rightRowCount = mq.getRowCount(getRight());
             if (Double.isInfinite(rightRowCount)) {
                 rowCount = rightRowCount;
             } else {

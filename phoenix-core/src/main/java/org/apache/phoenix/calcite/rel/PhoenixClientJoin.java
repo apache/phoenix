@@ -12,6 +12,7 @@ import org.apache.calcite.rel.RelCollation;
 import org.apache.calcite.rel.RelCollationTraitDef;
 import org.apache.calcite.rel.RelCollations;
 import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.rel.core.CorrelationId;
 import org.apache.calcite.rel.core.JoinInfo;
 import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
@@ -41,26 +42,27 @@ import com.google.common.collect.Lists;
 public class PhoenixClientJoin extends PhoenixAbstractJoin {
     
     public static PhoenixClientJoin create(final RelNode left, final RelNode right, 
-            RexNode condition, JoinRelType joinType, Set<String> variablesStopped,
+            RexNode condition, Set<CorrelationId> variablesSet, JoinRelType joinType,
             boolean isSingleValueRhs) {
-        RelOptCluster cluster = left.getCluster();
+        final RelOptCluster cluster = left.getCluster();
         final JoinInfo joinInfo = JoinInfo.of(left, right, condition);
+        final RelMetadataQuery mq = RelMetadataQuery.instance();
         final RelTraitSet traits =
                 cluster.traitSet().replace(PhoenixConvention.CLIENT)
                 .replaceIfs(RelCollationTraitDef.INSTANCE,
                         new Supplier<List<RelCollation>>() {
                     public List<RelCollation> get() {
-                        return PhoenixRelMdCollation.mergeJoin(left, right, joinInfo.leftKeys, joinInfo.rightKeys);
+                        return PhoenixRelMdCollation.mergeJoin(mq, left, right, joinInfo.leftKeys, joinInfo.rightKeys);
                     }
                 });
-        return new PhoenixClientJoin(cluster, traits, left, right, condition, joinType, variablesStopped, isSingleValueRhs);
+        return new PhoenixClientJoin(cluster, traits, left, right, condition, variablesSet, joinType, isSingleValueRhs);
     }
 
     private PhoenixClientJoin(RelOptCluster cluster, RelTraitSet traits,
             RelNode left, RelNode right, RexNode condition,
-            JoinRelType joinType, Set<String> variablesStopped, boolean isSingleValueRhs) {
-        super(cluster, traits, left, right, condition, joinType,
-                variablesStopped, isSingleValueRhs);
+             Set<CorrelationId> variablesSet,JoinRelType joinType, boolean isSingleValueRhs) {
+        super(cluster, traits, left, right, condition, variablesSet,
+                joinType, isSingleValueRhs);
     }
 
     @Override
@@ -72,28 +74,29 @@ public class PhoenixClientJoin extends PhoenixAbstractJoin {
     @Override
     public PhoenixClientJoin copy(RelTraitSet traits, RexNode condition, RelNode left,
             RelNode right, JoinRelType joinRelType, boolean semiJoinDone, boolean isSingleValueRhs) {
-        return create(left, right, condition, joinRelType, variablesStopped, isSingleValueRhs);
+        return create(left, right, condition, variablesSet, joinRelType, isSingleValueRhs);
     }
 
     @Override
-    public RelOptCost computeSelfCost(RelOptPlanner planner) {
+    public RelOptCost computeSelfCost(RelOptPlanner planner, RelMetadataQuery mq) {
         if (!getLeft().getConvention().satisfies(PhoenixConvention.GENERIC) 
-                || !getRight().getConvention().satisfies(PhoenixConvention.GENERIC))
+                || !getRight().getConvention().satisfies(PhoenixConvention.GENERIC)
+                || !variablesSet.isEmpty())
             return planner.getCostFactory().makeInfiniteCost();            
         
         if (joinType == JoinRelType.RIGHT
-                || (!joinInfo.leftKeys.isEmpty() && !RelCollations.contains(RelMetadataQuery.collations(getLeft()), joinInfo.leftKeys))
-                || (!joinInfo.rightKeys.isEmpty() && !RelCollations.contains(RelMetadataQuery.collations(getRight()), joinInfo.rightKeys)))
+                 || (!joinInfo.leftKeys.isEmpty() && !RelCollations.contains(mq.collations(getLeft()), joinInfo.leftKeys))
+                 || (!joinInfo.rightKeys.isEmpty() && !RelCollations.contains(mq.collations(getRight()), joinInfo.rightKeys)))
             return planner.getCostFactory().makeInfiniteCost();
         
-        double rowCount = RelMetadataQuery.getRowCount(this);        
+        double rowCount = mq.getRowCount(this);        
 
-        double leftRowCount = RelMetadataQuery.getRowCount(getLeft());
+        double leftRowCount = mq.getRowCount(getLeft());
         if (Double.isInfinite(leftRowCount)) {
             rowCount = leftRowCount;
         } else {
             rowCount += leftRowCount;
-            double rightRowCount = RelMetadataQuery.getRowCount(getRight());
+            double rightRowCount = mq.getRowCount(getRight());
             if (Double.isInfinite(rightRowCount)) {
                 rowCount = rightRowCount;
             } else {

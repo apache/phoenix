@@ -32,10 +32,10 @@ abstract public class PhoenixAbstractProject extends Project implements PhoenixR
     }
 
     @Override
-    public RelOptCost computeSelfCost(RelOptPlanner planner) {
+    public RelOptCost computeSelfCost(RelOptPlanner planner, RelMetadataQuery mq) {
         // This is to minimize the weight of cost of Project so that it
         // does not affect more important decisions like join algorithms.
-        double rowCount = RelMetadataQuery.getRowCount(getInput());
+        double rowCount = mq.getRowCount(getInput());
         double rows = 2 * rowCount / (rowCount + 1);
         return planner.getCostFactory().makeCost(rows, 0, 0);
     }

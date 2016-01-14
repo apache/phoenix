@@ -51,16 +51,16 @@ public class PhoenixMergeSortUnion extends Union implements PhoenixRel {
     }
 
     @Override
-    public RelOptCost computeSelfCost(RelOptPlanner planner) {
+    public RelOptCost computeSelfCost(RelOptPlanner planner, RelMetadataQuery mq) {
         for (RelNode input : getInputs()) {
             if (!input.getConvention().satisfies(PhoenixConvention.GENERIC)
-                    || !RelMetadataQuery.collations(input).contains(collation)) {
+                    || !mq.collations(input).contains(collation)) {
                 return planner.getCostFactory().makeInfiniteCost();
             }
         }
         
         double mergeSortFactor = 1.1;
-        return super.computeSelfCost(planner)
+        return super.computeSelfCost(planner, mq)
                 .multiplyBy(PHOENIX_FACTOR).multiplyBy(mergeSortFactor);
     }
 

@@ -14,8 +14,10 @@ import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelWriter;
 import org.apache.calcite.rel.core.Aggregate;
 import org.apache.calcite.rel.core.AggregateCall;
+import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.util.ImmutableBitSet;
 import org.apache.calcite.util.ImmutableIntList;
+import org.apache.calcite.util.Util;
 import org.apache.phoenix.calcite.CalciteUtils;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.QueryPlan;
@@ -98,12 +100,24 @@ abstract public class PhoenixAbstractAggregate extends Aggregate implements Phoe
     }
     
     @Override
-    public RelOptCost computeSelfCost(RelOptPlanner planner) {
+    public RelOptCost computeSelfCost(RelOptPlanner planner, RelMetadataQuery mq) {
         if (isSingleValueCheckAggregate(this))
             return planner.getCostFactory().makeInfiniteCost();
         
-        double orderedGroupByFactor = isOrderedGroupBy ? 0.5 : 1.0;
-        return super.computeSelfCost(planner).multiplyBy(orderedGroupByFactor);
+        double rowCount = mq.getRowCount(this);
+        if (isOrderedGroupBy) {
+            rowCount = (rowCount * rowCount) / Util.nLogN(rowCount);
+        }
+        // Aggregates with more aggregate functions cost a bit more
+        float multiplier = 1f + (float) aggCalls.size() * 0.125f;
+        for (AggregateCall aggCall : aggCalls) {
+          if (aggCall.getAggregation().getName().equals("SUM")) {
+            // Pretend that SUM costs a little bit more than $SUM0,
+            // to make things deterministic.
+            multiplier += 0.0125f;
+          }
+        }
+        return planner.getCostFactory().makeCost(rowCount * multiplier, 0, 0);
     }
 
     @Override

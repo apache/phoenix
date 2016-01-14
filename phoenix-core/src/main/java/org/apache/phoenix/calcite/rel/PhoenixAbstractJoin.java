@@ -8,6 +8,7 @@ import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelWriter;
+import org.apache.calcite.rel.core.CorrelationId;
 import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.rel.core.JoinInfo;
 import org.apache.calcite.rel.core.JoinRelType;
@@ -25,8 +26,8 @@ abstract public class PhoenixAbstractJoin extends Join implements PhoenixRel {
     public final JoinInfo joinInfo;
     public final boolean isSingleValueRhs;
 
-    protected PhoenixAbstractJoin(RelOptCluster cluster, RelTraitSet traits, RelNode left, RelNode right, RexNode condition, JoinRelType joinType, Set<String> variablesStopped, boolean isSingleValueRhs) {
-        super(cluster, traits, left, right, condition, joinType, variablesStopped);
+    protected PhoenixAbstractJoin(RelOptCluster cluster, RelTraitSet traits, RelNode left, RelNode right, RexNode condition, Set<CorrelationId> variablesSet, JoinRelType joinType, boolean isSingleValueRhs) {
+        super(cluster, traits, left, right, condition, variablesSet, joinType);
         this.joinInfo = JoinInfo.of(left, right, condition);
         this.isSingleValueRhs = isSingleValueRhs;
     }

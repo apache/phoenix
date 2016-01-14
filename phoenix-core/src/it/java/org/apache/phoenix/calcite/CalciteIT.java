@@ -274,13 +274,16 @@ public class CalciteIT extends BaseCalciteIT {
     @Test public void testMultiJoin() throws Exception {
         start(false).sql("select t1.entity_id, t2.a_string, t3.organization_id from aTable t1 join aTable t2 on t1.entity_id = t2.entity_id and t1.organization_id = t2.organization_id join atable t3 on t1.entity_id = t3.entity_id and t1.organization_id = t3.organization_id where t1.a_string = 'a'") 
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixClientProject(ENTITY_ID=[$19], A_STRING=[$38], ORGANIZATION_ID=[$0])\n" +
-                           "    PhoenixServerJoin(condition=[AND(=($19, $1), =($18, $0))], joinType=[inner])\n" +
-                           "      PhoenixTableScan(table=[[phoenix, ATABLE]])\n" +
-                           "      PhoenixClientProject(ORGANIZATION_ID=[$18], ENTITY_ID=[$19], A_STRING=[$20], B_STRING=[$21], A_INTEGER=[$22], A_DATE=[$23], A_TIME=[$24], A_TIMESTAMP=[$25], X_DECIMAL=[$26], X_LONG=[$27], X_INTEGER=[$28], Y_INTEGER=[$29], A_BYTE=[$30], A_SHORT=[$31], A_FLOAT=[$32], A_DOUBLE=[$33], A_UNSIGNED_FLOAT=[$34], A_UNSIGNED_DOUBLE=[$35], ORGANIZATION_ID0=[$0], ENTITY_ID0=[$1], A_STRING0=[$2], B_STRING0=[$3], A_INTEGER0=[$4], A_DATE0=[$5], A_TIME0=[$6], A_TIMESTAMP0=[$7], X_DECIMAL0=[$8], X_LONG0=[$9], X_INTEGER0=[$10], Y_INTEGER0=[$11], A_BYTE0=[$12], A_SHORT0=[$13], A_FLOAT0=[$14], A_DOUBLE0=[$15], A_UNSIGNED_FLOAT0=[$16], A_UNSIGNED_DOUBLE0=[$17])\n" +
-                           "        PhoenixServerJoin(condition=[AND(=($19, $1), =($18, $0))], joinType=[inner])\n" +
-                           "          PhoenixTableScan(table=[[phoenix, ATABLE]])\n" +
-                           "          PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'a')])\n")
+                           "  PhoenixClientProject(ENTITY_ID=[$4], A_STRING=[$2], ORGANIZATION_ID=[$6])\n" +
+                           "    PhoenixServerJoin(condition=[AND(=($4, $1), =($3, $0))], joinType=[inner])\n" +
+                           "      PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1], A_STRING=[$2])\n" +
+                           "        PhoenixTableScan(table=[[phoenix, ATABLE]])\n" +
+                           "      PhoenixClientProject(ORGANIZATION_ID=[$2], ENTITY_ID=[$3], A_STRING=[$4], ORGANIZATION_ID0=[$0], ENTITY_ID0=[$1])\n" +
+                           "        PhoenixServerJoin(condition=[AND(=($3, $1), =($2, $0))], joinType=[inner])\n" +
+                           "          PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1])\n" +
+                           "            PhoenixTableScan(table=[[phoenix, ATABLE]])\n" +
+                           "          PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1], A_STRING=[$2])\n" +
+                           "            PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'a')])\n")
                 .resultIs(new Object[][] {
                           {"00A123122312312", "a", "00D300000000XHP"}, 
                           {"00A223122312312", "a", "00D300000000XHP"}, 
@@ -290,12 +293,15 @@ public class CalciteIT extends BaseCalciteIT {
         
         start(false).sql("select t1.entity_id, t2.a_string, t3.organization_id from aTable t1 join aTable t2 on t1.entity_id = t2.entity_id and t1.organization_id = t2.organization_id join atable t3 on t1.entity_id = t3.entity_id and t1.organization_id = t3.organization_id")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixClientProject(ENTITY_ID=[$19], A_STRING=[$2], ORGANIZATION_ID=[$36])\n" +
-                           "    PhoenixServerJoin(condition=[AND(=($19, $1), =($18, $0))], joinType=[inner])\n" +
-                           "      PhoenixTableScan(table=[[phoenix, ATABLE]])\n" +
-                           "      PhoenixServerJoin(condition=[AND(=($1, $19), =($0, $18))], joinType=[inner])\n" +
+                           "  PhoenixClientProject(ENTITY_ID=[$4], A_STRING=[$2], ORGANIZATION_ID=[$5])\n" +
+                           "    PhoenixServerJoin(condition=[AND(=($4, $1), =($3, $0))], joinType=[inner])\n" +
+                           "      PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1], A_STRING=[$2])\n" +
                            "        PhoenixTableScan(table=[[phoenix, ATABLE]])\n" +
-                           "        PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
+                           "      PhoenixServerJoin(condition=[AND(=($1, $3), =($0, $2))], joinType=[inner])\n" +
+                           "        PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1])\n" +
+                           "          PhoenixTableScan(table=[[phoenix, ATABLE]])\n" +
+                           "        PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1])\n" +
+                           "          PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
                 .resultIs(new Object[][] {
                           {"00A123122312312", "a", "00D300000000XHP"},
                           {"00A223122312312", "a", "00D300000000XHP"},
@@ -751,6 +757,7 @@ public class CalciteIT extends BaseCalciteIT {
                 .close();
     }
 
+    @Ignore // CALCITE-1045
     @Test public void testScalarSubquery() throws Exception {
         start(false).sql("select \"item_id\", name, (select max(quantity) sq \n"
             + "from " + JOIN_ORDER_TABLE_FULL_NAME + " o where o.\"item_id\" = i.\"item_id\")\n"
@@ -896,6 +903,7 @@ public class CalciteIT extends BaseCalciteIT {
                 .close();
     }
     
+    @Ignore // CALCITE-1055
     @Test public void testCorrelateAndDecorrelation() throws Exception {
         Properties correlProps = getConnectionProps(false);
         correlProps.setProperty("forceDecorrelate", Boolean.FALSE.toString());
@@ -910,20 +918,23 @@ public class CalciteIT extends BaseCalciteIT {
                 {"000000000000005", 5000}};
         String p1Correlate = 
                 "PhoenixToEnumerableConverter\n" +
-                "  PhoenixClientProject(order_id=[$0], QUANTITY=[$4])\n" +
-                "    PhoenixFilter(condition=[=($4, $7)])\n" +
-                "      PhoenixCorrelate(correlation=[$cor0], joinType=[LEFT], requiredColumns=[{2}])\n" +
-                "        PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n" +
+                "  PhoenixClientProject(order_id=[$0], QUANTITY=[$2])\n" +
+                "    PhoenixFilter(condition=[=($2, $3)])\n" +
+                "      PhoenixCorrelate(correlation=[$cor0], joinType=[LEFT], requiredColumns=[{1}])\n" +
+                "        PhoenixServerProject(order_id=[$0], item_id=[$2], QUANTITY=[$4])\n" +
+                "          PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n" +
                 "        PhoenixServerAggregate(group=[{}], EXPR$0=[MAX($4)])\n" +
                 "          PhoenixTableScan(table=[[phoenix, Join, OrderTable]], filter=[=($cor0.item_id, $2)])\n";
         String p1Decorrelated = 
                 "PhoenixToEnumerableConverter\n" +
-                "  PhoenixClientProject(order_id=[$0], QUANTITY=[$4])\n" +
-                "    PhoenixServerJoin(condition=[AND(=($2, $7), =($4, $8))], joinType=[inner])\n" +
-                "      PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n" +
-                "      PhoenixServerAggregate(group=[{7}], EXPR$0=[MAX($4)], isOrdered=[false])\n" +
-                "        PhoenixServerJoin(condition=[=($7, $2)], joinType=[inner])\n" +
-                "          PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n" +
+                "  PhoenixClientProject(order_id=[$0], QUANTITY=[$2])\n" +
+                "    PhoenixServerJoin(condition=[AND(=($1, $3), =($2, $4))], joinType=[inner])\n" +
+                "      PhoenixServerProject(order_id=[$0], item_id=[$2], QUANTITY=[$4])\n" +
+                "        PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n" +
+                "      PhoenixServerAggregate(group=[{2}], EXPR$0=[MAX($1)], isOrdered=[false])\n" +
+                "        PhoenixServerJoin(condition=[=($2, $0)], joinType=[inner])\n" +
+                "          PhoenixServerProject(item_id=[$2], QUANTITY=[$4])\n" +
+                "            PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n" +
                 "          PhoenixServerAggregate(group=[{2}], isOrdered=[false])\n" +
                 "            PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n";
         start(correlProps).sql(q1).explainIs(p1Correlate).resultIs(r1).close();
@@ -940,21 +951,24 @@ public class CalciteIT extends BaseCalciteIT {
         String p2Correlate = 
                 "PhoenixToEnumerableConverter\n" +
                 "  PhoenixClientProject(NAME=[$1])\n" +
-                "    PhoenixFilter(condition=[=($2, $7)])\n" +
+                "    PhoenixFilter(condition=[=($2, $3)])\n" +
                 "      PhoenixCorrelate(correlation=[$cor0], joinType=[LEFT], requiredColumns=[{0, 1}])\n" +
-                "        PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
+                "        PhoenixServerProject(item_id=[$0], NAME=[$1], PRICE=[$2])\n" +
+                "          PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
                 "        PhoenixServerAggregate(group=[{}], EXPR$0=[MAX($2)])\n" +
                 "          PhoenixTableScan(table=[[phoenix, Join, ItemTable]], filter=[AND(=($cor0.item_id, $0), =($cor0.NAME, $1), <>($0, 'invalid001'))])\n";
         String p2Decorrelated = 
                 "PhoenixToEnumerableConverter\n" +
                 "  PhoenixClientProject(NAME=[$1])\n" +
-                "    PhoenixServerJoin(condition=[AND(=($0, $7), =($1, $8), =($2, $9))], joinType=[inner])\n" +
-                "      PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
+                "    PhoenixServerJoin(condition=[AND(=($0, $3), =($1, $4), =($2, $5))], joinType=[inner])\n" +
+                "      PhoenixServerProject(item_id=[$0], NAME=[$1], PRICE=[$2])\n" +
+                "        PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
                 "      PhoenixServerAggregate(group=[{0, 1}], EXPR$0=[MAX($4)], isOrdered=[false])\n" +
                 "        PhoenixServerJoin(condition=[AND(=($0, $2), =($1, $3))], joinType=[inner])\n" +
                 "          PhoenixServerProject(item_id=[$0], NAME=[$1])\n" +
                 "            PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
-                "          PhoenixTableScan(table=[[phoenix, Join, ItemTable]], filter=[<>($0, 'invalid001')])\n";
+                "          PhoenixServerProject(item_id=[$0], NAME=[$1], PRICE=[$2])\n" +
+                "            PhoenixTableScan(table=[[phoenix, Join, ItemTable]], filter=[<>($0, 'invalid001')])\n";
         start(correlProps).sql(q2).explainIs(p2Correlate).resultIs(r2).close();
         start(decorrelProps).sql(q2).explainIs(p2Decorrelated).resultIs(r2).close();
         
@@ -968,22 +982,22 @@ public class CalciteIT extends BaseCalciteIT {
         String p3Correlate = 
                 "PhoenixToEnumerableConverter\n" +
                 "  PhoenixClientProject(item_id=[$0], NAME=[$1])\n" +
-                "    PhoenixFilter(condition=[IS NOT NULL($7)])\n" +
-                "      PhoenixCorrelate(correlation=[$cor0], joinType=[LEFT], requiredColumns=[{0}])\n" +
+                "    PhoenixCorrelate(correlation=[$cor0], joinType=[INNER], requiredColumns=[{0}])\n" +
+                "      PhoenixServerProject(item_id=[$0], NAME=[$1])\n" +
                 "        PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
-                "        PhoenixServerAggregate(group=[{}], agg#0=[MIN($0)])\n" +
-                "          PhoenixServerProject($f0=[true])\n" +
-                "            PhoenixTableScan(table=[[phoenix, Join, OrderTable]], filter=[=($cor0.item_id, $2)])\n";
+                "      PhoenixServerAggregate(group=[{0}], isOrdered=[false])\n" +
+                "        PhoenixServerProject(i=[true])\n" +
+                "          PhoenixTableScan(table=[[phoenix, Join, OrderTable]], filter=[=($cor0.item_id, $2)])\n";
         String p3Decorrelated = 
                 "PhoenixToEnumerableConverter\n" +
-                "  PhoenixClientProject(item_id=[$0], NAME=[$1])\n" +
-                "    PhoenixClientSemiJoin(condition=[=($0, $7)], joinType=[inner])\n" +
+                "  PhoenixClientSemiJoin(condition=[=($0, $2)], joinType=[inner])\n" +
+                "    PhoenixServerProject(item_id=[$0], NAME=[$1])\n" +
                 "      PhoenixTableScan(table=[[phoenix, Join, ItemTable]], scanOrder=[FORWARD])\n" +
-                "      PhoenixClientProject(item_id0=[$0], $f0=[true])\n" +
-                "        PhoenixServerJoin(condition=[=($0, $3)], joinType=[inner])\n" +
-                "          PhoenixServerProject(item_id=[$0])\n" +
-                "            PhoenixTableScan(table=[[phoenix, Join, ItemTable]], scanOrder=[FORWARD])\n" +
-                "          PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n";
+                "    PhoenixServerJoin(condition=[=($0, $1)], joinType=[inner])\n" +
+                "      PhoenixServerProject(item_id=[$0])\n" +
+                "        PhoenixTableScan(table=[[phoenix, Join, ItemTable]], scanOrder=[FORWARD])\n" +
+                "      PhoenixServerProject(item_id=[$2])\n" +
+                "        PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n";
         start(correlProps).sql(q3).explainIs(p3Correlate).resultIs(r3).close();
         start(decorrelProps).sql(q3).explainIs(p3Decorrelated).resultIs(r3).close();
         
@@ -1001,42 +1015,42 @@ public class CalciteIT extends BaseCalciteIT {
                 "    PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n";
         start(decorrelProps).sql(q4).explainIs(p4Decorrelated).resultIs(r4).close();
         
-        // CALCITE-864: switching orders and items in the first join wouldn't work.
-        String q5 = "select \"order_id\" from " + JOIN_ITEM_TABLE_FULL_NAME + " i JOIN " + JOIN_ORDER_TABLE_FULL_NAME + " o on o.\"item_id\" = i.\"item_id\" where quantity = (select max(quantity) from " + JOIN_ORDER_TABLE_FULL_NAME + " o2 JOIN " + JOIN_ITEM_TABLE_FULL_NAME + " i2 on o2.\"item_id\" = i2.\"item_id\" where i.\"supplier_id\" = i2.\"supplier_id\")";
-        Object [][] r5 = new Object[][] {
-                {"000000000000003"},
-                {"000000000000005"},
-                {"000000000000004"}};
-        String p5Correlate = 
-                "PhoenixToEnumerableConverter\n" +
-                "  PhoenixClientProject(order_id=[$7])\n" +
-                "    PhoenixFilter(condition=[=($11, $14)])\n" +
-                "      PhoenixCorrelate(correlation=[$cor0], joinType=[LEFT], requiredColumns=[{5}])\n" +
-                "        PhoenixServerJoin(condition=[=($9, $0)], joinType=[inner])\n" +
-                "          PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
-                "          PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n" +
-                "        PhoenixServerAggregate(group=[{}], EXPR$0=[MAX($4)])\n" +
-                "          PhoenixServerJoin(condition=[=($2, $7)], joinType=[inner])\n" +
-                "            PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n" +
-                "            PhoenixTableScan(table=[[phoenix, Join, ItemTable]], filter=[=($cor0.supplier_id, $5)])\n";
-        String p5Decorrelated =
-                "PhoenixToEnumerableConverter\n" +
-                "  PhoenixClientProject(order_id=[$7])\n" +
-                "    PhoenixServerJoin(condition=[AND(=($9, $0), =($5, $14))], joinType=[inner])\n" +
-                "      PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
-                "      PhoenixServerJoin(condition=[=($4, $8)], joinType=[inner])\n" +
-                "        PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n" +
-                "        PhoenixServerAggregate(group=[{14}], EXPR$0=[MAX($4)], isOrdered=[false])\n" +
-                "          PhoenixServerJoin(condition=[=($2, $7)], joinType=[inner])\n" +
-                "            PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n" +
-                "            PhoenixServerJoin(condition=[=($7, $5)], joinType=[inner])\n" +
-                "              PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
-                "              PhoenixServerAggregate(group=[{5}], isOrdered=[false])\n" +
-                "                PhoenixServerJoin(condition=[=($9, $0)], joinType=[inner])\n" +
-                "                  PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
-                "                  PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n";
-        start(correlProps).sql(q5).explainIs(p5Correlate).resultIs(r5).close();
-        start(decorrelProps).sql(q5).explainIs(p5Decorrelated).resultIs(r5).close();
+        // CALCITE-864
+        //String q5 = "select \"order_id\" from " + JOIN_ITEM_TABLE_FULL_NAME + " i JOIN " + JOIN_ORDER_TABLE_FULL_NAME + " o on o.\"item_id\" = i.\"item_id\" where quantity = (select max(quantity) from " + JOIN_ORDER_TABLE_FULL_NAME + " o2 JOIN " + JOIN_ITEM_TABLE_FULL_NAME + " i2 on o2.\"item_id\" = i2.\"item_id\" where i.\"supplier_id\" = i2.\"supplier_id\")";
+        //Object [][] r5 = new Object[][] {
+        //        {"000000000000003"},
+        //        {"000000000000005"},
+        //        {"000000000000004"}};
+        //String p5Correlate = 
+        //        "PhoenixToEnumerableConverter\n" +
+        //        "  PhoenixClientProject(order_id=[$7])\n" +
+        //        "    PhoenixFilter(condition=[=($11, $14)])\n" +
+        //        "      PhoenixCorrelate(correlation=[$cor0], joinType=[LEFT], requiredColumns=[{5}])\n" +
+        //        "        PhoenixServerJoin(condition=[=($9, $0)], joinType=[inner])\n" +
+        //        "          PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
+        //        "          PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n" +
+        //        "        PhoenixServerAggregate(group=[{}], EXPR$0=[MAX($4)])\n" +
+        //        "          PhoenixServerJoin(condition=[=($2, $7)], joinType=[inner])\n" +
+        //        "            PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n" +
+        //        "            PhoenixTableScan(table=[[phoenix, Join, ItemTable]], filter=[=($cor0.supplier_id, $5)])\n";
+        //String p5Decorrelated =
+        //        "PhoenixToEnumerableConverter\n" +
+        //        "  PhoenixClientProject(order_id=[$7])\n" +
+        //        "    PhoenixServerJoin(condition=[AND(=($9, $0), =($5, $14))], joinType=[inner])\n" +
+        //        "      PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
+        //        "      PhoenixServerJoin(condition=[=($4, $8)], joinType=[inner])\n" +
+        //        "        PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n" +
+        //        "        PhoenixServerAggregate(group=[{14}], EXPR$0=[MAX($4)], isOrdered=[false])\n" +
+        //        "          PhoenixServerJoin(condition=[=($2, $7)], joinType=[inner])\n" +
+        //        "            PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n" +
+        //        "            PhoenixServerJoin(condition=[=($7, $5)], joinType=[inner])\n" +
+        //        "              PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
+        //        "              PhoenixServerAggregate(group=[{5}], isOrdered=[false])\n" +
+        //        "                PhoenixServerJoin(condition=[=($9, $0)], joinType=[inner])\n" +
+        //        "                  PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
+        //        "                  PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n";
+        //start(correlProps).sql(q5).explainIs(p5Correlate).resultIs(r5).close();
+        //start(decorrelProps).sql(q5).explainIs(p5Decorrelated).resultIs(r5).close();
         
         String q6 = "select organization_id, entity_id, a_integer from v v1 where a_integer = (select min(a_integer) from v v2 where v1.organization_id = v2.organization_id and v1.b_string = v2.b_string)";
         Object[][] r6 = new Object[][] {
@@ -1045,20 +1059,23 @@ public class CalciteIT extends BaseCalciteIT {
                 {"00D300000000XHP", "00A323122312312", 3}};
         String p6Correlate = 
                 "PhoenixToEnumerableConverter\n" +
-                "  PhoenixClientProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1], A_INTEGER=[$4])\n" +
-                "    PhoenixFilter(condition=[=($4, $18)])\n" +
-                "      PhoenixCorrelate(correlation=[$cor0], joinType=[LEFT], requiredColumns=[{0, 3}])\n" +
-                "        PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'a')])\n" +
+                "  PhoenixClientProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1], A_INTEGER=[$3])\n" +
+                "    PhoenixFilter(condition=[=($3, $4)])\n" +
+                "      PhoenixCorrelate(correlation=[$cor0], joinType=[LEFT], requiredColumns=[{0, 2}])\n" +
+                "        PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1], B_STRING=[$3], A_INTEGER=[$4])\n" +
+                "          PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'a')])\n" +
                 "        PhoenixServerAggregate(group=[{}], EXPR$0=[MIN($4)])\n" +
                 "          PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[AND(=($2, 'a'), =($cor0.ORGANIZATION_ID, $0), =($cor0.B_STRING, $3))])\n";
         String p6Decorrelated = 
                 "PhoenixToEnumerableConverter\n" +
-                "  PhoenixClientProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1], A_INTEGER=[$4])\n" +
-                "    PhoenixServerJoin(condition=[AND(=($0, $18), =($3, $19), =($4, $20))], joinType=[inner])\n" +
-                "      PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'a')])\n" +
-                "      PhoenixServerAggregate(group=[{18, 19}], EXPR$0=[MIN($4)], isOrdered=[false])\n" +
-                "        PhoenixServerJoin(condition=[AND(=($18, $0), =($19, $3))], joinType=[inner])\n" +
-                "          PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'a')])\n" +
+                "  PhoenixClientProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1], A_INTEGER=[$3])\n" +
+                "    PhoenixServerJoin(condition=[AND(=($0, $4), =($2, $5), =($3, $6))], joinType=[inner])\n" +
+                "      PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1], B_STRING=[$3], A_INTEGER=[$4])\n" +
+                "        PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'a')])\n" +
+                "      PhoenixServerAggregate(group=[{3, 4}], EXPR$0=[MIN($2)], isOrdered=[false])\n" +
+                "        PhoenixServerJoin(condition=[AND(=($3, $0), =($4, $1))], joinType=[inner])\n" +
+                "          PhoenixServerProject(ORGANIZATION_ID=[$0], B_STRING=[$3], A_INTEGER=[$4])\n" +
+                "            PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'a')])\n" +
                 "          PhoenixServerAggregate(group=[{0, 3}], isOrdered=[false])\n" +
                 "            PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'a')])\n";
         start(correlProps).sql(q6).explainIs(p6Correlate).resultIs(r6).close();
@@ -1141,6 +1158,7 @@ public class CalciteIT extends BaseCalciteIT {
         start(false).sql("create view v as select * from (values (1, 'a'), (2, 'b')) as t(x, y)").execute();
     }
 
+    @Ignore // CALCITE-1045
     @Test public void testConnectJoinHsqldb() throws Exception {
         final Start start = new Start(getConnectionProps(false)) {
             @Override
