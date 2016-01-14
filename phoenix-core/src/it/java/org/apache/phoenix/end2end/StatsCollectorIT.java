@@ -109,7 +109,31 @@ public class StatsCollectorIT extends StatsCollectorAbstractIT {
         rs = conn.createStatement().executeQuery("SELECT k FROM " + tableName);
         assertTrue(rs.next());
         conn.close();
-	}
+    }
+
+    @Test
+    public void testNoDuplicatesAfterUpdateStats() throws Throwable {
+        Connection conn;
+        PreparedStatement stmt;
+        ResultSet rs;
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement()
+                .execute("CREATE TABLE x ( k VARCHAR, c1.a bigint,c2.b bigint CONSTRAINT pk PRIMARY KEY (k)) \n");
+        conn.createStatement().execute("upsert into x values ('abc',1,3)");
+        conn.createStatement().execute("upsert into x values ('def',2,4)");
+        conn.commit();
+        // CAll the update statistics query here
+        stmt = conn.prepareStatement("UPDATE STATISTICS X");
+        stmt.execute();
+        rs = conn.createStatement().executeQuery("SELECT k FROM x");
+        assertTrue(rs.next());
+        assertEquals("abc", rs.getString(1));
+        assertTrue(rs.next());
+        assertEquals("def", rs.getString(1));
+        assertTrue(!rs.next());
+        conn.close();
+    }
 
     @Test
     public void testUpdateStatsWithMultipleTables() throws Throwable {

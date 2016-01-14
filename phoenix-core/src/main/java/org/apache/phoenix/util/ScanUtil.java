@@ -270,6 +270,14 @@ public class ScanUtil {
             throw new RuntimeException(e);
         }
     }
+    
+	public static void setTimeRange(Scan scan, long minStamp, long maxStamp) {
+		try {
+			scan.setTimeRange(minStamp, maxStamp);
+		} catch (IOException e) {
+			throw new RuntimeException(e);
+		}
+	}
 
     public static byte[] getMinKey(RowKeySchema schema, List<List<KeyRange>> slots, int[] slotSpan) {
         return getKey(schema, slots, slotSpan, Bound.LOWER);

@@ -2416,6 +2416,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                     columnsToAdd = PhoenixDatabaseMetaData.TRANSACTIONAL + " " + PBoolean.INSTANCE.getSqlTypeName();
                                     metaConnection = addColumn(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
                                             MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0, columnsToAdd, false);
+									// Drop old stats table so that new stats
+									// table
+									metaConnection = dropStatsTable(metaConnection,
+											MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0 - 1);
                                 }
                                 
                             }
@@ -2530,7 +2534,80 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
         }
     }
+    
+	private PhoenixConnection dropStatsTable(PhoenixConnection oldMetaConnection, long timestamp)
+			throws SQLException, IOException {
+		Properties props = PropertiesUtil.deepCopy(oldMetaConnection.getClientInfo());
+		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(timestamp));
+		PhoenixConnection metaConnection = new PhoenixConnection(oldMetaConnection, this, props);
+		SQLException sqlE = null;
+		boolean wasCommit = metaConnection.getAutoCommit();
+		try {
+			metaConnection.setAutoCommit(true);
+			metaConnection.createStatement()
+					.executeUpdate("DELETE FROM " + PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME + " WHERE "
+							+ PhoenixDatabaseMetaData.TABLE_NAME + "='" + PhoenixDatabaseMetaData.SYSTEM_STATS_TABLE
+							+ "' AND " + PhoenixDatabaseMetaData.TABLE_SCHEM + "='"
+							+ PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME + "'");
+		} catch (SQLException e) {
+			logger.warn("exception during upgrading stats table:" + e);
+			sqlE = e;
+		} finally {
+			try {
+				metaConnection.setAutoCommit(wasCommit);
+				oldMetaConnection.close();
+			} catch (SQLException e) {
+				if (sqlE != null) {
+					sqlE.setNextException(e);
+				} else {
+					sqlE = e;
+				}
+			}
+			if (sqlE != null) {
+				throw sqlE;
+			}
+		}
 
+		HBaseAdmin admin = null;
+		try {
+			admin = getAdmin();
+			admin.disableTable(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES);
+			try {
+				admin.deleteTable(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES);
+			} catch (org.apache.hadoop.hbase.TableNotFoundException e) {
+				logger.debug("Stats table was not found during upgrade!!");
+			}
+		} finally {
+			if (admin != null)
+				admin.close();
+		}
+		oldMetaConnection = metaConnection;
+		props = PropertiesUtil.deepCopy(oldMetaConnection.getClientInfo());
+		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
+				Long.toString(MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0));
+		try {
+			metaConnection = new PhoenixConnection(oldMetaConnection, ConnectionQueryServicesImpl.this, props);
+		} finally {
+			try {
+				oldMetaConnection.close();
+			} catch (SQLException e) {
+				if (sqlE != null) {
+					sqlE.setNextException(e);
+				} else {
+					sqlE = e;
+				}
+			}
+			if (sqlE != null) {
+				throw sqlE;
+			}
+		}
+		metaConnection.removeTable(null, PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME,
+				PhoenixDatabaseMetaData.SYSTEM_STATS_TABLE, MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP);
+		clearTableFromCache(ByteUtil.EMPTY_BYTE_ARRAY, PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME_BYTES,
+				PhoenixDatabaseMetaData.SYSTEM_STATS_TABLE_BYTES, MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP);
+		clearTableRegionCache(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES);
+		return metaConnection;
+	}
     
     private static int getSaltBuckets(TableAlreadyExistsException e) {
         PTable table = e.getTable();
