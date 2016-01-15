@@ -47,8 +47,13 @@ public class PrefixByteDecoder {
      * @param maxLength maximum length needed for any call to {@link #decode(DataInput)}.
      */
     public PrefixByteDecoder(int maxLength) {
-        this.maxLength = maxLength;
-        this.previous = new ImmutableBytesWritable(new byte[maxLength],0,0);
+        if (maxLength > 0) {
+            this.maxLength = maxLength;
+            this.previous = new ImmutableBytesWritable(new byte[maxLength], 0, 0);
+        } else {
+            this.maxLength = -1;
+            previous = new ImmutableBytesWritable(ByteUtil.EMPTY_BYTE_ARRAY);
+        }
     }
     
     /**

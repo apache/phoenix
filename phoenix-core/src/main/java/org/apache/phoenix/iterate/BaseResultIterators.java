@@ -26,7 +26,6 @@ import java.io.ByteArrayInputStream;
 import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.EOFException;
-import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -508,21 +507,18 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         if (gpsSize > 0) {
             stream = new ByteArrayInputStream(guidePosts.get(), guidePosts.getOffset(), guidePosts.getLength());
             input = new DataInputStream(stream);
-            if (gps.getMaxLength() > 0) {
-                decoder = new PrefixByteDecoder(gps.getMaxLength());
-            } else {
-                decoder = new PrefixByteDecoder();
-            }
+            decoder = new PrefixByteDecoder(gps.getMaxLength());
             try {
-                currentGuidePost = CodecUtils.decode(decoder, input);
-                while (currentKey.getLength() != 0 && Bytes.compareTo(currentKey.get(), currentGuidePost.get()) <= 0) {
-                    currentGuidePost = CodecUtils.decode(decoder, input);
+                while (currentKey.compareTo(currentGuidePost = CodecUtils.decode(decoder, input)) >= 0) {
                     guideIndex++;
                 }
             } catch (EOFException e) {}
         }
+        byte[] currentKeyBytes = ByteUtil.copyKeyBytesIfNecessary(currentKey);
+
         // Merge bisect with guideposts for all but the last region
         while (regionIndex <= stopIndex) {
+            byte[] currentGuidePostBytes = currentGuidePost.copyBytes();
             byte[] endKey, endRegionKey = EMPTY_BYTE_ARRAY;
             if (regionIndex == stopIndex) {
                 endKey = stopKey;
@@ -536,17 +532,17 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 keyOffset = ScanUtil.getRowKeyOffset(regionInfo.getStartKey(), endRegionKey);
             }
             try {
-                while (guideIndex < gpsSize
-                        && (Bytes.compareTo(currentGuidePost.get(),
-                                endKey) <= 0 || endKey.length == 0)) {
-                    Scan newScan = scanRanges.intersectScan(scan, currentKey, currentGuidePost, keyOffset, false);
-                    scans = addNewScan(parallelScans, scans, newScan, currentGuidePost.get(), false, regionLocation);
-                    currentKey = new ImmutableBytesWritable(currentGuidePost.copyBytes());
+                while (guideIndex < gpsSize && (currentGuidePost.compareTo(endKey) <= 0 || endKey.length == 0)) {
+                    Scan newScan = scanRanges.intersectScan(scan, currentKeyBytes, currentGuidePostBytes, keyOffset,
+                            false);
+                    scans = addNewScan(parallelScans, scans, newScan, currentGuidePostBytes, false, regionLocation);
+                    currentKeyBytes = currentGuidePost.copyBytes();
                     currentGuidePost = CodecUtils.decode(decoder, input);
+                    currentGuidePostBytes = ByteUtil.copyKeyBytesIfNecessary(currentGuidePost);
                     guideIndex++;
                 }
             } catch (EOFException e) {}
-            Scan newScan = scanRanges.intersectScan(scan, currentKey, new ImmutableBytesWritable(endKey,0,endKey.length), keyOffset, true);
+            Scan newScan = scanRanges.intersectScan(scan, currentKeyBytes, endKey, keyOffset, true);
             if (isLocalIndex) {
                 if (newScan != null) {
                     newScan.setAttribute(EXPECTED_UPPER_REGION_KEY, endRegionKey);
@@ -555,17 +551,13 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 }
             }
             scans = addNewScan(parallelScans, scans, newScan, endKey, true, regionLocation);
-            currentKey = new ImmutableBytesWritable(endKey, 0, endKey.length);
+            currentKeyBytes = endKey;
             regionIndex++;
         }
         if (!scans.isEmpty()) { // Add any remaining scans
             parallelScans.add(scans);
         }
-        if (stream != null) {
-            try {
-                stream.close();
-            } catch (IOException e) {}
-        }
+        CodecUtils.close(stream);
         return parallelScans;
     }
 

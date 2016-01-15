@@ -49,6 +49,7 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.CodecUtils;
 import org.apache.phoenix.util.PrefixByteDecoder;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.TimeKeeper;
@@ -143,7 +144,7 @@ public class StatisticsWriter implements Closeable {
             ImmutableBytesWritable keys = gps.getGuidePosts();
             ByteArrayInputStream stream = new ByteArrayInputStream(keys.get(), keys.getOffset(), keys.getLength());
             DataInput input = new DataInputStream(stream);
-            PrefixByteDecoder decoder = new PrefixByteDecoder();
+            PrefixByteDecoder decoder = new PrefixByteDecoder(gps.getMaxLength());
             try {
                 while (true) {
                     ImmutableBytesWritable ptr = decoder.decode(input);
@@ -165,11 +166,7 @@ public class StatisticsWriter implements Closeable {
             } catch (EOFException e) { // Ignore as this signifies we're done
 
             } finally {
-                try {
-                    if (stream != null) {
-                        stream.close();
-                    }
-                } catch (IOException e) {}
+                CodecUtils.close(stream);
             }
         }
     }

@@ -21,7 +21,6 @@ import java.io.ByteArrayInputStream;
 import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.EOFException;
-import java.io.IOException;
 import java.util.Map;
 import java.util.SortedMap;
 import java.util.TreeMap;
@@ -80,12 +79,7 @@ public class PTableStatsImpl implements PTableStats {
             try {
                 if (keys.getLength() != 0) {
                     DataInput input = new DataInputStream(stream);
-                    PrefixByteDecoder decoder;
-                    if (entry.getValue().getMaxLength() > 0) {
-                        decoder = new PrefixByteDecoder(entry.getValue().getMaxLength());
-                    } else {
-                        decoder = new PrefixByteDecoder();
-                    }
+                    PrefixByteDecoder decoder = new PrefixByteDecoder(entry.getValue().getMaxLength());
                     try {
                         while (true) {
                             ImmutableBytesWritable ptr = CodecUtils.decode(decoder, input);
@@ -95,19 +89,13 @@ public class PTableStatsImpl implements PTableStats {
                     } catch (EOFException e) { // Ignore as this signifies we're done
 
                     } finally {
-                        try {
-                            stream.close();
-                        } catch (IOException e) {}
+                        CodecUtils.close(stream);
                     }
                     buf.setLength(buf.length() - 1);
                 }
                 buf.append(")");
             } finally {
-                if (stream != null) {
-                    try {
-                        stream.close();
-                    } catch (IOException e) {}
-                }
+                CodecUtils.close(stream);
             }
         }
         buf.append("]");
