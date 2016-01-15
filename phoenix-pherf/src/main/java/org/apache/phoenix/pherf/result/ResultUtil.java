@@ -84,7 +84,12 @@ public class ResultUtil {
         ensureBaseResultDirExists();
 
         CSVResultHandler writer = null;
-        ResultFileDetails resultFileDetails = ResultFileDetails.CSV_AGGREGATE_DATA_LOAD;
+        ResultFileDetails resultFileDetails;
+        if (PhoenixUtil.isThinDriver()) {
+            resultFileDetails = ResultFileDetails.CSV_THIN_AGGREGATE_DATA_LOAD;
+        } else {
+            resultFileDetails = ResultFileDetails.CSV_AGGREGATE_DATA_LOAD;
+        }
         try {
             writer = new CSVFileResultHandler();
             writer.setResultFileDetails(resultFileDetails);
@@ -92,7 +97,11 @@ public class ResultUtil {
 
             for (TableLoadTime loadTime : dataLoadTime.getTableLoadTime()) {
                 List<ResultValue> rowValues = new ArrayList<>();
-                rowValues.add(new ResultValue(PhoenixUtil.getZookeeper()));
+                if (PhoenixUtil.isThinDriver()) {
+                    rowValues.add(new ResultValue(PhoenixUtil.getQueryServerUrl()));
+                } else {
+                    rowValues.add(new ResultValue(PhoenixUtil.getZookeeper()));
+                }
                 rowValues.addAll(loadTime.getCsvRepresentation(this));
                 Result
                         result =

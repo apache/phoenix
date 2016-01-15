@@ -41,6 +41,7 @@ public class MetaDataUtilTest {
         assertTrue(VersionUtil.encodeVersion("0.94.6")>VersionUtil.encodeVersion("0.94.5-mapR"));
         assertTrue(VersionUtil.encodeVersion("0.94.6")>VersionUtil.encodeVersion("0.94.5"));
         assertTrue(VersionUtil.encodeVersion("0.94.1-mapR")>VersionUtil.encodeVersion("0.94"));
+        assertTrue(VersionUtil.encodeVersion("1", "1", "3")>VersionUtil.encodeVersion("1", "1", "1"));
     }
     
     @Test

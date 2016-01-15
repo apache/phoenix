@@ -2190,6 +2190,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
 			// creating a transactional table should fail if transactions are disabled
 			try {
 				conn.createStatement().execute("CREATE TABLE DEMO1(k INTEGER PRIMARY KEY, v VARCHAR) TRANSACTIONAL=true");
+				fail();
 			} catch (SQLException e) {
 				assertEquals(SQLExceptionCode.CANNOT_CREATE_TXN_TABLE_IF_TXNS_DISABLED.getErrorCode(), e.getErrorCode());
 			}
@@ -2197,6 +2198,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
 			conn.createStatement().execute("CREATE TABLE DEMO2(k INTEGER PRIMARY KEY, v VARCHAR)");
 			try {
 				conn.createStatement().execute("ALTER TABLE DEMO2 SET TRANSACTIONAL=true");
+				fail();
 			} catch (SQLException e) {
 				assertEquals(SQLExceptionCode.CANNOT_ALTER_TO_BE_TXN_IF_TXNS_DISABLED.getErrorCode(), e.getErrorCode());
 			}

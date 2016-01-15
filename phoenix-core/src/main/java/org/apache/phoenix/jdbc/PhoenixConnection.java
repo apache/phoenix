@@ -17,12 +17,15 @@
  */
 package org.apache.phoenix.jdbc;
 
+import static com.google.common.base.Preconditions.checkNotNull;
 import static java.util.Collections.emptyMap;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_OPEN_PHOENIX_CONNECTIONS;
 
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.io.Reader;
+import java.lang.ref.WeakReference;
 import java.sql.Array;
 import java.sql.Blob;
 import java.sql.CallableStatement;
@@ -50,8 +53,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.Executor;
+import java.util.concurrent.LinkedBlockingQueue;
 
+import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+
+import co.cask.tephra.TransactionContext;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Consistency;
@@ -64,8 +71,12 @@ import org.apache.phoenix.execute.CommitException;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.expression.function.FunctionArgumentType;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
+import org.apache.phoenix.iterate.DefaultTableResultIteratorFactory;
 import org.apache.phoenix.iterate.ParallelIteratorFactory;
+import org.apache.phoenix.iterate.TableResultIterator;
+import org.apache.phoenix.iterate.TableResultIteratorFactory;
 import org.apache.phoenix.jdbc.PhoenixStatement.PhoenixStatementParser;
+import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.DelegateConnectionQueryServices;
@@ -101,6 +112,7 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Objects;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
@@ -121,15 +133,16 @@ import com.google.common.collect.Lists;
  * 
  * @since 0.1
  */
-public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jdbc7Shim.Connection, MetaDataMutated{
+public class PhoenixConnection implements Connection, MetaDataMutated, SQLCloseable {
     private final String url;
     private final ConnectionQueryServices services;
     private final Properties info;
-    private List<SQLCloseable> statements = new ArrayList<SQLCloseable>();
     private final Map<PDataType<?>, Format> formatters = new HashMap<>();
-    private final MutationState mutationState;
     private final int mutateBatchSize;
     private final Long scn;
+    private MutationState mutationState;
+    private List<SQLCloseable> statements = new ArrayList<SQLCloseable>();
+    private boolean isAutoFlush = false;
     private boolean isAutoCommit = false;
     private PMetaData metaData;
     private final PName tenantId;
@@ -138,7 +151,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     private final String timestampPattern;
     private int statementExecutionCounter;
     private TraceScope traceScope = null;
-    private boolean isClosed = false;
+    private volatile boolean isClosed = false;
     private Sampler<?> sampler;
     private boolean readOnly = false;
     private Consistency consistency = Consistency.STRONG;
@@ -146,7 +159,8 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     private final boolean isRequestLevelMetricsEnabled;
     private final boolean isDescVarLengthRowKeyUpgrade;
     private ParallelIteratorFactory parallelIteratorFactory;
-    
+    private final LinkedBlockingQueue<WeakReference<TableResultIterator>> scannerQueue;
+    private TableResultIteratorFactory tableResultIteratorFactory;
     
     static {
         Tracing.addTraceMetricsSource();
@@ -161,6 +175,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     public PhoenixConnection(PhoenixConnection connection, boolean isDescRowKeyOrderUpgrade) throws SQLException {
         this(connection.getQueryServices(), connection.getURL(), connection.getClientInfo(), connection.metaData, connection.getMutationState(), isDescRowKeyOrderUpgrade);
         this.isAutoCommit = connection.isAutoCommit;
+        this.isAutoFlush = connection.isAutoFlush;
         this.sampler = connection.sampler;
         this.statementExecutionCounter = connection.statementExecutionCounter;
     }
@@ -180,6 +195,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     public PhoenixConnection(ConnectionQueryServices services, PhoenixConnection connection, long scn) throws SQLException {
         this(services, connection.getURL(), newPropsWithSCN(scn,connection.getClientInfo()), connection.metaData, connection.getMutationState(), connection.isDescVarLengthRowKeyUpgrade());
         this.isAutoCommit = connection.isAutoCommit;
+        this.isAutoFlush = connection.isAutoFlush;
         this.sampler = connection.sampler;
         this.statementExecutionCounter = connection.statementExecutionCounter;
     }
@@ -219,6 +235,8 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         Long scnParam = JDBCUtil.getCurrentSCN(url, this.info);
         checkScn(scnParam);
         this.scn = scnParam;
+        this.isAutoFlush = this.services.getProps().getBoolean(QueryServices.TRANSACTIONS_ENABLED, QueryServicesOptions.DEFAULT_TRANSACTIONS_ENABLED)
+                && this.services.getProps().getBoolean(QueryServices.AUTO_FLUSH_ATTRIB, QueryServicesOptions.DEFAULT_AUTO_FLUSH) ;
         this.isAutoCommit = JDBCUtil.getAutoCommit(
                 url, this.info,
                 this.services.getProps().getBoolean(
@@ -272,6 +290,9 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         // setup tracing, if its enabled
         this.sampler = Tracing.getConfiguredSampler(this);
         this.customTracingAnnotations = getImmutableCustomTracingAnnotations();
+        this.scannerQueue = new LinkedBlockingQueue<>();
+        this.tableResultIteratorFactory = new DefaultTableResultIteratorFactory();
+        GLOBAL_OPEN_PHOENIX_CONNECTIONS.increment();
     }
     
     private static void checkScn(Long scnParam) throws SQLException {
@@ -282,17 +303,13 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
 
     private static Properties filterKnownNonProperties(Properties info) {
         Properties prunedProperties = info;
-        if (info.contains(PhoenixRuntime.CURRENT_SCN_ATTRIB)) {
-            if (prunedProperties == info) {
-                prunedProperties = PropertiesUtil.deepCopy(info);
+        for (String property : PhoenixRuntime.CONNECTION_PROPERTIES) {
+            if (info.contains(property)) {
+                if (prunedProperties == info) {
+                    prunedProperties = PropertiesUtil.deepCopy(info);
+                }
+                prunedProperties.remove(property);
             }
-            prunedProperties.remove(PhoenixRuntime.CURRENT_SCN_ATTRIB);
-        }
-        if (info.contains(PhoenixRuntime.TENANT_ID_ATTRIB)) {
-            if (prunedProperties == info) {
-                prunedProperties = PropertiesUtil.deepCopy(info);
-            }
-            prunedProperties.remove(PhoenixRuntime.TENANT_ID_ATTRIB);
         }
         return prunedProperties;
     }
@@ -492,6 +509,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
             }
         } finally {
             isClosed = true;
+            GLOBAL_OPEN_PHOENIX_CONNECTIONS.decrement();
         }
     }
 
@@ -579,6 +597,35 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         return isAutoCommit;
     }
 
+    public boolean getAutoFlush() {
+        return isAutoFlush;
+    }
+
+    public void setAutoFlush(boolean autoFlush) throws SQLException {
+        if (autoFlush && !this.services.getProps().getBoolean(QueryServices.TRANSACTIONS_ENABLED, QueryServicesOptions.DEFAULT_TRANSACTIONS_ENABLED)) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.TX_MUST_BE_ENABLED_TO_SET_AUTO_FLUSH)
+            .build().buildException();
+        }
+        this.isAutoFlush = autoFlush;
+    }
+
+    public void flush() throws SQLException {
+        mutationState.sendUncommitted();
+    }
+        
+    public void setTransactionContext(TransactionContext txContext) throws SQLException {
+        if (!this.services.getProps().getBoolean(QueryServices.TRANSACTIONS_ENABLED, QueryServicesOptions.DEFAULT_TRANSACTIONS_ENABLED)) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.TX_MUST_BE_ENABLED_TO_SET_TX_CONTEXT)
+            .build().buildException();
+        }
+        this.mutationState.rollback();
+        this.mutationState = new MutationState(this.mutationState.getMaxSize(), this, txContext);
+        
+        // Write data to HBase after each statement execution as the commit may not
+        // come through Phoenix APIs.
+        setAutoFlush(true);
+    }
+    
     public Consistency getConsistency() {
         return this.consistency;
     }
@@ -611,7 +658,10 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
 
     @Override
     public int getTransactionIsolation() throws SQLException {
-        return Connection.TRANSACTION_READ_COMMITTED;
+        boolean transactionsEnabled = getQueryServices().getProps().getBoolean(QueryServices.TRANSACTIONS_ENABLED, 
+                QueryServicesOptions.DEFAULT_TRANSACTIONS_ENABLED);
+        return  transactionsEnabled ?
+                Connection.TRANSACTION_SERIALIZABLE : Connection.TRANSACTION_READ_COMMITTED;
     }
 
     @Override
@@ -670,17 +720,20 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
 
     @Override
     public PreparedStatement prepareStatement(String sql, int autoGeneratedKeys) throws SQLException {
-        throw new SQLFeatureNotSupportedException();
+        // Ignore autoGeneratedKeys, and just execute the statement.
+        return prepareStatement(sql);
     }
 
     @Override
     public PreparedStatement prepareStatement(String sql, int[] columnIndexes) throws SQLException {
-        throw new SQLFeatureNotSupportedException();
+        // Ignore columnIndexes, and just execute the statement.
+        return prepareStatement(sql);
     }
 
     @Override
     public PreparedStatement prepareStatement(String sql, String[] columnNames) throws SQLException {
-        throw new SQLFeatureNotSupportedException();
+        // Ignore columnNames, and just execute the statement.
+        return prepareStatement(sql);
     }
 
     @Override
@@ -772,8 +825,11 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
 
     @Override
     public void setTransactionIsolation(int level) throws SQLException {
-        if (level != Connection.TRANSACTION_READ_COMMITTED) {
-            throw new SQLFeatureNotSupportedException();
+        boolean transactionsEnabled = getQueryServices().getProps().getBoolean(QueryServices.TRANSACTIONS_ENABLED, 
+                QueryServicesOptions.DEFAULT_TRANSACTIONS_ENABLED);
+        if (!transactionsEnabled && (level == Connection.TRANSACTION_REPEATABLE_READ || level == Connection.TRANSACTION_SERIALIZABLE)) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.TX_MUST_BE_ENABLED_TO_SET_ISOLATION_LEVEL)
+            .build().buildException();
         }
     }
 
@@ -961,5 +1017,28 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
      */
     public void setIteratorFactory(ParallelIteratorFactory parallelIteratorFactory) {
         this.parallelIteratorFactory = parallelIteratorFactory;
+    }
+    
+    public void addIterator(@Nonnull TableResultIterator itr) {
+        if (services.supportsFeature(ConnectionQueryServices.Feature.RENEW_LEASE)) {
+            checkNotNull(itr);
+            scannerQueue.add(new WeakReference<TableResultIterator>(itr));
+        }
+    }
+
+    public LinkedBlockingQueue<WeakReference<TableResultIterator>> getScanners() {
+        return scannerQueue;
+    }
+
+    @VisibleForTesting
+    @Nonnull
+    public TableResultIteratorFactory getTableResultIteratorFactory() {
+        return tableResultIteratorFactory;
+    }
+
+    @VisibleForTesting
+    public void setTableResultIteratorFactory(TableResultIteratorFactory factory) {
+        checkNotNull(factory);
+        this.tableResultIteratorFactory = factory;
     }
 }

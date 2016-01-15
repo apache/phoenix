@@ -17,24 +17,24 @@
  */
 package org.apache.phoenix.schema.tuple;
 
-import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 
 
 public class SingleKeyValueTuple extends BaseTuple {
     private static final byte[] UNITIALIZED_KEY_BUFFER = new byte[0];
-    private KeyValue keyValue;
+    private Cell cell;
     private ImmutableBytesWritable keyPtr = new ImmutableBytesWritable(UNITIALIZED_KEY_BUFFER);
     
     public SingleKeyValueTuple() {
     }
     
-    public SingleKeyValueTuple(KeyValue keyValue) {
-        if (keyValue == null) {
+    public SingleKeyValueTuple(Cell cell) {
+        if (cell == null) {
             throw new NullPointerException();
         }
-        setKeyValue(keyValue);
+        setCell(cell);
     }
     
     public boolean hasKey() {
@@ -42,28 +42,27 @@ public class SingleKeyValueTuple extends BaseTuple {
     }
     
     public void reset() {
-        this.keyValue = null;
+        this.cell = null;
         keyPtr.set(UNITIALIZED_KEY_BUFFER);
     }
     
-    public void setKeyValue(KeyValue keyValue) {
-        if (keyValue == null) {
+    public void setCell(Cell cell) {
+        if (cell == null) {
             throw new IllegalArgumentException();
         }
-        this.keyValue = keyValue;
-        setKey(keyValue);
+        this.cell = cell;
+        setKey(cell);
     }
     
     public void setKey(ImmutableBytesWritable ptr) {
         keyPtr.set(ptr.get(), ptr.getOffset(), ptr.getLength());
     }
     
-    @SuppressWarnings("deprecation")
-    public void setKey(KeyValue keyValue) {
-        if (keyValue == null) {
+    public void setKey(Cell cell) {
+        if (cell == null) {
             throw new IllegalArgumentException();
         }
-        keyPtr.set(keyValue.getBuffer(), keyValue.getRowOffset(), keyValue.getRowLength());
+        keyPtr.set(cell.getRowArray(), cell.getRowOffset(), cell.getRowLength());
     }
     
     @Override
@@ -72,8 +71,8 @@ public class SingleKeyValueTuple extends BaseTuple {
     }
     
     @Override
-    public KeyValue getValue(byte[] cf, byte[] cq) {
-        return keyValue;
+    public Cell getValue(byte[] cf, byte[] cq) {
+        return cell;
     }
 
     @Override
@@ -83,29 +82,28 @@ public class SingleKeyValueTuple extends BaseTuple {
     
     @Override
     public String toString() {
-        return "SingleKeyValueTuple[" + keyValue == null ? keyPtr.get() == UNITIALIZED_KEY_BUFFER ? "null" : Bytes.toStringBinary(keyPtr.get(),keyPtr.getOffset(),keyPtr.getLength()) : keyValue.toString() + "]";
+        return "SingleKeyValueTuple[" + cell == null ? keyPtr.get() == UNITIALIZED_KEY_BUFFER ? "null" : Bytes.toStringBinary(keyPtr.get(),keyPtr.getOffset(),keyPtr.getLength()) : cell.toString() + "]";
     }
 
     @Override
     public int size() {
-        return keyValue == null ? 0 : 1;
+        return cell == null ? 0 : 1;
     }
 
     @Override
-    public KeyValue getValue(int index) {
-        if (index != 0 || keyValue == null) {
+    public Cell getValue(int index) {
+        if (index != 0 || cell == null) {
             throw new IndexOutOfBoundsException(Integer.toString(index));
         }
-        return keyValue;
+        return cell;
     }
 
-    @SuppressWarnings("deprecation")
     @Override
     public boolean getValue(byte[] family, byte[] qualifier,
             ImmutableBytesWritable ptr) {
-        if (keyValue == null)
+        if (cell == null)
             return false;
-        ptr.set(keyValue.getBuffer(), keyValue.getValueOffset(), keyValue.getValueLength());
+        ptr.set(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength());
         return true;
     }
 }

@@ -42,6 +42,8 @@ import java.sql.Date;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.Time;
+import java.sql.Timestamp;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
@@ -637,6 +639,173 @@ public class ClientTimeArithmeticQueryIT extends BaseQueryIT {
         } finally {
             conn.close();
         }
+    }
+ 
+    @Test
+    public void testAddTimeStamp() throws Exception {
+      Connection conn;
+      PreparedStatement stmt;
+      ResultSet rs;
+
+      long ts = nextTimestamp();
+      Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+      props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+      conn = DriverManager.getConnection(getUrl(), props);
+      conn.createStatement()
+              .execute(
+                      "create table timestamp_table (ts timestamp primary key)");
+      conn.close();
+
+      props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
+      conn = DriverManager.getConnection(getUrl(), props);
+      stmt = conn.prepareStatement("upsert into timestamp_table values (?)");
+      stmt.setTimestamp(1, new Timestamp(1995 - 1900, 4, 2, 1, 1, 1, 1));
+      stmt.execute();
+      conn.commit();
+      props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 60));
+      conn = DriverManager.getConnection(getUrl(), props);
+      rs = conn.createStatement().executeQuery("SELECT ts FROM timestamp_table");
+      assertTrue(rs.next());
+      assertEquals("1995-05-02 01:01:01.000000001",rs.getTimestamp(1).toString());
+      props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 70));
+      conn = DriverManager.getConnection(getUrl(), props);
+      rs = conn.createStatement().executeQuery("SELECT ts + 1 FROM timestamp_table");
+      assertTrue(rs.next());
+      assertEquals("1995-05-03 01:01:01.000000001",rs.getTimestamp(1).toString());
+    }
+ 
+    @Test
+    public void testSubtractTimeStamp() throws Exception {
+      Connection conn;
+      PreparedStatement stmt;
+      ResultSet rs;
+
+      long ts = nextTimestamp();
+      Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+      props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+      conn = DriverManager.getConnection(getUrl(), props);
+      conn.createStatement()
+              .execute(
+                      "create table timestamp_table (ts timestamp primary key)");
+      conn.close();
+
+      props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
+      conn = DriverManager.getConnection(getUrl(), props);
+      stmt = conn.prepareStatement("upsert into timestamp_table values (?)");
+      stmt.setTimestamp(1, new Timestamp(1995 - 1900, 4, 2, 1, 1, 1, 1));
+      stmt.execute();
+      conn.commit();
+      props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 60));
+      conn = DriverManager.getConnection(getUrl(), props);
+      rs = conn.createStatement().executeQuery("SELECT ts FROM timestamp_table");
+      assertTrue(rs.next());
+      assertEquals("1995-05-02 01:01:01.000000001",rs.getTimestamp(1).toString());
+      props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 70));
+      conn = DriverManager.getConnection(getUrl(), props);
+      rs = conn.createStatement().executeQuery("SELECT ts - 1 FROM timestamp_table");
+      assertTrue(rs.next());
+      assertEquals("1995-05-01 01:01:01.000000001",rs.getTimestamp(1).toString());
+    }
+    
+    @Test
+    public void testAddTime() throws Exception {
+      Connection conn;
+      PreparedStatement stmt;
+      ResultSet rs;
+
+      long ts = nextTimestamp();
+      Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+      props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+      conn = DriverManager.getConnection(getUrl(), props);
+      conn.createStatement()
+              .execute(
+                      "create table time_table (ts time primary key)");
+      conn.close();
+
+      props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
+      conn = DriverManager.getConnection(getUrl(), props);
+      stmt = conn.prepareStatement("upsert into time_table values (?)");
+      Time time = new Time(1995 - 1900, 4, 2);
+      stmt.setTime(1, time);
+      stmt.execute();
+      conn.commit();
+      props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 60));
+      conn = DriverManager.getConnection(getUrl(), props);
+      rs = conn.createStatement().executeQuery("SELECT ts FROM time_table");
+      assertTrue(rs.next());
+      assertEquals(time.getTime(),rs.getTimestamp(1).getTime());
+      props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 70));
+      conn = DriverManager.getConnection(getUrl(), props);
+      rs = conn.createStatement().executeQuery("SELECT ts + 1 FROM time_table");
+      assertTrue(rs.next());
+      assertEquals(time.getTime() + TestUtil.MILLIS_IN_DAY,rs.getTimestamp(1).getTime());
+    }
+
+    @Test
+    public void testSubtractTime() throws Exception {
+      Connection conn;
+      PreparedStatement stmt;
+      ResultSet rs;
+
+      long ts = nextTimestamp();
+      Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+      props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+      conn = DriverManager.getConnection(getUrl(), props);
+      conn.createStatement()
+              .execute(
+                      "create table time_table (ts time primary key)");
+      conn.close();
+
+      props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
+      conn = DriverManager.getConnection(getUrl(), props);
+      stmt = conn.prepareStatement("upsert into time_table values (?)");
+      Time time = new Time(1995 - 1900, 4, 2);
+      stmt.setTime(1, time);
+      stmt.execute();
+      conn.commit();
+      props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 60));
+      conn = DriverManager.getConnection(getUrl(), props);
+      rs = conn.createStatement().executeQuery("SELECT ts FROM time_table");
+      assertTrue(rs.next());
+      assertEquals(time.getTime(),rs.getTimestamp(1).getTime());
+      props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 70));
+      conn = DriverManager.getConnection(getUrl(), props);
+      rs = conn.createStatement().executeQuery("SELECT ts - 1 FROM time_table");
+      assertTrue(rs.next());
+      assertEquals(time.getTime() - TestUtil.MILLIS_IN_DAY,rs.getTimestamp(1).getTime());
+    }
+ 
+    @Test
+    public void testSubtractDate() throws Exception {
+      Connection conn;
+      PreparedStatement stmt;
+      ResultSet rs;
+
+      long ts = nextTimestamp();
+      Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+      props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+      conn = DriverManager.getConnection(getUrl(), props);
+      conn.createStatement()
+              .execute(
+                      "create table date_table (ts date primary key)");
+      conn.close();
+
+      props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
+      conn = DriverManager.getConnection(getUrl(), props);
+      stmt = conn.prepareStatement("upsert into date_table values (?)");
+      stmt.setDate(1, new Date(1995 - 1900, 4, 2));
+      stmt.execute();
+      conn.commit();
+      props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 60));
+      conn = DriverManager.getConnection(getUrl(), props);
+      rs = conn.createStatement().executeQuery("SELECT ts FROM date_table");
+      assertTrue(rs.next());
+      assertEquals("1995-05-02",rs.getDate(1).toString());
+      props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 70));
+      conn = DriverManager.getConnection(getUrl(), props);
+      rs = conn.createStatement().executeQuery("SELECT ts - 1 FROM date_table");
+      assertTrue(rs.next());
+      assertEquals("1995-05-01",rs.getDate(1).toString());
     }
 
 }

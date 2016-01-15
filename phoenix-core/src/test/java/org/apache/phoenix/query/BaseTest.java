@@ -108,9 +108,21 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Properties;
 import java.util.Set;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import javax.annotation.Nonnull;
+
+import co.cask.tephra.TransactionManager;
+import co.cask.tephra.TxConstants;
+import co.cask.tephra.distributed.TransactionService;
+import co.cask.tephra.metrics.TxMetricsCollector;
+import co.cask.tephra.persist.InMemoryTransactionStateStorage;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
@@ -119,7 +131,7 @@ import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.IntegrationTestingUtility;
-import org.apache.hadoop.hbase.TableNotEnabledException;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.coprocessor.CoprocessorHost;
 import org.apache.hadoop.hbase.coprocessor.RegionServerObserver;
@@ -133,6 +145,8 @@ import org.apache.hadoop.hbase.regionserver.RSRpcServices;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.BaseClientManagedTimeIT;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.hbase.index.balancer.IndexLoadBalancer;
 import org.apache.phoenix.hbase.index.master.IndexMasterObserver;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -163,15 +177,10 @@ import org.junit.rules.TemporaryFolder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import co.cask.tephra.TransactionManager;
-import co.cask.tephra.TxConstants;
-import co.cask.tephra.distributed.TransactionService;
-import co.cask.tephra.metrics.TxMetricsCollector;
-import co.cask.tephra.persist.InMemoryTransactionStateStorage;
-
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.google.inject.util.Providers;
 
 /**
@@ -217,6 +226,11 @@ public abstract class BaseTest {
     protected static TransactionManager txManager;
     @ClassRule
     public static TemporaryFolder tmpFolder = new TemporaryFolder();
+    private static final int dropTableTimeout = 300; // 5 mins should be long enough.
+    private static final ThreadFactory factory = new ThreadFactoryBuilder().setDaemon(true)
+            .setNameFormat("DROP-TABLE-BASETEST" + "-thread-%s").build();
+    private static final ExecutorService dropHTableService = Executors
+            .newSingleThreadExecutor(factory);
     
     static {
         ImmutableMap.Builder<String,String> builder = ImmutableMap.builder();
@@ -550,7 +564,6 @@ public abstract class BaseTest {
         if (!clusterInitialized) {
             url = setUpTestCluster(config, overrideProps);
             clusterInitialized = true;
-            setupTxManager();
         }
         return url;
     }
@@ -574,6 +587,7 @@ public abstract class BaseTest {
                 assertTrue(destroyDriver(driver));
             } finally {
                 driver = null;
+                teardownTxManager();
             }
         }
     }
@@ -595,12 +609,8 @@ public abstract class BaseTest {
                     utility.shutdownMiniCluster();
                 }
             } finally {
-                try {
-                    teardownTxManager();
-                } finally {
-                    utility = null;
-                    clusterInitialized = false;
-                }
+                utility = null;
+                clusterInitialized = false;
             }
         }
     }
@@ -613,6 +623,9 @@ public abstract class BaseTest {
         String url = checkClusterInitialized(serverProps);
         if (driver == null) {
             driver = initAndRegisterDriver(url, clientProps);
+            if (clientProps.getBoolean(QueryServices.TRANSACTIONS_ENABLED, QueryServicesOptions.DEFAULT_TRANSACTIONS_ENABLED)) {
+                setupTxManager();
+            }
         }
     }
 
@@ -713,9 +726,6 @@ public abstract class BaseTest {
         conf.setInt("dfs.datanode.handler.count", 2);
         conf.setInt("ipc.server.read.threadpool.size", 2);
         conf.setInt("ipc.server.handler.threadpool.size", 2);
-        conf.setInt("hbase.hconnection.threads.max", 2);
-        conf.setInt("hbase.hconnection.threads.core", 2);
-        conf.setInt("hbase.htable.threads.max", 2);
         conf.setInt("hbase.regionserver.hlog.syncer.count", 2);
         conf.setInt("hbase.hlog.asyncer.number", 2);
         conf.setInt("hbase.assignment.zkevent.workers", 5);
@@ -735,7 +745,8 @@ public abstract class BaseTest {
         if (oldDriver != newDriver) {
             destroyDriver(oldDriver);
         }
-        Connection conn = newDriver.connect(url, PropertiesUtil.deepCopy(TEST_PROPERTIES));
+        Properties driverProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = newDriver.connect(url, driverProps);
         conn.close();
         return newDriver;
     }
@@ -774,7 +785,7 @@ public abstract class BaseTest {
         ensureTableCreated(url, tableName, null, null);
     }
 
-    protected static void ensureTableCreated(String url, String tableName, byte[][] splits) throws SQLException {
+    public static void ensureTableCreated(String url, String tableName, byte[][] splits) throws SQLException {
         ensureTableCreated(url, tableName, splits, null);
     }
 
@@ -1701,17 +1712,47 @@ public abstract class BaseTest {
             for (HTableDescriptor table : tables) {
                 String schemaName = SchemaUtil.getSchemaNameFromFullName(table.getName());
                 if (!QueryConstants.SYSTEM_SCHEMA_NAME.equals(schemaName)) {
-                    try{
-                        admin.disableTable(table.getName());
-                    } catch (TableNotEnabledException ignored){}
-                    admin.deleteTable(table.getName());
+                    disableAndDropTable(admin, table.getTableName());
                 }
             }
         } finally {
             admin.close();
         }
     }
-
+    
+    private static void disableAndDropTable(final HBaseAdmin admin, final TableName tableName)
+            throws Exception {
+        Future<Void> future = null;
+        boolean success = false;
+        try {
+            try {
+                future = dropHTableService.submit(new Callable<Void>() {
+                    @Override
+                    public Void call() throws Exception {
+                        if (admin.isTableEnabled(tableName)) {
+                            admin.disableTable(tableName);
+                            admin.deleteTable(tableName);
+                        }
+                        return null;
+                    }
+                });
+                future.get(dropTableTimeout, TimeUnit.SECONDS);
+                success = true;
+            } catch (TimeoutException e) {
+                throw new SQLExceptionInfo.Builder(SQLExceptionCode.OPERATION_TIMED_OUT)
+                .setMessage(
+                    "Not able to disable and delete table " + tableName.getNameAsString()
+                    + " in " + dropTableTimeout + " seconds.").build().buildException();
+            } catch (Exception e) {
+                throw e;
+            }
+        } finally { 
+            if (future != null && !success) {
+                future.cancel(true);
+            }
+        }
+    }
+    
     public static void assertOneOfValuesEqualsResultSet(ResultSet rs, List<List<Object>>... expectedResultsArray) throws SQLException {
         List<List<Object>> results = Lists.newArrayList();
         while (rs.next()) {

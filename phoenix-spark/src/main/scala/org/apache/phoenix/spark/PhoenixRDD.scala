@@ -13,9 +13,12 @@
  */
 package org.apache.phoenix.spark
 
+import java.sql.{Timestamp, DriverManager}
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hbase.{HBaseConfiguration, HConstants}
 import org.apache.hadoop.io.NullWritable
+import org.apache.phoenix.jdbc.PhoenixDriver
 import org.apache.phoenix.mapreduce.PhoenixInputFormat
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil
 import org.apache.phoenix.schema.types._
@@ -31,6 +34,9 @@ class PhoenixRDD(sc: SparkContext, table: String, columns: Seq[String],
                  predicate: Option[String] = None, zkUrl: Option[String] = None,
                  @transient conf: Configuration)
   extends RDD[PhoenixRecordWritable](sc, Nil) with Logging {
+
+  // Make sure to register the Phoenix driver
+  DriverManager.registerDriver(new PhoenixDriver)
 
   @transient lazy val phoenixConf = {
     getPhoenixConfiguration
@@ -141,7 +147,7 @@ class PhoenixRDD(sc: SparkContext, table: String, columns: Seq[String],
       if (columnInfo.getPrecision < 0) DecimalType(38, 18) else DecimalType(columnInfo.getPrecision, columnInfo.getScale)
     case t if t.isInstanceOf[PTimestamp] || t.isInstanceOf[PUnsignedTimestamp] => TimestampType
     case t if t.isInstanceOf[PTime] || t.isInstanceOf[PUnsignedTime] => TimestampType
-    case t if t.isInstanceOf[PDate] || t.isInstanceOf[PUnsignedDate] => TimestampType
+    case t if t.isInstanceOf[PDate] || t.isInstanceOf[PUnsignedDate] => DateType
     case t if t.isInstanceOf[PBoolean] => BooleanType
     case t if t.isInstanceOf[PVarbinary] || t.isInstanceOf[PBinary] => BinaryType
     case t if t.isInstanceOf[PIntegerArray] || t.isInstanceOf[PUnsignedIntArray] => ArrayType(IntegerType, containsNull = true)

@@ -39,10 +39,9 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAM
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_VALUE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DISABLE_WAL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.FUNCTION_NAME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.GUIDE_POSTS;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.GUIDE_POSTS_COUNT;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.GUIDE_POSTS_ROW_COUNT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.GUIDE_POST_KEY;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.GUIDE_POSTS_ROW_COUNT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_ROWS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INCREMENT_BY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP;
@@ -59,9 +58,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.KEY_SEQ;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LAST_STATS_UPDATE_TIME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LIMIT_REACHED_FLAG;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MAX_KEY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MAX_VALUE;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MIN_KEY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MIN_VALUE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MULTI_TENANT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.NULLABLE;
@@ -71,7 +68,6 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ORDINAL_POSITION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHYSICAL_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PK_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.REF_GENERATION;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.REGION_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.REMARKS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.RETURN_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SALT_BUCKETS;
@@ -274,17 +270,13 @@ public interface QueryConstants {
             // PK columns
             PHYSICAL_NAME  + " VARCHAR NOT NULL," +
             COLUMN_FAMILY + " VARCHAR," +
-            REGION_NAME + " VARCHAR," +
-            GUIDE_POSTS_COUNT + " BIGINT," +
-            GUIDE_POSTS  + " VARBINARY," +
+            GUIDE_POST_KEY  + " VARBINARY," +
             GUIDE_POSTS_WIDTH + " BIGINT," +
-            MIN_KEY + " VARBINARY," +
-            MAX_KEY + " VARBINARY," +
             LAST_STATS_UPDATE_TIME+ " DATE, "+
             GUIDE_POSTS_ROW_COUNT+ " BIGINT, "+
             "CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY ("
             + PHYSICAL_NAME + ","
-            + COLUMN_FAMILY + ","+ REGION_NAME+"))\n" +
+            + COLUMN_FAMILY + ","+ GUIDE_POST_KEY+"))\n" +
             HConstants.VERSIONS + "=" + MetaDataProtocol.DEFAULT_MAX_STAT_DATA_VERSIONS + ",\n" +
             HColumnDescriptor.KEEP_DELETED_CELLS + "="  + MetaDataProtocol.DEFAULT_META_DATA_KEEP_DELETED_CELLS + ",\n" +
             // Install split policy to prevent a physical table's stats from being split across regions.

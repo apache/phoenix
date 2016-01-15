@@ -60,7 +60,6 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ORDINAL_POSITION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PARENT_TENANT_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHYSICAL_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PK_NAME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.REGION_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.RETURN_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SALT_BUCKETS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SORT_ORDER;
@@ -904,7 +903,13 @@ public class MetaDataClient {
                 }
             }
         }
-        return new MutationState((int)rowCount, connection);
+        final long count = rowCount;
+        return new MutationState(1, connection) {
+            @Override
+            public long getUpdateCount() {
+                return count;
+            }
+        };
     }
 
     private long updateStatisticsInternal(PName physicalName, PTable logicalTable, Map<String, Object> statsProps) throws SQLException {
@@ -919,7 +924,7 @@ public class MetaDataClient {
         long clientTimeStamp = connection.getSCN() == null ? HConstants.LATEST_TIMESTAMP : scn;
         String query = "SELECT CURRENT_DATE()," + LAST_STATS_UPDATE_TIME + " FROM " + PhoenixDatabaseMetaData.SYSTEM_STATS_NAME
                 + " WHERE " + PHYSICAL_NAME + "='" + physicalName.getString() + "' AND " + COLUMN_FAMILY
-                + " IS NULL AND " + REGION_NAME + " IS NULL AND " + LAST_STATS_UPDATE_TIME + " IS NOT NULL";
+                + " IS NULL AND " + LAST_STATS_UPDATE_TIME + " IS NOT NULL";
         ResultSet rs = connection.createStatement().executeQuery(query);
         long msSinceLastUpdate = Long.MAX_VALUE;
         if (rs.next()) {
@@ -932,7 +937,15 @@ public class MetaDataClient {
              * since it may not represent a "real" table in the case of the view indexes of a base table.
              */
             PostDDLCompiler compiler = new PostDDLCompiler(connection);
-            TableRef tableRef = new TableRef(null, logicalTable, clientTimeStamp, false);
+            //even if table is transactional, while calculating stats we scan the table non-transactionally to 
+            //view all the data belonging to the table
+            PTable nonTxnLogicalTable = new DelegateTable(logicalTable) {
+                @Override
+                public boolean isTransactional() {
+                    return false;
+                }
+            };
+            TableRef tableRef = new TableRef(null, nonTxnLogicalTable, clientTimeStamp, false);
             MutationPlan plan = compiler.compile(Collections.singletonList(tableRef), null, null, null, clientTimeStamp);
             Scan scan = plan.getContext().getScan();
             scan.setCacheBlocks(false);
@@ -1039,7 +1052,7 @@ public class MetaDataClient {
                         throw new SQLException(e);
                     }
                     ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-                    PTable dataTable = tableRef.getTable();
+                    final PTable dataTable = tableRef.getTable();
                     for(PTable idx: dataTable.getIndexes()) {
                         if(idx.getName().equals(index.getName())) {
                             index = idx;
@@ -1064,6 +1077,7 @@ public class MetaDataClient {
 
                         @Override
                         public MutationState execute() throws SQLException {
+                            connection.getMutationState().commitWriteFence(dataTable);
                             Cell kv = plan.iterator().next().getValue(0);
                             ImmutableBytesWritable tmpPtr = new ImmutableBytesWritable(kv.getValueArray(), kv.getValueOffset(), kv.getValueLength());
                             // A single Cell will be returned with the count(*) - we decode that here
@@ -1556,7 +1570,7 @@ public class MetaDataClient {
             long clientTimeStamp = scn == null ? HConstants.LATEST_TIMESTAMP : scn;
             boolean multiTenant = false;
             boolean storeNulls = false;
-            boolean transactional = false;
+            boolean transactional = (parent!= null) ? parent.isTransactional() : false;
             Integer saltBucketNum = null;
             String defaultFamilyName = null;
             boolean isImmutableRows = false;
@@ -1565,27 +1579,24 @@ public class MetaDataClient {
             boolean rowKeyOrderOptimizable = true;
             Long timestamp = null;
             if (parent != null && tableType == PTableType.INDEX) {
-            	transactional = parent.isTransactional();
                 timestamp = TransactionUtil.getTableTimestamp(connection, transactional);
                 storeNulls = parent.getStoreNulls();
-                if (tableType == PTableType.INDEX) {
-	                // Index on view
-	                // TODO: Can we support a multi-tenant index directly on a multi-tenant
-	                // table instead of only a view? We don't have anywhere to put the link
-	                // from the table to the index, though.
-	                if (indexType == IndexType.LOCAL || (parent.getType() == PTableType.VIEW && parent.getViewType() != ViewType.MAPPED)) {
-	                	PName physicalName = parent.getPhysicalName();
-	                    saltBucketNum = parent.getBucketNum();
-	                    addSaltColumn = (saltBucketNum != null && indexType != IndexType.LOCAL);
-	                    defaultFamilyName = parent.getDefaultFamilyName() == null ? null : parent.getDefaultFamilyName().getString();
-	                    if (indexType == IndexType.LOCAL) {
-	                        saltBucketNum = null;
-	                        // Set physical name of local index table
-	                        physicalNames = Collections.singletonList(PNameFactory.newName(MetaDataUtil.getLocalIndexPhysicalName(physicalName.getBytes())));
-	                    } else {
-	                        // Set physical name of view index table
-	                        physicalNames = Collections.singletonList(PNameFactory.newName(MetaDataUtil.getViewIndexPhysicalName(physicalName.getBytes())));
-	                    }
+                // Index on view
+                // TODO: Can we support a multi-tenant index directly on a multi-tenant
+                // table instead of only a view? We don't have anywhere to put the link
+                // from the table to the index, though.
+                if (indexType == IndexType.LOCAL || (parent.getType() == PTableType.VIEW && parent.getViewType() != ViewType.MAPPED)) {
+                	PName physicalName = parent.getPhysicalName();
+                    saltBucketNum = parent.getBucketNum();
+                    addSaltColumn = (saltBucketNum != null && indexType != IndexType.LOCAL);
+                    defaultFamilyName = parent.getDefaultFamilyName() == null ? null : parent.getDefaultFamilyName().getString();
+                    if (indexType == IndexType.LOCAL) {
+                        saltBucketNum = null;
+                        // Set physical name of local index table
+                        physicalNames = Collections.singletonList(PNameFactory.newName(MetaDataUtil.getLocalIndexPhysicalName(physicalName.getBytes())));
+                    } else {
+                        // Set physical name of view index table
+                        physicalNames = Collections.singletonList(PNameFactory.newName(MetaDataUtil.getViewIndexPhysicalName(physicalName.getBytes())));
                     }
                 }
 
@@ -1718,6 +1729,14 @@ public class MetaDataClient {
                 .setSchemaName(schemaName).setTableName(tableName)
                 .build().buildException();
             }
+            // can't create a transactional table if it has a row timestamp column
+            if (pkConstraint.getNumColumnsWithRowTimestamp()>0 && transactional) {
+            	throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_CREATE_TXN_TABLE_WITH_ROW_TIMESTAMP)
+                .setSchemaName(schemaName).setTableName(tableName)
+                .build().buildException();
+            }
+            
+            
             tableProps.put(PhoenixDatabaseMetaData.TRANSACTIONAL, transactional);
             if (transactional) {
                 // If TTL set, use Tephra TTL property name instead
@@ -2564,7 +2583,6 @@ public class MetaDataClient {
             Map<String, List<Pair<String, Object>>> properties = new HashMap<>(stmtProperties.size());
             TableRef tableRef = FromCompiler.getResolver(statement, connection).getTables().get(0);
 			PTable table = tableRef.getTable();
-            Long timeStamp = table.isTransactional() ? tableRef.getTimeStamp() : null;
             List<ColumnDef> columnDefs = statement.getColumnDefs();
             if (columnDefs == null) {
                 columnDefs = Collections.emptyList();
@@ -2667,11 +2685,17 @@ public class MetaDataClient {
                         	throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_ALTER_TO_BE_TXN_IF_TXNS_DISABLED)
                             .setSchemaName(schemaName).setTableName(tableName).build().buildException();
                         }
-                        timeStamp = TransactionUtil.getTableTimestamp(connection, isTransactional);
+                        // cannot make a table transactional if it has a row timestamp column
+                        if (SchemaUtil.hasRowTimestampColumn(table)) {
+                        	throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_ALTER_TO_BE_TXN_WITH_ROW_TIMESTAMP)
+                            .setSchemaName(schemaName).setTableName(tableName)
+                            .build().buildException();
+                        }
                         changingPhoenixTableProperty = true;
                         nonTxToTx = true;
                     }
                 }
+                Long timeStamp = TransactionUtil.getTableTimestamp(connection, table.isTransactional() || nonTxToTx);
 
                 int numPkColumnsAdded = 0;
                 PreparedStatement colUpsert = connection.prepareStatement(INSERT_COLUMN_ALTER_TABLE);

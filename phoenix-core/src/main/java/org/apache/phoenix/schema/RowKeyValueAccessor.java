@@ -63,8 +63,11 @@ public class RowKeyValueAccessor implements Writable   {
             int offset = 0;
             if (datum.getDataType().isFixedWidth()) {
                 do {
-                    Integer maxLength = datum.getMaxLength();
-                    offset += maxLength == null ? datum.getDataType().getByteSize() : maxLength;
+                    // For non parameterized types such as BIGINT, the type will return its max length.
+                    // For parameterized types, for example CHAR(10) the type cannot know the max length,
+                    // so in this case, the max length is retrieved from the datum.
+                    Integer maxLength = datum.getDataType().getByteSize(); 
+                    offset += maxLength == null ? datum.getMaxLength() : maxLength;
                     datum = iterator.next();
                     pos++;
                 } while (pos < index && datum.getDataType().isFixedWidth());

@@ -83,11 +83,8 @@ public enum SQLExceptionCode {
     SINGLE_ROW_SUBQUERY_RETURNS_MULTIPLE_ROWS(215, "22015", "Single-row sub-query returns more than one row."),
     SUBQUERY_RETURNS_DIFFERENT_NUMBER_OF_FIELDS(216, "22016", "Sub-query must return the same number of fields as the left-hand-side expression of 'IN'."),
     AMBIGUOUS_JOIN_CONDITION(217, "22017", "Ambiguous or non-equi join condition specified. Consider using table list with where clause."),
-    CONSTRAINT_VIOLATION(218, "22018", "Constraint violation."),
+    CONSTRAINT_VIOLATION(218, "23018", "Constraint violation."),
 
-    /**
-     * Constraint Violation (errorcode 03, sqlstate 23)
-     */
     CONCURRENT_TABLE_MUTATION(301, "23000", "Concurrent modification to table.", new Factory() {
         @Override
         public SQLException newException(SQLExceptionInfo info) {
@@ -274,10 +271,16 @@ public enum SQLExceptionCode {
     CANNOT_START_TRANSACTION_WITH_SCN_SET(1073, "44A04", "Cannot start a transaction on a connection with SCN set"),
     TX_MAX_VERSIONS_MUST_BE_GREATER_THAN_ONE(1074, "44A05", "A transactional table must define VERSION of greater than one"),
     CANNOT_SPECIFY_SCN_FOR_TXN_TABLE(1075, "44A06", "Cannot use a connection with SCN set for a transactional table"),
-    NULL_TRANSACTION_CONTEXT(1076, "44A07", "No Tranasction Context available"),
+    NULL_TRANSACTION_CONTEXT(1076, "44A07", "No Transaction Context available"),
     TRANSACTION_FAILED(1077, "44A08", "Transaction Failure "),
     CANNOT_CREATE_TXN_TABLE_IF_TXNS_DISABLED(1078, "44A09", "Cannot create a transactional table if transactions are disabled"),
     CANNOT_ALTER_TO_BE_TXN_IF_TXNS_DISABLED(1079, "44A10", "Cannot alter table to be transactional table if transactions are disabled"),
+    CANNOT_CREATE_TXN_TABLE_WITH_ROW_TIMESTAMP(1080, "44A11", "Cannot create a transactional table if transactions are disabled"),
+    CANNOT_ALTER_TO_BE_TXN_WITH_ROW_TIMESTAMP(1081, "44A12", "Cannot alter table to be transactional table if transactions are disabled"),
+    TX_MUST_BE_ENABLED_TO_SET_TX_CONTEXT(1082, "44A13", "Cannot set transaction context if transactions are disabled"),
+    TX_MUST_BE_ENABLED_TO_SET_AUTO_FLUSH(1083, "44A14", "Cannot set auto flush if transactions are disabled"),
+    TX_MUST_BE_ENABLED_TO_SET_ISOLATION_LEVEL(1084, "44A15", "Cannot set isolation level to TRANSACTION_READ_COMMITTED or TRANSACTION_SERIALIZABLE if transactions are disabled"),
+    TX_UNABLE_TO_GET_WRITE_FENCE(1085, "44A16", "Unable to obtain write fence for DDL operation"),
 
     /** Sequence related */
     SEQUENCE_ALREADY_EXIST(1200, "42Z00", "Sequence already exists.", new Factory() {

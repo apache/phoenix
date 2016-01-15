@@ -37,7 +37,10 @@ import org.apache.phoenix.expression.function.CbrtFunction;
 import org.apache.phoenix.expression.function.CeilDateExpression;
 import org.apache.phoenix.expression.function.CeilDecimalExpression;
 import org.apache.phoenix.expression.function.CeilFunction;
+import org.apache.phoenix.expression.function.CeilMonthExpression;
 import org.apache.phoenix.expression.function.CeilTimestampExpression;
+import org.apache.phoenix.expression.function.CeilWeekExpression;
+import org.apache.phoenix.expression.function.CeilYearExpression;
 import org.apache.phoenix.expression.function.CoalesceFunction;
 import org.apache.phoenix.expression.function.ConvertTimezoneFunction;
 import org.apache.phoenix.expression.function.CountAggregateFunction;
@@ -52,6 +55,9 @@ import org.apache.phoenix.expression.function.FirstValueFunction;
 import org.apache.phoenix.expression.function.FloorDateExpression;
 import org.apache.phoenix.expression.function.FloorDecimalExpression;
 import org.apache.phoenix.expression.function.FloorFunction;
+import org.apache.phoenix.expression.function.FloorMonthExpression;
+import org.apache.phoenix.expression.function.FloorWeekExpression;
+import org.apache.phoenix.expression.function.FloorYearExpression;
 import org.apache.phoenix.expression.function.GetBitFunction;
 import org.apache.phoenix.expression.function.GetByteFunction;
 import org.apache.phoenix.expression.function.HourFunction;
@@ -86,7 +92,10 @@ import org.apache.phoenix.expression.function.ReverseFunction;
 import org.apache.phoenix.expression.function.RoundDateExpression;
 import org.apache.phoenix.expression.function.RoundDecimalExpression;
 import org.apache.phoenix.expression.function.RoundFunction;
+import org.apache.phoenix.expression.function.RoundMonthExpression;
 import org.apache.phoenix.expression.function.RoundTimestampExpression;
+import org.apache.phoenix.expression.function.RoundWeekExpression;
+import org.apache.phoenix.expression.function.RoundYearExpression;
 import org.apache.phoenix.expression.function.SQLIndexTypeFunction;
 import org.apache.phoenix.expression.function.SQLTableTypeFunction;
 import org.apache.phoenix.expression.function.SQLViewTypeFunction;
@@ -264,6 +273,15 @@ public enum ExpressionType {
     GetBitFunction(GetBitFunction.class),
     SetBitFunction(SetBitFunction.class),
     OctetLengthFunction(OctetLengthFunction.class),
+    RoundWeekExpression(RoundWeekExpression.class),
+    RoundMonthExpression(RoundMonthExpression.class),
+    RoundYearExpression(RoundYearExpression.class),
+    FloorWeekExpression(FloorWeekExpression.class),
+    FloorMonthExpression(FloorMonthExpression.class),
+    FloorYearExpression(FloorYearExpression.class),
+    CeilWeekExpression(CeilWeekExpression.class),
+    CeilMonthExpression(CeilMonthExpression.class),
+    CeilYearExpression(CeilYearExpression.class);
     ;
 
     ExpressionType(Class<? extends Expression> clazz) {

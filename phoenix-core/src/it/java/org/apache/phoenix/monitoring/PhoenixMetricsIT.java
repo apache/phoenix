@@ -15,6 +15,7 @@ import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_COMMIT_TIME;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_NUM_PARALLEL_SCANS;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_OPEN_PHOENIX_CONNECTIONS;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_QUERY_TIME;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_QUERY_TIMEOUT_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_REJECTED_TASK_COUNTER;
@@ -72,6 +73,8 @@ public class PhoenixMetricsIT extends BaseOwnClusterHBaseManagedTimeIT {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         // Enable request metric collection at the driver level
         props.put(QueryServices.COLLECT_REQUEST_LEVEL_METRICS, String.valueOf(true));
+        // disable renewing leases as this will force spooling to happen.
+        props.put(QueryServices.RENEW_LEASE_ENABLED, String.valueOf(false));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 
@@ -614,6 +617,15 @@ public class PhoenixMetricsIT extends BaseOwnClusterHBaseManagedTimeIT {
         Map<String, Map<String, Long>> autoCommitReadMetrics = PhoenixRuntime.getReadMetricsForMutationsSinceLastReset(pConn);
         assertMetricsAreSame(mutationMetrics, autoCommitMutationMetrics, mutationMetricsToSkip);
         assertMetricsAreSame(readMetrics, autoCommitReadMetrics, readMetricsToSkip);
+    }
+    
+    @Test
+    public void testOpenConnectionsCounter() throws Exception {
+        long numOpenConnections = GLOBAL_OPEN_PHOENIX_CONNECTIONS.getMetric().getValue();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            assertEquals(numOpenConnections + 1, GLOBAL_OPEN_PHOENIX_CONNECTIONS.getMetric().getValue());
+        }
+        assertEquals(numOpenConnections, GLOBAL_OPEN_PHOENIX_CONNECTIONS.getMetric().getValue());
     }
     
     private void createTableAndInsertValues(boolean commit, int numRows, Connection conn, String tableName)

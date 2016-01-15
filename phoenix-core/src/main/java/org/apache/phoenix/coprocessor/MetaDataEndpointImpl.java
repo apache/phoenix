@@ -978,13 +978,12 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         scan.setFilter(new FirstKeyOnlyFilter());
         scan.setRaw(true);
         List<Cell> results = Lists.<Cell> newArrayList();
-        try (RegionScanner scanner = region.getScanner(scan);) {
+        try (RegionScanner scanner = region.getScanner(scan)) {
           scanner.next(results);
         }
-        // HBase ignores the time range on a raw scan (HBASE-7362)
-        if (!results.isEmpty() && results.get(0).getTimestamp() > clientTimeStamp) {
-            Cell kv = results.get(0);
-            if (kv.getTypeByte() == Type.Delete.getCode()) {
+        for (Cell kv : results) {
+            KeyValue.Type type = Type.codeToType(kv.getTypeByte());
+            if (type == Type.DeleteFamily) { // Row was deleted
                 Cache<ImmutableBytesPtr, PMetaDataEntity> metaDataCache =
                         GlobalCache.getInstance(this.env).getMetaDataCache();
                 PTable table = newDeletedTableMarker(kv.getTimestamp());
@@ -1622,7 +1621,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         && (table = buildTable(key, cacheKey, region, HConstants.LATEST_TIMESTAMP)) == null) {
                     // if not found then call newerTableExists and add delete marker for timestamp
                     // found
-                    if (buildDeletedTable(key, cacheKey, region, clientTimeStamp) != null) {
+                    table = buildDeletedTable(key, cacheKey, region, clientTimeStamp);
+                    if (table != null) {
+                        logger.info("Found newer table deleted as of " + table.getTimeStamp() + " versus client timestamp of " + clientTimeStamp);
                         return new MetaDataMutationResult(MutationCode.NEWER_TABLE_FOUND,
                                 EnvironmentEdgeManager.currentTimeMillis(), null);
                     }
@@ -1630,6 +1631,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                             EnvironmentEdgeManager.currentTimeMillis(), null);
                 }
                 if (table.getTimeStamp() >= clientTimeStamp) {
+                    logger.info("Found newer table as of " + table.getTimeStamp() + " versus client timestamp of " + clientTimeStamp);
                     return new MetaDataMutationResult(MutationCode.NEWER_TABLE_FOUND,
                             EnvironmentEdgeManager.currentTimeMillis(), table);
                 } else if (isTableDeleted(table)) {
@@ -2667,7 +2669,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         Cache<ImmutableBytesPtr, PMetaDataEntity> metaDataCache =
                 GlobalCache.getInstance(this.env).getMetaDataCache();
         metaDataCache.invalidateAll();
-        cache.clearTenantCache();
+        long unfreedBytes = cache.clearTenantCache();
+        ClearCacheResponse.Builder builder = ClearCacheResponse.newBuilder();
+        builder.setUnfreedBytes(unfreedBytes);
+        done.run(builder.build());
     }
 
     @Override

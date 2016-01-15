@@ -22,7 +22,6 @@ import java.io.IOException;
 import org.apache.hadoop.hbase.exceptions.DeserializationException;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Writables;
-
 import org.apache.phoenix.expression.Expression;
 
 
@@ -32,8 +31,6 @@ import org.apache.phoenix.expression.Expression;
  * column qualifier parts of the key value to disambiguate with another similarly
  * named column qualifier in a different column family.
  *
- * 
- * @since 0.1
  */
 public class SingleCFCQKeyValueComparisonFilter extends SingleKeyValueComparisonFilter {
     public SingleCFCQKeyValueComparisonFilter() {

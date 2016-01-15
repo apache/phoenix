@@ -110,6 +110,37 @@ public class SkipScanQueryIT extends BaseHBaseManagedTimeIT {
     }
     
     @Test
+    public void testSkipScanFilterQuery() throws Exception {
+        String createTableDDL = "CREATE TABLE test" + "(col1 VARCHAR," + "col2 VARCHAR," + "col3 VARCHAR,"
+             + "col4 VARCHAR," + "CONSTRAINT pk  " + "PRIMARY KEY (col1,col2,col3,col4))";
+        String upsertQuery = "upsert into test values(?,?,?,?)";
+        String query = "SELECT col1, col2, col3, col4 FROM test WHERE col1 IN ('a','e','f') AND col2 = 'b' AND col4 = '1' ";
+        String[] col1Values = { "a", "e.f", "f" };
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        createTestTable(getUrl(), createTableDDL);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(true);
+        try {
+            PreparedStatement statement = conn.prepareStatement(upsertQuery);
+            for (String col1Value : col1Values) {
+                statement.setString(1, col1Value);
+                statement.setString(2, "b");
+                statement.setString(3, "");
+                statement.setString(4, "1");
+                statement.execute();
+            }
+            ResultSet rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals(rs.getString(1), "a");
+            assertTrue(rs.next());
+            assertEquals(rs.getString(1), "f");
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
+
+    @Test
     public void testSelectAfterUpsertInQuery() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         initSelectAfterUpsertTable(conn);
@@ -383,4 +414,24 @@ public class SkipScanQueryIT extends BaseHBaseManagedTimeIT {
             conn.close();
         }
     }    
+    
+    @Test
+    public void testOrPKWithAndNonPK() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        try {
+            conn.createStatement().execute("create table bugTable(ID varchar primary key,company varchar)");
+            conn.setAutoCommit(true);
+            conn.createStatement().execute("upsert into bugTable values('i1','c1')");
+            conn.createStatement().execute("upsert into bugTable values('i2','c2')");
+            conn.createStatement().execute("upsert into bugTable values('i3','c3')");
+            ResultSet rs = conn.createStatement().executeQuery("select * from bugTable where ID = 'i1' or (ID = 'i2' and company = 'c3')");
+            assertTrue(rs.next());
+            assertEquals("i1", rs.getString(1));
+            assertEquals("c1", rs.getString(2));
+            assertFalse(rs.next());
+            
+        } finally {
+            conn.close();
+        }
+    }
 }

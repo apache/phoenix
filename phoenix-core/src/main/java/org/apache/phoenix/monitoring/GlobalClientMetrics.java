@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.monitoring;
 
+import static org.apache.phoenix.monitoring.MetricType.OPEN_PHOENIX_CONNECTIONS_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.QUERY_FAILED_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.MEMORY_CHUNK_BYTES;
 import static org.apache.phoenix.monitoring.MetricType.MEMORY_WAIT_TIME;
@@ -71,7 +72,8 @@ public enum GlobalClientMetrics {
     GLOBAL_REJECTED_TASK_COUNTER(TASK_REJECTED_COUNTER),
     GLOBAL_QUERY_TIMEOUT_COUNTER(QUERY_TIMEOUT_COUNTER),
     GLOBAL_FAILED_QUERY_COUNTER(QUERY_FAILED_COUNTER),
-    GLOBAL_SPOOL_FILE_COUNTER(SPOOL_FILE_COUNTER);
+    GLOBAL_SPOOL_FILE_COUNTER(SPOOL_FILE_COUNTER),
+    GLOBAL_OPEN_PHOENIX_CONNECTIONS(OPEN_PHOENIX_CONNECTIONS_COUNTER);
     
     private static final boolean isGlobalMetricsEnabled = QueryServicesOptions.withDefaults().isGlobalMetricsEnabled();
     private GlobalMetric metric;
@@ -99,6 +101,12 @@ public enum GlobalClientMetrics {
     public void increment() {
         if (isGlobalMetricsEnabled) {
             metric.increment();
+        }
+    }
+    
+    public void decrement() {
+        if (isGlobalMetricsEnabled) {
+            metric.decrement();
         }
     }
 

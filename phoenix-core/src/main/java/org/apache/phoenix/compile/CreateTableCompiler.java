@@ -120,8 +120,8 @@ public class CreateTableCompiler {
                 }
                 if (viewTypeToBe != ViewType.MAPPED) {
                     Long scn = connection.getSCN();
-                    connectionToBe = scn != null ? connection :
-                        // If we haved no SCN on our connection, freeze the SCN at when
+                    connectionToBe = (scn != null || tableRef.getTable().isTransactional()) ? connection :
+                        // If we haved no SCN on our connection and the base table is not transactional, freeze the SCN at when
                         // the base table was resolved to prevent any race condition on
                         // the error checking we do for the base table. The only potential
                         // issue is if the base table lives on a different region server

@@ -172,7 +172,7 @@ public class DeleteCompiler {
                         MutationState indexState = new MutationState(indexTableRef, indexMutations, 0, maxSize, connection);
                         connection.getMutationState().join(indexState);
                     }
-                    connection.commit();
+                    connection.getMutationState().send();
                     mutations.clear();
                     if (indexMutations != null) {
                         indexMutations.clear();
@@ -618,23 +618,27 @@ public class DeleteCompiler {
                     @Override
                     public MutationState execute() throws SQLException {
                         ResultIterator iterator = plan.iterator();
-                        if (!hasLimit) {
-                            Tuple tuple;
-                            long totalRowCount = 0;
-                            while ((tuple=iterator.next()) != null) {// Runs query
-                                Cell kv = tuple.getValue(0);
-                                totalRowCount += PLong.INSTANCE.getCodec().decodeLong(kv.getValueArray(), kv.getValueOffset(), SortOrder.getDefault());
+                        try {
+                            if (!hasLimit) {
+                                Tuple tuple;
+                                long totalRowCount = 0;
+                                while ((tuple=iterator.next()) != null) {// Runs query
+                                    Cell kv = tuple.getValue(0);
+                                    totalRowCount += PLong.INSTANCE.getCodec().decodeLong(kv.getValueArray(), kv.getValueOffset(), SortOrder.getDefault());
+                                }
+                                // Return total number of rows that have been delete. In the case of auto commit being off
+                                // the mutations will all be in the mutation state of the current connection.
+                                MutationState state = new MutationState(maxSize, connection, totalRowCount);
+
+                                // set the read metrics accumulated in the parent context so that it can be published when the mutations are committed.
+                                state.setReadMetricQueue(plan.getContext().getReadMetricsQueue());
+
+                                return state;
+                            } else {
+                                return deleteRows(plan.getContext(), tableRef, deleteFromImmutableIndexToo ? plan.getTableRef() : null, iterator, plan.getProjector(), plan.getTableRef());
                             }
-                            // Return total number of rows that have been delete. In the case of auto commit being off
-                            // the mutations will all be in the mutation state of the current connection.
-                            MutationState state = new MutationState(maxSize, connection, totalRowCount);
-                            
-                            // set the read metrics accumulated in the parent context so that it can be published when the mutations are committed.
-                            state.setReadMetricQueue(plan.getContext().getReadMetricsQueue());
-                            
-                            return state;
-                        } else {
-                            return deleteRows(plan.getContext(), tableRef, deleteFromImmutableIndexToo ? plan.getTableRef() : null, iterator, plan.getProjector(), plan.getTableRef());
+                        } finally {
+                            iterator.close();
                         }
                     }
     

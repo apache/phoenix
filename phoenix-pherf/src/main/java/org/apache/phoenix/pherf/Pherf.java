@@ -89,6 +89,8 @@ public class Pherf {
 		options.addOption("label", true, "Label a run. Result file name will be suffixed with specified label");
 		options.addOption("compare", true, "Specify labeled run(s) to compare");
 		options.addOption("useAverageCompareType", false, "Compare results with Average query time instead of default is Minimum query time.");
+		    options.addOption("t", "thin", false, "Use the Phoenix Thin Driver");
+		    options.addOption("s", "server", true, "The URL for the Phoenix QueryServer");
     }
 
     private final String zookeeper;
@@ -109,6 +111,8 @@ public class Pherf {
     private final String label;
     private final String compareResults;
     private final CompareType compareType;
+    private final boolean thinDriver;
+    private final String queryServerUrl;
 
     public Pherf(String[] args) throws Exception {
         CommandLineParser parser = new PosixParser();
@@ -155,14 +159,27 @@ public class Pherf {
         label = command.getOptionValue("label", null);
         compareResults = command.getOptionValue("compare", null);
         compareType = command.hasOption("useAverageCompareType") ? CompareType.AVERAGE : CompareType.MINIMUM;
+        thinDriver = command.hasOption("thin");
+        if (thinDriver) {
+            queryServerUrl = command.getOptionValue("server", "http://localhost:8765");
+        } else {
+            queryServerUrl = null;
+        }
 
         if ((command.hasOption("h") || (args == null || args.length == 0)) && !command
                 .hasOption("listFiles")) {
             hf.printHelp("Pherf", options);
             System.exit(1);
         }
-        PhoenixUtil.setZookeeper(zookeeper);
         PhoenixUtil.setRowCountOverride(rowCountOverride);
+        if (!thinDriver) {
+            logger.info("Using thick driver with ZooKeepers '{}'", zookeeper);
+            PhoenixUtil.setZookeeper(zookeeper);
+        } else {
+            logger.info("Using thin driver with PQS '{}'", queryServerUrl);
+            // Enables the thin-driver and sets the PQS URL
+            PhoenixUtil.useThinDriver(queryServerUrl);
+        }
         ResultUtil.setFileSuffix(label);
     }
 
@@ -237,11 +254,17 @@ public class Pherf {
             // Schema and Data Load
             if (preLoadData) {
                 logger.info("\nStarting Data Load...");
-                WriteWorkload workload = new WriteWorkload(parser, generateStatistics);
-                workloadExecutor.add(workload);
+                Workload workload = new WriteWorkload(parser, generateStatistics);
+                try {
+                    workloadExecutor.add(workload);
 
-                // Wait for dataLoad to complete
-                workloadExecutor.get(workload);
+                    // Wait for dataLoad to complete
+                    workloadExecutor.get(workload);
+                } finally {
+                    if (null != workload) {
+                        workload.complete();
+                    }
+                }
             } else {
                 logger.info(
                         "\nSKIPPED: Data Load and schema creation as -l argument not specified");
@@ -273,10 +296,6 @@ public class Pherf {
             if (workloadExecutor != null) {
                 logger.info("Run completed. Shutting down thread pool.");
                 workloadExecutor.shutdown();
-                if (preLoadData) {
-                	System.exit(0);
-                }
-                
             }
         }
     }

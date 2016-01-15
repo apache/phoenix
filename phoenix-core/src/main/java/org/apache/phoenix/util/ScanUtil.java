@@ -50,6 +50,7 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.DescVarLengthFastByteComparisons;
 import org.apache.phoenix.filter.BooleanExpressionFilter;
 import org.apache.phoenix.filter.SkipScanFilter;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.KeyRange.Bound;
 import org.apache.phoenix.query.QueryConstants;
@@ -269,6 +270,14 @@ public class ScanUtil {
             throw new RuntimeException(e);
         }
     }
+    
+	public static void setTimeRange(Scan scan, long minStamp, long maxStamp) {
+		try {
+			scan.setTimeRange(minStamp, maxStamp);
+		} catch (IOException e) {
+			throw new RuntimeException(e);
+		}
+	}
 
     public static byte[] getMinKey(RowKeySchema schema, List<List<KeyRange>> slots, int[] slotSpan) {
         return getKey(schema, slots, slotSpan, Bound.LOWER);
@@ -375,7 +384,7 @@ public class ScanUtil {
              * incrementing the key value itself, and thus bumping it up too much.
              */
             boolean inclusiveUpper = range.isUpperInclusive() && bound == Bound.UPPER;
-            boolean exclusiveLower = !range.isLowerInclusive() && bound == Bound.LOWER;
+            boolean exclusiveLower = !range.isLowerInclusive() && bound == Bound.LOWER && range != KeyRange.EVERYTHING_RANGE;
             boolean exclusiveUpper = !range.isUpperInclusive() && bound == Bound.UPPER;
             // If we are setting the upper bound of using inclusive single key, we remember 
             // to increment the key if we exit the loop after this iteration.
@@ -731,14 +740,16 @@ public class ScanUtil {
         return filterIterator;
     }
     
-    public static boolean isRoundRobinPossible(OrderBy orderBy, StatementContext context) throws SQLException {
-        int fetchSize  = context.getStatement().getFetchSize();
-        /*
-         * Selecting underlying scanners in a round-robin fashion is possible if there is no ordering of rows needed,
-         * not even row key order. Also no point doing round robin of scanners if fetch size
-         * is 1.
-         */
-        return fetchSize > 1 && !shouldRowsBeInRowKeyOrder(orderBy, context) && orderBy.getOrderByExpressions().isEmpty();
+    /**
+     * Selecting underlying scanners in a round-robin fashion is possible if there is no ordering of
+     * rows needed, not even row key order. Also no point doing round robin of scanners if fetch
+     * size is 1.
+     */
+    public static boolean isRoundRobinPossible(OrderBy orderBy, StatementContext context)
+            throws SQLException {
+        int fetchSize = context.getStatement().getFetchSize();
+        return fetchSize > 1 && !shouldRowsBeInRowKeyOrder(orderBy, context)
+                && orderBy.getOrderByExpressions().isEmpty();
     }
     
     public static boolean forceRowKeyOrder(StatementContext context) {
@@ -781,6 +792,17 @@ public class ScanUtil {
     
     public static boolean isDefaultTimeRange(TimeRange range) {
         return range.getMin() == 0 && range.getMax() == Long.MAX_VALUE;
+    }
+    
+    /**
+     * @return true if scanners could be left open and records retrieved by simply advancing them on
+     *         the server side. To make sure HBase doesn't cancel the leases and close the open
+     *         scanners, we need to periodically renew leases. To look at the earliest HBase version
+     *         that supports renewing leases, see
+     *         {@link PhoenixDatabaseMetaData#MIN_RENEW_LEASE_VERSION}
+     */
+    public static boolean isPacingScannersPossible(StatementContext context) {
+        return context.getConnection().getQueryServices().isRenewingLeasesEnabled();
     }
 
 }

@@ -100,7 +100,7 @@ import com.google.common.annotations.VisibleForTesting;
  *
  * @since 0.1
  */
-public class PhoenixResultSet implements ResultSet, SQLCloseable, org.apache.phoenix.jdbc.Jdbc7Shim.ResultSet {
+public class PhoenixResultSet implements ResultSet, SQLCloseable {
 
     private static final Log LOG = LogFactory.getLog(PhoenixResultSet.class);
 
@@ -776,6 +776,9 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable, org.apache.pho
                 overAllQueryMetrics.startResultSetWatch();
             }
             currentRow = scanner.next();
+            if (currentRow == null) {
+                close();
+            }
             rowProjector.reset();
         } catch (RuntimeException e) {
             // FIXME: Expression.evaluate does not throw SQLException

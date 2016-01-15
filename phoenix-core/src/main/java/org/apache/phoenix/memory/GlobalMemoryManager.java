@@ -21,15 +21,15 @@ import org.apache.http.annotation.GuardedBy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 /**
- * 
+ *
  * Global memory manager to track course grained memory usage across all requests.
  *
- * 
+ *
  * @since 0.1
  */
 public class GlobalMemoryManager implements MemoryManager {
     private static final Logger logger = LoggerFactory.getLogger(GlobalMemoryManager.class);
-    
+
     private final Object sync = new Object();
     private final long maxMemoryBytes;
     private final int maxWaitMs;
@@ -46,7 +46,7 @@ public class GlobalMemoryManager implements MemoryManager {
         this.maxWaitMs = maxWaitMs;
         this.usedMemoryBytes = 0;
     }
-    
+
     @Override
     public long getAvailableMemory() {
         synchronized(sync) {
@@ -73,12 +73,14 @@ public class GlobalMemoryManager implements MemoryManager {
         synchronized(sync) {
             while (usedMemoryBytes + minBytes > maxMemoryBytes) { // Only wait if minBytes not available
                 try {
+                    logger.debug("Waiting for " + (usedMemoryBytes + minBytes - maxMemoryBytes) + " bytes to be free");
                     long remainingWaitTimeMs = maxWaitMs - (System.currentTimeMillis() - startTimeMs);
                     if (remainingWaitTimeMs <= 0) { // Ran out of time waiting for some memory to get freed up
-                        throw new InsufficientMemoryException("Requested memory of " + minBytes + " bytes could not be allocated from remaining memory of " + usedMemoryBytes + " bytes from global pool of " + maxMemoryBytes + " bytes after waiting for " + maxWaitMs + "ms.");
+                        throw new InsufficientMemoryException("Requested memory of " + minBytes + " bytes could not be allocated. Using memory of " + usedMemoryBytes + " bytes from global pool of " + maxMemoryBytes + " bytes after waiting for " + maxWaitMs + "ms.");
                     }
                     sync.wait(remainingWaitTimeMs);
                 } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
                     throw new RuntimeException("Interrupted allocation of " + minBytes + " bytes", ie);
                 }
             }
@@ -106,15 +108,18 @@ public class GlobalMemoryManager implements MemoryManager {
     protected MemoryChunk newMemoryChunk(long sizeBytes) {
         return new GlobalMemoryChunk(sizeBytes);
     }
-    
+
     private class GlobalMemoryChunk implements MemoryChunk {
         private volatile long size;
+        //private volatile String stack;
 
         private GlobalMemoryChunk(long size) {
             if (size < 0) {
                 throw new IllegalStateException("Size of memory chunk must be greater than zero, but instead is " + size);
             }
             this.size = size;
+            // Useful for debugging where a piece of memory was allocated
+            // this.stack = ExceptionUtils.getStackTrace(new Throwable());
         }
 
         @Override
@@ -123,7 +128,7 @@ public class GlobalMemoryManager implements MemoryManager {
                 return size; // TODO: does this need to be synchronized?
             }
         }
-        
+
         @Override
         public void resize(long nBytes) {
             if (nBytes < 0) {
@@ -138,10 +143,11 @@ public class GlobalMemoryManager implements MemoryManager {
                 } else {
                     allocateBytes(nAdditionalBytes, nAdditionalBytes);
                     size = nBytes;
+                    //this.stack = ExceptionUtils.getStackTrace(new Throwable());
                 }
             }
         }
-        
+
         /**
          * Check that MemoryChunk has previously been closed.
          */
@@ -150,24 +156,26 @@ public class GlobalMemoryManager implements MemoryManager {
             try {
                 if (size > 0) {
                     logger.warn("Orphaned chunk of " + size + " bytes found during finalize");
+                    //logger.warn("Orphaned chunk of " + size + " bytes found during finalize allocated here:\n" + stack);
                 }
-                close();
-                // TODO: log error here, but we can't use SFDC logging
-                // because this runs in an hbase coprocessor.
-                // Create a gack-like API (talk with GridForce or HBase folks)
+                freeMemory();
             } finally {
                 super.finalize();
             }
         }
-        
-        @Override
-        public void close() {
+
+        private void freeMemory() {
             synchronized(sync) {
                 usedMemoryBytes -= size;
                 size = 0;
                 sync.notifyAll();
             }
         }
+        
+        @Override
+        public void close() {
+            freeMemory();
+        }
     }
 }
- 
+

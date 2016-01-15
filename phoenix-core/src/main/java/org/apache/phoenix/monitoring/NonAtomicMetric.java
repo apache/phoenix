@@ -68,4 +68,9 @@ class NonAtomicMetric implements Metric {
         value = 0;
     }
 
+    @Override
+    public void decrement() {
+        value--;
+    }
+
 }

@@ -205,6 +205,7 @@ public final class PhoenixHBaseLoader extends LoadFunc implements LoadMetadata {
             final Tuple tuple = TypeUtil.transformToTuple(record,schema.getFields());
             return tuple;
        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
             int errCode = 6018;
             final String errMsg = "Error while reading input";
             throw new ExecException(errMsg, errCode,PigException.REMOTE_ENVIRONMENT, e);

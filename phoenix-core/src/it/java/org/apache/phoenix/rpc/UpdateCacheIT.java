@@ -30,6 +30,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import java.sql.Connection;
+import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -78,26 +79,49 @@ public class UpdateCacheIT extends BaseHBaseManagedTimeIT {
         ensureTableCreated(getUrl(), TRANSACTIONAL_DATA_TABLE);
     }
 
+    private static void setupSystemTable(Long scn) throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        if (scn != null) {
+            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(scn));
+        }
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute(
+            "create table " + QueryConstants.SYSTEM_SCHEMA_NAME + QueryConstants.NAME_SEPARATOR + MUTABLE_INDEX_DATA_TABLE + TEST_TABLE_SCHEMA);
+        }
+    }
+    
     @Test
     public void testUpdateCacheForTxnTable() throws Exception {
-        helpTestUpdateCache(true, null);
+        helpTestUpdateCache(true, false, null);
     }
     
     @Test
     public void testUpdateCacheForNonTxnTable() throws Exception {
-        helpTestUpdateCache(false, null);
+        helpTestUpdateCache(false, false, null);
     }
 	
-	public static void helpTestUpdateCache(boolean isTransactional, Long scn) throws Exception {
+    @Test
+    public void testUpdateCacheForNonTxnSystemTable() throws Exception {
+        helpTestUpdateCache(false, true, null);
+    }
+    
+	public static void helpTestUpdateCache(boolean isTransactional, boolean isSystem, Long scn) throws Exception {
 	    String tableName = isTransactional ? TRANSACTIONAL_DATA_TABLE : MUTABLE_INDEX_DATA_TABLE;
-	    String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + tableName;
+	    String schemaName;
+	    if (isSystem) {
+	        setupSystemTable(scn);
+	        schemaName = QueryConstants.SYSTEM_SCHEMA_NAME;
+	    } else {
+	        schemaName = INDEX_DATA_SCHEMA;
+	    }
+	    String fullTableName = schemaName + QueryConstants.NAME_SEPARATOR + tableName;
 		String selectSql = "SELECT * FROM "+fullTableName;
 		// use a spyed ConnectionQueryServices so we can verify calls to getTable
 		ConnectionQueryServices connectionQueryServices = Mockito.spy(driver.getConnectionQueryServices(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)));
 		Properties props = new Properties();
 		props.putAll(PhoenixEmbeddedDriver.DEFFAULT_PROPS.asMap());
 		if (scn!=null) {
-            props.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(scn));
+            props.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(scn+10));
         }
 		Connection conn = connectionQueryServices.connect(getUrl(), props);
 		try {
@@ -112,13 +136,14 @@ public class UpdateCacheIT extends BaseHBaseManagedTimeIT {
 			TestUtil.setRowKeyColumns(stmt, 3);
 			stmt.execute();
 			conn.commit();
-			// verify only one rpc to fetch table metadata, 
-            verify(connectionQueryServices).getTable((PName)isNull(), eq(PVarchar.INSTANCE.toBytes(INDEX_DATA_SCHEMA)), eq(PVarchar.INSTANCE.toBytes(tableName)), anyLong(), anyLong());
+            int numUpsertRpcs = isSystem ? 0 : 1; 
+			// verify only 0 or 1 rpc to fetch table metadata, 
+            verify(connectionQueryServices, times(numUpsertRpcs)).getTable((PName)isNull(), eq(PVarchar.INSTANCE.toBytes(schemaName)), eq(PVarchar.INSTANCE.toBytes(tableName)), anyLong(), anyLong());
             reset(connectionQueryServices);
             
             if (scn!=null) {
                 // advance scn so that we can see the data we just upserted
-                props.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(scn+2));
+                props.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(scn+20));
                 conn = connectionQueryServices.connect(getUrl(), props);
             }
 			
@@ -143,8 +168,9 @@ public class UpdateCacheIT extends BaseHBaseManagedTimeIT {
 	        // for non-transactional tables without a scn : verify one rpc to getTable occurs *per* query
             // for non-transactional tables with a scn : verify *only* one rpc occurs
             // for transactional tables : verify *only* one rpc occurs
-            int numRpcs = isTransactional || scn!=null ? 1 : 3; 
-            verify(connectionQueryServices, times(numRpcs)).getTable((PName)isNull(), eq(PVarchar.INSTANCE.toBytes(INDEX_DATA_SCHEMA)), eq(PVarchar.INSTANCE.toBytes(tableName)), anyLong(), anyLong());
+	        // for non-transactional, system tables : verify no rpc occurs
+            int numRpcs = isSystem ? 0 : (isTransactional || scn!=null ? 1 : 3); 
+            verify(connectionQueryServices, times(numRpcs)).getTable((PName)isNull(), eq(PVarchar.INSTANCE.toBytes(schemaName)), eq(PVarchar.INSTANCE.toBytes(tableName)), anyLong(), anyLong());
 		}
         finally {
         	conn.close();

@@ -39,9 +39,11 @@ import java.util.Properties;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.end2end.Shadower;
@@ -60,13 +62,17 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
-
-import co.cask.tephra.TxConstants;
-import co.cask.tephra.hbase11.coprocessor.TransactionProcessor;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+
+import co.cask.tephra.TransactionContext;
+import co.cask.tephra.TransactionSystemClient;
+import co.cask.tephra.TxConstants;
+import co.cask.tephra.hbase11.TransactionAwareHTable;
+import co.cask.tephra.hbase11.coprocessor.TransactionProcessor;
 
 public class TransactionIT extends BaseHBaseManagedTimeIT {
 	
@@ -345,6 +351,7 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
         assertFalse(rs.next());
     }
     
+    @Ignore
     @Test
     public void testNonTxToTxTableFailure() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
@@ -547,5 +554,320 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
         stmt.execute("CREATE INDEX DEMO_IDX ON DEMO (v1) INCLUDE(v2)");
         assertTrue(conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, "DEMO")).isTransactional());
         assertTrue(conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, "DEMO_IDX")).isTransactional());
+    }
+    
+    @Test
+    public void testRowTimestampDisabled() throws SQLException {
+    	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+	        conn.setAutoCommit(false);
+	        Statement stmt = conn.createStatement();
+	        try {
+	        	stmt.execute("CREATE TABLE DEMO(k VARCHAR, v VARCHAR, d DATE NOT NULL, CONSTRAINT PK PRIMARY KEY(k,d ROW_TIMESTAMP)) TRANSACTIONAL=true");
+	        	fail();
+	        }
+        	catch(SQLException e) {
+        		assertEquals(SQLExceptionCode.CANNOT_CREATE_TXN_TABLE_WITH_ROW_TIMESTAMP.getErrorCode(), e.getErrorCode());
+        	}
+	        stmt.execute("CREATE TABLE DEMO(k VARCHAR, v VARCHAR, d DATE NOT NULL, CONSTRAINT PK PRIMARY KEY(k,d ROW_TIMESTAMP))");
+	        try {
+	        	stmt.execute("ALTER TABLE DEMO SET TRANSACTIONAL=true");
+	        	fail();
+	        }
+        	catch(SQLException e) {
+        		assertEquals(SQLExceptionCode.CANNOT_ALTER_TO_BE_TXN_WITH_ROW_TIMESTAMP.getErrorCode(), e.getErrorCode());
+        	}
+        }
+    }
+    
+    @Test
+    public void testReadOnlyView() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+		String ddl = "CREATE TABLE t (k INTEGER NOT NULL PRIMARY KEY, v1 DATE) TRANSACTIONAL=true";
+        conn.createStatement().execute(ddl);
+        ddl = "CREATE VIEW v (v2 VARCHAR) AS SELECT * FROM t where k>4";
+        conn.createStatement().execute(ddl);
+        for (int i = 0; i < 10; i++) {
+            conn.createStatement().execute("UPSERT INTO t VALUES(" + i + ")");
+        }
+        conn.commit();
+        
+        int count = 0;
+        ResultSet rs = conn.createStatement().executeQuery("SELECT k FROM t");
+        while (rs.next()) {
+            assertEquals(count++, rs.getInt(1));
+        }
+        assertEquals(10, count);
+        
+        count = 0;
+        rs = conn.createStatement().executeQuery("SELECT k FROM v");
+        while (rs.next()) {
+            assertEquals(5+count++, rs.getInt(1));
+        }
+        assertEquals(5, count);
+    }
+    
+    @Test
+    public void testExternalTxContext() throws Exception {
+        ResultSet rs;
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(false);
+        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        
+        TransactionSystemClient txServiceClient = pconn.getQueryServices().getTransactionSystemClient();
+
+        String fullTableName = "T";
+        Statement stmt = conn.createStatement();
+        stmt.execute("CREATE TABLE " + fullTableName + "(K VARCHAR PRIMARY KEY, V1 VARCHAR, V2 VARCHAR) TRANSACTIONAL=true");
+        HTableInterface htable = pconn.getQueryServices().getTable(Bytes.toBytes(fullTableName));
+        stmt.executeUpdate("upsert into " + fullTableName + " values('x', 'a', 'a')");
+        conn.commit();
+
+        try (Connection newConn = DriverManager.getConnection(getUrl(), props)) {
+            rs = newConn.createStatement().executeQuery("select count(*) from " + fullTableName);
+            assertTrue(rs.next());
+            assertEquals(1,rs.getInt(1));
+        }
+
+        // Use HBase level Tephra APIs to start a new transaction
+        TransactionAwareHTable txAware = new TransactionAwareHTable(htable, TxConstants.ConflictDetection.ROW);
+        TransactionContext txContext = new TransactionContext(txServiceClient, txAware);
+        txContext.start();
+        
+        // Use HBase APIs to add a new row
+        Put put = new Put(Bytes.toBytes("z"));
+        put.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES, QueryConstants.EMPTY_COLUMN_VALUE_BYTES);
+        put.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, Bytes.toBytes("V1"), Bytes.toBytes("b"));
+        txAware.put(put);
+        
+        // Use Phoenix APIs to add new row (sharing the transaction context)
+        pconn.setTransactionContext(txContext);
+        conn.createStatement().executeUpdate("upsert into " + fullTableName + " values('y', 'c', 'c')");
+
+        // New connection should not see data as it hasn't been committed yet
+        try (Connection newConn = DriverManager.getConnection(getUrl(), props)) {
+            rs = newConn.createStatement().executeQuery("select count(*) from " + fullTableName);
+            assertTrue(rs.next());
+            assertEquals(1,rs.getInt(1));
+        }
+        
+        // Use new connection to create a row with a conflict
+        Connection connWithConflict = DriverManager.getConnection(getUrl(), props);
+        connWithConflict.createStatement().execute("upsert into " + fullTableName + " values('z', 'd', 'd')");
+        
+        // Existing connection should see data even though it hasn't been committed yet
+        rs = conn.createStatement().executeQuery("select count(*) from " + fullTableName);
+        assertTrue(rs.next());
+        assertEquals(3,rs.getInt(1));
+        
+        // Use Tephra APIs directly to finish (i.e. commit) the transaction
+        txContext.finish();
+        
+        // Confirm that attempt to commit row with conflict fails
+        try {
+            connWithConflict.commit();
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.TRANSACTION_CONFLICT_EXCEPTION.getErrorCode(), e.getErrorCode());
+        } finally {
+            connWithConflict.close();
+        }
+        
+        // New connection should now see data as it has been committed
+        try (Connection newConn = DriverManager.getConnection(getUrl(), props)) {
+            rs = newConn.createStatement().executeQuery("select count(*) from " + fullTableName);
+            assertTrue(rs.next());
+            assertEquals(3,rs.getInt(1));
+        }
+        
+        // Repeat the same as above, but this time abort the transaction
+        txContext = new TransactionContext(txServiceClient, txAware);
+        txContext.start();
+        
+        // Use HBase APIs to add a new row
+        put = new Put(Bytes.toBytes("j"));
+        put.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES, QueryConstants.EMPTY_COLUMN_VALUE_BYTES);
+        put.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, Bytes.toBytes("V1"), Bytes.toBytes("e"));
+        txAware.put(put);
+        
+        // Use Phoenix APIs to add new row (sharing the transaction context)
+        pconn.setTransactionContext(txContext);
+        conn.createStatement().executeUpdate("upsert into " + fullTableName + " values('k', 'f', 'f')");
+        
+        // Existing connection should see data even though it hasn't been committed yet
+        rs = conn.createStatement().executeQuery("select count(*) from " + fullTableName);
+        assertTrue(rs.next());
+        assertEquals(5,rs.getInt(1));
+
+        connWithConflict.createStatement().execute("upsert into " + fullTableName + " values('k', 'g', 'g')");
+        rs = connWithConflict.createStatement().executeQuery("select count(*) from " + fullTableName);
+        assertTrue(rs.next());
+        assertEquals(4,rs.getInt(1));
+
+        // Use Tephra APIs directly to abort (i.e. rollback) the transaction
+        txContext.abort();
+        
+        rs = conn.createStatement().executeQuery("select count(*) from " + fullTableName);
+        assertTrue(rs.next());
+        assertEquals(3,rs.getInt(1));
+
+        // Should succeed since conflicting row was aborted
+        connWithConflict.commit();
+
+        // New connection should now see data as it has been committed
+        try (Connection newConn = DriverManager.getConnection(getUrl(), props)) {
+            rs = newConn.createStatement().executeQuery("select count(*) from " + fullTableName);
+            assertTrue(rs.next());
+            assertEquals(4,rs.getInt(1));
+        }
+        
+        // Even using HBase APIs directly, we shouldn't find 'j' since a delete marker would have been
+        // written to hide it.
+        Result result = htable.get(new Get(Bytes.toBytes("j")));
+        assertTrue(result.isEmpty());
+    }
+
+    @Test
+    public void testCheckpointAndRollback() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(false);
+        try {
+            String fullTableName = "T";
+            Statement stmt = conn.createStatement();
+            stmt.execute("CREATE TABLE " + fullTableName + "(k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) TRANSACTIONAL=true");
+            stmt.executeUpdate("upsert into " + fullTableName + " values('x', 'a', 'a')");
+            conn.commit();
+            
+            stmt.executeUpdate("upsert into " + fullTableName + "(k,v1) SELECT k,v1||'a' FROM " + fullTableName);
+            ResultSet rs = stmt.executeQuery("select k, v1, v2 from " + fullTableName);
+            assertTrue(rs.next());
+            assertEquals("x", rs.getString(1));
+            assertEquals("aa", rs.getString(2));
+            assertEquals("a", rs.getString(3));
+            assertFalse(rs.next());
+            
+            stmt.executeUpdate("upsert into " + fullTableName + "(k,v1) SELECT k,v1||'a' FROM " + fullTableName);
+            
+            rs = stmt.executeQuery("select k, v1, v2 from " + fullTableName);
+            assertTrue(rs.next());
+            assertEquals("x", rs.getString(1));
+            assertEquals("aaa", rs.getString(2));
+            assertEquals("a", rs.getString(3));
+            assertFalse(rs.next());
+            
+            conn.rollback();
+            
+            //assert original row exists in fullTableName1
+            rs = stmt.executeQuery("select k, v1, v2 from " + fullTableName);
+            assertTrue(rs.next());
+            assertEquals("x", rs.getString(1));
+            assertEquals("a", rs.getString(2));
+            assertEquals("a", rs.getString(3));
+            assertFalse(rs.next());
+            
+        } finally {
+            conn.close();
+        }
+    }
+    
+    @Test
+    public void testInflightUpdateNotSeen() throws Exception {
+        String selectSQL = "SELECT * FROM " + FULL_TABLE_NAME;
+        try (Connection conn1 = DriverManager.getConnection(getUrl()); 
+                Connection conn2 = DriverManager.getConnection(getUrl())) {
+            conn1.setAutoCommit(false);
+            conn2.setAutoCommit(true);
+            ResultSet rs = conn1.createStatement().executeQuery(selectSQL);
+            assertFalse(rs.next());
+            
+            String upsert = "UPSERT INTO " + FULL_TABLE_NAME + "(varchar_pk, char_pk, int_pk, long_pk, decimal_pk, date_pk) VALUES(?, ?, ?, ?, ?, ?)";
+            PreparedStatement stmt = conn1.prepareStatement(upsert);
+            // upsert two rows
+            TestUtil.setRowKeyColumns(stmt, 1);
+            stmt.execute();
+            conn1.commit();
+            
+            TestUtil.setRowKeyColumns(stmt, 2);
+            stmt.execute();
+            
+            rs = conn1.createStatement().executeQuery("SELECT count(*) FROM " + FULL_TABLE_NAME + " WHERE int_col1 IS NULL");
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+            
+            upsert = "UPSERT INTO " + FULL_TABLE_NAME + "(varchar_pk, char_pk, int_pk, long_pk, decimal_pk, date_pk, int_col1) VALUES(?, ?, ?, ?, ?, ?, 1)";
+            stmt = conn1.prepareStatement(upsert);
+            TestUtil.setRowKeyColumns(stmt, 1);
+            stmt.execute();
+            
+            rs = conn1.createStatement().executeQuery("SELECT int_col1 FROM " + FULL_TABLE_NAME + " WHERE int_col1 = 1");
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+            assertFalse(rs.next());
+            
+            rs = conn2.createStatement().executeQuery("SELECT count(*) FROM " + FULL_TABLE_NAME + " WHERE int_col1 = 1");
+            assertTrue(rs.next());
+            assertEquals(0, rs.getInt(1));
+            rs = conn2.createStatement().executeQuery("SELECT * FROM " + FULL_TABLE_NAME + " WHERE int_col1 = 1");
+            assertFalse(rs.next());
+            
+            conn1.commit();
+            
+            rs = conn2.createStatement().executeQuery("SELECT count(*) FROM " + FULL_TABLE_NAME + " WHERE int_col1 = 1");
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+            rs = conn2.createStatement().executeQuery("SELECT * FROM " + FULL_TABLE_NAME + " WHERE int_col1 = 1");
+            assertTrue(rs.next());
+            assertFalse(rs.next());
+        }
+    }
+    
+    @Test
+    public void testInflightDeleteNotSeen() throws Exception {
+        String selectSQL = "SELECT * FROM " + FULL_TABLE_NAME;
+        try (Connection conn1 = DriverManager.getConnection(getUrl()); 
+                Connection conn2 = DriverManager.getConnection(getUrl())) {
+            conn1.setAutoCommit(false);
+            conn2.setAutoCommit(true);
+            ResultSet rs = conn1.createStatement().executeQuery(selectSQL);
+            assertFalse(rs.next());
+            
+            String upsert = "UPSERT INTO " + FULL_TABLE_NAME + "(varchar_pk, char_pk, int_pk, long_pk, decimal_pk, date_pk) VALUES(?, ?, ?, ?, ?, ?)";
+            PreparedStatement stmt = conn1.prepareStatement(upsert);
+            // upsert two rows
+            TestUtil.setRowKeyColumns(stmt, 1);
+            stmt.execute();
+            TestUtil.setRowKeyColumns(stmt, 2);
+            stmt.execute();
+            
+            conn1.commit();
+            
+            rs = conn1.createStatement().executeQuery("SELECT count(*) FROM " + FULL_TABLE_NAME);
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+            
+            String delete = "DELETE FROM " + FULL_TABLE_NAME + " WHERE varchar_pk = 'varchar1'";
+            stmt = conn1.prepareStatement(delete);
+            int count = stmt.executeUpdate();
+            assertEquals(1,count);
+            
+            rs = conn1.createStatement().executeQuery("SELECT count(*) FROM " + FULL_TABLE_NAME);
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+            assertFalse(rs.next());
+            
+            rs = conn2.createStatement().executeQuery("SELECT count(*) FROM " + FULL_TABLE_NAME);
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+            assertFalse(rs.next());
+            
+            conn1.commit();
+            
+            rs = conn2.createStatement().executeQuery("SELECT count(*) FROM " + FULL_TABLE_NAME);
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+            assertFalse(rs.next());
+        }
     }
 }

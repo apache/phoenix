@@ -22,6 +22,7 @@ import static org.apache.phoenix.query.QueryServices.MAX_MEMORY_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MAX_MEMORY_WAIT_MS_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MAX_TENANT_MEMORY_PERC_ATTRIB;
 
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
@@ -29,15 +30,16 @@ import java.util.concurrent.TimeUnit;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.memory.ChildMemoryManager;
 import org.apache.phoenix.memory.GlobalMemoryManager;
-import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PMetaDataEntity;
-import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.SizedUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
@@ -53,16 +55,33 @@ import com.google.common.cache.Weigher;
  * @since 0.1
  */
 public class GlobalCache extends TenantCacheImpl {
-    private static GlobalCache INSTANCE; 
+    private static final Logger logger = LoggerFactory.getLogger(GlobalCache.class);
+    private static volatile GlobalCache INSTANCE; 
     
     private final Configuration config;
     // TODO: Use Guava cache with auto removal after lack of access 
     private final ConcurrentMap<ImmutableBytesWritable,TenantCache> perTenantCacheMap = new ConcurrentHashMap<ImmutableBytesWritable,TenantCache>();
     // Cache for lastest PTable for a given Phoenix table
-    private Cache<ImmutableBytesPtr,PMetaDataEntity> metaDataCache;
+    private volatile Cache<ImmutableBytesPtr,PMetaDataEntity> metaDataCache;
     
-    public void clearTenantCache() {
+    public long clearTenantCache() {
+        long unfreedBytes = getMemoryManager().getMaxMemory() - getMemoryManager().getAvailableMemory();
+        if (unfreedBytes != 0 && logger.isDebugEnabled()) {
+            logger.debug("Found " + (getMemoryManager().getMaxMemory() - getMemoryManager().getAvailableMemory()) + " bytes not freed from global cache");
+        }
+        removeAllServerCache();
+        for (Map.Entry<ImmutableBytesWritable, TenantCache> entry : perTenantCacheMap.entrySet()) {
+            TenantCache cache = entry.getValue();
+            long unfreedTenantBytes = cache.getMemoryManager().getMaxMemory() - cache.getMemoryManager().getAvailableMemory();
+            if (unfreedTenantBytes != 0 && logger.isDebugEnabled()) {
+                ImmutableBytesWritable cacheId = entry.getKey();
+                logger.debug("Found " + unfreedTenantBytes + " bytes not freed for tenant " + Bytes.toStringBinary(cacheId.get(), cacheId.getOffset(), cacheId.getLength()));
+            }
+            unfreedBytes += unfreedTenantBytes;
+            cache.removeAllServerCache();
+        }
         perTenantCacheMap.clear();
+        return unfreedBytes;
     }
     
     public Cache<ImmutableBytesPtr,PMetaDataEntity> getMetaDataCache() {

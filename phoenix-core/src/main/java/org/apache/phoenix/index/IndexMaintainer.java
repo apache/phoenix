@@ -1221,8 +1221,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         	KeyValueExpressionVisitor visitor = new KeyValueExpressionVisitor() {
                 @Override
                 public Void visit(KeyValueColumnExpression expression) {
-                	indexedColumns.add(new ColumnReference(expression.getColumnFamily(), expression.getColumnName()));
-                    indexedColumnTypes.add(expression.getDataType());
+                	if (indexedColumns.add(new ColumnReference(expression.getColumnFamily(), expression.getColumnName()))) {
+                		indexedColumnTypes.add(expression.getDataType());
+                	}
                     return null;
                 }
             };

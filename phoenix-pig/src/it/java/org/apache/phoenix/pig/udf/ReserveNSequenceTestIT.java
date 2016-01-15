@@ -193,6 +193,8 @@ public class ReserveNSequenceTestIT extends BasePigIT {
             ReserveNSequence udf = new ReserveNSequence(zkQuorum, tenantId);
             result = udf.exec(tuple);
             validateReservedSequence(conn, props.getCurrentValue(), props.getNumToReserve(), result);
+            // Calling this to cleanup for the udf. To close the connection
+            udf.finish();
         } catch (Exception e) {
             if (props.isExceptionExpected()) {
                 assertEquals(props.getExceptionClass(), e.getClass());

@@ -15,7 +15,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.mapreduce;
+package org.apache.phoenix.end2end;
+
+import static org.apache.phoenix.query.BaseTest.setUpConfigForMiniCluster;
+import static org.apache.phoenix.query.QueryServices.DATE_FORMAT_ATTRIB;
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.io.PrintWriter;
 import java.sql.Connection;
@@ -28,8 +36,9 @@ import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
-import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
+import org.apache.hadoop.mapred.FileAlreadyExistsException;
 import org.apache.phoenix.jdbc.PhoenixDriver;
+import org.apache.phoenix.mapreduce.CsvBulkLoadTool;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.DateUtil;
@@ -38,14 +47,6 @@ import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
-import static org.apache.phoenix.query.BaseTest.setUpConfigForMiniCluster;
-import static org.apache.phoenix.query.QueryServices.DATE_FORMAT_ATTRIB;
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
 @Category(NeedsOwnMiniClusterTest.class)
 public class CsvBulkLoadToolIT {
@@ -159,6 +160,46 @@ public class CsvBulkLoadToolIT {
         assertTrue(rs.next());
         assertEquals(2, rs.getInt(1));
         assertArrayEquals(new Object[] { "Name 2a", "Name 2b" }, (Object[]) rs.getArray(2).getArray());
+        assertFalse(rs.next());
+
+        rs.close();
+        stmt.close();
+    }
+
+    @Test
+    public void testMultipleInputFiles() throws Exception {
+
+        Statement stmt = conn.createStatement();
+        stmt.execute("CREATE TABLE TABLE7 (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, T DATE) SPLIT ON (1,2)");
+
+        FileSystem fs = FileSystem.get(hbaseTestUtil.getConfiguration());
+        FSDataOutputStream outputStream = fs.create(new Path("/tmp/input1.csv"));
+        PrintWriter printWriter = new PrintWriter(outputStream);
+        printWriter.println("1,Name 1,1970/01/01");
+        printWriter.close();
+        outputStream = fs.create(new Path("/tmp/input2.csv"));
+        printWriter = new PrintWriter(outputStream);
+        printWriter.println("2,Name 2,1970/01/02");
+        printWriter.close();
+
+        CsvBulkLoadTool csvBulkLoadTool = new CsvBulkLoadTool();
+        csvBulkLoadTool.setConf(new Configuration(hbaseTestUtil.getConfiguration()));
+        csvBulkLoadTool.getConf().set(DATE_FORMAT_ATTRIB,"yyyy/MM/dd");
+        int exitCode = csvBulkLoadTool.run(new String[] {
+            "--input", "/tmp/input1.csv,/tmp/input2.csv",
+            "--table", "table7",
+            "--zookeeper", zkQuorum});
+        assertEquals(0, exitCode);
+
+        ResultSet rs = stmt.executeQuery("SELECT id, name, t FROM table7 ORDER BY id");
+        assertTrue(rs.next());
+        assertEquals(1, rs.getInt(1));
+        assertEquals("Name 1", rs.getString(2));
+        assertEquals(DateUtil.parseDate("1970-01-01"), rs.getDate(3));
+        assertTrue(rs.next());
+        assertEquals(2, rs.getInt(1));
+        assertEquals("Name 2", rs.getString(2));
+        assertEquals(DateUtil.parseDate("1970-01-02"), rs.getDate(3));
         assertFalse(rs.next());
 
         rs.close();
@@ -280,4 +321,51 @@ public class CsvBulkLoadToolIT {
         stmt.close();
     }
     
+    @Test
+    public void testInvalidArguments() {
+        String tableName = "TABLE8";
+        CsvBulkLoadTool csvBulkLoadTool = new CsvBulkLoadTool();
+        csvBulkLoadTool.setConf(hbaseTestUtil.getConfiguration());
+        try {
+            csvBulkLoadTool.run(new String[] {
+                "--input", "/tmp/input4.csv",
+                "--table", tableName,
+                "--zookeeper", zkQuorum });
+            fail(String.format("Table %s not created, hence should fail",tableName));
+        } catch (Exception ex) {
+            assertTrue(ex instanceof IllegalArgumentException); 
+            assertTrue(ex.getMessage().contains(String.format("Table %s not found", tableName)));
+        }
+    }
+    
+    @Test
+    public void testAlreadyExistsOutputPath() {
+        String tableName = "TABLE9";
+        String outputPath = "/tmp/output/tabl9";
+        try {
+            Statement stmt = conn.createStatement();
+            stmt.execute("CREATE TABLE " + tableName + "(ID INTEGER NOT NULL PRIMARY KEY, "
+                    + "FIRST_NAME VARCHAR, LAST_NAME VARCHAR)");
+            
+            FileSystem fs = FileSystem.get(hbaseTestUtil.getConfiguration());
+            fs.create(new Path(outputPath));
+            FSDataOutputStream outputStream = fs.create(new Path("/tmp/input9.csv"));
+            PrintWriter printWriter = new PrintWriter(outputStream);
+            printWriter.println("1,FirstName 1,LastName 1");
+            printWriter.println("2,FirstName 2,LastName 2");
+            printWriter.close();
+            
+            CsvBulkLoadTool csvBulkLoadTool = new CsvBulkLoadTool();
+            csvBulkLoadTool.setConf(hbaseTestUtil.getConfiguration());
+            csvBulkLoadTool.run(new String[] {
+                "--input", "/tmp/input9.csv",
+                "--output", outputPath,
+                "--table", tableName,
+                "--zookeeper", zkQuorum });
+            
+            fail(String.format("Output path %s already exists. hence, should fail",outputPath));
+        } catch (Exception ex) {
+            assertTrue(ex instanceof FileAlreadyExistsException); 
+        }
+    }
 }

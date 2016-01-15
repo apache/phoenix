@@ -80,7 +80,7 @@
     <top.dir>${project.basedir}</top.dir>
 
     <!-- Hadoop Versions -->
-    <hbase.version>1.1.0</hbase.version>
+    <hbase.version>1.1.2</hbase.version>
     <hadoop-two.version>2.5.1</hadoop-two.version>
 
     <!-- Dependency versions -->
@@ -112,7 +112,7 @@
     <joni.version>2.1.2</joni.version>
     <calcite.version>1.6.0-SNAPSHOT</calcite.version>
     <jettyVersion>8.1.7.v20120910</jettyVersion>
-    <tephra.version>0.6.3</tephra.version>
+    <tephra.version>0.6.4</tephra.version>
 
     <!-- Test Dependencies -->
     <mockito-all.version>1.8.5</mockito-all.version>
@@ -121,8 +121,8 @@
     <!-- Plugin versions -->
     <maven-eclipse-plugin.version>2.9</maven-eclipse-plugin.version>
     <maven-build-helper-plugin.version>1.9.1</maven-build-helper-plugin.version>
-    <maven-surefire-plugin.version>2.19</maven-surefire-plugin.version>
-    <maven-failsafe-plugin.version>2.19</maven-failsafe-plugin.version>
+    <maven-surefire-plugin.version>2.19.1</maven-surefire-plugin.version>
+    <maven-failsafe-plugin.version>2.19.1</maven-failsafe-plugin.version>
     
     <maven-dependency-plugin.version>2.1</maven-dependency-plugin.version>
     <maven.assembly.version>2.5.2</maven.assembly.version>
@@ -268,6 +268,7 @@
                  <configuration>
                  <encoding>UTF-8</encoding>
                  <forkCount>${numForkedIT}</forkCount>
+                 <runOrder>alphabetical</runOrder>
                  <reuseForks>true</reuseForks>
                  <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=128m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}"</argLine>
                  <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
@@ -284,6 +285,7 @@
                  <configuration>
                  <encoding>UTF-8</encoding>
                  <forkCount>${numForkedIT}</forkCount>
+                 <runOrder>alphabetical</runOrder>
                  <reuseForks>true</reuseForks>
                  <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=128m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}"</argLine>
                  <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
@@ -300,7 +302,8 @@
                  <configuration>
                  <encoding>UTF-8</encoding>
                  <forkCount>${numForkedIT}</forkCount>
-                 <reuseForks>true</reuseForks>
+                 <runOrder>alphabetical</runOrder>
+                 <reuseForks>false</reuseForks>
                  <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=128m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}"</argLine>
                  <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
                  <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
@@ -627,6 +630,50 @@
         <groupId>org.apache.calcite</groupId>
         <artifactId>calcite-avatica-server</artifactId>
         <version>${calcite.version}</version>
+      </dependency>
+
+      <!-- Transaction dependencies -->
+      <dependency>
+        <groupId>co.cask.tephra</groupId>
+        <artifactId>tephra-api</artifactId>
+        <version>${tephra.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>co.cask.tephra</groupId>
+        <artifactId>tephra-core</artifactId>
+        <version>${tephra.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-core</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-classic</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>co.cask.tephra</groupId>
+        <artifactId>tephra-core</artifactId>
+        <type>test-jar</type>
+        <version>${tephra.version}</version>
+        <scope>test</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-core</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-classic</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>co.cask.tephra</groupId>
+        <artifactId>tephra-hbase-compat-1.1</artifactId>
+        <version>${tephra.version}</version>
       </dependency>
 
       <!-- Make sure we have all the antlr dependencies -->

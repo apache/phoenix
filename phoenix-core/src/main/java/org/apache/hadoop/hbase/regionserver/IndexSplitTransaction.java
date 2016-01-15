@@ -736,6 +736,7 @@ public class IndexSplitTransaction extends SplitTransactionImpl { // FIXME: Exte
             " files and create the references, aborting split");
       }
     } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
       throw (InterruptedIOException)new InterruptedIOException().initCause(e);
     }
 
@@ -744,6 +745,7 @@ public class IndexSplitTransaction extends SplitTransactionImpl { // FIXME: Exte
       try {
         future.get();
       } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
         throw (InterruptedIOException)new InterruptedIOException().initCause(e);
       } catch (ExecutionException e) {
         throw new IOException(e);

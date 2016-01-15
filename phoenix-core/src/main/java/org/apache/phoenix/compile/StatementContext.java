@@ -280,7 +280,7 @@ public class StatementContext {
         whereConditionColumns.add(new Pair<byte[], byte[]>(cf, q));
     }
 
-    public List<Pair<byte[], byte[]>> getWhereCoditionColumns() {
+    public List<Pair<byte[], byte[]>> getWhereConditionColumns() {
         return whereConditionColumns;
     }
 

@@ -48,13 +48,11 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.Arrays;
 import java.util.Map;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HTableDescriptor;
-import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Put;
@@ -69,15 +67,15 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.ColumnNotFoundException;
-import org.apache.phoenix.schema.types.PDecimal;
-import org.apache.phoenix.schema.types.PInteger;
-import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.ReadOnlyTableException;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.schema.types.PChar;
+import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -151,17 +149,15 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
 
         rs = dbmd.getTables(null, CUSTOM_ENTITY_DATA_SCHEMA_NAME, CUSTOM_ENTITY_DATA_NAME, null);
         assertTrue(rs.next());
-        assertEquals(rs.getString("TABLE_SCHEM"),CUSTOM_ENTITY_DATA_SCHEMA_NAME);
-        assertEquals(rs.getString("TABLE_NAME"),CUSTOM_ENTITY_DATA_NAME);
-        assertEquals(PTableType.TABLE.toString(), rs.getString("TABLE_TYPE"));
-        assertFalse(rs.next());
-        
         try {
             rs.getString("RANDOM_COLUMN_NAME");
             fail();
         } catch (ColumnNotFoundException e) {
             // expected
         }
+        assertEquals(rs.getString("TABLE_SCHEM"),CUSTOM_ENTITY_DATA_SCHEMA_NAME);
+        assertEquals(rs.getString("TABLE_NAME"),CUSTOM_ENTITY_DATA_NAME);
+        assertEquals(PTableType.TABLE.toString(), rs.getString("TABLE_TYPE"));
         assertFalse(rs.next());
         
         rs = dbmd.getTables(null, "", "_TABLE", new String[] {PTableType.TABLE.toString()});

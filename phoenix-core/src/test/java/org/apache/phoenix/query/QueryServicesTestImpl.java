@@ -55,6 +55,13 @@ public final class QueryServicesTestImpl extends BaseQueryServicesImpl {
     public static final int DEFAULT_MIN_STATS_UPDATE_FREQ_MS = 0;
     public static final boolean DEFAULT_EXPLAIN_CHUNK_COUNT = false; // TODO: update explain plans in test and set to true
     public static final String DEFAULT_EXTRA_JDBC_ARGUMENTS = PhoenixRuntime.PHOENIX_TEST_DRIVER_URL_PARAM;
+    private static final boolean DEFAULT_RUN_UPDATE_STATS_ASYNC = false;
+    private static final boolean DEFAULT_COMMIT_STATS_ASYNC = false;
+    public static final int DEFAULT_INDEX_HANDLER_COUNT = 5;
+    public static final int DEFAULT_METADATA_HANDLER_COUNT = 5;
+    public static final int DEFAULT_HCONNECTION_POOL_CORE_SIZE = 10;
+    public static final int DEFAULT_HCONNECTION_POOL_MAX_SIZE = 10;
+    public static final int DEFAULT_HTABLE_MAX_THREADS = 10;
 
     
     /**
@@ -93,7 +100,14 @@ public final class QueryServicesTestImpl extends BaseQueryServicesImpl {
                 .setMaxClientMetaDataCacheSize(DEFAULT_MAX_CLIENT_METADATA_CACHE_SIZE)
                 .setMaxServerMetaDataCacheSize(DEFAULT_MAX_SERVER_METADATA_CACHE_SIZE)
                 .setForceRowKeyOrder(DEFAULT_FORCE_ROWKEY_ORDER)
-                .setExtraJDBCArguments(DEFAULT_EXTRA_JDBC_ARGUMENTS);
+                .setExtraJDBCArguments(DEFAULT_EXTRA_JDBC_ARGUMENTS)
+                .setRunUpdateStatsAsync(DEFAULT_RUN_UPDATE_STATS_ASYNC)
+                .setCommitStatsAsync(DEFAULT_COMMIT_STATS_ASYNC)
+                .setIndexHandlerCount(DEFAULT_INDEX_HANDLER_COUNT)
+                .setMetadataHandlerCount(DEFAULT_METADATA_HANDLER_COUNT)
+                .setHConnectionPoolCoreSize(DEFAULT_HCONNECTION_POOL_CORE_SIZE)
+                .setHConnectionPoolMaxSize(DEFAULT_HCONNECTION_POOL_MAX_SIZE)
+                .setMaxThreadsPerHTable(DEFAULT_HTABLE_MAX_THREADS);
     }
     
     public QueryServicesTestImpl(ReadOnlyProps defaultProps, ReadOnlyProps overrideProps) {

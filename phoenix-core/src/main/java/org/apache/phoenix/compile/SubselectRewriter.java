@@ -44,6 +44,7 @@ import com.google.common.collect.Lists;
 public class SubselectRewriter extends ParseNodeRewriter {
     private final String tableAlias;
     private final Map<String, ParseNode> aliasMap;
+    private boolean removeAlias = false;
     
     public static SelectStatement applyPostFilters(SelectStatement statement, List<ParseNode> postFilters, String subqueryAlias) throws SQLException {
         if (postFilters.isEmpty())
@@ -207,8 +208,13 @@ public class SubselectRewriter extends ParseNodeRewriter {
             hintRewrite = hintRewrite == null ? hint : HintNode.combine(hint, hintRewrite);
         }
         
-        return NODE_FACTORY.select(subselect.getFrom(), hintRewrite, isDistinctRewrite, selectNodesRewrite, whereRewrite, groupByRewrite, 
+        SelectStatement stmt = NODE_FACTORY.select(subselect.getFrom(), hintRewrite, isDistinctRewrite, selectNodesRewrite, whereRewrite, groupByRewrite, 
             havingRewrite, orderByRewrite, limitRewrite, select.getBindCount(), isAggregateRewrite, select.hasSequence(), select.getSelects(), select.getUdfParseNodes());
+        if (tableAlias != null) {
+            this.removeAlias = true;
+            stmt = ParseNodeRewriter.rewrite(stmt, this);
+        }
+        return stmt;
     }
     
     private SelectStatement applyPostFilters(SelectStatement statement, List<ParseNode> postFilters) throws SQLException {
@@ -246,6 +252,13 @@ public class SubselectRewriter extends ParseNodeRewriter {
     public ParseNode visit(ColumnParseNode node) throws SQLException {
         if (node.getTableName() == null)
             return super.visit(node);
+        
+        if (removeAlias) {
+            if (node.getTableName().equals(tableAlias)) {
+                return NODE_FACTORY.column(null, node.getName(), node.getAlias());
+            }
+            return super.visit(node);
+        }
         
         ParseNode aliasedNode = aliasMap.get(node.getFullName());
         if (aliasedNode != null) {

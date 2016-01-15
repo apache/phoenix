@@ -27,14 +27,17 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Map;
 import java.util.Properties;
 
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.junit.After;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -99,6 +102,17 @@ public class HashJoinMoreIT extends BaseHBaseManagedTimeIT {
         props.put(QueryServices.INDEX_MUTATE_BATCH_SIZE_THRESHOLD_ATTRIB, Integer.toString(2));
         // Must update config before starting server
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+    }
+    
+    @After
+    public void assertNoUnfreedMemory() throws SQLException {
+        Connection conn = DriverManager.getConnection(getUrl());
+        try {
+            long unfreedBytes = conn.unwrap(PhoenixConnection.class).getQueryServices().clearCache();
+            assertEquals(0,unfreedBytes);
+        } finally {
+            conn.close();
+        }
     }
     
     @Test
@@ -555,6 +569,7 @@ public class HashJoinMoreIT extends BaseHBaseManagedTimeIT {
             assertTrue(rs.next());
             assertEquals(rs.getInt(1), 5);
             assertFalse(rs.next());
+            rs.close();
             rs = conn.createStatement().executeQuery(
                     "SELECT * FROM INVENTORY RIGHT JOIN PRODUCT_IDS ON (PRODUCT_ID = INVENTORY.ID)");
             assertTrue(rs.next());

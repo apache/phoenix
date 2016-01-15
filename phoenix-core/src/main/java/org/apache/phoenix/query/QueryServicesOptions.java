@@ -17,11 +17,13 @@
  */
 package org.apache.phoenix.query;
 
+import static org.apache.hadoop.hbase.HConstants.DEFAULT_HBASE_CLIENT_SCANNER_TIMEOUT_PERIOD;
 import static org.apache.phoenix.query.QueryServices.ALLOW_ONLINE_TABLE_SCHEMA_UPDATE;
 import static org.apache.phoenix.query.QueryServices.ALLOW_VIEWS_ADD_NEW_CF_BASE_TABLE;
 import static org.apache.phoenix.query.QueryServices.CALL_QUEUE_PRODUCER_ATTRIB_NAME;
 import static org.apache.phoenix.query.QueryServices.CALL_QUEUE_ROUND_ROBIN_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.COLLECT_REQUEST_LEVEL_METRICS;
+import static org.apache.phoenix.query.QueryServices.COMMIT_STATS_ASYNC;
 import static org.apache.phoenix.query.QueryServices.DATE_FORMAT_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.DELAY_FOR_SCHEMA_UPDATE_CHECK;
@@ -52,8 +54,13 @@ import static org.apache.phoenix.query.QueryServices.NUM_RETRIES_FOR_SCHEMA_UPDA
 import static org.apache.phoenix.query.QueryServices.QUEUE_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.REGIONSERVER_INFO_PORT_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.REGIONSERVER_LEASE_PERIOD_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.RENEW_LEASE_ENABLED;
+import static org.apache.phoenix.query.QueryServices.RENEW_LEASE_THREAD_POOL_SIZE;
+import static org.apache.phoenix.query.QueryServices.RENEW_LEASE_THRESHOLD_MILLISECONDS;
 import static org.apache.phoenix.query.QueryServices.ROW_KEY_ORDER_SALTED_TABLE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.RPC_TIMEOUT_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.RUN_RENEW_LEASE_FREQUENCY_INTERVAL_MILLISECONDS;
+import static org.apache.phoenix.query.QueryServices.RUN_UPDATE_STATS_ASYNC;
 import static org.apache.phoenix.query.QueryServices.SCAN_CACHE_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.SCAN_RESULT_CHUNK_SIZE;
 import static org.apache.phoenix.query.QueryServices.SEQUENCE_CACHE_SIZE_ATTRIB;
@@ -69,8 +76,8 @@ import static org.apache.phoenix.query.QueryServices.USE_BYTE_BASED_REGEX_ATTRIB
 import static org.apache.phoenix.query.QueryServices.USE_INDEXES_ATTRIB;
 
 import java.util.HashSet;
-import java.util.Set;
 import java.util.Map.Entry;
+import java.util.Set;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Coprocessor;
@@ -172,6 +179,9 @@ public class QueryServicesOptions {
     // compression we're getting)
     public static final long DEFAULT_STATS_GUIDEPOST_WIDTH_BYTES = 3* 100 * 1024 *1024;
     public static final boolean DEFAULT_STATS_USE_CURRENT_TIME = true;
+    public static final boolean DEFAULT_RUN_UPDATE_STATS_ASYNC = true;
+    public static final boolean DEFAULT_COMMIT_STATS_ASYNC = true;
+    public static final int DEFAULT_STATS_POOL_SIZE = 4;
 
     public static final boolean DEFAULT_USE_REVERSE_SCAN = true;
 
@@ -193,11 +203,13 @@ public class QueryServicesOptions {
     // TODO Change this to true as part of PHOENIX-1543
     // We'll also need this for transactions to work correctly
     public static final boolean DEFAULT_AUTO_COMMIT = false;
-    public static final boolean DEFAULT_TRANSACTIONAL = false;
     public static final boolean DEFAULT_TABLE_ISTRANSACTIONAL = false;
     public static final boolean DEFAULT_TRANSACTIONS_ENABLED = false;
     public static final boolean DEFAULT_IS_GLOBAL_METRICS_ENABLED = true;
     
+    public static final boolean DEFAULT_TRANSACTIONAL = false;
+    public static final boolean DEFAULT_AUTO_FLUSH = false;
+
     private static final String DEFAULT_CLIENT_RPC_CONTROLLER_FACTORY = ClientRpcControllerFactory.class.getName();
     
     public static final String DEFAULT_CONSISTENCY_LEVEL = Consistency.STRONG.toString();
@@ -216,6 +228,13 @@ public class QueryServicesOptions {
     // doesn't depend on phoenix-core.
     public static final String DEFAULT_QUERY_SERVER_SERIALIZATION = "PROTOBUF";
     public static final int DEFAULT_QUERY_SERVER_HTTP_PORT = 8765;
+    public static final boolean DEFAULT_RENEW_LEASE_ENABLED = true;
+    public static final int DEFAULT_RUN_RENEW_LEASE_FREQUENCY_INTERVAL_MILLISECONDS =
+            DEFAULT_HBASE_CLIENT_SCANNER_TIMEOUT_PERIOD / 2;
+    public static final int DEFAULT_RENEW_LEASE_THRESHOLD_MILLISECONDS =
+            (3 * DEFAULT_HBASE_CLIENT_SCANNER_TIMEOUT_PERIOD) / 4;
+    public static final int DEFAULT_RENEW_LEASE_THREAD_POOL_SIZE = 10;
+
     @SuppressWarnings("serial")
     public static final Set<String> DEFAULT_QUERY_SERVER_SKIP_WORDS = new HashSet<String>() {
       {
@@ -225,7 +244,7 @@ public class QueryServicesOptions {
         add("credential");
       }
     };
-
+    
     private final Configuration config;
 
     private QueryServicesOptions(Configuration config) {
@@ -247,6 +266,8 @@ public class QueryServicesOptions {
         Configuration config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
         QueryServicesOptions options = new QueryServicesOptions(config)
             .setIfUnset(STATS_USE_CURRENT_TIME_ATTRIB, DEFAULT_STATS_USE_CURRENT_TIME)
+            .setIfUnset(RUN_UPDATE_STATS_ASYNC, DEFAULT_RUN_UPDATE_STATS_ASYNC)
+            .setIfUnset(COMMIT_STATS_ASYNC, DEFAULT_COMMIT_STATS_ASYNC)
             .setIfUnset(KEEP_ALIVE_MS_ATTRIB, DEFAULT_KEEP_ALIVE_MS)
             .setIfUnset(THREAD_POOL_SIZE_ATTRIB, DEFAULT_THREAD_POOL_SIZE)
             .setIfUnset(QUEUE_SIZE_ATTRIB, DEFAULT_QUEUE_SIZE)
@@ -282,7 +303,11 @@ public class QueryServicesOptions {
             .setIfUnset(USE_BYTE_BASED_REGEX_ATTRIB, DEFAULT_USE_BYTE_BASED_REGEX)
             .setIfUnset(FORCE_ROW_KEY_ORDER_ATTRIB, DEFAULT_FORCE_ROW_KEY_ORDER)
             .setIfUnset(COLLECT_REQUEST_LEVEL_METRICS, DEFAULT_REQUEST_LEVEL_METRICS_ENABLED)
-            .setIfUnset(ALLOW_VIEWS_ADD_NEW_CF_BASE_TABLE, DEFAULT_ALLOW_VIEWS_ADD_NEW_CF_BASE_TABLE);
+            .setIfUnset(ALLOW_VIEWS_ADD_NEW_CF_BASE_TABLE, DEFAULT_ALLOW_VIEWS_ADD_NEW_CF_BASE_TABLE)
+            .setIfUnset(ALLOW_VIEWS_ADD_NEW_CF_BASE_TABLE, DEFAULT_ALLOW_VIEWS_ADD_NEW_CF_BASE_TABLE)
+            .setIfUnset(RENEW_LEASE_THRESHOLD_MILLISECONDS, DEFAULT_RENEW_LEASE_THRESHOLD_MILLISECONDS)
+            .setIfUnset(RUN_RENEW_LEASE_FREQUENCY_INTERVAL_MILLISECONDS, DEFAULT_RUN_RENEW_LEASE_FREQUENCY_INTERVAL_MILLISECONDS)
+            .setIfUnset(RENEW_LEASE_THREAD_POOL_SIZE, DEFAULT_RENEW_LEASE_THREAD_POOL_SIZE);
             ;
         // HBase sets this to 1, so we reset it to something more appropriate.
         // Hopefully HBase will change this, because we can't know if a user set
@@ -575,4 +600,45 @@ public class QueryServicesOptions {
         config.set(EXTRA_JDBC_ARGUMENTS_ATTRIB, extraArgs);
         return this;
     }
+
+    public QueryServicesOptions setRunUpdateStatsAsync(boolean flag) {
+        config.setBoolean(RUN_UPDATE_STATS_ASYNC, flag);
+        return this;
+    }
+
+    public QueryServicesOptions setCommitStatsAsync(boolean flag) {
+        config.setBoolean(COMMIT_STATS_ASYNC, flag);
+        return this;
+    }
+    
+    public QueryServicesOptions setEnableRenewLease(boolean enable) {
+        config.setBoolean(RENEW_LEASE_ENABLED, enable);
+        return this;
+    }
+    
+    public QueryServicesOptions setIndexHandlerCount(int count) {
+        config.setInt(QueryServices.INDEX_HANDLER_COUNT_ATTRIB, count);
+        return this;
+    }
+    
+    public QueryServicesOptions setMetadataHandlerCount(int count) {
+        config.setInt(QueryServices.METADATA_HANDLER_COUNT_ATTRIB, count);
+        return this;
+    }
+    
+    public QueryServicesOptions setHConnectionPoolCoreSize(int count) {
+        config.setInt(QueryServices.HCONNECTION_POOL_CORE_SIZE, count);
+        return this;
+    }
+    
+    public QueryServicesOptions setHConnectionPoolMaxSize(int count) {
+        config.setInt(QueryServices.HCONNECTION_POOL_MAX_SIZE, count);
+        return this;
+    }
+    
+    public QueryServicesOptions setMaxThreadsPerHTable(int count) {
+        config.setInt(QueryServices.HTABLE_MAX_THREADS, count);
+        return this;
+    }
+    
 }
