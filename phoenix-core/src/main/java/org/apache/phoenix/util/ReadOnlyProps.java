@@ -18,7 +18,6 @@
 
 package org.apache.phoenix.util;
 
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
@@ -27,11 +26,14 @@ import java.util.Properties;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import javax.annotation.Nonnull;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Objects;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableMap.Builder;
 import com.google.common.collect.Maps;
 
 /**
@@ -39,13 +41,14 @@ import com.google.common.collect.Maps;
  * Read-only properties that avoids unnecessary synchronization in
  * java.util.Properties.
  *
- * 
- * @since 1.2.2
  */
 public class ReadOnlyProps implements Iterable<Entry<String, String>> {
     private static final Logger logger = LoggerFactory.getLogger(ReadOnlyProps.class);
     public static final ReadOnlyProps EMPTY_PROPS = new ReadOnlyProps();
+    @Nonnull
     private final Map<String, String> props;
+    @Nonnull
+    private final Map<String, String> overrideProps;
     
     public ReadOnlyProps(ReadOnlyProps defaultProps, Iterator<Entry<String, String>> iterator) {
         Map<String, String> map = new HashMap<String,String>(defaultProps.asMap());
@@ -54,6 +57,7 @@ public class ReadOnlyProps implements Iterable<Entry<String, String>> {
             map.put(entry.getKey(), entry.getValue());
         }
         this.props = ImmutableMap.copyOf(map);
+        this.overrideProps = ImmutableMap.of();
     }
 
     public ReadOnlyProps(Iterator<Entry<String, String>> iterator) {
@@ -61,22 +65,31 @@ public class ReadOnlyProps implements Iterable<Entry<String, String>> {
     }
 
     private ReadOnlyProps() {
-        this.props = Collections.emptyMap();
+        this.props = ImmutableMap.of();
+        this.overrideProps = ImmutableMap.of();
     }
 
     public ReadOnlyProps(Map<String, String> props) {
         this.props = ImmutableMap.copyOf(props);
+        this.overrideProps = ImmutableMap.of();
     }
 
-    private ReadOnlyProps(ReadOnlyProps defaultProps, Properties overrides) {
-        Map<String,String> combinedProps = Maps.newHashMapWithExpectedSize(defaultProps.props.size() + overrides.size());
-        combinedProps.putAll(defaultProps.props);
-        for (Entry<Object, Object> entry : overrides.entrySet()) {
-            String key = entry.getKey().toString();
-            String value = entry.getValue().toString();
-            combinedProps.put(key, value);
+    private ReadOnlyProps(ReadOnlyProps defaultProps, Properties overridesArg) {
+        this.props = defaultProps.props;
+        if (overridesArg == null || overridesArg.isEmpty()) {
+            this.overrideProps = defaultProps.overrideProps;
+        } else {
+            Map<String, String> combinedOverrides =
+                    Maps.newHashMapWithExpectedSize(defaultProps.overrideProps.size()
+                            + overridesArg.size());
+            if (!defaultProps.overrideProps.isEmpty()) {
+                combinedOverrides.putAll(defaultProps.overrideProps);
+            }
+            for (Entry<Object, Object> entry : overridesArg.entrySet()) {
+                combinedOverrides.put(entry.getKey().toString(), entry.getValue().toString());
+            }
+            this.overrideProps = ImmutableMap.copyOf(combinedOverrides);
         }
-        this.props = ImmutableMap.copyOf(combinedProps);
     }
 
     private static Pattern varPat = Pattern.compile("\\$\\{[^\\}\\$\u0020]+\\}");
@@ -122,7 +135,8 @@ public class ReadOnlyProps implements Iterable<Entry<String, String>> {
      *         or null if no such property exists.
      */
     public String getRaw(String name) {
-      return props.get(name);
+      String overridenValue = overrideProps.get(name);
+      return overridenValue == null ? props.get(name) : overridenValue;
     }
 
     public String getRaw(String name, String defaultValue) {
