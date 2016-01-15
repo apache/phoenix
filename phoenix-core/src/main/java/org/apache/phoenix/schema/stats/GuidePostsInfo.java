@@ -23,6 +23,7 @@ import java.io.IOException;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.CodecUtils;
 import org.apache.phoenix.util.PrefixByteEncoder;
 import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 /**
@@ -71,7 +72,7 @@ public class GuidePostsInfo {
      * @param rowCount
      */
     public GuidePostsInfo(long byteCount, ImmutableBytesWritable guidePosts, long rowCount, int maxLength, int guidePostsCount) {
-        this.guidePosts = guidePosts;
+        this.guidePosts = new ImmutableBytesWritable(guidePosts);
         this.maxLength = maxLength;
         this.byteCount = byteCount;
         this.rowCount = rowCount;
@@ -141,13 +142,7 @@ public class GuidePostsInfo {
     }
 
     public void close() {
-        if (stream != null) {
-            try {
-                stream.close();
-            } catch (IOException e) {
-                //exception can be ignored
-            }
-        }
+        CodecUtils.close(stream);
     }
     
     /*

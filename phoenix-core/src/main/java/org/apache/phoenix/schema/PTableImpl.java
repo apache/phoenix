@@ -75,6 +75,7 @@ import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.protobuf.HBaseZeroCopyByteString;
 import com.sun.istack.NotNull;
 
 import co.cask.tephra.TxConstants;
@@ -1009,7 +1010,7 @@ public class PTableImpl implements PTable {
             int maxLength = pGuidePosts.getMaxLength();
             int guidePostsCount = pGuidePosts.getGuidePostsCount();
             GuidePostsInfo info = new GuidePostsInfo(guidePostsByteCount,
-                    new ImmutableBytesWritable(pGuidePosts.getGuidePosts().toByteArray()), rowCount, maxLength, guidePostsCount);
+                    new ImmutableBytesWritable(HBaseZeroCopyByteString.zeroCopyGetBytes(pGuidePosts.getGuidePosts())), rowCount, maxLength, guidePostsCount);
             tableGuidePosts.put(pTableStatsProto.getKey().toByteArray(), info);
         }
       PTableStats stats = new PTableStatsImpl(tableGuidePosts, table.getStatsTimeStamp());

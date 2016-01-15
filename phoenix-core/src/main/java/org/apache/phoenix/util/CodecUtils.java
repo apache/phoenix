@@ -18,6 +18,7 @@
 package org.apache.phoenix.util;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.DataOutput;
@@ -35,12 +36,7 @@ public class CodecUtils {
     public static List<byte[]> decodeBytes(ImmutableBytesWritable encodedBytes, int maxLength) throws IOException {
         ByteArrayInputStream stream = new ByteArrayInputStream(encodedBytes.get(), encodedBytes.getOffset(), encodedBytes.getLength());
         DataInput input = new DataInputStream(stream);
-        PrefixByteDecoder decoder;
-        if (maxLength > 0) {
-            decoder = new PrefixByteDecoder(maxLength);
-        } else {
-            decoder = new PrefixByteDecoder();
-        }
+        PrefixByteDecoder decoder = new PrefixByteDecoder(maxLength);
         List<byte[]> listOfBytes = Lists.newArrayList();
         try {
             while (true) {
@@ -62,7 +58,7 @@ public class CodecUtils {
         for (byte[] bytes : listOfBytes) {
             encoder.encode(output, bytes, 0, bytes.length);
         }
-        stream.close();
+        close(stream);
         ptr.set(stream.getBuffer(), 0, stream.size());
         return encoder.getMaxLength();
     }
@@ -85,5 +81,24 @@ public class CodecUtils {
             throw new RuntimeException(e);
         }
     }
-   
+
+    public static void close(ByteArrayInputStream stream) {
+        if (stream != null) {
+            try {
+                stream.close();
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+
+    public static void close(ByteArrayOutputStream stream) {
+        if (stream != null) {
+            try {
+                stream.close();
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
 }
