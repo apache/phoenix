@@ -783,6 +783,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             } finally {
                 try {
                     if (noErrors && !compactionRunning) {
+                        stats.updateGuidePosts();
                         stats.updateStatistic(region);
                         logger.info("UPDATE STATISTICS finished successfully for scanner: "
                                 + innerScanner + ". Number of rows scanned: " + rowCount

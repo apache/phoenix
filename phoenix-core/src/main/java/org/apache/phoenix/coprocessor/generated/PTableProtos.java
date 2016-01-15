@@ -1843,19 +1843,15 @@ public final class PTableProtos {
      */
     com.google.protobuf.ByteString getKey();
 
-    // repeated bytes values = 2;
+    // optional bytes guidePosts = 2;
     /**
-     * <code>repeated bytes values = 2;</code>
+     * <code>optional bytes guidePosts = 2;</code>
      */
-    java.util.List<com.google.protobuf.ByteString> getValuesList();
+    boolean hasGuidePosts();
     /**
-     * <code>repeated bytes values = 2;</code>
+     * <code>optional bytes guidePosts = 2;</code>
      */
-    int getValuesCount();
-    /**
-     * <code>repeated bytes values = 2;</code>
-     */
-    com.google.protobuf.ByteString getValues(int index);
+    com.google.protobuf.ByteString getGuidePosts();
 
     // optional int64 guidePostsByteCount = 3;
     /**
@@ -1900,6 +1896,16 @@ public final class PTableProtos {
      * <code>optional .PGuidePosts pGuidePosts = 6;</code>
      */
     org.apache.phoenix.coprocessor.generated.PGuidePostsProtos.PGuidePostsOrBuilder getPGuidePostsOrBuilder();
+
+    // optional int32 maxLength = 7;
+    /**
+     * <code>optional int32 maxLength = 7;</code>
+     */
+    boolean hasMaxLength();
+    /**
+     * <code>optional int32 maxLength = 7;</code>
+     */
+    int getMaxLength();
   }
   /**
    * Protobuf type {@code PTableStats}
@@ -1958,31 +1964,28 @@ public final class PTableProtos {
               break;
             }
             case 18: {
-              if (!((mutable_bitField0_ & 0x00000002) == 0x00000002)) {
-                values_ = new java.util.ArrayList<com.google.protobuf.ByteString>();
-                mutable_bitField0_ |= 0x00000002;
-              }
-              values_.add(input.readBytes());
+              bitField0_ |= 0x00000002;
+              guidePosts_ = input.readBytes();
               break;
             }
             case 24: {
-              bitField0_ |= 0x00000002;
+              bitField0_ |= 0x00000004;
               guidePostsByteCount_ = input.readInt64();
               break;
             }
             case 32: {
-              bitField0_ |= 0x00000004;
+              bitField0_ |= 0x00000008;
               keyBytesCount_ = input.readInt64();
               break;
             }
             case 40: {
-              bitField0_ |= 0x00000008;
+              bitField0_ |= 0x00000010;
               guidePostsCount_ = input.readInt32();
               break;
             }
             case 50: {
               org.apache.phoenix.coprocessor.generated.PGuidePostsProtos.PGuidePosts.Builder subBuilder = null;
-              if (((bitField0_ & 0x00000010) == 0x00000010)) {
+              if (((bitField0_ & 0x00000020) == 0x00000020)) {
                 subBuilder = pGuidePosts_.toBuilder();
               }
               pGuidePosts_ = input.readMessage(org.apache.phoenix.coprocessor.generated.PGuidePostsProtos.PGuidePosts.PARSER, extensionRegistry);
@@ -1990,7 +1993,12 @@ public final class PTableProtos {
                 subBuilder.mergeFrom(pGuidePosts_);
                 pGuidePosts_ = subBuilder.buildPartial();
               }
-              bitField0_ |= 0x00000010;
+              bitField0_ |= 0x00000020;
+              break;
+            }
+            case 56: {
+              bitField0_ |= 0x00000040;
+              maxLength_ = input.readInt32();
               break;
             }
           }
@@ -2001,9 +2009,6 @@ public final class PTableProtos {
         throw new com.google.protobuf.InvalidProtocolBufferException(
             e.getMessage()).setUnfinishedMessage(this);
       } finally {
-        if (((mutable_bitField0_ & 0x00000002) == 0x00000002)) {
-          values_ = java.util.Collections.unmodifiableList(values_);
-        }
         this.unknownFields = unknownFields.build();
         makeExtensionsImmutable();
       }
@@ -2052,27 +2057,20 @@ public final class PTableProtos {
       return key_;
     }
 
-    // repeated bytes values = 2;
-    public static final int VALUES_FIELD_NUMBER = 2;
-    private java.util.List<com.google.protobuf.ByteString> values_;
+    // optional bytes guidePosts = 2;
+    public static final int GUIDEPOSTS_FIELD_NUMBER = 2;
+    private com.google.protobuf.ByteString guidePosts_;
     /**
-     * <code>repeated bytes values = 2;</code>
+     * <code>optional bytes guidePosts = 2;</code>
      */
-    public java.util.List<com.google.protobuf.ByteString>
-        getValuesList() {
-      return values_;
+    public boolean hasGuidePosts() {
+      return ((bitField0_ & 0x00000002) == 0x00000002);
     }
     /**
-     * <code>repeated bytes values = 2;</code>
+     * <code>optional bytes guidePosts = 2;</code>
      */
-    public int getValuesCount() {
-      return values_.size();
-    }
-    /**
-     * <code>repeated bytes values = 2;</code>
-     */
-    public com.google.protobuf.ByteString getValues(int index) {
-      return values_.get(index);
+    public com.google.protobuf.ByteString getGuidePosts() {
+      return guidePosts_;
     }
 
     // optional int64 guidePostsByteCount = 3;
@@ -2082,7 +2080,7 @@ public final class PTableProtos {
      * <code>optional int64 guidePostsByteCount = 3;</code>
      */
     public boolean hasGuidePostsByteCount() {
-      return ((bitField0_ & 0x00000002) == 0x00000002);
+      return ((bitField0_ & 0x00000004) == 0x00000004);
     }
     /**
      * <code>optional int64 guidePostsByteCount = 3;</code>
@@ -2098,7 +2096,7 @@ public final class PTableProtos {
      * <code>optional int64 keyBytesCount = 4;</code>
      */
     public boolean hasKeyBytesCount() {
-      return ((bitField0_ & 0x00000004) == 0x00000004);
+      return ((bitField0_ & 0x00000008) == 0x00000008);
     }
     /**
      * <code>optional int64 keyBytesCount = 4;</code>
@@ -2114,7 +2112,7 @@ public final class PTableProtos {
      * <code>optional int32 guidePostsCount = 5;</code>
      */
     public boolean hasGuidePostsCount() {
-      return ((bitField0_ & 0x00000008) == 0x00000008);
+      return ((bitField0_ & 0x00000010) == 0x00000010);
     }
     /**
      * <code>optional int32 guidePostsCount = 5;</code>
@@ -2130,7 +2128,7 @@ public final class PTableProtos {
      * <code>optional .PGuidePosts pGuidePosts = 6;</code>
      */
     public boolean hasPGuidePosts() {
-      return ((bitField0_ & 0x00000010) == 0x00000010);
+      return ((bitField0_ & 0x00000020) == 0x00000020);
     }
     /**
      * <code>optional .PGuidePosts pGuidePosts = 6;</code>
@@ -2145,13 +2143,30 @@ public final class PTableProtos {
       return pGuidePosts_;
     }
 
+    // optional int32 maxLength = 7;
+    public static final int MAXLENGTH_FIELD_NUMBER = 7;
+    private int maxLength_;
+    /**
+     * <code>optional int32 maxLength = 7;</code>
+     */
+    public boolean hasMaxLength() {
+      return ((bitField0_ & 0x00000040) == 0x00000040);
+    }
+    /**
+     * <code>optional int32 maxLength = 7;</code>
+     */
+    public int getMaxLength() {
+      return maxLength_;
+    }
+
     private void initFields() {
       key_ = com.google.protobuf.ByteString.EMPTY;
-      values_ = java.util.Collections.emptyList();
+      guidePosts_ = com.google.protobuf.ByteString.EMPTY;
       guidePostsByteCount_ = 0L;
       keyBytesCount_ = 0L;
       guidePostsCount_ = 0;
       pGuidePosts_ = org.apache.phoenix.coprocessor.generated.PGuidePostsProtos.PGuidePosts.getDefaultInstance();
+      maxLength_ = 0;
     }
     private byte memoizedIsInitialized = -1;
     public final boolean isInitialized() {
@@ -2172,20 +2187,23 @@ public final class PTableProtos {
       if (((bitField0_ & 0x00000001) == 0x00000001)) {
         output.writeBytes(1, key_);
       }
-      for (int i = 0; i < values_.size(); i++) {
-        output.writeBytes(2, values_.get(i));
-      }
       if (((bitField0_ & 0x00000002) == 0x00000002)) {
-        output.writeInt64(3, guidePostsByteCount_);
+        output.writeBytes(2, guidePosts_);
       }
       if (((bitField0_ & 0x00000004) == 0x00000004)) {
-        output.writeInt64(4, keyBytesCount_);
+        output.writeInt64(3, guidePostsByteCount_);
       }
       if (((bitField0_ & 0x00000008) == 0x00000008)) {
-        output.writeInt32(5, guidePostsCount_);
+        output.writeInt64(4, keyBytesCount_);
       }
       if (((bitField0_ & 0x00000010) == 0x00000010)) {
+        output.writeInt32(5, guidePostsCount_);
+      }
+      if (((bitField0_ & 0x00000020) == 0x00000020)) {
         output.writeMessage(6, pGuidePosts_);
+      }
+      if (((bitField0_ & 0x00000040) == 0x00000040)) {
+        output.writeInt32(7, maxLength_);
       }
       getUnknownFields().writeTo(output);
     }
@@ -2200,30 +2218,29 @@ public final class PTableProtos {
         size += com.google.protobuf.CodedOutputStream
           .computeBytesSize(1, key_);
       }
-      {
-        int dataSize = 0;
-        for (int i = 0; i < values_.size(); i++) {
-          dataSize += com.google.protobuf.CodedOutputStream
-            .computeBytesSizeNoTag(values_.get(i));
-        }
-        size += dataSize;
-        size += 1 * getValuesList().size();
-      }
       if (((bitField0_ & 0x00000002) == 0x00000002)) {
         size += com.google.protobuf.CodedOutputStream
-          .computeInt64Size(3, guidePostsByteCount_);
+          .computeBytesSize(2, guidePosts_);
       }
       if (((bitField0_ & 0x00000004) == 0x00000004)) {
         size += com.google.protobuf.CodedOutputStream
-          .computeInt64Size(4, keyBytesCount_);
+          .computeInt64Size(3, guidePostsByteCount_);
       }
       if (((bitField0_ & 0x00000008) == 0x00000008)) {
         size += com.google.protobuf.CodedOutputStream
-          .computeInt32Size(5, guidePostsCount_);
+          .computeInt64Size(4, keyBytesCount_);
       }
       if (((bitField0_ & 0x00000010) == 0x00000010)) {
         size += com.google.protobuf.CodedOutputStream
+          .computeInt32Size(5, guidePostsCount_);
+      }
+      if (((bitField0_ & 0x00000020) == 0x00000020)) {
+        size += com.google.protobuf.CodedOutputStream
           .computeMessageSize(6, pGuidePosts_);
+      }
+      if (((bitField0_ & 0x00000040) == 0x00000040)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeInt32Size(7, maxLength_);
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSerializedSize = size;
@@ -2253,8 +2270,11 @@ public final class PTableProtos {
         result = result && getKey()
             .equals(other.getKey());
       }
-      result = result && getValuesList()
-          .equals(other.getValuesList());
+      result = result && (hasGuidePosts() == other.hasGuidePosts());
+      if (hasGuidePosts()) {
+        result = result && getGuidePosts()
+            .equals(other.getGuidePosts());
+      }
       result = result && (hasGuidePostsByteCount() == other.hasGuidePostsByteCount());
       if (hasGuidePostsByteCount()) {
         result = result && (getGuidePostsByteCount()
@@ -2275,6 +2295,11 @@ public final class PTableProtos {
         result = result && getPGuidePosts()
             .equals(other.getPGuidePosts());
       }
+      result = result && (hasMaxLength() == other.hasMaxLength());
+      if (hasMaxLength()) {
+        result = result && (getMaxLength()
+            == other.getMaxLength());
+      }
       result = result &&
           getUnknownFields().equals(other.getUnknownFields());
       return result;
@@ -2292,9 +2317,9 @@ public final class PTableProtos {
         hash = (37 * hash) + KEY_FIELD_NUMBER;
         hash = (53 * hash) + getKey().hashCode();
       }
-      if (getValuesCount() > 0) {
-        hash = (37 * hash) + VALUES_FIELD_NUMBER;
-        hash = (53 * hash) + getValuesList().hashCode();
+      if (hasGuidePosts()) {
+        hash = (37 * hash) + GUIDEPOSTS_FIELD_NUMBER;
+        hash = (53 * hash) + getGuidePosts().hashCode();
       }
       if (hasGuidePostsByteCount()) {
         hash = (37 * hash) + GUIDEPOSTSBYTECOUNT_FIELD_NUMBER;
@@ -2311,6 +2336,10 @@ public final class PTableProtos {
       if (hasPGuidePosts()) {
         hash = (37 * hash) + PGUIDEPOSTS_FIELD_NUMBER;
         hash = (53 * hash) + getPGuidePosts().hashCode();
+      }
+      if (hasMaxLength()) {
+        hash = (37 * hash) + MAXLENGTH_FIELD_NUMBER;
+        hash = (53 * hash) + getMaxLength();
       }
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
@@ -2424,7 +2453,7 @@ public final class PTableProtos {
         super.clear();
         key_ = com.google.protobuf.ByteString.EMPTY;
         bitField0_ = (bitField0_ & ~0x00000001);
-        values_ = java.util.Collections.emptyList();
+        guidePosts_ = com.google.protobuf.ByteString.EMPTY;
         bitField0_ = (bitField0_ & ~0x00000002);
         guidePostsByteCount_ = 0L;
         bitField0_ = (bitField0_ & ~0x00000004);
@@ -2438,6 +2467,8 @@ public final class PTableProtos {
           pGuidePostsBuilder_.clear();
         }
         bitField0_ = (bitField0_ & ~0x00000020);
+        maxLength_ = 0;
+        bitField0_ = (bitField0_ & ~0x00000040);
         return this;
       }
 
@@ -2470,31 +2501,34 @@ public final class PTableProtos {
           to_bitField0_ |= 0x00000001;
         }
         result.key_ = key_;
-        if (((bitField0_ & 0x00000002) == 0x00000002)) {
-          values_ = java.util.Collections.unmodifiableList(values_);
-          bitField0_ = (bitField0_ & ~0x00000002);
-        }
-        result.values_ = values_;
-        if (((from_bitField0_ & 0x00000004) == 0x00000004)) {
+        if (((from_bitField0_ & 0x00000002) == 0x00000002)) {
           to_bitField0_ |= 0x00000002;
+        }
+        result.guidePosts_ = guidePosts_;
+        if (((from_bitField0_ & 0x00000004) == 0x00000004)) {
+          to_bitField0_ |= 0x00000004;
         }
         result.guidePostsByteCount_ = guidePostsByteCount_;
         if (((from_bitField0_ & 0x00000008) == 0x00000008)) {
-          to_bitField0_ |= 0x00000004;
+          to_bitField0_ |= 0x00000008;
         }
         result.keyBytesCount_ = keyBytesCount_;
         if (((from_bitField0_ & 0x00000010) == 0x00000010)) {
-          to_bitField0_ |= 0x00000008;
+          to_bitField0_ |= 0x00000010;
         }
         result.guidePostsCount_ = guidePostsCount_;
         if (((from_bitField0_ & 0x00000020) == 0x00000020)) {
-          to_bitField0_ |= 0x00000010;
+          to_bitField0_ |= 0x00000020;
         }
         if (pGuidePostsBuilder_ == null) {
           result.pGuidePosts_ = pGuidePosts_;
         } else {
           result.pGuidePosts_ = pGuidePostsBuilder_.build();
         }
+        if (((from_bitField0_ & 0x00000040) == 0x00000040)) {
+          to_bitField0_ |= 0x00000040;
+        }
+        result.maxLength_ = maxLength_;
         result.bitField0_ = to_bitField0_;
         onBuilt();
         return result;
@@ -2514,15 +2548,8 @@ public final class PTableProtos {
         if (other.hasKey()) {
           setKey(other.getKey());
         }
-        if (!other.values_.isEmpty()) {
-          if (values_.isEmpty()) {
-            values_ = other.values_;
-            bitField0_ = (bitField0_ & ~0x00000002);
-          } else {
-            ensureValuesIsMutable();
-            values_.addAll(other.values_);
-          }
-          onChanged();
+        if (other.hasGuidePosts()) {
+          setGuidePosts(other.getGuidePosts());
         }
         if (other.hasGuidePostsByteCount()) {
           setGuidePostsByteCount(other.getGuidePostsByteCount());
@@ -2535,6 +2562,9 @@ public final class PTableProtos {
         }
         if (other.hasPGuidePosts()) {
           mergePGuidePosts(other.getPGuidePosts());
+        }
+        if (other.hasMaxLength()) {
+          setMaxLength(other.getMaxLength());
         }
         this.mergeUnknownFields(other.getUnknownFields());
         return this;
@@ -2603,74 +2633,38 @@ public final class PTableProtos {
         return this;
       }
 
-      // repeated bytes values = 2;
-      private java.util.List<com.google.protobuf.ByteString> values_ = java.util.Collections.emptyList();
-      private void ensureValuesIsMutable() {
-        if (!((bitField0_ & 0x00000002) == 0x00000002)) {
-          values_ = new java.util.ArrayList<com.google.protobuf.ByteString>(values_);
-          bitField0_ |= 0x00000002;
-         }
+      // optional bytes guidePosts = 2;
+      private com.google.protobuf.ByteString guidePosts_ = com.google.protobuf.ByteString.EMPTY;
+      /**
+       * <code>optional bytes guidePosts = 2;</code>
+       */
+      public boolean hasGuidePosts() {
+        return ((bitField0_ & 0x00000002) == 0x00000002);
       }
       /**
-       * <code>repeated bytes values = 2;</code>
+       * <code>optional bytes guidePosts = 2;</code>
        */
-      public java.util.List<com.google.protobuf.ByteString>
-          getValuesList() {
-        return java.util.Collections.unmodifiableList(values_);
+      public com.google.protobuf.ByteString getGuidePosts() {
+        return guidePosts_;
       }
       /**
-       * <code>repeated bytes values = 2;</code>
+       * <code>optional bytes guidePosts = 2;</code>
        */
-      public int getValuesCount() {
-        return values_.size();
-      }
-      /**
-       * <code>repeated bytes values = 2;</code>
-       */
-      public com.google.protobuf.ByteString getValues(int index) {
-        return values_.get(index);
-      }
-      /**
-       * <code>repeated bytes values = 2;</code>
-       */
-      public Builder setValues(
-          int index, com.google.protobuf.ByteString value) {
+      public Builder setGuidePosts(com.google.protobuf.ByteString value) {
         if (value == null) {
     throw new NullPointerException();
   }
-  ensureValuesIsMutable();
-        values_.set(index, value);
+  bitField0_ |= 0x00000002;
+        guidePosts_ = value;
         onChanged();
         return this;
       }
       /**
-       * <code>repeated bytes values = 2;</code>
+       * <code>optional bytes guidePosts = 2;</code>
        */
-      public Builder addValues(com.google.protobuf.ByteString value) {
-        if (value == null) {
-    throw new NullPointerException();
-  }
-  ensureValuesIsMutable();
-        values_.add(value);
-        onChanged();
-        return this;
-      }
-      /**
-       * <code>repeated bytes values = 2;</code>
-       */
-      public Builder addAllValues(
-          java.lang.Iterable<? extends com.google.protobuf.ByteString> values) {
-        ensureValuesIsMutable();
-        super.addAll(values, values_);
-        onChanged();
-        return this;
-      }
-      /**
-       * <code>repeated bytes values = 2;</code>
-       */
-      public Builder clearValues() {
-        values_ = java.util.Collections.emptyList();
+      public Builder clearGuidePosts() {
         bitField0_ = (bitField0_ & ~0x00000002);
+        guidePosts_ = getDefaultInstance().getGuidePosts();
         onChanged();
         return this;
       }
@@ -2889,6 +2883,39 @@ public final class PTableProtos {
           pGuidePosts_ = null;
         }
         return pGuidePostsBuilder_;
+      }
+
+      // optional int32 maxLength = 7;
+      private int maxLength_ ;
+      /**
+       * <code>optional int32 maxLength = 7;</code>
+       */
+      public boolean hasMaxLength() {
+        return ((bitField0_ & 0x00000040) == 0x00000040);
+      }
+      /**
+       * <code>optional int32 maxLength = 7;</code>
+       */
+      public int getMaxLength() {
+        return maxLength_;
+      }
+      /**
+       * <code>optional int32 maxLength = 7;</code>
+       */
+      public Builder setMaxLength(int value) {
+        bitField0_ |= 0x00000040;
+        maxLength_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>optional int32 maxLength = 7;</code>
+       */
+      public Builder clearMaxLength() {
+        bitField0_ = (bitField0_ & ~0x00000040);
+        maxLength_ = 0;
+        onChanged();
+        return this;
       }
 
       // @@protoc_insertion_point(builder_scope:PTableStats)
@@ -6916,6 +6943,7 @@ public final class PTableProtos {
       "\006 \002(\010\022\020\n\010position\030\007 \002(\005\022\021\n\tsortOrder\030\010 \002" +
       "(\005\022\021\n\tarraySize\030\t \001(\005\022\024\n\014viewConstant\030\n " +
       "\001(\014\022\026\n\016viewReferenced\030\013 \001(\010\022\022\n\nexpressio" +
+<<<<<<< 3520e12858223dfcad343e0a3a29c71fe4d074bc
       "n\030\014 \001(\t\022\026\n\016isRowTimestamp\030\r \001(\010\"\232\001\n\013PTab" +
       "leStats\022\013\n\003key\030\001 \002(\014\022\016\n\006values\030\002 \003(\014\022\033\n\023" +
       "guidePostsByteCount\030\003 \001(\003\022\025\n\rkeyBytesCou",
@@ -6941,6 +6969,33 @@ public final class PTableProtos {
       "e\022\n\n\006SYSTEM\020\000\022\010\n\004USER\020\001\022\010\n\004VIEW\020\002\022\t\n\005IND",
       "EX\020\003\022\010\n\004JOIN\020\004B@\n(org.apache.phoenix.cop" +
       "rocessor.generatedB\014PTableProtosH\001\210\001\001\240\001\001"
+=======
+      "n\030\014 \001(\t\022\026\n\016isRowTimestamp\030\r \001(\010\"\261\001\n\013PTab" +
+      "leStats\022\013\n\003key\030\001 \002(\014\022\022\n\nguidePosts\030\002 \001(\014" +
+      "\022\033\n\023guidePostsByteCount\030\003 \001(\003\022\025\n\rkeyByte",
+      "sCount\030\004 \001(\003\022\027\n\017guidePostsCount\030\005 \001(\005\022!\n" +
+      "\013pGuidePosts\030\006 \001(\0132\014.PGuidePosts\022\021\n\tmaxL" +
+      "ength\030\007 \001(\005\"\206\005\n\006PTable\022\027\n\017schemaNameByte" +
+      "s\030\001 \002(\014\022\026\n\016tableNameBytes\030\002 \002(\014\022\036\n\ttable" +
+      "Type\030\003 \002(\0162\013.PTableType\022\022\n\nindexState\030\004 " +
+      "\001(\t\022\026\n\016sequenceNumber\030\005 \002(\003\022\021\n\ttimeStamp" +
+      "\030\006 \002(\003\022\023\n\013pkNameBytes\030\007 \001(\014\022\021\n\tbucketNum" +
+      "\030\010 \002(\005\022\031\n\007columns\030\t \003(\0132\010.PColumn\022\030\n\007ind" +
+      "exes\030\n \003(\0132\007.PTable\022\027\n\017isImmutableRows\030\013" +
+      " \002(\010\022 \n\nguidePosts\030\014 \003(\0132\014.PTableStats\022\032",
+      "\n\022dataTableNameBytes\030\r \001(\014\022\031\n\021defaultFam" +
+      "ilyName\030\016 \001(\014\022\022\n\ndisableWAL\030\017 \002(\010\022\023\n\013mul" +
+      "tiTenant\030\020 \002(\010\022\020\n\010viewType\030\021 \001(\014\022\025\n\rview" +
+      "Statement\030\022 \001(\014\022\025\n\rphysicalNames\030\023 \003(\014\022\020" +
+      "\n\010tenantId\030\024 \001(\014\022\023\n\013viewIndexId\030\025 \001(\005\022\021\n" +
+      "\tindexType\030\026 \001(\014\022\026\n\016statsTimeStamp\030\027 \001(\003" +
+      "\022\022\n\nstoreNulls\030\030 \001(\010\022\027\n\017baseColumnCount\030" +
+      "\031 \001(\005\022\036\n\026rowKeyOrderOptimizable\030\032 \001(\010\022\025\n" +
+      "\rtransactional\030\033 \001(\010*A\n\nPTableType\022\n\n\006SY" +
+      "STEM\020\000\022\010\n\004USER\020\001\022\010\n\004VIEW\020\002\022\t\n\005INDEX\020\003\022\010\n",
+      "\004JOIN\020\004B@\n(org.apache.phoenix.coprocesso" +
+      "r.generatedB\014PTableProtosH\001\210\001\001\240\001\001"
+>>>>>>> PHOENIX-2417 Compress memory used by row key byte[] of guideposts
     };
     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
       new com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner() {
@@ -6958,7 +7013,7 @@ public final class PTableProtos {
           internal_static_PTableStats_fieldAccessorTable = new
             com.google.protobuf.GeneratedMessage.FieldAccessorTable(
               internal_static_PTableStats_descriptor,
-              new java.lang.String[] { "Key", "Values", "GuidePostsByteCount", "KeyBytesCount", "GuidePostsCount", "PGuidePosts", });
+              new java.lang.String[] { "Key", "GuidePosts", "GuidePostsByteCount", "KeyBytesCount", "GuidePostsCount", "PGuidePosts", "MaxLength", });
           internal_static_PTable_descriptor =
             getDescriptor().getMessageTypes().get(2);
           internal_static_PTable_fieldAccessorTable = new

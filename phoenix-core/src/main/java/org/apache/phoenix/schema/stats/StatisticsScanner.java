@@ -93,6 +93,7 @@ public class StatisticsScanner implements InternalScanner {
     @Override
     public void close() throws IOException {
         boolean async = config.getBoolean(COMMIT_STATS_ASYNC, DEFAULT_COMMIT_STATS_ASYNC);
+        tracker.updateGuidePosts();
         StatisticsCollectionRunTracker collectionTracker = StatisticsCollectionRunTracker.getInstance(config);
         StatisticsScannerCallable callable = new StatisticsScannerCallable();
         if (!async) {
@@ -134,7 +135,8 @@ public class StatisticsScanner implements InternalScanner {
             } finally {
                 try {
                     collectionTracker.removeCompactingRegion(regionInfo);
-                    stats.close();
+                    stats.close();// close the writer
+                    tracker.close();// close the tracker
                 } catch (IOException e) {
                     if (toThrow == null) toThrow = e;
                     LOG.error("Error while closing the stats table", e);

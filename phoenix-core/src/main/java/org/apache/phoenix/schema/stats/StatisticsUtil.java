@@ -21,7 +21,6 @@ import static org.apache.phoenix.util.SchemaUtil.getVarCharLength;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.TreeMap;
 
@@ -55,10 +54,14 @@ public class StatisticsUtil {
 
     /** Number of parts in our complex key */
     protected static final int NUM_KEY_PARTS = 3;
-
+    
     public static byte[] getRowKey(byte[] table, ImmutableBytesPtr fam, byte[] guidePostStartKey) {
+        return getRowKey(table, fam, new ImmutableBytesWritable(guidePostStartKey,0,guidePostStartKey.length));
+    }
+
+    public static byte[] getRowKey(byte[] table, ImmutableBytesPtr fam, ImmutableBytesWritable guidePostStartKey) {
         // always starts with the source table
-        byte[] rowKey = new byte[table.length + fam.getLength() + guidePostStartKey.length + 2];
+        byte[] rowKey = new byte[table.length + fam.getLength() + guidePostStartKey.getLength() + 2];
         int offset = 0;
         System.arraycopy(table, 0, rowKey, offset, table.length);
         offset += table.length;
@@ -66,7 +69,7 @@ public class StatisticsUtil {
         System.arraycopy(fam.get(), fam.getOffset(), rowKey, offset, fam.getLength());
         offset += fam.getLength();
         rowKey[offset++] = QueryConstants.SEPARATOR_BYTE; // assumes stats table columns not DESC
-        System.arraycopy(guidePostStartKey, 0, rowKey, offset, guidePostStartKey.length);
+        System.arraycopy(guidePostStartKey.get(), 0, rowKey, offset, guidePostStartKey.getLength());
         return rowKey;
     }
 
@@ -170,15 +173,28 @@ public class StatisticsUtil {
                     byte[] newGPStartKey = getGuidePostsInfoFromRowKey(tableNameBytes, cfName, result.getRow());
                     GuidePostsInfo guidePosts = guidePostsPerCf.get(cfName);
                     if (guidePosts == null) {
-                        guidePosts = new GuidePostsInfo(0l, Collections.<byte[]> emptyList(), 0l);
+                        guidePosts = new GuidePostsInfo(0l, new ImmutableBytesWritable(ByteUtil.EMPTY_BYTE_ARRAY), 0l,
+                                0, 0);
                         guidePostsPerCf.put(cfName, guidePosts);
                     }
-                    guidePosts.addGuidePost(newGPStartKey, byteCount, rowCount);
+                    guidePosts.encodeAndCollectGuidePost(newGPStartKey, byteCount, rowCount);
+                }
+            }
+            for (byte[] cf : guidePostsPerCf.keySet()) {
+                GuidePostsInfo guidePostInfo = guidePostsPerCf.get(cf);
+                if (guidePostInfo != null) {
+                    guidePostInfo.updateGuidePosts();
                 }
             }
         } finally {
             if (scanner != null) {
                 scanner.close();
+            }
+            for (byte[] cf : guidePostsPerCf.keySet()) {
+                GuidePostsInfo guidePostInfo = guidePostsPerCf.get(cf);
+                if (guidePostInfo != null) {
+                    guidePostInfo.close();
+                }
             }
         }
         if (!guidePostsPerCf.isEmpty()) { return new PTableStatsImpl(guidePostsPerCf, timeStamp); }
