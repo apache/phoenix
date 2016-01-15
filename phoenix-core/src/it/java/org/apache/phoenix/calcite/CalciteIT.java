@@ -903,7 +903,6 @@ public class CalciteIT extends BaseCalciteIT {
                 .close();
     }
     
-    @Ignore // CALCITE-1055
     @Test public void testCorrelateAndDecorrelation() throws Exception {
         Properties correlProps = getConnectionProps(false);
         correlProps.setProperty("forceDecorrelate", Boolean.FALSE.toString());

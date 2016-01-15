@@ -3,32 +3,25 @@ package org.apache.phoenix.calcite.jdbc;
 import java.util.List;
 
 import org.apache.calcite.adapter.enumerable.EnumerableRules;
-import org.apache.calcite.config.CalciteConnectionConfig;
 import org.apache.calcite.jdbc.CalcitePrepare;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptCostFactory;
 import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelOptRule;
-import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.prepare.CalcitePrepareImpl;
 import org.apache.calcite.prepare.Prepare.Materialization;
 import org.apache.calcite.rel.RelNode;
-import org.apache.calcite.rel.core.RelFactories;
 import org.apache.calcite.rel.logical.LogicalSort;
 import org.apache.calcite.rel.rules.JoinCommuteRule;
 import org.apache.calcite.rel.rules.SortProjectTransposeRule;
 import org.apache.calcite.rel.rules.SortUnionTransposeRule;
-import org.apache.calcite.rel.rules.SubQueryRemoveRule;
 import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.runtime.Hook;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.parser.SqlParser;
-import org.apache.calcite.sql2rel.RelDecorrelator;
-import org.apache.calcite.sql2rel.RelFieldTrimmer;
 import org.apache.calcite.tools.Program;
 import org.apache.calcite.tools.Programs;
-import org.apache.calcite.tools.RelBuilder;
 import org.apache.calcite.util.Holder;
 import org.apache.calcite.util.Pair;
 import org.apache.phoenix.calcite.PhoenixSchema;
@@ -47,7 +40,6 @@ import org.apache.phoenix.calcite.rules.PhoenixReverseTableScanRule;
 import org.apache.phoenix.calcite.rules.PhoenixSortServerJoinTransposeRule;
 
 import com.google.common.base.Function;
-import com.google.common.collect.ImmutableList;
 
 public class PhoenixPrepareImpl extends CalcitePrepareImpl {
     public static final ThreadLocal<String> THREAD_SQL_STRING =
@@ -137,73 +129,12 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
 			@Override
 			public Object apply(
 					Pair<List<Materialization>, Holder<Program>> input) {
-				final Program program1 =
-						new Program() {
-					public RelNode run(RelOptPlanner planner, RelNode rel,
-							RelTraitSet requiredOutputTraits) {
-						final RelNode rootRel2 =
-								rel.getTraitSet().equals(requiredOutputTraits)
-								? rel
-										: planner.changeTraits(rel, requiredOutputTraits);
-						assert rootRel2 != null;
-
-						planner.setRoot(rootRel2);
-						final RelOptPlanner planner2 = planner.chooseDelegate();
-						final RelNode rootRel3 = planner2.findBestExp();
-						assert rootRel3 != null : "could not implement exp";
-						return rootRel3;
-					}
-				};
-				
-				final Program subqueryProgram = Programs.hep(
-				          ImmutableList.of((RelOptRule) SubQueryRemoveRule.FILTER,
-				                  SubQueryRemoveRule.PROJECT,
-				                  SubQueryRemoveRule.JOIN), true, PhoenixRel.METADATA_PROVIDER);
-
-				// Second planner pass to do physical "tweaks". This the first time that
-				// EnumerableCalcRel is introduced.
-				final Program program2 = Programs.hep(Programs.CALC_RULES, true, PhoenixRel.METADATA_PROVIDER);;
-
-				Program p = Programs.sequence(subqueryProgram,
-				        new DecorrelateProgram(),
-				        new TrimFieldsProgram(),
-				        program1,
-				        program2);
-				input.getValue().set(p);
+				input.getValue().set(Programs.standard(PhoenixRel.METADATA_PROVIDER));
 				return null;
 			}
         });
 
         return planner;
-    }
-
-    /** Program that de-correlates a query.
-     *
-     * <p>To work around
-     * <a href="https://issues.apache.org/jira/browse/CALCITE-842">[CALCITE-842]
-     * Decorrelator gets field offsets confused if fields have been trimmed</a>,
-     * disable field-trimming in {@link SqlToRelConverter}, and run
-     * {@link TrimFieldsProgram} after this program. */
-    private static class DecorrelateProgram implements Program {
-      public RelNode run(RelOptPlanner planner, RelNode rel,
-          RelTraitSet requiredOutputTraits) {
-        final CalciteConnectionConfig config =
-            planner.getContext().unwrap(CalciteConnectionConfig.class);
-        if (config != null && config.forceDecorrelate()) {
-          return RelDecorrelator.decorrelateQuery(rel);
-        }
-        return rel;
-      }
-    }
-
-    /** Program that trims fields. */
-    private static class TrimFieldsProgram implements Program {
-      public RelNode run(RelOptPlanner planner, RelNode rel,
-          RelTraitSet requiredOutputTraits) {
-        final RelBuilder relBuilder =
-            RelFactories.LOGICAL_BUILDER.create(rel.getCluster(), null);
-        return new RelFieldTrimmer(null, relBuilder).trim(rel);
-      }
     }
 
     @Override
