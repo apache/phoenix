@@ -509,12 +509,13 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             input = new DataInputStream(stream);
             decoder = new PrefixByteDecoder(gps.getMaxLength());
             try {
-                while (currentKey.compareTo(currentGuidePost = CodecUtils.decode(decoder, input)) >= 0) {
+                while (currentKey.compareTo(currentGuidePost = CodecUtils.decode(decoder, input)) >= 0
+                        && currentKey.getLength() != 0) {
                     guideIndex++;
                 }
             } catch (EOFException e) {}
         }
-        byte[] currentKeyBytes = ByteUtil.copyKeyBytesIfNecessary(currentKey);
+        byte[] currentKeyBytes = currentKey.copyBytes();
 
         // Merge bisect with guideposts for all but the last region
         while (regionIndex <= stopIndex) {
@@ -538,7 +539,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     scans = addNewScan(parallelScans, scans, newScan, currentGuidePostBytes, false, regionLocation);
                     currentKeyBytes = currentGuidePost.copyBytes();
                     currentGuidePost = CodecUtils.decode(decoder, input);
-                    currentGuidePostBytes = ByteUtil.copyKeyBytesIfNecessary(currentGuidePost);
+                    currentGuidePostBytes = currentGuidePost.copyBytes();
                     guideIndex++;
                 }
             } catch (EOFException e) {}
