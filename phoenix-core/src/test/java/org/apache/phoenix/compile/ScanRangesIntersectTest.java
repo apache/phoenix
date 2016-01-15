@@ -27,7 +27,6 @@ import java.util.Collections;
 import java.util.List;
 
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.types.PVarchar;
@@ -52,8 +51,7 @@ public class ScanRangesIntersectTest {
         scan.setFilter(ranges.getSkipScanFilter());
         byte[] startKey = lowerRange == null ? KeyRange.UNBOUND : PVarchar.INSTANCE.toBytes(lowerRange);
         byte[] stopKey = upperRange == null ? KeyRange.UNBOUND : PVarchar.INSTANCE.toBytes(upperRange);
-        Scan newScan = ranges.intersectScan(scan, new ImmutableBytesWritable(startKey, 0, startKey.length),
-                new ImmutableBytesWritable(stopKey, 0, stopKey.length), 0, true);
+        Scan newScan = ranges.intersectScan(scan, startKey, stopKey, 0, true);
         if (expectedPoints.length == 0) {
             assertNull(newScan);
         } else {
