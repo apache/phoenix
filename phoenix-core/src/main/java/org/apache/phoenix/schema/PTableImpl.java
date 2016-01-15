@@ -1003,26 +1003,16 @@ public class PTableImpl implements PTable {
       boolean isImmutableRows = table.getIsImmutableRows();
       SortedMap<byte[], GuidePostsInfo> tableGuidePosts = new TreeMap<byte[], GuidePostsInfo>(Bytes.BYTES_COMPARATOR);
         for (PTableProtos.PTableStats pTableStatsProto : table.getGuidePostsList()) {
-            List<byte[]> value = Lists.newArrayListWithExpectedSize(pTableStatsProto.getValuesCount());
-            for (int j = 0; j < pTableStatsProto.getValuesCount(); j++) {
-                value.add(pTableStatsProto.getValues(j).toByteArray());
-            }
-            // No op
-            pTableStatsProto.getGuidePostsByteCount();
-            value = Lists.newArrayListWithExpectedSize(pTableStatsProto.getValuesCount());
             PGuidePosts pGuidePosts = pTableStatsProto.getPGuidePosts();
-            for(int j = 0; j < pGuidePosts.getGuidePostsCount(); j++) {
-                value.add(pGuidePosts.getGuidePosts(j).toByteArray());
-            }
             long guidePostsByteCount = pGuidePosts.getByteCount();
             long rowCount = pGuidePosts.getRowCount();
-            // TODO : Not exposing MIN/MAX key outside to client 
-            GuidePostsInfo info =
-                    new GuidePostsInfo(guidePostsByteCount, value, rowCount);
+            int maxLength = pGuidePosts.getMaxLength();
+            int guidePostsCount = pGuidePosts.getGuidePostsCount();
+            GuidePostsInfo info = new GuidePostsInfo(guidePostsByteCount,
+                    new ImmutableBytesWritable(pGuidePosts.getGuidePosts().toByteArray()), rowCount, maxLength, guidePostsCount);
             tableGuidePosts.put(pTableStatsProto.getKey().toByteArray(), info);
-      }
+        }
       PTableStats stats = new PTableStatsImpl(tableGuidePosts, table.getStatsTimeStamp());
-
       PName dataTableName = null;
       if (table.hasDataTableNameBytes()) {
         dataTableName = PNameFactory.newName(table.getDataTableNameBytes().toByteArray());
@@ -1121,16 +1111,16 @@ public class PTableImpl implements PTable {
       for (Map.Entry<byte[], GuidePostsInfo> entry : table.getTableStats().getGuidePosts().entrySet()) {
          PTableProtos.PTableStats.Builder statsBuilder = PTableProtos.PTableStats.newBuilder();
          statsBuilder.setKey(ByteStringer.wrap(entry.getKey()));
-         for (byte[] stat : entry.getValue().getGuidePosts()) {
-             statsBuilder.addValues(ByteStringer.wrap(stat));
-         }
+         statsBuilder.setGuidePosts(ByteStringer.wrap(entry.getValue().getGuidePosts().get()));
          statsBuilder.setGuidePostsByteCount(entry.getValue().getByteCount());
+         statsBuilder.setMaxLength(entry.getValue().getMaxLength());
+         statsBuilder.setGuidePostsCount(entry.getValue().getGuidePostsCount());
          PGuidePostsProtos.PGuidePosts.Builder guidePstsBuilder = PGuidePostsProtos.PGuidePosts.newBuilder();
-         for (byte[] stat : entry.getValue().getGuidePosts()) {
-             guidePstsBuilder.addGuidePosts(ByteStringer.wrap(stat));
-         }
+         guidePstsBuilder.setGuidePosts(ByteStringer.wrap(entry.getValue().getGuidePosts().get()));
          guidePstsBuilder.setByteCount(entry.getValue().getByteCount());
          guidePstsBuilder.setRowCount(entry.getValue().getRowCount());
+         guidePstsBuilder.setMaxLength(entry.getValue().getMaxLength());
+         guidePstsBuilder.setGuidePostsCount(entry.getValue().getGuidePostsCount());
          statsBuilder.setPGuidePosts(guidePstsBuilder);
          builder.addGuidePosts(statsBuilder.build());
       }

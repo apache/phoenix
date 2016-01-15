@@ -17,13 +17,20 @@
  */
 package org.apache.phoenix.schema.stats;
 
-import java.util.List;
+import java.io.ByteArrayInputStream;
+import java.io.DataInput;
+import java.io.DataInputStream;
+import java.io.EOFException;
+import java.io.IOException;
 import java.util.Map;
 import java.util.SortedMap;
 import java.util.TreeMap;
 
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
+import org.apache.phoenix.util.CodecUtils;
+import org.apache.phoenix.util.PrefixByteDecoder;
 import org.apache.phoenix.util.SizedUtil;
 
 import com.sun.istack.NotNull;
@@ -47,12 +54,10 @@ public class PTableStatsImpl implements PTableStats {
         for (Map.Entry<byte[], GuidePostsInfo> entry : guidePosts.entrySet()) {
             byte[] cf = entry.getKey();
             estimatedSize += SizedUtil.ARRAY_SIZE + cf.length;
-            List<byte[]> keys = entry.getValue().getGuidePosts();
-            estimatedSize += SizedUtil.sizeOfArrayList(keys.size());
-            for (byte[] key : keys) {
-                estimatedSize += SizedUtil.ARRAY_SIZE + key.length;
-            }
+            estimatedSize += entry.getValue().getGuidePosts().getLength();
             estimatedSize += SizedUtil.LONG_SIZE;
+            estimatedSize += SizedUtil.INT_SIZE;
+            estimatedSize += SizedUtil.INT_SIZE;
         }
         this.estimatedSize = estimatedSize;
     }
@@ -65,19 +70,45 @@ public class PTableStatsImpl implements PTableStats {
     @Override
     public String toString() {
         StringBuilder buf = new StringBuilder();
+
         buf.append("PTableStats [");
         for (Map.Entry<byte[], GuidePostsInfo> entry : guidePosts.entrySet()) {
             buf.append(Bytes.toStringBinary(entry.getKey()));
             buf.append(":(");
-            List<byte[]> keys = entry.getValue().getGuidePosts();
-            if (!keys.isEmpty()) {
-                for (byte[] key : keys) {
-                    buf.append(Bytes.toStringBinary(key));
-                    buf.append(",");
+            ImmutableBytesWritable keys = entry.getValue().getGuidePosts();
+            ByteArrayInputStream stream = new ByteArrayInputStream(keys.get(), keys.getOffset(), keys.getLength());
+            try {
+                if (keys.getLength() != 0) {
+                    DataInput input = new DataInputStream(stream);
+                    PrefixByteDecoder decoder;
+                    if (entry.getValue().getMaxLength() > 0) {
+                        decoder = new PrefixByteDecoder(entry.getValue().getMaxLength());
+                    } else {
+                        decoder = new PrefixByteDecoder();
+                    }
+                    try {
+                        while (true) {
+                            ImmutableBytesWritable ptr = CodecUtils.decode(decoder, input);
+                            buf.append(Bytes.toStringBinary(ptr.get()));
+                            buf.append(",");
+                        }
+                    } catch (EOFException e) { // Ignore as this signifies we're done
+
+                    } finally {
+                        try {
+                            stream.close();
+                        } catch (IOException e) {}
+                    }
+                    buf.setLength(buf.length() - 1);
                 }
-                buf.setLength(buf.length()-1);
+                buf.append(")");
+            } finally {
+                if (stream != null) {
+                    try {
+                        stream.close();
+                    } catch (IOException e) {}
+                }
             }
-            buf.append(")");
         }
         buf.append("]");
         return buf.toString();

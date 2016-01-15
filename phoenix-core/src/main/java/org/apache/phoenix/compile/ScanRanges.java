@@ -237,7 +237,9 @@ public class ScanRanges {
         return temp;
     }
     
-    public Scan intersectScan(Scan scan, final byte[] originalStartKey, final byte[] originalStopKey, final int keyOffset, boolean crossesRegionBoundary) {
+    public Scan intersectScan(Scan scan, final ImmutableBytesWritable originalStartKeyPtr, final ImmutableBytesWritable originalStopKeyPtr, final int keyOffset, boolean crossesRegionBoundary) {
+        byte[] originalStartKey= originalStartKeyPtr.get();
+        byte[] originalStopKey= originalStopKeyPtr.get();
         byte[] startKey = originalStartKey;
         byte[] stopKey = originalStopKey;
         if (stopKey.length > 0 && Bytes.compareTo(startKey, stopKey) >= 0) { 
@@ -384,8 +386,8 @@ public class ScanRanges {
         if (scanStopKey.length > 0 && Bytes.compareTo(scanStartKey, scanStopKey) >= 0) { 
             return null; 
         }
-        newScan.setStartRow(scanStartKey);
-        newScan.setStopRow(scanStopKey);
+        newScan.setStartRow(Bytes.copy(scanStartKey));
+        newScan.setStopRow(Bytes.copy(scanStopKey));
         if(keyOffset > 0) {
             newScan.setAttribute(STARTKEY_OFFSET, Bytes.toBytes(keyOffset));
         }
@@ -416,7 +418,7 @@ public class ScanRanges {
         }
         
         //return filter.hasIntersect(lowerInclusiveKey, upperExclusiveKey);
-        return intersectScan(null, lowerInclusiveKey, upperExclusiveKey, keyOffset, crossesRegionBoundary) == HAS_INTERSECTION;
+        return intersectScan(null, new ImmutableBytesWritable(lowerInclusiveKey), new ImmutableBytesWritable(upperExclusiveKey), keyOffset, crossesRegionBoundary) == HAS_INTERSECTION;
     }
     
     public SkipScanFilter getSkipScanFilter() {

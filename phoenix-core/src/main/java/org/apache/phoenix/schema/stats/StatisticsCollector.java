@@ -19,7 +19,6 @@ package org.apache.phoenix.schema.stats;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -99,7 +98,7 @@ public class StatisticsCollector {
         // in a compaction we know the one family ahead of time
         if (family != null) {
             ImmutableBytesPtr cfKey = new ImmutableBytesPtr(family);
-            cachedGps = new Pair<Long, GuidePostsInfo>(0l, new GuidePostsInfo(0, Collections.<byte[]> emptyList(), 0l));
+            cachedGps = new Pair<Long, GuidePostsInfo>(0l, new GuidePostsInfo(0, new ImmutableBytesWritable(ByteUtil.EMPTY_BYTE_ARRAY), 0l, 0, 0));
             guidePostsMap.put(cfKey, cachedGps);
         }
     }
@@ -110,6 +109,12 @@ public class StatisticsCollector {
 
     public void close() throws IOException {
         this.statsTable.close();
+        for (ImmutableBytesPtr ptr : guidePostsMap.keySet()) {
+            GuidePostsInfo guidePostInfo = guidePostsMap.get(ptr).getSecond();
+            if (guidePostInfo != null) {
+                guidePostInfo.close();
+            }
+        }
     }
 
     public void updateStatistic(Region region) {
@@ -175,7 +180,7 @@ public class StatisticsCollector {
                 gps = guidePostsMap.get(cfKey);
                 if (gps == null) {
                     gps = new Pair<Long, GuidePostsInfo>(0l,
-                            new GuidePostsInfo(0, Collections.<byte[]> emptyList(), 0l));
+                            new GuidePostsInfo(0,new ImmutableBytesWritable(ByteUtil.EMPTY_BYTE_ARRAY), 0l, 0, 0));
                     guidePostsMap.put(cfKey, gps);
                 }
                 if (famMap.get(cfKey) == null) {
@@ -191,7 +196,7 @@ public class StatisticsCollector {
             if (byteCount >= guidepostDepth) {
                 byte[] row = ByteUtil.copyKeyBytesIfNecessary(
                         new ImmutableBytesWritable(kv.getRowArray(), kv.getRowOffset(), kv.getRowLength()));
-                if (gps.getSecond().addGuidePost(row, byteCount)) {
+                if (gps.getSecond().encodeAndCollectGuidePost(row, byteCount)) {
                     gps.setFirst(0l);
                 }
             }
@@ -225,21 +230,19 @@ public class StatisticsCollector {
         maxTimeStamp = MetaDataProtocol.MIN_TABLE_TIMESTAMP;
     }
 
-    public void addGuidePost(ImmutableBytesPtr cfKey, GuidePostsInfo info, long byteSize, long timestamp,
-            byte[] minKey) {
-        Pair<Long, GuidePostsInfo> newInfo = new Pair<Long, GuidePostsInfo>(byteSize, info);
-        Pair<Long, GuidePostsInfo> oldInfo = guidePostsMap.put(cfKey, newInfo);
-        if (oldInfo != null) {
-            info.combine(oldInfo.getSecond());
-            newInfo.setFirst(oldInfo.getFirst() + newInfo.getFirst());
-        }
-        maxTimeStamp = Math.max(maxTimeStamp, timestamp);
-    }
-
     public GuidePostsInfo getGuidePosts(ImmutableBytesPtr fam) {
         Pair<Long, GuidePostsInfo> pair = guidePostsMap.get(fam);
         if (pair != null) { return pair.getSecond(); }
         return null;
+    }
+
+    public void updateGuidePosts() {
+        for (ImmutableBytesPtr cf : guidePostsMap.keySet()) {
+            GuidePostsInfo guidePostInfo = guidePostsMap.get(cf).getSecond();
+            if (guidePostInfo != null) {
+                guidePostInfo.updateGuidePosts();
+            }
+        }
     }
 
 }
