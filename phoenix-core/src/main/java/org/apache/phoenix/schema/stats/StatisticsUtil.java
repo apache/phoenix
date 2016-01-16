@@ -200,7 +200,7 @@ public class StatisticsUtil {
             TreeMap<byte[], GuidePostsInfoWriter> guidePostsWriterPerCf) {
         TreeMap<byte[], GuidePostsInfo> guidePostsPerCf = new TreeMap<byte[], GuidePostsInfo>(Bytes.BYTES_COMPARATOR);
         for (byte[] key : guidePostsWriterPerCf.keySet()) {
-            guidePostsPerCf.put(key, StatisticsUtil.getGuidePostsInfoFromWriter(guidePostsWriterPerCf.get(key)));
+            guidePostsPerCf.put(key, guidePostsWriterPerCf.get(key).createGuidePostInfo());
         }
         return guidePostsPerCf;
     }
@@ -226,9 +226,4 @@ public class StatisticsUtil {
 		ptr.set(row, gpOffset, row.length - gpOffset);
 		return ByteUtil.copyKeyBytesIfNecessary(ptr);
 	}
-	
-    public static GuidePostsInfo getGuidePostsInfoFromWriter(GuidePostsInfoWriter writer) {
-        return new GuidePostsInfo(writer.getByteCount(), writer.getGuidePosts(), writer.getRowCount(),
-                writer.getMaxLength(), writer.getGuidePostsCount());
-    }
 }

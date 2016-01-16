@@ -232,7 +232,7 @@ public class StatisticsCollector {
 
     public GuidePostsInfo getGuidePosts(ImmutableBytesPtr fam) {
         Pair<Long, GuidePostsInfoWriter> pair = guidePostsInfoWriterMap.get(fam);
-        if (pair != null) { return StatisticsUtil.getGuidePostsInfoFromWriter(pair.getSecond()); }
+        if (pair != null) { return pair.getSecond().createGuidePostInfo(); }
         return null;
     }
 
