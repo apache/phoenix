@@ -37,6 +37,18 @@ import java.util.concurrent.TimeoutException;
 import javax.annotation.Nonnull;
 import javax.annotation.concurrent.Immutable;
 
+import co.cask.tephra.Transaction;
+import co.cask.tephra.Transaction.VisibilityLevel;
+import co.cask.tephra.TransactionAware;
+import co.cask.tephra.TransactionCodec;
+import co.cask.tephra.TransactionConflictException;
+import co.cask.tephra.TransactionContext;
+import co.cask.tephra.TransactionFailureException;
+import co.cask.tephra.TransactionSystemClient;
+import co.cask.tephra.hbase11.TransactionAwareHTable;
+import co.cask.tephra.visibility.FenceWait;
+import co.cask.tephra.visibility.VisibilityFence;
+
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.HTableInterface;
@@ -97,18 +109,6 @@ import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-
-import co.cask.tephra.Transaction;
-import co.cask.tephra.Transaction.VisibilityLevel;
-import co.cask.tephra.TransactionAware;
-import co.cask.tephra.TransactionCodec;
-import co.cask.tephra.TransactionConflictException;
-import co.cask.tephra.TransactionContext;
-import co.cask.tephra.TransactionFailureException;
-import co.cask.tephra.TransactionSystemClient;
-import co.cask.tephra.hbase11.TransactionAwareHTable;
-import co.cask.tephra.visibility.FenceWait;
-import co.cask.tephra.visibility.VisibilityFence;
 
 /**
  * 
@@ -242,7 +242,18 @@ public class MutationState implements SQLCloseable {
         }
     }
     
-    private void addReadFence(PTable dataTable) throws SQLException {
+    /**
+     * Add an entry to the change set representing the DML operation that is starting.
+     * These entries will not conflict with each other, but they will conflict with a
+     * DDL operation of creating an index. See {@link #addReadFence(PTable)} and TEPHRA-157
+     * for more information.
+     * @param dataTable the table which is doing DML
+     * @throws SQLException
+     */
+    public void addReadFence(PTable dataTable) throws SQLException {
+        if (this.txContext == null) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.NULL_TRANSACTION_CONTEXT).build().buildException();
+        }
         byte[] logicalKey = SchemaUtil.getTableKey(dataTable);
         this.txContext.addTransactionAware(VisibilityFence.create(logicalKey));
         byte[] physicalKey = dataTable.getPhysicalName().getBytes();
@@ -848,8 +859,7 @@ public class MutationState implements SQLCloseable {
 	            final PTable table = tableRef.getTable();
 	            // Track tables to which we've sent uncommitted data
 	            if (isTransactional = table.isTransactional()) {
-	                addReadFence(table);
-                    txTableRefs.add(tableRef);
+	                txTableRefs.add(tableRef);
 	                uncommittedPhysicalNames.add(table.getPhysicalName().getString());
 	            }
 	            boolean isDataTable = true;
