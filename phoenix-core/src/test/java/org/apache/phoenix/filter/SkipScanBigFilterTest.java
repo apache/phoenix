@@ -26,7 +26,6 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.SortedMap;
 
-import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.end2end.Shadower;
@@ -39,8 +38,8 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
+import org.apache.phoenix.schema.stats.GuidePostsInfoWriter;
 import org.apache.phoenix.schema.stats.PTableStats;
-import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
@@ -648,12 +647,12 @@ public class SkipScanBigFilterTest extends BaseConnectionlessQueryTest {
         stmt.execute();
         
         final PTable table = conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, "PERF.BIG_OLAP_DOC"));
-        GuidePostsInfo info = new GuidePostsInfo(0, new ImmutableBytesWritable(ByteUtil.EMPTY_BYTE_ARRAY), 0l, 0, 0);
+        GuidePostsInfoWriter gpWriter = new GuidePostsInfoWriter();
         for (byte[] gp : guidePosts) {
-            info.encodeAndCollectGuidePost(gp, 1000);
+            gpWriter.writeGuidePosts(gp, 1000);
         }
-        info.updateGuidePosts();
-        info.close();
+        GuidePostsInfo info = gpWriter.createGuidePostInfo();
+        gpWriter.close();
         final SortedMap<byte[], GuidePostsInfo> gpMap = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
         gpMap.put(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, info);
         PTable tableWithStats = PTableImpl.makePTable(table, new PTableStats() {
