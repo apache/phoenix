@@ -31,6 +31,8 @@ import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
+
 /**
  * Singleton that is used to track state associated with regions undergoing stats collection at the
  * region server's JVM level.
@@ -64,14 +66,10 @@ public class StatisticsCollectionRunTracker {
         int poolSize =
                 config.getInt(QueryServices.STATS_SERVER_POOL_SIZE,
                     QueryServicesOptions.DEFAULT_STATS_POOL_SIZE);
-        executor = Executors.newFixedThreadPool(poolSize, new ThreadFactory() {
-            @Override
-            public Thread newThread(Runnable r) {
-                Thread t = Executors.defaultThreadFactory().newThread(r);
-                t.setDaemon(true);
-                return t;
-            }
-        });
+        ThreadFactoryBuilder builder =
+                new ThreadFactoryBuilder().setDaemon(true).setNameFormat(
+                    "phoenix-update-statistics-%s");
+        executor = Executors.newFixedThreadPool(poolSize, builder.build());
     }
 
     /**
