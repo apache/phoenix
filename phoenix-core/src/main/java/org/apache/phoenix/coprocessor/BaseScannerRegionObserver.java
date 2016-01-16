@@ -92,7 +92,7 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
     public static final String GUIDEPOST_PER_REGION = "_GUIDEPOST_PER_REGION";
     public static final String UPGRADE_DESC_ROW_KEY = "_UPGRADE_DESC_ROW_KEY";
     public static final String SCAN_REGION_SERVER = "_SCAN_REGION_SERVER";
-    public static final String RUN_UPDATE_STATS_ASYNC = "_RunUpdateStatsAsync";
+    public static final String RUN_UPDATE_STATS_ASYNC_ATTRIB = "_RunUpdateStatsAsync";
     
     /**
      * Attribute name used to pass custom annotations in Scans and Mutations (later). Custom annotations

@@ -663,7 +663,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             final HRegion region, final Scan scan, Configuration config) throws IOException {
         StatsCollectionCallable callable =
                 new StatsCollectionCallable(stats, region, innerScanner, config);
-        byte[] asyncBytes = scan.getAttribute(BaseScannerRegionObserver.RUN_UPDATE_STATS_ASYNC);
+        byte[] asyncBytes = scan.getAttribute(BaseScannerRegionObserver.RUN_UPDATE_STATS_ASYNC_ATTRIB);
         boolean async = false;
         if (asyncBytes != null) {
             async = Bytes.toBoolean(asyncBytes);
