@@ -232,17 +232,8 @@ public class StatisticsCollector {
 
     public GuidePostsInfo getGuidePosts(ImmutableBytesPtr fam) {
         Pair<Long, GuidePostsInfoWriter> pair = guidePostsInfoWriterMap.get(fam);
-        if (pair != null) { return pair.getSecond().getGuidePostInfo(); }
+        if (pair != null) { return StatisticsUtil.getGuidePostsInfoFromWriter(pair.getSecond()); }
         return null;
-    }
-
-    public void updateGuidePosts() {
-        for (ImmutableBytesPtr cf : guidePostsInfoWriterMap.keySet()) {
-            GuidePostsInfoWriter guidePostWriter = guidePostsInfoWriterMap.get(cf).getSecond();
-            if (guidePostWriter != null) {
-                guidePostWriter.updateGuidePosts();
-            }
-        }
     }
 
 }
