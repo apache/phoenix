@@ -22,7 +22,7 @@ import static com.google.common.collect.Sets.newLinkedHashSet;
 import static com.google.common.collect.Sets.newLinkedHashSetWithExpectedSize;
 import static org.apache.hadoop.hbase.HColumnDescriptor.TTL;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.ANALYZE_TABLE;
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.RUN_UPDATE_STATS_ASYNC;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.RUN_UPDATE_STATS_ASYNC_ATTRIB;
 import static org.apache.phoenix.exception.SQLExceptionCode.INSUFFICIENT_MULTI_TENANT_COLUMNS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ARG_POSITION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ARRAY_SIZE;
@@ -955,8 +955,8 @@ public class MetaDataClient {
             Scan scan = plan.getContext().getScan();
             scan.setCacheBlocks(false);
             scan.setAttribute(ANALYZE_TABLE, TRUE_BYTES);
-            boolean runUpdateStatsAsync = props.getBoolean(RUN_UPDATE_STATS_ASYNC, DEFAULT_RUN_UPDATE_STATS_ASYNC);
-            scan.setAttribute(RUN_UPDATE_STATS_ASYNC, runUpdateStatsAsync ? TRUE_BYTES : FALSE_BYTES);
+            boolean runUpdateStatsAsync = props.getBoolean(QueryServices.RUN_UPDATE_STATS_ASYNC, DEFAULT_RUN_UPDATE_STATS_ASYNC);
+            scan.setAttribute(RUN_UPDATE_STATS_ASYNC_ATTRIB, runUpdateStatsAsync ? TRUE_BYTES : FALSE_BYTES);
             if (statsProps != null) {
                 Object gp_width = statsProps.get(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB);
                 if (gp_width != null) {
