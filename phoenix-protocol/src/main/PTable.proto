@@ -52,12 +52,13 @@ message PColumn {
 
 message PTableStats {
   required bytes key = 1;
-  optional bytes guidePosts = 2;
+  repeated bytes values = 2;
   optional int64 guidePostsByteCount = 3;
   optional int64 keyBytesCount = 4;
   optional int32 guidePostsCount = 5;
   optional PGuidePosts pGuidePosts = 6;
-  optional int32 maxLength = 7;
+  optional bytes guidePosts = 7;
+  optional int32 maxLength = 8;
 }
 
 message PTable {
