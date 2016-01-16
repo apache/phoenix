@@ -93,6 +93,7 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
     public static final String UPGRADE_DESC_ROW_KEY = "_UPGRADE_DESC_ROW_KEY";
     public static final String SCAN_REGION_SERVER = "_SCAN_REGION_SERVER";
     public static final String RUN_UPDATE_STATS_ASYNC_ATTRIB = "_RunUpdateStatsAsync";
+    public static final String SKIP_REGION_BOUNDARY_CHECK = "_SKIP_REGION_BOUNDARY_CHECK";
     
     /**
      * Attribute name used to pass custom annotations in Scans and Mutations (later). Custom annotations
@@ -143,12 +144,19 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
 
     abstract protected boolean isRegionObserverFor(Scan scan);
     abstract protected RegionScanner doPostScannerOpen(ObserverContext<RegionCoprocessorEnvironment> c, final Scan scan, final RegionScanner s) throws Throwable;
+
+    protected boolean skipRegionBoundaryCheck(Scan scan) {
+        byte[] skipCheckBytes = scan.getAttribute(SKIP_REGION_BOUNDARY_CHECK);
+        return skipCheckBytes != null && Bytes.toBoolean(skipCheckBytes);
+    }
     
     @Override
     public RegionScanner preScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c,
         final Scan scan, final RegionScanner s) throws IOException {
         if (isRegionObserverFor(scan)) {
-            throwIfScanOutOfRegion(scan, c.getEnvironment().getRegion());
+            if (! skipRegionBoundaryCheck(scan)) {
+                throwIfScanOutOfRegion(scan, c.getEnvironment().getRegion());
+            }
             // Muck with the start/stop row of the scan and set as reversed at the
             // last possible moment. You need to swap the start/stop and make the
             // start exclusive and the stop inclusive.
