@@ -120,5 +120,10 @@ public class GuidePostsInfoWriter {
         this.guidePosts.set(stream.getBuffer(), 0, stream.size());
         return guidePosts;
     }
+    
+    public GuidePostsInfo createGuidePostInfo(){
+        return new GuidePostsInfo(this.getByteCount(), this.getGuidePosts(), this.getRowCount(),
+                this.getMaxLength(), this.getGuidePostsCount());
+    }
 
 }
