@@ -395,7 +395,6 @@ public class DeleteCompiler {
             break;
         }
         final QueryPlan dataPlan = dataPlanToBe;
-        final ColumnResolver resolver = resolverToBe;
         final boolean hasImmutableIndexes = !immutableIndex.isEmpty();
         // tableRefs is parallel with queryPlans
         TableRef[] tableRefs = new TableRef[hasImmutableIndexes ? immutableIndex.size() : 1];
