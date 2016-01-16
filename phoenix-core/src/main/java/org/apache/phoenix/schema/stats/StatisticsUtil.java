@@ -180,12 +180,8 @@ public class StatisticsUtil {
                     guidePostsInfoWriter.writeGuidePosts(newGPStartKey, byteCount, rowCount);
                 }
             }
-            for (byte[] cf : guidePostsInfoWriterPerCf.keySet()) {
-                GuidePostsInfoWriter guidePostsInfoWriter = guidePostsInfoWriterPerCf.get(cf);
-                if (guidePostsInfoWriter != null) {
-                    guidePostsInfoWriter.updateGuidePosts();
-                }
-            }
+            if (!guidePostsInfoWriterPerCf.isEmpty()) { return new PTableStatsImpl(
+                    getGuidePostsPerCf(guidePostsInfoWriterPerCf), timeStamp); }
         } finally {
             if (scanner != null) {
                 scanner.close();
@@ -197,7 +193,6 @@ public class StatisticsUtil {
                 }
             }
         }
-        if (!guidePostsInfoWriterPerCf.isEmpty()) { return new PTableStatsImpl(getGuidePostsPerCf(guidePostsInfoWriterPerCf), timeStamp); }
         return PTableStats.EMPTY_STATS;
     }
 
@@ -205,7 +200,7 @@ public class StatisticsUtil {
             TreeMap<byte[], GuidePostsInfoWriter> guidePostsWriterPerCf) {
         TreeMap<byte[], GuidePostsInfo> guidePostsPerCf = new TreeMap<byte[], GuidePostsInfo>(Bytes.BYTES_COMPARATOR);
         for (byte[] key : guidePostsWriterPerCf.keySet()) {
-            guidePostsPerCf.put(key, guidePostsWriterPerCf.get(key).getGuidePostInfo());
+            guidePostsPerCf.put(key, StatisticsUtil.getGuidePostsInfoFromWriter(guidePostsWriterPerCf.get(key)));
         }
         return guidePostsPerCf;
     }
@@ -231,4 +226,9 @@ public class StatisticsUtil {
 		ptr.set(row, gpOffset, row.length - gpOffset);
 		return ByteUtil.copyKeyBytesIfNecessary(ptr);
 	}
+	
+    public static GuidePostsInfo getGuidePostsInfoFromWriter(GuidePostsInfoWriter writer) {
+        return new GuidePostsInfo(writer.getByteCount(), writer.getGuidePosts(), writer.getRowCount(),
+                writer.getMaxLength(), writer.getGuidePostsCount());
+    }
 }

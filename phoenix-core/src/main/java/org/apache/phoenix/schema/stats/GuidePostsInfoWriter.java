@@ -29,13 +29,12 @@ import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 
 /*
  * Writer to help in writing guidePosts and creating guidePostInfo. This is used when we are collecting stats or reading stats for a table.
- * updateGuidePosts() is required to be invoked before calling getGuidePostInfo() in order to get the updated guidePosts
  */
 
 public class GuidePostsInfoWriter {
     private PrefixByteEncoder encoder;
     private byte[] lastRow;
-    private GuidePostsInfo guidePostInfo;
+    private ImmutableBytesWritable guidePosts=new ImmutableBytesWritable(ByteUtil.EMPTY_BYTE_ARRAY);
     private long byteCount = 0;
     private int guidePostsCount;
     
@@ -50,7 +49,6 @@ public class GuidePostsInfoWriter {
     private int maxLength;
     private DataOutputStream output;
     private TrustedByteArrayOutputStream stream;
-    private ImmutableBytesWritable guidePosts=new ImmutableBytesWritable();
     
     public final static GuidePostsInfo EMPTY_GUIDEPOST = new GuidePostsInfo(0,
             new ImmutableBytesWritable(ByteUtil.EMPTY_BYTE_ARRAY), 0, 0, 0);
@@ -97,20 +95,6 @@ public class GuidePostsInfoWriter {
     public boolean writeGuidePosts(byte[] row, long byteCount){
         return writeGuidePosts(row, byteCount, 0);
     }
-    
-    /*
-     * This needs to be called once all stats are encoded and stream buffer needs to be copied for retrieval before
-     * close()
-     */
-    public void updateGuidePosts() {
-        this.guidePosts.set(Bytes.copy(stream.getBuffer(), 0, stream.size()));
-        this.guidePostInfo = new GuidePostsInfo(this.byteCount, this.guidePosts, this.rowCount, this.maxLength,
-                this.guidePostsCount);
-    }
-
-    public GuidePostsInfo getGuidePostInfo() {
-        return this.guidePostInfo;
-    }
 
     public void close() {
         CodecUtils.close(stream);
@@ -119,4 +103,22 @@ public class GuidePostsInfoWriter {
     public void incrementRowCount() {
         this.rowCount++;
     }
+
+    public long getByteCount() {
+        return byteCount;
+    }
+
+    public int getGuidePostsCount() {
+        return guidePostsCount;
+    }
+
+    public long getRowCount() {
+        return rowCount;
+    }
+
+    public ImmutableBytesWritable getGuidePosts() {
+        this.guidePosts.set(stream.getBuffer(), 0, stream.size());
+        return guidePosts;
+    }
+
 }

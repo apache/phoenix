@@ -93,7 +93,6 @@ public class StatisticsScanner implements InternalScanner {
     @Override
     public void close() throws IOException {
         boolean async = config.getBoolean(COMMIT_STATS_ASYNC, DEFAULT_COMMIT_STATS_ASYNC);
-        tracker.updateGuidePosts();
         StatisticsCollectionRunTracker collectionTracker = StatisticsCollectionRunTracker.getInstance(config);
         StatisticsScannerCallable callable = new StatisticsScannerCallable();
         if (!async) {
