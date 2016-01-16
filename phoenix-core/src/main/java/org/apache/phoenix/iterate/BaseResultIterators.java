@@ -464,9 +464,6 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
           whereConditions.add(where.getFirst());
         }
         GuidePostsInfo gps = getGuidePosts(whereConditions);
-        if (logger.isDebugEnabled()) {
-            logger.debug("Guideposts: " + gps);
-        }
         boolean traverseAllRegions = isSalted || isLocalIndex;
         if (!traverseAllRegions) {
             byte[] scanStartRow = scan.getStartRow();
@@ -492,7 +489,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         }
         List<List<Scan>> parallelScans = Lists.newArrayListWithExpectedSize(stopIndex - regionIndex + 1);
         
-        ImmutableBytesWritable currentKey = new ImmutableBytesWritable(startKey, 0, startKey.length);
+        ImmutableBytesWritable currentKey = new ImmutableBytesWritable(startKey);
         
         int gpsSize = gps.getGuidePostsCount();
         int estGuidepostsPerRegion = gpsSize == 0 ? 1 : gpsSize / regionLocations.size() + 1;

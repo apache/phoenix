@@ -17,15 +17,8 @@
  */
 package org.apache.phoenix.schema.stats;
 
-import java.io.DataOutputStream;
-import java.io.IOException;
-
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.CodecUtils;
-import org.apache.phoenix.util.PrefixByteEncoder;
-import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 /**
  *  A class that holds the guidePosts of a region and also allows combining the 
  *  guidePosts of different regions when the GuidePostsInfo is formed for a table.
@@ -57,13 +50,8 @@ public class GuidePostsInfo {
     public int getMaxLength() {
         return maxLength;
     }
-
-    private TrustedByteArrayOutputStream stream;
-    private PrefixByteEncoder encoder;
-    private DataOutputStream output;
-    private byte[] lastRow;
+    
     private int guidePostsCount;
-    private boolean isStreamInitialized; 
 
     /**
      * Constructor that creates GuidePostsInfo per region
@@ -77,7 +65,6 @@ public class GuidePostsInfo {
         this.byteCount = byteCount;
         this.rowCount = rowCount;
         this.guidePostsCount = guidePostsCount;
-        lastRow = ByteUtil.EMPTY_BYTE_ARRAY;
     }
     
     
@@ -93,69 +80,8 @@ public class GuidePostsInfo {
         return this.rowCount;
     }
     
-    public void incrementRowCount() {
-        this.rowCount++;
-    }
-    
     public int getGuidePostsCount() {
         return guidePostsCount;
     }
 
-    /**
-     * The guide posts, rowCount and byteCount are accumulated every time a guidePosts depth is
-     * reached while collecting stats.
-     * @param row
-     * @param byteCount
-     * @return
-     * @throws IOException 
-     */
-    public boolean encodeAndCollectGuidePost(byte[] row, long byteCount, long rowCount) {
-        if (row.length != 0 && Bytes.compareTo(lastRow, row) < 0) {
-            try {
-                if(!isStreamInitialized){
-                    stream = new TrustedByteArrayOutputStream(guidePosts.getLength());
-                    output = new DataOutputStream(stream);
-                    stream.write(ByteUtil.copyKeyBytesIfNecessary(guidePosts));
-                    encoder = new PrefixByteEncoder();
-                    isStreamInitialized=true;
-                }
-                encoder.encode(output, row, 0, row.length);
-                this.byteCount += byteCount;
-                this.guidePostsCount++;
-                this.maxLength = encoder.getMaxLength();
-                this.rowCount += rowCount;
-                lastRow = row;
-                return true;
-            } catch (IOException e) {
-                return false;
-            }
-        }
-        return false;
-    }
-  
-    public boolean encodeAndCollectGuidePost(byte[] row){
-        return encodeAndCollectGuidePost(row, 0, 0);
-    }
-
-    public boolean encodeAndCollectGuidePost(byte[] row, long byteCount){
-        return encodeAndCollectGuidePost(row, byteCount, 0);
-    }
-
-    public void close() {
-        CodecUtils.close(stream);
-    }
-    
-    /*
-     * This needs to be collect once all stats are encoded and stream buffer needs to be copied for retrieval before close()
-     */
-    public void updateGuidePosts() {
-        if (stream != null) {
-            this.guidePosts.set(Bytes.copy(stream.getBuffer(), 0, stream.size()));
-        }
-    }
-    
-    @Override
-    public String toString() {
-        return Bytes.toString(this.guidePosts.get());
-    }
 }
