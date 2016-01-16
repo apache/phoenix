@@ -157,6 +157,29 @@ public class GlobalIndexOptimizationIT extends BaseHBaseManagedTimeIT {
             assertEquals("a", rs.getString("v1"));
             assertFalse(rs.next());
             
+            query = "SELECT /*+ INDEX(" + TestUtil.DEFAULT_DATA_TABLE_NAME + " " + TestUtil.DEFAULT_INDEX_TABLE_NAME + ")*/ * FROM " + TestUtil.DEFAULT_DATA_TABLE_NAME +" where v1='a' limit 1";
+            rs = conn1.createStatement().executeQuery("EXPLAIN "+ query);
+            
+            expected = 
+                    "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + TestUtil.DEFAULT_DATA_TABLE_NAME + "\n" +
+                    "CLIENT 1 ROW LIMIT\n" +
+                    "    SKIP-SCAN-JOIN TABLE 0\n" +
+                    "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + TestUtil.DEFAULT_INDEX_TABLE_NAME + " \\['a'\\]\n" +
+                    "            SERVER FILTER BY FIRST KEY ONLY\n" +
+                    "    DYNAMIC SERVER FILTER BY \\(\"T.T_ID\", \"T.K1\", \"T.K2\"\\) IN \\(\\(\\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+\\)\\)\n" +
+                    "    JOIN-SCANNER 1 ROW LIMIT";
+            actual = QueryUtil.getExplainPlan(rs);
+            assertTrue("Expected:\n" + expected + "\nbut got\n" + actual, Pattern.matches(expected, actual));
+            
+            rs = conn1.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals("f", rs.getString("t_id"));
+            assertEquals(1, rs.getInt("k1"));
+            assertEquals(2, rs.getInt("k2"));
+            assertEquals(3, rs.getInt("k3"));
+            assertEquals("a", rs.getString("v1"));
+            assertFalse(rs.next());
+            
             query = "SELECT /*+ INDEX(" + TestUtil.DEFAULT_DATA_TABLE_NAME + " " + TestUtil.DEFAULT_INDEX_TABLE_NAME + ")*/ t_id, k1, k2, k3, V1 from " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME + "  where v1<='z' and k3 > 1 order by V1,t_id";
             rs = conn1.createStatement().executeQuery("EXPLAIN " + query);
             
