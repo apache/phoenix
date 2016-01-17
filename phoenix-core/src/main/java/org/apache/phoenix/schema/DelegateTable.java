@@ -242,6 +242,7 @@ public class DelegateTable implements PTable {
         return delegate.isTransactional();
     }
 
+    @Override
     public int getBaseColumnCount() {
         return delegate.getBaseColumnCount();
     }
@@ -259,5 +260,10 @@ public class DelegateTable implements PTable {
     @Override
     public String toString() {
         return delegate.toString();
+    }
+
+    @Override
+    public long getUpdateCacheFrequency() {
+        return delegate.getUpdateCacheFrequency();
     }
 }
