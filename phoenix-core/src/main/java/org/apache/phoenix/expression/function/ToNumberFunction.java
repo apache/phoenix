@@ -60,6 +60,10 @@ public class ToNumberFunction extends ScalarFunction {
     
     public ToNumberFunction() {}
 
+    public ToNumberFunction(List<Expression> children) throws SQLException {
+        this(children, null, null, null);
+    }
+
     public ToNumberFunction(List<Expression> children, FunctionArgumentType type, String formatString, Format formatter) throws SQLException {
         super(children.subList(0, 1));
         Preconditions.checkNotNull(type);
