@@ -57,6 +57,10 @@ public class ToCharFunction extends ScalarFunction {
     public ToCharFunction() {
     }
 
+    public ToCharFunction(List<Expression> children) throws  SQLException {
+        this(children, null, null, null);
+    }
+
     public ToCharFunction(List<Expression> children, FunctionArgumentType type, String formatString, Format formatter) throws SQLException {
         super(children.subList(0, 1));
         Preconditions.checkNotNull(formatString);
