@@ -285,6 +285,9 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final String TRANSACTIONAL = "TRANSACTIONAL";
     public static final byte[] TRANSACTIONAL_BYTES = Bytes.toBytes(TRANSACTIONAL);
 
+    public static final String UPDATE_CACHE_FREQUENCY = "UPDATE_CACHE_FREQUENCY";
+    public static final byte[] UPDATE_CACHE_FREQUENCY_BYTES = Bytes.toBytes(UPDATE_CACHE_FREQUENCY);
+
     public static final String ASYNC_CREATED_DATE = "ASYNC_CREATED_DATE";
 
     private final PhoenixConnection connection;

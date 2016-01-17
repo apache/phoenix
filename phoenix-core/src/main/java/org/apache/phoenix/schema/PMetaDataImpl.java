@@ -170,6 +170,10 @@ public class PMetaDataImpl implements PMetaData {
                 return put(key, new PTableRef(value, timeKeeper.getCurrentTime(), 0, resolvedTime));
             }
             
+            public long getAge(PTableRef ref) {
+                return timeKeeper.getCurrentTime() - ref.getCreateTime();
+            }
+            
             public PTable remove(PTableKey key) {
                 PTableRef value = this.tables.remove(key);
                 if (value == null) {
@@ -313,7 +317,7 @@ public class PMetaDataImpl implements PMetaData {
     }
 
     @Override
-    public PMetaData addColumn(PName tenantId, String tableName, List<PColumn> columnsToAdd, long tableTimeStamp, long tableSeqNum, boolean isImmutableRows, boolean isWalDisabled, boolean isMultitenant, boolean storeNulls, boolean isTransactional, long resolvedTime) throws SQLException {
+    public PMetaData addColumn(PName tenantId, String tableName, List<PColumn> columnsToAdd, long tableTimeStamp, long tableSeqNum, boolean isImmutableRows, boolean isWalDisabled, boolean isMultitenant, boolean storeNulls, boolean isTransactional, long updateCacheFrequency, long resolvedTime) throws SQLException {
         PTableRef oldTableRef = metaData.get(new PTableKey(tenantId, tableName));
         if (oldTableRef == null) {
             return this;
@@ -327,7 +331,9 @@ public class PMetaDataImpl implements PMetaData {
             newColumns.addAll(oldColumns);
             newColumns.addAll(columnsToAdd);
         }
-        PTable newTable = PTableImpl.makePTable(oldTableRef.getTable(), tableTimeStamp, tableSeqNum, newColumns, isImmutableRows, isWalDisabled, isMultitenant, storeNulls, isTransactional);
+        PTable newTable = PTableImpl.makePTable(oldTableRef.getTable(),
+                tableTimeStamp, tableSeqNum, newColumns, isImmutableRows,
+                isWalDisabled, isMultitenant, storeNulls, isTransactional, updateCacheFrequency);
         return addTable(newTable, resolvedTime);
     }
 
@@ -471,5 +477,10 @@ public class PMetaDataImpl implements PMetaData {
         }
         return new PMetaDataImpl(clone);
     
+    }
+
+    @Override
+    public long getAge(PTableRef ref) {
+        return this.metaData.getAge(ref);
     }
 }
