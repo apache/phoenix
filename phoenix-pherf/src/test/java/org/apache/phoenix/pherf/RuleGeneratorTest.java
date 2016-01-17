@@ -49,6 +49,7 @@ import org.junit.Test;
 public class RuleGeneratorTest {
     private static final String matcherScenario = PherfConstants.SCENARIO_ROOT_PATTERN + ".xml";
 
+    @Ignore("Flapping - see PHOENIX-2592")
     @Test
     public void testDateGenerator() throws Exception {
         XMLConfigParser parser = new XMLConfigParser(matcherScenario);
