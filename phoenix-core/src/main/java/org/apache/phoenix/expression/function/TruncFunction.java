@@ -51,6 +51,8 @@ args = {
 public abstract class TruncFunction extends ScalarFunction {
     
     public static final String NAME = "TRUNC";
+
+    public TruncFunction() {}
     
     public TruncFunction(List<Expression> children) throws SQLException {
         super(children);
