@@ -28,7 +28,7 @@ import org.apache.phoenix.util.PrefixByteEncoder;
 import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 
 /*
- * Writer to help in writing guidePosts and creating guidePostInfo. This is used when we are collecting stats or reading stats for a table.
+ * Builder to help in adding guidePosts and building guidePostInfo. This is used when we are collecting stats or reading stats for a table.
  */
 
 public class GuidePostsInfoBuilder {
