@@ -49,7 +49,7 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.CodecUtils;
+import org.apache.phoenix.util.PrefixByteCodec;
 import org.apache.phoenix.util.PrefixByteDecoder;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.TimeKeeper;
@@ -166,7 +166,7 @@ public class StatisticsWriter implements Closeable {
             } catch (EOFException e) { // Ignore as this signifies we're done
 
             } finally {
-                CodecUtils.close(stream);
+                PrefixByteCodec.close(stream);
             }
         }
     }

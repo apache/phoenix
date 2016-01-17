@@ -53,9 +53,9 @@ public class PrefixByteEncoderDecoderTest {
     public void testEncode() throws IOException {
         List<byte[]> listOfBytes = Arrays.asList(Bytes.toBytes("aaaaa"), Bytes.toBytes("aaaabb"));
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-        int maxLength = CodecUtils.encodeBytes(listOfBytes, ptr);
+        int maxLength = PrefixByteCodec.encodeBytes(listOfBytes, ptr);
         assertEquals(6, maxLength);
-        TrustedByteArrayOutputStream stream = new TrustedByteArrayOutputStream(CodecUtils.calculateSize(listOfBytes));
+        TrustedByteArrayOutputStream stream = new TrustedByteArrayOutputStream(PrefixByteCodec.calculateSize(listOfBytes));
         DataOutput output = new DataOutputStream(stream);
         WritableUtils.writeVInt(output, 0);
         WritableUtils.writeVInt(output, 5);
@@ -78,11 +78,11 @@ public class PrefixByteEncoderDecoderTest {
     
     private void testEncodeDecode(boolean useSingleBuffer) throws IOException {
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-        int maxLength = CodecUtils.encodeBytes(guideposts, ptr);
+        int maxLength = PrefixByteCodec.encodeBytes(guideposts, ptr);
         int encodedSize = ptr.getLength();
-        int unencodedSize = CodecUtils.calculateSize(guideposts);
+        int unencodedSize = PrefixByteCodec.calculateSize(guideposts);
         assertTrue(encodedSize < unencodedSize);
-        List<byte[]> listOfBytes = CodecUtils.decodeBytes(ptr, useSingleBuffer ? maxLength : -1);
+        List<byte[]> listOfBytes = PrefixByteCodec.decodeBytes(ptr, useSingleBuffer ? maxLength : -1);
         assertListByteArraysEquals(guideposts, listOfBytes);
     }
     

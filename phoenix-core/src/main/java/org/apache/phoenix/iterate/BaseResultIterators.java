@@ -81,7 +81,7 @@ import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.PTableStats;
 import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.CodecUtils;
+import org.apache.phoenix.util.PrefixByteCodec;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.PrefixByteDecoder;
 import org.apache.phoenix.util.SQLCloseables;
@@ -506,7 +506,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             input = new DataInputStream(stream);
             decoder = new PrefixByteDecoder(gps.getMaxLength());
             try {
-                while (currentKey.compareTo(currentGuidePost = CodecUtils.decode(decoder, input)) >= 0
+                while (currentKey.compareTo(currentGuidePost = PrefixByteCodec.decode(decoder, input)) >= 0
                         && currentKey.getLength() != 0) {
                     guideIndex++;
                 }
@@ -535,7 +535,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                             false);
                     scans = addNewScan(parallelScans, scans, newScan, currentGuidePostBytes, false, regionLocation);
                     currentKeyBytes = currentGuidePost.copyBytes();
-                    currentGuidePost = CodecUtils.decode(decoder, input);
+                    currentGuidePost = PrefixByteCodec.decode(decoder, input);
                     currentGuidePostBytes = currentGuidePost.copyBytes();
                     guideIndex++;
                 }
@@ -555,7 +555,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         if (!scans.isEmpty()) { // Add any remaining scans
             parallelScans.add(scans);
         }
-        CodecUtils.close(stream);
+        PrefixByteCodec.close(stream);
         return parallelScans;
     }
 

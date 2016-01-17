@@ -23,7 +23,7 @@ import java.io.IOException;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.CodecUtils;
+import org.apache.phoenix.util.PrefixByteCodec;
 import org.apache.phoenix.util.PrefixByteEncoder;
 import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 
@@ -31,7 +31,7 @@ import org.apache.phoenix.util.TrustedByteArrayOutputStream;
  * Writer to help in writing guidePosts and creating guidePostInfo. This is used when we are collecting stats or reading stats for a table.
  */
 
-public class GuidePostsInfoWriter {
+public class GuidePostsInfoBuilder {
     private PrefixByteEncoder encoder;
     private byte[] lastRow;
     private ImmutableBytesWritable guidePosts=new ImmutableBytesWritable(ByteUtil.EMPTY_BYTE_ARRAY);
@@ -56,7 +56,7 @@ public class GuidePostsInfoWriter {
     public int getMaxLength() {
         return maxLength;
     }
-    public GuidePostsInfoWriter(){
+    public GuidePostsInfoBuilder(){
         this.stream = new TrustedByteArrayOutputStream(1);
         this.output = new DataOutputStream(stream);
         this.encoder=new PrefixByteEncoder();
@@ -71,7 +71,7 @@ public class GuidePostsInfoWriter {
      * @return
      * @throws IOException 
      */
-    public boolean writeGuidePosts( byte[] row, long byteCount, long rowCount) {
+    public boolean addGuidePosts( byte[] row, long byteCount, long rowCount) {
         if (row.length != 0 && Bytes.compareTo(lastRow, row) < 0) {
             try {
                 encoder.encode(output, row, 0, row.length);
@@ -88,42 +88,26 @@ public class GuidePostsInfoWriter {
         return false;
     }
     
-    public boolean writeGuidePosts(byte[] row){
-        return writeGuidePosts(row, 0, 0);
+    public boolean addGuidePosts(byte[] row){
+        return addGuidePosts(row, 0, 0);
     }
 
-    public boolean writeGuidePosts(byte[] row, long byteCount){
-        return writeGuidePosts(row, byteCount, 0);
+    public boolean addGuidePosts(byte[] row, long byteCount){
+        return addGuidePosts(row, byteCount, 0);
     }
 
-    public void close() {
-        CodecUtils.close(stream);
+    private void close() {
+        PrefixByteCodec.close(stream);
     }
 
-    public void incrementRowCount() {
-        this.rowCount++;
-    }
-
-    public long getByteCount() {
-        return byteCount;
-    }
-
-    public int getGuidePostsCount() {
-        return guidePostsCount;
-    }
-
-    public long getRowCount() {
-        return rowCount;
-    }
-
-    public ImmutableBytesWritable getGuidePosts() {
+    public GuidePostsInfo build() {
         this.guidePosts.set(stream.getBuffer(), 0, stream.size());
-        return guidePosts;
+        GuidePostsInfo guidePostsInfo = new GuidePostsInfo(this.byteCount, this.guidePosts, this.rowCount, this.maxLength, this.guidePostsCount);
+        this.close();
+        return guidePostsInfo;
     }
-    
-    public GuidePostsInfo createGuidePostInfo(){
-        return new GuidePostsInfo(this.getByteCount(), this.getGuidePosts(), this.getRowCount(),
-                this.getMaxLength(), this.getGuidePostsCount());
+    public void incrementRowCount() {
+      this.rowCount++;
     }
 
 }
