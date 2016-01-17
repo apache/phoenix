@@ -28,7 +28,7 @@ import java.util.TreeMap;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
-import org.apache.phoenix.util.CodecUtils;
+import org.apache.phoenix.util.PrefixByteCodec;
 import org.apache.phoenix.util.PrefixByteDecoder;
 import org.apache.phoenix.util.SizedUtil;
 
@@ -82,20 +82,20 @@ public class PTableStatsImpl implements PTableStats {
                     PrefixByteDecoder decoder = new PrefixByteDecoder(entry.getValue().getMaxLength());
                     try {
                         while (true) {
-                            ImmutableBytesWritable ptr = CodecUtils.decode(decoder, input);
+                            ImmutableBytesWritable ptr = PrefixByteCodec.decode(decoder, input);
                             buf.append(Bytes.toStringBinary(ptr.get()));
                             buf.append(",");
                         }
                     } catch (EOFException e) { // Ignore as this signifies we're done
 
                     } finally {
-                        CodecUtils.close(stream);
+                        PrefixByteCodec.close(stream);
                     }
                     buf.setLength(buf.length() - 1);
                 }
                 buf.append(")");
             } finally {
-                CodecUtils.close(stream);
+                PrefixByteCodec.close(stream);
             }
         }
         buf.append("]");

@@ -60,9 +60,9 @@ public class StatisticsCollector {
 
     private long guidepostDepth;
     private long maxTimeStamp = MetaDataProtocol.MIN_TABLE_TIMESTAMP;
-    private Map<ImmutableBytesPtr, Pair<Long, GuidePostsInfoWriter>> guidePostsInfoWriterMap = Maps.newHashMap();
+    private Map<ImmutableBytesPtr, Pair<Long, GuidePostsInfoBuilder>> guidePostsInfoWriterMap = Maps.newHashMap();
     protected StatisticsWriter statsTable;
-    private Pair<Long, GuidePostsInfoWriter> cachedGps = null;
+    private Pair<Long, GuidePostsInfoBuilder> cachedGps = null;
 
     public StatisticsCollector(RegionCoprocessorEnvironment env, String tableName, long clientTimeStamp)
             throws IOException {
@@ -98,7 +98,7 @@ public class StatisticsCollector {
         // in a compaction we know the one family ahead of time
         if (family != null) {
             ImmutableBytesPtr cfKey = new ImmutableBytesPtr(family);
-            cachedGps = new Pair<Long, GuidePostsInfoWriter>(0l, new GuidePostsInfoWriter());
+            cachedGps = new Pair<Long, GuidePostsInfoBuilder>(0l, new GuidePostsInfoBuilder());
             guidePostsInfoWriterMap.put(cfKey, cachedGps);
         }
     }
@@ -109,12 +109,6 @@ public class StatisticsCollector {
 
     public void close() throws IOException {
         this.statsTable.close();
-        for (ImmutableBytesPtr ptr : guidePostsInfoWriterMap.keySet()) {
-            GuidePostsInfoWriter guidePostWriter = guidePostsInfoWriterMap.get(ptr).getSecond();
-            if (guidePostWriter != null) {
-                guidePostWriter.close();
-            }
-        }
     }
 
     public void updateStatistic(Region region) {
@@ -166,21 +160,21 @@ public class StatisticsCollector {
      */
     public void collectStatistics(final List<Cell> results) {
         Map<ImmutableBytesPtr, Boolean> famMap = Maps.newHashMap();
-        List<GuidePostsInfoWriter> rowTracker = null;
+        List<GuidePostsInfoBuilder> rowTracker = null;
         if (cachedGps == null) {
-            rowTracker = new ArrayList<GuidePostsInfoWriter>();
+            rowTracker = new ArrayList<GuidePostsInfoBuilder>();
         }
         for (Cell cell : results) {
             KeyValue kv = KeyValueUtil.ensureKeyValue(cell);
             maxTimeStamp = Math.max(maxTimeStamp, kv.getTimestamp());
-            Pair<Long, GuidePostsInfoWriter> gps;
+            Pair<Long, GuidePostsInfoBuilder> gps;
             if (cachedGps == null) {
                 ImmutableBytesPtr cfKey = new ImmutableBytesPtr(kv.getFamilyArray(), kv.getFamilyOffset(),
                         kv.getFamilyLength());
                 gps = guidePostsInfoWriterMap.get(cfKey);
                 if (gps == null) {
-                    gps = new Pair<Long, GuidePostsInfoWriter>(0l,
-                            new GuidePostsInfoWriter());
+                    gps = new Pair<Long, GuidePostsInfoBuilder>(0l,
+                            new GuidePostsInfoBuilder());
                     guidePostsInfoWriterMap.put(cfKey, gps);
                 }
                 if (famMap.get(cfKey) == null) {
@@ -196,13 +190,13 @@ public class StatisticsCollector {
             if (byteCount >= guidepostDepth) {
                 byte[] row = ByteUtil.copyKeyBytesIfNecessary(
                         new ImmutableBytesWritable(kv.getRowArray(), kv.getRowOffset(), kv.getRowLength()));
-                if (gps.getSecond().writeGuidePosts(row, byteCount)) {
+                if (gps.getSecond().addGuidePosts(row, byteCount)) {
                     gps.setFirst(0l);
                 }
             }
         }
         if (cachedGps == null) {
-            for (GuidePostsInfoWriter s : rowTracker) {
+            for (GuidePostsInfoBuilder s : rowTracker) {
                 s.incrementRowCount();
             }
         } else {
@@ -231,8 +225,8 @@ public class StatisticsCollector {
     }
 
     public GuidePostsInfo getGuidePosts(ImmutableBytesPtr fam) {
-        Pair<Long, GuidePostsInfoWriter> pair = guidePostsInfoWriterMap.get(fam);
-        if (pair != null) { return pair.getSecond().createGuidePostInfo(); }
+        Pair<Long, GuidePostsInfoBuilder> pair = guidePostsInfoWriterMap.get(fam);
+        if (pair != null) { return pair.getSecond().build(); }
         return null;
     }
 
