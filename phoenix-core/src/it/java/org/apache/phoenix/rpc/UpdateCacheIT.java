@@ -52,8 +52,8 @@ import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
-import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.mockito.Mockito;
@@ -76,48 +76,86 @@ public class UpdateCacheIT extends BaseHBaseManagedTimeIT {
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
     
-    @Before
-    public void setUp() throws SQLException {
-        ensureTableCreated(getUrl(), MUTABLE_INDEX_DATA_TABLE);
-        ensureTableCreated(getUrl(), TRANSACTIONAL_DATA_TABLE);
-    }
-
-    private static void setupSystemTable(Long scn) throws SQLException {
+    private static void setupSystemTable(String fullTableName) throws SQLException {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        if (scn != null) {
-            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(scn));
-        }
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.createStatement().execute(
-            "create table " + QueryConstants.SYSTEM_SCHEMA_NAME + QueryConstants.NAME_SEPARATOR + MUTABLE_INDEX_DATA_TABLE + TEST_TABLE_SCHEMA);
+            "create table " + fullTableName + TEST_TABLE_SCHEMA);
         }
     }
     
     @Test
     public void testUpdateCacheForTxnTable() throws Exception {
-        helpTestUpdateCache(true, false, null);
+        String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + TRANSACTIONAL_DATA_TABLE;
+        ensureTableCreated(getUrl(), TRANSACTIONAL_DATA_TABLE);
+        helpTestUpdateCache(fullTableName, null, new int[] {1, 1});
     }
     
     @Test
     public void testUpdateCacheForNonTxnTable() throws Exception {
-        helpTestUpdateCache(false, false, null);
+        String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + MUTABLE_INDEX_DATA_TABLE;
+        ensureTableCreated(getUrl(), MUTABLE_INDEX_DATA_TABLE);
+        helpTestUpdateCache(fullTableName, null, new int[] {1, 3});
     }
 	
     @Test
     public void testUpdateCacheForNonTxnSystemTable() throws Exception {
-        helpTestUpdateCache(false, true, null);
+        String fullTableName = QueryConstants.SYSTEM_SCHEMA_NAME + QueryConstants.NAME_SEPARATOR + MUTABLE_INDEX_DATA_TABLE;
+        setupSystemTable(fullTableName);
+        helpTestUpdateCache(fullTableName, null, new int[] {0, 0});
     }
     
-	public static void helpTestUpdateCache(boolean isTransactional, boolean isSystem, Long scn) throws Exception {
-	    String tableName = isTransactional ? TRANSACTIONAL_DATA_TABLE : MUTABLE_INDEX_DATA_TABLE;
-	    String schemaName;
-	    if (isSystem) {
-	        setupSystemTable(scn);
-	        schemaName = QueryConstants.SYSTEM_SCHEMA_NAME;
-	    } else {
-	        schemaName = INDEX_DATA_SCHEMA;
-	    }
-	    String fullTableName = schemaName + QueryConstants.NAME_SEPARATOR + tableName;
+    @Test
+    public void testUpdateCacheForNeverUpdatedTable() throws Exception {
+        String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + MUTABLE_INDEX_DATA_TABLE;
+        ensureTableCreated(getUrl(), MUTABLE_INDEX_DATA_TABLE);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute(
+            "alter table " + fullTableName + " SET UPDATE_CACHE_FREQUENCY=NEVER");
+        }
+        helpTestUpdateCache(fullTableName, null, new int[] {0, 0});
+    }
+    
+    @Test
+    public void testUpdateCacheForAlwaysUpdatedTable() throws Exception {
+        String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + MUTABLE_INDEX_DATA_TABLE;
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute("CREATE TABLE " + fullTableName + TEST_TABLE_SCHEMA + " UPDATE_CACHE_FREQUENCY=always");
+        }
+        helpTestUpdateCache(fullTableName, null, new int[] {1, 3});
+    }
+    
+    @Test
+    public void testUpdateCacheForTimeLimitedUpdateTable() throws Exception {
+        String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + MUTABLE_INDEX_DATA_TABLE;
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute("CREATE TABLE " + fullTableName + TEST_TABLE_SCHEMA + " UPDATE_CACHE_FREQUENCY=" + 10000);
+        }
+        helpTestUpdateCache(fullTableName, null, new int[] {0, 0});
+        Thread.sleep(10000);
+        helpTestUpdateCache(fullTableName, null, new int[] {1, 0});
+    }
+    
+    @Test
+    public void testUpdateCacheForChangingUpdateTable() throws Exception {
+        String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + MUTABLE_INDEX_DATA_TABLE;
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute("CREATE TABLE " + fullTableName + TEST_TABLE_SCHEMA + " UPDATE_CACHE_FREQUENCY=never");
+        }
+        helpTestUpdateCache(fullTableName, null, new int[] {0, 0});
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute("ALTER TABLE " + fullTableName + " SET UPDATE_CACHE_FREQUENCY=ALWAYS");
+        }
+        helpTestUpdateCache(fullTableName, null, new int[] {1, 3});
+    }
+    
+	public static void helpTestUpdateCache(String fullTableName, Long scn, int[] expectedRPCs) throws Exception {
+	    String tableName = SchemaUtil.getTableNameFromFullName(fullTableName);
+	    String schemaName = SchemaUtil.getSchemaNameFromFullName(fullTableName);
 		String selectSql = "SELECT * FROM "+fullTableName;
 		// use a spyed ConnectionQueryServices so we can verify calls to getTable
 		ConnectionQueryServices connectionQueryServices = Mockito.spy(driver.getConnectionQueryServices(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)));
@@ -139,7 +177,7 @@ public class UpdateCacheIT extends BaseHBaseManagedTimeIT {
 			TestUtil.setRowKeyColumns(stmt, 3);
 			stmt.execute();
 			conn.commit();
-            int numUpsertRpcs = isSystem ? 0 : 1; 
+            int numUpsertRpcs = expectedRPCs[0];
 			// verify only 0 or 1 rpc to fetch table metadata, 
             verify(connectionQueryServices, times(numUpsertRpcs)).getTable((PName)isNull(), eq(PVarchar.INSTANCE.toBytes(schemaName)), eq(PVarchar.INSTANCE.toBytes(tableName)), anyLong(), anyLong());
             reset(connectionQueryServices);
@@ -172,7 +210,7 @@ public class UpdateCacheIT extends BaseHBaseManagedTimeIT {
             // for non-transactional tables with a scn : verify *only* one rpc occurs
             // for transactional tables : verify *only* one rpc occurs
 	        // for non-transactional, system tables : verify no rpc occurs
-            int numRpcs = isSystem ? 0 : (isTransactional || scn!=null ? 1 : 3); 
+            int numRpcs = expectedRPCs[1]; 
             verify(connectionQueryServices, times(numRpcs)).getTable((PName)isNull(), eq(PVarchar.INSTANCE.toBytes(schemaName)), eq(PVarchar.INSTANCE.toBytes(tableName)), anyLong(), anyLong());
 		}
         finally {

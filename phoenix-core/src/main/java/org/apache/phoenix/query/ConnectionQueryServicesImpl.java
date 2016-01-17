@@ -629,12 +629,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
      }
 
     @Override
-    public PMetaData addColumn(final PName tenantId, final String tableName, final List<PColumn> columns, final long tableTimeStamp, final long tableSeqNum, final boolean isImmutableRows, final boolean isWalDisabled, final boolean isMultitenant, final boolean storeNulls, final boolean isTransactional, final long resolvedTime) throws SQLException {
+    public PMetaData addColumn(final PName tenantId, final String tableName, final List<PColumn> columns, final long tableTimeStamp, 
+            final long tableSeqNum, final boolean isImmutableRows, final boolean isWalDisabled, final boolean isMultitenant, 
+            final boolean storeNulls, final boolean isTransactional, final long updateCacheFrequency, final long resolvedTime) throws SQLException {
         return metaDataMutated(tenantId, tableName, tableSeqNum, new Mutator() {
             @Override
             public PMetaData mutate(PMetaData metaData) throws SQLException {
                 try {
-                    return metaData.addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows, isWalDisabled, isMultitenant, storeNulls, isTransactional, resolvedTime);
+                    return metaData.addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows, isWalDisabled, isMultitenant, storeNulls, isTransactional, updateCacheFrequency, resolvedTime);
                 } catch (TableNotFoundException e) {
                     // The DROP TABLE may have been processed first, so just ignore.
                     return metaData;
@@ -2409,17 +2411,20 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 }
                                 if (currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_6_0) {
                                     columnsToAdd = PhoenixDatabaseMetaData.IS_ROW_TIMESTAMP + " " + PBoolean.INSTANCE.getSqlTypeName();
-                                    metaConnection = addColumn(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-                                            MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_6_0, columnsToAdd, false);
+                                    metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
+                                            MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_6_0, columnsToAdd);
                                 }
                                 if(currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0) {
-                                    columnsToAdd = PhoenixDatabaseMetaData.TRANSACTIONAL + " " + PBoolean.INSTANCE.getSqlTypeName();
-                                    metaConnection = addColumn(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-                                            MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0, columnsToAdd, false);
-									// Drop old stats table so that new stats
-									// table
+                                    // Add these columns one at a time, each with different timestamps so that if folks have
+                                    // run the upgrade code already for a snapshot, we'll still enter this block (and do the
+                                    // parts we haven't yet done).
+                                    metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG, MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0 - 2,
+                                            PhoenixDatabaseMetaData.TRANSACTIONAL + " " + PBoolean.INSTANCE.getSqlTypeName());
+                                    metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG, MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0 - 1, 
+                                            PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY + " " + PLong.INSTANCE.getSqlTypeName());
+									// Drop old stats table so that new stats table is created
 									metaConnection = dropStatsTable(metaConnection,
-											MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0 - 1);
+											MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0);
                                 }
                                 
                             }
@@ -2538,7 +2543,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 	private PhoenixConnection dropStatsTable(PhoenixConnection oldMetaConnection, long timestamp)
 			throws SQLException, IOException {
 		Properties props = PropertiesUtil.deepCopy(oldMetaConnection.getClientInfo());
-		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(timestamp));
+		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(timestamp-1));
 		PhoenixConnection metaConnection = new PhoenixConnection(oldMetaConnection, this, props);
 		SQLException sqlE = null;
 		boolean wasCommit = metaConnection.getAutoCommit();
@@ -2568,23 +2573,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 			}
 		}
 
-		HBaseAdmin admin = null;
-		try {
-			admin = getAdmin();
-			admin.disableTable(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES);
-			try {
-				admin.deleteTable(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES);
-			} catch (org.apache.hadoop.hbase.TableNotFoundException e) {
-				logger.debug("Stats table was not found during upgrade!!");
-			}
-		} finally {
-			if (admin != null)
-				admin.close();
-		}
 		oldMetaConnection = metaConnection;
 		props = PropertiesUtil.deepCopy(oldMetaConnection.getClientInfo());
-		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
-				Long.toString(MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0));
+		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(timestamp));
 		try {
 			metaConnection = new PhoenixConnection(oldMetaConnection, ConnectionQueryServicesImpl.this, props);
 		} finally {
