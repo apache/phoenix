@@ -135,7 +135,7 @@ public class MutationState implements SQLCloseable {
     private int numRows = 0;
     private int[] uncommittedStatementIndexes = EMPTY_STATEMENT_INDEX_ARRAY;
     private boolean isExternalTxContext = false;
-    private Map<TableRef, Map<ImmutableBytesPtr,RowMutationState>> txMutations;
+    private Map<TableRef, Map<ImmutableBytesPtr,RowMutationState>> txMutations = Collections.emptyMap();
     
     private final MutationMetricQueue mutationMetricQueue;
     private ReadMetricQueue readMetricQueue;
@@ -435,6 +435,59 @@ public class MutationState implements SQLCloseable {
         return sizeOffset + numRows;
     }
     
+    private void joinMutationState(TableRef tableRef, Map<ImmutableBytesPtr,RowMutationState> srcRows,
+            Map<TableRef, Map<ImmutableBytesPtr, RowMutationState>> dstMutations) {
+        PTable table = tableRef.getTable();
+        boolean isIndex = table.getType() == PTableType.INDEX;
+        boolean incrementRowCount = dstMutations == this.mutations;
+        Map<ImmutableBytesPtr,RowMutationState> existingRows = dstMutations.put(tableRef, srcRows);
+        if (existingRows != null) { // Rows for that table already exist
+            // Loop through new rows and replace existing with new
+            for (Map.Entry<ImmutableBytesPtr,RowMutationState> rowEntry : srcRows.entrySet()) {
+                // Replace existing row with new row
+                RowMutationState existingRowMutationState = existingRows.put(rowEntry.getKey(), rowEntry.getValue());
+                if (existingRowMutationState != null) {
+                    Map<PColumn,byte[]> existingValues = existingRowMutationState.getColumnValues();
+                    if (existingValues != PRow.DELETE_MARKER) {
+                        Map<PColumn,byte[]> newRow = rowEntry.getValue().getColumnValues();
+                        // if new row is PRow.DELETE_MARKER, it means delete, and we don't need to merge it with existing row. 
+                        if (newRow != PRow.DELETE_MARKER) {
+                            // Merge existing column values with new column values
+                            existingRowMutationState.join(rowEntry.getValue());
+                            // Now that the existing row has been merged with the new row, replace it back
+                            // again (since it was merged with the new one above).
+                            existingRows.put(rowEntry.getKey(), existingRowMutationState);
+                        }
+                    }
+                } else {
+                    if (incrementRowCount && !isIndex) { // Don't count index rows in row count
+                        numRows++;
+                    }
+                }
+            }
+            // Put the existing one back now that it's merged
+            dstMutations.put(tableRef, existingRows);
+        } else {
+            // Size new map at batch size as that's what it'll likely grow to.
+            Map<ImmutableBytesPtr,RowMutationState> newRows = Maps.newHashMapWithExpectedSize(connection.getMutateBatchSize());
+            newRows.putAll(srcRows);
+            dstMutations.put(tableRef, newRows);
+            if (incrementRowCount && !isIndex) {
+                numRows += srcRows.size();
+            }
+        }
+    }
+    
+    private void joinMutationState(Map<TableRef, Map<ImmutableBytesPtr, RowMutationState>> srcMutations, 
+            Map<TableRef, Map<ImmutableBytesPtr, RowMutationState>> dstMutations) {
+        // Merge newMutation with this one, keeping state from newMutation for any overlaps
+        for (Map.Entry<TableRef, Map<ImmutableBytesPtr,RowMutationState>> entry : srcMutations.entrySet()) {
+            // Replace existing entries for the table with new entries
+            TableRef tableRef = entry.getKey();
+            Map<ImmutableBytesPtr,RowMutationState> srcRows = entry.getValue();
+            joinMutationState(tableRef, srcRows, dstMutations);
+        }
+    }
     /**
      * Combine a newer mutation with this one, where in the event of overlaps, the newer one will take precedence.
      * Combine any metrics collected for the newer mutation.
@@ -453,48 +506,12 @@ public class MutationState implements SQLCloseable {
             txAwares.addAll(newMutationState.txAwares);
         }
         this.sizeOffset += newMutationState.sizeOffset;
-        // Merge newMutation with this one, keeping state from newMutation for any overlaps
-        for (Map.Entry<TableRef, Map<ImmutableBytesPtr,RowMutationState>> entry : newMutationState.mutations.entrySet()) {
-            // Replace existing entries for the table with new entries
-            TableRef tableRef = entry.getKey();
-            PTable table = tableRef.getTable();
-            boolean isIndex = table.getType() == PTableType.INDEX;
-            Map<ImmutableBytesPtr,RowMutationState> existingRows = this.mutations.put(tableRef, entry.getValue());
-            if (existingRows != null) { // Rows for that table already exist
-                // Loop through new rows and replace existing with new
-                for (Map.Entry<ImmutableBytesPtr,RowMutationState> rowEntry : entry.getValue().entrySet()) {
-                    // Replace existing row with new row
-                    RowMutationState existingRowMutationState = existingRows.put(rowEntry.getKey(), rowEntry.getValue());
-                    if (existingRowMutationState != null) {
-                        Map<PColumn,byte[]> existingValues = existingRowMutationState.getColumnValues();
-                        if (existingValues != PRow.DELETE_MARKER) {
-                            Map<PColumn,byte[]> newRow = rowEntry.getValue().getColumnValues();
-                            // if new row is PRow.DELETE_MARKER, it means delete, and we don't need to merge it with existing row. 
-                            if (newRow != PRow.DELETE_MARKER) {
-                                // Merge existing column values with new column values
-                                existingRowMutationState.join(rowEntry.getValue());
-                                // Now that the existing row has been merged with the new row, replace it back
-                                // again (since it was merged with the new one above).
-                                existingRows.put(rowEntry.getKey(), existingRowMutationState);
-                            }
-                        }
-                    } else {
-                        if (!isIndex) { // Don't count index rows in row count
-                            numRows++;
-                        }
-                    }
-                }
-                // Put the existing one back now that it's merged
-                this.mutations.put(entry.getKey(), existingRows);
-            } else {
-                // Size new map at batch size as that's what it'll likely grow to.
-                Map<ImmutableBytesPtr,RowMutationState> newRows = Maps.newHashMapWithExpectedSize(connection.getMutateBatchSize());
-                newRows.putAll(entry.getValue());
-                this.mutations.put(tableRef, newRows);
-                if (!isIndex) {
-                    numRows += entry.getValue().size();
-                }
+        joinMutationState(newMutationState.mutations, this.mutations);
+        if (!newMutationState.txMutations.isEmpty()) {
+            if (txMutations.isEmpty()) {
+                txMutations = Maps.newHashMapWithExpectedSize(mutations.size());
             }
+            joinMutationState(newMutationState.txMutations, this.txMutations);
         }
         mutationMetricQueue.combineMetricQueues(newMutationState.mutationMetricQueue);
         if (readMetricQueue == null) {
@@ -915,6 +932,7 @@ public class MutationState implements SQLCloseable {
                             long startTime = System.currentTimeMillis();
                             child.addTimelineAnnotation("Attempt " + retryCount);
                             hTable.batch(mutationList);
+                            if (logger.isDebugEnabled()) logger.debug("Sent batch of " + numMutations + " for " + Bytes.toString(htableName));
                             child.stop();
                             child.stop();
                             shouldRetry = false;
@@ -980,13 +998,13 @@ public class MutationState implements SQLCloseable {
                 // committed in the event of a failure.
                 if (isTransactional) {
                     addUncommittedStatementIndexes(valuesMap.values());
-                    if (txMutations == null) {
+                    if (txMutations.isEmpty()) {
                         txMutations = Maps.newHashMapWithExpectedSize(mutations.size());
                     }
                     // Keep all mutations we've encountered until a commit or rollback.
                     // This is not ideal, but there's not good way to get the values back
                     // in the event that we need to replay the commit.
-                    txMutations.put(tableRef, valuesMap);
+                    joinMutationState(tableRef, valuesMap, txMutations);
                 }
                 // Remove batches as we process them
                 if (sendAll) {
@@ -1082,7 +1100,7 @@ public class MutationState implements SQLCloseable {
     private void resetTransactionalState() {
         tx = null;
         txAwares.clear();
-        txMutations = null;
+        txMutations = Collections.emptyMap();
         uncommittedPhysicalNames.clear();
         uncommittedStatementIndexes = EMPTY_STATEMENT_INDEX_ARRAY;
     }
@@ -1187,9 +1205,7 @@ public class MutationState implements SQLCloseable {
                 break;
             }
             retryCount++;
-            if (txMutations != null) {
-                mutations.putAll(txMutations);
-            }
+            mutations.putAll(txMutations);
         } while (true);
     }
 
@@ -1214,6 +1230,7 @@ public class MutationState implements SQLCloseable {
             if (result.getTable() == null) {
                 throw new TableNotFoundException(dataTable.getSchemaName().getString(), dataTable.getTableName().getString());
             }
+            tableRef.setTable(result.getTable());
             if (!result.wasUpdated()) {
                 if (logger.isInfoEnabled()) logger.info("No updates to " + dataTable.getName().getString() + " as of "  + timestamp);
                 continue;
@@ -1223,7 +1240,7 @@ public class MutationState implements SQLCloseable {
                 // that an index was dropped and recreated with the same name but different
                 // indexed/covered columns.
                 addedIndexes = (!oldIndexes.equals(result.getTable().getIndexes()));
-                if (logger.isInfoEnabled()) logger.info((addedIndexes ? "Updates " : "No updates ") + "as of "  + timestamp + " to " + dataTable.getName().getString() + " with indexes " + dataTable.getIndexes());
+                if (logger.isInfoEnabled()) logger.info((addedIndexes ? "Updates " : "No updates ") + "as of "  + timestamp + " to " + dataTable.getName().getString() + " with indexes " + tableRef.getTable().getIndexes());
             }
         }
         if (logger.isInfoEnabled()) logger.info((addedIndexes ? "Updates " : "No updates ") + "to indexes as of "  + getInitialWritePointer());
