@@ -479,8 +479,8 @@ public class MetaDataClient {
         // Do not make rpc to getTable if 
         // 1. table is a system table
         // 2. table was already resolved as of that timestamp
-		if (table != null && !alwaysHitServer
-				&& (systemTable || resolvedTimestamp == tableResolvedTimestamp || connection.getMetaDataCache().getAge(tableRef) < table.getUpdateCacheFrequency())) {
+        if (table != null && !alwaysHitServer
+                && (systemTable || resolvedTimestamp == tableResolvedTimestamp || connection.getMetaDataCache().getAge(tableRef) < table.getUpdateCacheFrequency())) {
             return new MetaDataMutationResult(MutationCode.TABLE_ALREADY_EXISTS, QueryConstants.UNSET_TIMESTAMP, table);
         }
 
@@ -1383,6 +1383,7 @@ public class MetaDataClient {
             return new MutationState(0,connection);
         }
 
+        if (logger.isInfoEnabled()) logger.info("Created index " + table.getName().getString() + " at " + table.getTimeStamp());
         // In async process, we return immediately as the MR job needs to be triggered .
         if(statement.isAsync()) {
             return new MutationState(0, connection);
@@ -2887,19 +2888,19 @@ public class MetaDataClient {
                     String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
                     long resolvedTimeStamp = TransactionUtil.getResolvedTime(connection, result);
                     if (table.getIndexes().isEmpty() || (numPkColumnsAdded==0 && !nonTxToTx)) {
-						connection.addColumn(
-								tenantId,
-								fullTableName,
-								columns,
-								result.getMutationTime(),
-								seqNum,
-								isImmutableRows == null ? table.isImmutableRows() : isImmutableRows,
-								disableWAL == null ? table.isWALDisabled() : disableWAL,
-								multiTenant == null ? table.isMultiTenant() : multiTenant,
-								storeNulls == null ? table.getStoreNulls() : storeNulls, 
-								isTransactional == null ? table.isTransactional() : isTransactional,
-								updateCacheFrequency == null ? table.getUpdateCacheFrequency() : updateCacheFrequency,
-								resolvedTimeStamp);
+                        connection.addColumn(
+                                tenantId,
+                                fullTableName,
+                                columns,
+                                result.getMutationTime(),
+                                seqNum,
+                                isImmutableRows == null ? table.isImmutableRows() : isImmutableRows,
+                                disableWAL == null ? table.isWALDisabled() : disableWAL,
+                                multiTenant == null ? table.isMultiTenant() : multiTenant,
+                                storeNulls == null ? table.getStoreNulls() : storeNulls, 
+                                isTransactional == null ? table.isTransactional() : isTransactional,
+                                updateCacheFrequency == null ? table.getUpdateCacheFrequency() : updateCacheFrequency,
+                                resolvedTimeStamp);
                     } else if (updateCacheFrequency != null) {
                         // Force removal from cache as the update cache frequency has changed
                         // Note that clients outside this JVM won't be affected.
