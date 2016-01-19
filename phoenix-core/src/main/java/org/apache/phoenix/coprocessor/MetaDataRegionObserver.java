@@ -18,10 +18,6 @@
 package org.apache.phoenix.coprocessor;
 
 import java.io.IOException;
-
-import org.apache.log4j.Level;
-import org.apache.log4j.Logger;
-import org.apache.phoenix.jdbc.PhoenixDriver;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -36,28 +32,45 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Delete;
+import org.apache.hadoop.hbase.client.Get;
+import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.filter.SingleColumnValueFilter;
 import org.apache.hadoop.hbase.filter.CompareFilter;
+import org.apache.hadoop.hbase.filter.SingleColumnValueFilter;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.log4j.Level;
+import org.apache.log4j.Logger;
 import org.apache.phoenix.cache.GlobalCache;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixDriver;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PIndexState;
-import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
+
+import com.google.common.collect.Lists;
 
 
 /**
@@ -69,6 +82,8 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
     protected ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(1);
     private boolean enableRebuildIndex = QueryServicesOptions.DEFAULT_INDEX_FAILURE_HANDLING_REBUILD;
     private long rebuildIndexTimeInterval = QueryServicesOptions.DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_INTERVAL;
+    public static final byte[] UPGRADE_TO_4_7_COLUMN_NAME = Bytes.toBytes("UPGRADE_TO_4_7");
+    public static final String UPGRADE_TO_4_7_COLUMN_VALUE = "TRUNCATED_4_7";
 
     @Override
     public void preClose(final ObserverContext<RegionCoprocessorEnvironment> c,
@@ -96,10 +111,109 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
         rebuildIndexTimeInterval = env.getConfiguration().getLong(QueryServices.INDEX_FAILURE_HANDLING_REBUILD_INTERVAL_ATTRIB,
             QueryServicesOptions.DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_INTERVAL);
     }
-
+    
+    private static String getJdbcUrl(RegionCoprocessorEnvironment env) {
+        String zkQuorum = env.getConfiguration().get(HConstants.ZOOKEEPER_QUORUM);
+        String zkClientPort = env.getConfiguration().get(HConstants.ZOOKEEPER_CLIENT_PORT,
+            Integer.toString(HConstants.DEFAULT_ZOOKEPER_CLIENT_PORT));
+        String zkParentNode = env.getConfiguration().get(HConstants.ZOOKEEPER_ZNODE_PARENT,
+            HConstants.DEFAULT_ZOOKEEPER_ZNODE_PARENT);
+        return PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum
+            + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkClientPort
+            + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkParentNode;
+    }
 
     @Override
     public void postOpen(ObserverContext<RegionCoprocessorEnvironment> e) {
+        final RegionCoprocessorEnvironment env = e.getEnvironment();
+
+        Runnable r = new Runnable() {
+            @Override
+            public void run() {
+                HTableInterface metaTable = null;
+                HTableInterface statsTable = null;
+                try {
+                    Thread.sleep(1000);
+                    LOG.info("Stats will be deleted for upgrade 4.7 requirement!!");
+                    metaTable = env.getTable(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME));
+                    List<Cell> columnCells = metaTable
+                            .get(new Get(SchemaUtil.getTableKey(null, PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME,
+                                    PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE)))
+                            .getColumnCells(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                                    QueryConstants.EMPTY_COLUMN_BYTES);
+                    if (!columnCells.isEmpty()
+                            && columnCells.get(0).getTimestamp() < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0) {
+
+                        statsTable = env.getTable(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME));
+                        byte[] statsTableKey = SchemaUtil.getTableKey(null, PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME,
+                                PhoenixDatabaseMetaData.SYSTEM_STATS_TABLE);
+                        KeyValue upgradeKV = KeyValueUtil.newKeyValue(statsTableKey,
+                                PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES, UPGRADE_TO_4_7_COLUMN_NAME,
+                                MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0 - 1,
+                                PVarchar.INSTANCE.toBytes(UPGRADE_TO_4_7_COLUMN_VALUE));
+                        Put upgradePut = new Put(statsTableKey);
+                        upgradePut.add(upgradeKV);
+
+                        // check for null in UPGRADE_TO_4_7_COLUMN_NAME in checkAndPut so that only single client
+                        // drop the rows of SYSTEM.STATS
+                        if (metaTable.checkAndPut(statsTableKey, PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                                UPGRADE_TO_4_7_COLUMN_NAME, null, upgradePut)) {
+                            List<Mutation> mutations = Lists.newArrayListWithExpectedSize(1000);
+                            Scan scan = new Scan();
+                            scan.setRaw(true);
+                            scan.setMaxVersions();
+                            ResultScanner statsScanner = statsTable.getScanner(scan);
+                            Result r;
+                            mutations.clear();
+                            int count = 0;
+                            while ((r = statsScanner.next()) != null) {
+                                Delete delete = null;
+                                for (KeyValue keyValue : r.raw()) {
+                                    if (KeyValue.Type.codeToType(keyValue.getType()) == KeyValue.Type.Put) {
+                                        if (delete == null) {
+                                            delete = new Delete(keyValue.getRow());
+                                        }
+                                        KeyValue deleteKeyValue = new KeyValue(keyValue.getRowArray(),
+                                                keyValue.getRowOffset(), keyValue.getRowLength(),
+                                                keyValue.getFamilyArray(), keyValue.getFamilyOffset(),
+                                                keyValue.getFamilyLength(), keyValue.getQualifierArray(),
+                                                keyValue.getQualifierOffset(), keyValue.getQualifierLength(),
+                                                keyValue.getTimestamp(), KeyValue.Type.Delete,
+                                                ByteUtil.EMPTY_BYTE_ARRAY, 0, 0);
+                                        delete.addDeleteMarker(deleteKeyValue);
+                                    }
+                                }
+                                if (delete != null) {
+                                    mutations.add(delete);
+                                    if (count > 1000) {
+                                        statsTable.batch(mutations);
+                                        mutations.clear();
+                                        count = 0;
+                                    }
+                                    count++;
+                                }
+                            }
+                            if (!mutations.isEmpty()) {
+                                statsTable.batch(mutations);
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    LOG.warn("Exception while deleting stats..", e);
+                } finally {
+                    try {
+                        if (metaTable != null) {
+                            metaTable.close();
+                        }
+                        if (statsTable != null) {
+                            statsTable.close();
+                        }
+                    } catch (IOException e) {}
+                }
+            }
+        };
+        (new Thread(r)).start();
+
         if (!enableRebuildIndex) {
             LOG.info("Failure Index Rebuild is skipped by configuration.");
             return;
@@ -132,17 +246,6 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
 
         public BuildIndexScheduleTask(RegionCoprocessorEnvironment env) {
             this.env = env;
-        }
-
-        private String getJdbcUrl() {
-            String zkQuorum = this.env.getConfiguration().get(HConstants.ZOOKEEPER_QUORUM);
-            String zkClientPort = this.env.getConfiguration().get(HConstants.ZOOKEEPER_CLIENT_PORT,
-                Integer.toString(HConstants.DEFAULT_ZOOKEPER_CLIENT_PORT));
-            String zkParentNode = this.env.getConfiguration().get(HConstants.ZOOKEEPER_ZNODE_PARENT,
-                HConstants.DEFAULT_ZOOKEEPER_ZNODE_PARENT);
-            return PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum
-                + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkClientPort
-                + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkParentNode;
         }
 
         @Override
@@ -219,7 +322,7 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
                     }
 
                     if (conn == null) {
-                        conn = DriverManager.getConnection(getJdbcUrl()).unwrap(PhoenixConnection.class);
+                        conn = DriverManager.getConnection(getJdbcUrl(env)).unwrap(PhoenixConnection.class);
                     }
 
                     String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTable);
