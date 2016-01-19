@@ -1231,10 +1231,6 @@ public class MutationState implements SQLCloseable {
                 throw new TableNotFoundException(dataTable.getSchemaName().getString(), dataTable.getTableName().getString());
             }
             tableRef.setTable(result.getTable());
-            if (!result.wasUpdated()) {
-                if (logger.isInfoEnabled()) logger.info("No updates to " + dataTable.getName().getString() + " as of "  + timestamp);
-                continue;
-            }
             if (!addedIndexes) {
                 // TODO: in theory we should do a deep equals check here, as it's possible
                 // that an index was dropped and recreated with the same name but different
