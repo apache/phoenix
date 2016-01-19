@@ -563,7 +563,7 @@ public class TestUtil {
         String query = "UPDATE STATISTICS " + tableName;
         conn.createStatement().execute(query);
         // if the table is transactional burn a txn in order to make sure the next txn read pointer is close to wall clock time
-        TransactionUtil.getTableTimestamp(conn.unwrap(PhoenixConnection.class), transactional);
+        conn.commit();
     }
     
     public static void analyzeTableIndex(Connection conn, String tableName) throws IOException, SQLException {
