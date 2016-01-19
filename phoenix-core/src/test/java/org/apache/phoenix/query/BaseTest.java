@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.query;
 
+import static org.apache.phoenix.query.BaseTest.setUpConfigForMiniCluster;
 import static org.apache.phoenix.util.PhoenixRuntime.CURRENT_SCN_ATTRIB;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
@@ -150,6 +151,7 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.hbase.index.balancer.IndexLoadBalancer;
 import org.apache.phoenix.hbase.index.master.IndexMasterObserver;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
@@ -200,7 +202,7 @@ import com.google.inject.util.Providers;
 public abstract class BaseTest {
     protected static final String TEST_TABLE_SCHEMA = "(" +
             "   varchar_pk VARCHAR NOT NULL, " +
-            "   char_pk CHAR(6) NOT NULL, " +
+            "   char_pk CHAR(10) NOT NULL, " +
             "   int_pk INTEGER NOT NULL, "+ 
             "   long_pk BIGINT NOT NULL, " +
             "   decimal_pk DECIMAL(31, 10) NOT NULL, " +
@@ -1805,77 +1807,44 @@ public abstract class BaseTest {
     public HBaseTestingUtility getUtility() {
         return utility;
     }
+    
+    public static void upsertRows(Connection conn, String fullTableName, int numRows) throws SQLException {
+    	for (int i=1; i<=numRows; ++i) {
+	        upsertRow(conn, fullTableName, i, false);
+    	}
+    }
+
+    public static void upsertRow(Connection conn, String fullTableName, int index, boolean firstRowInBatch) throws SQLException {
+    	String upsert = "UPSERT INTO " + fullTableName
+                + " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+		PreparedStatement stmt = conn.prepareStatement(upsert);
+		stmt.setString(1, firstRowInBatch ? "firstRowInBatch_" : "" + "varchar"+index);
+		stmt.setString(2, "char"+index);
+		stmt.setInt(3, index);
+		stmt.setLong(4, index);
+		stmt.setBigDecimal(5, new BigDecimal(index));
+		Date date = DateUtil.parseDate("2015-01-01 00:00:00");
+		stmt.setDate(6, date);
+		stmt.setString(7, "varchar_a");
+		stmt.setString(8, "chara");
+		stmt.setInt(9, index+1);
+		stmt.setLong(10, index+1);
+		stmt.setBigDecimal(11, new BigDecimal(index+1));
+		stmt.setDate(12, date);
+		stmt.setString(13, "varchar_b");
+		stmt.setString(14, "charb");
+		stmt.setInt(15, index+2);
+		stmt.setLong(16, index+2);
+		stmt.setBigDecimal(17, new BigDecimal(index+2));
+		stmt.setDate(18, date);
+		stmt.executeUpdate();
+	}
 
     // Populate the test table with data.
     public static void populateTestTable(String fullTableName) throws SQLException {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            String upsert = "UPSERT INTO " + fullTableName
-                    + " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-            PreparedStatement stmt = conn.prepareStatement(upsert);
-            stmt.setString(1, "varchar1");
-            stmt.setString(2, "char1");
-            stmt.setInt(3, 1);
-            stmt.setLong(4, 1L);
-            stmt.setBigDecimal(5, new BigDecimal(1.0));
-            Date date = DateUtil.parseDate("2015-01-01 00:00:00");
-            stmt.setDate(6, date);
-            stmt.setString(7, "varchar_a");
-            stmt.setString(8, "chara");
-            stmt.setInt(9, 2);
-            stmt.setLong(10, 2L);
-            stmt.setBigDecimal(11, new BigDecimal(2.0));
-            stmt.setDate(12, date);
-            stmt.setString(13, "varchar_b");
-            stmt.setString(14, "charb");
-            stmt.setInt(15, 3);
-            stmt.setLong(16, 3L);
-            stmt.setBigDecimal(17, new BigDecimal(3.0));
-            stmt.setDate(18, date);
-            stmt.executeUpdate();
-            
-            stmt.setString(1, "varchar2");
-            stmt.setString(2, "char2");
-            stmt.setInt(3, 2);
-            stmt.setLong(4, 2L);
-            stmt.setBigDecimal(5, new BigDecimal(2.0));
-            date = DateUtil.parseDate("2015-01-02 00:00:00");
-            stmt.setDate(6, date);
-            stmt.setString(7, "varchar_a");
-            stmt.setString(8, "chara");
-            stmt.setInt(9, 3);
-            stmt.setLong(10, 3L);
-            stmt.setBigDecimal(11, new BigDecimal(3.0));
-            stmt.setDate(12, date);
-            stmt.setString(13, "varchar_b");
-            stmt.setString(14, "charb");
-            stmt.setInt(15, 4);
-            stmt.setLong(16, 4L);
-            stmt.setBigDecimal(17, new BigDecimal(4.0));
-            stmt.setDate(18, date);
-            stmt.executeUpdate();
-            
-            stmt.setString(1, "varchar3");
-            stmt.setString(2, "char3");
-            stmt.setInt(3, 3);
-            stmt.setLong(4, 3L);
-            stmt.setBigDecimal(5, new BigDecimal(3.0));
-            date = DateUtil.parseDate("2015-01-03 00:00:00");
-            stmt.setDate(6, date);
-            stmt.setString(7, "varchar_a");
-            stmt.setString(8, "chara");
-            stmt.setInt(9, 4);
-            stmt.setLong(10, 4L);
-            stmt.setBigDecimal(11, new BigDecimal(4.0));
-            stmt.setDate(12, date);
-            stmt.setString(13, "varchar_b");
-            stmt.setString(14, "charb");
-            stmt.setInt(15, 5);
-            stmt.setLong(16, 5L);
-            stmt.setBigDecimal(17, new BigDecimal(5.0));
-            stmt.setDate(18, date);
-            stmt.executeUpdate();
-            
+        	upsertRows(conn, fullTableName, 3);
             conn.commit();
         }
     }
