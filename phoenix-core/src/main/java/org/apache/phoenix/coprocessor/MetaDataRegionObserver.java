@@ -185,7 +185,7 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
                                 }
                                 if (delete != null) {
                                     mutations.add(delete);
-                                    if (count > 1000) {
+                                    if (count > 10) {
                                         statsTable.batch(mutations);
                                         mutations.clear();
                                         count = 0;
