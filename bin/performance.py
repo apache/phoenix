@@ -96,7 +96,7 @@ if java_home:
 else:
     java_cmd = 'java'
 
-execute = ('%s -cp "%s%s%s" -Dlog4j.configuration=file:' +
+execute = ('%s $PHOENIX_OPTS -cp "%s%s%s" -Dlog4j.configuration=file:' +
            os.path.join(phoenix_utils.current_dir, "log4j.properties") +
            ' org.apache.phoenix.util.PhoenixRuntime -t %s %s ') % \
     (java_cmd, hbase_config_path, os.pathsep, phoenix_utils.phoenix_client_jar, table, zookeeper)
