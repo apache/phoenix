@@ -1234,7 +1234,7 @@ public class MutationState implements SQLCloseable {
             if (updatedDataTable == null) {
                 throw new TableNotFoundException(dataTable.getSchemaName().getString(), dataTable.getTableName().getString());
             }
-            allImmutableTables |= updatedDataTable.isImmutableRows();
+            allImmutableTables &= updatedDataTable.isImmutableRows();
             tableRef.setTable(updatedDataTable);
             if (!addedAnyIndexes) {
                 // TODO: in theory we should do a deep equals check here, as it's possible
