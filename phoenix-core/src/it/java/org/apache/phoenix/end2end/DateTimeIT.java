@@ -52,6 +52,7 @@ import java.util.Calendar;
 import java.util.GregorianCalendar;
 
 import org.apache.phoenix.util.DateUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -663,5 +664,14 @@ public class DateTimeIT extends BaseHBaseManagedTimeIT {
         assertNull(rs.getDate(1));
         assertNull(rs.getDate(1, GregorianCalendar.getInstance()));
         assertFalse(rs.next());
+    }
+    
+    @Test
+    public void testCurrentDateWithNoTable() throws Exception {
+        long expectedTime = System.currentTimeMillis();
+        ResultSet rs = conn.createStatement().executeQuery("SELECT CURRENT_DATE()");
+        assertTrue(rs.next());
+        long actualTime = rs.getDate(1).getTime();
+        assertTrue(Math.abs(actualTime - expectedTime) < TestUtil.MILLIS_IN_DAY);
     }
 }
