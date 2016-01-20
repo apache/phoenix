@@ -7099,96 +7099,12 @@ public final class PTableProtos {
       "\006 \002(\010\022\020\n\010position\030\007 \002(\005\022\021\n\tsortOrder\030\010 \002" +
       "(\005\022\021\n\tarraySize\030\t \001(\005\022\024\n\014viewConstant\030\n " +
       "\001(\014\022\026\n\016viewReferenced\030\013 \001(\010\022\022\n\nexpressio" +
-<<<<<<< 5591b5a7dbbe8f086523c8d1b53b4a913a516896
-<<<<<<< 056ddbed5ca75018213b02d599c7c7a93e8a6692
-<<<<<<< 3520e12858223dfcad343e0a3a29c71fe4d074bc
-      "n\030\014 \001(\t\022\026\n\016isRowTimestamp\030\r \001(\010\"\232\001\n\013PTab" +
-      "leStats\022\013\n\003key\030\001 \002(\014\022\016\n\006values\030\002 \003(\014\022\033\n\023" +
-      "guidePostsByteCount\030\003 \001(\003\022\025\n\rkeyBytesCou",
-      "nt\030\004 \001(\003\022\027\n\017guidePostsCount\030\005 \001(\005\022!\n\013pGu" +
-      "idePosts\030\006 \001(\0132\014.PGuidePosts\"\244\005\n\006PTable\022" +
-      "\027\n\017schemaNameBytes\030\001 \002(\014\022\026\n\016tableNameByt" +
-      "es\030\002 \002(\014\022\036\n\ttableType\030\003 \002(\0162\013.PTableType" +
-      "\022\022\n\nindexState\030\004 \001(\t\022\026\n\016sequenceNumber\030\005" +
-      " \002(\003\022\021\n\ttimeStamp\030\006 \002(\003\022\023\n\013pkNameBytes\030\007" +
-      " \001(\014\022\021\n\tbucketNum\030\010 \002(\005\022\031\n\007columns\030\t \003(\013" +
-      "2\010.PColumn\022\030\n\007indexes\030\n \003(\0132\007.PTable\022\027\n\017" +
-      "isImmutableRows\030\013 \002(\010\022 \n\nguidePosts\030\014 \003(" +
-      "\0132\014.PTableStats\022\032\n\022dataTableNameBytes\030\r ",
-      "\001(\014\022\031\n\021defaultFamilyName\030\016 \001(\014\022\022\n\ndisabl" +
-      "eWAL\030\017 \002(\010\022\023\n\013multiTenant\030\020 \002(\010\022\020\n\010viewT" +
-      "ype\030\021 \001(\014\022\025\n\rviewStatement\030\022 \001(\014\022\025\n\rphys" +
-      "icalNames\030\023 \003(\014\022\020\n\010tenantId\030\024 \001(\014\022\023\n\013vie" +
-      "wIndexId\030\025 \001(\005\022\021\n\tindexType\030\026 \001(\014\022\026\n\016sta" +
-      "tsTimeStamp\030\027 \001(\003\022\022\n\nstoreNulls\030\030 \001(\010\022\027\n" +
-      "\017baseColumnCount\030\031 \001(\005\022\036\n\026rowKeyOrderOpt" +
-      "imizable\030\032 \001(\010\022\025\n\rtransactional\030\033 \001(\010\022\034\n" +
-      "\024updateCacheFrequency\030\034 \001(\003*A\n\nPTableTyp" +
-      "e\022\n\n\006SYSTEM\020\000\022\010\n\004USER\020\001\022\010\n\004VIEW\020\002\022\t\n\005IND",
-      "EX\020\003\022\010\n\004JOIN\020\004B@\n(org.apache.phoenix.cop" +
-      "rocessor.generatedB\014PTableProtosH\001\210\001\001\240\001\001"
-=======
-      "n\030\014 \001(\t\022\026\n\016isRowTimestamp\030\r \001(\010\"\261\001\n\013PTab" +
-      "leStats\022\013\n\003key\030\001 \002(\014\022\022\n\nguidePosts\030\002 \001(\014" +
-      "\022\033\n\023guidePostsByteCount\030\003 \001(\003\022\025\n\rkeyByte",
-      "sCount\030\004 \001(\003\022\027\n\017guidePostsCount\030\005 \001(\005\022!\n" +
-      "\013pGuidePosts\030\006 \001(\0132\014.PGuidePosts\022\021\n\tmaxL" +
-      "ength\030\007 \001(\005\"\206\005\n\006PTable\022\027\n\017schemaNameByte" +
-      "s\030\001 \002(\014\022\026\n\016tableNameBytes\030\002 \002(\014\022\036\n\ttable" +
-      "Type\030\003 \002(\0162\013.PTableType\022\022\n\nindexState\030\004 " +
-      "\001(\t\022\026\n\016sequenceNumber\030\005 \002(\003\022\021\n\ttimeStamp" +
-      "\030\006 \002(\003\022\023\n\013pkNameBytes\030\007 \001(\014\022\021\n\tbucketNum" +
-      "\030\010 \002(\005\022\031\n\007columns\030\t \003(\0132\010.PColumn\022\030\n\007ind" +
-      "exes\030\n \003(\0132\007.PTable\022\027\n\017isImmutableRows\030\013" +
-      " \002(\010\022 \n\nguidePosts\030\014 \003(\0132\014.PTableStats\022\032",
-      "\n\022dataTableNameBytes\030\r \001(\014\022\031\n\021defaultFam" +
-      "ilyName\030\016 \001(\014\022\022\n\ndisableWAL\030\017 \002(\010\022\023\n\013mul" +
-      "tiTenant\030\020 \002(\010\022\020\n\010viewType\030\021 \001(\014\022\025\n\rview" +
-      "Statement\030\022 \001(\014\022\025\n\rphysicalNames\030\023 \003(\014\022\020" +
-      "\n\010tenantId\030\024 \001(\014\022\023\n\013viewIndexId\030\025 \001(\005\022\021\n" +
-      "\tindexType\030\026 \001(\014\022\026\n\016statsTimeStamp\030\027 \001(\003" +
-      "\022\022\n\nstoreNulls\030\030 \001(\010\022\027\n\017baseColumnCount\030" +
-      "\031 \001(\005\022\036\n\026rowKeyOrderOptimizable\030\032 \001(\010\022\025\n" +
-      "\rtransactional\030\033 \001(\010*A\n\nPTableType\022\n\n\006SY" +
-      "STEM\020\000\022\010\n\004USER\020\001\022\010\n\004VIEW\020\002\022\t\n\005INDEX\020\003\022\010\n",
-      "\004JOIN\020\004B@\n(org.apache.phoenix.coprocesso" +
-      "r.generatedB\014PTableProtosH\001\210\001\001\240\001\001"
->>>>>>> PHOENIX-2417 Compress memory used by row key byte[] of guideposts
-=======
-      "n\030\014 \001(\t\022\026\n\016isRowTimestamp\030\r \001(\010\"\301\001\n\013PTab" +
-      "leStats\022\013\n\003key\030\001 \002(\014\022\016\n\006values\030\002 \003(\014\022\033\n\023" +
-      "guidePostsByteCount\030\003 \001(\003\022\025\n\rkeyBytesCou",
-      "nt\030\004 \001(\003\022\027\n\017guidePostsCount\030\005 \001(\005\022!\n\013pGu" +
-      "idePosts\030\006 \001(\0132\014.PGuidePosts\022\022\n\nguidePos" +
-      "ts\030\007 \001(\014\022\021\n\tmaxLength\030\010 \001(\005\"\206\005\n\006PTable\022\027" +
-      "\n\017schemaNameBytes\030\001 \002(\014\022\026\n\016tableNameByte" +
-      "s\030\002 \002(\014\022\036\n\ttableType\030\003 \002(\0162\013.PTableType\022" +
-      "\022\n\nindexState\030\004 \001(\t\022\026\n\016sequenceNumber\030\005 " +
-      "\002(\003\022\021\n\ttimeStamp\030\006 \002(\003\022\023\n\013pkNameBytes\030\007 " +
-      "\001(\014\022\021\n\tbucketNum\030\010 \002(\005\022\031\n\007columns\030\t \003(\0132" +
-      "\010.PColumn\022\030\n\007indexes\030\n \003(\0132\007.PTable\022\027\n\017i" +
-      "sImmutableRows\030\013 \002(\010\022 \n\nguidePosts\030\014 \003(\013",
-      "2\014.PTableStats\022\032\n\022dataTableNameBytes\030\r \001" +
-      "(\014\022\031\n\021defaultFamilyName\030\016 \001(\014\022\022\n\ndisable" +
-      "WAL\030\017 \002(\010\022\023\n\013multiTenant\030\020 \002(\010\022\020\n\010viewTy" +
-      "pe\030\021 \001(\014\022\025\n\rviewStatement\030\022 \001(\014\022\025\n\rphysi" +
-      "calNames\030\023 \003(\014\022\020\n\010tenantId\030\024 \001(\014\022\023\n\013view" +
-      "IndexId\030\025 \001(\005\022\021\n\tindexType\030\026 \001(\014\022\026\n\016stat" +
-      "sTimeStamp\030\027 \001(\003\022\022\n\nstoreNulls\030\030 \001(\010\022\027\n\017" +
-      "baseColumnCount\030\031 \001(\005\022\036\n\026rowKeyOrderOpti" +
-      "mizable\030\032 \001(\010\022\025\n\rtransactional\030\033 \001(\010*A\n\n" +
-      "PTableType\022\n\n\006SYSTEM\020\000\022\010\n\004USER\020\001\022\010\n\004VIEW",
-      "\020\002\022\t\n\005INDEX\020\003\022\010\n\004JOIN\020\004B@\n(org.apache.ph" +
-      "oenix.coprocessor.generatedB\014PTableProto" +
-      "sH\001\210\001\001\240\001\001"
->>>>>>> review comments second round
-=======
       "n\030\014 \001(\t\022\026\n\016isRowTimestamp\030\r \001(\010\"\310\001\n\013PTab" +
       "leStats\022\013\n\003key\030\001 \002(\014\022\016\n\006values\030\002 \003(\014\022\033\n\023" +
       "guidePostsByteCount\030\003 \001(\003\022\025\n\rkeyBytesCou",
       "nt\030\004 \001(\003\022\027\n\017guidePostsCount\030\005 \001(\005\022!\n\013pGu" +
       "idePosts\030\006 \001(\0132\014.PGuidePosts\022\031\n\021encodedG" +
-      "uidePosts\030\007 \001(\014\022\021\n\tmaxLength\030\010 \001(\005\"\206\005\n\006P" +
+      "uidePosts\030\007 \001(\014\022\021\n\tmaxLength\030\010 \001(\005\"\244\005\n\006P" +
       "Table\022\027\n\017schemaNameBytes\030\001 \002(\014\022\026\n\016tableN" +
       "ameBytes\030\002 \002(\014\022\036\n\ttableType\030\003 \002(\0162\013.PTab" +
       "leType\022\022\n\nindexState\030\004 \001(\t\022\026\n\016sequenceNu" +
@@ -7205,11 +7121,11 @@ public final class PTableProtos {
       "\026\n\016statsTimeStamp\030\027 \001(\003\022\022\n\nstoreNulls\030\030 " +
       "\001(\010\022\027\n\017baseColumnCount\030\031 \001(\005\022\036\n\026rowKeyOr" +
       "derOptimizable\030\032 \001(\010\022\025\n\rtransactional\030\033 " +
-      "\001(\010*A\n\nPTableType\022\n\n\006SYSTEM\020\000\022\010\n\004USER\020\001\022",
-      "\010\n\004VIEW\020\002\022\t\n\005INDEX\020\003\022\010\n\004JOIN\020\004B@\n(org.ap" +
-      "ache.phoenix.coprocessor.generatedB\014PTab" +
-      "leProtosH\001\210\001\001\240\001\001"
->>>>>>> updatd review comments for protobuf backward compatibility and moving code to upgrade Util
+      "\001(\010\022\034\n\024updateCacheFrequency\030\034 \001(\003*A\n\nPTa",
+      "bleType\022\n\n\006SYSTEM\020\000\022\010\n\004USER\020\001\022\010\n\004VIEW\020\002\022" +
+      "\t\n\005INDEX\020\003\022\010\n\004JOIN\020\004B@\n(org.apache.phoen" +
+      "ix.coprocessor.generatedB\014PTableProtosH\001" +
+      "\210\001\001\240\001\001"
     };
     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
       new com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner() {
