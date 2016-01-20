@@ -24,9 +24,10 @@ option java_generic_services = true;
 option java_generate_equals_and_hash = true;
 option optimize_for = SPEED;
 message PGuidePosts {
-  optional bytes guidePosts = 1;
+  repeated bytes guidePosts = 1;
   optional int64 byteCount = 2;
   optional int64 rowCount = 3;
   optional int32 maxLength = 4;
-  optional int32 guidePostsCount = 5;
+  optional int32 encodedGuidePostsCount = 5;
+  optional bytes encodedGuidePosts = 6;
 }

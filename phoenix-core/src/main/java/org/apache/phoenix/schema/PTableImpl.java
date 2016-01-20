@@ -1008,9 +1008,9 @@ public class PTableImpl implements PTable {
             long guidePostsByteCount = pGuidePosts.getByteCount();
             long rowCount = pGuidePosts.getRowCount();
             int maxLength = pGuidePosts.getMaxLength();
-            int guidePostsCount = pGuidePosts.getGuidePostsCount();
+            int guidePostsCount = pGuidePosts.getEncodedGuidePostsCount();
             GuidePostsInfo info = new GuidePostsInfo(guidePostsByteCount,
-                    new ImmutableBytesWritable(HBaseZeroCopyByteString.zeroCopyGetBytes(pGuidePosts.getGuidePosts())), rowCount, maxLength, guidePostsCount);
+                    new ImmutableBytesWritable(HBaseZeroCopyByteString.zeroCopyGetBytes(pGuidePosts.getEncodedGuidePosts())), rowCount, maxLength, guidePostsCount);
             tableGuidePosts.put(pTableStatsProto.getKey().toByteArray(), info);
         }
       PTableStats stats = new PTableStatsImpl(tableGuidePosts, table.getStatsTimeStamp());
@@ -1112,16 +1112,16 @@ public class PTableImpl implements PTable {
       for (Map.Entry<byte[], GuidePostsInfo> entry : table.getTableStats().getGuidePosts().entrySet()) {
          PTableProtos.PTableStats.Builder statsBuilder = PTableProtos.PTableStats.newBuilder();
          statsBuilder.setKey(ByteStringer.wrap(entry.getKey()));
-         statsBuilder.setGuidePosts(ByteStringer.wrap(entry.getValue().getGuidePosts().get()));
+         statsBuilder.setEncodedGuidePosts(ByteStringer.wrap(entry.getValue().getGuidePosts().get()));
          statsBuilder.setGuidePostsByteCount(entry.getValue().getByteCount());
          statsBuilder.setMaxLength(entry.getValue().getMaxLength());
          statsBuilder.setGuidePostsCount(entry.getValue().getGuidePostsCount());
          PGuidePostsProtos.PGuidePosts.Builder guidePstsBuilder = PGuidePostsProtos.PGuidePosts.newBuilder();
-         guidePstsBuilder.setGuidePosts(ByteStringer.wrap(entry.getValue().getGuidePosts().get()));
+         guidePstsBuilder.setEncodedGuidePosts(ByteStringer.wrap(entry.getValue().getGuidePosts().get()));
          guidePstsBuilder.setByteCount(entry.getValue().getByteCount());
          guidePstsBuilder.setRowCount(entry.getValue().getRowCount());
          guidePstsBuilder.setMaxLength(entry.getValue().getMaxLength());
-         guidePstsBuilder.setGuidePostsCount(entry.getValue().getGuidePostsCount());
+         guidePstsBuilder.setEncodedGuidePostsCount(entry.getValue().getGuidePostsCount());
          statsBuilder.setPGuidePosts(guidePstsBuilder);
          builder.addGuidePosts(statsBuilder.build());
       }
