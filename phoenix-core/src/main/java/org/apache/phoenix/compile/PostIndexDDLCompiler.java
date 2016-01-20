@@ -120,7 +120,7 @@ public class PostIndexDDLCompiler {
             DelegateMutationPlan delegate = new DelegateMutationPlan(statement.compileMutation(updateStmtStr.toString())) {
                 @Override
                 public MutationState execute() throws SQLException {
-                    connection.getMutationState().commitWriteFence(dataTable);
+                    connection.getMutationState().commitDDLFence(dataTable);
                     return super.execute();
                 }
             };
