@@ -1074,7 +1074,7 @@ public class MetaDataClient {
 
                         @Override
                         public MutationState execute() throws SQLException {
-                            connection.getMutationState().commitWriteFence(dataTable);
+                            connection.getMutationState().commitDDLFence(dataTable);
                             Cell kv = plan.iterator().next().getValue(0);
                             ImmutableBytesWritable tmpPtr = new ImmutableBytesWritable(kv.getValueArray(), kv.getValueOffset(), kv.getValueLength());
                             // A single Cell will be returned with the count(*) - we decode that here

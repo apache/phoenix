@@ -210,12 +210,12 @@ public class MutationState implements SQLCloseable {
      * when a data table transaction is started before the create index
      * but completes after it. In this case, we need to rerun the data
      * table transaction after the index creation so that the index rows
-     * are generated. See {@link #addReadFence(PTable)} and TEPHRA-157
+     * are generated. See {@link #addDMLFence(PTable)} and TEPHRA-157
      * for more information.
      * @param dataTable the data table upon which an index is being added
      * @throws SQLException
      */
-    public void commitWriteFence(PTable dataTable) throws SQLException {
+    public void commitDDLFence(PTable dataTable) throws SQLException {
         if (dataTable.isTransactional()) {
             byte[] key = SchemaUtil.getTableKey(dataTable);
             boolean success = false;
@@ -249,12 +249,12 @@ public class MutationState implements SQLCloseable {
     /**
      * Add an entry to the change set representing the DML operation that is starting.
      * These entries will not conflict with each other, but they will conflict with a
-     * DDL operation of creating an index. See {@link #addReadFence(PTable)} and TEPHRA-157
+     * DDL operation of creating an index. See {@link #addDMLFence(PTable)} and TEPHRA-157
      * for more information.
      * @param dataTable the table which is doing DML
      * @throws SQLException
      */
-    public void addReadFence(PTable dataTable) throws SQLException {
+    public void addDMLFence(PTable dataTable) throws SQLException {
         if (this.txContext == null) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.NULL_TRANSACTION_CONTEXT).build().buildException();
         }
@@ -1004,7 +1004,9 @@ public class MutationState implements SQLCloseable {
                     // Keep all mutations we've encountered until a commit or rollback.
                     // This is not ideal, but there's not good way to get the values back
                     // in the event that we need to replay the commit.
-                    joinMutationState(tableRef, valuesMap, txMutations);
+                    // Copy TableRef so we have the original PTable and know when the
+                    // indexes have changed.
+                    joinMutationState(new TableRef(tableRef), valuesMap, txMutations);
                 }
                 // Remove batches as we process them
                 if (sendAll) {
@@ -1180,11 +1182,11 @@ public class MutationState implements SQLCloseable {
                             Set<TableRef> txTableRefs = txMutations.keySet();
                             for (TableRef tableRef : txTableRefs) {
                                 PTable dataTable = tableRef.getTable();
-                                addReadFence(dataTable);
+                                addDMLFence(dataTable);
                             }
                             try {
                                 // Only retry if an index was added
-                                retryCommit = wasIndexAdded(txTableRefs);
+                                retryCommit = shouldResubmitTransaction(txTableRefs);
                             } catch (SQLException e) {
                                 retryCommit = false;
                                 if (sqlE == null) {
@@ -1214,11 +1216,12 @@ public class MutationState implements SQLCloseable {
      * @return true if indexes were added and false otherwise.
      * @throws SQLException 
      */
-    private boolean wasIndexAdded(Set<TableRef> txTableRefs) throws SQLException {
+    private boolean shouldResubmitTransaction(Set<TableRef> txTableRefs) throws SQLException {
         if (logger.isInfoEnabled()) logger.info("Checking for index updates as of "  + getInitialWritePointer());
         MetaDataClient client = new MetaDataClient(connection);
         PMetaData cache = connection.getMetaDataCache();
-        boolean addedIndexes = false;
+        boolean addedAnyIndexes = false;
+        boolean allImmutableTables = !txTableRefs.isEmpty();
         for (TableRef tableRef : txTableRefs) {
             PTable dataTable = tableRef.getTable();
             List<PTable> oldIndexes;
@@ -1227,20 +1230,24 @@ public class MutationState implements SQLCloseable {
             MetaDataMutationResult result = client.updateCache(dataTable.getTenantId(), dataTable.getSchemaName().getString(), dataTable.getTableName().getString());
             long timestamp = TransactionUtil.getResolvedTime(connection, result);
             tableRef.setTimeStamp(timestamp);
-            if (result.getTable() == null) {
+            PTable updatedDataTable = result.getTable();
+            if (updatedDataTable == null) {
                 throw new TableNotFoundException(dataTable.getSchemaName().getString(), dataTable.getTableName().getString());
             }
-            tableRef.setTable(result.getTable());
-            if (!addedIndexes) {
+            allImmutableTables |= updatedDataTable.isImmutableRows();
+            tableRef.setTable(updatedDataTable);
+            if (!addedAnyIndexes) {
                 // TODO: in theory we should do a deep equals check here, as it's possible
                 // that an index was dropped and recreated with the same name but different
                 // indexed/covered columns.
-                addedIndexes = (!oldIndexes.equals(result.getTable().getIndexes()));
-                if (logger.isInfoEnabled()) logger.info((addedIndexes ? "Updates " : "No updates ") + "as of "  + timestamp + " to " + dataTable.getName().getString() + " with indexes " + tableRef.getTable().getIndexes());
+                addedAnyIndexes = (!oldIndexes.equals(updatedDataTable.getIndexes()));
+                if (logger.isInfoEnabled()) logger.info((addedAnyIndexes ? "Updates " : "No updates ") + "as of "  + timestamp + " to " + updatedDataTable.getName().getString() + " with indexes " + updatedDataTable.getIndexes());
             }
         }
-        if (logger.isInfoEnabled()) logger.info((addedIndexes ? "Updates " : "No updates ") + "to indexes as of "  + getInitialWritePointer());
-        return addedIndexes;
+        if (logger.isInfoEnabled()) logger.info((addedAnyIndexes ? "Updates " : "No updates ") + "to indexes as of "  + getInitialWritePointer() + " over " + (allImmutableTables ? " all immutable tables" : " some mutable tables"));
+        // If all tables are immutable, we know the conflict we got was due to our DDL/DML fence.
+        // If any indexes were added, then the conflict might be due to DDL/DML fence.
+        return allImmutableTables || addedAnyIndexes;
     }
 
     /**

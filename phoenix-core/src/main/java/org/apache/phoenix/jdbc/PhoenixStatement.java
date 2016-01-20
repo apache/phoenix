@@ -328,7 +328,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                                 MutationPlan plan = stmt.compilePlan(PhoenixStatement.this, Sequence.ValueOp.VALIDATE_SEQUENCE);
                                 if (plan.getTargetRef() != null && plan.getTargetRef().getTable() != null && plan.getTargetRef().getTable().isTransactional()) {
                                     state.startTransaction();
-                                    state.addReadFence(plan.getTargetRef().getTable());
+                                    state.addDMLFence(plan.getTargetRef().getTable());
                                 }
                                 Iterator<TableRef> tableRefs = plan.getSourceRefs().iterator();
                                 state.sendUncommitted(tableRefs);

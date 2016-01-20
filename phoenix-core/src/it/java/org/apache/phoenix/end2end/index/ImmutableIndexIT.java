@@ -219,7 +219,7 @@ public class ImmutableIndexIT extends BaseHBaseManagedTimeIT {
                 futureList.add(threadPool.submit(new UpsertRunnable(fullTableName)));
             }
             // upsert some rows before creating the index 
-            Thread.sleep(5000);
+            Thread.sleep(500);
 
             // create the index 
             try (Connection conn2 = DriverManager.getConnection(getUrl(), props)) {
@@ -230,14 +230,14 @@ public class ImmutableIndexIT extends BaseHBaseManagedTimeIT {
             }
 
             // upsert some rows after creating the index
-            Thread.sleep(1000);
+            Thread.sleep(100);
             // cancel the running threads
             for (Future<?> future : futureList) {
                 future.cancel(true);
             }
             threadPool.shutdownNow();
             threadPool.awaitTermination(30, TimeUnit.SECONDS);
-            Thread.sleep(1000);
+            Thread.sleep(100);
 
             ResultSet rs;
             rs = conn.createStatement().executeQuery("SELECT /*+ NO_INDEX */ COUNT(*) FROM " + fullTableName);
