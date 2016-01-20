@@ -37,8 +37,6 @@ import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
-import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.query.QueryServicesOptions;
 
 
 /**
@@ -124,6 +122,7 @@ public class StatisticsScanner implements InternalScanner {
                 try {
                     statsRunState.removeCompactingRegion(region.getRegionInfo());
                     stats.close();
+                    tracker.close();// close the tracker
                 } catch (IOException e) {
                     if (toThrow == null) toThrow = e;
                     LOG.error("Error while closing the stats table", e);
