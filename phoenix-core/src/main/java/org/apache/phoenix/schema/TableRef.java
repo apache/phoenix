@@ -36,12 +36,16 @@ public class TableRef {
     private final long lowerBoundTimeStamp;
     private final boolean hasDynamicCols;
 
+    public TableRef(TableRef tableRef) {
+        this(tableRef.alias, tableRef.table, tableRef.upperBoundTimeStamp, tableRef.lowerBoundTimeStamp, tableRef.hasDynamicCols);
+    }
+    
     public TableRef(TableRef tableRef, long timeStamp) {
-        this(tableRef.alias, tableRef.table, timeStamp, tableRef.hasDynamicCols);
+        this(tableRef.alias, tableRef.table, timeStamp, tableRef.lowerBoundTimeStamp, tableRef.hasDynamicCols);
     }
     
     public TableRef(TableRef tableRef, String alias) {
-        this(alias, tableRef.table, tableRef.upperBoundTimeStamp, tableRef.hasDynamicCols);
+        this(alias, tableRef.table, tableRef.upperBoundTimeStamp, tableRef.lowerBoundTimeStamp, tableRef.hasDynamicCols);
     }
     
     public TableRef(PTable table) {
