@@ -274,6 +274,7 @@
                  <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
                  <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
                  <groups>org.apache.phoenix.end2end.ClientManagedTimeTest</groups>
+                 <shutdown>kill</shutdown>
                </configuration>
                <goals>
                  <goal>integration-test</goal>
@@ -291,6 +292,7 @@
                  <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
                  <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
                  <groups>org.apache.phoenix.end2end.HBaseManagedTimeTest</groups>
+                 <shutdown>kill</shutdown>
                </configuration>
                <goals>
                  <goal>integration-test</goal>
@@ -308,6 +310,7 @@
                  <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
                  <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
                  <groups>org.apache.phoenix.end2end.NeedsOwnMiniClusterTest</groups>
+                 <shutdown>kill</shutdown>
                </configuration>
                <goals>
                  <goal>integration-test</goal>
