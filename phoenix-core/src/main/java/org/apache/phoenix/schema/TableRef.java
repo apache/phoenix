@@ -19,7 +19,6 @@ package org.apache.phoenix.schema;
 
 import java.util.Objects;
 
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.compile.TupleProjectionCompiler;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.util.IndexUtil;
@@ -49,7 +48,7 @@ public class TableRef {
     }
     
     public TableRef(PTable table) {
-        this(null, table, HConstants.LATEST_TIMESTAMP, false);
+        this(null, table, QueryConstants.UNSET_TIMESTAMP, false);
     }
     
     public TableRef(PTable table, long upperBoundTimeStamp, long lowerBoundTimeStamp) {
