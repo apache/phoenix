@@ -17,14 +17,8 @@
  */
 package org.apache.phoenix.schema.stats;
 
-import java.util.ArrayList;
-import java.util.List;
-
-import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.util.Bytes;
-
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Lists;
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.phoenix.util.ByteUtil;
 /**
  *  A class that holds the guidePosts of a region and also allows combining the 
  *  guidePosts of different regions when the GuidePostsInfo is formed for a table.
@@ -34,7 +28,7 @@ public class GuidePostsInfo {
     /**
      * the total number of guidePosts for the table combining all the guidePosts per region per cf.
      */
-    private List<byte[]> guidePosts;
+    private ImmutableBytesWritable guidePosts;
     /**
      * The bytecount that is flattened across the total number of guide posts.
      */
@@ -45,7 +39,19 @@ public class GuidePostsInfo {
      */
     private long rowCount = 0;
     
-    private long keyByteSize; // Total number of bytes in keys stored in guidePosts
+    /**
+     * Maximum length of a guidePost collected
+     */
+    private int maxLength;
+    
+    public final static GuidePostsInfo EMPTY_GUIDEPOST = new GuidePostsInfo(0,
+            new ImmutableBytesWritable(ByteUtil.EMPTY_BYTE_ARRAY), 0, 0, 0);
+
+    public int getMaxLength() {
+        return maxLength;
+    }
+    
+    private int guidePostsCount;
 
     /**
      * Constructor that creates GuidePostsInfo per region
@@ -53,22 +59,20 @@ public class GuidePostsInfo {
      * @param guidePosts
      * @param rowCount
      */
-    public GuidePostsInfo(long byteCount, List<byte[]> guidePosts, long rowCount) {
-        this.guidePosts = ImmutableList.copyOf(guidePosts);
-        int size = 0;
-        for (byte[] key : guidePosts) {
-            size += key.length;
-        }
-        this.keyByteSize = size;
+    public GuidePostsInfo(long byteCount, ImmutableBytesWritable guidePosts, long rowCount, int maxLength, int guidePostsCount) {
+        this.guidePosts = new ImmutableBytesWritable(guidePosts);
+        this.maxLength = maxLength;
         this.byteCount = byteCount;
         this.rowCount = rowCount;
+        this.guidePostsCount = guidePostsCount;
     }
+    
     
     public long getByteCount() {
         return byteCount;
     }
 
-    public List<byte[]> getGuidePosts() {
+    public ImmutableBytesWritable getGuidePosts() {
         return guidePosts;
     }
 
@@ -76,70 +80,8 @@ public class GuidePostsInfo {
         return this.rowCount;
     }
     
-    public void incrementRowCount() {
-        this.rowCount++;
-    }
-
-    /**
-     * Combines the GuidePosts per region into one.
-     * @param oldInfo
-     */
-    public void combine(GuidePostsInfo oldInfo) {
-        if (!oldInfo.getGuidePosts().isEmpty()) {
-            byte[] newFirstKey = oldInfo.getGuidePosts().get(0);
-            byte[] existingLastKey;
-            if (!this.getGuidePosts().isEmpty()) {
-                existingLastKey = this.getGuidePosts().get(this.getGuidePosts().size() - 1);
-            } else {
-                existingLastKey = HConstants.EMPTY_BYTE_ARRAY;
-            }
-            int size = oldInfo.getGuidePosts().size();
-            // If the existing guidePosts is lesser than the new RegionInfo that we are combining
-            // then add the new Region info to the end of the current GuidePosts.
-            // If the new region info is smaller than the existing guideposts then add the existing
-            // guide posts after the new guideposts.
-            List<byte[]> newTotalGuidePosts = new ArrayList<byte[]>(this.getGuidePosts().size() + size);
-            if (Bytes.compareTo(existingLastKey, newFirstKey) <= 0) {
-                newTotalGuidePosts.addAll(this.getGuidePosts());
-                newTotalGuidePosts.addAll(oldInfo.getGuidePosts());
-            } else {
-                newTotalGuidePosts.addAll(oldInfo.getGuidePosts());
-                newTotalGuidePosts.addAll(this.getGuidePosts());
-            }
-            this.guidePosts = ImmutableList.copyOf(newTotalGuidePosts);
-        }
-        this.byteCount += oldInfo.getByteCount();
-        this.keyByteSize += oldInfo.keyByteSize;
-        this.rowCount += oldInfo.getRowCount();
-    }
-    
-    /**
-     * The guide posts, rowCount and byteCount are accumulated every time a guidePosts depth is
-     * reached while collecting stats.
-     * @param row
-     * @param byteCount
-     * @return
-     */
-    public boolean addGuidePost(byte[] row, long byteCount, long rowCount) {
-        if (guidePosts.isEmpty() || Bytes.compareTo(row, guidePosts.get(guidePosts.size() - 1)) > 0) {
-            List<byte[]> newGuidePosts = Lists.newArrayListWithExpectedSize(this.getGuidePosts().size() + 1);
-            newGuidePosts.addAll(guidePosts);
-            newGuidePosts.add(row);
-            this.guidePosts = ImmutableList.copyOf(newGuidePosts);
-            this.byteCount += byteCount;
-            this.keyByteSize += row.length;
-            this.rowCount+=rowCount;
-            return true;
-        }
-        return false;
-    }
-    
-    public boolean addGuidePost(byte[] row) {
-        return addGuidePost(row, 0, 0);
-    }
-
-    public boolean addGuidePost(byte[] row, long byteCount) {
-        return addGuidePost(row, byteCount, 0);
+    public int getGuidePostsCount() {
+        return guidePostsCount;
     }
 
 }
