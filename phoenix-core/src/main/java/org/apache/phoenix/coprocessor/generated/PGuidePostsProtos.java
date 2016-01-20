@@ -11,15 +11,19 @@ public final class PGuidePostsProtos {
   public interface PGuidePostsOrBuilder
       extends com.google.protobuf.MessageOrBuilder {
 
-    // optional bytes guidePosts = 1;
+    // repeated bytes guidePosts = 1;
     /**
-     * <code>optional bytes guidePosts = 1;</code>
+     * <code>repeated bytes guidePosts = 1;</code>
      */
-    boolean hasGuidePosts();
+    java.util.List<com.google.protobuf.ByteString> getGuidePostsList();
     /**
-     * <code>optional bytes guidePosts = 1;</code>
+     * <code>repeated bytes guidePosts = 1;</code>
      */
-    com.google.protobuf.ByteString getGuidePosts();
+    int getGuidePostsCount();
+    /**
+     * <code>repeated bytes guidePosts = 1;</code>
+     */
+    com.google.protobuf.ByteString getGuidePosts(int index);
 
     // optional int64 byteCount = 2;
     /**
@@ -51,15 +55,25 @@ public final class PGuidePostsProtos {
      */
     int getMaxLength();
 
-    // optional int32 guidePostsCount = 5;
+    // optional int32 encodedGuidePostsCount = 5;
     /**
-     * <code>optional int32 guidePostsCount = 5;</code>
+     * <code>optional int32 encodedGuidePostsCount = 5;</code>
      */
-    boolean hasGuidePostsCount();
+    boolean hasEncodedGuidePostsCount();
     /**
-     * <code>optional int32 guidePostsCount = 5;</code>
+     * <code>optional int32 encodedGuidePostsCount = 5;</code>
      */
-    int getGuidePostsCount();
+    int getEncodedGuidePostsCount();
+
+    // optional bytes encodedGuidePosts = 6;
+    /**
+     * <code>optional bytes encodedGuidePosts = 6;</code>
+     */
+    boolean hasEncodedGuidePosts();
+    /**
+     * <code>optional bytes encodedGuidePosts = 6;</code>
+     */
+    com.google.protobuf.ByteString getEncodedGuidePosts();
   }
   /**
    * Protobuf type {@code PGuidePosts}
@@ -113,28 +127,36 @@ public final class PGuidePostsProtos {
               break;
             }
             case 10: {
-              bitField0_ |= 0x00000001;
-              guidePosts_ = input.readBytes();
+              if (!((mutable_bitField0_ & 0x00000001) == 0x00000001)) {
+                guidePosts_ = new java.util.ArrayList<com.google.protobuf.ByteString>();
+                mutable_bitField0_ |= 0x00000001;
+              }
+              guidePosts_.add(input.readBytes());
               break;
             }
             case 16: {
-              bitField0_ |= 0x00000002;
+              bitField0_ |= 0x00000001;
               byteCount_ = input.readInt64();
               break;
             }
             case 24: {
-              bitField0_ |= 0x00000004;
+              bitField0_ |= 0x00000002;
               rowCount_ = input.readInt64();
               break;
             }
             case 32: {
-              bitField0_ |= 0x00000008;
+              bitField0_ |= 0x00000004;
               maxLength_ = input.readInt32();
               break;
             }
             case 40: {
+              bitField0_ |= 0x00000008;
+              encodedGuidePostsCount_ = input.readInt32();
+              break;
+            }
+            case 50: {
               bitField0_ |= 0x00000010;
-              guidePostsCount_ = input.readInt32();
+              encodedGuidePosts_ = input.readBytes();
               break;
             }
           }
@@ -145,6 +167,9 @@ public final class PGuidePostsProtos {
         throw new com.google.protobuf.InvalidProtocolBufferException(
             e.getMessage()).setUnfinishedMessage(this);
       } finally {
+        if (((mutable_bitField0_ & 0x00000001) == 0x00000001)) {
+          guidePosts_ = java.util.Collections.unmodifiableList(guidePosts_);
+        }
         this.unknownFields = unknownFields.build();
         makeExtensionsImmutable();
       }
@@ -177,20 +202,27 @@ public final class PGuidePostsProtos {
     }
 
     private int bitField0_;
-    // optional bytes guidePosts = 1;
+    // repeated bytes guidePosts = 1;
     public static final int GUIDEPOSTS_FIELD_NUMBER = 1;
-    private com.google.protobuf.ByteString guidePosts_;
+    private java.util.List<com.google.protobuf.ByteString> guidePosts_;
     /**
-     * <code>optional bytes guidePosts = 1;</code>
+     * <code>repeated bytes guidePosts = 1;</code>
      */
-    public boolean hasGuidePosts() {
-      return ((bitField0_ & 0x00000001) == 0x00000001);
+    public java.util.List<com.google.protobuf.ByteString>
+        getGuidePostsList() {
+      return guidePosts_;
     }
     /**
-     * <code>optional bytes guidePosts = 1;</code>
+     * <code>repeated bytes guidePosts = 1;</code>
      */
-    public com.google.protobuf.ByteString getGuidePosts() {
-      return guidePosts_;
+    public int getGuidePostsCount() {
+      return guidePosts_.size();
+    }
+    /**
+     * <code>repeated bytes guidePosts = 1;</code>
+     */
+    public com.google.protobuf.ByteString getGuidePosts(int index) {
+      return guidePosts_.get(index);
     }
 
     // optional int64 byteCount = 2;
@@ -200,7 +232,7 @@ public final class PGuidePostsProtos {
      * <code>optional int64 byteCount = 2;</code>
      */
     public boolean hasByteCount() {
-      return ((bitField0_ & 0x00000002) == 0x00000002);
+      return ((bitField0_ & 0x00000001) == 0x00000001);
     }
     /**
      * <code>optional int64 byteCount = 2;</code>
@@ -216,7 +248,7 @@ public final class PGuidePostsProtos {
      * <code>optional int64 rowCount = 3;</code>
      */
     public boolean hasRowCount() {
-      return ((bitField0_ & 0x00000004) == 0x00000004);
+      return ((bitField0_ & 0x00000002) == 0x00000002);
     }
     /**
      * <code>optional int64 rowCount = 3;</code>
@@ -232,7 +264,7 @@ public final class PGuidePostsProtos {
      * <code>optional int32 maxLength = 4;</code>
      */
     public boolean hasMaxLength() {
-      return ((bitField0_ & 0x00000008) == 0x00000008);
+      return ((bitField0_ & 0x00000004) == 0x00000004);
     }
     /**
      * <code>optional int32 maxLength = 4;</code>
@@ -241,28 +273,45 @@ public final class PGuidePostsProtos {
       return maxLength_;
     }
 
-    // optional int32 guidePostsCount = 5;
-    public static final int GUIDEPOSTSCOUNT_FIELD_NUMBER = 5;
-    private int guidePostsCount_;
+    // optional int32 encodedGuidePostsCount = 5;
+    public static final int ENCODEDGUIDEPOSTSCOUNT_FIELD_NUMBER = 5;
+    private int encodedGuidePostsCount_;
     /**
-     * <code>optional int32 guidePostsCount = 5;</code>
+     * <code>optional int32 encodedGuidePostsCount = 5;</code>
      */
-    public boolean hasGuidePostsCount() {
+    public boolean hasEncodedGuidePostsCount() {
+      return ((bitField0_ & 0x00000008) == 0x00000008);
+    }
+    /**
+     * <code>optional int32 encodedGuidePostsCount = 5;</code>
+     */
+    public int getEncodedGuidePostsCount() {
+      return encodedGuidePostsCount_;
+    }
+
+    // optional bytes encodedGuidePosts = 6;
+    public static final int ENCODEDGUIDEPOSTS_FIELD_NUMBER = 6;
+    private com.google.protobuf.ByteString encodedGuidePosts_;
+    /**
+     * <code>optional bytes encodedGuidePosts = 6;</code>
+     */
+    public boolean hasEncodedGuidePosts() {
       return ((bitField0_ & 0x00000010) == 0x00000010);
     }
     /**
-     * <code>optional int32 guidePostsCount = 5;</code>
+     * <code>optional bytes encodedGuidePosts = 6;</code>
      */
-    public int getGuidePostsCount() {
-      return guidePostsCount_;
+    public com.google.protobuf.ByteString getEncodedGuidePosts() {
+      return encodedGuidePosts_;
     }
 
     private void initFields() {
-      guidePosts_ = com.google.protobuf.ByteString.EMPTY;
+      guidePosts_ = java.util.Collections.emptyList();
       byteCount_ = 0L;
       rowCount_ = 0L;
       maxLength_ = 0;
-      guidePostsCount_ = 0;
+      encodedGuidePostsCount_ = 0;
+      encodedGuidePosts_ = com.google.protobuf.ByteString.EMPTY;
     }
     private byte memoizedIsInitialized = -1;
     public final boolean isInitialized() {
@@ -276,20 +325,23 @@ public final class PGuidePostsProtos {
     public void writeTo(com.google.protobuf.CodedOutputStream output)
                         throws java.io.IOException {
       getSerializedSize();
-      if (((bitField0_ & 0x00000001) == 0x00000001)) {
-        output.writeBytes(1, guidePosts_);
+      for (int i = 0; i < guidePosts_.size(); i++) {
+        output.writeBytes(1, guidePosts_.get(i));
       }
-      if (((bitField0_ & 0x00000002) == 0x00000002)) {
+      if (((bitField0_ & 0x00000001) == 0x00000001)) {
         output.writeInt64(2, byteCount_);
       }
-      if (((bitField0_ & 0x00000004) == 0x00000004)) {
+      if (((bitField0_ & 0x00000002) == 0x00000002)) {
         output.writeInt64(3, rowCount_);
       }
-      if (((bitField0_ & 0x00000008) == 0x00000008)) {
+      if (((bitField0_ & 0x00000004) == 0x00000004)) {
         output.writeInt32(4, maxLength_);
       }
+      if (((bitField0_ & 0x00000008) == 0x00000008)) {
+        output.writeInt32(5, encodedGuidePostsCount_);
+      }
       if (((bitField0_ & 0x00000010) == 0x00000010)) {
-        output.writeInt32(5, guidePostsCount_);
+        output.writeBytes(6, encodedGuidePosts_);
       }
       getUnknownFields().writeTo(output);
     }
@@ -300,25 +352,34 @@ public final class PGuidePostsProtos {
       if (size != -1) return size;
 
       size = 0;
-      if (((bitField0_ & 0x00000001) == 0x00000001)) {
-        size += com.google.protobuf.CodedOutputStream
-          .computeBytesSize(1, guidePosts_);
+      {
+        int dataSize = 0;
+        for (int i = 0; i < guidePosts_.size(); i++) {
+          dataSize += com.google.protobuf.CodedOutputStream
+            .computeBytesSizeNoTag(guidePosts_.get(i));
+        }
+        size += dataSize;
+        size += 1 * getGuidePostsList().size();
       }
-      if (((bitField0_ & 0x00000002) == 0x00000002)) {
+      if (((bitField0_ & 0x00000001) == 0x00000001)) {
         size += com.google.protobuf.CodedOutputStream
           .computeInt64Size(2, byteCount_);
       }
-      if (((bitField0_ & 0x00000004) == 0x00000004)) {
+      if (((bitField0_ & 0x00000002) == 0x00000002)) {
         size += com.google.protobuf.CodedOutputStream
           .computeInt64Size(3, rowCount_);
       }
-      if (((bitField0_ & 0x00000008) == 0x00000008)) {
+      if (((bitField0_ & 0x00000004) == 0x00000004)) {
         size += com.google.protobuf.CodedOutputStream
           .computeInt32Size(4, maxLength_);
       }
+      if (((bitField0_ & 0x00000008) == 0x00000008)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeInt32Size(5, encodedGuidePostsCount_);
+      }
       if (((bitField0_ & 0x00000010) == 0x00000010)) {
         size += com.google.protobuf.CodedOutputStream
-          .computeInt32Size(5, guidePostsCount_);
+          .computeBytesSize(6, encodedGuidePosts_);
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSerializedSize = size;
@@ -343,11 +404,8 @@ public final class PGuidePostsProtos {
       org.apache.phoenix.coprocessor.generated.PGuidePostsProtos.PGuidePosts other = (org.apache.phoenix.coprocessor.generated.PGuidePostsProtos.PGuidePosts) obj;
 
       boolean result = true;
-      result = result && (hasGuidePosts() == other.hasGuidePosts());
-      if (hasGuidePosts()) {
-        result = result && getGuidePosts()
-            .equals(other.getGuidePosts());
-      }
+      result = result && getGuidePostsList()
+          .equals(other.getGuidePostsList());
       result = result && (hasByteCount() == other.hasByteCount());
       if (hasByteCount()) {
         result = result && (getByteCount()
@@ -363,10 +421,15 @@ public final class PGuidePostsProtos {
         result = result && (getMaxLength()
             == other.getMaxLength());
       }
-      result = result && (hasGuidePostsCount() == other.hasGuidePostsCount());
-      if (hasGuidePostsCount()) {
-        result = result && (getGuidePostsCount()
-            == other.getGuidePostsCount());
+      result = result && (hasEncodedGuidePostsCount() == other.hasEncodedGuidePostsCount());
+      if (hasEncodedGuidePostsCount()) {
+        result = result && (getEncodedGuidePostsCount()
+            == other.getEncodedGuidePostsCount());
+      }
+      result = result && (hasEncodedGuidePosts() == other.hasEncodedGuidePosts());
+      if (hasEncodedGuidePosts()) {
+        result = result && getEncodedGuidePosts()
+            .equals(other.getEncodedGuidePosts());
       }
       result = result &&
           getUnknownFields().equals(other.getUnknownFields());
@@ -381,9 +444,9 @@ public final class PGuidePostsProtos {
       }
       int hash = 41;
       hash = (19 * hash) + getDescriptorForType().hashCode();
-      if (hasGuidePosts()) {
+      if (getGuidePostsCount() > 0) {
         hash = (37 * hash) + GUIDEPOSTS_FIELD_NUMBER;
-        hash = (53 * hash) + getGuidePosts().hashCode();
+        hash = (53 * hash) + getGuidePostsList().hashCode();
       }
       if (hasByteCount()) {
         hash = (37 * hash) + BYTECOUNT_FIELD_NUMBER;
@@ -397,9 +460,13 @@ public final class PGuidePostsProtos {
         hash = (37 * hash) + MAXLENGTH_FIELD_NUMBER;
         hash = (53 * hash) + getMaxLength();
       }
-      if (hasGuidePostsCount()) {
-        hash = (37 * hash) + GUIDEPOSTSCOUNT_FIELD_NUMBER;
-        hash = (53 * hash) + getGuidePostsCount();
+      if (hasEncodedGuidePostsCount()) {
+        hash = (37 * hash) + ENCODEDGUIDEPOSTSCOUNT_FIELD_NUMBER;
+        hash = (53 * hash) + getEncodedGuidePostsCount();
+      }
+      if (hasEncodedGuidePosts()) {
+        hash = (37 * hash) + ENCODEDGUIDEPOSTS_FIELD_NUMBER;
+        hash = (53 * hash) + getEncodedGuidePosts().hashCode();
       }
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
@@ -510,7 +577,7 @@ public final class PGuidePostsProtos {
 
       public Builder clear() {
         super.clear();
-        guidePosts_ = com.google.protobuf.ByteString.EMPTY;
+        guidePosts_ = java.util.Collections.emptyList();
         bitField0_ = (bitField0_ & ~0x00000001);
         byteCount_ = 0L;
         bitField0_ = (bitField0_ & ~0x00000002);
@@ -518,8 +585,10 @@ public final class PGuidePostsProtos {
         bitField0_ = (bitField0_ & ~0x00000004);
         maxLength_ = 0;
         bitField0_ = (bitField0_ & ~0x00000008);
-        guidePostsCount_ = 0;
+        encodedGuidePostsCount_ = 0;
         bitField0_ = (bitField0_ & ~0x00000010);
+        encodedGuidePosts_ = com.google.protobuf.ByteString.EMPTY;
+        bitField0_ = (bitField0_ & ~0x00000020);
         return this;
       }
 
@@ -548,26 +617,31 @@ public final class PGuidePostsProtos {
         org.apache.phoenix.coprocessor.generated.PGuidePostsProtos.PGuidePosts result = new org.apache.phoenix.coprocessor.generated.PGuidePostsProtos.PGuidePosts(this);
         int from_bitField0_ = bitField0_;
         int to_bitField0_ = 0;
-        if (((from_bitField0_ & 0x00000001) == 0x00000001)) {
-          to_bitField0_ |= 0x00000001;
+        if (((bitField0_ & 0x00000001) == 0x00000001)) {
+          guidePosts_ = java.util.Collections.unmodifiableList(guidePosts_);
+          bitField0_ = (bitField0_ & ~0x00000001);
         }
         result.guidePosts_ = guidePosts_;
         if (((from_bitField0_ & 0x00000002) == 0x00000002)) {
-          to_bitField0_ |= 0x00000002;
+          to_bitField0_ |= 0x00000001;
         }
         result.byteCount_ = byteCount_;
         if (((from_bitField0_ & 0x00000004) == 0x00000004)) {
-          to_bitField0_ |= 0x00000004;
+          to_bitField0_ |= 0x00000002;
         }
         result.rowCount_ = rowCount_;
         if (((from_bitField0_ & 0x00000008) == 0x00000008)) {
-          to_bitField0_ |= 0x00000008;
+          to_bitField0_ |= 0x00000004;
         }
         result.maxLength_ = maxLength_;
         if (((from_bitField0_ & 0x00000010) == 0x00000010)) {
+          to_bitField0_ |= 0x00000008;
+        }
+        result.encodedGuidePostsCount_ = encodedGuidePostsCount_;
+        if (((from_bitField0_ & 0x00000020) == 0x00000020)) {
           to_bitField0_ |= 0x00000010;
         }
-        result.guidePostsCount_ = guidePostsCount_;
+        result.encodedGuidePosts_ = encodedGuidePosts_;
         result.bitField0_ = to_bitField0_;
         onBuilt();
         return result;
@@ -584,8 +658,15 @@ public final class PGuidePostsProtos {
 
       public Builder mergeFrom(org.apache.phoenix.coprocessor.generated.PGuidePostsProtos.PGuidePosts other) {
         if (other == org.apache.phoenix.coprocessor.generated.PGuidePostsProtos.PGuidePosts.getDefaultInstance()) return this;
-        if (other.hasGuidePosts()) {
-          setGuidePosts(other.getGuidePosts());
+        if (!other.guidePosts_.isEmpty()) {
+          if (guidePosts_.isEmpty()) {
+            guidePosts_ = other.guidePosts_;
+            bitField0_ = (bitField0_ & ~0x00000001);
+          } else {
+            ensureGuidePostsIsMutable();
+            guidePosts_.addAll(other.guidePosts_);
+          }
+          onChanged();
         }
         if (other.hasByteCount()) {
           setByteCount(other.getByteCount());
@@ -596,8 +677,11 @@ public final class PGuidePostsProtos {
         if (other.hasMaxLength()) {
           setMaxLength(other.getMaxLength());
         }
-        if (other.hasGuidePostsCount()) {
-          setGuidePostsCount(other.getGuidePostsCount());
+        if (other.hasEncodedGuidePostsCount()) {
+          setEncodedGuidePostsCount(other.getEncodedGuidePostsCount());
+        }
+        if (other.hasEncodedGuidePosts()) {
+          setEncodedGuidePosts(other.getEncodedGuidePosts());
         }
         this.mergeUnknownFields(other.getUnknownFields());
         return this;
@@ -626,38 +710,74 @@ public final class PGuidePostsProtos {
       }
       private int bitField0_;
 
-      // optional bytes guidePosts = 1;
-      private com.google.protobuf.ByteString guidePosts_ = com.google.protobuf.ByteString.EMPTY;
-      /**
-       * <code>optional bytes guidePosts = 1;</code>
-       */
-      public boolean hasGuidePosts() {
-        return ((bitField0_ & 0x00000001) == 0x00000001);
+      // repeated bytes guidePosts = 1;
+      private java.util.List<com.google.protobuf.ByteString> guidePosts_ = java.util.Collections.emptyList();
+      private void ensureGuidePostsIsMutable() {
+        if (!((bitField0_ & 0x00000001) == 0x00000001)) {
+          guidePosts_ = new java.util.ArrayList<com.google.protobuf.ByteString>(guidePosts_);
+          bitField0_ |= 0x00000001;
+         }
       }
       /**
-       * <code>optional bytes guidePosts = 1;</code>
+       * <code>repeated bytes guidePosts = 1;</code>
        */
-      public com.google.protobuf.ByteString getGuidePosts() {
-        return guidePosts_;
+      public java.util.List<com.google.protobuf.ByteString>
+          getGuidePostsList() {
+        return java.util.Collections.unmodifiableList(guidePosts_);
       }
       /**
-       * <code>optional bytes guidePosts = 1;</code>
+       * <code>repeated bytes guidePosts = 1;</code>
        */
-      public Builder setGuidePosts(com.google.protobuf.ByteString value) {
+      public int getGuidePostsCount() {
+        return guidePosts_.size();
+      }
+      /**
+       * <code>repeated bytes guidePosts = 1;</code>
+       */
+      public com.google.protobuf.ByteString getGuidePosts(int index) {
+        return guidePosts_.get(index);
+      }
+      /**
+       * <code>repeated bytes guidePosts = 1;</code>
+       */
+      public Builder setGuidePosts(
+          int index, com.google.protobuf.ByteString value) {
         if (value == null) {
     throw new NullPointerException();
   }
-  bitField0_ |= 0x00000001;
-        guidePosts_ = value;
+  ensureGuidePostsIsMutable();
+        guidePosts_.set(index, value);
         onChanged();
         return this;
       }
       /**
-       * <code>optional bytes guidePosts = 1;</code>
+       * <code>repeated bytes guidePosts = 1;</code>
+       */
+      public Builder addGuidePosts(com.google.protobuf.ByteString value) {
+        if (value == null) {
+    throw new NullPointerException();
+  }
+  ensureGuidePostsIsMutable();
+        guidePosts_.add(value);
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>repeated bytes guidePosts = 1;</code>
+       */
+      public Builder addAllGuidePosts(
+          java.lang.Iterable<? extends com.google.protobuf.ByteString> values) {
+        ensureGuidePostsIsMutable();
+        super.addAll(values, guidePosts_);
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>repeated bytes guidePosts = 1;</code>
        */
       public Builder clearGuidePosts() {
+        guidePosts_ = java.util.Collections.emptyList();
         bitField0_ = (bitField0_ & ~0x00000001);
-        guidePosts_ = getDefaultInstance().getGuidePosts();
         onChanged();
         return this;
       }
@@ -761,35 +881,71 @@ public final class PGuidePostsProtos {
         return this;
       }
 
-      // optional int32 guidePostsCount = 5;
-      private int guidePostsCount_ ;
+      // optional int32 encodedGuidePostsCount = 5;
+      private int encodedGuidePostsCount_ ;
       /**
-       * <code>optional int32 guidePostsCount = 5;</code>
+       * <code>optional int32 encodedGuidePostsCount = 5;</code>
        */
-      public boolean hasGuidePostsCount() {
+      public boolean hasEncodedGuidePostsCount() {
         return ((bitField0_ & 0x00000010) == 0x00000010);
       }
       /**
-       * <code>optional int32 guidePostsCount = 5;</code>
+       * <code>optional int32 encodedGuidePostsCount = 5;</code>
        */
-      public int getGuidePostsCount() {
-        return guidePostsCount_;
+      public int getEncodedGuidePostsCount() {
+        return encodedGuidePostsCount_;
       }
       /**
-       * <code>optional int32 guidePostsCount = 5;</code>
+       * <code>optional int32 encodedGuidePostsCount = 5;</code>
        */
-      public Builder setGuidePostsCount(int value) {
+      public Builder setEncodedGuidePostsCount(int value) {
         bitField0_ |= 0x00000010;
-        guidePostsCount_ = value;
+        encodedGuidePostsCount_ = value;
         onChanged();
         return this;
       }
       /**
-       * <code>optional int32 guidePostsCount = 5;</code>
+       * <code>optional int32 encodedGuidePostsCount = 5;</code>
        */
-      public Builder clearGuidePostsCount() {
+      public Builder clearEncodedGuidePostsCount() {
         bitField0_ = (bitField0_ & ~0x00000010);
-        guidePostsCount_ = 0;
+        encodedGuidePostsCount_ = 0;
+        onChanged();
+        return this;
+      }
+
+      // optional bytes encodedGuidePosts = 6;
+      private com.google.protobuf.ByteString encodedGuidePosts_ = com.google.protobuf.ByteString.EMPTY;
+      /**
+       * <code>optional bytes encodedGuidePosts = 6;</code>
+       */
+      public boolean hasEncodedGuidePosts() {
+        return ((bitField0_ & 0x00000020) == 0x00000020);
+      }
+      /**
+       * <code>optional bytes encodedGuidePosts = 6;</code>
+       */
+      public com.google.protobuf.ByteString getEncodedGuidePosts() {
+        return encodedGuidePosts_;
+      }
+      /**
+       * <code>optional bytes encodedGuidePosts = 6;</code>
+       */
+      public Builder setEncodedGuidePosts(com.google.protobuf.ByteString value) {
+        if (value == null) {
+    throw new NullPointerException();
+  }
+  bitField0_ |= 0x00000020;
+        encodedGuidePosts_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>optional bytes encodedGuidePosts = 6;</code>
+       */
+      public Builder clearEncodedGuidePosts() {
+        bitField0_ = (bitField0_ & ~0x00000020);
+        encodedGuidePosts_ = getDefaultInstance().getEncodedGuidePosts();
         onChanged();
         return this;
       }
@@ -819,12 +975,13 @@ public final class PGuidePostsProtos {
       descriptor;
   static {
     java.lang.String[] descriptorData = {
-      "\n\021PGuidePosts.proto\"r\n\013PGuidePosts\022\022\n\ngu" +
-      "idePosts\030\001 \001(\014\022\021\n\tbyteCount\030\002 \001(\003\022\020\n\010row" +
-      "Count\030\003 \001(\003\022\021\n\tmaxLength\030\004 \001(\005\022\027\n\017guideP" +
-      "ostsCount\030\005 \001(\005BE\n(org.apache.phoenix.co" +
-      "processor.generatedB\021PGuidePostsProtosH\001" +
-      "\210\001\001\240\001\001"
+      "\n\021PGuidePosts.proto\"\224\001\n\013PGuidePosts\022\022\n\ng" +
+      "uidePosts\030\001 \003(\014\022\021\n\tbyteCount\030\002 \001(\003\022\020\n\010ro" +
+      "wCount\030\003 \001(\003\022\021\n\tmaxLength\030\004 \001(\005\022\036\n\026encod" +
+      "edGuidePostsCount\030\005 \001(\005\022\031\n\021encodedGuideP" +
+      "osts\030\006 \001(\014BE\n(org.apache.phoenix.coproce" +
+      "ssor.generatedB\021PGuidePostsProtosH\001\210\001\001\240\001" +
+      "\001"
     };
     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
       new com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner() {
@@ -836,7 +993,7 @@ public final class PGuidePostsProtos {
           internal_static_PGuidePosts_fieldAccessorTable = new
             com.google.protobuf.GeneratedMessage.FieldAccessorTable(
               internal_static_PGuidePosts_descriptor,
-              new java.lang.String[] { "GuidePosts", "ByteCount", "RowCount", "MaxLength", "GuidePostsCount", });
+              new java.lang.String[] { "GuidePosts", "ByteCount", "RowCount", "MaxLength", "EncodedGuidePostsCount", "EncodedGuidePosts", });
           return null;
         }
       };
