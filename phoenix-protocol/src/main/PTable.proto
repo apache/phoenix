@@ -57,6 +57,8 @@ message PTableStats {
   optional int64 keyBytesCount = 4;
   optional int32 guidePostsCount = 5;
   optional PGuidePosts pGuidePosts = 6;
+  optional bytes encodedGuidePosts = 7;
+  optional int32 maxLength = 8;
 }
 
 message PTable {

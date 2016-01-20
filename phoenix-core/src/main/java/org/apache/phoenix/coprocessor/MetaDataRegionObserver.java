@@ -18,10 +18,6 @@
 package org.apache.phoenix.coprocessor;
 
 import java.io.IOException;
-
-import org.apache.log4j.Level;
-import org.apache.log4j.Logger;
-import org.apache.phoenix.jdbc.PhoenixDriver;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -36,28 +32,34 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.filter.SingleColumnValueFilter;
 import org.apache.hadoop.hbase.filter.CompareFilter;
+import org.apache.hadoop.hbase.filter.SingleColumnValueFilter;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.log4j.Level;
+import org.apache.log4j.Logger;
 import org.apache.phoenix.cache.GlobalCache;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PIndexState;
-import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.UpgradeUtil;
 
 
 /**
@@ -96,10 +98,52 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
         rebuildIndexTimeInterval = env.getConfiguration().getLong(QueryServices.INDEX_FAILURE_HANDLING_REBUILD_INTERVAL_ATTRIB,
             QueryServicesOptions.DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_INTERVAL);
     }
-
+    
+    private static String getJdbcUrl(RegionCoprocessorEnvironment env) {
+        String zkQuorum = env.getConfiguration().get(HConstants.ZOOKEEPER_QUORUM);
+        String zkClientPort = env.getConfiguration().get(HConstants.ZOOKEEPER_CLIENT_PORT,
+            Integer.toString(HConstants.DEFAULT_ZOOKEPER_CLIENT_PORT));
+        String zkParentNode = env.getConfiguration().get(HConstants.ZOOKEEPER_ZNODE_PARENT,
+            HConstants.DEFAULT_ZOOKEEPER_ZNODE_PARENT);
+        return PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum
+            + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkClientPort
+            + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkParentNode;
+    }
 
     @Override
     public void postOpen(ObserverContext<RegionCoprocessorEnvironment> e) {
+        final RegionCoprocessorEnvironment env = e.getEnvironment();
+
+        Runnable r = new Runnable() {
+            @Override
+            public void run() {
+                HTableInterface metaTable = null;
+                HTableInterface statsTable = null;
+                try {
+                    Thread.sleep(1000);
+                    metaTable = env.getTable(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME));
+                    statsTable = env.getTable(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME));
+                    if (UpgradeUtil.truncateStats(metaTable, statsTable)) {
+                        LOG.info("Stats are successfully truncated for upgrade 4.7!!");
+                    }
+                } catch (Exception exception) {
+                    LOG.warn("Exception while truncate stats..,"
+                            + " please check and delete stats manually inorder to get proper result with old client!!");
+                    LOG.warn(exception.getStackTrace());
+                } finally {
+                    try {
+                        if (metaTable != null) {
+                            metaTable.close();
+                        }
+                        if (statsTable != null) {
+                            statsTable.close();
+                        }
+                    } catch (IOException e) {}
+                }
+            }
+        };
+        (new Thread(r)).start();
+
         if (!enableRebuildIndex) {
             LOG.info("Failure Index Rebuild is skipped by configuration.");
             return;
@@ -132,17 +176,6 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
 
         public BuildIndexScheduleTask(RegionCoprocessorEnvironment env) {
             this.env = env;
-        }
-
-        private String getJdbcUrl() {
-            String zkQuorum = this.env.getConfiguration().get(HConstants.ZOOKEEPER_QUORUM);
-            String zkClientPort = this.env.getConfiguration().get(HConstants.ZOOKEEPER_CLIENT_PORT,
-                Integer.toString(HConstants.DEFAULT_ZOOKEPER_CLIENT_PORT));
-            String zkParentNode = this.env.getConfiguration().get(HConstants.ZOOKEEPER_ZNODE_PARENT,
-                HConstants.DEFAULT_ZOOKEEPER_ZNODE_PARENT);
-            return PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum
-                + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkClientPort
-                + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkParentNode;
         }
 
         @Override
@@ -219,7 +252,7 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
                     }
 
                     if (conn == null) {
-                        conn = DriverManager.getConnection(getJdbcUrl()).unwrap(PhoenixConnection.class);
+                        conn = DriverManager.getConnection(getJdbcUrl(env)).unwrap(PhoenixConnection.class);
                     }
 
                     String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTable);
