@@ -1450,25 +1450,26 @@ public class MetaDataClient {
             List<Mutation> functionData = Lists.newArrayListWithExpectedSize(function.getFunctionArguments().size() + 1);
 
             List<FunctionArgument> args = function.getFunctionArguments();
-            PreparedStatement argUpsert = connection.prepareStatement(INSERT_FUNCTION_ARGUMENT);
-
-            for (int i = 0; i < args.size(); i++) {
-                FunctionArgument arg = args.get(i);
-                addFunctionArgMutation(function.getFunctionName(), arg, argUpsert, i);
+            try (PreparedStatement argUpsert = connection.prepareStatement(INSERT_FUNCTION_ARGUMENT)) {
+                for (int i = 0; i < args.size(); i++) {
+                    FunctionArgument arg = args.get(i);
+                    addFunctionArgMutation(function.getFunctionName(), arg, argUpsert, i);
+                }
+                functionData.addAll(connection.getMutationState().toMutations().next().getSecond());
+                connection.rollback();
             }
-            functionData.addAll(connection.getMutationState().toMutations().next().getSecond());
-            connection.rollback();
 
-            PreparedStatement functionUpsert = connection.prepareStatement(CREATE_FUNCTION);
-            functionUpsert.setString(1, tenantIdStr);
-            functionUpsert.setString(2, function.getFunctionName());
-            functionUpsert.setInt(3, function.getFunctionArguments().size());
-            functionUpsert.setString(4, function.getClassName());
-            functionUpsert.setString(5, function.getJarPath());
-            functionUpsert.setString(6, function.getReturnType());
-            functionUpsert.execute();
-            functionData.addAll(connection.getMutationState().toMutations(null).next().getSecond());
-            connection.rollback();
+            try (PreparedStatement functionUpsert = connection.prepareStatement(CREATE_FUNCTION)) {
+                functionUpsert.setString(1, tenantIdStr);
+                functionUpsert.setString(2, function.getFunctionName());
+                functionUpsert.setInt(3, function.getFunctionArguments().size());
+                functionUpsert.setString(4, function.getClassName());
+                functionUpsert.setString(5, function.getJarPath());
+                functionUpsert.setString(6, function.getReturnType());
+                functionUpsert.execute();
+                functionData.addAll(connection.getMutationState().toMutations(null).next().getSecond());
+                connection.rollback();
+            }
             MetaDataMutationResult result = connection.getQueryServices().createFunction(functionData, function, stmt.isTemporary());
             MutationCode code = result.getMutationCode();
             switch(code) {
@@ -1880,7 +1881,6 @@ public class MetaDataClient {
                 }
             }
 
-            PreparedStatement colUpsert = connection.prepareStatement(INSERT_COLUMN_CREATE_TABLE);
             Map<String, PName> familyNames = Maps.newLinkedHashMap();
             boolean isPK = false;
             boolean rowTimeStampColumnAlreadyFound = false;
@@ -2056,37 +2056,39 @@ public class MetaDataClient {
             }
 
             short nextKeySeq = 0;
-            for (int i = 0; i < columns.size(); i++) {
-                PColumn column = columns.get(i);
-                final int columnPosition = column.getPosition();
-                // For client-side cache, we need to update the column
-                if (isViewColumnReferenced != null) {
-                    if (viewColumnConstants != null && columnPosition < viewColumnConstants.length) {
-                        columns.set(i, column = new DelegateColumn(column) {
-                            @Override
-                            public byte[] getViewConstant() {
-                                return viewColumnConstants[columnPosition];
-                            }
-                            @Override
-                            public boolean isViewReferenced() {
-                                return isViewColumnReferenced.get(columnPosition);
-                            }
-                        });
-                    } else {
-                        columns.set(i, column = new DelegateColumn(column) {
-                            @Override
-                            public boolean isViewReferenced() {
-                                return isViewColumnReferenced.get(columnPosition);
-                            }
-                        });
+            
+            try (PreparedStatement colUpsert = connection.prepareStatement(INSERT_COLUMN_CREATE_TABLE)) {
+                for (int i = 0; i < columns.size(); i++) {
+                    PColumn column = columns.get(i);
+                    final int columnPosition = column.getPosition();
+                    // For client-side cache, we need to update the column
+                    if (isViewColumnReferenced != null) {
+                        if (viewColumnConstants != null && columnPosition < viewColumnConstants.length) {
+                            columns.set(i, column = new DelegateColumn(column) {
+                                @Override
+                                public byte[] getViewConstant() {
+                                    return viewColumnConstants[columnPosition];
+                                }
+                                @Override
+                                public boolean isViewReferenced() {
+                                    return isViewColumnReferenced.get(columnPosition);
+                                }
+                            });
+                        } else {
+                            columns.set(i, column = new DelegateColumn(column) {
+                                @Override
+                                public boolean isViewReferenced() {
+                                    return isViewColumnReferenced.get(columnPosition);
+                                }
+                            });
+                        }
                     }
+                    Short keySeq = SchemaUtil.isPKColumn(column) ? ++nextKeySeq : null;
+                    addColumnMutation(schemaName, tableName, column, colUpsert, parentTableName, pkName, keySeq, saltBucketNum != null);
                 }
-                Short keySeq = SchemaUtil.isPKColumn(column) ? ++nextKeySeq : null;
-                addColumnMutation(schemaName, tableName, column, colUpsert, parentTableName, pkName, keySeq, saltBucketNum != null);
+                tableMetaData.addAll(connection.getMutationState().toMutations(timestamp).next().getSecond());
+                connection.rollback();
             }
-
-            tableMetaData.addAll(connection.getMutationState().toMutations(timestamp).next().getSecond());
-            connection.rollback();
 
             String dataTableName = parent == null || tableType == PTableType.VIEW ? null : parent.getTableName().getString();
             PIndexState indexState = parent == null || tableType == PTableType.VIEW  ? null : PIndexState.BUILDING;
@@ -2572,12 +2574,13 @@ public class MetaDataClient {
                         TABLE_NAME + "," +
                         propertyName +
                         ") VALUES (?, ?, ?, ?)";
-        PreparedStatement tableBoolUpsert = connection.prepareStatement(updatePropertySql);
-        tableBoolUpsert.setString(1, tenantId);
-        tableBoolUpsert.setString(2, schemaName);
-        tableBoolUpsert.setString(3, tableName);
-        tableBoolUpsert.setBoolean(4, propertyValue);
-        tableBoolUpsert.execute();
+        try (PreparedStatement tableBoolUpsert = connection.prepareStatement(updatePropertySql)) {
+            tableBoolUpsert.setString(1, tenantId);
+            tableBoolUpsert.setString(2, schemaName);
+            tableBoolUpsert.setString(3, tableName);
+            tableBoolUpsert.setBoolean(4, propertyValue);
+            tableBoolUpsert.execute();
+        }
     }
 
     private void mutateLongProperty(String tenantId, String schemaName, String tableName,
@@ -2588,12 +2591,13 @@ public class MetaDataClient {
                         TABLE_NAME + "," +
                         propertyName +
                         ") VALUES (?, ?, ?, ?)";
-        PreparedStatement tableBoolUpsert = connection.prepareStatement(updatePropertySql);
-        tableBoolUpsert.setString(1, tenantId);
-        tableBoolUpsert.setString(2, schemaName);
-        tableBoolUpsert.setString(3, tableName);
-        tableBoolUpsert.setLong(4, propertyValue);
-        tableBoolUpsert.execute();
+        try (PreparedStatement tableBoolUpsert = connection.prepareStatement(updatePropertySql)) {
+            tableBoolUpsert.setString(1, tenantId);
+            tableBoolUpsert.setString(2, schemaName);
+            tableBoolUpsert.setString(3, tableName);
+            tableBoolUpsert.setLong(4, propertyValue);
+            tableBoolUpsert.execute();
+        }
     }
 
     public MutationState addColumn(AddColumnStatement statement) throws SQLException {
@@ -2743,77 +2747,76 @@ public class MetaDataClient {
                 Long timeStamp = TransactionUtil.getTableTimestamp(connection, table.isTransactional() || nonTxToTx);
 
                 int numPkColumnsAdded = 0;
-                PreparedStatement colUpsert = connection.prepareStatement(INSERT_COLUMN_ALTER_TABLE);
-
                 List<PColumn> columns = Lists.newArrayListWithExpectedSize(columnDefs.size());
                 Set<String> colFamiliesForPColumnsToBeAdded = new LinkedHashSet<>();
                 Set<String> families = new LinkedHashSet<>();
                 if (columnDefs.size() > 0 ) {
-                    short nextKeySeq = SchemaUtil.getMaxKeySeq(table);
-                    for( ColumnDef colDef : columnDefs) {
-                        if (colDef != null && !colDef.isNull()) {
-                            if(colDef.isPK()) {
-                                throw new SQLExceptionInfo.Builder(SQLExceptionCode.NOT_NULLABLE_COLUMN_IN_ROW_KEY)
+                    try (PreparedStatement colUpsert = connection.prepareStatement(INSERT_COLUMN_ALTER_TABLE)) {
+                        short nextKeySeq = SchemaUtil.getMaxKeySeq(table);
+                        for( ColumnDef colDef : columnDefs) {
+                            if (colDef != null && !colDef.isNull()) {
+                                if(colDef.isPK()) {
+                                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.NOT_NULLABLE_COLUMN_IN_ROW_KEY)
+                                    .setColumnName(colDef.getColumnDefName().getColumnName()).build().buildException();
+                                } else {
+                                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_ADD_NOT_NULLABLE_COLUMN)
+                                    .setColumnName(colDef.getColumnDefName().getColumnName()).build().buildException();
+                                }
+                            }
+                            if (colDef != null && colDef.isPK() && table.getType() == VIEW && table.getViewType() != MAPPED) {
+                                throwIfLastPKOfParentIsFixedLength(getParentOfView(table), schemaName, tableName, colDef);
+                            }
+                            if (colDef != null && colDef.isRowTimestamp()) {
+                                throw new SQLExceptionInfo.Builder(SQLExceptionCode.ROWTIMESTAMP_CREATE_ONLY)
                                 .setColumnName(colDef.getColumnDefName().getColumnName()).build().buildException();
+                            }
+                            PColumn column = newColumn(position++, colDef, PrimaryKeyConstraint.EMPTY, table.getDefaultFamilyName() == null ? null : table.getDefaultFamilyName().getString(), true);
+                            columns.add(column);
+                            String pkName = null;
+                            Short keySeq = null;
+
+                            // TODO: support setting properties on other families?
+                            if (column.getFamilyName() == null) {
+                                ++numPkColumnsAdded;
+                                pkName = table.getPKName() == null ? null : table.getPKName().getString();
+                                keySeq = ++nextKeySeq;
                             } else {
-                                throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_ADD_NOT_NULLABLE_COLUMN)
-                                .setColumnName(colDef.getColumnDefName().getColumnName()).build().buildException();
+                                families.add(column.getFamilyName().getString());
                             }
+                            colFamiliesForPColumnsToBeAdded.add(column.getFamilyName() == null ? null : column.getFamilyName().getString());
+                            addColumnMutation(schemaName, tableName, column, colUpsert, null, pkName, keySeq, table.getBucketNum() != null);
                         }
-                        if (colDef != null && colDef.isPK() && table.getType() == VIEW && table.getViewType() != MAPPED) {
-                            throwIfLastPKOfParentIsFixedLength(getParentOfView(table), schemaName, tableName, colDef);
-                        }
-                        if (colDef != null && colDef.isRowTimestamp()) {
-                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.ROWTIMESTAMP_CREATE_ONLY)
-                            .setColumnName(colDef.getColumnDefName().getColumnName()).build().buildException();
-                        }
-                        PColumn column = newColumn(position++, colDef, PrimaryKeyConstraint.EMPTY, table.getDefaultFamilyName() == null ? null : table.getDefaultFamilyName().getString(), true);
-                        columns.add(column);
-                        String pkName = null;
-                        Short keySeq = null;
 
-                        // TODO: support setting properties on other families?
-                        if (column.getFamilyName() == null) {
-                            ++numPkColumnsAdded;
-                            pkName = table.getPKName() == null ? null : table.getPKName().getString();
-                            keySeq = ++nextKeySeq;
-                        } else {
-                            families.add(column.getFamilyName().getString());
-                        }
-                        colFamiliesForPColumnsToBeAdded.add(column.getFamilyName() == null ? null : column.getFamilyName().getString());
-                        addColumnMutation(schemaName, tableName, column, colUpsert, null, pkName, keySeq, table.getBucketNum() != null);
-                    }
-
-                    // Add any new PK columns to end of index PK
-                    if (numPkColumnsAdded>0) {
-                        // create PK column list that includes the newly created columns
-                        List<PColumn> pkColumns = Lists.newArrayListWithExpectedSize(table.getPKColumns().size()+numPkColumnsAdded);
-                        pkColumns.addAll(table.getPKColumns());
-                        for (int i=0; i<columnDefs.size(); ++i) {
-                            if (columnDefs.get(i).isPK()) {
-                                pkColumns.add(columns.get(i));
-                            }
-                        }
-                        int pkSlotPosition = table.getPKColumns().size()-1;
-                        for (PTable index : table.getIndexes()) {
-                            short nextIndexKeySeq = SchemaUtil.getMaxKeySeq(index);
-                            int indexPosition = index.getColumns().size();
+                        // Add any new PK columns to end of index PK
+                        if (numPkColumnsAdded>0) {
+                            // create PK column list that includes the newly created columns
+                            List<PColumn> pkColumns = Lists.newArrayListWithExpectedSize(table.getPKColumns().size()+numPkColumnsAdded);
+                            pkColumns.addAll(table.getPKColumns());
                             for (int i=0; i<columnDefs.size(); ++i) {
-                                ColumnDef colDef = columnDefs.get(i);
-                                if (colDef.isPK()) {
-                                    PDataType indexColDataType = IndexUtil.getIndexColumnDataType(colDef.isNull(), colDef.getDataType());
-                                    ColumnName indexColName = ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(null, colDef.getColumnDefName().getColumnName()));
-                                    Expression expression = new RowKeyColumnExpression(columns.get(i), new RowKeyValueAccessor(pkColumns, ++pkSlotPosition));
-                                    ColumnDef indexColDef = FACTORY.columnDef(indexColName, indexColDataType.getSqlTypeName(), colDef.isNull(), colDef.getMaxLength(), colDef.getScale(), true, colDef.getSortOrder(), expression.toString(), colDef.isRowTimestamp());
-                                    PColumn indexColumn = newColumn(indexPosition++, indexColDef, PrimaryKeyConstraint.EMPTY, null, true);
-                                    addColumnMutation(schemaName, index.getTableName().getString(), indexColumn, colUpsert, index.getParentTableName().getString(), index.getPKName() == null ? null : index.getPKName().getString(), ++nextIndexKeySeq, index.getBucketNum() != null);
+                                if (columnDefs.get(i).isPK()) {
+                                    pkColumns.add(columns.get(i));
+                                }
+                            }
+                            int pkSlotPosition = table.getPKColumns().size()-1;
+                            for (PTable index : table.getIndexes()) {
+                                short nextIndexKeySeq = SchemaUtil.getMaxKeySeq(index);
+                                int indexPosition = index.getColumns().size();
+                                for (int i=0; i<columnDefs.size(); ++i) {
+                                    ColumnDef colDef = columnDefs.get(i);
+                                    if (colDef.isPK()) {
+                                        PDataType indexColDataType = IndexUtil.getIndexColumnDataType(colDef.isNull(), colDef.getDataType());
+                                        ColumnName indexColName = ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(null, colDef.getColumnDefName().getColumnName()));
+                                        Expression expression = new RowKeyColumnExpression(columns.get(i), new RowKeyValueAccessor(pkColumns, ++pkSlotPosition));
+                                        ColumnDef indexColDef = FACTORY.columnDef(indexColName, indexColDataType.getSqlTypeName(), colDef.isNull(), colDef.getMaxLength(), colDef.getScale(), true, colDef.getSortOrder(), expression.toString(), colDef.isRowTimestamp());
+                                        PColumn indexColumn = newColumn(indexPosition++, indexColDef, PrimaryKeyConstraint.EMPTY, null, true);
+                                        addColumnMutation(schemaName, index.getTableName().getString(), indexColumn, colUpsert, index.getParentTableName().getString(), index.getPKName() == null ? null : index.getPKName().getString(), ++nextIndexKeySeq, index.getBucketNum() != null);
+                                    }
                                 }
                             }
                         }
+                        columnMetaData.addAll(connection.getMutationState().toMutations(timeStamp).next().getSecond());
+                        connection.rollback();
                     }
-
-                    columnMetaData.addAll(connection.getMutationState().toMutations(timeStamp).next().getSecond());
-                    connection.rollback();
                 } else {
                     // Check that HBase configured properly for mutable secondary indexing
                     // if we're changing from an immutable table to a mutable table and we
