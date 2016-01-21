@@ -3311,8 +3311,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         wait = false;
                     }
                     // It is guaranteed that this poll won't hang indefinitely because this is the
-                    // only thread that removes items from the queue.
-                    WeakReference<PhoenixConnection> connRef = connectionsQueue.poll();
+                    // only thread that removes items from the queue. Still adding a 1 ms timeout
+                    // for sanity check.
+                    WeakReference<PhoenixConnection> connRef =
+                            connectionsQueue.poll(1, TimeUnit.MILLISECONDS);
+                    if (connRef == null) {
+                        throw new IllegalStateException(
+                                "Connection ref found to be null. This is a bug. Some other thread removed items from the connection queue.");
+                    }
                     PhoenixConnection conn = connRef.get();
                     if (conn != null && !conn.isClosed()) {
                         LinkedBlockingQueue<WeakReference<TableResultIterator>> scannerQueue =
@@ -3323,7 +3329,15 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         int renewed = 0;
                         long start = System.currentTimeMillis();
                         while (numScanners > 0) {
-                            WeakReference<TableResultIterator> ref = scannerQueue.poll();
+                            // It is guaranteed that this poll won't hang indefinitely because this is the
+                            // only thread that removes items from the queue. Still adding a 1 ms timeout
+                            // for sanity check.
+                            WeakReference<TableResultIterator> ref =
+                                    scannerQueue.poll(1, TimeUnit.MILLISECONDS);
+                            if (ref == null) {
+                                throw new IllegalStateException(
+                                        "TableResulIterator ref found to be null. This is a bug. Some other thread removed items from the scanner queue.");
+                            }
                             TableResultIterator scanningItr = ref.get();
                             if (scanningItr != null) {
                                 RenewLeaseStatus status = scanningItr.renewLease();
