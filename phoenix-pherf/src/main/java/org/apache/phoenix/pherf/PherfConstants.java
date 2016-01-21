@@ -44,6 +44,7 @@ public class PherfConstants {
             SCENARIO_ROOT_PATTERN =
             		".*" + PherfConstants.RESOURCE_SCENARIO.substring(1) + ".*" + PherfConstants.RESOURCE_SCENARIO.substring(1) + ".*";
     public static final String SCHEMA_ROOT_PATTERN = ".*";
+    public static final String TEST_SCENARIO_ROOT_PATTERN = ".*" + "test" + "_" + PherfConstants.RESOURCE_SCENARIO.substring(1);
     public static final String PHERF_PROPERTIES = "pherf.properties";
 
     public static final String EXPORT_DIR = "CSV_EXPORT";

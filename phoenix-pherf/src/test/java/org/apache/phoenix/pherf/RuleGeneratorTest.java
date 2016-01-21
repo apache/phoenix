@@ -47,9 +47,8 @@ import org.junit.Ignore;
 import org.junit.Test;
 
 public class RuleGeneratorTest {
-    private static final String matcherScenario = PherfConstants.SCENARIO_ROOT_PATTERN + ".xml";
+    private static final String matcherScenario = PherfConstants.TEST_SCENARIO_ROOT_PATTERN + ".xml";
 
-    @Ignore("Flapping - see PHOENIX-2592")
     @Test
     public void testDateGenerator() throws Exception {
         XMLConfigParser parser = new XMLConfigParser(matcherScenario);
@@ -194,7 +193,7 @@ public class RuleGeneratorTest {
         expectedValues.add("bBByYhnNbBs9kWu");
         expectedValues.add("cCCyYhnNbBs9kWr");
 
-        XMLConfigParser parser = new XMLConfigParser(".*test_scenario.xml");
+        XMLConfigParser parser = new XMLConfigParser(matcherScenario);
         WriteWorkload loader = new WriteWorkload(parser);
         RulesApplier rulesApplier = loader.getRulesApplier();
         Scenario scenario = parser.getScenarios().get(0);
@@ -212,7 +211,7 @@ public class RuleGeneratorTest {
 
     @Test
     public void testRuleOverrides() throws Exception {
-        XMLConfigParser parser = new XMLConfigParser(".*test_scenario.xml");
+        XMLConfigParser parser = new XMLConfigParser(matcherScenario);
         WriteWorkload loader = new WriteWorkload(parser);
         RulesApplier rulesApplier = loader.getRulesApplier();
         Scenario scenario = parser.getScenarios().get(0);
