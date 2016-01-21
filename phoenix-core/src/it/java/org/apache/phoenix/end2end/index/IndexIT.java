@@ -70,6 +70,7 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
 	
 	private final boolean localIndex;
     private final boolean transactional;
+    private final boolean mutable;
 	private final String tableDDLOptions;
 	private final String tableName;
     private final String indexName;
@@ -79,6 +80,7 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
 	public IndexIT(boolean localIndex, boolean mutable, boolean transactional) {
 		this.localIndex = localIndex;
 		this.transactional = transactional;
+		this.mutable = mutable;
 		StringBuilder optionBuilder = new StringBuilder();
 		if (!mutable) 
 			optionBuilder.append(" IMMUTABLE_ROWS=true ");
@@ -461,7 +463,7 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
 	        // Can't set IMMUTABLE_ROWS, MULTI_TENANT or DEFAULT_COLUMN_FAMILY_NAME on an index
 	        assertNull(indexTable.getDefaultFamilyName());
 	        assertFalse(indexTable.isMultiTenant());
-	        assertFalse(indexTable.isImmutableRows());
+	        assertEquals(mutable, !indexTable.isImmutableRows()); // Should match table
 	        if(localIndex) {
 	            assertEquals(10, indexTable.getBucketNum().intValue());
 	            assertTrue(indexTable.isWALDisabled());
