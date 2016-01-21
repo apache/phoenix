@@ -92,12 +92,6 @@ import org.apache.phoenix.util.TransactionUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.base.Predicate;
-import com.google.common.collect.Iterators;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
-
 import co.cask.tephra.Transaction;
 import co.cask.tephra.Transaction.VisibilityLevel;
 import co.cask.tephra.TransactionAware;
@@ -110,12 +104,16 @@ import co.cask.tephra.hbase10.TransactionAwareHTable;
 import co.cask.tephra.visibility.FenceWait;
 import co.cask.tephra.visibility.VisibilityFence;
 
+import com.google.common.base.Predicate;
+import com.google.common.collect.Iterators;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
+
 /**
  * 
  * Tracks the uncommitted state
  *
- * 
- * @since 0.1
  */
 public class MutationState implements SQLCloseable {
     private static final Logger logger = LoggerFactory.getLogger(MutationState.class);
@@ -1227,7 +1225,9 @@ public class MutationState implements SQLCloseable {
             List<PTable> oldIndexes;
             PTableRef ptableRef = cache.getTableRef(dataTable.getKey());
             oldIndexes = ptableRef.getTable().getIndexes();
-            MetaDataMutationResult result = client.updateCache(dataTable.getTenantId(), dataTable.getSchemaName().getString(), dataTable.getTableName().getString());
+            // Always check at server for metadata change, as it's possible that the table is configured to not check for metadata changes
+            // but in this case, the tx manager is telling us it's likely that there has been a change.
+            MetaDataMutationResult result = client.updateCache(dataTable.getTenantId(), dataTable.getSchemaName().getString(), dataTable.getTableName().getString(), true);
             long timestamp = TransactionUtil.getResolvedTime(connection, result);
             tableRef.setTimeStamp(timestamp);
             PTable updatedDataTable = result.getTable();
