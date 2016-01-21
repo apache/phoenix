@@ -188,6 +188,12 @@ import org.apache.twill.zookeeper.ZKClients;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import co.cask.tephra.TransactionSystemClient;
+import co.cask.tephra.TxConstants;
+import co.cask.tephra.distributed.PooledClientProvider;
+import co.cask.tephra.distributed.TransactionServiceClient;
+import co.cask.tephra.hbase98.coprocessor.TransactionProcessor;
+
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Throwables;
@@ -199,12 +205,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-
-import co.cask.tephra.TransactionSystemClient;
-import co.cask.tephra.TxConstants;
-import co.cask.tephra.distributed.PooledClientProvider;
-import co.cask.tephra.distributed.TransactionServiceClient;
-import co.cask.tephra.hbase98.coprocessor.TransactionProcessor;
 
 public class ConnectionQueryServicesImpl extends DelegateQueryServices implements ConnectionQueryServices {
     private static final Logger logger = LoggerFactory.getLogger(ConnectionQueryServicesImpl.class);
@@ -2422,6 +2422,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                             PhoenixDatabaseMetaData.TRANSACTIONAL + " " + PBoolean.INSTANCE.getSqlTypeName());
                                     metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG, MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0 - 1, 
                                             PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY + " " + PLong.INSTANCE.getSqlTypeName());
+                                    setImmutableTableIndexesImmutable(metaConnection);
 									// Drop old stats table so that new stats table is created
 									metaConnection = dropStatsTable(metaConnection,
 											MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0);
@@ -2538,9 +2539,36 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     renewLeaseTaskFrequency, TimeUnit.MILLISECONDS);
             }
         }
+    }   
+
+    /**
+     * Set IMMUTABLE_ROWS to true for all index tables over immutable tables.
+     * @param metaConnection connection over which to run the upgrade
+     * @throws SQLException
+     */
+    private static void setImmutableTableIndexesImmutable(PhoenixConnection metaConnection) throws SQLException {
+        boolean autoCommit = metaConnection.getAutoCommit();
+        try {
+            metaConnection.setAutoCommit(true);
+            metaConnection.createStatement().execute(
+                    "UPSERT INTO SYSTEM.CATALOG(TENANT_ID, TABLE_SCHEM, TABLE_NAME, COLUMN_NAME, COLUMN_FAMILY, IMMUTABLE_ROWS)\n" + 
+                    "SELECT A.TENANT_ID, A.TABLE_SCHEM,B.COLUMN_FAMILY,null,null,true\n" + 
+                    "FROM SYSTEM.CATALOG A JOIN SYSTEM.CATALOG B ON (\n" + 
+                    " A.TENANT_ID = B.TENANT_ID AND \n" + 
+                    " A.TABLE_SCHEM = B.TABLE_SCHEM AND\n" + 
+                    " A.TABLE_NAME = B.TABLE_NAME AND\n" + 
+                    " A.COLUMN_NAME = B.COLUMN_NAME AND\n" + 
+                    " B.LINK_TYPE = 1\n" + 
+                    ")\n" + 
+                    "WHERE A.COLUMN_FAMILY IS NULL AND\n" + 
+                    " B.COLUMN_FAMILY IS NOT NULL AND\n" + 
+                    " A.IMMUTABLE_ROWS = TRUE;");
+        } finally {
+            metaConnection.setAutoCommit(autoCommit);
+        }
     }
-    
-	private PhoenixConnection dropStatsTable(PhoenixConnection oldMetaConnection, long timestamp)
+
+    private PhoenixConnection dropStatsTable(PhoenixConnection oldMetaConnection, long timestamp)
 			throws SQLException, IOException {
 		Properties props = PropertiesUtil.deepCopy(oldMetaConnection.getClientInfo());
 		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(timestamp-1));
