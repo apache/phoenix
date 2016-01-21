@@ -2427,6 +2427,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 									// Drop old stats table so that new stats table is created
 									metaConnection = dropStatsTable(metaConnection,
 											MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0);
+									// Clear the server cache so the above changes make it over to any clients
+									// that already have cached data.
+									clearCache();
                                 }
                                 
                             }
@@ -2608,11 +2611,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 				throw sqlE;
 			}
 		}
-		metaConnection.removeTable(null, PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME,
-				PhoenixDatabaseMetaData.SYSTEM_STATS_TABLE, MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP);
-		clearTableFromCache(ByteUtil.EMPTY_BYTE_ARRAY, PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME_BYTES,
-				PhoenixDatabaseMetaData.SYSTEM_STATS_TABLE_BYTES, MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP);
-		clearTableRegionCache(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES);
 		return metaConnection;
 	}
 
