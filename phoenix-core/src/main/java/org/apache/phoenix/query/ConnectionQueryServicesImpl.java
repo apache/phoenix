@@ -187,12 +187,6 @@ import org.apache.twill.zookeeper.ZKClients;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import co.cask.tephra.TransactionSystemClient;
-import co.cask.tephra.TxConstants;
-import co.cask.tephra.distributed.PooledClientProvider;
-import co.cask.tephra.distributed.TransactionServiceClient;
-import co.cask.tephra.hbase11.coprocessor.TransactionProcessor;
-
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Throwables;
@@ -204,6 +198,12 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+
+import co.cask.tephra.TransactionSystemClient;
+import co.cask.tephra.TxConstants;
+import co.cask.tephra.distributed.PooledClientProvider;
+import co.cask.tephra.distributed.TransactionServiceClient;
+import co.cask.tephra.hbase11.coprocessor.TransactionProcessor;
 
 
 public class ConnectionQueryServicesImpl extends DelegateQueryServices implements ConnectionQueryServices {
@@ -2259,6 +2259,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         SQLException sqlE = null;
         try {
             metaConnection.createStatement().executeUpdate("ALTER TABLE " + tableName + " ADD " + (addIfNotExists ? " IF NOT EXISTS " : "") + columns );
+        } catch (NewerTableAlreadyExistsException e) {
+            logger.warn("Table already modified at this timestamp, so assuming add of these columns already done: " + columns);
         } catch (SQLException e) {
             logger.warn("Add column failed due to:" + e);
             sqlE = e;
@@ -2553,7 +2555,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     ")\n" + 
                     "WHERE A.COLUMN_FAMILY IS NULL AND\n" + 
                     " B.COLUMN_FAMILY IS NOT NULL AND\n" + 
-                    " A.IMMUTABLE_ROWS = TRUE;");
+                    " A.IMMUTABLE_ROWS = TRUE");
         } finally {
             metaConnection.setAutoCommit(autoCommit);
         }
