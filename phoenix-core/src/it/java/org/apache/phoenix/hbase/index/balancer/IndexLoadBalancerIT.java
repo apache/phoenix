@@ -54,6 +54,7 @@ import org.apache.phoenix.hbase.index.Indexer;
 import org.apache.phoenix.hbase.index.master.IndexMasterObserver;
 import org.apache.phoenix.util.ConfigUtil;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -389,6 +390,7 @@ public class IndexLoadBalancerIT {
 
     }
     
+    @Ignore // FIXME: PHOENIX-2625 
     @Test
     public void testRoundRobinAssignmentDuringMasterStartUp() throws Exception {
         MiniHBaseCluster cluster = UTIL.getHBaseCluster();
