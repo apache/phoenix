@@ -53,10 +53,14 @@ import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.base.Preconditions;
 
-public class TupleProjectionCompiler {
+public final class TupleProjectionCompiler {
     public static final PName PROJECTED_TABLE_SCHEMA = PNameFactory.newName(".");
     private static final ParseNodeFactory NODE_FACTORY = new ParseNodeFactory();
-    
+
+    private TupleProjectionCompiler() {
+    	throw new AssertionError("Must not instantiate this class");
+    }
+
     public static PTable createProjectedTable(SelectStatement select, StatementContext context) throws SQLException {
         Preconditions.checkArgument(!select.isJoin());
         // Non-group-by or group-by aggregations will create its own projected result.

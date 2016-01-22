@@ -33,12 +33,16 @@ import com.google.common.base.Preconditions;
  * Utility class for {@linkplain IndexTool}
  *
  */
-public class IndexToolUtil {
+public final class IndexToolUtil {
 
 	private static final String ALTER_INDEX_QUERY_TEMPLATE = "ALTER INDEX IF EXISTS %s ON %s %s";  
     
 	private static final Logger LOG = LoggerFactory.getLogger(IndexToolUtil.class);
-	
+
+	private IndexToolUtil() {
+		throw new AssertionError("Must not instantiate this class");
+    }
+
 	/**
 	 * Updates the index state.
 	 * @param configuration

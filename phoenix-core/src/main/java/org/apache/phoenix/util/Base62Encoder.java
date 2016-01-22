@@ -19,13 +19,17 @@ package org.apache.phoenix.util;
 /**
  * Utility for converting a base 10 number to string that represents a base 62 number 
  */
-public class Base62Encoder {
+public final class Base62Encoder {
 
     // All possible chars for representing a number as a base 62 encoded String
     public static final char[] digits = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz".toCharArray();
 
     private static final char[] DigitTens = new char[3844];
     private static final char[] DigitOnes = new char[3844];
+
+    private Base62Encoder() {
+        throw new AssertionError("Must not instantiate this class");
+	}
 
     static {
         for (byte i = 0; i < 62; ++i) {

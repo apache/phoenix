@@ -53,7 +53,7 @@ import com.sun.istack.NotNull;
 /**
  * Helper class to manage using the {@link Tracer} within Phoenix
  */
-public class Tracing {
+public final class Tracing {
 
     private static final Log LOG = LogFactory.getLog(Tracing.class);
 
@@ -64,6 +64,10 @@ public class Tracing {
 
     // Constants for passing into the metrics system
     private static final String TRACE_METRIC_PREFIX = "phoenix.trace.instance";
+
+    private Tracing() {
+		throw new AssertionError("Must not instantiate this class");
+	}
 
     /**
      * Manage the types of frequencies that we support. By default, we never turn on tracing.

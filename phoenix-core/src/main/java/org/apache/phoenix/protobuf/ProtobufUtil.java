@@ -40,7 +40,11 @@ import org.apache.phoenix.coprocessor.generated.ServerCachingProtos;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.schema.PTableType;
 
-public class ProtobufUtil {
+public final class ProtobufUtil {
+
+	private ProtobufUtil() {
+		throw new AssertionError("Must not instantiate this class");
+	}
 
     /**
      * Stores an exception encountered during RPC invocation so it can be passed back through to the

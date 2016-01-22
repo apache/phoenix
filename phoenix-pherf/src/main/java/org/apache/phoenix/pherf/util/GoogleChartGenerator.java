@@ -376,7 +376,12 @@ public class GoogleChartGenerator {
 		}
     }
     
-    static class StaticGoogleChartsRenderingData {
+    static final class StaticGoogleChartsRenderingData {
+    	
+    	private StaticGoogleChartsRenderingData() {
+			throw new AssertionError("Must not instantiate this class");
+		}
+    	
 		public static String HEADER = "<html><head><title>[title]</title>"
 				+ "<script type='text/javascript' src='https://www.google.com/jsapi'></script>"
 				+ "<script type='text/javascript'>google.load('visualization', '1', {packages: ['corechart', 'bar']});google.setOnLoadCallback(drawMaterial);"

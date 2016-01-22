@@ -22,9 +22,13 @@ import com.google.common.math.LongMath;
 /**
  * Sequence related util functions
  */
-public class SequenceUtil {
+public final class SequenceUtil {
 
     public static final long DEFAULT_NUM_SLOTS_TO_ALLOCATE = 1L; 
+    
+    private SequenceUtil() {
+		throw new AssertionError("Must not instantiate this class");
+	}
     
     /**
      * @return true if we limit of a sequence has been reached.

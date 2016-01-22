@@ -37,7 +37,7 @@ import org.apache.phoenix.hbase.index.util.VersionUtil;
 
 
 @SuppressWarnings("deprecation")
-public class ServerUtil {
+public final class ServerUtil {
     private static final int COPROCESSOR_SCAN_WORKS = VersionUtil.encodeVersion("0.98.6");
     
     private static final String FORMAT = "ERROR %d (%s): %s";
@@ -48,6 +48,10 @@ public class ServerUtil {
         // Map a normal exception into a corresponding SQLException.
         errorcodeMap.put(ArithmeticException.class, SQLExceptionCode.SERVER_ARITHMETIC_ERROR);
     }
+    
+    private ServerUtil() {
+		throw new AssertionError("Must not instantiate this class");
+	}
 
     public static void throwIOException(String msg, Throwable t) throws IOException {
         throw createIOException(msg, t);

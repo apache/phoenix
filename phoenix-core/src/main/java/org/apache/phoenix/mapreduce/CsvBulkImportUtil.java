@@ -26,7 +26,11 @@ import com.google.common.annotations.VisibleForTesting;
 /**
  * Collection of utility methods for setting up bulk import jobs.
  */
-public class CsvBulkImportUtil {
+public final class CsvBulkImportUtil {
+
+	private CsvBulkImportUtil() {
+		throw new AssertionError("Must not instantiate this class");
+	}
 
     /**
      * Configure a job configuration for a bulk CSV import.

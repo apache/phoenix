@@ -27,10 +27,14 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.joda.time.DateTimeZone;
 
-public class JodaTimezoneCache {
+public final class JodaTimezoneCache {
 
     public static final int CACHE_EXPRIRE_TIME_MINUTES = 10;
     private static final LoadingCache<ByteBuffer, DateTimeZone> cachedJodaTimeZones = createTimezoneCache();
+
+    private JodaTimezoneCache() {
+    	throw new AssertionError("Must not instantiate this class");
+    }
 
     /**
      * Returns joda's DateTimeZone instance from cache or create new instance and cache it.

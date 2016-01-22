@@ -96,8 +96,12 @@ import com.google.common.collect.Lists;
  *
  * @since 0.1
  */
-public class FromCompiler {
+public final class FromCompiler {
     private static final Logger logger = LoggerFactory.getLogger(FromCompiler.class);
+
+    private FromCompiler() {
+    	throw new AssertionError("Must not instantiate this class");
+    }
 
     public static final ColumnResolver EMPTY_TABLE_RESOLVER = new ColumnResolver() {
 

@@ -26,12 +26,16 @@ import java.sql.SQLException;
 * ConnectionFactory is to handle database connection
 *
 */
-public class ConnectionFactory {
+public final class ConnectionFactory {
 
   private static Connection con;
   //TODO : need to get port and host from configuration
   protected static String PHOENIX_HOST = "localhost";
   protected static int PHOENIX_PORT = 2181;
+  
+  private ConnectionFactory() {
+	throw new AssertionError("Must not instantiate this class");
+  }
 
   public static Connection getConnection() throws SQLException, ClassNotFoundException {
     if (con == null || con.isClosed()) {

@@ -37,10 +37,14 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PDataType;
 
-public class UnionCompiler {
+public final class UnionCompiler {
     private static final PName UNION_FAMILY_NAME = PNameFactory.newName("unionFamilyName");
     private static final PName UNION_SCHEMA_NAME = PNameFactory.newName("unionSchemaName");
     private static final PName UNION_TABLE_NAME = PNameFactory.newName("unionTableName");
+
+    private UnionCompiler() {
+    	throw new AssertionError("Must not instantiate this class");
+    }
 
     public static List<QueryPlan> checkProjectionNumAndTypes(List<QueryPlan> selectPlans) throws SQLException {
         QueryPlan plan = selectPlans.get(0);
