@@ -109,7 +109,7 @@
     <collections.version>3.2.1</collections.version>
     <jodatime.version>2.7</jodatime.version>
     <joni.version>2.1.2</joni.version>
-    <calcite.version>1.5.0</calcite.version>
+    <calcite.version>1.6.0</calcite.version>
     <jettyVersion>8.1.7.v20120910</jettyVersion>
     <tephra.version>0.6.4</tephra.version>
 
