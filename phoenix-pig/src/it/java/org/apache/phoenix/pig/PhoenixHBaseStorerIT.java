@@ -19,10 +19,12 @@
  */
 package org.apache.phoenix.pig;
 
+import static org.apache.pig.builtin.mock.Storage.tuple;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
+import java.sql.Array;
 import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.Collection;
@@ -253,5 +255,40 @@ public class PhoenixHBaseStorerIT extends BasePigIT {
         assertEquals(now, rs.getTime(3).getTime());
         assertEquals(now, rs.getTimestamp(4).getTime());
      
+    }
+    
+    @Test
+    public void testStoreForArray() throws Exception {
+     
+        final String tableName = "TABLE5";
+        final Statement stmt = conn.createStatement();
+        String ddl = "CREATE TABLE  " + tableName
+                + " ( ID INTEGER PRIMARY KEY, dbl double array[], a_varchar_array varchar array)";
+      
+        stmt.execute(ddl);
+      
+        final Data data = Storage.resetData(pigServer);
+        data.set("in",  tuple(1, tuple(2.2)),
+                        tuple(2, tuple(2.4, 2.5)),
+                        tuple(3, tuple(2.3)));
+
+        pigServer.setBatchOn();
+        pigServer.registerQuery("A = LOAD 'in' USING mock.Storage() as (id:int, dbl:tuple());");
+        pigServer.registerQuery("Store A into 'hbase://" + tableName + "/ID,DBL"
+                               + "' using " + PhoenixHBaseStorage.class.getName() + "('"
+                                + zkQuorum + "', '-batchSize 1000');");
+
+        if (pigServer.executeBatch().get(0).getStatus() != JOB_STATUS.COMPLETED) {
+             throw new RuntimeException("Job failed", pigServer.executeBatch()
+                    .get(0).getException());
+        }
+
+        final ResultSet rs = stmt
+                .executeQuery(String.format("SELECT id , dbl FROM %s where id = 2" , tableName));
+
+        assertTrue(rs.next());
+        assertEquals(2, rs.getInt(1));
+        Array expectedDoubleArr = conn.createArrayOf("DOUBLE", new Double[] { 2.4, 2.5 });
+        assertEquals(expectedDoubleArr,rs.getArray(2));
     }
 }

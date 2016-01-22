@@ -22,6 +22,7 @@ package org.apache.phoenix.pig;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
+import java.sql.Array;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.ArrayList;
@@ -38,6 +39,8 @@ import org.apache.pig.data.Tuple;
 import org.apache.pig.impl.logicalLayer.schema.Schema;
 import org.apache.pig.impl.logicalLayer.schema.Schema.FieldSchema;
 import org.junit.Test;
+
+import com.google.common.collect.Lists;
 
 /**
  * 
@@ -672,4 +675,166 @@ public class PhoenixHBaseLoaderIT extends BasePigIT {
         List<Tuple> actualList = data.get("out");
         assertEquals(expectedList.size(), actualList.size());
     }
+    
+   /**
+    * 
+    * @throws Exception
+    */
+    @Test
+    public void testLoadForArrayWithQuery() throws Exception {
+         //create the table
+        final String TABLE = "TABLE14";
+        String ddl = "CREATE TABLE  " + TABLE
+                + " ( ID INTEGER PRIMARY KEY, a_double_array double array[] , a_varchar_array varchar array, a_concat_str varchar, sep varchar)";
+                
+        conn.createStatement().execute(ddl);
+        
+        Double[] doubleArr =  new Double[3];
+        doubleArr[0] = 2.2;
+        doubleArr[1] = 4.4;
+        doubleArr[2] = 6.6;
+        Array doubleArray = conn.createArrayOf("DOUBLE", doubleArr);
+        Tuple doubleArrTuple = Storage.tuple(2.2d, 4.4d, 6.6d);
+        
+        Double[] doubleArr2 =  new Double[2];
+        doubleArr2[0] = 12.2;
+        doubleArr2[1] = 22.2;
+        Array doubleArray2 = conn.createArrayOf("DOUBLE", doubleArr2);
+        Tuple doubleArrTuple2 = Storage.tuple(12.2d, 22.2d);
+        
+        String[] strArr =  new String[4];
+        strArr[0] = "ABC";
+        strArr[1] = "DEF";
+        strArr[2] = "GHI";
+        strArr[3] = "JKL";
+        Array strArray  = conn.createArrayOf("VARCHAR", strArr);
+        Tuple strArrTuple = Storage.tuple("ABC", "DEF", "GHI", "JKL");
+        
+        String[] strArr2 =  new String[2];
+        strArr2[0] = "ABC";
+        strArr2[1] = "XYZ";
+        Array strArray2  = conn.createArrayOf("VARCHAR", strArr2);
+        Tuple strArrTuple2 = Storage.tuple("ABC", "XYZ");
+        
+        //upsert data.
+        final String dml = "UPSERT INTO " + TABLE + " VALUES(?, ?, ?, ?, ?) ";
+        PreparedStatement stmt = conn.prepareStatement(dml);
+        stmt.setInt(1, 1);
+        stmt.setArray(2, doubleArray);
+        stmt.setArray(3, strArray);
+        stmt.setString(4, "ONE,TWO,THREE");
+        stmt.setString(5, ",");
+        stmt.execute();
+        
+        stmt.setInt(1, 2);
+        stmt.setArray(2, doubleArray2);
+        stmt.setArray(3, strArray2);
+        stmt.setString(4, "FOUR:five:six");
+        stmt.setString(5, ":");
+        stmt.execute();
+       
+        conn.commit();
+        
+        Tuple dynArrTuple = Storage.tuple("ONE", "TWO", "THREE");
+        Tuple dynArrTuple2 = Storage.tuple("FOUR", "five", "six");
+        
+        //sql query
+        final String sqlQuery = String.format(" SELECT ID, A_DOUBLE_ARRAY, A_VARCHAR_ARRAY, REGEXP_SPLIT(a_concat_str, sep) AS flattend_str FROM %s ", TABLE); 
+      
+        final Data data = Storage.resetData(pigServer);
+        List<Tuple> expectedList = new ArrayList<Tuple>();
+        expectedList.add(Storage.tuple(1, 3L, 4L, dynArrTuple));
+        expectedList.add(Storage.tuple(2, 2L, 2L, dynArrTuple2));
+        final String load = String.format("A = load 'hbase://query/%s' using " + PhoenixHBaseLoader.class.getName() + "('%s');",sqlQuery,zkQuorum);
+        pigServer.setBatchOn();
+        pigServer.registerQuery(load);
+        pigServer.registerQuery("B = FOREACH A GENERATE ID, SIZE(A_DOUBLE_ARRAY), SIZE(A_VARCHAR_ARRAY), FLATTEND_STR;");
+        pigServer.registerQuery("STORE B INTO 'out' using mock.Storage();");
+        pigServer.executeBatch();
+        
+        List<Tuple> actualList = data.get("out");
+        assertEquals(expectedList.size(), actualList.size());
+        assertEquals(expectedList, actualList);
+        
+        Schema schema = pigServer.dumpSchema("A");
+        List<FieldSchema> fields = schema.getFields();
+        assertEquals(4, fields.size());
+        assertTrue(fields.get(0).alias.equalsIgnoreCase("ID"));
+        assertTrue(fields.get(0).type == DataType.INTEGER);
+        assertTrue(fields.get(1).alias.equalsIgnoreCase("A_DOUBLE_ARRAY"));
+        assertTrue(fields.get(1).type == DataType.TUPLE);
+        assertTrue(fields.get(2).alias.equalsIgnoreCase("A_VARCHAR_ARRAY"));
+        assertTrue(fields.get(2).type == DataType.TUPLE);
+        assertTrue(fields.get(3).alias.equalsIgnoreCase("FLATTEND_STR"));
+        assertTrue(fields.get(3).type == DataType.TUPLE);
+        
+        Iterator<Tuple> iterator = pigServer.openIterator("A");
+        Tuple firstTuple = Storage.tuple(1, doubleArrTuple, strArrTuple, dynArrTuple);
+        Tuple secondTuple = Storage.tuple(2, doubleArrTuple2, strArrTuple2, dynArrTuple2);
+        List<Tuple> expectedRows = Lists.newArrayList(firstTuple, secondTuple);
+        List<Tuple> actualRows = Lists.newArrayList();
+        while (iterator.hasNext()) {
+            Tuple tuple = iterator.next();
+            actualRows.add(tuple);
+        }
+        assertEquals(expectedRows, actualRows);
+    }
+    
+    
+    /**
+     * 
+     * @throws Exception
+     */
+     @Test
+     public void testLoadForArrayWithTable() throws Exception {
+          //create the table
+         final String TABLE = "TABLE15";
+         String ddl = "CREATE TABLE  " + TABLE
+                 + " ( ID INTEGER PRIMARY KEY, a_double_array double array[])";
+                 
+         conn.createStatement().execute(ddl);
+         
+         Double[] doubleArr =  new Double[3];
+         doubleArr[0] = 2.2;
+         doubleArr[1] = 4.4;
+         doubleArr[2] = 6.6;
+         Array doubleArray = conn.createArrayOf("DOUBLE", doubleArr);
+         Tuple doubleArrTuple = Storage.tuple(2.2d, 4.4d, 6.6d);
+         
+         Double[] doubleArr2 =  new Double[2];
+         doubleArr2[0] = 12.2;
+         doubleArr2[1] = 22.2;
+         Array doubleArray2 = conn.createArrayOf("DOUBLE", doubleArr2);
+         Tuple doubleArrTuple2 = Storage.tuple(12.2d, 22.2d);
+         
+         //upsert data.
+         final String dml = "UPSERT INTO " + TABLE + " VALUES(?, ?) ";
+         PreparedStatement stmt = conn.prepareStatement(dml);
+         stmt.setInt(1, 1);
+         stmt.setArray(2, doubleArray);
+         stmt.execute();
+         
+         stmt.setInt(1, 2);
+         stmt.setArray(2, doubleArray2);
+         stmt.execute();
+        
+         conn.commit();
+         
+         final Data data = Storage.resetData(pigServer);
+         List<Tuple> expectedList = new ArrayList<Tuple>();
+         expectedList.add(Storage.tuple(1, doubleArrTuple));
+         expectedList.add(Storage.tuple(2, doubleArrTuple2));
+         
+         pigServer.setBatchOn();
+         pigServer.registerQuery(String.format(
+             "A = load 'hbase://table/%s' using " + PhoenixHBaseLoader.class.getName() + "('%s');", TABLE,
+             zkQuorum));
+
+         pigServer.registerQuery("STORE A INTO 'out' using mock.Storage();");
+         pigServer.executeBatch();
+         
+         List<Tuple> actualList = data.get("out");
+         assertEquals(expectedList.size(), actualList.size());
+         assertEquals(expectedList, actualList);
+     }
 }

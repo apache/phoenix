@@ -17,11 +17,6 @@
  */
 package org.apache.phoenix.mapreduce;
 
-import org.apache.hadoop.mapreduce.lib.db.DBWritable;
-import org.apache.phoenix.schema.types.*;
-import org.apache.phoenix.util.ColumnInfo;
-import org.joda.time.DateTime;
-
 import java.sql.Array;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -29,16 +24,24 @@ import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+
+import org.apache.hadoop.mapreduce.lib.db.DBWritable;
+import org.apache.phoenix.schema.types.PBinary;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.util.ColumnInfo;
+import org.joda.time.DateTime;
 
 
 public class PhoenixRecordWritable implements DBWritable {
 
     private final List<Object> upsertValues = new ArrayList<>();
-    private final Map<String, Object> resultMap = new HashMap<>();
-    private List<ColumnInfo> columnMetaDataList;
+    private final Map<String, Object> resultMap = new LinkedHashMap<>();
+    private List<ColumnInfo> columnMetaDataList; 
 
     /** For serialization; do not use. */
     public PhoenixRecordWritable() {
@@ -147,9 +150,10 @@ public class PhoenixRecordWritable implements DBWritable {
                 // PVarbinary and PBinary are provided as byte[] but are treated as SQL objects
                 if (PDataType.equalsAny(finalType, PVarbinary.INSTANCE, PBinary.INSTANCE)) {
                     statement.setObject(i + 1, finalObj);
+                } else {
+                    // otherwise set as array type
+                    setArrayInStatement(statement, finalType, primativeArrayToObjectArray((byte[]) finalObj), i + 1);
                 }
-                // otherwise set as array type
-                setArrayInStatement(statement, finalType, primativeArrayToObjectArray((byte[]) finalObj), i + 1);
             } else if (finalObj instanceof short[]) {
                 setArrayInStatement(statement, finalType, primativeArrayToObjectArray((short[]) finalObj), i + 1);
             } else if (finalObj instanceof int[]) {
@@ -171,10 +175,6 @@ public class PhoenixRecordWritable implements DBWritable {
         for (int i = 1; i <= metaData.getColumnCount(); i++) {
             // return the contents of a PhoenixArray, if necessary
             Object value = resultSet.getObject(i);
-            if (value instanceof PhoenixArray) {
-                value = ((PhoenixArray) value).getArray();
-            }
-
             // put a (ColumnLabel -> value) entry into the result map
             resultMap.put(metaData.getColumnLabel(i), value);
         }
