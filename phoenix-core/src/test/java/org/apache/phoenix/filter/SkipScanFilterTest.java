@@ -106,36 +106,59 @@ public class SkipScanFilterTest extends TestCase {
     public static Collection<Object> data() {
         List<Object> testCases = Lists.newArrayList();
         // Variable length tests
+//        testCases.addAll(
+//                foreach(new KeyRange[][]{{
+//                    PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true),
+//                    PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("e"), true, Bytes.toBytes("e"), true),
+//                    PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("f"), true, Bytes.toBytes("f"), true),
+//                },
+//                {
+//                    PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
+//                },
+//                {
+//                    KeyRange.EVERYTHING_RANGE,
+//                },
+//                {
+//                    PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+//                }},
+//                new int[4],
+//                new Include(ByteUtil.concat(Bytes.toBytes("a"),QueryConstants.SEPARATOR_BYTE_ARRAY, 
+//                                            Bytes.toBytes("b"), QueryConstants.SEPARATOR_BYTE_ARRAY,
+//                                            QueryConstants.SEPARATOR_BYTE_ARRAY,
+//                                            Bytes.toBytes("1") ) ),
+//                new SeekNext(ByteUtil.concat(Bytes.toBytes("e.f"),QueryConstants.SEPARATOR_BYTE_ARRAY, 
+//                                             Bytes.toBytes("b"), QueryConstants.SEPARATOR_BYTE_ARRAY,
+//                                             QueryConstants.SEPARATOR_BYTE_ARRAY,
+//                                             Bytes.toBytes("1") ), 
+//                            ByteUtil.concat(Bytes.toBytes("f"),QueryConstants.SEPARATOR_BYTE_ARRAY, 
+//                                            Bytes.toBytes("b") )),
+//                new Include(ByteUtil.concat(Bytes.toBytes("f"),QueryConstants.SEPARATOR_BYTE_ARRAY, 
+//                                            Bytes.toBytes("b"), QueryConstants.SEPARATOR_BYTE_ARRAY,
+//                                            QueryConstants.SEPARATOR_BYTE_ARRAY,
+//                                            Bytes.toBytes("1") ) ) )
+//        );
         testCases.addAll(
                 foreach(new KeyRange[][]{{
-                    PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true),
-                    PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("e"), true, Bytes.toBytes("e"), true),
-                    PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("f"), true, Bytes.toBytes("f"), true),
+                    PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("20160116121006"), true, Bytes.toBytes("20160116181006"), true),
                 },
                 {
-                    PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
-                },
+                    PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("2404787"), true, Bytes.toBytes("2404787"), true),
+                }/*,
                 {
                     KeyRange.EVERYTHING_RANGE,
                 },
                 {
-                    PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
-                }},
+                    KeyRange.EVERYTHING_RANGE,
+                }*/},
                 new int[4],
-                new Include(ByteUtil.concat(Bytes.toBytes("a"),QueryConstants.SEPARATOR_BYTE_ARRAY, 
-                                            Bytes.toBytes("b"), QueryConstants.SEPARATOR_BYTE_ARRAY,
+                new SeekNext(ByteUtil.concat(Bytes.toBytes("20160116141006"),QueryConstants.SEPARATOR_BYTE_ARRAY, 
                                             QueryConstants.SEPARATOR_BYTE_ARRAY,
-                                            Bytes.toBytes("1") ) ),
-                new SeekNext(ByteUtil.concat(Bytes.toBytes("e.f"),QueryConstants.SEPARATOR_BYTE_ARRAY, 
-                                             Bytes.toBytes("b"), QueryConstants.SEPARATOR_BYTE_ARRAY,
-                                             QueryConstants.SEPARATOR_BYTE_ARRAY,
-                                             Bytes.toBytes("1") ), 
-                            ByteUtil.concat(Bytes.toBytes("f"),QueryConstants.SEPARATOR_BYTE_ARRAY, 
-                                            Bytes.toBytes("b") )),
-                new Include(ByteUtil.concat(Bytes.toBytes("f"),QueryConstants.SEPARATOR_BYTE_ARRAY, 
-                                            Bytes.toBytes("b"), QueryConstants.SEPARATOR_BYTE_ARRAY,
-                                            QueryConstants.SEPARATOR_BYTE_ARRAY,
-                                            Bytes.toBytes("1") ) ) )
+                                            Bytes.toBytes("servlet") ),
+                             ByteUtil.concat(Bytes.toBytes("20160116141006"),QueryConstants.SEPARATOR_BYTE_ARRAY, 
+                                             Bytes.toBytes("2404787") )),
+                new Include(ByteUtil.concat(Bytes.toBytes("20160116151006"),QueryConstants.SEPARATOR_BYTE_ARRAY, 
+                                            Bytes.toBytes("2404787"), QueryConstants.SEPARATOR_BYTE_ARRAY,
+                                            Bytes.toBytes("jdbc"), QueryConstants.SEPARATOR_BYTE_ARRAY ) ) )
         );
         // Fixed length tests
         testCases.addAll(
@@ -342,7 +365,7 @@ public class SkipScanFilterTest extends TestCase {
         );
         return testCases;
     }
-
+    
     private static Collection<?> foreach(KeyRange[][] ranges, int[] widths, Expectation... expectations) {
         List<List<KeyRange>> cnf = Lists.transform(Lists.newArrayList(ranges), ARRAY_TO_LIST);
         List<Object> ret = Lists.newArrayList();
