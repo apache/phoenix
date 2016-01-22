@@ -72,20 +72,19 @@ import com.google.common.collect.Maps;
 public class ImmutableIndexIT extends BaseHBaseManagedTimeIT {
 
     private final boolean localIndex;
-    private final boolean transactional;
     private final String tableDDLOptions;
     private final String tableName;
     private final String indexName;
     private final String fullTableName;
     private final String fullIndexName;
+    private volatile boolean stopThreads = false;
 
     private static String TABLE_NAME;
     private static String INDEX_DDL;
-    public static final AtomicInteger NUM_ROWS = new AtomicInteger(1);
+    public static final AtomicInteger NUM_ROWS = new AtomicInteger(0);
 
     public ImmutableIndexIT(boolean localIndex, boolean transactional) {
         this.localIndex = localIndex;
-        this.transactional = transactional;
         StringBuilder optionBuilder = new StringBuilder("IMMUTABLE_ROWS=true");
         if (transactional) {
             optionBuilder.append(", TRANSACTIONAL=true");
@@ -210,8 +209,8 @@ public class ImmutableIndexIT extends BaseHBaseManagedTimeIT {
         }
     }
 
-    private static class UpsertRunnable implements Runnable {
-        private static final int NUM_ROWS_IN_BATCH = 1000;
+    private class UpsertRunnable implements Runnable {
+        private static final int NUM_ROWS_IN_BATCH = 10;
         private final String fullTableName;
 
         public UpsertRunnable(String fullTableName) {
@@ -222,18 +221,19 @@ public class ImmutableIndexIT extends BaseHBaseManagedTimeIT {
         public void run() {
             Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-                while (true) {
+                while (!stopThreads) {
                     // write a large batch of rows
                     boolean fistRowInBatch = true;
-                    for (int i=0; i<NUM_ROWS_IN_BATCH; ++i) {
-                        BaseTest.upsertRow(conn, fullTableName, NUM_ROWS.intValue(), fistRowInBatch);
-                        NUM_ROWS.incrementAndGet();
+                    for (int i=0; i<NUM_ROWS_IN_BATCH && !stopThreads; ++i) {
+                        BaseTest.upsertRow(conn, fullTableName, NUM_ROWS.incrementAndGet(), fistRowInBatch);
                         fistRowInBatch = false;
                     }
                     conn.commit();
+                    Thread.sleep(10);
                 }
             } catch (SQLException e) {
                 throw new RuntimeException(e);
+            } catch (InterruptedException e) {
             }
         }
     }
@@ -242,56 +242,58 @@ public class ImmutableIndexIT extends BaseHBaseManagedTimeIT {
     public void testCreateIndexWhileUpsertingData() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String ddl ="CREATE TABLE " + fullTableName + BaseTest.TEST_TABLE_SCHEMA + tableDDLOptions;
-        String indexDDL = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX IF NOT EXISTS " + indexName + " ON " + fullTableName
+        String indexDDL = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX " + indexName + " ON " + fullTableName
                 + " (long_pk, varchar_pk)"
                 + " INCLUDE (long_col1, long_col2)";
-        int numThreads = 3;
+        int numThreads = 2;
+        ExecutorService executorService = Executors.newFixedThreadPool(numThreads, new ThreadFactory() {
+            @Override
+            public Thread newThread(Runnable r) {
+                Thread t = Executors.defaultThreadFactory().newThread(r);
+                t.setDaemon(true);
+                t.setPriority(Thread.MIN_PRIORITY);
+                return t;
+            }
+        });
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            conn.setAutoCommit(false);
+            conn.setAutoCommit(true);
             Statement stmt = conn.createStatement();
             stmt.execute(ddl);
-
-            ExecutorService executorService = Executors.newFixedThreadPool(numThreads, new ThreadFactory() {
-                @Override
-                public Thread newThread(Runnable r) {
-                    Thread t = Executors.defaultThreadFactory().newThread(r);
-                    t.setDaemon(true);
-                    return t;
-                }
-            });
-            List<Future<?>> futureList = Lists.newArrayListWithExpectedSize(numThreads);
-            for (int i =0; i<numThreads; ++i) {
-                futureList.add(executorService.submit(new UpsertRunnable(fullTableName)));
-            }
-            // upsert some rows before creating the index 
-            Thread.sleep(500);
-
-            // create the index 
-            try (Connection conn2 = DriverManager.getConnection(getUrl(), props)) {
-                conn2.setAutoCommit(false);
-                Statement stmt2 = conn2.createStatement();
-                stmt2.execute(indexDDL);
-                conn2.commit();
-            }
-
-            // upsert some rows after creating the index
-            Thread.sleep(100);
-            // cancel the running threads
-            for (Future<?> future : futureList) {
-                future.cancel(true);
-            }
-            executorService.shutdownNow();
-            executorService.awaitTermination(30, TimeUnit.SECONDS);
-            Thread.sleep(100);
 
             ResultSet rs;
             rs = conn.createStatement().executeQuery("SELECT /*+ NO_INDEX */ COUNT(*) FROM " + fullTableName);
             assertTrue(rs.next());
             int dataTableRowCount = rs.getInt(1);
+            assertEquals(0,dataTableRowCount);
+
+            List<Future<?>> futureList = Lists.newArrayListWithExpectedSize(numThreads);
+            for (int i =0; i<numThreads; ++i) {
+                futureList.add(executorService.submit(new UpsertRunnable(fullTableName)));
+            }
+            // upsert some rows before creating the index 
+            Thread.sleep(100);
+
+            // create the index 
+            try (Connection conn2 = DriverManager.getConnection(getUrl(), props)) {
+                conn2.createStatement().execute(indexDDL);
+            }
+
+            // upsert some rows after creating the index
+            Thread.sleep(50);
+            // cancel the running threads
+            stopThreads = true;
+            executorService.shutdown();
+            assertTrue(executorService.awaitTermination(30, TimeUnit.SECONDS));
+
+            rs = conn.createStatement().executeQuery("SELECT /*+ NO_INDEX */ COUNT(*) FROM " + fullTableName);
+            assertTrue(rs.next());
+            dataTableRowCount = rs.getInt(1);
             rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM " + fullIndexName);
             assertTrue(rs.next());
             int indexTableRowCount = rs.getInt(1);
             assertEquals("Data and Index table should have the same number of rows ", dataTableRowCount, indexTableRowCount);
+        } finally {
+            executorService.shutdownNow();
         }
     }
 
