@@ -434,4 +434,26 @@ public class SkipScanQueryIT extends BaseHBaseManagedTimeIT {
             conn.close();
         }
     }
+    
+    @Test
+    public void testNullInfiniteLoop() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.setAutoCommit(true);
+            conn.createStatement().execute(
+              "create table NULL_TEST"+
+              "("+
+                     "CREATETIME VARCHAR,"+
+                     "ACCOUNTID VARCHAR,"+
+                     "SERVICENAME VARCHAR,"+
+                     "SPAN.APPID VARCHAR,"+
+                     "CONSTRAINT pk PRIMARY KEY(CREATETIME,ACCOUNTID,SERVICENAME)"+
+              ")");
+
+            conn.createStatement().execute("upsert into NULL_TEST(CREATETIME,SERVICENAME,SPAN.APPID) values('20160116141006','servlet','android')");
+            conn.createStatement().execute("upsert into NULL_TEST(CREATETIME,ACCOUNTID,SERVICENAME,SPAN.APPID) values('20160116151006','2404787','jdbc','ios')");
+            ResultSet rs = conn.createStatement().executeQuery("select * from NULL_TEST where CREATETIME>='20160116121006' and  CREATETIME<='20160116181006' and ACCOUNTID='2404787'");
+            assertTrue(rs.next());
+            assertFalse(rs.next());
+        }
+    }
 }
