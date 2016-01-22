@@ -106,37 +106,37 @@ public class SkipScanFilterTest extends TestCase {
     public static Collection<Object> data() {
         List<Object> testCases = Lists.newArrayList();
         // Variable length tests
-//        testCases.addAll(
-//                foreach(new KeyRange[][]{{
-//                    PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true),
-//                    PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("e"), true, Bytes.toBytes("e"), true),
-//                    PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("f"), true, Bytes.toBytes("f"), true),
-//                },
-//                {
-//                    PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
-//                },
-//                {
-//                    KeyRange.EVERYTHING_RANGE,
-//                },
-//                {
-//                    PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
-//                }},
-//                new int[4],
-//                new Include(ByteUtil.concat(Bytes.toBytes("a"),QueryConstants.SEPARATOR_BYTE_ARRAY, 
-//                                            Bytes.toBytes("b"), QueryConstants.SEPARATOR_BYTE_ARRAY,
-//                                            QueryConstants.SEPARATOR_BYTE_ARRAY,
-//                                            Bytes.toBytes("1") ) ),
-//                new SeekNext(ByteUtil.concat(Bytes.toBytes("e.f"),QueryConstants.SEPARATOR_BYTE_ARRAY, 
-//                                             Bytes.toBytes("b"), QueryConstants.SEPARATOR_BYTE_ARRAY,
-//                                             QueryConstants.SEPARATOR_BYTE_ARRAY,
-//                                             Bytes.toBytes("1") ), 
-//                            ByteUtil.concat(Bytes.toBytes("f"),QueryConstants.SEPARATOR_BYTE_ARRAY, 
-//                                            Bytes.toBytes("b") )),
-//                new Include(ByteUtil.concat(Bytes.toBytes("f"),QueryConstants.SEPARATOR_BYTE_ARRAY, 
-//                                            Bytes.toBytes("b"), QueryConstants.SEPARATOR_BYTE_ARRAY,
-//                                            QueryConstants.SEPARATOR_BYTE_ARRAY,
-//                                            Bytes.toBytes("1") ) ) )
-//        );
+        testCases.addAll(
+                foreach(new KeyRange[][]{{
+                    PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true),
+                    PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("e"), true, Bytes.toBytes("e"), true),
+                    PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("f"), true, Bytes.toBytes("f"), true),
+                },
+                {
+                    PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
+                },
+                {
+                    KeyRange.EVERYTHING_RANGE,
+                },
+                {
+                    PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                }},
+                new int[4],
+                new Include(ByteUtil.concat(Bytes.toBytes("a"),QueryConstants.SEPARATOR_BYTE_ARRAY, 
+                                            Bytes.toBytes("b"), QueryConstants.SEPARATOR_BYTE_ARRAY,
+                                            QueryConstants.SEPARATOR_BYTE_ARRAY,
+                                            Bytes.toBytes("1") ) ),
+                new SeekNext(ByteUtil.concat(Bytes.toBytes("e.f"),QueryConstants.SEPARATOR_BYTE_ARRAY, 
+                                             Bytes.toBytes("b"), QueryConstants.SEPARATOR_BYTE_ARRAY,
+                                             QueryConstants.SEPARATOR_BYTE_ARRAY,
+                                             Bytes.toBytes("1") ), 
+                            ByteUtil.concat(Bytes.toBytes("f"),QueryConstants.SEPARATOR_BYTE_ARRAY, 
+                                            Bytes.toBytes("b") )),
+                new Include(ByteUtil.concat(Bytes.toBytes("f"),QueryConstants.SEPARATOR_BYTE_ARRAY, 
+                                            Bytes.toBytes("b"), QueryConstants.SEPARATOR_BYTE_ARRAY,
+                                            QueryConstants.SEPARATOR_BYTE_ARRAY,
+                                            Bytes.toBytes("1") ) ) )
+        );
         testCases.addAll(
                 foreach(new KeyRange[][]{{
                     PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("20160116121006"), true, Bytes.toBytes("20160116181006"), true),
