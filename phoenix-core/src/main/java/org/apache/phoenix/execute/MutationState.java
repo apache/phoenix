@@ -54,7 +54,6 @@ import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
-import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.IndexMetaDataCacheClient;
 import org.apache.phoenix.index.PhoenixIndexCodec;
@@ -87,7 +86,6 @@ import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
-import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.TransactionUtil;
 import org.slf4j.Logger;
@@ -216,7 +214,7 @@ public class MutationState implements SQLCloseable {
      */
     public void commitDDLFence(PTable dataTable) throws SQLException {
         if (dataTable.isTransactional()) {
-            byte[] key = SchemaUtil.getTableKey(dataTable);
+            byte[] key = dataTable.getName().getBytes();
             boolean success = false;
             try {
                 FenceWait fenceWait = VisibilityFence.prepareWait(key, connection.getQueryServices().getTransactionSystemClient());
@@ -250,18 +248,28 @@ public class MutationState implements SQLCloseable {
      * These entries will not conflict with each other, but they will conflict with a
      * DDL operation of creating an index. See {@link #addDMLFence(PTable)} and TEPHRA-157
      * for more information.
-     * @param dataTable the table which is doing DML
+     * @param table the table which is doing DML
      * @throws SQLException
      */
-    public void addDMLFence(PTable dataTable) throws SQLException {
-        if (this.txContext == null) {
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.NULL_TRANSACTION_CONTEXT).build().buildException();
+    private void addDMLFence(PTable table) throws SQLException {
+        if (table.getType() == PTableType.INDEX || !table.isTransactional()) {
+            return;
         }
-        byte[] logicalKey = SchemaUtil.getTableKey(dataTable);
-        this.txContext.addTransactionAware(VisibilityFence.create(logicalKey));
-        byte[] physicalKey = dataTable.getPhysicalName().getBytes();
+        byte[] logicalKey = table.getName().getBytes();
+        TransactionAware logicalTxAware = VisibilityFence.create(logicalKey);
+        if (this.txContext == null) {
+            this.txAwares.add(logicalTxAware);
+        } else {
+            this.txContext.addTransactionAware(logicalTxAware);
+        }
+        byte[] physicalKey = table.getPhysicalName().getBytes();
         if (Bytes.compareTo(physicalKey, logicalKey) != 0) {
-            this.txContext.addTransactionAware(VisibilityFence.create(physicalKey));
+            TransactionAware physicalTxAware = VisibilityFence.create(physicalKey);
+            if (this.txContext == null) {
+                this.txAwares.add(physicalTxAware);
+            } else {
+                this.txContext.addTransactionAware(physicalTxAware);
+            }
         }
     }
     
@@ -878,6 +886,7 @@ public class MutationState implements SQLCloseable {
                 // Track tables to which we've sent uncommitted data
                 if (isTransactional = table.isTransactional()) {
                     txTableRefs.add(tableRef);
+                    addDMLFence(table);
                     uncommittedPhysicalNames.add(table.getPhysicalName().getString());
                 }
                 boolean isDataTable = true;
