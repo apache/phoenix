@@ -104,7 +104,7 @@ public class QueryServicesOptions {
 	public static final int DEFAULT_QUEUE_SIZE = 5000;
 	public static final int DEFAULT_THREAD_TIMEOUT_MS = 600000; // 10min
 	public static final int DEFAULT_SPOOL_THRESHOLD_BYTES = 1024 * 1024 * 20; // 20m
-    public static final String DEFAULT_SPOOL_DIRECTORY = "/tmp";
+    public static final String DEFAULT_SPOOL_DIRECTORY = System.getProperty("java.io.tmpdir");
 	public static final int DEFAULT_MAX_MEMORY_PERC = 15; // 15% of heap
 	public static final int DEFAULT_MAX_MEMORY_WAIT_MS = 10000;
 	public static final int DEFAULT_MAX_TENANT_MEMORY_PERC = 100;
