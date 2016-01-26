@@ -528,6 +528,19 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
             assertEquals(10,rs.getInt(2));
 
             assertFalse(rs.next());
+            
+            // (union) groupby limit
+            query = "SELECT a_string, count(*) FROM (SELECT a_string FROM aTable where a_byte < 4 union all SELECT a_string FROM aTable where a_byte > 8) group by a_string limit 2";
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(A_VALUE,rs.getString(1));
+            assertEquals(3,rs.getInt(2));
+            assertTrue (rs.next());
+            assertEquals(C_VALUE,rs.getString(1));
+            assertEquals(1,rs.getInt(2));
+
+            assertFalse(rs.next());            
         } finally {
             conn.close();
         }
