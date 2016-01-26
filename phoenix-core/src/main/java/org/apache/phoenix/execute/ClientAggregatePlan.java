@@ -100,7 +100,7 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
                 for (Expression keyExpression : keyExpressions) {
                     keyExpressionOrderBy.add(new OrderByExpression(keyExpression, false, true));
                 }
-                iterator = new OrderedResultIterator(iterator, keyExpressionOrderBy, thresholdBytes, limit, projector.getEstimatedRowByteSize());
+                iterator = new OrderedResultIterator(iterator, keyExpressionOrderBy, thresholdBytes, null, projector.getEstimatedRowByteSize());
             }
             aggResultIterator = new ClientGroupedAggregatingResultIterator(LookAheadResultIterator.wrap(iterator), serverAggregators, groupBy.getKeyExpressions());
             aggResultIterator = new GroupedAggregatingResultIterator(LookAheadResultIterator.wrap(aggResultIterator), clientAggregators);
