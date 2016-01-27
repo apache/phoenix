@@ -25,10 +25,9 @@ import org.apache.hadoop.hbase.Abortable;
 import org.apache.hadoop.hbase.Stoppable;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 
 import com.google.common.collect.Multimap;
-
-import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 
 /**
  * Naive failure policy - kills the server on which it resides
@@ -61,7 +60,7 @@ public class KillServerOnFailurePolicy implements IndexFailurePolicy {
 
   @Override
   public void
-      handleFailure(Multimap<HTableInterfaceReference, Mutation> attempted, Exception cause){
+      handleFailure(Multimap<HTableInterfaceReference, Mutation> attempted, Exception cause) throws IOException{
     // cleanup resources
     this.stop("Killing ourselves because of an error:" + cause);
     // notify the regionserver of the failure
