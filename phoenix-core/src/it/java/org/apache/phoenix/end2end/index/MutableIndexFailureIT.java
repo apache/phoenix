@@ -193,7 +193,11 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
                 }
             }
             else {
-                conn.commit();
+                try {
+                    conn.commit();
+                    fail();
+                } catch (SQLException e) {
+                }
             }
 
             // Verify the metadata for index is correct.
