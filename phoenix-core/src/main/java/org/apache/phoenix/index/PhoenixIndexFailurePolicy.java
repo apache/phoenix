@@ -61,6 +61,7 @@ import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.ServerUtil;
 
 import com.google.common.collect.Multimap;
 
@@ -99,13 +100,17 @@ public class PhoenixIndexFailurePolicy extends KillServerOnFailurePolicy {
      * @param cause root cause of the failure
      */
     @Override
-    public void handleFailure(Multimap<HTableInterfaceReference, Mutation> attempted, Exception cause) {
-
+    public void handleFailure(Multimap<HTableInterfaceReference, Mutation> attempted, Exception cause) throws IOException {
+        boolean throwing = true;
         try {
             handleFailureWithExceptions(attempted, cause);
+            throwing = false;
         } catch (Throwable t) {
             LOG.warn("handleFailure failed", t);
             super.handleFailure(attempted, cause);
+            throwing = false;
+        } finally {
+            if (!throwing) throw ServerUtil.createIOException(null, cause);
         }
     }
 
