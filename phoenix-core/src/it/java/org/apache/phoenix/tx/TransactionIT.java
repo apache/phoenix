@@ -20,6 +20,8 @@ package org.apache.phoenix.tx;
 import static org.apache.phoenix.util.TestUtil.INDEX_DATA_SCHEMA;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.TRANSACTIONAL_DATA_TABLE;
+import static org.apache.phoenix.util.TestUtil.analyzeTable;
+import static org.apache.phoenix.util.TestUtil.getAllSplits;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -36,12 +38,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
-import co.cask.tephra.TransactionContext;
-import co.cask.tephra.TransactionSystemClient;
-import co.cask.tephra.TxConstants;
-import co.cask.tephra.hbase10.TransactionAwareHTable;
-import co.cask.tephra.hbase10.coprocessor.TransactionProcessor;
-
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
@@ -56,6 +52,7 @@ import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -70,6 +67,12 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
+
+import co.cask.tephra.TransactionContext;
+import co.cask.tephra.TransactionSystemClient;
+import co.cask.tephra.TxConstants;
+import co.cask.tephra.hbase10.TransactionAwareHTable;
+import co.cask.tephra.hbase10.coprocessor.TransactionProcessor;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -86,8 +89,9 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
     @BeforeClass
     @Shadower(classBeingShadowed = BaseHBaseManagedTimeIT.class)
     public static void doSetup() throws Exception {
-        Map<String,String> props = Maps.newHashMapWithExpectedSize(1);
+        Map<String,String> props = Maps.newHashMapWithExpectedSize(2);
         props.put(QueryServices.TRANSACTIONS_ENABLED, Boolean.toString(true));
+        props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Integer.toString(20));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
         
@@ -581,30 +585,107 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
     }
     
     @Test
-    public void testReadOnlyView() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
-        String ddl = "CREATE TABLE t (k INTEGER NOT NULL PRIMARY KEY, v1 DATE) TRANSACTIONAL=true";
-        conn.createStatement().execute(ddl);
-        ddl = "CREATE VIEW v (v2 VARCHAR) AS SELECT * FROM t where k>4";
-        conn.createStatement().execute(ddl);
-        for (int i = 0; i < 10; i++) {
-            conn.createStatement().execute("UPSERT INTO t VALUES(" + i + ")");
+    public void testReadOnlyViewWithStats() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String ddl = "CREATE TABLE t (k INTEGER NOT NULL PRIMARY KEY, v1 DATE) TRANSACTIONAL=true";
+            conn.createStatement().execute(ddl);
+            ddl = "CREATE VIEW v (v2 VARCHAR) AS SELECT * FROM t where k>5";
+            conn.createStatement().execute(ddl);
+            for (int i = 0; i < 10; i++) {
+                conn.createStatement().execute("UPSERT INTO t VALUES(" + i + ")");
+            }
+            conn.commit();
+            
+            // verify rows are visible for stats
+            analyzeTable(conn, "v", true);
+            List<KeyRange> splits = getAllSplits(conn, "v");
+            assertEquals(4, splits.size());
+            
+            int count = 0;
+            ResultSet rs = conn.createStatement().executeQuery("SELECT k FROM t");
+            while (rs.next()) {
+                assertEquals(count++, rs.getInt(1));
+            }
+            assertEquals(10, count);
+            
+            count = 0;
+            rs = conn.createStatement().executeQuery("SELECT k FROM v");
+            while (rs.next()) {
+                assertEquals(6+count++, rs.getInt(1));
+            }
+            assertEquals(4, count);
         }
-        conn.commit();
-        
-        int count = 0;
-        ResultSet rs = conn.createStatement().executeQuery("SELECT k FROM t");
-        while (rs.next()) {
-            assertEquals(count++, rs.getInt(1));
+    }
+    
+    @Test
+    public void testReadOwnWritesWithStats() throws Exception {
+        try (Connection conn1 = DriverManager.getConnection(getUrl()); 
+                Connection conn2 = DriverManager.getConnection(getUrl())) {
+            String ddl = "CREATE TABLE t (k INTEGER NOT NULL PRIMARY KEY, v1 DATE) TRANSACTIONAL=true";
+            conn1.createStatement().execute(ddl);
+            ddl = "CREATE VIEW v (v2 VARCHAR) AS SELECT * FROM t where k>5";
+            conn1.createStatement().execute(ddl);
+            for (int i = 0; i < 10; i++) {
+                conn1.createStatement().execute("UPSERT INTO t VALUES(" + i + ")");
+            }
+    
+            // verify you can read your own writes
+            int count = 0;
+            ResultSet rs = conn1.createStatement().executeQuery("SELECT k FROM t");
+            while (rs.next()) {
+                assertEquals(count++, rs.getInt(1));
+            }
+            assertEquals(10, count);
+            
+            count = 0;
+            rs = conn1.createStatement().executeQuery("SELECT k FROM v");
+            while (rs.next()) {
+                assertEquals(6+count++, rs.getInt(1));
+            }
+            assertEquals(4, count);
+            
+            // verify stats can see the read own writes rows
+            analyzeTable(conn2, "v", true);
+            List<KeyRange> splits = getAllSplits(conn2, "v");
+            assertEquals(4, splits.size());
         }
-        assertEquals(10, count);
-        
-        count = 0;
-        rs = conn.createStatement().executeQuery("SELECT k FROM v");
-        while (rs.next()) {
-            assertEquals(5+count++, rs.getInt(1));
+    }
+    
+    @Test
+    public void testInvalidRowsWithStats() throws Exception {
+        try (Connection conn1 = DriverManager.getConnection(getUrl()); 
+                Connection conn2 = DriverManager.getConnection(getUrl())) {
+            String ddl = "CREATE TABLE t (k INTEGER NOT NULL PRIMARY KEY, v1 DATE) TRANSACTIONAL=true";
+            conn1.createStatement().execute(ddl);
+            ddl = "CREATE VIEW v (v2 VARCHAR) AS SELECT * FROM t where k>5";
+            conn1.createStatement().execute(ddl);
+            for (int i = 0; i < 10; i++) {
+                conn1.createStatement().execute("UPSERT INTO t VALUES(" + i + ")");
+            }
+    
+            // verify you can read your own writes
+            int count = 0;
+            ResultSet rs = conn1.createStatement().executeQuery("SELECT k FROM t");
+            while (rs.next()) {
+                assertEquals(count++, rs.getInt(1));
+            }
+            assertEquals(10, count);
+            
+            count = 0;
+            rs = conn1.createStatement().executeQuery("SELECT k FROM v");
+            while (rs.next()) {
+                assertEquals(6+count++, rs.getInt(1));
+            }
+            assertEquals(4, count);
+            
+            Thread.sleep(DEFAULT_TXN_TIMEOUT_SECONDS*1000+20000);
+            assertEquals("There should be one invalid transaction", 1, txManager.getInvalidSize());
+            
+            // verify stats can see the rows from the invalid transaction
+            analyzeTable(conn2, "v", true);
+            List<KeyRange> splits = getAllSplits(conn2, "v");
+            assertEquals(4, splits.size());
         }
-        assertEquals(5, count);
     }
     
     @Test
