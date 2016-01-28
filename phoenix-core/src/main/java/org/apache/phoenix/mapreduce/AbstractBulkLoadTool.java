@@ -208,7 +208,7 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
         FormatToKeyValueMapper.configureColumnInfoList(conf, importColumns);
         boolean ignoreInvalidRows = cmdLine.hasOption(IGNORE_ERRORS_OPT.getOpt());
         conf.setBoolean(FormatToKeyValueMapper.IGNORE_INVALID_ROW_CONFKEY, ignoreInvalidRows);
-        conf.set(FormatToKeyValueMapper.TABLE_NAME_CONFKEY, tableName);
+        conf.set(FormatToKeyValueMapper.TABLE_NAME_CONFKEY, qualifiedTableName);
 
         // give subclasses their hook
         configureOptions(cmdLine, importColumns, conf);
