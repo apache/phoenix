@@ -36,12 +36,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
-import co.cask.tephra.TransactionContext;
-import co.cask.tephra.TransactionSystemClient;
-import co.cask.tephra.TxConstants;
-import co.cask.tephra.hbase10.TransactionAwareHTable;
-import co.cask.tephra.hbase10.coprocessor.TransactionProcessor;
-
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
@@ -70,6 +64,12 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
+
+import co.cask.tephra.TransactionContext;
+import co.cask.tephra.TransactionSystemClient;
+import co.cask.tephra.TxConstants;
+import co.cask.tephra.hbase10.TransactionAwareHTable;
+import co.cask.tephra.hbase10.coprocessor.TransactionProcessor;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -578,33 +578,6 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
                 assertEquals(SQLExceptionCode.CANNOT_ALTER_TO_BE_TXN_WITH_ROW_TIMESTAMP.getErrorCode(), e.getErrorCode());
             }
         }
-    }
-    
-    @Test
-    public void testReadOnlyView() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
-        String ddl = "CREATE TABLE t (k INTEGER NOT NULL PRIMARY KEY, v1 DATE) TRANSACTIONAL=true";
-        conn.createStatement().execute(ddl);
-        ddl = "CREATE VIEW v (v2 VARCHAR) AS SELECT * FROM t where k>4";
-        conn.createStatement().execute(ddl);
-        for (int i = 0; i < 10; i++) {
-            conn.createStatement().execute("UPSERT INTO t VALUES(" + i + ")");
-        }
-        conn.commit();
-        
-        int count = 0;
-        ResultSet rs = conn.createStatement().executeQuery("SELECT k FROM t");
-        while (rs.next()) {
-            assertEquals(count++, rs.getInt(1));
-        }
-        assertEquals(10, count);
-        
-        count = 0;
-        rs = conn.createStatement().executeQuery("SELECT k FROM v");
-        while (rs.next()) {
-            assertEquals(5+count++, rs.getInt(1));
-        }
-        assertEquals(5, count);
     }
     
     @Test

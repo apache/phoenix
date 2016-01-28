@@ -30,6 +30,8 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -44,14 +46,23 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameters;
 
 import com.google.common.collect.Maps;
 
-
+@RunWith(Parameterized.class)
 public class StatsCollectorIT extends StatsCollectorAbstractIT {
     private static final String STATS_TEST_TABLE_NAME = "S";
+    
+    private final String tableDDLOptions;
+    private final String tableName;
+    private final String fullTableName;
         
     @BeforeClass
     public static void doSetup() throws Exception {
@@ -63,30 +74,31 @@ public class StatsCollectorIT extends StatsCollectorAbstractIT {
         props.put(QueryServices.TRANSACTIONS_ENABLED, Boolean.toString(true));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
-
-    @Test
-    public void testUpdateStatsForNonTxnTable() throws Throwable {
-        helpTestUpdateStats(false);
+    
+    public StatsCollectorIT( boolean transactional) {
+        this.tableDDLOptions= transactional ? " TRANSACTIONAL=true" : "";
+        this.tableName = TestUtil.DEFAULT_DATA_TABLE_NAME + ( transactional ?  "_TXN" : "");
+        this.fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
     }
     
-    @Test
-    public void testUpdateStatsForTxnTable() throws Throwable {
-        helpTestUpdateStats(true);
+    @Parameters(name="transactional = {0}")
+    public static Collection<Boolean> data() {
+        return Arrays.asList(false,true);
     }
 
-	private void helpTestUpdateStats(boolean transactional) throws SQLException, IOException,
+    @Test
+    public void testUpdateStats() throws SQLException, IOException,
 			InterruptedException {
 		Connection conn;
         PreparedStatement stmt;
         ResultSet rs;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        String tableName = "T" + (transactional ? "_TXN" : "");
         // props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute(
-                "CREATE TABLE " + tableName +" ( k VARCHAR, a_string_array VARCHAR(100) ARRAY[4], b_string_array VARCHAR(100) ARRAY[4] \n"
-                        + " CONSTRAINT pk PRIMARY KEY (k, b_string_array DESC))" 
-                		+ (transactional ? " TRANSACTIONAL=true" : ""));
+                "CREATE TABLE " + fullTableName +" ( k VARCHAR, a_string_array VARCHAR(100) ARRAY[4], b_string_array VARCHAR(100) ARRAY[4] \n"
+                        + " CONSTRAINT pk PRIMARY KEY (k, b_string_array DESC))"
+                		+ tableDDLOptions );
         String[] s;
         Array array;
         conn = upsertValues(props, tableName);
@@ -120,14 +132,14 @@ public class StatsCollectorIT extends StatsCollectorAbstractIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement()
-                .execute("CREATE TABLE x ( k VARCHAR, c1.a bigint,c2.b bigint CONSTRAINT pk PRIMARY KEY (k)) \n");
-        conn.createStatement().execute("upsert into x values ('abc',1,3)");
-        conn.createStatement().execute("upsert into x values ('def',2,4)");
+                .execute("CREATE TABLE " + fullTableName +" ( k VARCHAR, c1.a bigint,c2.b bigint CONSTRAINT pk PRIMARY KEY (k))" + tableDDLOptions );
+        conn.createStatement().execute("upsert into " + fullTableName +" values ('abc',1,3)");
+        conn.createStatement().execute("upsert into " + fullTableName +" values ('def',2,4)");
         conn.commit();
         // CAll the update statistics query here
-        stmt = conn.prepareStatement("UPDATE STATISTICS X");
+        stmt = conn.prepareStatement("UPDATE STATISTICS " + fullTableName);
         stmt.execute();
-        rs = conn.createStatement().executeQuery("SELECT k FROM x");
+        rs = conn.createStatement().executeQuery("SELECT k FROM " + fullTableName);
         assertTrue(rs.next());
         assertEquals("abc", rs.getString(1));
         assertTrue(rs.next());
@@ -138,6 +150,7 @@ public class StatsCollectorIT extends StatsCollectorAbstractIT {
 
     @Test
     public void testUpdateStatsWithMultipleTables() throws Throwable {
+        String fullTableName2 = fullTableName+"_2";
         Connection conn;
         PreparedStatement stmt;
         ResultSet rs;
@@ -145,21 +158,21 @@ public class StatsCollectorIT extends StatsCollectorAbstractIT {
         // props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute(
-                "CREATE TABLE x ( k VARCHAR, a_string_array VARCHAR(100) ARRAY[4], b_string_array VARCHAR(100) ARRAY[4] \n"
-                        + " CONSTRAINT pk PRIMARY KEY (k, b_string_array DESC)) \n");
+                "CREATE TABLE " + fullTableName +" ( k VARCHAR, a_string_array VARCHAR(100) ARRAY[4], b_string_array VARCHAR(100) ARRAY[4] \n"
+                        + " CONSTRAINT pk PRIMARY KEY (k, b_string_array DESC))" + tableDDLOptions );
         conn.createStatement().execute(
-                "CREATE TABLE z ( k VARCHAR, a_string_array VARCHAR(100) ARRAY[4], b_string_array VARCHAR(100) ARRAY[4] \n"
-                        + " CONSTRAINT pk PRIMARY KEY (k, b_string_array DESC)) \n");
+                "CREATE TABLE " + fullTableName2 +" ( k VARCHAR, a_string_array VARCHAR(100) ARRAY[4], b_string_array VARCHAR(100) ARRAY[4] \n"
+                        + " CONSTRAINT pk PRIMARY KEY (k, b_string_array DESC))" + tableDDLOptions );
         String[] s;
         Array array;
-        conn = upsertValues(props, "x");
-        conn = upsertValues(props, "z");
+        conn = upsertValues(props, fullTableName);
+        conn = upsertValues(props, fullTableName2);
         // CAll the update statistics query here
-        stmt = conn.prepareStatement("UPDATE STATISTICS X");
+        stmt = conn.prepareStatement("UPDATE STATISTICS "+fullTableName);
         stmt.execute();
-        stmt = conn.prepareStatement("UPDATE STATISTICS Z");
+        stmt = conn.prepareStatement("UPDATE STATISTICS "+fullTableName2);
         stmt.execute();
-        stmt = upsertStmt(conn, "x");
+        stmt = upsertStmt(conn, fullTableName);
         stmt.setString(1, "z");
         s = new String[] { "xyz", "def", "ghi", "jkll", null, null, "xxx" };
         array = conn.createArrayOf("VARCHAR", s);
@@ -168,7 +181,7 @@ public class StatsCollectorIT extends StatsCollectorAbstractIT {
         array = conn.createArrayOf("VARCHAR", s);
         stmt.setArray(3, array);
         stmt.execute();
-        stmt = upsertStmt(conn, "z");
+        stmt = upsertStmt(conn, fullTableName2);
         stmt.setString(1, "z");
         s = new String[] { "xyz", "def", "ghi", "jkll", null, null, "xxx" };
         array = conn.createArrayOf("VARCHAR", s);
@@ -180,9 +193,9 @@ public class StatsCollectorIT extends StatsCollectorAbstractIT {
         conn.close();
         conn = DriverManager.getConnection(getUrl(), props);
         // This analyze would not work
-        stmt = conn.prepareStatement("UPDATE STATISTICS Z");
+        stmt = conn.prepareStatement("UPDATE STATISTICS "+fullTableName2);
         stmt.execute();
-        rs = conn.createStatement().executeQuery("SELECT k FROM Z");
+        rs = conn.createStatement().executeQuery("SELECT k FROM "+fullTableName2);
         assertTrue(rs.next());
         conn.close();
     }
