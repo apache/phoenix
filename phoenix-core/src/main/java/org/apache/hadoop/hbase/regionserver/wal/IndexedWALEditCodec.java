@@ -33,6 +33,8 @@ import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.codec.BaseDecoder;
 import org.apache.hadoop.hbase.codec.BaseEncoder;
+import org.apache.hadoop.hbase.util.VersionInfo;
+import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.hbase.index.wal.IndexedKeyValue;
 import org.apache.phoenix.hbase.index.wal.KeyValueCodec;
 
@@ -50,23 +52,27 @@ public class IndexedWALEditCodec extends WALCellCodec {
   // the stream
   private static final int REGULAR_KEY_VALUE_MARKER = 0;
   private CompressionContext compression;
+  private static final int MIN_BINARY_COMPATIBLE_INDEX_CODEC_VERSION = VersionUtil.encodeVersion("0", "98", "18");
+  private final boolean useDefaultDecoder;
 
   public IndexedWALEditCodec(Configuration conf, CompressionContext compression) {
       super(conf, compression);
       this.compression = compression;
+      String hbaseVersion = VersionInfo.getVersion();
+      this.useDefaultDecoder = VersionUtil.encodeVersion(hbaseVersion) >= MIN_BINARY_COMPATIBLE_INDEX_CODEC_VERSION;
   }
 
   @Override
   public Decoder getDecoder(InputStream is) {
     // compression isn't enabled
     if (this.compression == null) {
-      return new IndexKeyValueDecoder(is);
+      return useDefaultDecoder ? new IndexKeyValueDecoder(is) : new BinaryCompatibleIndexKeyValueDecoder(is);
     }
 
     // there is compression, so we get the standard decoder to handle reading those kvs
     Decoder decoder = super.getDecoder(is);
     // compression is on, reqturn our custom decoder
-    return new CompressedIndexKeyValueDecoder(is, decoder);
+    return useDefaultDecoder ? new CompressedIndexKeyValueDecoder(is, decoder) : new BinaryCompatibleCompressedIndexKeyValueDecoder(is, decoder);
   }
 
   @Override
@@ -237,4 +243,78 @@ public class IndexedWALEditCodec extends WALCellCodec {
       }
     }
   }
+  
+  private static abstract class BinaryCompatiblePhoenixBaseDecoder extends BinaryCompatibleBaseDecoder {
+      protected DataInput dataInput;
+      public BinaryCompatiblePhoenixBaseDecoder(InputStream in) {
+        super(in);
+        dataInput = getDataInput(this.in);
+      } 
+  }
+  
+  /**
+   * This class is meant to be used when runtime version of HBase
+   * HBase is older than 0.98.18. This is needed to handle binary incompatibility introduced by
+   * HBASE-14501. See PHOENIX-2629 and PHOENIX-2636 for details.
+   */
+  private static class BinaryCompatibleIndexKeyValueDecoder extends BinaryCompatiblePhoenixBaseDecoder {
+      /**
+       * Create a Decoder on the given input stream with the given Decoder to parse
+       * generic {@link KeyValue}s.
+       * @param is stream to read from
+       */
+      public BinaryCompatibleIndexKeyValueDecoder(InputStream is){
+        super(is);
+      }
+
+      @Override
+      protected KeyValue parseCell() throws IOException{
+        return KeyValueCodec.readKeyValue(this.dataInput);
+      }
+  }
+  
+  /**
+   * This class is meant to be used when runtime version of HBase
+   * HBase is older than 0.98.18. This is needed to handle binary incompatibility introduced by
+   * HBASE-14501. See PHOENIX-2629 and PHOENIX-2636 for details.
+   */
+  private static class BinaryCompatibleCompressedIndexKeyValueDecoder extends BinaryCompatiblePhoenixBaseDecoder {
+
+      private Decoder decoder;
+
+      /**
+       * Create a Decoder on the given input stream with the given Decoder to parse
+       * generic {@link KeyValue}s.
+       * @param is stream to read from
+       * @param compressedDecoder decoder for generic {@link KeyValue}s. Should support the expected
+       *          compression.
+       */
+      public BinaryCompatibleCompressedIndexKeyValueDecoder(InputStream is, Decoder compressedDecoder) {
+        super(is);
+        this.decoder = compressedDecoder;
+      }
+
+      @Override
+      protected Cell parseCell() throws IOException {
+        // reader the marker
+        int marker = this.in.read();
+        if (marker < 0) {
+          throw new EOFException(
+              "Unexepcted end of stream found while reading next (Indexed) KeyValue");
+        }
+
+        // do the normal thing, if its a regular kv
+        if (marker == REGULAR_KEY_VALUE_MARKER) {
+          if (!this.decoder.advance()) {
+            throw new IOException("Could not read next key-value from generic KeyValue Decoder!");
+          }
+          return this.decoder.current();
+        }
+
+        // its an indexedKeyValue, so parse it out specially
+        return KeyValueCodec.readKeyValue(this.dataInput);
+      }
+  }
+  
+  
 }
