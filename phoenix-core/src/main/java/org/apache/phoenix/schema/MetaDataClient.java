@@ -1013,7 +1013,6 @@ public class MetaDataClient {
     private MutationState buildIndex(PTable index, TableRef dataTableRef) throws SQLException {
         AlterIndexStatement indexStatement = null;
         boolean wasAutoCommit = connection.getAutoCommit();
-        connection.rollback();
         try {
             connection.setAutoCommit(true);
             MutationPlan mutationPlan;

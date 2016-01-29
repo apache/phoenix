@@ -180,7 +180,7 @@ public class MutableIndexReplicationIT extends BaseTest {
         // Must update config before starting server
         URL = getLocalClusterUrl(utility1);
         LOG.info("Connecting driver to "+URL);
-        driver = initAndRegisterDriver(URL, new ReadOnlyProps(props.entrySet().iterator()));
+        driver = initAndRegisterTestDriver(URL, new ReadOnlyProps(props.entrySet().iterator()));
     }
 
     @Test
