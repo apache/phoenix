@@ -35,6 +35,7 @@ import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
@@ -95,6 +96,7 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
     public static final String SCAN_REGION_SERVER = "_SCAN_REGION_SERVER";
     public static final String RUN_UPDATE_STATS_ASYNC_ATTRIB = "_RunUpdateStatsAsync";
     public static final String SKIP_REGION_BOUNDARY_CHECK = "_SKIP_REGION_BOUNDARY_CHECK";
+    public static final String TX_SCN = "_TxScn";
     
     /**
      * Attribute name used to pass custom annotations in Scans and Mutations (later). Custom annotations
@@ -154,6 +156,11 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
     @Override
     public RegionScanner preScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c,
         final Scan scan, final RegionScanner s) throws IOException {
+        byte[] txnScn = scan.getAttribute(TX_SCN);
+        if (txnScn!=null) {
+            TimeRange timeRange = scan.getTimeRange();
+            scan.setTimeRange(timeRange.getMin(), Bytes.toLong(txnScn));
+        }
         if (isRegionObserverFor(scan)) {
             if (! skipRegionBoundaryCheck(scan)) {
                 throwIfScanOutOfRegion(scan, c.getEnvironment().getRegion());

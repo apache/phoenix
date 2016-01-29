@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.mapreduce.util;
 
+import static org.apache.commons.lang.StringUtils.isNotEmpty;
+
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -44,8 +46,6 @@ import org.apache.phoenix.util.QueryUtil;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-
-import static org.apache.commons.lang.StringUtils.isNotEmpty;
 
 /**
  * A utility class to set properties on the {#link Configuration} instance.
@@ -86,6 +86,8 @@ public final class PhoenixConfigurationUtil {
     public static final String INPUT_CLASS = "phoenix.input.class";
     
     public static final String CURRENT_SCN_VALUE = "phoenix.mr.currentscn.value";
+    
+    public static final String TX_SCN_VALUE = "phoenix.mr.txscn.value";
     
     /** Configuration key for the class name of an ImportPreUpsertKeyValueProcessor */
     public static final String UPSERT_HOOK_CLASS_CONFKEY = "phoenix.mapreduce.import.kvprocessor";
