@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.query;
 
-import static org.apache.phoenix.query.BaseTest.setUpConfigForMiniCluster;
 import static org.apache.phoenix.util.PhoenixRuntime.CURRENT_SCN_ATTRIB;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
@@ -119,12 +118,6 @@ import java.util.concurrent.TimeoutException;
 
 import javax.annotation.Nonnull;
 
-import co.cask.tephra.TransactionManager;
-import co.cask.tephra.TxConstants;
-import co.cask.tephra.distributed.TransactionService;
-import co.cask.tephra.metrics.TxMetricsCollector;
-import co.cask.tephra.persist.InMemoryTransactionStateStorage;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
@@ -178,6 +171,12 @@ import org.junit.ClassRule;
 import org.junit.rules.TemporaryFolder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import co.cask.tephra.TransactionManager;
+import co.cask.tephra.TxConstants;
+import co.cask.tephra.distributed.TransactionService;
+import co.cask.tephra.metrics.TxMetricsCollector;
+import co.cask.tephra.persist.InMemoryTransactionStateStorage;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
@@ -508,6 +507,7 @@ public abstract class BaseTest {
     
     protected static String url;
     protected static PhoenixTestDriver driver;
+    protected static PhoenixDriver realDriver;
     protected static boolean clusterInitialized = false;
     private static HBaseTestingUtility utility;
     protected static final Configuration config = HBaseConfiguration.create(); 
@@ -588,9 +588,16 @@ public abstract class BaseTest {
                 assertTrue(destroyDriver(driver));
             } finally {
                 driver = null;
-                teardownTxManager();
             }
         }
+        if (realDriver != null) {
+            try {
+                assertTrue(destroyDriver(realDriver));
+            } finally {
+                realDriver = null;
+            }
+        }
+        teardownTxManager();
     }
     
     protected static void dropNonSystemTables() throws Exception {
@@ -607,7 +614,11 @@ public abstract class BaseTest {
         } finally {
             try {
                 if (utility != null) {
-                    utility.shutdownMiniCluster();
+                    try {
+                        utility.shutdownMiniMapReduceCluster();
+                    } finally {
+                        utility.shutdownMiniCluster();
+                    }
                 }
             } finally {
                 utility = null;
@@ -623,10 +634,31 @@ public abstract class BaseTest {
     protected static void setUpTestDriver(ReadOnlyProps serverProps, ReadOnlyProps clientProps) throws Exception {
         String url = checkClusterInitialized(serverProps);
         if (driver == null) {
-            driver = initAndRegisterDriver(url, clientProps);
+            driver = initAndRegisterTestDriver(url, clientProps);
             if (clientProps.getBoolean(QueryServices.TRANSACTIONS_ENABLED, QueryServicesOptions.DEFAULT_TRANSACTIONS_ENABLED)) {
                 setupTxManager();
             }
+        }
+    }
+    
+    protected static void setUpRealDriver(ReadOnlyProps serverProps, ReadOnlyProps clientProps) throws Exception {
+        if (!clusterInitialized) {
+            setUpConfigForMiniCluster(config, serverProps);
+            utility = new HBaseTestingUtility(config);
+            try {
+                utility.startMiniCluster(NUM_SLAVES_BASE);
+                utility.startMiniMapReduceCluster();
+                url = QueryUtil.getConnectionUrl(new Properties(), utility.getConfiguration());
+            } catch (Throwable t) {
+                throw new RuntimeException(t);
+            }
+            clusterInitialized = true;
+        }
+        Class.forName(PhoenixDriver.class.getName());
+        realDriver = PhoenixDriver.INSTANCE;
+        DriverManager.registerDriver(realDriver);
+        if (clientProps.getBoolean(QueryServices.TRANSACTIONS_ENABLED, QueryServicesOptions.DEFAULT_TRANSACTIONS_ENABLED)) {
+            setupTxManager();
         }
     }
 
@@ -739,7 +771,7 @@ public abstract class BaseTest {
      * Create a {@link PhoenixTestDriver} and register it.
      * @return an initialized and registered {@link PhoenixTestDriver} 
      */
-    public static PhoenixTestDriver initAndRegisterDriver(String url, ReadOnlyProps props) throws Exception {
+    public static PhoenixTestDriver initAndRegisterTestDriver(String url, ReadOnlyProps props) throws Exception {
         PhoenixTestDriver newDriver = new PhoenixTestDriver(props);
         DriverManager.registerDriver(newDriver);
         Driver oldDriver = DriverManager.getDriver(url); 
@@ -1804,7 +1836,7 @@ public abstract class BaseTest {
         assertEquals(expectedCount, count);
     }
     
-    public HBaseTestingUtility getUtility() {
+    public static HBaseTestingUtility getUtility() {
         return utility;
     }
     

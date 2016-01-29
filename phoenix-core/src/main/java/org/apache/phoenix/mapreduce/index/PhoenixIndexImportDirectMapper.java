@@ -80,8 +80,11 @@ public class PhoenixIndexImportDirectMapper extends
             indxWritable.setColumnMetadata(indxTblColumnMetadata);
 
             final Properties overrideProps = new Properties();
-            overrideProps.put(PhoenixRuntime.CURRENT_SCN_ATTRIB,
-                configuration.get(PhoenixConfigurationUtil.CURRENT_SCN_VALUE));
+            String scn = configuration.get(PhoenixConfigurationUtil.CURRENT_SCN_VALUE);
+            String txScnValue = configuration.get(PhoenixConfigurationUtil.TX_SCN_VALUE);
+            if(txScnValue==null) {
+                overrideProps.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, scn);
+            }
             connection = ConnectionUtil.getOutputConnection(configuration, overrideProps);
             connection.setAutoCommit(false);
             // Get BatchSize
