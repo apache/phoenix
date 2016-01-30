@@ -95,7 +95,7 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeIT {
 
     private void verifyResult(ResultSet rs, int i) throws SQLException {
         assertTrue(rs.next());
-        assertEquals("VARCHAR" + String.valueOf(i) + "_" + StringUtils.rightPad("CHAR" + String.valueOf(i), 6, ' ')
+        assertEquals("VARCHAR" + String.valueOf(i) + "_" + StringUtils.rightPad("CHAR" + String.valueOf(i), 10, ' ')
                 + "_A.VARCHAR" + String.valueOf(i) + "_" + StringUtils.rightPad("B.CHAR" + String.valueOf(i), 10, ' '),
                 rs.getString(1));
         assertEquals(i * 3, rs.getInt(2));
@@ -141,7 +141,7 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeIT {
                     // DECIMAL in the index (which is not fixed width)
                     + " AND date_pk+1=? AND date1+1=? AND date2+1=?";
             stmt = conn.prepareStatement(whereSql);
-            stmt.setString(1, "VARCHAR1_CHAR1 _A.VARCHAR1_B.CHAR1   ");
+            stmt.setString(1, "VARCHAR1_CHAR1     _A.VARCHAR1_B.CHAR1   ");
             stmt.setInt(2, 3);
             Date date = DateUtil.parseDate("2015-01-02 00:00:00");
             stmt.setDate(3, date);
@@ -153,8 +153,8 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeIT {
             assertEquals(
                     localIndex ? "CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_INDEX_TEST."
                             + dataTableName
-                            + " [-32768,'VARCHAR1_CHAR1 _A.VARCHAR1_B.CHAR1   ',3,'2015-01-02 00:00:00.000',1,420,156,800,000,1,420,156,800,000]\nCLIENT MERGE SORT"
-                            : "CLIENT PARALLEL 1-WAY RANGE SCAN OVER INDEX_TEST.IDX ['VARCHAR1_CHAR1 _A.VARCHAR1_B.CHAR1   ',3,'2015-01-02 00:00:00.000',1,420,156,800,000,1,420,156,800,000]",
+                            + " [-32768,'VARCHAR1_CHAR1     _A.VARCHAR1_B.CHAR1   ',3,'2015-01-02 00:00:00.000',1,420,156,800,000,1,420,156,800,000]\nCLIENT MERGE SORT"
+                            : "CLIENT PARALLEL 1-WAY RANGE SCAN OVER INDEX_TEST.IDX ['VARCHAR1_CHAR1     _A.VARCHAR1_B.CHAR1   ',3,'2015-01-02 00:00:00.000',1,420,156,800,000,1,420,156,800,000]",
                     QueryUtil.getExplainPlan(rs));
 
             // verify that the correct results are returned
@@ -254,20 +254,20 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeIT {
                     + fullDataTableName;
             ResultSet rs = conn.createStatement().executeQuery("SELECT /*+ NO_INDEX */ " + selectSql);
             assertTrue(rs.next());
-            assertEquals("VARCHAR1_CHAR1 _A.VARCHAR_UPDATED_B.CHAR1   ", rs.getString(1));
+            assertEquals("VARCHAR1_CHAR1     _A.VARCHAR_UPDATED_B.CHAR1   ", rs.getString(1));
             assertEquals(101, rs.getLong(2));
             assertTrue(rs.next());
-            assertEquals("VARCHAR2_CHAR2 _A.VARCHAR2_B.CHAR2   ", rs.getString(1));
+            assertEquals("VARCHAR2_CHAR2     _A.VARCHAR2_B.CHAR2   ", rs.getString(1));
             assertEquals(2, rs.getLong(2));
             assertFalse(rs.next());
 
             // verify that the rows in the index table are also updated
             rs = conn.createStatement().executeQuery("SELECT " + selectSql);
             assertTrue(rs.next());
-            assertEquals("VARCHAR1_CHAR1 _A.VARCHAR_UPDATED_B.CHAR1   ", rs.getString(1));
+            assertEquals("VARCHAR1_CHAR1     _A.VARCHAR_UPDATED_B.CHAR1   ", rs.getString(1));
             assertEquals(101, rs.getLong(2));
             assertTrue(rs.next());
-            assertEquals("VARCHAR2_CHAR2 _A.VARCHAR2_B.CHAR2   ", rs.getString(1));
+            assertEquals("VARCHAR2_CHAR2     _A.VARCHAR2_B.CHAR2   ", rs.getString(1));
             assertEquals(2, rs.getLong(2));
             assertFalse(rs.next());
             conn.createStatement().execute("DROP INDEX IDX ON " + fullDataTableName);

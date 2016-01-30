@@ -17,7 +17,11 @@
  */
 package org.apache.phoenix.schema.stats;
 
+import java.io.ByteArrayInputStream;
 import java.io.Closeable;
+import java.io.DataInput;
+import java.io.DataInputStream;
+import java.io.EOFException;
 import java.io.IOException;
 import java.sql.Date;
 import java.util.List;
@@ -45,6 +49,8 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.PrefixByteCodec;
+import org.apache.phoenix.util.PrefixByteDecoder;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.TimeKeeper;
 
@@ -103,6 +109,7 @@ public class StatisticsWriter implements Closeable {
     @Override
     public void close() throws IOException {
         statsWriterTable.close();
+        statsReaderTable.close();
     }
 
     /**
@@ -134,21 +141,32 @@ public class StatisticsWriter implements Closeable {
         GuidePostsInfo gps = tracker.getGuidePosts(cfKey);
         if (gps != null) {
             boolean rowColumnAdded = false;
-            for (byte[] gp : gps.getGuidePosts()) {
-                byte[] prefix = StatisticsUtil.getRowKey(tableName, cfKey, gp);
-                Put put = new Put(prefix);
-                if (!rowColumnAdded) {
-                    put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH_BYTES,
-                            timeStamp, PLong.INSTANCE.toBytes(gps.getByteCount()));
-                    put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
-                            PhoenixDatabaseMetaData.GUIDE_POSTS_ROW_COUNT_BYTES, timeStamp,
-                            PLong.INSTANCE.toBytes(gps.getRowCount()));
-                    rowColumnAdded = true;
+            ImmutableBytesWritable keys = gps.getGuidePosts();
+            ByteArrayInputStream stream = new ByteArrayInputStream(keys.get(), keys.getOffset(), keys.getLength());
+            DataInput input = new DataInputStream(stream);
+            PrefixByteDecoder decoder = new PrefixByteDecoder(gps.getMaxLength());
+            try {
+                while (true) {
+                    ImmutableBytesWritable ptr = decoder.decode(input);
+                    byte[] prefix = StatisticsUtil.getRowKey(tableName, cfKey, ptr);
+                    Put put = new Put(prefix);
+                    if (!rowColumnAdded) {
+                        put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH_BYTES,
+                                timeStamp, PLong.INSTANCE.toBytes(gps.getByteCount()));
+                        put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
+                                PhoenixDatabaseMetaData.GUIDE_POSTS_ROW_COUNT_BYTES, timeStamp,
+                                PLong.INSTANCE.toBytes(gps.getRowCount()));
+                        rowColumnAdded = true;
+                    }
+                    // Add our empty column value so queries behave correctly
+                    put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES, timeStamp,
+                            ByteUtil.EMPTY_BYTE_ARRAY);
+                    mutations.add(put);
                 }
-                // Add our empty column value so queries behave correctly
-                put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES, timeStamp,
-                        ByteUtil.EMPTY_BYTE_ARRAY);
-                mutations.add(put);
+            } catch (EOFException e) { // Ignore as this signifies we're done
+
+            } finally {
+                PrefixByteCodec.close(stream);
             }
         }
     }

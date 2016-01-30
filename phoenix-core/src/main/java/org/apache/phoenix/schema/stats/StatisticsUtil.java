@@ -21,8 +21,8 @@ import static org.apache.phoenix.util.SchemaUtil.getVarCharLength;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
+import java.util.SortedMap;
 import java.util.TreeMap;
 
 import org.apache.hadoop.hbase.Cell;
@@ -55,10 +55,14 @@ public class StatisticsUtil {
 
     /** Number of parts in our complex key */
     protected static final int NUM_KEY_PARTS = 3;
-
+    
     public static byte[] getRowKey(byte[] table, ImmutableBytesPtr fam, byte[] guidePostStartKey) {
+        return getRowKey(table, fam, new ImmutableBytesWritable(guidePostStartKey,0,guidePostStartKey.length));
+    }
+
+    public static byte[] getRowKey(byte[] table, ImmutableBytesPtr fam, ImmutableBytesWritable guidePostStartKey) {
         // always starts with the source table
-        byte[] rowKey = new byte[table.length + fam.getLength() + guidePostStartKey.length + 2];
+        byte[] rowKey = new byte[table.length + fam.getLength() + guidePostStartKey.getLength() + 2];
         int offset = 0;
         System.arraycopy(table, 0, rowKey, offset, table.length);
         offset += table.length;
@@ -66,7 +70,7 @@ public class StatisticsUtil {
         System.arraycopy(fam.get(), fam.getOffset(), rowKey, offset, fam.getLength());
         offset += fam.getLength();
         rowKey[offset++] = QueryConstants.SEPARATOR_BYTE; // assumes stats table columns not DESC
-        System.arraycopy(guidePostStartKey, 0, rowKey, offset, guidePostStartKey.length);
+        System.arraycopy(guidePostStartKey.get(), 0, rowKey, offset, guidePostStartKey.getLength());
         return rowKey;
     }
 
@@ -126,7 +130,7 @@ public class StatisticsUtil {
         s.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES);
         ResultScanner scanner = null;
         long timeStamp = MetaDataProtocol.MIN_TABLE_TIMESTAMP;
-        TreeMap<byte[], GuidePostsInfo> guidePostsPerCf = new TreeMap<byte[], GuidePostsInfo>(Bytes.BYTES_COMPARATOR);
+        TreeMap<byte[], GuidePostsInfoBuilder> guidePostsInfoWriterPerCf = new TreeMap<byte[], GuidePostsInfoBuilder>(Bytes.BYTES_COMPARATOR);
         try {
             scanner = statsHTable.getScanner(s);
             Result result = null;
@@ -168,21 +172,31 @@ public class StatisticsUtil {
                 }
                 if (cfName != null) {
                     byte[] newGPStartKey = getGuidePostsInfoFromRowKey(tableNameBytes, cfName, result.getRow());
-                    GuidePostsInfo guidePosts = guidePostsPerCf.get(cfName);
-                    if (guidePosts == null) {
-                        guidePosts = new GuidePostsInfo(0l, Collections.<byte[]> emptyList(), 0l);
-                        guidePostsPerCf.put(cfName, guidePosts);
+                    GuidePostsInfoBuilder guidePostsInfoWriter = guidePostsInfoWriterPerCf.get(cfName);
+                    if (guidePostsInfoWriter == null) {
+                        guidePostsInfoWriter = new GuidePostsInfoBuilder();
+                        guidePostsInfoWriterPerCf.put(cfName, guidePostsInfoWriter);
                     }
-                    guidePosts.addGuidePost(newGPStartKey, byteCount, rowCount);
+                    guidePostsInfoWriter.addGuidePosts(newGPStartKey, byteCount, rowCount);
                 }
             }
+            if (!guidePostsInfoWriterPerCf.isEmpty()) { return new PTableStatsImpl(
+                    getGuidePostsPerCf(guidePostsInfoWriterPerCf), timeStamp); }
         } finally {
             if (scanner != null) {
                 scanner.close();
             }
         }
-        if (!guidePostsPerCf.isEmpty()) { return new PTableStatsImpl(guidePostsPerCf, timeStamp); }
         return PTableStats.EMPTY_STATS;
+    }
+
+    private static SortedMap<byte[], GuidePostsInfo> getGuidePostsPerCf(
+            TreeMap<byte[], GuidePostsInfoBuilder> guidePostsWriterPerCf) {
+        TreeMap<byte[], GuidePostsInfo> guidePostsPerCf = new TreeMap<byte[], GuidePostsInfo>(Bytes.BYTES_COMPARATOR);
+        for (byte[] key : guidePostsWriterPerCf.keySet()) {
+            guidePostsPerCf.put(key, guidePostsWriterPerCf.get(key).build());
+        }
+        return guidePostsPerCf;
     }
 
     public static long getGuidePostDepth(int guidepostPerRegion, long guidepostWidth, HTableDescriptor tableDesc) {

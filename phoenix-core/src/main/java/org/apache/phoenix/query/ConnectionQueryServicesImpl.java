@@ -630,12 +630,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
      }
 
     @Override
-    public PMetaData addColumn(final PName tenantId, final String tableName, final List<PColumn> columns, final long tableTimeStamp, final long tableSeqNum, final boolean isImmutableRows, final boolean isWalDisabled, final boolean isMultitenant, final boolean storeNulls, final boolean isTransactional, final long resolvedTime) throws SQLException {
+    public PMetaData addColumn(final PName tenantId, final String tableName, final List<PColumn> columns, final long tableTimeStamp, 
+            final long tableSeqNum, final boolean isImmutableRows, final boolean isWalDisabled, final boolean isMultitenant, 
+            final boolean storeNulls, final boolean isTransactional, final long updateCacheFrequency, final long resolvedTime) throws SQLException {
         return metaDataMutated(tenantId, tableName, tableSeqNum, new Mutator() {
             @Override
             public PMetaData mutate(PMetaData metaData) throws SQLException {
                 try {
-                    return metaData.addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows, isWalDisabled, isMultitenant, storeNulls, isTransactional, resolvedTime);
+                    return metaData.addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows, isWalDisabled, isMultitenant, storeNulls, isTransactional, updateCacheFrequency, resolvedTime);
                 } catch (TableNotFoundException e) {
                     // The DROP TABLE may have been processed first, so just ignore.
                     return metaData;
@@ -2257,6 +2259,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         SQLException sqlE = null;
         try {
             metaConnection.createStatement().executeUpdate("ALTER TABLE " + tableName + " ADD " + (addIfNotExists ? " IF NOT EXISTS " : "") + columns );
+        } catch (NewerTableAlreadyExistsException e) {
+            logger.warn("Table already modified at this timestamp, so assuming add of these columns already done: " + columns);
         } catch (SQLException e) {
             logger.warn("Add column failed due to:" + e);
             sqlE = e;
@@ -2410,17 +2414,24 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 }
                                 if (currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_6_0) {
                                     columnsToAdd = PhoenixDatabaseMetaData.IS_ROW_TIMESTAMP + " " + PBoolean.INSTANCE.getSqlTypeName();
-                                    metaConnection = addColumn(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-                                            MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_6_0, columnsToAdd, false);
+                                    metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
+                                            MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_6_0, columnsToAdd);
                                 }
                                 if(currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0) {
-                                    columnsToAdd = PhoenixDatabaseMetaData.TRANSACTIONAL + " " + PBoolean.INSTANCE.getSqlTypeName();
-                                    metaConnection = addColumn(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-                                            MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0, columnsToAdd, false);
-									// Drop old stats table so that new stats
-									// table
+                                    // Add these columns one at a time, each with different timestamps so that if folks have
+                                    // run the upgrade code already for a snapshot, we'll still enter this block (and do the
+                                    // parts we haven't yet done).
+                                    metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG, MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0 - 2,
+                                            PhoenixDatabaseMetaData.TRANSACTIONAL + " " + PBoolean.INSTANCE.getSqlTypeName());
+                                    metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG, MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0 - 1, 
+                                            PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY + " " + PLong.INSTANCE.getSqlTypeName());
+                                    setImmutableTableIndexesImmutable(metaConnection);
+									// Drop old stats table so that new stats table is created
 									metaConnection = dropStatsTable(metaConnection,
-											MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0 - 1);
+											MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0);
+									// Clear the server cache so the above changes make it over to any clients
+									// that already have cached data.
+									clearCache();
                                 }
                                 
                             }
@@ -2522,10 +2533,38 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
     }
 
-	private PhoenixConnection dropStatsTable(PhoenixConnection oldMetaConnection, long timestamp)
+
+    /**
+     * Set IMMUTABLE_ROWS to true for all index tables over immutable tables.
+     * @param metaConnection connection over which to run the upgrade
+     * @throws SQLException
+     */
+    private static void setImmutableTableIndexesImmutable(PhoenixConnection metaConnection) throws SQLException {
+        boolean autoCommit = metaConnection.getAutoCommit();
+        try {
+            metaConnection.setAutoCommit(true);
+            metaConnection.createStatement().execute(
+                    "UPSERT INTO SYSTEM.CATALOG(TENANT_ID, TABLE_SCHEM, TABLE_NAME, COLUMN_NAME, COLUMN_FAMILY, IMMUTABLE_ROWS)\n" + 
+                    "SELECT A.TENANT_ID, A.TABLE_SCHEM,B.COLUMN_FAMILY,null,null,true\n" + 
+                    "FROM SYSTEM.CATALOG A JOIN SYSTEM.CATALOG B ON (\n" + 
+                    " A.TENANT_ID = B.TENANT_ID AND \n" + 
+                    " A.TABLE_SCHEM = B.TABLE_SCHEM AND\n" + 
+                    " A.TABLE_NAME = B.TABLE_NAME AND\n" + 
+                    " A.COLUMN_NAME = B.COLUMN_NAME AND\n" + 
+                    " B.LINK_TYPE = 1\n" + 
+                    ")\n" + 
+                    "WHERE A.COLUMN_FAMILY IS NULL AND\n" + 
+                    " B.COLUMN_FAMILY IS NOT NULL AND\n" + 
+                    " A.IMMUTABLE_ROWS = TRUE");
+        } finally {
+            metaConnection.setAutoCommit(autoCommit);
+        }
+    }
+
+    private PhoenixConnection dropStatsTable(PhoenixConnection oldMetaConnection, long timestamp)
 			throws SQLException, IOException {
 		Properties props = PropertiesUtil.deepCopy(oldMetaConnection.getClientInfo());
-		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(timestamp));
+		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(timestamp-1));
 		PhoenixConnection metaConnection = new PhoenixConnection(oldMetaConnection, this, props);
 		SQLException sqlE = null;
 		boolean wasCommit = metaConnection.getAutoCommit();
@@ -2555,23 +2594,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 			}
 		}
 
-		HBaseAdmin admin = null;
-		try {
-			admin = getAdmin();
-			admin.disableTable(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES);
-			try {
-				admin.deleteTable(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES);
-			} catch (org.apache.hadoop.hbase.TableNotFoundException e) {
-				logger.debug("Stats table was not found during upgrade!!");
-			}
-		} finally {
-			if (admin != null)
-				admin.close();
-		}
 		oldMetaConnection = metaConnection;
 		props = PropertiesUtil.deepCopy(oldMetaConnection.getClientInfo());
-		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
-				Long.toString(MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0));
+		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(timestamp));
 		try {
 			metaConnection = new PhoenixConnection(oldMetaConnection, ConnectionQueryServicesImpl.this, props);
 		} finally {
@@ -2588,11 +2613,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 				throw sqlE;
 			}
 		}
-		metaConnection.removeTable(null, PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME,
-				PhoenixDatabaseMetaData.SYSTEM_STATS_TABLE, MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP);
-		clearTableFromCache(ByteUtil.EMPTY_BYTE_ARRAY, PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME_BYTES,
-				PhoenixDatabaseMetaData.SYSTEM_STATS_TABLE_BYTES, MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP);
-		clearTableRegionCache(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES);
 		return metaConnection;
 	}
 
@@ -3320,8 +3340,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         wait = false;
                     }
                     // It is guaranteed that this poll won't hang indefinitely because this is the
-                    // only thread that removes items from the queue.
-                    WeakReference<PhoenixConnection> connRef = connectionsQueue.poll();
+                    // only thread that removes items from the queue. Still adding a 1 ms timeout
+                    // for sanity check.
+                    WeakReference<PhoenixConnection> connRef =
+                            connectionsQueue.poll(1, TimeUnit.MILLISECONDS);
+                    if (connRef == null) {
+                        throw new IllegalStateException(
+                                "Connection ref found to be null. This is a bug. Some other thread removed items from the connection queue.");
+                    }
                     PhoenixConnection conn = connRef.get();
                     if (conn != null && !conn.isClosed()) {
                         LinkedBlockingQueue<WeakReference<TableResultIterator>> scannerQueue =
@@ -3332,7 +3358,15 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         int renewed = 0;
                         long start = System.currentTimeMillis();
                         while (numScanners > 0) {
-                            WeakReference<TableResultIterator> ref = scannerQueue.poll();
+                            // It is guaranteed that this poll won't hang indefinitely because this is the
+                            // only thread that removes items from the queue. Still adding a 1 ms timeout
+                            // for sanity check.
+                            WeakReference<TableResultIterator> ref =
+                                    scannerQueue.poll(1, TimeUnit.MILLISECONDS);
+                            if (ref == null) {
+                                throw new IllegalStateException(
+                                        "TableResulIterator ref found to be null. This is a bug. Some other thread removed items from the scanner queue.");
+                            }
                             TableResultIterator scanningItr = ref.get();
                             if (scanningItr != null) {
                                 RenewLeaseStatus status = scanningItr.renewLease();

@@ -19,7 +19,6 @@ package org.apache.phoenix.schema;
 
 import java.util.Objects;
 
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.compile.TupleProjectionCompiler;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.util.IndexUtil;
@@ -36,16 +35,20 @@ public class TableRef {
     private final long lowerBoundTimeStamp;
     private final boolean hasDynamicCols;
 
+    public TableRef(TableRef tableRef) {
+        this(tableRef.alias, tableRef.table, tableRef.upperBoundTimeStamp, tableRef.lowerBoundTimeStamp, tableRef.hasDynamicCols);
+    }
+    
     public TableRef(TableRef tableRef, long timeStamp) {
-        this(tableRef.alias, tableRef.table, timeStamp, tableRef.hasDynamicCols);
+        this(tableRef.alias, tableRef.table, timeStamp, tableRef.lowerBoundTimeStamp, tableRef.hasDynamicCols);
     }
     
     public TableRef(TableRef tableRef, String alias) {
-        this(alias, tableRef.table, tableRef.upperBoundTimeStamp, tableRef.hasDynamicCols);
+        this(alias, tableRef.table, tableRef.upperBoundTimeStamp, tableRef.lowerBoundTimeStamp, tableRef.hasDynamicCols);
     }
     
     public TableRef(PTable table) {
-        this(null, table, HConstants.LATEST_TIMESTAMP, false);
+        this(null, table, QueryConstants.UNSET_TIMESTAMP, false);
     }
     
     public TableRef(PTable table, long upperBoundTimeStamp, long lowerBoundTimeStamp) {

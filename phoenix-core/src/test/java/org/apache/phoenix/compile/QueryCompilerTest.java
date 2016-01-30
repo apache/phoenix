@@ -217,7 +217,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             statement.execute();
             fail();
         } catch (SQLException e) {
-            assertTrue(e.getMessage(), e.getMessage().contains("ERROR 517 (42895): Invalid not null constraint on non primary key column columnName=FOO.PK"));
+            assertEquals(SQLExceptionCode.INVALID_NOT_NULL_CONSTRAINT.getErrorCode(), e.getErrorCode());
         } finally {
             conn.close();
         }
@@ -1189,7 +1189,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             conn.createStatement().execute(ddl);
             assertImmutableRows(conn, "T", true);
             conn.createStatement().execute(indexDDL);
-            assertImmutableRows(conn, "T", true);
+            assertImmutableRows(conn, "I", true);
             conn.createStatement().execute("DELETE FROM t WHERE v2 = 'foo'");
             fail();
         } catch (SQLException e) {
@@ -1209,13 +1209,13 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     
     @Test
     public void testInvalidNegativeArrayIndex() throws Exception {
-    	String query = "SELECT a_double_array[-20] FROM table_with_array";
-    	Connection conn = DriverManager.getConnection(getUrl());
+        String query = "SELECT a_double_array[-20] FROM table_with_array";
+        Connection conn = DriverManager.getConnection(getUrl());
         try {
             conn.createStatement().execute(query);
             fail();
         } catch (Exception e) {
-        	
+            
         }
     }
     @Test
@@ -1232,8 +1232,8 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     
     @Test
     public void testNonArrayColumnWithIndex() throws Exception {
-    	String query = "SELECT a_float[1] FROM table_with_array";
-    	Connection conn = DriverManager.getConnection(getUrl());
+        String query = "SELECT a_float[1] FROM table_with_array";
+        Connection conn = DriverManager.getConnection(getUrl());
         try {
             conn.createStatement().execute(query);
             fail();

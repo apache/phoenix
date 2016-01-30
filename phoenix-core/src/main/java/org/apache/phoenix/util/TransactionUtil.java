@@ -19,6 +19,11 @@ package org.apache.phoenix.util;
 
 import java.sql.SQLException;
 
+import co.cask.tephra.TransactionConflictException;
+import co.cask.tephra.TransactionFailureException;
+import co.cask.tephra.TxConstants;
+import co.cask.tephra.hbase11.TransactionAwareHTable;
+
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -26,11 +31,6 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.PTable;
-
-import co.cask.tephra.TransactionConflictException;
-import co.cask.tephra.TransactionFailureException;
-import co.cask.tephra.TxConstants;
-import co.cask.tephra.hbase11.TransactionAwareHTable;
 
 public class TransactionUtil {
     private TransactionUtil() {
@@ -67,7 +67,7 @@ public class TransactionUtil {
 	public static long getResolvedTimestamp(PhoenixConnection connection, boolean isTransactional, long defaultResolvedTimestamp) {
 		MutationState mutationState = connection.getMutationState();
 		Long scn = connection.getSCN();
-	    return scn != null ?  scn : (isTransactional && mutationState.isTransactionStarted()) ? convertToMilliseconds(mutationState.getReadPointer()) : defaultResolvedTimestamp;
+	    return scn != null ?  scn : (isTransactional && mutationState.isTransactionStarted()) ? convertToMilliseconds(mutationState.getInitialWritePointer()) : defaultResolvedTimestamp;
 	}
 
 	public static long getResolvedTime(PhoenixConnection connection, MetaDataMutationResult result) {
@@ -80,7 +80,7 @@ public class TransactionUtil {
 		PTable table = result.getTable();
 		MutationState mutationState = connection.getMutationState();
 		boolean txInProgress = table != null && table.isTransactional() && mutationState.isTransactionStarted();
-		return  txInProgress ? convertToMilliseconds(mutationState.getReadPointer()) : result.getMutationTime();
+		return  txInProgress ? convertToMilliseconds(mutationState.getInitialWritePointer()) : result.getMutationTime();
 	}
 
 	public static Long getTableTimestamp(PhoenixConnection connection, boolean transactional) throws SQLException {
@@ -89,17 +89,10 @@ public class TransactionUtil {
 			return timestamp;
 		}
 		MutationState mutationState = connection.getMutationState();
-		// we need to burn a txn so that we are sure the txn read pointer is close to wall clock time
 		if (!mutationState.isTransactionStarted()) {
 			mutationState.startTransaction();
-			connection.commit();
 		}
-		else {
-			connection.commit();
-		}
-		mutationState.startTransaction();
-		timestamp = convertToMilliseconds(mutationState.getReadPointer());
-		connection.commit();
+		timestamp = convertToMilliseconds(mutationState.getInitialWritePointer());
 		return timestamp;
 	}
 }

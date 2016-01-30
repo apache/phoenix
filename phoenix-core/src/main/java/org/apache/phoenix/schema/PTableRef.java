@@ -20,15 +20,16 @@ package org.apache.phoenix.schema;
 public class PTableRef {
     private final PTable table;
     private final int estSize;
+    private final long createTime;
+    private final long resolvedTimeStamp;
 	private volatile long lastAccessTime;
-	// timestamp (scn or txn timestamp at which rpc to fetch the table was made)
-    private long resolvedTimeStamp;
     
     public PTableRef(PTable table, long lastAccessTime, int estSize, long resolvedTime) {
         this.table = table;
         this.lastAccessTime = lastAccessTime;
         this.estSize = estSize;
         this.resolvedTimeStamp = resolvedTime;
+        this.createTime = lastAccessTime;
     }
 
     public PTableRef(PTable table, long lastAccessTime, long resolvedTime) {
@@ -37,6 +38,14 @@ public class PTableRef {
 
     public PTableRef(PTableRef tableRef) {
         this (tableRef.table, tableRef.lastAccessTime, tableRef.estSize, tableRef.resolvedTimeStamp);
+    }
+    
+    /**
+     * Tracks how long this entry has been in the cache
+     * @return time in milliseconds for how long this entry has been in the cache.
+     */
+    public long getCreateTime() {
+        return createTime;
     }
     
     public PTable getTable() {
@@ -57,9 +66,5 @@ public class PTableRef {
 
 	public void setLastAccessTime(long lastAccessTime) {
 		this.lastAccessTime = lastAccessTime;
-	}
-	
-	public void setResolvedTimeStamp(long resolvedTimeStamp) {
-		this.resolvedTimeStamp = resolvedTimeStamp;
 	}
 }

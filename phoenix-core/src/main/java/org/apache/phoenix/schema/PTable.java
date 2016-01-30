@@ -339,4 +339,5 @@ public interface PTable extends PMetaDataEntity {
      * -1 if there is no such column.
      */
     int getRowTimestampColPos();
+    long getUpdateCacheFrequency();
 }

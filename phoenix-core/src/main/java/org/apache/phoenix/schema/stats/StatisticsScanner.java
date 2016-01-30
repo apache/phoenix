@@ -134,7 +134,8 @@ public class StatisticsScanner implements InternalScanner {
             } finally {
                 try {
                     collectionTracker.removeCompactingRegion(regionInfo);
-                    stats.close();
+                    stats.close();// close the writer
+                    tracker.close();// close the tracker
                 } catch (IOException e) {
                     if (toThrow == null) toThrow = e;
                     LOG.error("Error while closing the stats table", e);

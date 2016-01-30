@@ -238,7 +238,8 @@ public class RulesApplier {
 
         // Get Ms Date between min and max
         synchronized (randomDataGenerator) {
-            long rndLong = randomDataGenerator.nextLong(minDt.getMillis(), maxDt.getMillis());
+            //Make sure date generated is exactly between the passed limits
+            long rndLong = randomDataGenerator.nextLong(minDt.getMillis()+1, maxDt.getMillis()-1);
             dt = new DateTime(rndLong, PherfConstants.DEFAULT_TIME_ZONE);
         }
 

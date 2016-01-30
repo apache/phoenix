@@ -509,7 +509,8 @@ fam_prop_name returns [PropertyName ret]
     ;
     
 prop_value returns [Object ret]
-    :   l=literal { $ret = l.getValue(); }
+    :   v=identifier { $ret = v; }
+    |   l=literal { $ret = l.getValue(); }
     ;
     
 column_name returns [ColumnName ret]

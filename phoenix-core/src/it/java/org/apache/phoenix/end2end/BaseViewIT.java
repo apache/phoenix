@@ -27,11 +27,20 @@ import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
+import java.sql.Statement;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.ResultScanner;
+import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.QueryUtil;
@@ -81,20 +90,40 @@ public abstract class BaseViewIT extends BaseOwnClusterHBaseManagedTimeIT {
     }
     
     protected void testUpdatableViewWithIndex(Integer saltBuckets, boolean localIndex) throws Exception {
-        testUpdatableView(saltBuckets);
-        testUpdatableViewIndex(saltBuckets, localIndex);
+        String viewName = testUpdatableView(saltBuckets);
+        Pair<String,Scan> pair = testUpdatableViewIndex(saltBuckets, localIndex);
+        Scan scan = pair.getSecond();
+        String tableName = pair.getFirst();
+        // Confirm that dropping the view also deletes the rows in the index
+        if (saltBuckets == null) {
+            try (Connection conn = DriverManager.getConnection(getUrl())) {
+                HTableInterface htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(tableName));
+                ResultScanner scanner = htable.getScanner(scan);
+                Result result = scanner.next();
+                // Confirm index has rows
+                assertTrue(result != null && !result.isEmpty());
+                
+                conn.createStatement().execute("DROP VIEW " + viewName);
+                
+                // Confirm index has no rows after view is dropped
+                scanner = htable.getScanner(scan);
+                result = scanner.next();
+                assertTrue(result == null || result.isEmpty());
+            }
+        }
     }
 
-    protected void testUpdatableView(Integer saltBuckets) throws Exception {
+    protected String testUpdatableView(Integer saltBuckets) throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 		if (saltBuckets!=null) {
 			if (tableDDLOptions.length()!=0)
 				tableDDLOptions+=",";
 			tableDDLOptions+=(" SALT_BUCKETS="+saltBuckets);
 		}
+		String viewName = "V";
         String ddl = "CREATE TABLE " + fullTableName + " (k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, k3 DECIMAL, s VARCHAR CONSTRAINT pk PRIMARY KEY (k1, k2, k3))" + tableDDLOptions;
         conn.createStatement().execute(ddl);
-        ddl = "CREATE VIEW v AS SELECT * FROM " + fullTableName + " WHERE k1 = 1";
+        ddl = "CREATE VIEW " + viewName + " AS SELECT * FROM " + fullTableName + " WHERE k1 = 1";
         conn.createStatement().execute(ddl);
         for (int i = 0; i < 10; i++) {
             conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES(" + (i % 4) + "," + (i+100) + "," + (i > 5 ? 2 : 1) + ")");
@@ -135,13 +164,14 @@ public abstract class BaseViewIT extends BaseOwnClusterHBaseManagedTimeIT {
         assertEquals(121, rs.getInt(2));
         assertFalse(rs.next());
         conn.close();
+        return viewName;
     }
 
-    protected void testUpdatableViewIndex(Integer saltBuckets) throws Exception {
-        testUpdatableViewIndex(saltBuckets, false);
+    protected Pair<String,Scan> testUpdatableViewIndex(Integer saltBuckets) throws Exception {
+        return testUpdatableViewIndex(saltBuckets, false);
     }
 
-    protected void testUpdatableViewIndex(Integer saltBuckets, boolean localIndex) throws Exception {
+    protected Pair<String,Scan> testUpdatableViewIndex(Integer saltBuckets, boolean localIndex) throws Exception {
         ResultSet rs;
         Connection conn = DriverManager.getConnection(getUrl());
         if (localIndex) {
@@ -196,28 +226,32 @@ public abstract class BaseViewIT extends BaseOwnClusterHBaseManagedTimeIT {
 
         
         query = "SELECT k1, k2, s FROM v WHERE s = 'foo'";
-        rs = conn.createStatement().executeQuery(query);
+        Statement statement = conn.createStatement();
+        rs = statement.executeQuery(query);
+        Scan scan = statement.unwrap(PhoenixStatement.class).getQueryPlan().getContext().getScan();
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
         assertEquals(120, rs.getInt(2));
         assertEquals("foo", rs.getString(3));
         assertFalse(rs.next());
+        String htableName;
         rs = conn.createStatement().executeQuery("EXPLAIN " + query);
         if (localIndex) {
-            assertEquals("CLIENT PARALLEL "+ (saltBuckets == null ? 1 : saltBuckets)  +"-WAY RANGE SCAN OVER _LOCAL_IDX_" + tableName +" [" + (Short.MIN_VALUE+1) + ",'foo']\n"
+            htableName = "_LOCAL_IDX_" + tableName;
+            assertEquals("CLIENT PARALLEL "+ (saltBuckets == null ? 1 : saltBuckets)  +"-WAY RANGE SCAN OVER " + htableName +" [" + (Short.MIN_VALUE+1) + ",'foo']\n"
                     + "    SERVER FILTER BY FIRST KEY ONLY\n"
                     + "CLIENT MERGE SORT",QueryUtil.getExplainPlan(rs));
         } else {
+            htableName = "_IDX_" + tableName;
             assertEquals(saltBuckets == null
-                    ? "CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_" + tableName +" [" + (Short.MIN_VALUE+1) + ",'foo']\n"
+                    ? "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + htableName +" [" + (Short.MIN_VALUE+1) + ",'foo']\n"
                             + "    SERVER FILTER BY FIRST KEY ONLY"
-                            : "CLIENT PARALLEL " + saltBuckets + "-WAY RANGE SCAN OVER _IDX_T" + (transactional ? "_TXN" : "") + " [0," + (Short.MIN_VALUE+1) + ",'foo']\n"
+                            : "CLIENT PARALLEL " + saltBuckets + "-WAY RANGE SCAN OVER " + htableName + " [0," + (Short.MIN_VALUE+1) + ",'foo']\n"
                                     + "    SERVER FILTER BY FIRST KEY ONLY\n"
                                     + "CLIENT MERGE SORT",
                             QueryUtil.getExplainPlan(rs));
         }
         conn.close();
+        return new Pair<>(htableName,scan);
     }
-
-
 }

@@ -87,4 +87,5 @@ message PTable {
   optional int32 baseColumnCount = 25;
   optional bool rowKeyOrderOptimizable = 26;
   optional bool transactional = 27;
+  optional int64 updateCacheFrequency = 28;
 }
