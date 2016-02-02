@@ -19,6 +19,7 @@
 package org.apache.phoenix.pherf.rules;
 
 import com.google.common.base.Preconditions;
+
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.math3.random.RandomDataGenerator;
 import org.apache.phoenix.pherf.PherfConstants;
@@ -26,6 +27,7 @@ import org.apache.commons.lang.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
 import org.apache.phoenix.pherf.configuration.*;
 import org.joda.time.DateTime;
+import org.joda.time.DateTimeZone;
 import org.joda.time.format.DateTimeFormat;
 import org.joda.time.format.DateTimeFormatter;
 import org.slf4j.Logger;
@@ -228,7 +230,7 @@ public class RulesApplier {
     }
 
     public String generateRandomDate(String min, String max) throws Exception {
-        DateTimeFormatter fmtr = DateTimeFormat.forPattern(PherfConstants.DEFAULT_DATE_PATTERN);
+        DateTimeFormatter fmtr = DateTimeFormat.forPattern(PherfConstants.DEFAULT_DATE_PATTERN).withZone(DateTimeZone.UTC);
         DateTime minDt;
         DateTime maxDt;
         DateTime dt;
@@ -247,7 +249,7 @@ public class RulesApplier {
     }
 
     public String getCurrentDate() {
-        DateTimeFormatter fmtr = DateTimeFormat.forPattern(PherfConstants.DEFAULT_DATE_PATTERN);
+        DateTimeFormatter fmtr = DateTimeFormat.forPattern(PherfConstants.DEFAULT_DATE_PATTERN).withZone(DateTimeZone.UTC);;
         DateTime dt = new DateTime(PherfConstants.DEFAULT_TIME_ZONE);
         return fmtr.print(dt);
     }
@@ -325,15 +327,8 @@ public class RulesApplier {
 
     // Checks if date is in defult pattern
     public String checkDatePattern(String date) {
-        DateTimeFormatter fmtr = DateTimeFormat.forPattern(PherfConstants.DEFAULT_DATE_PATTERN);
-        DateTime parsedDate;
-        try {
-            parsedDate = fmtr.parseDateTime(date);
-        } catch (IllegalArgumentException e) {
-            /*  Trying add default time zone if no time zone appended to date */
-            date = date + " " + PherfConstants.DEFAULT_TIME_ZONE.toString();
-            parsedDate = fmtr.parseDateTime(date);
-        }
+        DateTimeFormatter fmtr = DateTimeFormat.forPattern(PherfConstants.DEFAULT_DATE_PATTERN).withZone(DateTimeZone.UTC);;
+        DateTime parsedDate = fmtr.parseDateTime(date);
         return fmtr.print(parsedDate);
     }
 
