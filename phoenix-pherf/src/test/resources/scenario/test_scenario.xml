@@ -96,8 +96,8 @@
                     <value>2019-09-19 00:01:00.000</value>
                 </datavalue>
                 <datavalue distribution="10">
-                    <minValue>2019-09-22 00:01:00.000 UTC</minValue>
-                    <maxValue>2019-09-22 00:01:00.300 UTC</maxValue>
+                    <minValue>2019-09-22 00:01:00.000</minValue>
+                    <maxValue>2019-09-22 00:01:00.300</maxValue>
                 </datavalue>
             </valuelist>
         </column>

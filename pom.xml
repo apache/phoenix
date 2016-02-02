@@ -107,7 +107,8 @@
     <commons-codec.version>1.7</commons-codec.version>
     <htrace.version>3.1.0-incubating</htrace.version>
     <collections.version>3.2.1</collections.version>
-    <jodatime.version>2.7</jodatime.version>
+    <!-- Do not change jodatime.version until HBASE-15199 is fixed -->
+    <jodatime.version>1.6</jodatime.version>
     <joni.version>2.1.2</joni.version>
     <calcite.version>1.6.0</calcite.version>
     <jettyVersion>8.1.7.v20120910</jettyVersion>
