@@ -12,6 +12,8 @@ import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PDateArray;
+import org.apache.phoenix.schema.types.PDouble;
+import org.apache.phoenix.schema.types.PFloat;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PLongArray;
 import org.apache.phoenix.schema.types.PTime;
@@ -20,6 +22,7 @@ import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PTimestampArray;
 import org.apache.phoenix.schema.types.PUnsignedDate;
 import org.apache.phoenix.schema.types.PUnsignedDateArray;
+import org.apache.phoenix.schema.types.PUnsignedFloat;
 import org.apache.phoenix.schema.types.PUnsignedTime;
 import org.apache.phoenix.schema.types.PUnsignedTimeArray;
 import org.apache.phoenix.schema.types.PUnsignedTimestamp;
@@ -91,12 +94,17 @@ public class CalciteRuntime {
                 PDataType type = projector.getExpression().getDataType();
                 if (PDataType.equalsAny(
                         type,
+                        PUnsignedFloat.INSTANCE,
+                        PFloat.INSTANCE)) {
+                    type = PDouble.INSTANCE;
+                } else if (PDataType.equalsAny(
+                        type,
                         PUnsignedDate.INSTANCE,
                         PDate.INSTANCE,
                         PUnsignedTime.INSTANCE,
                         PTime.INSTANCE)) {
                     type = PLong.INSTANCE;
-                }else if (PDataType.equalsAny(
+                } else if (PDataType.equalsAny(
                         type,
                         PUnsignedDateArray.INSTANCE,
                         PDateArray.INSTANCE,

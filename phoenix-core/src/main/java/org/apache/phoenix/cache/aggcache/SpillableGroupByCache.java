@@ -340,12 +340,7 @@ public class SpillableGroupByCache implements GroupByCache {
         final Iterator<Entry<ImmutableBytesWritable, Aggregator[]>> cacheIter = new EntryIterator();
 
         // scanner using the spillable implementation
-        return new BaseRegionScanner() {
-            @Override
-            public HRegionInfo getRegionInfo() {
-                return s.getRegionInfo();
-            }
-
+        return new BaseRegionScanner(s) {
             @Override
             public void close() throws IOException {
                 try {
@@ -373,16 +368,6 @@ public class SpillableGroupByCache implements GroupByCache {
                 results.add(KeyValueUtil.newKeyValue(key.get(), key.getOffset(), key.getLength(), SINGLE_COLUMN_FAMILY,
                         SINGLE_COLUMN, AGG_TIMESTAMP, value, 0, value.length));
                 return cacheIter.hasNext();
-            }
-
-            @Override
-            public long getMaxResultSize() {
-              return s.getMaxResultSize();
-            }
-
-            @Override
-            public int getBatch() {
-                return s.getBatch();
             }
         };
     }

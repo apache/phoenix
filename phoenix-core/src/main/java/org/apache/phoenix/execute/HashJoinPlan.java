@@ -458,7 +458,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
             return this;
 
         return new HashJoinPlan(this.statement, delegate, this.joinInfo, 
-                this.subPlans, this.recompileWhereClause);
+                this.subPlans, this.recompileWhereClause, dependencies);
     }
 }
 

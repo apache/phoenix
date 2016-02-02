@@ -315,13 +315,8 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                 aggResults.add(keyValue);
             }
             // scanner using the non spillable, memory-only implementation
-            return new BaseRegionScanner() {
+            return new BaseRegionScanner(s) {
                 private int index = 0;
-
-                @Override
-                public HRegionInfo getRegionInfo() {
-                    return s.getRegionInfo();
-                }
 
                 @Override
                 public void close() throws IOException {
@@ -340,16 +335,6 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                     results.add(aggResults.get(index));
                     index++;
                     return index < aggResults.size();
-                }
-
-                @Override
-                public long getMaxResultSize() {
-                	return s.getMaxResultSize();
-                }
-
-                @Override
-                public int getBatch() {
-                    return s.getBatch();
                 }
             };
         }
@@ -471,19 +456,9 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
             logger.debug(LogUtil.addCustomAnnotations("Grouped aggregation over ordered rows with scan " + scan + ", group by "
                     + expressions + ", aggregators " + aggregators, ScanUtil.getCustomAnnotations(scan)));
         }
-        return new BaseRegionScanner() {
+        return new BaseRegionScanner(scanner) {
             private long rowCount = 0;
             private ImmutableBytesWritable currentKey = null;
-
-            @Override
-            public HRegionInfo getRegionInfo() {
-                return scanner.getRegionInfo();
-            }
-
-            @Override
-            public void close() throws IOException {
-                scanner.close();
-            }
 
             @Override
             public boolean next(List<Cell> results) throws IOException {
@@ -566,15 +541,6 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                 }
                 currentKey = null;
                 return false;
-            }
-
-            @Override
-            public long getMaxResultSize() {
-                return scanner.getMaxResultSize();
-            }
-            @Override
-            public int getBatch() {
-                return scanner.getBatch();
             }
         };
     }

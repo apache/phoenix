@@ -34,18 +34,30 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 
 import org.apache.calcite.avatica.util.ArrayImpl;
 import org.apache.calcite.config.CalciteConnectionProperty;
 import org.apache.phoenix.end2end.BaseClientManagedTimeIT;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.ReadOnlyProps;
+import org.junit.BeforeClass;
 
 import com.google.common.collect.Lists;
 
 public class BaseCalciteIT extends BaseClientManagedTimeIT {
+    
+    @BeforeClass
+    public static void doSetup() throws Exception {
+        Map<String,String> props = getDefaultProps();
+        props.put(QueryServices.RUN_UPDATE_STATS_ASYNC, Boolean.FALSE.toString());
+        props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(1000));
+        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+    }
     
     public static Start start(boolean materializationEnabled) {
         return new Start(getConnectionProps(materializationEnabled));
@@ -154,27 +166,78 @@ public class BaseCalciteIT extends BaseClientManagedTimeIT {
             start.close();
         }
 
-        public Sql resultIs(Object[]... expected) throws SQLException {
+        public Sql resultIs(boolean ordered, Object[][] expected) throws SQLException {
             final Statement statement = start.getConnection().createStatement();
             final ResultSet resultSet = statement.executeQuery(sql);
-            for (int i = 0; i < expected.length; i++) {
-                assertTrue(resultSet.next());
-                Object[] row = expected[i];
-                for (int j = 0; j < row.length; j++) {
-                    Object obj = resultSet.getObject(j + 1);
-                    if (obj instanceof ArrayImpl) {
-                        assertEquals(
-                                Arrays.toString((Object[]) row[j]),
-                                obj.toString());
-                    } else {
-                        assertEquals(row[j], obj);
-                    }
-                }
+            if (ordered) {
+                checkResultOrdered(resultSet, expected);
+            } else {
+                checkResultUnordered(resultSet, expected);
             }
-            assertFalse(resultSet.next());
             resultSet.close();
             statement.close();
             return this;
+        }
+        
+        private void checkResultOrdered(ResultSet resultSet, Object[][] expected) throws SQLException {
+            int expectedCount = expected.length;
+            int count = 0;
+            for (int i = 0; i < expectedCount; i++) {
+                assertTrue(
+                        "Expected " + expectedCount + " rows, but got " + count + " rows.",
+                        resultSet.next());
+                count++;
+                Object[] row = expected[i];
+                for (int j = 0; j < row.length; j++) {
+                    Object obj = resultSet.getObject(j + 1);
+                    assertEquals(canonicalize(row[j]), canonicalize(obj));
+                }
+            }
+            assertFalse("Got more rows than expected.", resultSet.next());            
+        }
+        
+        private void checkResultUnordered(ResultSet resultSet, Object[][] expected) throws SQLException {
+            List<List<Object>> expectedResults = Lists.newArrayList();
+            List<List<Object>> actualResults = Lists.newArrayList();
+            List<List<Object>> errorResults = Lists.newArrayList();
+            int columnCount = expected.length > 0 ? expected[0].length : 0;
+            for (Object[] e : expected) {
+                List<Object> row = Lists.newArrayList();
+                for (Object o : e) {
+                    row.add(canonicalize(o));
+                }
+                expectedResults.add(row);
+            }
+            while (resultSet.next()) {
+                List<Object> result = Lists.newArrayList();
+                for (int i = 0; i < columnCount; i++) {
+                    result.add(canonicalize(resultSet.getObject(i+1)));
+                }
+                if (!expectedResults.remove(result)) {
+                    errorResults.add(result);
+                }
+                actualResults.add(result);
+            }
+            assertTrue(
+                    (expectedResults.isEmpty() ? "" : ("Count not find " + expectedResults + " in actual results: " + actualResults + ".\n")) +
+                    (errorResults.isEmpty() ? "" : "Could not find " + errorResults + " in expected results.\n"),
+                    errorResults.isEmpty() && expectedResults.isEmpty());
+        }
+        
+        private Object canonicalize(Object obj) {
+            if (obj == null) {
+                return obj;
+            }
+            
+            if (obj instanceof ArrayImpl) {
+                return obj.toString();
+            }
+            
+            if (obj.getClass().isArray()) {
+                return Arrays.toString((Object[]) obj);
+            }
+            
+            return obj;
         }
     }
 

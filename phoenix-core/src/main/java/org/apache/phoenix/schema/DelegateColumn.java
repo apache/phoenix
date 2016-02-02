@@ -84,4 +84,9 @@ public class DelegateColumn extends DelegateDatum implements PColumn {
     public String toString() {
         return getDelegate().toString();
     }
+
+	@Override
+	public boolean isDynamic() {
+		return getDelegate().isDynamic();
+	}
 }

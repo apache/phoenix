@@ -86,7 +86,6 @@ import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
-import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.TransactionUtil;
 import org.slf4j.Logger;
@@ -215,7 +214,7 @@ public class MutationState implements SQLCloseable {
      */
     public void commitDDLFence(PTable dataTable) throws SQLException {
         if (dataTable.isTransactional()) {
-            byte[] key = SchemaUtil.getTableKey(dataTable);
+            byte[] key = dataTable.getName().getBytes();
             boolean success = false;
             try {
                 FenceWait fenceWait = VisibilityFence.prepareWait(key, connection.getQueryServices().getTransactionSystemClient());
@@ -249,18 +248,28 @@ public class MutationState implements SQLCloseable {
      * These entries will not conflict with each other, but they will conflict with a
      * DDL operation of creating an index. See {@link #addDMLFence(PTable)} and TEPHRA-157
      * for more information.
-     * @param dataTable the table which is doing DML
+     * @param table the table which is doing DML
      * @throws SQLException
      */
-    public void addDMLFence(PTable dataTable) throws SQLException {
-        if (this.txContext == null) {
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.NULL_TRANSACTION_CONTEXT).build().buildException();
+    private void addDMLFence(PTable table) throws SQLException {
+        if (table.getType() == PTableType.INDEX || !table.isTransactional()) {
+            return;
         }
-        byte[] logicalKey = SchemaUtil.getTableKey(dataTable);
-        this.txContext.addTransactionAware(VisibilityFence.create(logicalKey));
-        byte[] physicalKey = dataTable.getPhysicalName().getBytes();
+        byte[] logicalKey = table.getName().getBytes();
+        TransactionAware logicalTxAware = VisibilityFence.create(logicalKey);
+        if (this.txContext == null) {
+            this.txAwares.add(logicalTxAware);
+        } else {
+            this.txContext.addTransactionAware(logicalTxAware);
+        }
+        byte[] physicalKey = table.getPhysicalName().getBytes();
         if (Bytes.compareTo(physicalKey, logicalKey) != 0) {
-            this.txContext.addTransactionAware(VisibilityFence.create(physicalKey));
+            TransactionAware physicalTxAware = VisibilityFence.create(physicalKey);
+            if (this.txContext == null) {
+                this.txAwares.add(physicalTxAware);
+            } else {
+                this.txContext.addTransactionAware(physicalTxAware);
+            }
         }
     }
     
@@ -569,7 +578,7 @@ public class MutationState implements SQLCloseable {
                 List<Mutation> indexMutations;
                 try {
                     indexMutations =
-                            IndexUtil.generateIndexData(table, index, mutationsPertainingToIndex,
+                    		IndexUtil.generateIndexData(table, index, mutationsPertainingToIndex,
                                 connection.getKeyValueBuilder(), connection);
                     // we may also have to include delete mutations for immutable tables if we are not processing all the tables in the mutations map
                     if (!sendAll) {
@@ -719,37 +728,35 @@ public class MutationState implements SQLCloseable {
         long serverTimeStamp = tableRef.getTimeStamp();
         // If we're auto committing, we've already validated the schema when we got the ColumnResolver,
         // so no need to do it again here.
-        if (!connection.getAutoCommit()) {
-            PTable table = tableRef.getTable();
-            MetaDataMutationResult result = client.updateCache(table.getSchemaName().getString(), table.getTableName().getString());
-            PTable resolvedTable = result.getTable();
-            if (resolvedTable == null) {
-                throw new TableNotFoundException(table.getSchemaName().getString(), table.getTableName().getString());
-            }
-            // Always update tableRef table as the one we've cached may be out of date since when we executed
-            // the UPSERT VALUES call and updated in the cache before this.
-            tableRef.setTable(resolvedTable);
-            long timestamp = result.getMutationTime();
-            if (timestamp != QueryConstants.UNSET_TIMESTAMP) {
-                serverTimeStamp = timestamp;
-                if (result.wasUpdated()) {
-                    // TODO: use bitset?
-                    PColumn[] columns = new PColumn[resolvedTable.getColumns().size()];
-                    for (Map.Entry<ImmutableBytesPtr,RowMutationState> rowEntry : rowKeyToColumnMap.entrySet()) {
-                        RowMutationState valueEntry = rowEntry.getValue();
-                        if (valueEntry != null) {
-                            Map<PColumn, byte[]> colValues = valueEntry.getColumnValues();
-                            if (colValues != PRow.DELETE_MARKER) {
-                                for (PColumn column : colValues.keySet()) {
-                                    columns[column.getPosition()] = column;
-                                }
+        PTable table = tableRef.getTable();
+        MetaDataMutationResult result = client.updateCache(table.getSchemaName().getString(), table.getTableName().getString());
+        PTable resolvedTable = result.getTable();
+        if (resolvedTable == null) {
+            throw new TableNotFoundException(table.getSchemaName().getString(), table.getTableName().getString());
+        }
+        // Always update tableRef table as the one we've cached may be out of date since when we executed
+        // the UPSERT VALUES call and updated in the cache before this.
+        tableRef.setTable(resolvedTable);
+        long timestamp = result.getMutationTime();
+        if (timestamp != QueryConstants.UNSET_TIMESTAMP) {
+            serverTimeStamp = timestamp;
+            if (result.wasUpdated()) {
+                List<PColumn> columns = Lists.newArrayListWithExpectedSize(table.getColumns().size());
+                for (Map.Entry<ImmutableBytesPtr,RowMutationState> rowEntry : rowKeyToColumnMap.entrySet()) {
+                    RowMutationState valueEntry = rowEntry.getValue();
+                    if (valueEntry != null) {
+                        Map<PColumn, byte[]> colValues = valueEntry.getColumnValues();
+                        if (colValues != PRow.DELETE_MARKER) {
+                            for (PColumn column : colValues.keySet()) {
+                            	if (!column.isDynamic())
+                            		columns.add(column);
                             }
                         }
                     }
-                    for (PColumn column : columns) {
-                        if (column != null) {
-                            resolvedTable.getColumnFamily(column.getFamilyName().getString()).getColumn(column.getName().getString());
-                        }
+                }
+                for (PColumn column : columns) {
+                    if (column != null) {
+                        resolvedTable.getColumnFamily(column.getFamilyName().getString()).getColumn(column.getName().getString());
                     }
                 }
             }
@@ -879,6 +886,7 @@ public class MutationState implements SQLCloseable {
                 // Track tables to which we've sent uncommitted data
                 if (isTransactional = table.isTransactional()) {
                     txTableRefs.add(tableRef);
+                    addDMLFence(table);
                     uncommittedPhysicalNames.add(table.getPhysicalName().getString());
                 }
                 boolean isDataTable = true;

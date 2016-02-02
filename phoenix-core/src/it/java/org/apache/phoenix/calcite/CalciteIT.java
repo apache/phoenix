@@ -64,7 +64,7 @@ public class CalciteIT extends BaseCalciteIT {
         start(false).sql("select * from aTable where a_string = 'a'")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'a')])\n")
-                .resultIs(new Object[][] {
+                .resultIs(false, new Object[][] {
                           {"00D300000000XHP", "00A123122312312", "a"}, 
                           {"00D300000000XHP", "00A223122312312", "a"}, 
                           {"00D300000000XHP", "00A323122312312", "a"}, 
@@ -73,12 +73,12 @@ public class CalciteIT extends BaseCalciteIT {
         
         // FIXME: Should be 14:22:56 instead. Wrong due to time zone.
         start(false).sql("select \"DATE\" from " + JOIN_ORDER_TABLE_FULL_NAME + " where \"order_id\" = '000000000000001'")
-                .resultIs(new Object[][]{
+                .resultIs(false, new Object[][]{
                         {new Timestamp(format.parse("2013-11-22 19:22:56").getTime())}})
                 .close();
         
         start(false).sql("select student_id, scores from " + SCORES_TABLE_NAME)
-                .resultIs(new Object[][] {
+                .resultIs(false, new Object[][] {
                         {1, new Integer[] {85, 80, 82}},
                         {2, null},
                         {3, new Integer[] {87, 88, 80}}})
@@ -90,7 +90,7 @@ public class CalciteIT extends BaseCalciteIT {
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixServerProject(ENTITY_ID=[$1], A_STRING=[$2], ORGANIZATION_ID=[$0])\n" +
                            "    PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'a')])\n")
-                .resultIs(new Object[][] {
+                .resultIs(false, new Object[][] {
                           {"00A123122312312", "a", "00D300000000XHP"}, 
                           {"00A223122312312", "a", "00D300000000XHP"}, 
                           {"00A323122312312", "a", "00D300000000XHP"}, 
@@ -107,7 +107,7 @@ public class CalciteIT extends BaseCalciteIT {
                            "        PhoenixTableScan(table=[[phoenix, ATABLE]])\n" +
                            "      PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1], A_STRING=[$2])\n" +
                            "        PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'a')])\n")
-                .resultIs(new Object[][] {
+                .resultIs(false, new Object[][] {
                           {"00A123122312312", "a", "00D300000000XHP"}, 
                           {"00A223122312312", "a", "00D300000000XHP"}, 
                           {"00A323122312312", "a", "00D300000000XHP"}, 
@@ -122,7 +122,7 @@ public class CalciteIT extends BaseCalciteIT {
                            "        PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
                            "      PhoenixServerProject(supplier_id=[$0], NAME=[$1])\n" +
                            "        PhoenixTableScan(table=[[phoenix, Join, SupplierTable]])\n")
-                .resultIs(new Object[][] {
+                .resultIs(false, new Object[][] {
                           {"0000000001", "T1", "0000000001", "S1"}, 
                           {"0000000002", "T2", "0000000001", "S1"}, 
                           {"0000000003", "T3", "0000000002", "S2"}, 
@@ -138,7 +138,7 @@ public class CalciteIT extends BaseCalciteIT {
                            "      PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
                            "      PhoenixServerProject(supplier_id=[$0], NAME=[$1], PHONE=[$2], ADDRESS=[$3], LOC_ID=[$4], NAME5=[CAST($1):VARCHAR(2) CHARACTER SET \"ISO-8859-1\" COLLATE \"ISO-8859-1$en_US$primary\"])\n" +
                            "        PhoenixTableScan(table=[[phoenix, Join, SupplierTable]], filter=[=(CAST($1):VARCHAR(2) CHARACTER SET \"ISO-8859-1\" COLLATE \"ISO-8859-1$en_US$primary\", 'S5')])\n")
-                .resultIs(new Object[][] {
+                .resultIs(false, new Object[][] {
                           {"0000000005", "T5", 500, 8, 15, "0000000005", "Item T5", "0000000005", "S5", "888-888-5555", "505 YYY Street", "10005"}})
                 .close();
         
@@ -151,7 +151,7 @@ public class CalciteIT extends BaseCalciteIT {
                            "        PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
                            "      PhoenixServerProject(order_id=[$0], item_id=[$2], QUANTITY=[$4], PRICE7=[CAST($3):DECIMAL(17, 6)])\n" +
                            "        PhoenixTableScan(table=[[phoenix, Join, OrderTable]], filter=[<($4, 5000)])\n")
-                .resultIs(new Object[][] {
+                .resultIs(false, new Object[][] {
                           {"000000000000004", "T6", 600, 15, 4000}})
                 .close();
     }
@@ -165,7 +165,7 @@ public class CalciteIT extends BaseCalciteIT {
                            "        PhoenixTableScan(table=[[phoenix, Join, SupplierTable]])\n" +
                            "      PhoenixServerProject(item_id=[$0], NAME=[$1], supplier_id=[$5])\n" +
                            "        PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n")
-                .resultIs(new Object[][] {
+                .resultIs(false, new Object[][] {
                           {"0000000001", "T1", "0000000001", "S1"}, 
                           {"0000000002", "T2", "0000000001", "S1"}, 
                           {"0000000003", "T3", "0000000002", "S2"}, 
@@ -188,7 +188,7 @@ public class CalciteIT extends BaseCalciteIT {
                            "            PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
                            "        PhoenixServerProject(supplier_id=[$0], NAME=[$1])\n" +
                            "          PhoenixTableScan(table=[[phoenix, Join, SupplierTable]], scanOrder=[FORWARD])\n")
-                .resultIs(new Object[][] {
+                .resultIs(true, new Object[][] {
                         {"0000000001", "T1", "0000000001", "S1"},
                         {"0000000002", "T2", "0000000001", "S1"},
                         {"0000000003", "T3", "0000000002", "S2"},
@@ -208,7 +208,7 @@ public class CalciteIT extends BaseCalciteIT {
                            "        PhoenixTableScan(table=[[phoenix, ATABLE]], scanOrder=[FORWARD])\n" +
                            "      PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1], A_STRING=[$2])\n" +
                            "        PhoenixTableScan(table=[[phoenix, ATABLE]], scanOrder=[FORWARD])\n")
-                .resultIs(new Object[][] {
+                .resultIs(false, new Object[][] {
                           {"00A123122312312", "a", "00D300000000XHP"},
                           {"00A223122312312", "a", "00D300000000XHP"},
                           {"00A323122312312", "a", "00D300000000XHP"},
@@ -284,7 +284,7 @@ public class CalciteIT extends BaseCalciteIT {
                            "            PhoenixTableScan(table=[[phoenix, ATABLE]])\n" +
                            "          PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1], A_STRING=[$2])\n" +
                            "            PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'a')])\n")
-                .resultIs(new Object[][] {
+                .resultIs(false, new Object[][] {
                           {"00A123122312312", "a", "00D300000000XHP"}, 
                           {"00A223122312312", "a", "00D300000000XHP"}, 
                           {"00A323122312312", "a", "00D300000000XHP"}, 
@@ -302,7 +302,7 @@ public class CalciteIT extends BaseCalciteIT {
                            "          PhoenixTableScan(table=[[phoenix, ATABLE]])\n" +
                            "        PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1])\n" +
                            "          PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
-                .resultIs(new Object[][] {
+                .resultIs(false, new Object[][] {
                           {"00A123122312312", "a", "00D300000000XHP"},
                           {"00A223122312312", "a", "00D300000000XHP"},
                           {"00A323122312312", "a", "00D300000000XHP"},
@@ -320,7 +320,7 @@ public class CalciteIT extends BaseCalciteIT {
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixServerAggregate(group=[{}], EXPR$0=[COUNT($3)])\n" +
                            "    PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
-                .resultIs(new Object[][] {
+                .resultIs(false, new Object[][] {
                           {9L}})
                 .close();
         
@@ -328,7 +328,7 @@ public class CalciteIT extends BaseCalciteIT {
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixServerAggregate(group=[{0}], EXPR$1=[COUNT($3)], isOrdered=[true])\n" +
                            "    PhoenixTableScan(table=[[phoenix, ATABLE]], scanOrder=[FORWARD])\n")
-                .resultIs(new Object[][] {
+                .resultIs(false, new Object[][] {
                           {"00D300000000XHP", 9L}})
                 .close();
         
@@ -336,7 +336,7 @@ public class CalciteIT extends BaseCalciteIT {
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixServerAggregate(group=[{0, 1}], EXPR$2=[COUNT($3)], isOrdered=[true])\n" +
                            "    PhoenixTableScan(table=[[phoenix, ATABLE]], scanOrder=[FORWARD])\n")
-                .resultIs(new Object[][] {
+                .resultIs(false, new Object[][] {
                           {"00D300000000XHP", "00A123122312312", 1L}, 
                           {"00D300000000XHP", "00A223122312312", 1L}, 
                           {"00D300000000XHP", "00A323122312312", 1L}, 
@@ -352,7 +352,7 @@ public class CalciteIT extends BaseCalciteIT {
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixServerAggregate(group=[{1}], EXPR$1=[COUNT($3)], isOrdered=[false])\n" +
                            "    PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
-                .resultIs(new Object[][] {
+                .resultIs(false, new Object[][] {
                         {"00A123122312312", 1L}, 
                         {"00A223122312312", 1L}, 
                         {"00A323122312312", 1L}, 
@@ -368,7 +368,7 @@ public class CalciteIT extends BaseCalciteIT {
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixServerAggregate(group=[{2}], EXPR$1=[COUNT($3)], isOrdered=[false])\n" +
                            "    PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
-                .resultIs(new Object[][] {
+                .resultIs(false, new Object[][] {
                           {"a", 4L},
                           {"b", 4L},
                           {"c", 1L}})
@@ -379,7 +379,7 @@ public class CalciteIT extends BaseCalciteIT {
                            "  PhoenixClientProject(EXPR$0=[$1], A_STRING=[$0])\n" +
                            "    PhoenixServerAggregate(group=[{2}], EXPR$0=[COUNT()], isOrdered=[false])\n" +
                            "      PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
-                .resultIs(new Object[][] {
+                .resultIs(false, new Object[][] {
                           {4L, "a"},
                           {4L, "b"},
                           {1L, "c"}})
@@ -393,7 +393,7 @@ public class CalciteIT extends BaseCalciteIT {
                            "        PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
                            "      PhoenixServerProject(supplier_id=[$0], NAME=[$1])\n" +
                            "        PhoenixTableScan(table=[[phoenix, Join, SupplierTable]])\n")
-                .resultIs(new Object[][] {
+                .resultIs(false, new Object[][] {
                           {"S1", 2L},
                           {"S2", 2L},
                           {"S5", 1L},
@@ -409,7 +409,7 @@ public class CalciteIT extends BaseCalciteIT {
                            "        PhoenixTableScan(table=[[phoenix, Join, SupplierTable]], scanOrder=[FORWARD])\n" +
                            "      PhoenixServerProject(supplier_id=[$5])\n" +
                            "        PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n")
-                .resultIs(new Object[][] {
+                .resultIs(false, new Object[][] {
                           {"0000000001", 2L},
                           {"0000000002", 2L},
                           {"0000000005", 1L},
@@ -420,7 +420,7 @@ public class CalciteIT extends BaseCalciteIT {
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixServerAggregate(group=[{2}], EXPR$1=[SUM($4)], isOrdered=[false])\n" +
                            "    PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
-                .resultIs(new Object[][] {
+                .resultIs(false, new Object[][] {
                            {"a", 10L},
                            {"b", 26L},
                            {"c", 9L}})
@@ -431,7 +431,7 @@ public class CalciteIT extends BaseCalciteIT {
                            "  PhoenixClientProject(MYPK0=[$0], EXPR$1=[CAST(/($1, $2)):INTEGER NOT NULL])\n" +
                            "    PhoenixServerAggregate(group=[{0}], agg#0=[$SUM0($1)], agg#1=[COUNT()], isOrdered=[true])\n" +
                            "      PhoenixTableScan(table=[[phoenix, SALTED_TEST_TABLE]], scanOrder=[FORWARD])\n")
-                .resultIs(new Object[][] {
+                .resultIs(false, new Object[][] {
                         {1, 2},
                         {2, 3},
                         {3, 4}})
@@ -443,7 +443,7 @@ public class CalciteIT extends BaseCalciteIT {
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixServerAggregate(group=[{2}], isOrdered=[false])\n" +
                            "    PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
-                .resultIs(new Object[][]{
+                .resultIs(false, new Object[][]{
                           {"a"}, 
                           {"b"}, 
                           {"c"}})
@@ -456,7 +456,7 @@ public class CalciteIT extends BaseCalciteIT {
                            "  PhoenixServerSort(sort0=[$2], sort1=[$1], dir0=[ASC], dir1=[ASC])\n" +
                            "    PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1], A_STRING=[$2])\n" +
                            "      PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
-                .resultIs(new Object[][] {
+                .resultIs(true, new Object[][] {
                           {"00D300000000XHP", "00A123122312312", "a"}, 
                           {"00D300000000XHP", "00A223122312312", "a"}, 
                           {"00D300000000XHP", "00A323122312312", "a"}, 
@@ -472,7 +472,7 @@ public class CalciteIT extends BaseCalciteIT {
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1], A_STRING=[$2])\n" +
                            "    PhoenixTableScan(table=[[phoenix, ATABLE]], scanOrder=[FORWARD])\n")
-                .resultIs(new Object[][] {
+                .resultIs(true, new Object[][] {
                           {"00D300000000XHP", "00A123122312312", "a"}, 
                           {"00D300000000XHP", "00A223122312312", "a"}, 
                           {"00D300000000XHP", "00A323122312312", "a"}, 
@@ -488,7 +488,7 @@ public class CalciteIT extends BaseCalciteIT {
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1], A_STRING=[$2])\n" +
                            "    PhoenixTableScan(table=[[phoenix, ATABLE]], scanOrder=[REVERSE])\n")
-                .resultIs(new Object[][] {
+                .resultIs(true, new Object[][] {
                           {"00D300000000XHP", "00C923122312312", "c"},
                           {"00D300000000XHP", "00B823122312312", "b"}, 
                           {"00D300000000XHP", "00B723122312312", "b"}, 
@@ -504,7 +504,7 @@ public class CalciteIT extends BaseCalciteIT {
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1], A_STRING=[$2])\n" +
                            "    PhoenixTableScan(table=[[phoenix, ATABLE]], scanOrder=[REVERSE])\n")
-                .resultIs(new Object[][] {
+                .resultIs(true, new Object[][] {
                           {"00D300000000XHP", "00C923122312312", "c"},
                           {"00D300000000XHP", "00B823122312312", "b"}, 
                           {"00D300000000XHP", "00B723122312312", "b"}, 
@@ -521,7 +521,7 @@ public class CalciteIT extends BaseCalciteIT {
                            "  PhoenixServerSort(sort0=[$0], sort1=[$1], dir0=[ASC], dir1=[DESC])\n" +
                            "    PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1], A_STRING=[$2])\n" +
                            "      PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
-                .resultIs(new Object[][] {
+                .resultIs(true, new Object[][] {
                           {"00D300000000XHP", "00C923122312312", "c"},
                           {"00D300000000XHP", "00B823122312312", "b"}, 
                           {"00D300000000XHP", "00B723122312312", "b"}, 
@@ -539,7 +539,7 @@ public class CalciteIT extends BaseCalciteIT {
                            "    PhoenixCompactClientSort(sort0=[$1], sort1=[$0], dir0=[ASC], dir1=[DESC])\n" +
                            "      PhoenixServerAggregate(group=[{2}], EXPR$0=[COUNT()], isOrdered=[false])\n" +
                            "        PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
-                .resultIs(new Object[][] {
+                .resultIs(true, new Object[][] {
                           {1L, "c"},
                           {4L, "b"},
                           {4L, "a"}})
@@ -554,7 +554,7 @@ public class CalciteIT extends BaseCalciteIT {
                            "          PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
                            "        PhoenixServerProject(supplier_id=[$0], NAME=[$1])\n" +
                            "          PhoenixTableScan(table=[[phoenix, Join, SupplierTable]])\n")
-                .resultIs(new Object[][] {
+                .resultIs(true, new Object[][] {
                           {"S6", 1L},
                           {"S5", 1L},
                           {"S2", 2L},
@@ -570,7 +570,7 @@ public class CalciteIT extends BaseCalciteIT {
                            "          PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
                            "        PhoenixServerProject(supplier_id=[$0], NAME=[$1])\n" +
                            "          PhoenixTableScan(table=[[phoenix, Join, SupplierTable]])\n")
-                .resultIs(new Object[][] {
+                .resultIs(true, new Object[][] {
                           {"0000000006", "T6", "0000000006", "S6"}, 
                           {"0000000005", "T5", "0000000005", "S5"}, 
                           {"0000000004", "T4", "0000000002", "S2"}, 
@@ -587,7 +587,7 @@ public class CalciteIT extends BaseCalciteIT {
                            "    PhoenixServerSort(sort0=[$2], sort1=[$1], dir0=[ASC], dir1=[ASC])\n" +
                            "      PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1], A_STRING=[$2])\n" +
                            "        PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
-                .resultIs(new Object[][] {
+                .resultIs(true, new Object[][] {
                           {"00D300000000XHP", "00A123122312312", "a"}, 
                           {"00D300000000XHP", "00A223122312312", "a"}, 
                           {"00D300000000XHP", "00A323122312312", "a"}, 
@@ -600,7 +600,7 @@ public class CalciteIT extends BaseCalciteIT {
                            "  PhoenixLimit(fetch=[5])\n" +
                            "    PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1], A_STRING=[$2])\n" +
                            "      PhoenixTableScan(table=[[phoenix, ATABLE]], scanOrder=[FORWARD])\n")
-                .resultIs(new Object[][] {
+                .resultIs(true, new Object[][] {
                           {"00D300000000XHP", "00A123122312312", "a"}, 
                           {"00D300000000XHP", "00A223122312312", "a"}, 
                           {"00D300000000XHP", "00A323122312312", "a"}, 
@@ -613,7 +613,7 @@ public class CalciteIT extends BaseCalciteIT {
                            "  PhoenixLimit(fetch=[5])\n" +
                            "    PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1], A_STRING=[$2])\n" +
                            "      PhoenixTableScan(table=[[phoenix, ATABLE]], scanOrder=[REVERSE])\n")
-                .resultIs(new Object[][] {
+                .resultIs(true, new Object[][] {
                           {"00D300000000XHP", "00C923122312312", "c"},
                           {"00D300000000XHP", "00B823122312312", "b"}, 
                           {"00D300000000XHP", "00B723122312312", "b"}, 
@@ -626,7 +626,7 @@ public class CalciteIT extends BaseCalciteIT {
                            "  PhoenixLimit(fetch=[5])\n" +
                            "    PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1], A_STRING=[$2])\n" +
                            "      PhoenixTableScan(table=[[phoenix, ATABLE]], scanOrder=[REVERSE])\n")
-                .resultIs(new Object[][] {
+                .resultIs(true, new Object[][] {
                           {"00D300000000XHP", "00C923122312312", "c"},
                           {"00D300000000XHP", "00B823122312312", "b"}, 
                           {"00D300000000XHP", "00B723122312312", "b"}, 
@@ -640,7 +640,7 @@ public class CalciteIT extends BaseCalciteIT {
                            "    PhoenixServerSort(sort0=[$0], sort1=[$1], dir0=[ASC], dir1=[DESC])\n" +
                            "      PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1], A_STRING=[$2])\n" +
                            "        PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
-                .resultIs(new Object[][] {
+                .resultIs(true, new Object[][] {
                           {"00D300000000XHP", "00C923122312312", "c"},
                           {"00D300000000XHP", "00B823122312312", "b"}, 
                           {"00D300000000XHP", "00B723122312312", "b"}, 
@@ -655,7 +655,7 @@ public class CalciteIT extends BaseCalciteIT {
                            "      PhoenixCompactClientSort(sort0=[$1], sort1=[$0], dir0=[ASC], dir1=[DESC])\n" +
                            "        PhoenixServerAggregate(group=[{2}], EXPR$0=[COUNT()], isOrdered=[false])\n" +
                            "          PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
-                .resultIs(new Object[][] {
+                .resultIs(true, new Object[][] {
                           {1L, "c"},
                           {4L, "b"}})
                 .close();
@@ -670,7 +670,7 @@ public class CalciteIT extends BaseCalciteIT {
                            "            PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
                            "          PhoenixServerProject(supplier_id=[$0], NAME=[$1])\n" +
                            "            PhoenixTableScan(table=[[phoenix, Join, SupplierTable]])\n")
-                .resultIs(new Object[][] {
+                .resultIs(true, new Object[][] {
                           {"S6", 1L},
                           {"S5", 1L},
                           {"S2", 2L}})
@@ -686,7 +686,7 @@ public class CalciteIT extends BaseCalciteIT {
                            "            PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
                            "          PhoenixServerProject(supplier_id=[$0], NAME=[$1])\n" +
                            "            PhoenixTableScan(table=[[phoenix, Join, SupplierTable]])\n")
-                .resultIs(new Object[][] {
+                .resultIs(true, new Object[][] {
                           {"0000000006", "T6", "0000000006", "S6"}, 
                           {"0000000005", "T5", "0000000005", "S5"}, 
                           {"0000000004", "T4", "0000000002", "S2"}})
@@ -699,7 +699,7 @@ public class CalciteIT extends BaseCalciteIT {
                            "  PhoenixLimit(fetch=[5])\n" +
                            "    PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1], A_STRING=[$2])\n" +
                            "      PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
-                .resultIs(new Object[][] {
+                .resultIs(false, new Object[][] {
                           {"00D300000000XHP", "00A123122312312", "a"}, 
                           {"00D300000000XHP", "00A223122312312", "a"}, 
                           {"00D300000000XHP", "00A323122312312", "a"}, 
@@ -713,7 +713,7 @@ public class CalciteIT extends BaseCalciteIT {
                            "    PhoenixLimit(fetch=[2])\n" +
                            "      PhoenixServerAggregate(group=[{2}], EXPR$0=[COUNT()], isOrdered=[false])\n" +
                            "        PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
-                .resultIs(new Object[][] {
+                .resultIs(false, new Object[][] {
                           {4L, "a"},
                           {4L, "b"}})
                 .close();
@@ -727,7 +727,7 @@ public class CalciteIT extends BaseCalciteIT {
                            "          PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
                            "        PhoenixServerProject(supplier_id=[$0], NAME=[$1])\n" +
                            "          PhoenixTableScan(table=[[phoenix, Join, SupplierTable]])\n")
-                .resultIs(new Object[][] {
+                .resultIs(false, new Object[][] {
                           {"S1", 2L},
                           {"S2", 2L},
                           {"S5", 1L}})
@@ -742,7 +742,7 @@ public class CalciteIT extends BaseCalciteIT {
                            "          PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
                            "        PhoenixServerProject(supplier_id=[$0], NAME=[$1])\n" +
                            "          PhoenixTableScan(table=[[phoenix, Join, SupplierTable]])\n")
-                .resultIs(new Object[][] {
+                .resultIs(false, new Object[][] {
                           {"0000000001", "T1", "0000000001", "S1"}, 
                           {"0000000002", "T2", "0000000001", "S1"}, 
                           {"0000000003", "T3", "0000000002", "S2"}})
@@ -753,7 +753,7 @@ public class CalciteIT extends BaseCalciteIT {
                            "  PhoenixClientProject(X=[$0])\n" +
                            "    PhoenixLimit(fetch=[2])\n" +
                            "      PhoenixValues(tuples=[[{ 1, 2 }, { 2, 4 }, { 3, 6 }]])\n")
-                .resultIs(new Object[][] {{1}, {2}})
+                .resultIs(false, new Object[][] {{1}, {2}})
                 .close();
     }
 
@@ -771,7 +771,7 @@ public class CalciteIT extends BaseCalciteIT {
                        "          PhoenixServerProject(item_id=[$0])\n" +
                        "            PhoenixTableScan(table=[[phoenix, Join, ItemTable]], scanOrder=[FORWARD])\n" +
                        "          PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n")
-            .resultIs(new Object[][] {
+            .resultIs(false, new Object[][] {
                     new Object[] {"0000000001", "T1", 1000},
                     new Object[] {"0000000002", "T2", 3000},
                     new Object[] {"0000000003", "T3", 5000},
@@ -793,7 +793,7 @@ public class CalciteIT extends BaseCalciteIT {
                           "          PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n" +
                           "          PhoenixServerProject(item_id=[$0])\n" +
                           "            PhoenixTableScan(table=[[phoenix, Join, ItemTable]], filter=[<($0, '0000000006')])\n")
-               .resultIs(new Object[][] {
+               .resultIs(false, new Object[][] {
                          new Object[] {"0000000001", "T1", 1000},
                          new Object[] {"0000000002", "T2", 3000},
                          new Object[] {"0000000003", "T3", 5000},
@@ -812,7 +812,7 @@ public class CalciteIT extends BaseCalciteIT {
             .explainIs("PhoenixToEnumerableConverter\n" +
                        "  PhoenixClientAggregate(group=[{}], EXPR$0=[COUNT()], EXPR$1=[MAX($1)])\n" +
                        "    PhoenixValues(tuples=[[{ 2, 1 }, { 3, 4 }, { 5, 2 }]])\n")
-            .resultIs(new Object[][] {{3L, 4}})
+            .resultIs(false, new Object[][] {{3L, 4}})
             .close();
     }
     
@@ -824,7 +824,7 @@ public class CalciteIT extends BaseCalciteIT {
                            "      PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'a')])\n" +
                            "    PhoenixServerProject(ENTITY_ID=[$1])\n" +
                            "      PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'b')])\n")
-                .resultIs(new Object[][] {
+                .resultIs(false, new Object[][] {
                         {"00A123122312312"},
                         {"00A223122312312"},
                         {"00A323122312312"},
@@ -847,7 +847,7 @@ public class CalciteIT extends BaseCalciteIT {
                            "        PhoenixServerSort(sort0=[$0], dir0=[DESC])\n" +
                            "          PhoenixServerProject(ENTITY_ID=[$1], A_STRING=[$2])\n" +
                            "            PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'c')])\n")
-                .resultIs(new Object[][] {
+                .resultIs(true, new Object[][] {
                         {"00C923122312312", "c"},
                         {"00A423122312312", "a"},
                         {"00A323122312312", "a"}})
@@ -862,7 +862,7 @@ public class CalciteIT extends BaseCalciteIT {
                            "    PhoenixServerSort(sort0=[$0], dir0=[DESC])\n" +
                            "      PhoenixServerProject(ENTITY_ID=[$1], A_STRING=[$2])\n" +
                            "        PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'c')])\n")
-                .resultIs(new Object[][] {
+                .resultIs(true, new Object[][] {
                         {"00C923122312312", "c"},
                         {"00A423122312312", "a"},
                         {"00A323122312312", "a"},
@@ -877,7 +877,7 @@ public class CalciteIT extends BaseCalciteIT {
                            "  PhoenixUncollect\n" +
                            "    PhoenixServerProject(EXPR$0=[$2])\n" +
                            "      PhoenixTableScan(table=[[phoenix, SCORES]])\n")
-                .resultIs(new Object[][] {
+                .resultIs(false, new Object[][] {
                         {85}, 
                         {80}, 
                         {82}, 
@@ -893,7 +893,7 @@ public class CalciteIT extends BaseCalciteIT {
                            "      PhoenixUncollect\n" +
                            "        PhoenixServerProject(EXPR$0=[$2])\n" +
                            "          PhoenixTableScan(table=[[phoenix, SCORES]], filter=[=($cor0.STUDENT_ID, $0)])\n")
-                .resultIs(new Object[][] {
+                .resultIs(false, new Object[][] {
                         {1, 85}, 
                         {1, 80}, 
                         {1, 82}, 
@@ -936,8 +936,8 @@ public class CalciteIT extends BaseCalciteIT {
                 "            PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n" +
                 "          PhoenixServerAggregate(group=[{2}], isOrdered=[false])\n" +
                 "            PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n";
-        start(correlProps).sql(q1).explainIs(p1Correlate).resultIs(r1).close();
-        start(decorrelProps).sql(q1).explainIs(p1Decorrelated).resultIs(r1).close();
+        start(correlProps).sql(q1).explainIs(p1Correlate).resultIs(false, r1).close();
+        start(decorrelProps).sql(q1).explainIs(p1Decorrelated).resultIs(false, r1).close();
                 
         String q2 = "select name from " + JOIN_ITEM_TABLE_FULL_NAME + " i where price = (select max(price) from " + JOIN_ITEM_TABLE_FULL_NAME + " i2 where i.\"item_id\" = i2.\"item_id\" and i.name = i2.name and i2.\"item_id\" <> 'invalid001')";
         Object[][] r2 = new Object[][]{
@@ -968,8 +968,8 @@ public class CalciteIT extends BaseCalciteIT {
                 "            PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
                 "          PhoenixServerProject(item_id=[$0], NAME=[$1], PRICE=[$2])\n" +
                 "            PhoenixTableScan(table=[[phoenix, Join, ItemTable]], filter=[<>($0, 'invalid001')])\n";
-        start(correlProps).sql(q2).explainIs(p2Correlate).resultIs(r2).close();
-        start(decorrelProps).sql(q2).explainIs(p2Decorrelated).resultIs(r2).close();
+        start(correlProps).sql(q2).explainIs(p2Correlate).resultIs(false, r2).close();
+        start(decorrelProps).sql(q2).explainIs(p2Decorrelated).resultIs(false, r2).close();
         
         // Test PhoenixClientSemiJoin
         String q3 = "select \"item_id\", name from " + JOIN_ITEM_TABLE_FULL_NAME + " i where exists (select 1 from " + JOIN_ORDER_TABLE_FULL_NAME + " o where i.\"item_id\" = o.\"item_id\")";
@@ -997,8 +997,8 @@ public class CalciteIT extends BaseCalciteIT {
                 "        PhoenixTableScan(table=[[phoenix, Join, ItemTable]], scanOrder=[FORWARD])\n" +
                 "      PhoenixServerProject(item_id=[$2])\n" +
                 "        PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n";
-        start(correlProps).sql(q3).explainIs(p3Correlate).resultIs(r3).close();
-        start(decorrelProps).sql(q3).explainIs(p3Decorrelated).resultIs(r3).close();
+        start(correlProps).sql(q3).explainIs(p3Correlate).resultIs(false, r3).close();
+        start(decorrelProps).sql(q3).explainIs(p3Decorrelated).resultIs(false, r3).close();
         
         String q4 = "select \"item_id\", name from " + JOIN_ITEM_TABLE_FULL_NAME + " i where \"item_id\" in (select \"item_id\" from " + JOIN_ORDER_TABLE_FULL_NAME + ")";
         Object[][] r4 = new Object[][] {
@@ -1012,7 +1012,7 @@ public class CalciteIT extends BaseCalciteIT {
                 "    PhoenixServerProject(item_id=[$0], NAME=[$1])\n" +
                 "      PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
                 "    PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n";
-        start(decorrelProps).sql(q4).explainIs(p4Decorrelated).resultIs(r4).close();
+        start(decorrelProps).sql(q4).explainIs(p4Decorrelated).resultIs(false, r4).close();
         
         // CALCITE-864
         //String q5 = "select \"order_id\" from " + JOIN_ITEM_TABLE_FULL_NAME + " i JOIN " + JOIN_ORDER_TABLE_FULL_NAME + " o on o.\"item_id\" = i.\"item_id\" where quantity = (select max(quantity) from " + JOIN_ORDER_TABLE_FULL_NAME + " o2 JOIN " + JOIN_ITEM_TABLE_FULL_NAME + " i2 on o2.\"item_id\" = i2.\"item_id\" where i.\"supplier_id\" = i2.\"supplier_id\")";
@@ -1048,8 +1048,8 @@ public class CalciteIT extends BaseCalciteIT {
         //        "                PhoenixServerJoin(condition=[=($9, $0)], joinType=[inner])\n" +
         //        "                  PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
         //        "                  PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n";
-        //start(correlProps).sql(q5).explainIs(p5Correlate).resultIs(r5).close();
-        //start(decorrelProps).sql(q5).explainIs(p5Decorrelated).resultIs(r5).close();
+        //start(correlProps).sql(q5).explainIs(p5Correlate).resultIs(false, r5).close();
+        //start(decorrelProps).sql(q5).explainIs(p5Decorrelated).resultIs(false, r5).close();
         
         String q6 = "select organization_id, entity_id, a_integer from v v1 where a_integer = (select min(a_integer) from v v2 where v1.organization_id = v2.organization_id and v1.b_string = v2.b_string)";
         Object[][] r6 = new Object[][] {
@@ -1077,8 +1077,8 @@ public class CalciteIT extends BaseCalciteIT {
                 "            PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'a')])\n" +
                 "          PhoenixServerAggregate(group=[{0, 3}], isOrdered=[false])\n" +
                 "            PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'a')])\n";
-        start(correlProps).sql(q6).explainIs(p6Correlate).resultIs(r6).close();
-        start(decorrelProps).sql(q6).explainIs(p6Decorrelated).resultIs(r6).close();
+        start(correlProps).sql(q6).explainIs(p6Correlate).resultIs(false, r6).close();
+        start(decorrelProps).sql(q6).explainIs(p6Decorrelated).resultIs(false, r6).close();
     }
     
     @Test public void testInValueList() throws Exception {
@@ -1086,7 +1086,7 @@ public class CalciteIT extends BaseCalciteIT {
             .explainIs("PhoenixToEnumerableConverter\n" +
                        "  PhoenixServerProject(ENTITY_ID=[$1])\n" +
                        "    PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[AND(=($0, '00D300000000XHP'), OR(=($1, '00A123122312312'), =($1, '00A223122312312'), =($1, '00B523122312312'), =($1, '00B623122312312'), =($1, '00C923122312312')))])\n")
-            .resultIs(new Object[][] {
+            .resultIs(false, new Object[][] {
                     {"00A123122312312"},
                     {"00A223122312312"},
                     {"00B523122312312"},
@@ -1099,7 +1099,7 @@ public class CalciteIT extends BaseCalciteIT {
         start(false).sql("select * from v")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'a')])\n")
-                .resultIs(new Object[][] {
+                .resultIs(false, new Object[][] {
                         {"00D300000000XHP", "00A123122312312", "a"}, 
                         {"00D300000000XHP", "00A223122312312", "a"}, 
                         {"00D300000000XHP", "00A323122312312", "a"}, 
@@ -1112,7 +1112,7 @@ public class CalciteIT extends BaseCalciteIT {
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixClientProject(EXPR$0=[NEXT_VALUE('\"SEQ0\"')], C0=[$0])\n" +
                            "    PhoenixValues(tuples=[[{ 1 }, { 1 }]])\n")
-                .resultIs(new Object[][]{
+                .resultIs(false, new Object[][]{
                         {1L, 1},
                         {2L, 1}})
                 .close();
@@ -1121,7 +1121,7 @@ public class CalciteIT extends BaseCalciteIT {
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixClientProject(EXPR$0=[NEXT_VALUE('\"MY\".\"SEQ1\"')], ENTITY_ID=[$1])\n" +
                            "    PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'a')])\n")
-                .resultIs(new Object[][]{
+                .resultIs(false, new Object[][]{
                         {2L, "00A123122312312"},
                         {4L, "00A223122312312"},
                         {6L, "00A323122312312"},
@@ -1136,7 +1136,7 @@ public class CalciteIT extends BaseCalciteIT {
                            "        PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
                            "      PhoenixServerProject(supplier_id=[$0], NAME=[$1])\n" +
                            "        PhoenixTableScan(table=[[phoenix, Join, SupplierTable]])\n")
-                .resultIs(new Object[][] {
+                .resultIs(false, new Object[][] {
                         {3L, "0000000001", "T1", "0000000001", "S1"}, 
                         {4L, "0000000002", "T2", "0000000001", "S1"}, 
                         {5L, "0000000003", "T3", "0000000002", "S2"}, 
@@ -1181,7 +1181,7 @@ public class CalciteIT extends BaseCalciteIT {
                        "          JdbcToEnumerableConverter\n" +
                        "            JdbcProject(time_id=[$0], the_date=[$1], the_day=[$2], the_month=[$3], the_year=[$4], day_of_month=[$5], week_of_year=[$6], month_of_year=[$7], quarter=[$8], fiscal_period=[$9], the_year10=[CAST($4):INTEGER])\n" +
                        "              JdbcTableScan(table=[[foodmart, time_by_day]])\n")
-            .resultIs(new Object[][] {
+            .resultIs(false, new Object[][] {
                     new Object[] {1997, 1000, 365L}, 
                     new Object[] {1997, 2000, 365L},
                     new Object[] {1997, 3000, 365L},

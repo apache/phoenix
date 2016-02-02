@@ -143,7 +143,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         if (isPointLookup || ScanUtil.isAnalyzeTable(scan)) {
             return false;
         }
-        return true;
+        return false;
     }
     
     private static void initializeScan(QueryPlan plan, Integer perScanLimit) {

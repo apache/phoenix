@@ -122,20 +122,20 @@ public class CalciteIndexIT extends BaseCalciteIT {
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixServerAggregate(group=[{}], EXPR$0=[COUNT()])\n" +
                            "    PhoenixTableScan(table=[[phoenix, IDXSALTED_NOSALT_TEST_TABLE]], filter=[>(CAST($0):INTEGER, 3)])\n")
-                .resultIs(new Object[][]{{2L}})
+                .resultIs(false, new Object[][]{{2L}})
                 .close();
         start(true).sql("select mypk0, mypk1, col0 from " + NOSALT_TABLE_NAME + " where col0 <= 4")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixServerProject(MYPK0=[$1], MYPK1=[$2], COL0=[CAST($0):INTEGER])\n" +
                            "    PhoenixTableScan(table=[[phoenix, IDXSALTED_NOSALT_TEST_TABLE]], filter=[<=(CAST($0):INTEGER, 4)])\n")
-                .resultIs(new Object[][] {
+                .resultIs(false, new Object[][] {
                         {2, 3, 4},
                         {1, 2, 3}})
                 .close();
         start(true).sql("select * from " + SALTED_TABLE_NAME + " where mypk0 < 3")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixTableScan(table=[[phoenix, SALTED_TEST_TABLE]], filter=[<($0, 3)])\n")
-                .resultIs(new Object[][] {
+                .resultIs(false, new Object[][] {
                         {1, 2, 3, 4},
                         {2, 3, 4, 5}})
                 .close();
@@ -143,13 +143,13 @@ public class CalciteIndexIT extends BaseCalciteIT {
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixServerAggregate(group=[{}], EXPR$0=[COUNT()])\n" +
                            "    PhoenixTableScan(table=[[phoenix, IDX_SALTED_TEST_TABLE]], filter=[>(CAST($0):INTEGER, 3)])\n")
-                .resultIs(new Object[][]{{2L}})
+                .resultIs(false, new Object[][]{{2L}})
                 .close();
         start(true).sql("select mypk0, mypk1, col0 from " + SALTED_TABLE_NAME + " where col0 <= 4")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixServerProject(MYPK0=[$1], MYPK1=[$2], COL0=[CAST($0):INTEGER])\n" +
                            "    PhoenixTableScan(table=[[phoenix, IDX_SALTED_TEST_TABLE]], filter=[<=(CAST($0):INTEGER, 4)])\n")
-                .resultIs(new Object[][] {
+                .resultIs(false, new Object[][] {
                         {2, 3, 4},
                         {1, 2, 3}})
                 .close();
@@ -157,13 +157,13 @@ public class CalciteIndexIT extends BaseCalciteIT {
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixServerAggregate(group=[{}], EXPR$0=[COUNT()])\n" +
                            "    PhoenixTableScan(table=[[phoenix, IDXSALTED_SALTED_TEST_TABLE]], filter=[>(CAST($0):INTEGER, 4)])\n")
-                .resultIs(new Object[][]{{2L}})
+                .resultIs(false, new Object[][]{{2L}})
                 .close();
         start(true).sql("select * from " + SALTED_TABLE_NAME + " where col1 <= 5 order by col1")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixServerProject(MYPK0=[$1], MYPK1=[$2], COL0=[$3], COL1=[CAST($0):INTEGER])\n" +
                            "    PhoenixTableScan(table=[[phoenix, IDXSALTED_SALTED_TEST_TABLE]], filter=[<=(CAST($0):INTEGER, 5)], scanOrder=[FORWARD])\n")
-                .resultIs(new Object[][] {
+                .resultIs(true, new Object[][] {
                         {1, 2, 3, 4},
                         {2, 3, 4, 5}})
                 .close();
@@ -173,7 +173,7 @@ public class CalciteIndexIT extends BaseCalciteIT {
                            "    PhoenixTableScan(table=[[phoenix, SALTED_TEST_TABLE]], filter=[>($0, 1)])\n" +
                            "    PhoenixServerProject(MYPK0=[$1], MYPK1=[$2], COL0=[$3], COL1=[CAST($0):INTEGER])\n" +
                            "      PhoenixTableScan(table=[[phoenix, IDXSALTED_SALTED_TEST_TABLE]], filter=[<(CAST($0):INTEGER, 6)])\n")
-                .resultIs(new Object[][] {
+                .resultIs(false, new Object[][] {
                         {2, 3, 4, 5, 2, 3, 4, 5}})
                 .close();
     }
@@ -183,7 +183,7 @@ public class CalciteIndexIT extends BaseCalciteIT {
         start(props).sql("select * from " + MULTI_TENANT_TABLE)
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixTableScan(table=[[phoenix, MULTITENANT_TEST_TABLE]])\n")
-                .resultIs(new Object[][] {
+                .resultIs(false, new Object[][] {
                         {"10", "2", 3, 4, 5},
                         {"15", "3", 4, 5, 6},
                         {"20", "4", 5, 6, 7},
@@ -194,7 +194,7 @@ public class CalciteIndexIT extends BaseCalciteIT {
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixServerProject(TENANT_ID=[$0], ID=[$2], COL0=[$3], COL1=[CAST($1):INTEGER], COL2=[$4])\n" +
                            "    PhoenixTableScan(table=[[phoenix, IDX_MULTITENANT_TEST_TABLE]], filter=[AND(=(CAST($0):VARCHAR(2) CHARACTER SET \"ISO-8859-1\" COLLATE \"ISO-8859-1$en_US$primary\" NOT NULL, '20'), >(CAST($1):INTEGER, 1))])\n")
-                .resultIs(new Object[][] {
+                .resultIs(false, new Object[][] {
                         {"20", "4", 5, 6, 7},
                         {"20", "5", 6, 7, 8}})
                 .close();
@@ -211,7 +211,7 @@ public class CalciteIndexIT extends BaseCalciteIT {
         start(props).sql("select * from " + MULTI_TENANT_TABLE)
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixTableScan(table=[[phoenix, MULTITENANT_TEST_TABLE]])\n")
-                .resultIs(new Object[][] {
+                .resultIs(false, new Object[][] {
                         {"3", 4, 5, 6}})
                 .close();
         
@@ -219,7 +219,7 @@ public class CalciteIndexIT extends BaseCalciteIT {
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixServerProject(ID=[$1], COL0=[$2], COL1=[CAST($0):INTEGER], COL2=[$3])\n" +
                            "    PhoenixTableScan(table=[[phoenix, IDX_MULTITENANT_TEST_TABLE]], filter=[>(CAST($0):INTEGER, 1)])\n")
-                .resultIs(new Object[][] {
+                .resultIs(false, new Object[][] {
                         {"3", 4, 5, 6}})
                 .close();
         
@@ -235,7 +235,7 @@ public class CalciteIndexIT extends BaseCalciteIT {
         start(props).sql("select * from " + MULTI_TENANT_VIEW1)
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixTableScan(table=[[phoenix, MULTITENANT_TEST_TABLE]])\n")
-                .resultIs(new Object[][] {
+                .resultIs(false, new Object[][] {
                         {"2", 3, 4, 5}})
                 .close();
         
@@ -243,7 +243,7 @@ public class CalciteIndexIT extends BaseCalciteIT {
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixServerProject(ID=[$1], COL0=[$2], COL1=[CAST($0):INTEGER], COL2=[$3])\n" +
                            "    PhoenixTableScan(table=[[phoenix, IDX_MULTITENANT_TEST_TABLE]], filter=[>(CAST($0):INTEGER, 1)])\n")
-                .resultIs(new Object[][] {
+                .resultIs(false, new Object[][] {
                         {"2", 3, 4, 5}})
                 .close();
         
@@ -251,7 +251,7 @@ public class CalciteIndexIT extends BaseCalciteIT {
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixServerProject(ID=[$1], COL0=[CAST($0):INTEGER])\n" +
                            "    PhoenixTableScan(table=[[phoenix, S1, IDX_MULTITENANT_TEST_VIEW1]], filter=[>(CAST($0):INTEGER, 1)])\n")
-                .resultIs(new Object[][] {
+                .resultIs(false, new Object[][] {
                         {"2", 3}})
                 .close();
 
@@ -259,7 +259,7 @@ public class CalciteIndexIT extends BaseCalciteIT {
         start(props).sql("select * from " + MULTI_TENANT_VIEW2)
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixTableScan(table=[[phoenix, MULTITENANT_TEST_TABLE]], filter=[>($3, 7)])\n")
-                .resultIs(new Object[][] {
+                .resultIs(false, new Object[][] {
                         {"5", 6, 7, 8}})
                 .close();
         
@@ -267,7 +267,7 @@ public class CalciteIndexIT extends BaseCalciteIT {
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixServerProject(ID=[$1], COL0=[CAST($0):INTEGER])\n" +
                            "    PhoenixTableScan(table=[[phoenix, S2, IDX_MULTITENANT_TEST_VIEW2]], filter=[>(CAST($0):INTEGER, 1)])\n")
-                .resultIs(new Object[][] {
+                .resultIs(false, new Object[][] {
                         {"5", 6}})
                 .close();
         
@@ -275,7 +275,7 @@ public class CalciteIndexIT extends BaseCalciteIT {
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixServerProject(ID=[$1], COL0=[CAST($0):INTEGER])\n" +
                            "    PhoenixTableScan(table=[[phoenix, S2, IDX_MULTITENANT_TEST_VIEW2]], scanOrder=[FORWARD])\n")
-                .resultIs(new Object[][] {
+                .resultIs(true, new Object[][] {
                         {"5", 6}})
                 .close();
     }

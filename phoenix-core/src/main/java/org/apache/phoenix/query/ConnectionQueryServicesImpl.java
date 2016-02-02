@@ -962,16 +962,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
      * @throws SQLException
      */
     private HTableDescriptor ensureTableCreated(byte[] tableName, PTableType tableType , Map<String,Object> props, List<Pair<byte[],Map<String,Object>>> families, byte[][] splits, boolean modifyExistingMetaData) throws SQLException {
-        HBaseAdmin admin = null;
         SQLException sqlE = null;
         HTableDescriptor existingDesc = null;
         boolean isMetaTable = SchemaUtil.isMetaTable(tableName);
         boolean tableExist = true;
-        try {
+        try (HBaseAdmin admin = getAdmin()) {
             final String quorum = ZKConfig.getZKQuorumServersString(config);
             final String znode = this.props.get(HConstants.ZOOKEEPER_ZNODE_PARENT);
             logger.debug("Found quorum: " + quorum + ":" + znode);
-            admin = new HBaseAdmin(config);
             try {
                 existingDesc = admin.getTableDescriptor(tableName);
             } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
@@ -1065,28 +1063,16 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         } catch (TimeoutException e) {
             sqlE = new SQLExceptionInfo.Builder(SQLExceptionCode.OPERATION_TIMED_OUT).setRootCause(e.getCause() != null ? e.getCause() : e).build().buildException();
         } finally {
-            try {
-                if (admin != null) {
-                    admin.close();
-                }
-            } catch (IOException e) {
-                if (sqlE == null) {
-                    sqlE = ServerUtil.parseServerException(e);
-                } else {
-                    sqlE.setNextException(ServerUtil.parseServerException(e));
-                }
-            } finally {
-                if (sqlE != null) {
-                    throw sqlE;
-                }
+            if (sqlE != null) {
+                throw sqlE;
             }
         }
         return null; // will never make it here
     }
 
     private void modifyTable(byte[] tableName, HTableDescriptor newDesc, boolean shouldPoll) throws IOException,
-    InterruptedException, TimeoutException {
-    	try (HBaseAdmin admin = new HBaseAdmin(config)) {
+    InterruptedException, TimeoutException, SQLException {
+        try (HBaseAdmin admin = getAdmin()) {
     		if (!allowOnlineTableSchemaUpdate()) {
     			admin.disableTable(tableName);
     			admin.modifyTable(tableName, newDesc);
@@ -1308,10 +1294,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private boolean ensureViewIndexTableDropped(byte[] physicalTableName, long timestamp) throws SQLException {
         byte[] physicalIndexName = MetaDataUtil.getViewIndexPhysicalName(physicalTableName);
         HTableDescriptor desc = null;
-        HBaseAdmin admin = null;
         boolean wasDeleted = false;
-        try {
-            admin = new HBaseAdmin(config);
+        try (HBaseAdmin admin = getAdmin()) {
             try {
                 desc = admin.getTableDescriptor(physicalIndexName);
                 if (Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(desc.getValue(MetaDataUtil.IS_VIEW_INDEX_TABLE_PROP_BYTES)))) {
@@ -1330,12 +1314,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
         } catch (IOException e) {
             throw ServerUtil.parseServerException(e);
-        } finally {
-            try {
-                if (admin != null) admin.close();
-            } catch (IOException e) {
-                logger.warn("",e);
-            }
         }
         return wasDeleted;
     }
@@ -1343,10 +1321,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private boolean ensureLocalIndexTableDropped(byte[] physicalTableName, long timestamp) throws SQLException {
         byte[] physicalIndexName = MetaDataUtil.getLocalIndexPhysicalName(physicalTableName);
         HTableDescriptor desc = null;
-        HBaseAdmin admin = null;
         boolean wasDeleted = false;
-        try {
-            admin = new HBaseAdmin(config);
+        try (HBaseAdmin admin = getAdmin()) {
             try {
                 desc = admin.getTableDescriptor(physicalIndexName);
                 if (Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(desc.getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES)))) {
@@ -1365,12 +1341,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
         } catch (IOException e) {
             throw ServerUtil.parseServerException(e);
-        } finally {
-            try {
-                if (admin != null) admin.close();
-            } catch (IOException e) {
-                logger.warn("",e);
-            }
         }
         return wasDeleted;
     }
@@ -1574,10 +1544,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     private void dropTables(final List<byte[]> tableNamesToDelete) throws SQLException {
-        HBaseAdmin admin = null;
         SQLException sqlE = null;
-        try{
-            admin = new HBaseAdmin(config);
+        try (HBaseAdmin admin = getAdmin()) {
             if (tableNamesToDelete != null){
                 for ( byte[] tableName : tableNamesToDelete ) {
                     if ( admin.tableExists(tableName) ) {
@@ -1591,20 +1559,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         } catch (IOException e) {
             sqlE = ServerUtil.parseServerException(e);
         } finally {
-            try {
-                if (admin != null) {
-                    admin.close();
-                }
-            } catch (IOException e) {
-                if (sqlE == null) {
-                    sqlE = ServerUtil.parseServerException(e);
-                } else {
-                    sqlE.setNextException(ServerUtil.parseServerException(e));
-                }
-            } finally {
-                if (sqlE != null) {
-                    throw sqlE;
-                }
+            if (sqlE != null) {
+                throw sqlE;
             }
         }
     }
@@ -1790,10 +1746,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
     private void updateDescriptorForTx(PTable table, Map<String, Object> tableProps, HTableDescriptor tableDescriptor,
             String txValue, Set<HTableDescriptor> descriptorsToUpdate, Set<HTableDescriptor> origDescriptors) throws SQLException {
-        HBaseAdmin admin = null;
         byte[] physicalTableName = table.getPhysicalName().getBytes();
-        try {
-            admin = new HBaseAdmin(config);
+        try (HBaseAdmin admin = getAdmin()) {
             setTransactional(tableDescriptor, table.getType(), txValue, tableProps);
             Map<String, Object> indexTableProps;
             if (txValue == null) {
@@ -1848,12 +1802,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
         } catch (IOException e) {
             throw ServerUtil.parseServerException(e);
-        } finally {
-            try {
-                if (admin != null) admin.close();
-            } catch (IOException e) {
-                logger.warn("Could not close admin",e);
-            }
         }
     }
     private void setSharedIndexMaxVersion(PTable table, HTableDescriptor tableDescriptor,
@@ -2336,9 +2284,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 if(currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_3_0) {
                                     // We know that we always need to add the STORE_NULLS column for 4.3 release
                                     columnsToAdd += "," + PhoenixDatabaseMetaData.STORE_NULLS + " " + PBoolean.INSTANCE.getSqlTypeName();
-                                    HBaseAdmin admin = null;
-                                    try {
-                                        admin = getAdmin();
+                                    try (HBaseAdmin admin = getAdmin()) {
                                         HTableDescriptor[] localIndexTables = admin.listTables(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX+".*");
                                         for (HTableDescriptor table : localIndexTables) {
                                             if (table.getValue(MetaDataUtil.PARENT_TABLE_KEY) == null
@@ -2354,8 +2300,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                                 admin.enableTable(table.getTableName());
                                             }
                                         }
-                                    } finally {
-                                        if (admin != null) admin.close();
                                     }
                                 }
 
@@ -2732,7 +2676,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     @Override
     public HBaseAdmin getAdmin() throws SQLException {
         try {
-            return new HBaseAdmin(config);
+            return new HBaseAdmin(connection);
         } catch (IOException e) {
             throw new PhoenixIOException(e);
         }
