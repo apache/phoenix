@@ -47,7 +47,7 @@ public class JavaPattern extends AbstractBasePattern {
     public void matches(ImmutableBytesWritable srcPtr) {
         Preconditions.checkNotNull(srcPtr);
         String matcherSourceStr = (String) PVarchar.INSTANCE.toObject(srcPtr);
-        if (srcPtr.get().length == 0 && matcherSourceStr == null) matcherSourceStr = "";
+        if (srcPtr.getLength() == 0 && matcherSourceStr == null) matcherSourceStr = "";
         boolean ret = pattern.matcher(matcherSourceStr).matches();
         srcPtr.set(ret ? PDataType.TRUE_BYTES : PDataType.FALSE_BYTES);
     }
