@@ -84,6 +84,13 @@ public class TableRowkeyPair implements WritableComparable<TableRowkeyPair> {
         WritableUtils.writeString(output,tableName);
         rowkey.write(output);
     }
+    
+    @Override
+    public int hashCode() {
+        int result = this.tableName.hashCode();
+        result = 31 * result + this.rowkey.hashCode();
+        return result;
+    }
 
     @Override
     public int compareTo(TableRowkeyPair other) {
@@ -95,40 +102,8 @@ public class TableRowkeyPair implements WritableComparable<TableRowkeyPair> {
         }
     }
     
-    /** Comparator optimized for <code>TableRowkeyPair</code>. */
-    public static class Comparator extends WritableComparator {
-        private BytesWritable.Comparator comparator = new BytesWritable.Comparator();
-        
-        public Comparator() {
-            super(TableRowkeyPair.class);
-        }
-
-        @Override
-        public int compare(byte[] b1, int s1, int l1, byte[] b2, int s2, int l2) {
-            try {
-                int vintL1 = WritableUtils.decodeVIntSize(b1[s1]);
-                int vintL2 = WritableUtils.decodeVIntSize(b2[s2]);
-                int strL1 = readVInt(b1, s1);
-                int strL2 = readVInt(b2, s2);
-                int cmp = compareBytes(b1, s1 + vintL1, strL1, b2, s2 + vintL2, strL2);
-                if (cmp != 0) {
-                  return cmp;
-                }
-                int vintL3 = WritableUtils.decodeVIntSize(b1[s1 + vintL1 + strL1]);
-                int vintL4 = WritableUtils.decodeVIntSize(b2[s2 + vintL2 + strL2]);
-                int strL3 = readVInt(b1, s1 + vintL1 + strL1);
-                int strL4 = readVInt(b2, s2 + vintL2 + strL2);
-                return comparator.compare(b1, s1 + vintL1 + strL1 + vintL3, strL3, b2, s2
-                    + vintL2 + strL2 + vintL4, strL4);
-                
-            } catch(Exception ex) {
-                throw new IllegalArgumentException(ex);
-            }
-        }
-    }
- 
     static { 
-        WritableComparator.define(TableRowkeyPair.class, new Comparator());
+        WritableComparator.define(TableRowkeyPair.class, new BytesWritable.Comparator());
     }
 
 }
