@@ -83,7 +83,7 @@ public abstract class CloneExpressionVisitor extends TraverseAllExpressionVisito
 
     @Override
     public Expression visit(ProjectedColumnExpression node) {
-        return node;
+        return node.clone();
     }
 
     @Override
