@@ -22,12 +22,13 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.io.BytesWritable;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.io.WritableComparator;
 import org.apache.hadoop.io.WritableUtils;
 
 import com.google.common.base.Preconditions;
+
 
 
 /**
@@ -101,9 +102,38 @@ public class TableRowkeyPair implements WritableComparable<TableRowkeyPair> {
             return this.tableName.compareTo(otherTableName);
         }
     }
-    
-    static { 
-        WritableComparator.define(TableRowkeyPair.class, new BytesWritable.Comparator());
+
+    /** Comparator for <code>TableRowkeyPair</code>. */
+    public static class Comparator extends WritableComparator {
+
+        public Comparator() {
+            super(TableRowkeyPair.class);
+        }
+
+        @Override
+        public int compare(byte[] b1, int s1, int l1, byte[] b2, int s2, int l2) {
+            try {
+                // Compare table names
+                int strL1 = readInt(b1, s1);
+                int strL2 = readInt(b2, s2);
+                int cmp = compareBytes(b1, s1 + Bytes.SIZEOF_INT, strL1, b2, s2 + Bytes.SIZEOF_INT, strL2);
+                if (cmp != 0) {
+                    return cmp;
+                }
+                // Compare row keys
+                int strL3 = readInt(b1, s1 + Bytes.SIZEOF_INT + strL1);
+                int strL4 = readInt(b2, s2 + Bytes.SIZEOF_INT + strL2);
+                int i = compareBytes(b1, s1 + Bytes.SIZEOF_INT*2 + strL1, strL3, b2, s2
+                        + Bytes.SIZEOF_INT*2 + strL2, strL4);
+                return i;
+            } catch(Exception ex) {
+                throw new IllegalArgumentException(ex);
+            }
+        }
+    }
+
+    static {
+        WritableComparator.define(TableRowkeyPair.class, new Comparator());
     }
 
 }
