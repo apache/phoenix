@@ -23,7 +23,6 @@ import java.io.IOException;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.io.BytesWritable;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -38,8 +37,9 @@ public class TestTableRowkeyPair {
         testsRowsKeys("first", "aa", "first", "ab", -1);
         testsRowsKeys("second", "aa", "first", "aa", 1);
         testsRowsKeys("first", "aa", "first", "aaa", -1);
+        testsRowsKeys("first","bb", "first", "aaaa", 1);
     }
-    
+
     private void testsRowsKeys(String aTable, String akey, String bTable, String bkey, int expectedSignum) throws IOException {
         
         final ImmutableBytesWritable arowkey = new ImmutableBytesWritable(Bytes.toBytes(akey));
@@ -48,7 +48,7 @@ public class TestTableRowkeyPair {
         ImmutableBytesWritable browkey = new ImmutableBytesWritable(Bytes.toBytes(bkey));
         TableRowkeyPair pair2 = new TableRowkeyPair(bTable, browkey);
         
-        BytesWritable.Comparator comparator = new BytesWritable.Comparator();
+        TableRowkeyPair.Comparator comparator = new TableRowkeyPair.Comparator();
         try( ByteArrayOutputStream baosA = new ByteArrayOutputStream();
              ByteArrayOutputStream baosB = new ByteArrayOutputStream()) {
             
