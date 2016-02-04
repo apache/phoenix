@@ -3,7 +3,6 @@ package org.apache.phoenix.calcite.rules;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
-import java.util.logging.Logger;
 
 import org.apache.calcite.adapter.enumerable.EnumerableConvention;
 import org.apache.calcite.plan.Convention;
@@ -36,7 +35,6 @@ import org.apache.calcite.rel.logical.LogicalSort;
 import org.apache.calcite.rel.logical.LogicalUnion;
 import org.apache.calcite.rel.logical.LogicalValues;
 import org.apache.calcite.rex.RexNode;
-import org.apache.calcite.util.trace.CalciteTrace;
 import org.apache.phoenix.calcite.CalciteUtils;
 import org.apache.phoenix.calcite.rel.PhoenixAbstractAggregate;
 import org.apache.phoenix.calcite.rel.PhoenixClientAggregate;
@@ -69,8 +67,6 @@ import com.google.common.collect.Lists;
  */
 public class PhoenixConverterRules {
     private PhoenixConverterRules() {}
-
-    protected static final Logger LOGGER = CalciteTrace.getPlannerTracer();
 
     public static final RelOptRule[] RULES = {
         PhoenixToEnumerableConverterRule.SERVER,
