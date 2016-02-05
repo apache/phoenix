@@ -131,8 +131,8 @@ public class StatsCollectorIT extends StatsCollectorAbstractIT {
         conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement()
                 .execute("CREATE TABLE " + fullTableName
-                        + " ( k VARCHAR, c1.a bigint,c2.b bigint CONSTRAINT pk PRIMARY KEY (k)) "
-                        + (splitKey != null ? "split on (" + splitKey + ")" : ""));
+                        + " ( k VARCHAR, c1.a bigint,c2.b bigint CONSTRAINT pk PRIMARY KEY (k))"+ tableDDLOptions
+                        + (splitKey != null ? " split on (" + splitKey + ")" : "") );
         conn.createStatement().execute("upsert into " + fullTableName + " values ('abc',1,3)");
         conn.createStatement().execute("upsert into " + fullTableName + " values ('def',2,4)");
         conn.commit();
