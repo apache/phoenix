@@ -87,7 +87,7 @@ public class InListExpression extends BaseSingleExpression {
             }
         }
         if (coercedKeyExpressions.size() == 1) {
-            throw sqlE;
+            throw sqlE != null ? sqlE : new SQLException("Only one element in IN list");
         }
         if (coercedKeyExpressions.size() == 2 && addedNull) {
             return LiteralExpression.newConstant(null, PBoolean.INSTANCE, Determinism.ALWAYS);
