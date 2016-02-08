@@ -2158,7 +2158,9 @@ public class MetaDataClient {
             case NEWER_TABLE_FOUND:
                 // Add table to ConnectionQueryServices so it's cached, but don't add
                 // it to this connection as we can't see it.
-                throw new NewerTableAlreadyExistsException(schemaName, tableName, result.getTable());
+                if (!statement.ifNotExists()) {
+                    throw new NewerTableAlreadyExistsException(schemaName, tableName, result.getTable());
+                }
             case UNALLOWED_TABLE_MUTATION:
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_MUTATE_TABLE)
                     .setSchemaName(schemaName).setTableName(tableName).build().buildException();
