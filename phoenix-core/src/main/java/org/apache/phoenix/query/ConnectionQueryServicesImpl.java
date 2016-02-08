@@ -94,6 +94,7 @@ import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MutationCode;
 import org.apache.phoenix.coprocessor.MetaDataRegionObserver;
+import org.apache.phoenix.coprocessor.PhoenixTransactionalProcessor;
 import org.apache.phoenix.coprocessor.ScanRegionObserver;
 import org.apache.phoenix.coprocessor.SequenceRegionObserver;
 import org.apache.phoenix.coprocessor.ServerCachingEndpointImpl;
@@ -191,7 +192,6 @@ import co.cask.tephra.TransactionSystemClient;
 import co.cask.tephra.TxConstants;
 import co.cask.tephra.distributed.PooledClientProvider;
 import co.cask.tephra.distributed.TransactionServiceClient;
-import co.cask.tephra.hbase11.coprocessor.TransactionProcessor;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
@@ -867,13 +867,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
             
             if (isTransactional) {
-                if (!descriptor.hasCoprocessor(TransactionProcessor.class.getName())) {
-                    descriptor.addCoprocessor(TransactionProcessor.class.getName(), null, priority - 10, null);
+                if (!descriptor.hasCoprocessor(PhoenixTransactionalProcessor.class.getName())) {
+                    descriptor.addCoprocessor(PhoenixTransactionalProcessor.class.getName(), null, priority - 10, null);
                 }
             } else {
                 // If exception on alter table to transition back to non transactional
-                if (descriptor.hasCoprocessor(TransactionProcessor.class.getName())) {
-                    descriptor.removeCoprocessor(TransactionProcessor.class.getName());
+                if (descriptor.hasCoprocessor(PhoenixTransactionalProcessor.class.getName())) {
+                    descriptor.removeCoprocessor(PhoenixTransactionalProcessor.class.getName());
                 }                
             }
         } catch (IOException e) {
@@ -1042,7 +1042,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 } else {
                     // If we think we're creating a non transactional table when it's already
                     // transactional, don't allow.
-                    if (existingDesc.hasCoprocessor(TransactionProcessor.class.getName())) {
+                    if (existingDesc.hasCoprocessor(PhoenixTransactionalProcessor.class.getName())) {
                         throw new SQLExceptionInfo.Builder(SQLExceptionCode.TX_MAY_NOT_SWITCH_TO_NON_TX)
                         .setSchemaName(SchemaUtil.getSchemaNameFromFullName(tableName))
                         .setTableName(SchemaUtil.getTableNameFromFullName(tableName)).build().buildException();

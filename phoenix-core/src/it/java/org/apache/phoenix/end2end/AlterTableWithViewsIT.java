@@ -41,6 +41,7 @@ import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.coprocessor.PhoenixTransactionalProcessor;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -57,8 +58,6 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
-import co.cask.tephra.hbase11.coprocessor.TransactionProcessor;
 
 import com.google.common.base.Objects;
 import com.google.common.collect.Maps;
@@ -1126,7 +1125,7 @@ public class AlterTableWithViewsIT extends BaseHBaseManagedTimeIT {
             assertTableDefinition(conn, "VIEWOFTABLE", PTableType.VIEW, "TABLEWITHVIEW", 0, 5, 3, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
             
             HTableInterface htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes("TABLEWITHVIEW"));
-            assertFalse(htable.getTableDescriptor().getCoprocessors().contains(TransactionProcessor.class.getName()));
+            assertFalse(htable.getTableDescriptor().getCoprocessors().contains(PhoenixTransactionalProcessor.class.getName()));
             assertFalse(conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, "TABLEWITHVIEW")).isTransactional());
             assertFalse(conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, "VIEWOFTABLE")).isTransactional());
             
@@ -1135,7 +1134,7 @@ public class AlterTableWithViewsIT extends BaseHBaseManagedTimeIT {
             // query the view to force the table cache to be updated
             conn.createStatement().execute("SELECT * FROM VIEWOFTABLE");
             htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes("TABLEWITHVIEW"));
-            assertTrue(htable.getTableDescriptor().getCoprocessors().contains(TransactionProcessor.class.getName()));
+            assertTrue(htable.getTableDescriptor().getCoprocessors().contains(PhoenixTransactionalProcessor.class.getName()));
             assertTrue(conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, "TABLEWITHVIEW")).isTransactional());
             assertTrue(conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, "VIEWOFTABLE")).isTransactional());
         } 
