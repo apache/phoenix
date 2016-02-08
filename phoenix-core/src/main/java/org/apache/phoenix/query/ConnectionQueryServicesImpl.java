@@ -191,7 +191,7 @@ import co.cask.tephra.TransactionSystemClient;
 import co.cask.tephra.TxConstants;
 import co.cask.tephra.distributed.PooledClientProvider;
 import co.cask.tephra.distributed.TransactionServiceClient;
-import co.cask.tephra.hbase98.coprocessor.TransactionProcessor;
+import co.cask.tephra.hbase11.coprocessor.TransactionProcessor;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
@@ -204,12 +204,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-
-import co.cask.tephra.TransactionSystemClient;
-import co.cask.tephra.TxConstants;
-import co.cask.tephra.distributed.PooledClientProvider;
-import co.cask.tephra.distributed.TransactionServiceClient;
-import co.cask.tephra.hbase11.coprocessor.TransactionProcessor;
 
 
 public class ConnectionQueryServicesImpl extends DelegateQueryServices implements ConnectionQueryServices {
