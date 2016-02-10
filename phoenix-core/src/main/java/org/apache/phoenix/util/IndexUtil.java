@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Delete;
@@ -281,7 +282,14 @@ public class IndexUtil {
                         }
                         
                     };
-                    indexMutations.add(maintainer.buildUpdateMutation(kvBuilder, valueGetter, ptr, ts, null, null));
+                    byte[] regionStartKey = null;
+                    byte[] regionEndkey = null;
+                    if(maintainer.isLocalIndex()) {
+                        HRegionLocation tableRegionLocation = connection.getQueryServices().getTableRegionLocation(table.getName().getBytes(), dataMutation.getRow());
+                        regionStartKey = tableRegionLocation.getRegionInfo().getStartKey();
+                        regionEndkey = tableRegionLocation.getRegionInfo().getEndKey();
+                    }
+                    indexMutations.add(maintainer.buildUpdateMutation(kvBuilder, valueGetter, ptr, ts, regionStartKey, regionEndkey));
                 }
             }
             return indexMutations;
