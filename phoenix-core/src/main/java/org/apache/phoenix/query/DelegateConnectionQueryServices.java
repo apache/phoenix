@@ -304,4 +304,10 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     public boolean isRenewingLeasesEnabled() {
         return getDelegate().isRenewingLeasesEnabled();
     }
+
+    @Override
+    public HRegionLocation getTableRegionLocation(byte[] tableName, byte[] row)
+            throws SQLException {
+        return getDelegate().getTableRegionLocation(tableName, row);
+    }
 }

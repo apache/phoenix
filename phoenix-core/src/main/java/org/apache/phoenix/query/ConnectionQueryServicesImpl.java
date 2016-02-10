@@ -3363,4 +3363,31 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     public boolean isRenewingLeasesEnabled() {
         return supportsFeature(ConnectionQueryServices.Feature.RENEW_LEASE) && renewLeaseEnabled;
     }
+
+
+    @Override
+    public HRegionLocation getTableRegionLocation(byte[] tableName, byte[] row) throws SQLException {
+       /*
+        * Use HConnection.getRegionLocation as it uses the cache in HConnection, to get the region
+        * to which specified row belongs to.
+         */
+        int retryCount = 0, maxRetryCount = 1;
+        boolean reload =false;
+        while (true) {
+                try {
+                        return connection.getRegionLocation(TableName.valueOf(tableName), row, reload);
+                } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
+                        String fullName = Bytes.toString(tableName);
+                        throw new TableNotFoundException(SchemaUtil.getSchemaNameFromFullName(fullName), SchemaUtil.getTableNameFromFullName(fullName));
+                } catch (IOException e) {
+                        if (retryCount++ < maxRetryCount) { // One retry, in case split occurs while navigating
+                                reload = true;
+                                continue;
+                        }
+                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.GET_TABLE_REGIONS_FAIL)
+                        .setRootCause(e).build().buildException();
+                }
+        }
+     }
+
 }

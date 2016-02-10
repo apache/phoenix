@@ -218,7 +218,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterHBaseManagedTimeIT {
 
         Statement stmt = conn.createStatement();
         stmt.execute("CREATE TABLE TABLE6 (ID INTEGER NOT NULL PRIMARY KEY, " +
-                "FIRST_NAME VARCHAR, LAST_NAME VARCHAR)");
+                "FIRST_NAME VARCHAR, LAST_NAME VARCHAR) SPLIt ON (1,2)");
         String ddl = "CREATE LOCAL INDEX TABLE6_IDX ON TABLE6 "
                 + " (FIRST_NAME ASC)";
         stmt.execute(ddl);
@@ -234,16 +234,19 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterHBaseManagedTimeIT {
 
         CsvBulkLoadTool csvBulkLoadTool = new CsvBulkLoadTool();
         csvBulkLoadTool.setConf(getUtility().getConfiguration());
-        try {
-            csvBulkLoadTool.run(new String[] {
-                    "--input", "/tmp/input3.csv",
-                    "--table", "table6",
-                    "--zookeeper", zkQuorum});
-            fail("Csv bulk load currently has issues with local indexes.");
-        } catch( UnsupportedOperationException ise) {
-            assertEquals("Local indexes not supported by Bulk Loader",ise.getMessage());
-        }
-        
+        int exitCode = csvBulkLoadTool.run(new String[] {
+                "--input", "/tmp/input3.csv",
+                "--table", "table6",
+                "--zookeeper", zkQuorum});
+        assertEquals(0, exitCode);
+
+        ResultSet rs = stmt.executeQuery("SELECT id, FIRST_NAME FROM TABLE6 where first_name='FirstName 2'");
+        assertTrue(rs.next());
+        assertEquals(2, rs.getInt(1));
+        assertEquals("FirstName 2", rs.getString(2));
+
+        rs.close();
+        stmt.close();
     }
 
     @Test
@@ -251,7 +254,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterHBaseManagedTimeIT {
         testImportOneIndexTable("TABLE4", false);
     }
 
-    //@Test
+    @Test
     public void testImportOneLocalIndexTable() throws Exception {
         testImportOneIndexTable("TABLE5", true);
     }

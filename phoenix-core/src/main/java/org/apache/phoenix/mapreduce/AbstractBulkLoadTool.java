@@ -21,8 +21,10 @@ import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import org.apache.commons.cli.CommandLine;
@@ -54,6 +56,7 @@ import org.apache.phoenix.mapreduce.bulkload.TargetTableRefFunctions;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.ColumnInfo;
+import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -295,7 +298,12 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
     }
 
     private void completebulkload(Configuration conf,Path outputPath , List<TargetTableRef> tablesToBeLoaded) throws Exception {
+        Set<String> tableNames = new HashSet<>(tablesToBeLoaded.size());
         for(TargetTableRef table : tablesToBeLoaded) {
+            if(tableNames.contains(table.getPhysicalName())){
+                continue;
+            }
+            tableNames.add(table.getPhysicalName());
             LoadIncrementalHFiles loader = new LoadIncrementalHFiles(conf);
             String tableName = table.getPhysicalName();
             Path tableOutputPath = new Path(outputPath,tableName);
@@ -382,11 +390,9 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
         List<TargetTableRef> indexTables = new ArrayList<TargetTableRef>();
         for(PTable indexTable : table.getIndexes()){
             if (indexTable.getIndexType() == PTable.IndexType.LOCAL) {
-                throw new UnsupportedOperationException("Local indexes not supported by Bulk Loader");
-                /*indexTables.add(
-                        new TargetTableRef(getQualifiedTableName(schemaName,
-                                indexTable.getTableName().getString()),
-                                MetaDataUtil.getLocalIndexTableName(qualifiedTableName))); */
+                indexTables.add(new TargetTableRef(getQualifiedTableName(schemaName, indexTable
+                        .getTableName().getString()), MetaDataUtil
+                        .getLocalIndexTableName(qualifiedTableName)));
             } else {
                 indexTables.add(new TargetTableRef(getQualifiedTableName(schemaName,
                         indexTable.getTableName().getString())));
