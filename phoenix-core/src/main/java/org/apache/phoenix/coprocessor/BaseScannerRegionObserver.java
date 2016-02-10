@@ -96,6 +96,7 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
     public static final String RUN_UPDATE_STATS_ASYNC_ATTRIB = "_RunUpdateStatsAsync";
     public static final String SKIP_REGION_BOUNDARY_CHECK = "_SKIP_REGION_BOUNDARY_CHECK";
     public static final String TX_SCN = "_TxScn";
+    public static final String SCAN_ACTUAL_START_ROW = "_ScanActualStartRow";
     
     /**
      * Attribute name used to pass custom annotations in Scans and Mutations (later). Custom annotations
@@ -136,7 +137,8 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
                     Bytes.compareTo(upperExclusiveRegionKey, expectedUpperRegionKey) != 0;
         } else {
             isStaleRegionBoundaries = Bytes.compareTo(lowerInclusiveScanKey, lowerInclusiveRegionKey) < 0 ||
-                    ( Bytes.compareTo(upperExclusiveScanKey, upperExclusiveRegionKey) > 0 && upperExclusiveRegionKey.length != 0);
+                    ( Bytes.compareTo(upperExclusiveScanKey, upperExclusiveRegionKey) > 0 && upperExclusiveRegionKey.length != 0) ||
+                    (upperExclusiveRegionKey.length != 0 && upperExclusiveScanKey.length == 0);
         }
         if (isStaleRegionBoundaries) {
             Exception cause = new StaleRegionBoundaryCacheException(region.getRegionInfo().getTable().getNameAsString());
