@@ -46,7 +46,7 @@ public class TargetTableRef {
     }
 
     @JsonCreator
-    private TargetTableRef(@JsonProperty("logicalName") String logicalName,
+    public TargetTableRef(@JsonProperty("logicalName") String logicalName,
         @JsonProperty("physicalName") String physicalName) {
         this.logicalName = logicalName;
         this.physicalName = physicalName;
