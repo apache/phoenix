@@ -21,6 +21,7 @@ import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.EXPECTED_
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_FAILED_QUERY_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_QUERY_TIMEOUT_COUNTER;
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_ACTUAL_START_ROW;
 
 import java.io.ByteArrayInputStream;
 import java.io.DataInput;
@@ -471,7 +472,8 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 startKey = scanStartRow;
             }
             byte[] scanStopRow = scan.getStopRow();
-            if (stopKey.length == 0 || Bytes.compareTo(scanStopRow, stopKey) < 0) {
+            if (stopKey.length == 0
+                    || (scanStopRow.length != 0 && Bytes.compareTo(scanStopRow, stopKey) < 0)) {
                 stopKey = scanStopRow;
             }
         }
@@ -632,16 +634,15 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                             throw new SQLExceptionInfo.Builder(SQLExceptionCode.OPERATION_TIMED_OUT).setMessage(". Query couldn't be completed in the alloted time: " + queryTimeOut + " ms").build().buildException(); 
                         }
                         if (isLocalIndex && previousScan != null && previousScan.getScan() != null
-                                && ((!isReverse && Bytes.compareTo(scanPair.getFirst().getStartRow(),
+                                && ((!isReverse && Bytes.compareTo(scanPair.getFirst().getAttribute(SCAN_ACTUAL_START_ROW),
                                         previousScan.getScan().getStopRow()) < 0)
-                                || (isReverse && Bytes.compareTo(scanPair.getFirst().getStartRow(),
+                                || (isReverse && Bytes.compareTo(scanPair.getFirst().getAttribute(SCAN_ACTUAL_START_ROW),
                                         previousScan.getScan().getStopRow()) > 0)
                                 || (scanPair.getFirst().getAttribute(EXPECTED_UPPER_REGION_KEY) != null
                                         && previousScan.getScan().getAttribute(EXPECTED_UPPER_REGION_KEY) != null
                                         && Bytes.compareTo(scanPair.getFirst().getAttribute(EXPECTED_UPPER_REGION_KEY),
                                                 previousScan.getScan()
                                                         .getAttribute(EXPECTED_UPPER_REGION_KEY)) == 0))) {
-
                             continue;
                         }
                         PeekingResultIterator iterator = scanPair.getSecond().get(timeOutForScan, TimeUnit.MILLISECONDS);
@@ -658,11 +659,12 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                             }
                             // Resubmit just this portion of work again
                             Scan oldScan = scanPair.getFirst();
-                            byte[] startKey = oldScan.getStartRow();
+                            byte[] startKey = oldScan.getAttribute(SCAN_ACTUAL_START_ROW);
                             byte[] endKey = oldScan.getStopRow();
                             if (isLocalIndex) {
                                 endKey = oldScan.getAttribute(EXPECTED_UPPER_REGION_KEY);
                             }
+                            
                             List<List<Scan>> newNestedScans = this.getParallelScans(startKey, endKey);
                             // Add any concatIterators that were successful so far
                             // as we need these to be in order
