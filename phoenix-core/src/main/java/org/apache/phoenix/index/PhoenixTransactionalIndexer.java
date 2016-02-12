@@ -53,6 +53,7 @@ import org.apache.htrace.Span;
 import org.apache.htrace.Trace;
 import org.apache.htrace.TraceScope;
 import org.apache.phoenix.compile.ScanRanges;
+import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.hbase.index.MultiMutation;
 import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.covered.IndexUpdate;
@@ -229,7 +230,6 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
                 scan.addColumn(indexMaintainers.get(0).getDataEmptyKeyValueCF(), QueryConstants.EMPTY_COLUMN_BYTES);
                 ScanRanges scanRanges = ScanRanges.create(SchemaUtil.VAR_BINARY_SCHEMA, Collections.singletonList(keys), ScanUtil.SINGLE_COLUMN_SLOT_SPAN, KeyRange.EVERYTHING_RANGE, null, true, -1);
                 scanRanges.initializeScan(scan);
-                scan.setFilter(scanRanges.getSkipScanFilter());
                 TableName tableName = env.getRegion().getRegionInfo().getTable();
                 HTableInterface htable = env.getTable(tableName);
                 txTable = new TransactionAwareHTable(htable);
@@ -237,9 +237,12 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
                 // For rollback, we need to see all versions, including
                 // the last committed version as there may be multiple
                 // checkpointed versions.
+                SkipScanFilter filter = scanRanges.getSkipScanFilter();
                 if (isRollback) {
+                    filter = new SkipScanFilter(filter,true);
                     tx.setVisibility(VisibilityLevel.SNAPSHOT_ALL);
                 }
+                scan.setFilter(filter);
                 currentScanner = txTable.getScanner(scan);
             }
             if (isRollback) {
