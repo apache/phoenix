@@ -43,7 +43,7 @@ public class PhoenixCompactClientSort extends PhoenixAbstractSort {
             return planner.getCostFactory().makeInfiniteCost();
         
         return super.computeSelfCost(planner, mq)
-                .multiplyBy(CLIENT_MERGE_FACTOR)
+                .multiplyBy(SERVER_FACTOR)
                 .multiplyBy(PHOENIX_FACTOR);
     }
 

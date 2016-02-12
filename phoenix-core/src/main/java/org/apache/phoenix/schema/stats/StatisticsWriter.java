@@ -219,7 +219,7 @@ public class StatisticsWriter implements Closeable {
             throws IOException {
         long timeStamp = clientTimeStamp == StatisticsCollector.NO_TIMESTAMP ? tracker.getMaxTimeStamp()
                 : clientTimeStamp;
-        List<Result> statsForRegion = StatisticsUtil.readStatistics(statsWriterTable, tableName, fam,
+        List<Result> statsForRegion = StatisticsUtil.readStatisticsForDelete(statsWriterTable, tableName, fam,
                 region.getRegionInfo().getStartKey(), region.getRegionInfo().getEndKey(), timeStamp);
         for (Result result : statsForRegion) {
             mutations.add(new Delete(result.getRow(), timeStamp - 1));

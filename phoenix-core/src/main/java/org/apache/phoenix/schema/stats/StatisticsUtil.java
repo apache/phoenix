@@ -99,7 +99,7 @@ public class StatisticsUtil {
         return key;
     }
 
-    public static List<Result> readStatistics(HTableInterface statsHTable, byte[] tableNameBytes, ImmutableBytesPtr cf,
+    public static List<Result> readStatisticsForDelete(HTableInterface statsHTable, byte[] tableNameBytes, ImmutableBytesPtr cf,
             byte[] startKey, byte[] stopKey, long clientTimeStamp) throws IOException {
         List<Result> statsForRegion = new ArrayList<Result>();
         Scan s = MetaDataUtil.newTableRowsScan(getAdjustedKey(startKey, tableNameBytes, cf, false),
@@ -123,8 +123,22 @@ public class StatisticsUtil {
 
     public static PTableStats readStatistics(HTableInterface statsHTable, byte[] tableNameBytes, long clientTimeStamp)
             throws IOException {
+        return readStatistics(statsHTable, tableNameBytes, null, null, null, clientTimeStamp);
+    }
+
+    public static PTableStats readStatistics(HTableInterface statsHTable,
+            byte[] tableNameBytes, ImmutableBytesPtr cf, byte[] startKey, byte[] stopKey,
+            long clientTimeStamp)
+            throws IOException {
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-        Scan s = MetaDataUtil.newTableRowsScan(tableNameBytes, MetaDataProtocol.MIN_TABLE_TIMESTAMP, clientTimeStamp);
+        Scan s;
+        if (cf == null) {
+            s = MetaDataUtil.newTableRowsScan(tableNameBytes, MetaDataProtocol.MIN_TABLE_TIMESTAMP, clientTimeStamp);
+        } else {
+            s = MetaDataUtil.newTableRowsScan(getAdjustedKey(startKey, tableNameBytes, cf, false),
+                    getAdjustedKey(stopKey, tableNameBytes, cf, true), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                    clientTimeStamp);
+        }
         s.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH_BYTES);
         s.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_ROW_COUNT_BYTES);
         s.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES);

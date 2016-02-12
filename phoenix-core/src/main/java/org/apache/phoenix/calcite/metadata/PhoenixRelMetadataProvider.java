@@ -10,6 +10,7 @@ public class PhoenixRelMetadataProvider extends ChainedRelMetadataProvider {
         super(ImmutableList.of(
                 PhoenixRelMdRowCount.SOURCE, 
                 PhoenixRelMdCollation.SOURCE,
+                PhoenixRelMdSize.SOURCE,
                 new DefaultRelMetadataProvider()));
     }
 

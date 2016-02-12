@@ -32,6 +32,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.text.DecimalFormat;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -39,6 +40,7 @@ import java.util.Properties;
 
 import org.apache.calcite.avatica.util.ArrayImpl;
 import org.apache.calcite.config.CalciteConnectionProperty;
+import org.apache.phoenix.calcite.rel.PhoenixRel;
 import org.apache.phoenix.end2end.BaseClientManagedTimeIT;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
@@ -59,8 +61,8 @@ public class BaseCalciteIT extends BaseClientManagedTimeIT {
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
     
-    public static Start start(boolean materializationEnabled) {
-        return new Start(getConnectionProps(materializationEnabled));
+    public static Start start(boolean materializationEnabled, float rowCountFactor) {
+        return new Start(getConnectionProps(materializationEnabled, rowCountFactor));
     }
     
     public static Start start(Properties props) {
@@ -308,7 +310,7 @@ public class BaseCalciteIT extends BaseClientManagedTimeIT {
         return connection;
     }
 
-    protected static Properties getConnectionProps(boolean enableMaterialization) {
+    protected static Properties getConnectionProps(boolean enableMaterialization, float rowCountFactor) {
         Properties props = new Properties();
         props.setProperty(
                 CalciteConnectionProperty.MATERIALIZATIONS_ENABLED.camelName(),
@@ -316,6 +318,7 @@ public class BaseCalciteIT extends BaseClientManagedTimeIT {
         props.setProperty(
                 CalciteConnectionProperty.CREATE_MATERIALIZATIONS.camelName(),
                 Boolean.toString(false));
+        props.setProperty(PhoenixRel.ROW_COUNT_FACTOR, Float.toString(rowCountFactor));
         return props;
     }
     
@@ -364,21 +367,13 @@ public class BaseCalciteIT extends BaseClientManagedTimeIT {
             PreparedStatement stmt = conn.prepareStatement(
                     "UPSERT INTO " + NOSALT_TABLE_NAME
                     + " VALUES(?, ?, ?, ?)");
-            stmt.setInt(1, 1);
-            stmt.setInt(2, 2);
-            stmt.setInt(3, 3);
-            stmt.setInt(4, 4);
-            stmt.execute();
-            stmt.setInt(1, 2);
-            stmt.setInt(2, 3);
-            stmt.setInt(3, 4);
-            stmt.setInt(4, 5);
-            stmt.execute();
-            stmt.setInt(1, 3);
-            stmt.setInt(2, 4);
-            stmt.setInt(3, 5);
-            stmt.setInt(4, 6);
-            stmt.execute();
+            for (int i = 0; i < 1000; i++) {
+                stmt.setInt(1, i + 1);
+                stmt.setInt(2, i + 2);
+                stmt.setInt(3, i + 3);
+                stmt.setInt(4, i + 4);
+                stmt.execute();
+            }
             conn.commit();
             
             if (index != null) {
@@ -391,21 +386,13 @@ public class BaseCalciteIT extends BaseClientManagedTimeIT {
             stmt = conn.prepareStatement(
                     "UPSERT INTO " + SALTED_TABLE_NAME
                     + " VALUES(?, ?, ?, ?)");
-            stmt.setInt(1, 1);
-            stmt.setInt(2, 2);
-            stmt.setInt(3, 3);
-            stmt.setInt(4, 4);
-            stmt.execute();
-            stmt.setInt(1, 2);
-            stmt.setInt(2, 3);
-            stmt.setInt(3, 4);
-            stmt.setInt(4, 5);
-            stmt.execute();
-            stmt.setInt(1, 3);
-            stmt.setInt(2, 4);
-            stmt.setInt(3, 5);
-            stmt.setInt(4, 6);
-            stmt.execute();
+            for (int i = 0; i < 1000; i++) {
+                stmt.setInt(1, i + 1);
+                stmt.setInt(2, i + 2);
+                stmt.setInt(3, i + 3);
+                stmt.setInt(4, i + 4);
+                stmt.execute();
+            }
             conn.commit();
             
             if (index != null) {
@@ -434,30 +421,31 @@ public class BaseCalciteIT extends BaseClientManagedTimeIT {
             PreparedStatement stmt = conn.prepareStatement(
                     "UPSERT INTO " + MULTI_TENANT_TABLE
                     + " VALUES(?, ?, ?, ?, ?)");
-            stmt.setString(1, "10");
-            stmt.setString(2, "2");
-            stmt.setInt(3, 3);
-            stmt.setInt(4, 4);
-            stmt.setInt(5, 5);
-            stmt.execute();
-            stmt.setString(1, "15");
-            stmt.setString(2, "3");
-            stmt.setInt(3, 4);
-            stmt.setInt(4, 5);
-            stmt.setInt(5, 6);
-            stmt.execute();
-            stmt.setString(1, "20");
-            stmt.setString(2, "4");
-            stmt.setInt(3, 5);
-            stmt.setInt(4, 6);
-            stmt.setInt(5, 7);
-            stmt.execute();
-            stmt.setString(1, "20");
-            stmt.setString(2, "5");
-            stmt.setInt(3, 6);
-            stmt.setInt(4, 7);
-            stmt.setInt(5, 8);
-            stmt.execute();
+            DecimalFormat formatter = new DecimalFormat("0000");
+            for (int i = 0; i < 1000; i++) {
+                stmt.setString(1, "10");
+                stmt.setString(2, formatter.format(2 + i));
+                stmt.setInt(3, 3 + i);
+                stmt.setInt(4, 4 + i);
+                stmt.setInt(5, 5 + i);
+                stmt.execute();
+            }
+            for (int i = 0; i < 1000; i++) {
+                stmt.setString(1, "15");
+                stmt.setString(2, formatter.format(3 + i));
+                stmt.setInt(3, 4 + i);
+                stmt.setInt(4, 5 + i);
+                stmt.setInt(5, 6 + i);
+                stmt.execute();
+            }
+            for (int i = 0; i < 1000; i++) {
+                stmt.setString(1, "20");
+                stmt.setString(2, formatter.format(4 + i));
+                stmt.setInt(3, 5 + i);
+                stmt.setInt(4, 6 + i);
+                stmt.setInt(5, 7 + i);
+                stmt.execute();
+            }
             conn.commit();
             
             if (index != null) {

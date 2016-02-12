@@ -1,5 +1,7 @@
 package org.apache.phoenix.calcite;
 
+import java.io.IOException;
+import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.calcite.plan.RelOptTable;
@@ -18,14 +20,22 @@ import org.apache.calcite.schema.TranslatableTable;
 import org.apache.calcite.schema.impl.AbstractTable;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.util.ImmutableBitSet;
+import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.phoenix.calcite.rel.PhoenixRel;
 import org.apache.phoenix.calcite.rel.PhoenixTableScan;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
+import org.apache.phoenix.schema.stats.StatisticsUtil;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.SizedUtil;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
@@ -40,6 +50,8 @@ public class PhoenixTable extends AbstractTable implements TranslatableTable {
   public final List<PColumn> mappedColumns;
   public final ImmutableBitSet pkBitSet;
   public final RelCollation collation;
+  public final long byteCount;
+  public final long rowCount;
   public final PhoenixConnection pc;
   
   public static List<PColumn> getMappedColumns(PTable pTable) {
@@ -78,6 +90,52 @@ public class PhoenixTable extends AbstractTable implements TranslatableTable {
       }
       this.pkBitSet = ImmutableBitSet.of(pkPositions);
       this.collation = RelCollationTraitDef.INSTANCE.canonize(RelCollations.of(fieldCollations));
+      byte[] emptyCf = SchemaUtil.getEmptyColumnFamily(pTable);
+      GuidePostsInfo info = pTable.getTableStats().getGuidePosts().get(emptyCf);
+      long rowCount;
+      long byteCount;
+      try {
+          if (info == null) {
+              // TODO The props might not be the same as server props.
+              int guidepostPerRegion = pc.getQueryServices().getProps().getInt(
+                      QueryServices.STATS_GUIDEPOST_PER_REGION_ATTRIB,
+                      QueryServicesOptions.DEFAULT_STATS_GUIDEPOST_PER_REGION);
+              long guidepostWidth = pc.getQueryServices().getProps().getLong(
+                      QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB,
+                      QueryServicesOptions.DEFAULT_STATS_GUIDEPOST_WIDTH_BYTES);
+              HTableDescriptor desc = null;
+              if (guidepostPerRegion > 0) {
+                  desc = pc.getQueryServices().getAdmin().getTableDescriptor(
+                          pTable.getPhysicalName().getBytes());
+              }
+              byteCount = StatisticsUtil.getGuidePostDepth(
+                      guidepostPerRegion, guidepostWidth, desc) / 2;
+              long keySize = pTable.getRowKeySchema().getEstimatedByteSize();
+              long rowSize = 0;
+              for (PColumnFamily cf : pTable.getColumnFamilies()) {
+                  for (PColumn column : cf.getColumns()) {
+                      Integer maxLength = column.getMaxLength();
+                      int byteSize = column.getDataType().isFixedWidth() ?
+                              maxLength == null ?
+                                      column.getDataType().getByteSize()
+                                      : maxLength
+                                      : RowKeySchema.ESTIMATED_VARIABLE_LENGTH_SIZE;
+                      rowSize += SizedUtil.KEY_VALUE_SIZE + keySize + byteSize;
+                  }
+              }
+              if (rowSize == 0) {
+                  rowSize = keySize;
+              }
+              rowCount = byteCount / rowSize;
+          } else {
+              byteCount = info.getByteCount();
+              rowCount = info.getRowCount();
+          }
+      } catch (SQLException | IOException e) {
+          throw new RuntimeException(e);
+      }
+      this.byteCount = byteCount;
+      this.rowCount = rowCount;
     }
     
     public PTable getTable() {
@@ -127,13 +185,9 @@ public class PhoenixTable extends AbstractTable implements TranslatableTable {
         return new Statistic() {
             @Override
             public Double getRowCount() {
-                byte[] emptyCf = SchemaUtil.getEmptyColumnFamily(pTable);
-                GuidePostsInfo info = pTable.getTableStats().getGuidePosts().get(emptyCf);
-                long rowCount = info == null ? 0 : info.getRowCount();
-                
-                // Return an non-zero value to make the query plans stable.
-                // TODO remove "* 10.0" which is for test purpose.
-                return rowCount > 0 ? rowCount * 10.0 : 100.0;
+                float f = pc.getQueryServices().getProps().getFloat(
+                        PhoenixRel.ROW_COUNT_FACTOR, 1f);
+                return (double) (rowCount * f);
             }
 
             @Override

@@ -16,7 +16,6 @@ import org.apache.calcite.rel.core.CorrelationId;
 import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rex.RexNode;
-import org.apache.calcite.util.Util;
 import org.apache.phoenix.calcite.CalciteUtils;
 import org.apache.phoenix.calcite.metadata.PhoenixRelMdCollation;
 import org.apache.phoenix.compile.JoinCompiler;
@@ -95,7 +94,8 @@ public class PhoenixServerJoin extends PhoenixAbstractJoin {
             if (Double.isInfinite(rightRowCount)) {
                 rowCount = rightRowCount;
             } else {
-                rowCount += Util.nLogN(rightRowCount);
+                double rightRowSize = mq.getAverageRowSize(getRight());
+                rowCount += (rightRowCount + rightRowCount * rightRowSize);
             }
         }            
         
