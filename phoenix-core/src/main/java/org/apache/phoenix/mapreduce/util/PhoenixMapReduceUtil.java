@@ -58,8 +58,9 @@ public final class PhoenixMapReduceUtil {
      * @param inputQuery  Select query.
      */
     public static void setInput(final Job job, final Class<? extends DBWritable> inputClass, final String tableName, final String inputQuery) {
-          final Configuration configuration = setInput(job, inputClass, tableName);
-          PhoenixConfigurationUtil.setSchemaType(configuration, SchemaType.QUERY);
+        final Configuration configuration = setInput(job, inputClass, tableName);
+        PhoenixConfigurationUtil.setInputQuery(configuration, inputQuery);
+        PhoenixConfigurationUtil.setSchemaType(configuration, SchemaType.QUERY);
      }
 
     private static Configuration setInput(final Job job, final Class<? extends DBWritable> inputClass, final String tableName){
