@@ -182,7 +182,8 @@ public class QueryCompiler {
         StatementContext context = new StatementContext(statement, resolver, scan, sequenceManager);
 
         QueryPlan plan = compileSingleFlatQuery(context, select, statement.getParameters(), false, false, null, null, false);
-        plan =  new UnionPlan(context, select, tableRef, plan.getProjector(), plan.getLimit(), plan.getOrderBy(), GroupBy.EMPTY_GROUP_BY, plans, null); 
+        plan =  new UnionPlan(context, select, tableRef, plan.getProjector(), plan.getLimit(), plan.getOrderBy(), GroupBy.EMPTY_GROUP_BY, 
+                plans, context.getBindManager().getParameterMetaData()); 
         return plan;
     }
 
