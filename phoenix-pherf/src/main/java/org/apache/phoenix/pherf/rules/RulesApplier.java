@@ -137,6 +137,11 @@ public class RulesApplier {
         }
 
         switch (column.getType()) {
+			case YCSBKEY:
+				Preconditions.checkArgument(length > 0, "length needs to be > 0");
+				data = getSuperSequentialDataValue(column);
+				break;
+				
             case VARCHAR:
                 // Use the specified data values from configs if they exist
                 if ((column.getDataValues() != null) && (column.getDataValues().size() > 0)) {
@@ -400,4 +405,14 @@ public class RulesApplier {
         varchar = StringUtils.left(varchar, column.getLength());
         return new DataValue(column.getType(), varchar);
     }
+	
+	private DataValue getSuperSequentialDataValue(Column column) {
+		DataValue data = null;
+		long inc = COUNTER.getAndIncrement();
+		String strInc = String.valueOf(inc);
+		String varchar = "user_";
+		varchar = varchar + strInc;
+		data = new DataValue(column.getType(), varchar);
+		return data;
+	}
 }
