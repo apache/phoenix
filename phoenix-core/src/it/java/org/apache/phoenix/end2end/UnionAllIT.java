@@ -40,7 +40,6 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-
 public class UnionAllIT extends BaseOwnClusterHBaseManagedTimeIT {
 
     @BeforeClass
@@ -679,4 +678,52 @@ public class UnionAllIT extends BaseOwnClusterHBaseManagedTimeIT {
             conn.close();
         }
     }
+
+    @Test
+    public void testParameterMetaDataNotNull() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+    
+        String ddl = "CREATE TABLE test_table " +
+                "  (a_string varchar not null, col1 integer" +
+                "  CONSTRAINT pk PRIMARY KEY (a_string))\n";
+        createTestTable(getUrl(), ddl);
+        String dml = "UPSERT INTO test_table VALUES(?, ?)";
+        PreparedStatement stmt = conn.prepareStatement(dml);
+        stmt.setString(1, "a");
+        stmt.setInt(2, 10);
+        stmt.execute();
+        conn.commit();
+
+        ddl = "CREATE TABLE b_table " +
+                "  (a_string varchar not null, col1 integer" +
+                "  CONSTRAINT pk PRIMARY KEY (a_string))\n";
+        createTestTable(getUrl(), ddl);
+        dml = "UPSERT INTO b_table VALUES(?, ?)";
+        stmt = conn.prepareStatement(dml);
+        stmt.setString(1, "b");
+        stmt.setInt(2, 20);
+        stmt.execute();
+        conn.commit();
+
+        String query = "select * from test_table union all select * from b_table";
+
+        try{
+            PreparedStatement pstmt = conn.prepareStatement(query);
+            assertTrue(pstmt.getParameterMetaData() != null);
+            ResultSet rs = pstmt.executeQuery();
+            assertTrue(rs.next());
+            assertEquals("a",rs.getString(1));
+            assertEquals(10,rs.getInt(2));
+            assertTrue(rs.next());
+            assertEquals("b",rs.getString(1));
+            assertEquals(20,rs.getInt(2));
+            assertFalse(rs.next()); 
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        } finally {
+            conn.close();
+        }
+    } 
+
 }
