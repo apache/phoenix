@@ -33,6 +33,7 @@ import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.phoenix.compile.ScanRanges;
+import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.hbase.index.covered.IndexMetaData;
 import org.apache.phoenix.hbase.index.covered.NonTxIndexBuilder;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
@@ -90,10 +91,9 @@ public class PhoenixIndexBuilder extends NonTxIndexBuilder {
         }
         if (maintainers.isEmpty()) return;
         Scan scan = IndexManagementUtil.newLocalStateScan(new ArrayList<IndexMaintainer>(maintainers.values()));
-        scan.setRaw(true);
         ScanRanges scanRanges = ScanRanges.createPointLookup(keys);
         scanRanges.initializeScan(scan);
-        scan.setFilter(scanRanges.getSkipScanFilter());
+        scan.setFilter(new SkipScanFilter(scanRanges.getSkipScanFilter(),true));
         Region region = env.getRegion();
         RegionScanner scanner = region.getScanner(scan);
         // Run through the scanner using internal nextRaw method
