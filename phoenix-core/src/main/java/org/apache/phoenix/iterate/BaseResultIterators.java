@@ -30,7 +30,6 @@ import java.io.EOFException;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -82,8 +81,8 @@ import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.PTableStats;
 import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.PrefixByteCodec;
 import org.apache.phoenix.util.LogUtil;
+import org.apache.phoenix.util.PrefixByteCodec;
 import org.apache.phoenix.util.PrefixByteDecoder;
 import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.ScanUtil;
@@ -382,24 +381,17 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             // For sure we can get the defaultCF from the table
             gps = getDefaultFamilyGuidePosts(guidePostMap, defaultCF);
         } else {
-            byte[] familyInWhere = null;
-            if (!whereConditions.isEmpty()) {
-                if (whereConditions.contains(defaultCF)) {
-                    gps = getDefaultFamilyGuidePosts(guidePostMap, defaultCF);
-                } else {
-                    familyInWhere = whereConditions.iterator().next();
-                    if (familyInWhere != null) {
-                        GuidePostsInfo guidePostsInfo = guidePostMap.get(familyInWhere);
-                        if (guidePostsInfo != null) {
-                            gps = guidePostsInfo;
-                        } else {
-                            // As there are no guideposts collected for the where family we go with the default CF
-                            gps = getDefaultFamilyGuidePosts(guidePostMap, defaultCF);
-                        }
-                    }
-                }
-            } else {
+            if (whereConditions.isEmpty() || whereConditions.contains(defaultCF)) {
                 gps = getDefaultFamilyGuidePosts(guidePostMap, defaultCF);
+            } else {
+                byte[] familyInWhere = whereConditions.iterator().next();
+                GuidePostsInfo guidePostsInfo = guidePostMap.get(familyInWhere);
+                if (guidePostsInfo != null) {
+                    gps = guidePostsInfo;
+                } else {
+                    // As there are no guideposts collected for the where family we go with the default CF
+                    gps = getDefaultFamilyGuidePosts(guidePostMap, defaultCF);
+                }
             }
         }
         if (gps == null) { return GuidePostsInfo.EMPTY_GUIDEPOST; }
@@ -460,9 +452,12 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         PTable table = getTable();
         boolean isSalted = table.getBucketNum() != null;
         boolean isLocalIndex = table.getIndexType() == IndexType.LOCAL;
-        HashSet<byte[]> whereConditions = new HashSet<byte[]>(context.getWhereConditionColumns().size());
+        TreeSet<byte[]> whereConditions = new TreeSet<byte[]>(Bytes.BYTES_COMPARATOR);
         for(Pair<byte[], byte[]> where : context.getWhereConditionColumns()) {
-          whereConditions.add(where.getFirst());
+            byte[] cf = where.getFirst();
+            if (cf != null) {
+                whereConditions.add(cf);
+            }
         }
         GuidePostsInfo gps = getGuidePosts(whereConditions);
         boolean traverseAllRegions = isSalted || isLocalIndex;
