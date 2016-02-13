@@ -93,7 +93,7 @@ public class CalciteIndexIT extends BaseCalciteIT {
                        "  PhoenixServerProject(A_STRING=[$0])\n" +
                        "    PhoenixTableScan(table=[[phoenix, IDX1]], scanOrder=[FORWARD])\n")
             .close();
-        start(true, 1000f).sql("select a_string from aTable order by organization_id")
+        start(true, 1000000f).sql("select a_string from aTable order by organization_id")
             .explainIs("PhoenixToEnumerableConverter\n" +
                        "  PhoenixServerProject(A_STRING=[$2], ORGANIZATION_ID=[$0])\n" +
                        "    PhoenixTableScan(table=[[phoenix, ATABLE]], scanOrder=[FORWARD])\n")

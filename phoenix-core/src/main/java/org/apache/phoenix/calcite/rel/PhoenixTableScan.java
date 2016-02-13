@@ -73,6 +73,7 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
     public final ScanRanges scanRanges;
     
     protected final GuidePostsInfo filteredGuideposts;
+    protected final float rowCountFactor;
     
     public static PhoenixTableScan create(RelOptCluster cluster, final RelOptTable table) {
         return create(cluster, table, null,
@@ -100,6 +101,9 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
         super(cluster, traits, table);
         this.filter = filter;
         this.scanOrder = scanOrder;
+        final PhoenixTable phoenixTable = table.unwrap(PhoenixTable.class);
+        this.rowCountFactor = phoenixTable.pc.getQueryServices()
+                .getProps().getFloat(PhoenixRel.ROW_COUNT_FACTOR, 1f);
         
         ScanRanges scanRanges = null;
         GuidePostsInfo info = null;
@@ -107,7 +111,6 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
         if (filter != null) {
             try {
                 // TODO simplify this code
-                final PhoenixTable phoenixTable = table.unwrap(PhoenixTable.class);
                 PTable pTable = phoenixTable.getTable();
                 TableRef tableRef = new TableRef(CalciteUtils.createTempAlias(), pTable, HConstants.LATEST_TIMESTAMP, false);
                 // We use a implementor with a special implementation for field access
@@ -239,6 +242,7 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
         } else {
             byteCount = phoenixTable.byteCount;
         }
+        byteCount *= rowCountFactor;
         if (scanOrder != ScanOrder.NONE) {
             // We don't want to make a big difference here. The idea is to avoid
             // forcing row key order whenever the order is absolutely useless.
@@ -257,6 +261,7 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
         }
         return planner.getCostFactory()
                 .makeCost(byteCount, byteCount + 1, 0)
+                .multiplyBy(SERVER_FACTOR)
                 .multiplyBy(PHOENIX_FACTOR);
     }
     
@@ -267,7 +272,7 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
             rows = rows * mq.getSelectivity(this, filter);
         }
         
-        return rows;
+        return rows * rowCountFactor;
     }
     
     @Override

@@ -46,7 +46,7 @@ public interface PhoenixRel extends RelNode {
    * <p>Multiply by the value (which is less than unity), and you will get a cheaper cost.
    * Server is cheaper.
    */
-  double SERVER_FACTOR = 0.1;
+  double SERVER_FACTOR = 0.2;
 
   QueryPlan implement(Implementor implementor);
   

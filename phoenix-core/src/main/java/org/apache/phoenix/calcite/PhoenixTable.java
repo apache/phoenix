@@ -21,7 +21,6 @@ import org.apache.calcite.schema.impl.AbstractTable;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.util.ImmutableBitSet;
 import org.apache.hadoop.hbase.HTableDescriptor;
-import org.apache.phoenix.calcite.rel.PhoenixRel;
 import org.apache.phoenix.calcite.rel.PhoenixTableScan;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
@@ -185,9 +184,7 @@ public class PhoenixTable extends AbstractTable implements TranslatableTable {
         return new Statistic() {
             @Override
             public Double getRowCount() {
-                float f = pc.getQueryServices().getProps().getFloat(
-                        PhoenixRel.ROW_COUNT_FACTOR, 1f);
-                return (double) (rowCount * f);
+                return (double) rowCount;
             }
 
             @Override

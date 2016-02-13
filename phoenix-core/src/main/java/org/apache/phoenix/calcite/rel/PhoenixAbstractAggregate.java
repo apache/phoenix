@@ -105,6 +105,7 @@ abstract public class PhoenixAbstractAggregate extends Aggregate implements Phoe
             return planner.getCostFactory().makeInfiniteCost();
         
         double rowCount = mq.getRowCount(this);
+        double bytesPerRow = mq.getAverageRowSize(this);
         if (isOrderedGroupBy) {
             rowCount = (rowCount * rowCount) / Util.nLogN(rowCount);
         }
@@ -117,7 +118,7 @@ abstract public class PhoenixAbstractAggregate extends Aggregate implements Phoe
             multiplier += 0.0125f;
           }
         }
-        return planner.getCostFactory().makeCost(rowCount * multiplier, 0, 0);
+        return planner.getCostFactory().makeCost(rowCount * multiplier * bytesPerRow, 0, 0);
     }
 
     @Override
