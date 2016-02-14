@@ -129,6 +129,9 @@ public interface QueryServices extends SQLCloseable {
     public static final String INDEX_FAILURE_HANDLING_REBUILD_INTERVAL_ATTRIB =
         "phoenix.index.failure.handling.rebuild.interval";
 
+    // A master switch if to block writes when index build failed
+    public static final String INDEX_FAILURE_BLOCK_WRITE = "phoenix.index.failure.block.write";
+
     // Index will be partially re-built from index disable time stamp - following overlap time
     public static final String INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_TIME_ATTRIB =
         "phoenix.index.failure.handling.rebuild.overlap.time";

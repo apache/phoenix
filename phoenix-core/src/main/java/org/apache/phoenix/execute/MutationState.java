@@ -37,6 +37,18 @@ import java.util.concurrent.TimeoutException;
 import javax.annotation.Nonnull;
 import javax.annotation.concurrent.Immutable;
 
+import co.cask.tephra.Transaction;
+import co.cask.tephra.Transaction.VisibilityLevel;
+import co.cask.tephra.TransactionAware;
+import co.cask.tephra.TransactionCodec;
+import co.cask.tephra.TransactionConflictException;
+import co.cask.tephra.TransactionContext;
+import co.cask.tephra.TransactionFailureException;
+import co.cask.tephra.TransactionSystemClient;
+import co.cask.tephra.hbase11.TransactionAwareHTable;
+import co.cask.tephra.visibility.FenceWait;
+import co.cask.tephra.visibility.VisibilityFence;
+
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.HTableInterface;
@@ -68,6 +80,7 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PMetaData;
 import org.apache.phoenix.schema.PRow;
 import org.apache.phoenix.schema.PTable;
@@ -90,18 +103,6 @@ import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.TransactionUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import co.cask.tephra.Transaction;
-import co.cask.tephra.Transaction.VisibilityLevel;
-import co.cask.tephra.TransactionAware;
-import co.cask.tephra.TransactionCodec;
-import co.cask.tephra.TransactionConflictException;
-import co.cask.tephra.TransactionContext;
-import co.cask.tephra.TransactionFailureException;
-import co.cask.tephra.TransactionSystemClient;
-import co.cask.tephra.hbase11.TransactionAwareHTable;
-import co.cask.tephra.visibility.FenceWait;
-import co.cask.tephra.visibility.VisibilityFence;
 
 import com.google.common.base.Predicate;
 import com.google.common.collect.Iterators;
@@ -737,6 +738,16 @@ public class MutationState implements SQLCloseable {
         // Always update tableRef table as the one we've cached may be out of date since when we executed
         // the UPSERT VALUES call and updated in the cache before this.
         tableRef.setTable(resolvedTable);
+        List<PTable> indexes = resolvedTable.getIndexes();
+        for (PTable idxTtable : indexes) {
+            // If index is still active, but has a non zero INDEX_DISABLE_TIMESTAMP value, then infer that
+            // our failure mode is block writes on index failure.
+            if (idxTtable.getIndexState() == PIndexState.ACTIVE && idxTtable.getIndexDisableTimestamp() > 0) {
+                throw new SQLExceptionInfo.Builder(SQLExceptionCode.INDEX_FAILURE_BLOCK_WRITE)
+                .setSchemaName(table.getSchemaName().getString())
+                .setTableName(table.getTableName().getString()).build().buildException();
+            }
+        } 
         long timestamp = result.getMutationTime();
         if (timestamp != QueryConstants.UNSET_TIMESTAMP) {
             serverTimeStamp = timestamp;
@@ -748,8 +759,8 @@ public class MutationState implements SQLCloseable {
                         Map<PColumn, byte[]> colValues = valueEntry.getColumnValues();
                         if (colValues != PRow.DELETE_MARKER) {
                             for (PColumn column : colValues.keySet()) {
-                            	if (!column.isDynamic())
-                            		columns.add(column);
+                                if (!column.isDynamic())
+                                    columns.add(column);
                             }
                         }
                     }

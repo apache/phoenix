@@ -91,7 +91,6 @@ import org.apache.hadoop.hbase.Coprocessor;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Get;
@@ -110,12 +109,9 @@ import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
 import org.apache.hadoop.hbase.filter.SingleColumnValueFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.regionserver.MultiVersionConsistencyControl;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.Region.RowLock;
-import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
-import org.apache.hadoop.hbase.regionserver.RegionServerServices;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.cache.GlobalCache;
@@ -153,6 +149,8 @@ import org.apache.phoenix.parse.PFunction.FunctionArgument;
 import org.apache.phoenix.protobuf.ProtobufUtil;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
@@ -192,7 +190,6 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.UpgradeUtil;
-import org.hamcrest.core.IsInstanceOf;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -298,6 +295,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
     private static final int ROW_KEY_ORDER_OPTIMIZABLE_INDEX = TABLE_KV_COLUMNS.indexOf(ROW_KEY_ORDER_OPTIMIZABLE_KV);
     private static final int TRANSACTIONAL_INDEX = TABLE_KV_COLUMNS.indexOf(TRANSACTIONAL_KV);
     private static final int UPDATE_CACHE_FREQUENCY_INDEX = TABLE_KV_COLUMNS.indexOf(UPDATE_CACHE_FREQUENCY_KV);
+    private static final int INDEX_DISABLE_TIMESTAMP = TABLE_KV_COLUMNS.indexOf(INDEX_DISABLE_TIMESTAMP_KV);
 
     // KeyValues for Column
     private static final KeyValue DECIMAL_DIGITS_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, DECIMAL_DIGITS_BYTES);
@@ -458,7 +456,23 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 return;
             }
             builder.setReturnCode(MetaDataProtos.MutationCode.TABLE_ALREADY_EXISTS);
-            builder.setMutationTime(currentTime);
+            long disableIndexTimestamp = table.getIndexDisableTimestamp();
+            long minNonZerodisableIndexTimestamp = disableIndexTimestamp > 0 ? disableIndexTimestamp : Long.MAX_VALUE;
+            for (PTable index : table.getIndexes()) {
+                disableIndexTimestamp = index.getIndexDisableTimestamp();
+                if (disableIndexTimestamp > 0 && index.getIndexState() == PIndexState.ACTIVE && disableIndexTimestamp < minNonZerodisableIndexTimestamp) {
+                    minNonZerodisableIndexTimestamp = disableIndexTimestamp;
+                }
+            }
+            // Freeze time for table at min non-zero value of INDEX_DISABLE_TIMESTAMP
+            // This will keep the table consistent with index as the table has had one more
+            // batch applied to it.
+            if (minNonZerodisableIndexTimestamp == Long.MAX_VALUE) {
+                builder.setMutationTime(currentTime);
+            } else {
+                // Subtract one because we add one due to timestamp granularity in Windows
+                builder.setMutationTime(minNonZerodisableIndexTimestamp - 1);
+            }
 
             if (table.getTimeStamp() != tableTimeStamp) {
                 builder.setTable(PTableImpl.toProto(table));
@@ -482,11 +496,14 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             PTable oldTable = (PTable)metaDataCache.getIfPresent(cacheKey);
             long tableTimeStamp = oldTable == null ? MIN_TABLE_TIMESTAMP-1 : oldTable.getTimeStamp();
             PTable newTable;
+            boolean blockWriteRebuildIndex = env.getConfiguration().getBoolean(QueryServices.INDEX_FAILURE_BLOCK_WRITE, 
+                    QueryServicesOptions.DEFAULT_INDEX_FAILURE_BLOCK_WRITE);
             newTable = getTable(scanner, clientTimeStamp, tableTimeStamp);
             if (newTable == null) {
                 return null;
             }
-            if (oldTable == null || tableTimeStamp < newTable.getTimeStamp()) {
+            if (oldTable == null || tableTimeStamp < newTable.getTimeStamp()
+                    || (blockWriteRebuildIndex && newTable.getIndexDisableTimestamp() > 0)) {
                 if (logger.isDebugEnabled()) {
                     logger.debug("Caching table "
                             + Bytes.toStringBinary(cacheKey.get(), cacheKey.getOffset(),
@@ -819,7 +836,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         long updateCacheFrequency = updateCacheFrequencyKv == null ? 0 :
             PLong.INSTANCE.getCodec().decodeLong(updateCacheFrequencyKv.getValueArray(),
                     updateCacheFrequencyKv.getValueOffset(), SortOrder.getDefault());
-
+        Cell indexDisableTimestampKv = tableKeyValues[INDEX_DISABLE_TIMESTAMP];
+        long indexDisableTimestamp = indexDisableTimestampKv == null ? 0L : PLong.INSTANCE.getCodec().decodeLong(indexDisableTimestampKv.getValueArray(),
+                indexDisableTimestampKv.getValueOffset(), SortOrder.getDefault());
+        
         List<PColumn> columns = Lists.newArrayListWithExpectedSize(columnCount);
         List<PTable> indexes = new ArrayList<PTable>();
         List<PName> physicalTables = new ArrayList<PName>();
@@ -864,7 +884,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             tableSeqNum, pkName, saltBucketNum, columns, tableType == INDEX ? schemaName : null,
             tableType == INDEX ? dataTableName : null, indexes, isImmutableRows, physicalTables, defaultFamilyName, viewStatement,
             disableWAL, multiTenant, storeNulls, viewType, viewIndexId, indexType, rowKeyOrderOptimizable, transactional, updateCacheFrequency,
-            stats, baseColumnCount);
+            stats, baseColumnCount, indexDisableTimestamp);
     }
 
     private PFunction getFunction(RegionScanner scanner, final boolean isReplace, long clientTimeStamp, List<Mutation> deleteMutationsForReplace)
@@ -2410,19 +2430,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         ImmutableBytesPtr cacheKey = new ImmutableBytesPtr(key);
         Cache<ImmutableBytesPtr, PMetaDataEntity> metaDataCache =
                 GlobalCache.getInstance(this.env).getMetaDataCache();
-        PTable table = (PTable)metaDataCache.getIfPresent(cacheKey);
-        // We only cache the latest, so we'll end up building the table with every call if the
-        // client connection has specified an SCN.
-        // TODO: If we indicate to the client that we're returning an older version, but there's a
-        // newer version available, the client
-        // can safely not call this, since we only allow modifications to the latest.
-        if (table != null && table.getTimeStamp() < clientTimeStamp) {
-            // Table on client is up-to-date with table on server, so just return
-            if (isTableDeleted(table)) {
-                return null;
-            }
-            return table;
-        }
         // Ask Lars about the expense of this call - if we don't take the lock, we still won't get
         // partial results
         // get the co-processor environment
@@ -2434,6 +2441,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
          * from getting rebuilt too often.
          */
         final boolean wasLocked = (rowLock != null);
+        boolean blockWriteRebuildIndex = env.getConfiguration().getBoolean(QueryServices.INDEX_FAILURE_BLOCK_WRITE, 
+                QueryServicesOptions.DEFAULT_INDEX_FAILURE_BLOCK_WRITE);
         if (!wasLocked) {
             rowLock = region.getRowLock(key, true);
             if (rowLock == null) {
@@ -2441,6 +2450,19 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             }
         }
         try {
+            PTable table = (PTable)metaDataCache.getIfPresent(cacheKey);
+            // We only cache the latest, so we'll end up building the table with every call if the
+            // client connection has specified an SCN.
+            // TODO: If we indicate to the client that we're returning an older version, but there's a
+            // newer version available, the client
+            // can safely not call this, since we only allow modifications to the latest.
+            if (table != null && table.getTimeStamp() < clientTimeStamp) {
+                // Table on client is up-to-date with table on server, so just return
+                if (isTableDeleted(table)) {
+                    return null;
+                }
+                return table;
+            }
             // Try cache again in case we were waiting on a lock
             table = (PTable)metaDataCache.getIfPresent(cacheKey);
             // We only cache the latest, so we'll end up building the table with every call if the
@@ -2457,7 +2479,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             }
             // Query for the latest table first, since it's not cached
             table = buildTable(key, cacheKey, region, HConstants.LATEST_TIMESTAMP);
-            if (table != null && table.getTimeStamp() < clientTimeStamp) {
+            if ((table != null && table.getTimeStamp() < clientTimeStamp) || 
+                    (blockWriteRebuildIndex && table.getIndexDisableTimestamp() > 0)) {
                 return table;
             }
             // Otherwise, query for an older version of the table - it won't be cached
@@ -2773,23 +2796,20 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         PIndexState.fromSerializedValue(currentStateKV.getValueArray()[currentStateKV
                                 .getValueOffset()]);
 
-                // check if we need reset disable time stamp
-                if( (newState == PIndexState.DISABLE) &&
-                    (currentState == PIndexState.DISABLE || currentState == PIndexState.INACTIVE) &&
-                    (currentDisableTimeStamp != null && currentDisableTimeStamp.getValueLength() > 0) &&
-                    (disableTimeStampKVIndex >= 0)) {
-                    Long curTimeStampVal = (Long) PLong.INSTANCE.toObject(currentDisableTimeStamp.getValueArray(),
-                      currentDisableTimeStamp.getValueOffset(), currentDisableTimeStamp.getValueLength());
+                if ((currentDisableTimeStamp != null && currentDisableTimeStamp.getValueLength() > 0) &&
+                        (disableTimeStampKVIndex >= 0)) {
+                    long curTimeStampVal = (Long) PLong.INSTANCE.toObject(currentDisableTimeStamp.getValueArray(),
+                            currentDisableTimeStamp.getValueOffset(), currentDisableTimeStamp.getValueLength());
                     // new DisableTimeStamp is passed in
                     Cell newDisableTimeStampCell = newKVs.get(disableTimeStampKVIndex);
-                    Long newDisableTimeStamp = (Long) PLong.INSTANCE.toObject(newDisableTimeStampCell.getValueArray(),
-                      newDisableTimeStampCell.getValueOffset(), newDisableTimeStampCell.getValueLength());
+                    long newDisableTimeStamp = (Long) PLong.INSTANCE.toObject(newDisableTimeStampCell.getValueArray(),
+                            newDisableTimeStampCell.getValueOffset(), newDisableTimeStampCell.getValueLength());
                     if(curTimeStampVal > 0 && curTimeStampVal < newDisableTimeStamp){
                         // not reset disable timestamp
                         newKVs.remove(disableTimeStampKVIndex);
+                        disableTimeStampKVIndex = -1;
                     }
                 }
-
                 // Detect invalid transitions
                 if (currentState == PIndexState.BUILDING) {
                     if (newState == PIndexState.USABLE) {
@@ -2827,7 +2847,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 }
 
                 PTable returnTable = null;
-                if (currentState != newState) {
+                if (currentState != newState || disableTimeStampKVIndex != -1) {
                     byte[] dataTableKey = null;
                     if(dataTableKV != null) {
                         dataTableKey = SchemaUtil.getTableKey(tenantId, schemaName, dataTableKV.getValue());
@@ -2837,7 +2857,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         tableMetadata = new ArrayList<Mutation>(tableMetadata);
                         // insert an empty KV to trigger time stamp update on data table row
                         Put p = new Put(dataTableKey);
-                        p.add(TABLE_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES, timeStamp, ByteUtil.EMPTY_BYTE_ARRAY);
+                        p.add(TABLE_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES, timeStamp, QueryConstants.EMPTY_COLUMN_VALUE_BYTES);
                         tableMetadata.add(p);
                     }
                     boolean setRowKeyOrderOptimizableCell = newState == PIndexState.BUILDING && !rowKeyOrderOptimizable;
@@ -2854,7 +2874,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     if(dataTableKey != null) {
                         metaDataCache.invalidate(new ImmutableBytesPtr(dataTableKey));
                     }
-                    if (setRowKeyOrderOptimizableCell) {
+                    if (setRowKeyOrderOptimizableCell || disableTimeStampKVIndex != -1) {
                         returnTable = doGetTable(key, HConstants.LATEST_TIMESTAMP, rowLock);
                     }
                 }

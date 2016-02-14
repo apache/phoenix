@@ -157,6 +157,7 @@ public interface PTable extends PMetaDataEntity {
 
     long getTimeStamp();
     long getSequenceNumber();
+    long getIndexDisableTimestamp();
     /**
      * @return table name
      */

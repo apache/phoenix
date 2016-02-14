@@ -1098,29 +1098,33 @@ public class MetaDataClient {
     /**
      * Rebuild indexes from a timestamp which is the value from hbase row key timestamp field
      */
-    public void buildPartialIndexFromTimeStamp(PTable index, TableRef dataTableRef) throws SQLException {
-        boolean needRestoreIndexState = false;
-        // Need to change index state from Disable to InActive when build index partially so that
-        // new changes will be indexed during index rebuilding
-        AlterIndexStatement indexStatement = FACTORY.alterIndex(FACTORY.namedTable(null,
-            TableName.create(index.getSchemaName().getString(), index.getTableName().getString())),
-            dataTableRef.getTable().getTableName().getString(), false, PIndexState.INACTIVE);
-        alterIndex(indexStatement);
-        needRestoreIndexState = true;
+    public void buildPartialIndexFromTimeStamp(PTable index, TableRef dataTableRef, boolean blockWriteRebuildIndex) throws SQLException {
+        boolean needRestoreIndexState = true;
+        AlterIndexStatement indexStatement = null;
+        if (!blockWriteRebuildIndex) {
+            // Need to change index state from Disable to InActive when build index partially so that
+            // new changes will be indexed during index rebuilding
+            indexStatement = FACTORY.alterIndex(FACTORY.namedTable(null,
+                    TableName.create(index.getSchemaName().getString(), index.getTableName().getString())),
+                    dataTableRef.getTable().getTableName().getString(), false, PIndexState.INACTIVE);
+            alterIndex(indexStatement); 
+        } 
         try {
             buildIndex(index, dataTableRef);
             needRestoreIndexState = false;
         } finally {
             if(needRestoreIndexState) {
-                // reset index state to disable
-                indexStatement = FACTORY.alterIndex(FACTORY.namedTable(null,
-                    TableName.create(index.getSchemaName().getString(), index.getTableName().getString())),
-                    dataTableRef.getTable().getTableName().getString(), false, PIndexState.DISABLE);
-                alterIndex(indexStatement);
+                if (!blockWriteRebuildIndex) {
+                    // reset index state to disable
+                    indexStatement = FACTORY.alterIndex(FACTORY.namedTable(null,
+                            TableName.create(index.getSchemaName().getString(), index.getTableName().getString())),
+                            dataTableRef.getTable().getTableName().getString(), false, PIndexState.DISABLE);
+                    alterIndex(indexStatement);
+                }
             }
         }
     }
-
+    
     /**
      * Create an index table by morphing the CreateIndexStatement into a CreateTableStatement and calling
      * MetaDataClient.createTable. In doing so, we perform the following translations:
@@ -2004,7 +2008,7 @@ public class MetaDataClient {
                         Collections.<PTable>emptyList(), isImmutableRows,
                         Collections.<PName>emptyList(), defaultFamilyName == null ? null :
                                 PNameFactory.newName(defaultFamilyName), null,
-                        Boolean.TRUE.equals(disableWAL), false, false, null, indexId, indexType, true, false, 0);
+                        Boolean.TRUE.equals(disableWAL), false, false, null, indexId, indexType, true, false, 0, 0L);
                 connection.addTable(table, MetaDataProtocol.MIN_TABLE_TIMESTAMP);
             } else if (tableType == PTableType.INDEX && indexId == null) {
                 if (tableProps.get(HTableDescriptor.MAX_FILESIZE) == null) {
@@ -2174,7 +2178,7 @@ public class MetaDataClient {
                         PTable.INITIAL_SEQ_NUM, pkName == null ? null : PNameFactory.newName(pkName), saltBucketNum, columns,
                         dataTableName == null ? null : newSchemaName, dataTableName == null ? null : PNameFactory.newName(dataTableName), Collections.<PTable>emptyList(), isImmutableRows,
                         physicalNames, defaultFamilyName == null ? null : PNameFactory.newName(defaultFamilyName), viewStatement, Boolean.TRUE.equals(disableWAL), multiTenant, storeNulls, viewType,
-                        indexId, indexType, rowKeyOrderOptimizable, transactional, updateCacheFrequency);
+                        indexId, indexType, rowKeyOrderOptimizable, transactional, updateCacheFrequency, 0L);
                 result = new MetaDataMutationResult(code, result.getMutationTime(), table, true);
                 addTableToCache(result);
                 return table;

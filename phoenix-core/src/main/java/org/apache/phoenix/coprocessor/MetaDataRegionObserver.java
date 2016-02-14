@@ -72,6 +72,7 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
     protected ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(1);
     private boolean enableRebuildIndex = QueryServicesOptions.DEFAULT_INDEX_FAILURE_HANDLING_REBUILD;
     private long rebuildIndexTimeInterval = QueryServicesOptions.DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_INTERVAL;
+    private boolean blockWriteRebuildIndex = false;
 
     @Override
     public void preClose(final ObserverContext<RegionCoprocessorEnvironment> c,
@@ -98,6 +99,8 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
             QueryServicesOptions.DEFAULT_INDEX_FAILURE_HANDLING_REBUILD);
         rebuildIndexTimeInterval = env.getConfiguration().getLong(QueryServices.INDEX_FAILURE_HANDLING_REBUILD_INTERVAL_ATTRIB,
             QueryServicesOptions.DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_INTERVAL);
+        blockWriteRebuildIndex = env.getConfiguration().getBoolean(QueryServices.INDEX_FAILURE_BLOCK_WRITE,
+        	QueryServicesOptions.DEFAULT_INDEX_FAILURE_BLOCK_WRITE);
     }
     
     private static String getJdbcUrl(RegionCoprocessorEnvironment env) {
@@ -145,7 +148,7 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
         };
         (new Thread(r)).start();
 
-        if (!enableRebuildIndex) {
+        if (!enableRebuildIndex && !blockWriteRebuildIndex) {
             LOG.info("Failure Index Rebuild is skipped by configuration.");
             return;
         }
@@ -181,8 +184,14 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
 
         @Override
         public void run() {
+            // FIXME: we should replay the data table Put, as doing a partial index build would only add
+            // the new rows and not delete the previous index value. Also, we should restrict the scan
+            // to only data within this region (as otherwise *every* region will be running this code
+            // separately, all updating the same data.
             RegionScanner scanner = null;
             PhoenixConnection conn = null;
+            boolean blockWriteRebuildIndex = env.getConfiguration().getBoolean(QueryServices.INDEX_FAILURE_BLOCK_WRITE, 
+                    QueryServicesOptions.DEFAULT_INDEX_FAILURE_BLOCK_WRITE);
             if (inProgress.get() > 0) {
                 LOG.debug("New ScheduledBuildIndexTask skipped as there is already one running");
                 return;
@@ -192,7 +201,7 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
                 Scan scan = new Scan();
                 SingleColumnValueFilter filter = new SingleColumnValueFilter(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                     PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP_BYTES,
-                    CompareFilter.CompareOp.NOT_EQUAL, PLong.INSTANCE.toBytes(0L));
+                    CompareFilter.CompareOp.GREATER, PLong.INSTANCE.toBytes(0L));
                 filter.setFilterIfMissing(true);
                 scan.setFilter(filter);
                 scan.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
@@ -233,11 +242,14 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
                     byte[] indexStat = r.getValue(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                         PhoenixDatabaseMetaData.INDEX_STATE_BYTES);
                     if ((dataTable == null || dataTable.length == 0)
-                            || (indexStat == null || indexStat.length == 0)
-                            || ((Bytes.compareTo(PIndexState.DISABLE.getSerializedBytes(), indexStat) != 0)
+                            || (indexStat == null || indexStat.length == 0)) {
+                        // data table name can't be empty
+                        continue;
+                    }
+
+                    if (!blockWriteRebuildIndex && ((Bytes.compareTo(PIndexState.DISABLE.getSerializedBytes(), indexStat) != 0)
                                     && (Bytes.compareTo(PIndexState.INACTIVE.getSerializedBytes(), indexStat) != 0))) {
                         // index has to be either in disable or inactive state
-                        // data table name can't be empty
                         continue;
                     }
 
@@ -254,6 +266,9 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
 
                     if (conn == null) {
                     	final Properties props = new Properties();
+                    	// Set SCN so that we don't ping server and have the upper bound set back to
+                    	// the timestamp when the failure occurred.
+                    	props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(Long.MAX_VALUE));
                     	// don't run a second index populations upsert select 
                         props.setProperty(QueryServices.INDEX_POPULATION_SLEEP_TIME, "0"); 
                         conn = DriverManager.getConnection(getJdbcUrl(env), props).unwrap(PhoenixConnection.class);
@@ -276,7 +291,7 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
                     long timeStamp = Math.max(0, disabledTimeStampVal - overlapTime);
                     
                     LOG.info("Starting to build index=" + indexPTable.getName() + " from timestamp=" + timeStamp);
-                    client.buildPartialIndexFromTimeStamp(indexPTable, new TableRef(dataPTable, Long.MAX_VALUE, timeStamp));
+                    client.buildPartialIndexFromTimeStamp(indexPTable, new TableRef(dataPTable, Long.MAX_VALUE, timeStamp), blockWriteRebuildIndex);
 
                 } while (hasMore);
             } catch (Throwable t) {
