@@ -86,9 +86,9 @@ public class PhoenixServerSemiJoin extends PhoenixAbstractSemiJoin {
             }
         }            
         
-        RelOptCost cost = planner.getCostFactory().makeCost(rowCount, 0, 0);
+        RelOptCost cost = planner.getCostFactory().makeCost(0, rowCount, 0);
 
-        return cost.multiplyBy(SERVER_FACTOR).multiplyBy(PHOENIX_FACTOR);
+        return cost.multiplyBy(SERVER_FACTOR);
     }
 
     @Override

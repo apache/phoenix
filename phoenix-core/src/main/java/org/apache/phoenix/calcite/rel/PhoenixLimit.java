@@ -69,9 +69,7 @@ public class PhoenixLimit extends SingleRel implements PhoenixRel {
             return planner.getCostFactory().makeInfiniteCost();
         
         double rowCount = mq.getRowCount(this);
-        return planner.getCostFactory()
-                .makeCost(rowCount, 0, 0)
-                .multiplyBy(PHOENIX_FACTOR);
+        return planner.getCostFactory().makeCost(0, rowCount, 0);
     }
     
     @Override 

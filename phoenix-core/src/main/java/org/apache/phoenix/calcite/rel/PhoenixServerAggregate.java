@@ -49,8 +49,7 @@ public class PhoenixServerAggregate extends PhoenixAbstractAggregate {
             return planner.getCostFactory().makeInfiniteCost();
         
         return super.computeSelfCost(planner, mq)
-                .multiplyBy(SERVER_FACTOR)
-                .multiplyBy(PHOENIX_FACTOR);
+                .multiplyBy(SERVER_FACTOR);
     }
 
     @Override

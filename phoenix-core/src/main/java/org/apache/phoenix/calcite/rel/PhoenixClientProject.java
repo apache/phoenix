@@ -63,8 +63,7 @@ public class PhoenixClientProject extends PhoenixAbstractProject {
         if (!getInput().getConvention().satisfies(PhoenixConvention.GENERIC))
             return planner.getCostFactory().makeInfiniteCost();
         
-        return super.computeSelfCost(planner, mq)
-                .multiplyBy(PHOENIX_FACTOR);
+        return super.computeSelfCost(planner, mq);
     }
 
     @Override

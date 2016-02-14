@@ -34,13 +34,6 @@ public interface PhoenixRel extends RelNode {
   /** For test purpose */
   String ROW_COUNT_FACTOR = "phoenix.calcite.metadata.rowcount.factor";
 
-  /** Relative cost of Phoenix versus Enumerable convention.
-   *
-   * <p>Multiply by the value (which is less than unity), and you will get a cheaper cost.
-   * Phoenix is cheaper.
-   */
-  double PHOENIX_FACTOR = 0.0001;
-
   /** Relative cost of server plan versus client plan.
    *
    * <p>Multiply by the value (which is less than unity), and you will get a cheaper cost.

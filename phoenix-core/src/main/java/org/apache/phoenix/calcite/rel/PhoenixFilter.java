@@ -57,7 +57,9 @@ public class PhoenixFilter extends Filter implements PhoenixRel {
         if (!getInput().getConvention().satisfies(PhoenixConvention.GENERIC))
             return planner.getCostFactory().makeInfiniteCost();
         
-        return super.computeSelfCost(planner, mq).multiplyBy(PHOENIX_FACTOR);
+        double rows = mq.getRowCount(this);
+        double inputRows = mq.getRowCount(getInput());
+        return planner.getCostFactory().makeCost(0, rows + inputRows, 0);
     }
 
     public QueryPlan implement(Implementor implementor) {

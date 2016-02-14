@@ -41,7 +41,7 @@ abstract public class PhoenixAbstractSort extends Sort implements PhoenixRel {
         double rowCount = mq.getRowCount(this);
         double bytesPerRow = mq.getAverageRowSize(this);
         return planner.getCostFactory().makeCost(
-                Util.nLogN(rowCount) * bytesPerRow, rowCount, 0);
+                0, Util.nLogN(rowCount) * bytesPerRow, 0);
     }
 
     protected static OrderBy getOrderBy(RelCollation collation, Implementor implementor, TupleProjector tupleProjector) {

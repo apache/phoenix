@@ -27,6 +27,7 @@ import org.apache.calcite.util.Pair;
 import org.apache.phoenix.calcite.PhoenixSchema;
 import org.apache.phoenix.calcite.parse.SqlCreateView;
 import org.apache.phoenix.calcite.parser.PhoenixParserImpl;
+import org.apache.phoenix.calcite.plan.PhoenixCost;
 import org.apache.phoenix.calcite.rel.PhoenixRel;
 import org.apache.phoenix.calcite.rel.PhoenixServerProject;
 import org.apache.phoenix.calcite.rel.PhoenixTemporarySort;
@@ -77,6 +78,7 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
             final CalcitePrepare.Context prepareContext,
             org.apache.calcite.plan.Context externalContext,
             RelOptCostFactory costFactory) {
+        costFactory = PhoenixCost.FACTORY;
         RelOptPlanner planner = super.createPlanner(prepareContext, externalContext, costFactory);
         
         planner.removeRule(EnumerableRules.ENUMERABLE_SEMI_JOIN_RULE);

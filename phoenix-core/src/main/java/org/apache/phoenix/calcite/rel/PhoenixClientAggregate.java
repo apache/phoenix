@@ -53,8 +53,7 @@ public class PhoenixClientAggregate extends PhoenixAbstractAggregate {
         if (!getInput().getConvention().satisfies(PhoenixConvention.CLIENT))
             return planner.getCostFactory().makeInfiniteCost();
         
-        return super.computeSelfCost(planner, mq)
-                .multiplyBy(PHOENIX_FACTOR);
+        return super.computeSelfCost(planner, mq);
     }
 
     @Override

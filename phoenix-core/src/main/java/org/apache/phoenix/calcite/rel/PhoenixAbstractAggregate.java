@@ -118,7 +118,7 @@ abstract public class PhoenixAbstractAggregate extends Aggregate implements Phoe
             multiplier += 0.0125f;
           }
         }
-        return planner.getCostFactory().makeCost(rowCount * multiplier * bytesPerRow, 0, 0);
+        return planner.getCostFactory().makeCost(0, rowCount * multiplier * bytesPerRow, 0);
     }
 
     @Override

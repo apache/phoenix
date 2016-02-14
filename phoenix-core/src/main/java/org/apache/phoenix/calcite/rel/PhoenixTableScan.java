@@ -259,10 +259,8 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
                 byteCount = addEpsilon(byteCount);
             }
         }
-        return planner.getCostFactory()
-                .makeCost(byteCount, byteCount + 1, 0)
-                .multiplyBy(SERVER_FACTOR)
-                .multiplyBy(PHOENIX_FACTOR);
+        return planner.getCostFactory().makeCost(0, byteCount, 0)
+                .multiplyBy(SERVER_FACTOR);
     }
     
     @Override
