@@ -32,6 +32,11 @@ public class DelegateTable implements PTable {
     }
 
     @Override
+    public long getIndexDisableTimestamp() {
+        return delegate.getIndexDisableTimestamp();
+    }
+
+    @Override
     public long getSequenceNumber() {
         return delegate.getSequenceNumber();
     }

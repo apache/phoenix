@@ -66,6 +66,7 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PMetaData;
 import org.apache.phoenix.schema.PRow;
 import org.apache.phoenix.schema.PTable;
@@ -91,6 +92,12 @@ import org.cloudera.htrace.TraceScope;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.common.base.Predicate;
+import com.google.common.collect.Iterators;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
+
 import co.cask.tephra.Transaction;
 import co.cask.tephra.Transaction.VisibilityLevel;
 import co.cask.tephra.TransactionAware;
@@ -102,12 +109,6 @@ import co.cask.tephra.TransactionSystemClient;
 import co.cask.tephra.hbase98.TransactionAwareHTable;
 import co.cask.tephra.visibility.FenceWait;
 import co.cask.tephra.visibility.VisibilityFence;
-
-import com.google.common.base.Predicate;
-import com.google.common.collect.Iterators;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
 
 /**
  * 
@@ -737,6 +738,16 @@ public class MutationState implements SQLCloseable {
         // Always update tableRef table as the one we've cached may be out of date since when we executed
         // the UPSERT VALUES call and updated in the cache before this.
         tableRef.setTable(resolvedTable);
+        List<PTable> indexes = resolvedTable.getIndexes();
+        for (PTable idxTtable : indexes) {
+            // If index is still active, but has a non zero INDEX_DISABLE_TIMESTAMP value, then infer that
+            // our failure mode is block writes on index failure.
+            if (idxTtable.getIndexState() == PIndexState.ACTIVE && idxTtable.getIndexDisableTimestamp() > 0) {
+                throw new SQLExceptionInfo.Builder(SQLExceptionCode.INDEX_FAILURE_BLOCK_WRITE)
+                .setSchemaName(table.getSchemaName().getString())
+                .setTableName(table.getTableName().getString()).build().buildException();
+            }
+        } 
         long timestamp = result.getMutationTime();
         if (timestamp != QueryConstants.UNSET_TIMESTAMP) {
             serverTimeStamp = timestamp;
@@ -748,8 +759,8 @@ public class MutationState implements SQLCloseable {
                         Map<PColumn, byte[]> colValues = valueEntry.getColumnValues();
                         if (colValues != PRow.DELETE_MARKER) {
                             for (PColumn column : colValues.keySet()) {
-                            	if (!column.isDynamic())
-                            		columns.add(column);
+                                if (!column.isDynamic())
+                                    columns.add(column);
                             }
                         }
                     }
