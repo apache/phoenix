@@ -172,7 +172,7 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
             TableName indexTable =
                     TableName.valueOf(localIndex ? MetaDataUtil
                             .getLocalIndexTableName(fullTableName) : fullIndexName);
-            HBaseAdmin admin = this.getUtility().getHBaseAdmin();
+            HBaseAdmin admin = getUtility().getHBaseAdmin();
             HTableDescriptor indexTableDesc = admin.getTableDescriptor(indexTable);
             try{
                 admin.disableTable(indexTable);
@@ -184,20 +184,10 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
             stmt.setString(2, "x2");
             stmt.setString(3, "2");
             stmt.execute();
-            if (transactional) {
-                try {
-                    conn.commit();
-                    fail();
-                } catch (SQLException e) {
-                    conn.rollback();
-                }
-            }
-            else {
-                try {
-                    conn.commit();
-                    fail();
-                } catch (SQLException e) {
-                }
+            try {
+                conn.commit();
+                fail();
+            } catch (SQLException e) {
             }
 
             // Verify the metadata for index is correct.
@@ -340,9 +330,9 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
             // find a RS which doesn't has CATALOG table
             TableName catalogTable = TableName.valueOf("SYSTEM.CATALOG");
             TableName indexTable = TableName.valueOf(fullIndexName);
-            final HBaseCluster cluster = this.getUtility().getHBaseCluster();
+            final HBaseCluster cluster = getUtility().getHBaseCluster();
             Collection<ServerName> rss = cluster.getClusterStatus().getServers();
-            HBaseAdmin admin = this.getUtility().getHBaseAdmin();
+            HBaseAdmin admin = getUtility().getHBaseAdmin();
             List<HRegionInfo> regions = admin.getTableRegions(catalogTable);
             ServerName catalogRS = cluster.getServerHoldingRegion(regions.get(0).getTable(),
                     regions.get(0).getRegionName());
@@ -362,7 +352,7 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
             final HRegionInfo indexRegion = regions.get(0);
             final ServerName dstRS = rsToBeKilled;
             admin.move(indexRegion.getEncodedNameAsBytes(), Bytes.toBytes(rsToBeKilled.getServerName()));
-            this.getUtility().waitFor(30000, 200, new Waiter.Predicate<Exception>() {
+            getUtility().waitFor(30000, 200, new Waiter.Predicate<Exception>() {
                 @Override
                 public boolean evaluate() throws Exception {
                     ServerName sn = cluster.getServerHoldingRegion(indexRegion.getTable(),
@@ -378,10 +368,10 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
             Thread.sleep(100);
 
             // kill RS hosting index table
-            this.getUtility().getHBaseCluster().killRegionServer(rsToBeKilled);
+            getUtility().getHBaseCluster().killRegionServer(rsToBeKilled);
 
             // wait for index table completes recovery
-            this.getUtility().waitUntilAllRegionsAssigned(indexTable);
+            getUtility().waitUntilAllRegionsAssigned(indexTable);
 
             // Verify the metadata for index is correct.       
             do {
@@ -412,6 +402,7 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
             this.fullTableName = fullTableName;
         }
 
+        @Override
         public void run() {
             if(inProgress.get() > 0){
                 return;

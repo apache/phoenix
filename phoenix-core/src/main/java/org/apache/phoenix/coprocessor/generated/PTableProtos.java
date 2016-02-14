@@ -3328,6 +3328,16 @@ public final class PTableProtos {
      * <code>optional int64 updateCacheFrequency = 28;</code>
      */
     long getUpdateCacheFrequency();
+
+    // optional int64 indexDisableTimestamp = 29;
+    /**
+     * <code>optional int64 indexDisableTimestamp = 29;</code>
+     */
+    boolean hasIndexDisableTimestamp();
+    /**
+     * <code>optional int64 indexDisableTimestamp = 29;</code>
+     */
+    long getIndexDisableTimestamp();
   }
   /**
    * Protobuf type {@code PTable}
@@ -3536,6 +3546,11 @@ public final class PTableProtos {
             case 224: {
               bitField0_ |= 0x00800000;
               updateCacheFrequency_ = input.readInt64();
+              break;
+            }
+            case 232: {
+              bitField0_ |= 0x01000000;
+              indexDisableTimestamp_ = input.readInt64();
               break;
             }
           }
@@ -4132,6 +4147,22 @@ public final class PTableProtos {
       return updateCacheFrequency_;
     }
 
+    // optional int64 indexDisableTimestamp = 29;
+    public static final int INDEXDISABLETIMESTAMP_FIELD_NUMBER = 29;
+    private long indexDisableTimestamp_;
+    /**
+     * <code>optional int64 indexDisableTimestamp = 29;</code>
+     */
+    public boolean hasIndexDisableTimestamp() {
+      return ((bitField0_ & 0x01000000) == 0x01000000);
+    }
+    /**
+     * <code>optional int64 indexDisableTimestamp = 29;</code>
+     */
+    public long getIndexDisableTimestamp() {
+      return indexDisableTimestamp_;
+    }
+
     private void initFields() {
       schemaNameBytes_ = com.google.protobuf.ByteString.EMPTY;
       tableNameBytes_ = com.google.protobuf.ByteString.EMPTY;
@@ -4161,6 +4192,7 @@ public final class PTableProtos {
       rowKeyOrderOptimizable_ = false;
       transactional_ = false;
       updateCacheFrequency_ = 0L;
+      indexDisableTimestamp_ = 0L;
     }
     private byte memoizedIsInitialized = -1;
     public final boolean isInitialized() {
@@ -4312,6 +4344,9 @@ public final class PTableProtos {
       if (((bitField0_ & 0x00800000) == 0x00800000)) {
         output.writeInt64(28, updateCacheFrequency_);
       }
+      if (((bitField0_ & 0x01000000) == 0x01000000)) {
+        output.writeInt64(29, indexDisableTimestamp_);
+      }
       getUnknownFields().writeTo(output);
     }
 
@@ -4437,6 +4472,10 @@ public final class PTableProtos {
       if (((bitField0_ & 0x00800000) == 0x00800000)) {
         size += com.google.protobuf.CodedOutputStream
           .computeInt64Size(28, updateCacheFrequency_);
+      }
+      if (((bitField0_ & 0x01000000) == 0x01000000)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeInt64Size(29, indexDisableTimestamp_);
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSerializedSize = size;
@@ -4589,6 +4628,11 @@ public final class PTableProtos {
         result = result && (getUpdateCacheFrequency()
             == other.getUpdateCacheFrequency());
       }
+      result = result && (hasIndexDisableTimestamp() == other.hasIndexDisableTimestamp());
+      if (hasIndexDisableTimestamp()) {
+        result = result && (getIndexDisableTimestamp()
+            == other.getIndexDisableTimestamp());
+      }
       result = result &&
           getUnknownFields().equals(other.getUnknownFields());
       return result;
@@ -4713,6 +4757,10 @@ public final class PTableProtos {
       if (hasUpdateCacheFrequency()) {
         hash = (37 * hash) + UPDATECACHEFREQUENCY_FIELD_NUMBER;
         hash = (53 * hash) + hashLong(getUpdateCacheFrequency());
+      }
+      if (hasIndexDisableTimestamp()) {
+        hash = (37 * hash) + INDEXDISABLETIMESTAMP_FIELD_NUMBER;
+        hash = (53 * hash) + hashLong(getIndexDisableTimestamp());
       }
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
@@ -4894,6 +4942,8 @@ public final class PTableProtos {
         bitField0_ = (bitField0_ & ~0x04000000);
         updateCacheFrequency_ = 0L;
         bitField0_ = (bitField0_ & ~0x08000000);
+        indexDisableTimestamp_ = 0L;
+        bitField0_ = (bitField0_ & ~0x10000000);
         return this;
       }
 
@@ -5050,6 +5100,10 @@ public final class PTableProtos {
           to_bitField0_ |= 0x00800000;
         }
         result.updateCacheFrequency_ = updateCacheFrequency_;
+        if (((from_bitField0_ & 0x10000000) == 0x10000000)) {
+          to_bitField0_ |= 0x01000000;
+        }
+        result.indexDisableTimestamp_ = indexDisableTimestamp_;
         result.bitField0_ = to_bitField0_;
         onBuilt();
         return result;
@@ -5227,6 +5281,9 @@ public final class PTableProtos {
         }
         if (other.hasUpdateCacheFrequency()) {
           setUpdateCacheFrequency(other.getUpdateCacheFrequency());
+        }
+        if (other.hasIndexDisableTimestamp()) {
+          setIndexDisableTimestamp(other.getIndexDisableTimestamp());
         }
         this.mergeUnknownFields(other.getUnknownFields());
         return this;
@@ -6964,6 +7021,39 @@ public final class PTableProtos {
         return this;
       }
 
+      // optional int64 indexDisableTimestamp = 29;
+      private long indexDisableTimestamp_ ;
+      /**
+       * <code>optional int64 indexDisableTimestamp = 29;</code>
+       */
+      public boolean hasIndexDisableTimestamp() {
+        return ((bitField0_ & 0x10000000) == 0x10000000);
+      }
+      /**
+       * <code>optional int64 indexDisableTimestamp = 29;</code>
+       */
+      public long getIndexDisableTimestamp() {
+        return indexDisableTimestamp_;
+      }
+      /**
+       * <code>optional int64 indexDisableTimestamp = 29;</code>
+       */
+      public Builder setIndexDisableTimestamp(long value) {
+        bitField0_ |= 0x10000000;
+        indexDisableTimestamp_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>optional int64 indexDisableTimestamp = 29;</code>
+       */
+      public Builder clearIndexDisableTimestamp() {
+        bitField0_ = (bitField0_ & ~0x10000000);
+        indexDisableTimestamp_ = 0L;
+        onChanged();
+        return this;
+      }
+
       // @@protoc_insertion_point(builder_scope:PTable)
     }
 
@@ -7011,7 +7101,7 @@ public final class PTableProtos {
       "\016\n\006values\030\002 \003(\014\022\033\n\023guidePostsByteCount\030\003",
       " \001(\003\022\025\n\rkeyBytesCount\030\004 \001(\003\022\027\n\017guidePost" +
       "sCount\030\005 \001(\005\022!\n\013pGuidePosts\030\006 \001(\0132\014.PGui" +
-      "dePosts\"\244\005\n\006PTable\022\027\n\017schemaNameBytes\030\001 " +
+      "dePosts\"\303\005\n\006PTable\022\027\n\017schemaNameBytes\030\001 " +
       "\002(\014\022\026\n\016tableNameBytes\030\002 \002(\014\022\036\n\ttableType" +
       "\030\003 \002(\0162\013.PTableType\022\022\n\nindexState\030\004 \001(\t\022" +
       "\026\n\016sequenceNumber\030\005 \002(\003\022\021\n\ttimeStamp\030\006 \002" +
@@ -7028,10 +7118,11 @@ public final class PTableProtos {
       "storeNulls\030\030 \001(\010\022\027\n\017baseColumnCount\030\031 \001(" +
       "\005\022\036\n\026rowKeyOrderOptimizable\030\032 \001(\010\022\025\n\rtra" +
       "nsactional\030\033 \001(\010\022\034\n\024updateCacheFrequency" +
-      "\030\034 \001(\003*A\n\nPTableType\022\n\n\006SYSTEM\020\000\022\010\n\004USER",
-      "\020\001\022\010\n\004VIEW\020\002\022\t\n\005INDEX\020\003\022\010\n\004JOIN\020\004B@\n(org" +
-      ".apache.phoenix.coprocessor.generatedB\014P" +
-      "TableProtosH\001\210\001\001\240\001\001"
+      "\030\034 \001(\003\022\035\n\025indexDisableTimestamp\030\035 \001(\003*A\n",
+      "\nPTableType\022\n\n\006SYSTEM\020\000\022\010\n\004USER\020\001\022\010\n\004VIE" +
+      "W\020\002\022\t\n\005INDEX\020\003\022\010\n\004JOIN\020\004B@\n(org.apache.p" +
+      "hoenix.coprocessor.generatedB\014PTableProt" +
+      "osH\001\210\001\001\240\001\001"
     };
     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
       new com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner() {
@@ -7055,7 +7146,7 @@ public final class PTableProtos {
           internal_static_PTable_fieldAccessorTable = new
             com.google.protobuf.GeneratedMessage.FieldAccessorTable(
               internal_static_PTable_descriptor,
-              new java.lang.String[] { "SchemaNameBytes", "TableNameBytes", "TableType", "IndexState", "SequenceNumber", "TimeStamp", "PkNameBytes", "BucketNum", "Columns", "Indexes", "IsImmutableRows", "GuidePosts", "DataTableNameBytes", "DefaultFamilyName", "DisableWAL", "MultiTenant", "ViewType", "ViewStatement", "PhysicalNames", "TenantId", "ViewIndexId", "IndexType", "StatsTimeStamp", "StoreNulls", "BaseColumnCount", "RowKeyOrderOptimizable", "Transactional", "UpdateCacheFrequency", });
+              new java.lang.String[] { "SchemaNameBytes", "TableNameBytes", "TableType", "IndexState", "SequenceNumber", "TimeStamp", "PkNameBytes", "BucketNum", "Columns", "Indexes", "IsImmutableRows", "GuidePosts", "DataTableNameBytes", "DefaultFamilyName", "DisableWAL", "MultiTenant", "ViewType", "ViewStatement", "PhysicalNames", "TenantId", "ViewIndexId", "IndexType", "StatsTimeStamp", "StoreNulls", "BaseColumnCount", "RowKeyOrderOptimizable", "Transactional", "UpdateCacheFrequency", "IndexDisableTimestamp", });
           return null;
         }
       };
