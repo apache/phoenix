@@ -58,9 +58,9 @@ import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 
-import co.cask.tephra.Transaction;
-
 import com.google.common.collect.ImmutableList;
+
+import co.cask.tephra.Transaction;
 
 
 abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
@@ -98,6 +98,7 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
     public static final String SKIP_REGION_BOUNDARY_CHECK = "_SKIP_REGION_BOUNDARY_CHECK";
     public static final String TX_SCN = "_TxScn";
     public static final String SCAN_ACTUAL_START_ROW = "_ScanActualStartRow";
+    public static final String IGNORE_NEWER_MUTATIONS = "_IGNORE_NEWER_MUTATIONS";
     
     /**
      * Attribute name used to pass custom annotations in Scans and Mutations (later). Custom annotations

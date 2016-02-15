@@ -486,7 +486,7 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
         }
 
         @Override
-        public Pair<ValueGetter, IndexUpdate> getIndexUpdateState(Collection<? extends ColumnReference> indexedColumns)
+        public Pair<ValueGetter, IndexUpdate> getIndexUpdateState(Collection<? extends ColumnReference> indexedColumns, boolean ignoreNewerMutations)
                 throws IOException {
             // TODO: creating these objects over and over again is wasteful
             ColumnTracker tracker = new ColumnTracker(indexedColumns);

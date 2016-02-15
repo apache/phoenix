@@ -204,8 +204,6 @@ import org.apache.phoenix.util.UpgradeUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import co.cask.tephra.TxConstants;
-
 import com.google.common.base.Objects;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.ListMultimap;
@@ -213,6 +211,8 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.primitives.Ints;
+
+import co.cask.tephra.TxConstants;
 
 public class MetaDataClient {
     private static final Logger logger = LoggerFactory.getLogger(MetaDataClient.class);
@@ -1095,36 +1095,6 @@ public class MetaDataClient {
         return fullName;
     }
 
-    /**
-     * Rebuild indexes from a timestamp which is the value from hbase row key timestamp field
-     */
-    public void buildPartialIndexFromTimeStamp(PTable index, TableRef dataTableRef, boolean blockWriteRebuildIndex) throws SQLException {
-        boolean needRestoreIndexState = true;
-        AlterIndexStatement indexStatement = null;
-        if (!blockWriteRebuildIndex) {
-            // Need to change index state from Disable to InActive when build index partially so that
-            // new changes will be indexed during index rebuilding
-            indexStatement = FACTORY.alterIndex(FACTORY.namedTable(null,
-                    TableName.create(index.getSchemaName().getString(), index.getTableName().getString())),
-                    dataTableRef.getTable().getTableName().getString(), false, PIndexState.INACTIVE);
-            alterIndex(indexStatement); 
-        } 
-        try {
-            buildIndex(index, dataTableRef);
-            needRestoreIndexState = false;
-        } finally {
-            if(needRestoreIndexState) {
-                if (!blockWriteRebuildIndex) {
-                    // reset index state to disable
-                    indexStatement = FACTORY.alterIndex(FACTORY.namedTable(null,
-                            TableName.create(index.getSchemaName().getString(), index.getTableName().getString())),
-                            dataTableRef.getTable().getTableName().getString(), false, PIndexState.DISABLE);
-                    alterIndex(indexStatement);
-                }
-            }
-        }
-    }
-    
     /**
      * Create an index table by morphing the CreateIndexStatement into a CreateTableStatement and calling
      * MetaDataClient.createTable. In doing so, we perform the following translations:
