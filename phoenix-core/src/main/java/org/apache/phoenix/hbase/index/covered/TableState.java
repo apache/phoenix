@@ -23,7 +23,6 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -58,9 +57,13 @@ public interface TableState {
 
   /**
    * Get a getter interface for the state of the index row
+   * @param indexedColumns list of indexed columns.
+   * @param ignoreNewerMutations ignore mutations newer than m when determining current state. Useful
+   *        when replaying mutation state for partial index rebuild where writes succeeded to the data
+   *        table, but not to the index table.
    */
   Pair<ValueGetter, IndexUpdate> getIndexUpdateState(
-      Collection<? extends ColumnReference> indexedColumns) throws IOException;
+      Collection<? extends ColumnReference> indexedColumns, boolean ignoreNewerMutations) throws IOException;
 
   /**
    * @return the row key for the current row for which we are building an index update.

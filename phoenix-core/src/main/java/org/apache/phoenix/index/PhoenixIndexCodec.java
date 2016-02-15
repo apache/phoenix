@@ -15,7 +15,6 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.hadoop.hbase.client.Delete;
-import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -60,7 +59,8 @@ public class PhoenixIndexCodec extends BaseIndexCodec {
 
     @Override
     public Iterable<IndexUpdate> getIndexUpserts(TableState state, IndexMetaData context) throws IOException {
-        List<IndexMaintainer> indexMaintainers = ((PhoenixIndexMetaData)context).getIndexMaintainers();
+        PhoenixIndexMetaData metaData = (PhoenixIndexMetaData)context;
+        List<IndexMaintainer> indexMaintainers = metaData.getIndexMaintainers();
         if (indexMaintainers.get(0).isRowDeleted(state.getPendingUpdate())) {
             return Collections.emptyList();
         }
@@ -68,7 +68,7 @@ public class PhoenixIndexCodec extends BaseIndexCodec {
         ptr.set(state.getCurrentRowKey());
         List<IndexUpdate> indexUpdates = Lists.newArrayList();
         for (IndexMaintainer maintainer : indexMaintainers) {
-            Pair<ValueGetter, IndexUpdate> statePair = state.getIndexUpdateState(maintainer.getAllColumns());
+            Pair<ValueGetter, IndexUpdate> statePair = state.getIndexUpdateState(maintainer.getAllColumns(), metaData.ignoreNewerMutations());
             ValueGetter valueGetter = statePair.getFirst();
             IndexUpdate indexUpdate = statePair.getSecond();
             indexUpdate.setTable(maintainer.getIndexTableName());
@@ -82,7 +82,8 @@ public class PhoenixIndexCodec extends BaseIndexCodec {
 
     @Override
     public Iterable<IndexUpdate> getIndexDeletes(TableState state, IndexMetaData context) throws IOException {
-        List<IndexMaintainer> indexMaintainers = ((PhoenixIndexMetaData)context).getIndexMaintainers();
+        PhoenixIndexMetaData metaData = (PhoenixIndexMetaData)context;
+        List<IndexMaintainer> indexMaintainers = metaData.getIndexMaintainers();
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         ptr.set(state.getCurrentRowKey());
         List<IndexUpdate> indexUpdates = Lists.newArrayList();
@@ -91,7 +92,7 @@ public class PhoenixIndexCodec extends BaseIndexCodec {
             // to aid in rollback if there's a KeyValue column in the index. The alternative would be
             // to hold on to all uncommitted index row keys (even ones already sent to HBase) on the
             // client side.
-            Pair<ValueGetter, IndexUpdate> statePair = state.getIndexUpdateState(maintainer.getAllColumns());
+            Pair<ValueGetter, IndexUpdate> statePair = state.getIndexUpdateState(maintainer.getAllColumns(), metaData.ignoreNewerMutations());
             ValueGetter valueGetter = statePair.getFirst();
             IndexUpdate indexUpdate = statePair.getSecond();
             indexUpdate.setTable(maintainer.getIndexTableName());

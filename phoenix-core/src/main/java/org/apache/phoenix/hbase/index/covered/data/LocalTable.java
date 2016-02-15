@@ -51,13 +51,20 @@ public class LocalTable implements LocalHBaseState {
   }
 
   @Override
-  public Result getCurrentRowState(Mutation m, Collection<? extends ColumnReference> columns)
+  public Result getCurrentRowState(Mutation m, Collection<? extends ColumnReference> columns, boolean ignoreNewerMutations)
       throws IOException {
     byte[] row = m.getRow();
     // need to use a scan here so we can get raw state, which Get doesn't provide.
     Scan s = IndexManagementUtil.newLocalStateScan(Collections.singletonList(columns));
     s.setStartRow(row);
     s.setStopRow(row);
+
+    if (ignoreNewerMutations) {
+        // Provides a means of client indicating that newer cells should not be considered,
+        // enabling mutations to be replayed to partially rebuild the index when a write fails.
+        long ts = m.getFamilyCellMap().firstEntry().getValue().get(0).getTimestamp();
+        s.setTimeRange(0,ts);
+    }
     HRegion region = this.env.getRegion();
     RegionScanner scanner = region.getScanner(s);
     List<Cell> kvs = new ArrayList<Cell>(1);

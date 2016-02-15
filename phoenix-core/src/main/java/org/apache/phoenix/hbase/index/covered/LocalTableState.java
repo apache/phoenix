@@ -36,8 +36,6 @@ import org.apache.phoenix.hbase.index.scanner.Scanner;
 import org.apache.phoenix.hbase.index.scanner.ScannerBuilder;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 
-import com.google.inject.Key;
-
 /**
  * Manage the state of the HRegion's view of the table, for the single row.
  * <p>
@@ -108,7 +106,7 @@ public class LocalTableState implements TableState {
     public void setCurrentTimestamp(long timestamp) {
         this.ts = timestamp;
     }
-
+    
     public void resetTrackedColumns() {
         this.trackedColumns.clear();
     }
@@ -139,6 +137,9 @@ public class LocalTableState implements TableState {
      * request - you will never see a column with the timestamp we are tracking, but the next oldest
      * timestamp for that column.
      * @param indexedColumns the columns to that will be indexed
+     * @param ignoreNewerMutations ignore mutations newer than m when determining current state. Useful
+     *        when replaying mutation state for partial index rebuild where writes succeeded to the data
+     *        table, but not to the index table.
      * @return an iterator over the columns and the {@link IndexUpdate} that should be passed back to
      *         the builder. Even if no update is necessary for the requested columns, you still need
      *         to return the {@link IndexUpdate}, just don't set the update for the
@@ -146,8 +147,8 @@ public class LocalTableState implements TableState {
      * @throws IOException
      */
     public Pair<Scanner, IndexUpdate> getIndexedColumnsTableState(
-        Collection<? extends ColumnReference> indexedColumns) throws IOException {
-        ensureLocalStateInitialized(indexedColumns);
+        Collection<? extends ColumnReference> indexedColumns, boolean ignoreNewerMutations) throws IOException {
+        ensureLocalStateInitialized(indexedColumns, ignoreNewerMutations);
         // filter out things with a newer timestamp and track the column references to which it applies
         ColumnTracker tracker = new ColumnTracker(indexedColumns);
         synchronized (this.trackedColumns) {
@@ -167,7 +168,7 @@ public class LocalTableState implements TableState {
      * {@link #getNonIndexedColumnsTableState(List)}, which is unlikely to be called concurrently from the outside. Even
      * then, there is still fairly low contention as each new Put/Delete will have its own table state.
      */
-    private synchronized void ensureLocalStateInitialized(Collection<? extends ColumnReference> columns)
+    private synchronized void ensureLocalStateInitialized(Collection<? extends ColumnReference> columns, boolean ignoreNewerMutations)
             throws IOException {
         // check to see if we haven't initialized any columns yet
         Collection<? extends ColumnReference> toCover = this.columnSet.findNonCoveredColumns(columns);
@@ -175,7 +176,7 @@ public class LocalTableState implements TableState {
         if (toCover.isEmpty()) { return; }
 
         // add the current state of the row
-        this.addUpdate(this.table.getCurrentRowState(update, toCover).list(), false);
+        this.addUpdate(this.table.getCurrentRowState(update, toCover, ignoreNewerMutations).list(), false);
 
         // add the covered columns to the set
         for (ColumnReference ref : toCover) {
@@ -268,9 +269,9 @@ public class LocalTableState implements TableState {
     }
 
     @Override
-    public Pair<ValueGetter, IndexUpdate> getIndexUpdateState(Collection<? extends ColumnReference> indexedColumns)
+    public Pair<ValueGetter, IndexUpdate> getIndexUpdateState(Collection<? extends ColumnReference> indexedColumns, boolean ignoreNewerMutations)
             throws IOException {
-        Pair<Scanner, IndexUpdate> pair = getIndexedColumnsTableState(indexedColumns);
+        Pair<Scanner, IndexUpdate> pair = getIndexedColumnsTableState(indexedColumns, ignoreNewerMutations);
         ValueGetter valueGetter = IndexManagementUtil.createGetterFromScanner(pair.getFirst(), getCurrentRowKey());
         return new Pair<ValueGetter, IndexUpdate>(valueGetter, pair.getSecond());
     }
