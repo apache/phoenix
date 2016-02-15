@@ -1221,18 +1221,16 @@ public class UpgradeUtil {
 
     public static boolean truncateStats(HTableInterface metaTable, HTableInterface statsTable)
             throws IOException, InterruptedException {
-        List<Cell> columnCells = metaTable
-                .get(new Get(SchemaUtil.getTableKey(null, PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME,
-                        PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE)))
+        byte[] statsTableKey = SchemaUtil.getTableKey(null, PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME,
+                PhoenixDatabaseMetaData.SYSTEM_STATS_TABLE);
+        List<Cell> columnCells = metaTable.get(new Get(statsTableKey))
                 .getColumnCells(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES);
-        if (!columnCells.isEmpty()
-                && columnCells.get(0).getTimestamp() < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0) {
+        long timestamp;
+        if (!columnCells.isEmpty() && (timestamp = columnCells.get(0)
+                .getTimestamp()) < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0) {
 
-            byte[] statsTableKey = SchemaUtil.getTableKey(null, PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME,
-                    PhoenixDatabaseMetaData.SYSTEM_STATS_TABLE);
             KeyValue upgradeKV = KeyValueUtil.newKeyValue(statsTableKey, PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
-                    UPGRADE_TO_4_7_COLUMN_NAME, MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0 - 1,
-                    ByteUtil.EMPTY_BYTE_ARRAY);
+                    UPGRADE_TO_4_7_COLUMN_NAME, timestamp, PBoolean.INSTANCE.toBytes(true));
             Put upgradePut = new Put(statsTableKey);
             upgradePut.add(upgradeKV);
 
