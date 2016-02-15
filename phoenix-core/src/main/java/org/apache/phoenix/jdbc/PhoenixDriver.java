@@ -47,6 +47,7 @@ import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesImpl;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -224,20 +225,23 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
                     connectionQueryServices = prevValue;
                 }
             }
-            boolean success = false;
-            SQLException sqlE = null;
-            try {
-                connectionQueryServices.init(url, info);
-                success = true;
-            } catch (SQLException e) {
-                sqlE = e;
-            }
-            finally {
-                if (!success) {
-                    // Remove from map, as initialization failed
-                    connectionQueryServicesMap.remove(normalizedConnInfo);
-                    if (sqlE != null) {
-                        throw sqlE;
+            String noUpgradeProp = info.getProperty(PhoenixRuntime.NO_UPGRADE_ATTRIB);
+            if (!Boolean.TRUE.equals(noUpgradeProp)) {
+                boolean success = false;
+                SQLException sqlE = null;
+                try {
+                    connectionQueryServices.init(url, info);
+                    success = true;
+                } catch (SQLException e) {
+                    sqlE = e;
+                }
+                finally {
+                    if (!success) {
+                        // Remove from map, as initialization failed
+                        connectionQueryServicesMap.remove(normalizedConnInfo);
+                        if (sqlE != null) {
+                            throw sqlE;
+                        }
                     }
                 }
             }

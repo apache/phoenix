@@ -130,6 +130,11 @@ public class PhoenixRuntime {
     public static final String TENANT_ID_ATTRIB = "TenantId";
 
     /**
+     * Use this connection property to prevent an upgrade from occurring when
+     * connecting to a new server version.
+     */
+    public static final String NO_UPGRADE_ATTRIB = "NoUpgrade";
+    /**
      * Use this connection property to control the number of rows that are
      * batched together on an UPSERT INTO table1... SELECT ... FROM table2.
      * It's only used when autoCommit is true and your source table is
@@ -170,7 +175,8 @@ public class PhoenixRuntime {
             UPSERT_BATCH_SIZE_ATTRIB,
             AUTO_COMMIT_ATTRIB,
             CONSISTENCY_ATTRIB,
-            REQUEST_METRIC_ATTRIB
+            REQUEST_METRIC_ATTRIB,
+            NO_UPGRADE_ATTRIB
             };
 
     /**
