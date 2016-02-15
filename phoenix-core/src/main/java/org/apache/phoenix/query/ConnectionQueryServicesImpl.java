@@ -188,11 +188,6 @@ import org.apache.twill.zookeeper.ZKClients;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import co.cask.tephra.TransactionSystemClient;
-import co.cask.tephra.TxConstants;
-import co.cask.tephra.distributed.PooledClientProvider;
-import co.cask.tephra.distributed.TransactionServiceClient;
-
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Throwables;
@@ -204,6 +199,11 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+
+import co.cask.tephra.TransactionSystemClient;
+import co.cask.tephra.TxConstants;
+import co.cask.tephra.distributed.PooledClientProvider;
+import co.cask.tephra.distributed.TransactionServiceClient;
 
 
 public class ConnectionQueryServicesImpl extends DelegateQueryServices implements ConnectionQueryServices {
@@ -2370,14 +2370,16 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                     // parts we haven't yet done).
                                     metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG, MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0 - 2,
                                             PhoenixDatabaseMetaData.TRANSACTIONAL + " " + PBoolean.INSTANCE.getSqlTypeName());
-                                    metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG, MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0 - 1, 
-                                            PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY + " " + PLong.INSTANCE.getSqlTypeName());
+                                    // Drop old stats table so that new stats table is created
+                                    metaConnection = dropStatsTable(metaConnection,
+                                            MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0 - 1);
+                                    metaConnection = addColumnsIfNotExists(metaConnection,
+                                            PhoenixDatabaseMetaData.SYSTEM_CATALOG,
+                                            MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0,
+                                            PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY + " "
+                                                    + PLong.INSTANCE.getSqlTypeName());
                                     setImmutableTableIndexesImmutable(metaConnection);
-									// Drop old stats table so that new stats table is created
-									metaConnection = dropStatsTable(metaConnection,
-											MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0);
-									// Clear the server cache so the above changes make it over to any clients
-									// that already have cached data.
+                                    // that already have cached data.
 									clearCache();
                                 }
                                 
@@ -2511,7 +2513,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private PhoenixConnection dropStatsTable(PhoenixConnection oldMetaConnection, long timestamp)
 			throws SQLException, IOException {
 		Properties props = PropertiesUtil.deepCopy(oldMetaConnection.getClientInfo());
-		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(timestamp-1));
+		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(timestamp));
 		PhoenixConnection metaConnection = new PhoenixConnection(oldMetaConnection, this, props);
 		SQLException sqlE = null;
 		boolean wasCommit = metaConnection.getAutoCommit();
@@ -2528,26 +2530,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 		} finally {
 			try {
 				metaConnection.setAutoCommit(wasCommit);
-				oldMetaConnection.close();
-			} catch (SQLException e) {
-				if (sqlE != null) {
-					sqlE.setNextException(e);
-				} else {
-					sqlE = e;
-				}
-			}
-			if (sqlE != null) {
-				throw sqlE;
-			}
-		}
-
-		oldMetaConnection = metaConnection;
-		props = PropertiesUtil.deepCopy(oldMetaConnection.getClientInfo());
-		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(timestamp));
-		try {
-			metaConnection = new PhoenixConnection(oldMetaConnection, ConnectionQueryServicesImpl.this, props);
-		} finally {
-			try {
 				oldMetaConnection.close();
 			} catch (SQLException e) {
 				if (sqlE != null) {
