@@ -27,34 +27,28 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.Properties;
 
-import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
 
-public class CompareDecimalToLongIT extends BaseClientManagedTimeIT {
-    protected static void initTableValues(byte[][] splits, long ts) throws Exception {
-        ensureTableCreated(getUrl(),"LongInKeyTest",splits, ts-2);
-        
-        // Insert all rows at ts
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
-        Connection conn = DriverManager.getConnection(url);
-        conn.setAutoCommit(true);
+public class PrimitiveTypeIT extends BaseHBaseManagedTimeIT {
+    private static void initTableValues(Connection conn) throws Exception {
+        conn.createStatement().execute("create table T (l bigint not null primary key, b boolean)");
         PreparedStatement stmt = conn.prepareStatement(
                 "upsert into " +
-                "LongInKeyTest VALUES(?)");
+                "T VALUES(?)");
         stmt.setLong(1, 2);
         stmt.execute();
-        conn.close();
+        conn.commit();
     }
 
     @Test
     public void testCompareLongGTDecimal() throws Exception {
-        long ts = nextTimestamp();
-        initTableValues(null, ts);
-        String query = "SELECT l FROM LongInKeyTest where l > 1.5";
-        Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
+        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
+        initTableValues(conn);
+        String query = "SELECT l FROM T where l > 1.5";
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -68,12 +62,10 @@ public class CompareDecimalToLongIT extends BaseClientManagedTimeIT {
     
     @Test
     public void testCompareLongGTEDecimal() throws Exception {
-        long ts = nextTimestamp();
-        initTableValues(null, ts);
-        String query = "SELECT l FROM LongInKeyTest where l >= 1.5";
-        Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
+        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
+        initTableValues(conn);
+        String query = "SELECT l FROM T where l >= 1.5";
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -94,12 +86,10 @@ public class CompareDecimalToLongIT extends BaseClientManagedTimeIT {
     
     @Test
     public void testCompareLongLTDecimal() throws Exception {
-        long ts = nextTimestamp();
-        initTableValues(null, ts);
-        String query = "SELECT l FROM LongInKeyTest where l < 1.5";
-        Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
+        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
+        initTableValues(conn);
+        String query = "SELECT l FROM T where l < 1.5";
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -118,12 +108,10 @@ public class CompareDecimalToLongIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testCompareLongLTEDecimal() throws Exception {
-        long ts = nextTimestamp();
-        initTableValues(null, ts);
-        String query = "SELECT l FROM LongInKeyTest where l <= 1.5";
-        Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
+        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
+        initTableValues(conn);
+        String query = "SELECT l FROM T where l <= 1.5";
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -141,12 +129,10 @@ public class CompareDecimalToLongIT extends BaseClientManagedTimeIT {
     }
     @Test
     public void testCompareLongGTDecimal2() throws Exception {
-        long ts = nextTimestamp();
-        initTableValues(null, ts);
-        String query = "SELECT l FROM LongInKeyTest where l > 2.5";
-        Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
+        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
+        initTableValues(conn);
+        String query = "SELECT l FROM T where l > 2.5";
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -165,12 +151,10 @@ public class CompareDecimalToLongIT extends BaseClientManagedTimeIT {
     
     @Test
     public void testCompareLongGTEDecimal2() throws Exception {
-        long ts = nextTimestamp();
-        initTableValues(null, ts);
-        String query = "SELECT l FROM LongInKeyTest where l >= 2.5";
-        Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
+        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
+        initTableValues(conn);
+        String query = "SELECT l FROM T where l >= 2.5";
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -189,12 +173,10 @@ public class CompareDecimalToLongIT extends BaseClientManagedTimeIT {
     
     @Test
     public void testCompareLongLTDecimal2() throws Exception {
-        long ts = nextTimestamp();
-        initTableValues(null, ts);
-        String query = "SELECT l FROM LongInKeyTest where l < 2.5";
-        Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
+        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
+        initTableValues(conn);
+        String query = "SELECT l FROM T where l < 2.5";
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -215,12 +197,10 @@ public class CompareDecimalToLongIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testCompareLongLTEDecimal2() throws Exception {
-        long ts = nextTimestamp();
-        initTableValues(null, ts);
-        String query = "SELECT l FROM LongInKeyTest where l <= 2.5";
-        Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
+        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
+        initTableValues(conn);
+        String query = "SELECT l FROM T where l <= 2.5";
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -233,6 +213,30 @@ public class CompareDecimalToLongIT extends BaseClientManagedTimeIT {
              */
             assertTrue (rs.next());
             assertEquals(2, rs.getLong(1));
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
+    
+    @Test
+    public void testBooleanAsObject() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        initTableValues(conn);
+        String query = "upsert into T values (2, ?)";
+        try {
+            PreparedStatement statement = conn.prepareStatement(query);
+            statement.setObject(1, new Boolean("false"));
+            statement.execute();
+            conn.commit();
+            statement = conn.prepareStatement("SELECT l,b,? FROM T");
+            statement.setObject(1, new Boolean("false"));
+            ResultSet rs = statement.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(2, rs.getLong(1));
+            assertEquals(Boolean.FALSE, rs.getObject(2));
+            assertEquals(Boolean.FALSE, rs.getObject(3));
             assertFalse(rs.next());
         } finally {
             conn.close();

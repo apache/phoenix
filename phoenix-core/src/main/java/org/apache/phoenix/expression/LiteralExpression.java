@@ -85,7 +85,7 @@ public class LiteralExpression extends BaseTerminalExpression {
     }
     
     private static LiteralExpression getBooleanLiteralExpression(Boolean bool, Determinism determinism){
-    	return BOOLEAN_EXPRESSIONS[ (bool==Boolean.FALSE ?  0 : Determinism.values().length) + determinism.ordinal()];
+    	return BOOLEAN_EXPRESSIONS[ (Boolean.FALSE.equals(bool) ?  0 : Determinism.values().length) + determinism.ordinal()];
     }
 
     public static boolean isFalse(Expression child) {
