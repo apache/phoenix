@@ -1213,14 +1213,14 @@ DIGIT
 STRING_LITERAL
 @init{ StringBuilder sb = new StringBuilder(); }
     :   '\''
-    ( t=CHAR_ESC { sb.append(getText()); }
-    | t=CHAR { sb.append(t.getText()); }
+    ( t=CHAR { sb.append(t.getText()); } 
+    | t=CHAR_ESC { sb.append(getText()); }
     )* '\'' { setText(sb.toString()); }
     ;
 
 fragment
 CHAR
-    :   ( ~('\'') )
+    :   ( ~('\'' | '\\') )
     ;
 
 fragment
@@ -1242,6 +1242,7 @@ CHAR_ESC
         | '\\'  { setText("\\"); }
         | '_'   { setText("\\_"); }
         | '%'   { setText("\\\%"); }
+        |       { setText("\\"); }
         )
     |   '\'\''  { setText("\'"); }
     ;
