@@ -172,17 +172,17 @@ import org.junit.rules.TemporaryFolder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import co.cask.tephra.TransactionManager;
-import co.cask.tephra.TxConstants;
-import co.cask.tephra.distributed.TransactionService;
-import co.cask.tephra.metrics.TxMetricsCollector;
-import co.cask.tephra.persist.InMemoryTransactionStateStorage;
-
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.google.inject.util.Providers;
+
+import co.cask.tephra.TransactionManager;
+import co.cask.tephra.TxConstants;
+import co.cask.tephra.distributed.TransactionService;
+import co.cask.tephra.metrics.TxMetricsCollector;
+import co.cask.tephra.persist.InMemoryTransactionStateStorage;
 
 /**
  * 
@@ -429,8 +429,6 @@ public abstract class BaseTest {
                 "   (i integer not null primary key)");
         builder.put("IntIntKeyTest","create table IntIntKeyTest" +
                 "   (i integer not null primary key, j integer)");
-        builder.put("LongInKeyTest","create table LongInKeyTest" +
-                "   (l bigint not null primary key)");
         builder.put("PKIntValueTest", "create table PKIntValueTest" +
                 "   (pk integer not null primary key)");
         builder.put("PKBigIntValueTest", "create table PKBigIntValueTest" +
