@@ -30,4 +30,6 @@ message PGuidePosts {
   optional int32 maxLength = 4;
   optional int32 encodedGuidePostsCount = 5;
   optional bytes encodedGuidePosts = 6;
+  repeated int64 byteCounts = 7;
+  repeated int64 rowCounts = 8;
 }
