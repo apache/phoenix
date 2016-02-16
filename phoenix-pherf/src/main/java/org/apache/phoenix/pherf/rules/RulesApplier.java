@@ -139,11 +139,7 @@ public class RulesApplier {
         }
 
         switch (column.getType()) {
-			case YCSBKEY:
-				Preconditions.checkArgument(length > 0, "length needs to be > 0");
-				data = getSuperSequentialDataValue(column);
-				break;
-				
+					
             case VARCHAR:
                 // Use the specified data values from configs if they exist
                 if ((column.getDataValues() != null) && (column.getDataValues().size() > 0)) {
@@ -162,7 +158,10 @@ public class RulesApplier {
                     data = pickDataValueFromList(dataValues);
                 } else {
                     Preconditions.checkArgument(length > 0, "length needs to be > 0");
-                    if (column.getDataSequence() == DataSequence.SEQUENTIAL) {
+					if(column.getDataSequence() == DataSequence.SUPERSEQUENTIAL) {
+						data = getSuperSequentialDataValue(column);
+					}
+                    else if (column.getDataSequence() == DataSequence.SEQUENTIAL) {
                         data = getSequentialDataValue(column);
                     } else {
                         data = getRandomDataValue(column);

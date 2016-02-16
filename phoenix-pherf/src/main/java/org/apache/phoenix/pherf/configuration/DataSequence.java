@@ -19,5 +19,5 @@
 package org.apache.phoenix.pherf.configuration;
 
 public enum DataSequence {
-	RANDOM, SEQUENTIAL,LIST;
+	RANDOM, SEQUENTIAL,LIST,SUPERSEQUENTIAL;
 }
