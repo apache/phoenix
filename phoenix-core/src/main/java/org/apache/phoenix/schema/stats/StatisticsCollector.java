@@ -41,7 +41,6 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PLong;
-import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.TimeKeeper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -160,10 +159,6 @@ public class StatisticsCollector {
      */
     public void collectStatistics(final List<Cell> results) {
         Map<ImmutableBytesPtr, Boolean> famMap = Maps.newHashMap();
-        List<GuidePostsInfoBuilder> rowTracker = null;
-        if (cachedGps == null) {
-            rowTracker = new ArrayList<GuidePostsInfoBuilder>();
-        }
         for (Cell cell : results) {
             KeyValue kv = KeyValueUtil.ensureKeyValue(cell);
             maxTimeStamp = Math.max(maxTimeStamp, kv.getTimestamp());
@@ -179,28 +174,22 @@ public class StatisticsCollector {
                 }
                 if (famMap.get(cfKey) == null) {
                     famMap.put(cfKey, true);
-                    rowTracker.add(gps.getSecond());
+                    gps.getSecond().incrementRowCount();
                 }
             } else {
                 gps = cachedGps;
+                cachedGps.getSecond().incrementRowCount();
             }
             int kvLength = kv.getLength();
             long byteCount = gps.getFirst() + kvLength;
             gps.setFirst(byteCount);
             if (byteCount >= guidepostDepth) {
-                byte[] row = ByteUtil.copyKeyBytesIfNecessary(
-                        new ImmutableBytesWritable(kv.getRowArray(), kv.getRowOffset(), kv.getRowLength()));
-                if (gps.getSecond().addGuidePosts(row, byteCount)) {
+                ImmutableBytesWritable row = new ImmutableBytesWritable(kv.getRowArray(), kv.getRowOffset(), kv.getRowLength());
+                if (gps.getSecond().addGuidePosts(row, byteCount, gps.getSecond().getRowCount())) {
                     gps.setFirst(0l);
+                    gps.getSecond().resetRowCount();
                 }
             }
-        }
-        if (cachedGps == null) {
-            for (GuidePostsInfoBuilder s : rowTracker) {
-                s.incrementRowCount();
-            }
-        } else {
-            cachedGps.getSecond().incrementRowCount();
         }
     }
 

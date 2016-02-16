@@ -1029,12 +1029,12 @@ public class PTableImpl implements PTable {
       SortedMap<byte[], GuidePostsInfo> tableGuidePosts = new TreeMap<byte[], GuidePostsInfo>(Bytes.BYTES_COMPARATOR);
       for (PTableProtos.PTableStats pTableStatsProto : table.getGuidePostsList()) {
           PGuidePosts pGuidePosts = pTableStatsProto.getPGuidePosts();
-          long guidePostsByteCount = pGuidePosts.getByteCount();
-          long rowCount = pGuidePosts.getRowCount();
           int maxLength = pGuidePosts.getMaxLength();
           int guidePostsCount = pGuidePosts.getEncodedGuidePostsCount();
-          GuidePostsInfo info = new GuidePostsInfo(guidePostsByteCount,
-                  new ImmutableBytesWritable(HBaseZeroCopyByteString.zeroCopyGetBytes(pGuidePosts.getEncodedGuidePosts())), rowCount, maxLength, guidePostsCount);
+            GuidePostsInfo info = new GuidePostsInfo(pGuidePosts.getByteCountsList(),
+                    new ImmutableBytesWritable(
+                            HBaseZeroCopyByteString.zeroCopyGetBytes(pGuidePosts.getEncodedGuidePosts())),
+                    pGuidePosts.getRowCountsList(), maxLength, guidePostsCount);
           tableGuidePosts.put(pTableStatsProto.getKey().toByteArray(), info);
       }
       PTableStats stats = new PTableStatsImpl(tableGuidePosts, table.getStatsTimeStamp());
@@ -1142,17 +1142,16 @@ public class PTableImpl implements PTable {
       for (Map.Entry<byte[], GuidePostsInfo> entry : table.getTableStats().getGuidePosts().entrySet()) {
          PTableProtos.PTableStats.Builder statsBuilder = PTableProtos.PTableStats.newBuilder();
          statsBuilder.setKey(ByteStringer.wrap(entry.getKey()));
-         statsBuilder.setGuidePostsByteCount(entry.getValue().getByteCount());
          statsBuilder.setGuidePostsCount(entry.getValue().getGuidePostsCount());
          PGuidePostsProtos.PGuidePosts.Builder guidePstsBuilder = PGuidePostsProtos.PGuidePosts.newBuilder();
-         guidePstsBuilder.setEncodedGuidePosts(ByteStringer.wrap(entry.getValue().getGuidePosts().get()));
-         guidePstsBuilder.setByteCount(entry.getValue().getByteCount());
-         guidePstsBuilder.setRowCount(entry.getValue().getRowCount());
-         guidePstsBuilder.setMaxLength(entry.getValue().getMaxLength());
-         guidePstsBuilder.setEncodedGuidePostsCount(entry.getValue().getGuidePostsCount());
-         statsBuilder.setPGuidePosts(guidePstsBuilder);
-         builder.addGuidePosts(statsBuilder.build());
-      }
+            guidePstsBuilder.setEncodedGuidePosts(ByteStringer.wrap(entry.getValue().getGuidePosts().get()));
+            guidePstsBuilder.addAllByteCounts(entry.getValue().getByteCounts());
+            guidePstsBuilder.addAllRowCounts(entry.getValue().getRowCounts());
+            guidePstsBuilder.setMaxLength(entry.getValue().getMaxLength());
+            guidePstsBuilder.setEncodedGuidePostsCount(entry.getValue().getGuidePostsCount());
+            statsBuilder.setPGuidePosts(guidePstsBuilder);
+            builder.addGuidePosts(statsBuilder.build());
+        }
       builder.setStatsTimeStamp(table.getTableStats().getTimestamp());
 
       if (table.getParentName() != null) {
