@@ -163,8 +163,8 @@ public class RulesApplier {
 						data = getSuperSequentialDataValue(column);
 					}
                     else if (column.getDataSequence() == DataSequence.SEQUENTIAL) {
-                        //data = getSequentialDataValue(column);
-						data = getSuperSequentialDataValue(column);
+                        data = getSequentialDataValue(column);
+						//data = getSuperSequentialDataValue(column);
                     } else {
                         data = getRandomDataValue(column);
                     }
@@ -416,7 +416,7 @@ public class RulesApplier {
      * @param column {@link org.apache.phoenix.pherf.configuration.Column}
      * @return {@link org.apache.phoenix.pherf.rules.DataValue}
      */
-    private DataValue getSequentialDataValue(Column column) {
+    /*private DataValue getSequentialDataValue(Column column) {
         DataValue data = null;
         long inc = COUNTER.getAndIncrement();
         String strInc = String.valueOf(inc);
@@ -428,7 +428,7 @@ public class RulesApplier {
         varchar = StringUtils.left(varchar,column.getLength());
         data = new DataValue(column.getType(), varchar);
         return data;
-    }
+    }*/
 
     private DataValue getRandomDataValue(Column column) {
         String varchar = RandomStringUtils.randomAlphanumeric(column.getLength());
@@ -439,7 +439,7 @@ public class RulesApplier {
         return new DataValue(column.getType(), varchar);
     }
 	
-	private DataValue getSuperSequentialDataValue(Column column) {
+	private DataValue getSequentialDataValue(Column column) {
 		DataValue data = null;
 		long inc = COUNTER.getAndIncrement();
 		String strInc = String.valueOf(inc);
