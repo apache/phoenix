@@ -18,6 +18,7 @@
 
 package org.apache.phoenix.end2end.index;
 
+import static org.apache.phoenix.query.QueryConstants.MILLIS_IN_DAY;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -519,9 +520,9 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
             assertTrue(rs.next());
             assertEquals(date, rs.getDate(1));
             assertTrue(rs.next());
-            assertEquals(new Date(date.getTime() + TestUtil.MILLIS_IN_DAY), rs.getDate(1));
+            assertEquals(new Date(date.getTime() + MILLIS_IN_DAY), rs.getDate(1));
             assertTrue(rs.next());
-            assertEquals(new Date(date.getTime() + 2 * TestUtil.MILLIS_IN_DAY), rs.getDate(1));
+            assertEquals(new Date(date.getTime() + 2 * MILLIS_IN_DAY), rs.getDate(1));
             assertFalse(rs.next());
         } 
     }
