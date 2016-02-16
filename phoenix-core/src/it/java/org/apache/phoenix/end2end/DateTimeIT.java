@@ -17,12 +17,12 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.query.QueryConstants.MILLIS_IN_DAY;
 import static org.apache.phoenix.util.TestUtil.ATABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.A_VALUE;
 import static org.apache.phoenix.util.TestUtil.B_VALUE;
 import static org.apache.phoenix.util.TestUtil.C_VALUE;
 import static org.apache.phoenix.util.TestUtil.E_VALUE;
-import static org.apache.phoenix.util.TestUtil.MILLIS_IN_DAY;
 import static org.apache.phoenix.util.TestUtil.ROW1;
 import static org.apache.phoenix.util.TestUtil.ROW2;
 import static org.apache.phoenix.util.TestUtil.ROW3;
@@ -52,7 +52,6 @@ import java.util.Calendar;
 import java.util.GregorianCalendar;
 
 import org.apache.phoenix.util.DateUtil;
-import org.apache.phoenix.util.TestUtil;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -672,6 +671,6 @@ public class DateTimeIT extends BaseHBaseManagedTimeIT {
         ResultSet rs = conn.createStatement().executeQuery("SELECT CURRENT_DATE()");
         assertTrue(rs.next());
         long actualTime = rs.getDate(1).getTime();
-        assertTrue(Math.abs(actualTime - expectedTime) < TestUtil.MILLIS_IN_DAY);
+        assertTrue(Math.abs(actualTime - expectedTime) < MILLIS_IN_DAY);
     }
 }

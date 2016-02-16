@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.compile;
 
+import static org.apache.phoenix.query.QueryConstants.MILLIS_IN_DAY;
 import static org.apache.phoenix.util.TestUtil.BINARY_NAME;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.assertDegenerate;
@@ -36,8 +37,6 @@ import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.Date;
 import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collections;
@@ -1263,7 +1262,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         String query = "select /*+ RANGE_SCAN */ ORGANIZATION_ID, PARENT_ID, CREATED_DATE, ENTITY_HISTORY_ID from " + TestUtil.ENTITY_HISTORY_TABLE_NAME + 
                 " where ORGANIZATION_ID=? and SUBSTR(PARENT_ID, 1, 3) = ? and  CREATED_DATE >= ? and CREATED_DATE < ? order by ORGANIZATION_ID, PARENT_ID, CREATED_DATE, ENTITY_HISTORY_ID limit 6";
         Date startTime = new Date(System.currentTimeMillis());
-        Date stopTime = new Date(startTime.getTime() + TestUtil.MILLIS_IN_DAY);
+        Date stopTime = new Date(startTime.getTime() + MILLIS_IN_DAY);
         List<Object> binds = Arrays.<Object>asList(tenantId, keyPrefix, startTime, stopTime);
         StatementContext context = compileStatement(query, binds, 6);
         Scan scan = context.getScan();

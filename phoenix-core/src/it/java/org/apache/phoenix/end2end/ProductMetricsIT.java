@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.query.QueryConstants.MILLIS_IN_DAY;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -47,7 +48,6 @@ import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
 import com.google.common.collect.Lists;
@@ -1983,8 +1983,8 @@ public class ProductMetricsIT extends BaseClientManagedTimeIT {
         url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts); // Run query at timestamp 5
         props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         conn = DriverManager.getConnection(url, props);
-        initDateTableValues(conn, tenantId, new Date(startDate.getTime()+TestUtil.MILLIS_IN_DAY*10), 2.0);
-        initDateTableValues(conn, tenantId, new Date(startDate.getTime()+TestUtil.MILLIS_IN_DAY*20), 2.0);
+        initDateTableValues(conn, tenantId, new Date(startDate.getTime()+MILLIS_IN_DAY*10), 2.0);
+        initDateTableValues(conn, tenantId, new Date(startDate.getTime()+MILLIS_IN_DAY*20), 2.0);
         conn.commit();
         conn.close();
 

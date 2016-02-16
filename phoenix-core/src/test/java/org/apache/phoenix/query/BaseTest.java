@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.query;
 
+import static org.apache.phoenix.query.QueryConstants.MILLIS_IN_DAY;
 import static org.apache.phoenix.util.PhoenixRuntime.CURRENT_SCN_ATTRIB;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
@@ -53,7 +54,6 @@ import static org.apache.phoenix.util.TestUtil.JOIN_ORDER_TABLE_FULL_NAME;
 import static org.apache.phoenix.util.TestUtil.JOIN_SUPPLIER_TABLE_FULL_NAME;
 import static org.apache.phoenix.util.TestUtil.KEYONLY_NAME;
 import static org.apache.phoenix.util.TestUtil.MDTEST_NAME;
-import static org.apache.phoenix.util.TestUtil.MILLIS_IN_DAY;
 import static org.apache.phoenix.util.TestUtil.MULTI_CF_NAME;
 import static org.apache.phoenix.util.TestUtil.MUTABLE_INDEX_DATA_TABLE;
 import static org.apache.phoenix.util.TestUtil.PARENTID1;
@@ -159,7 +159,6 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.TestUtil;
 import org.apache.twill.discovery.DiscoveryService;
 import org.apache.twill.discovery.ZKDiscoveryService;
 import org.apache.twill.internal.utils.Networks;
@@ -1933,7 +1932,7 @@ public abstract class BaseTest {
             stmt.setInt(13, 3);
             stmt.setLong(14, 3L);
             stmt.setBigDecimal(15, new BigDecimal("3.1"));
-            stmt.setDate(16, date == null ? null : new Date(date.getTime() + TestUtil.MILLIS_IN_DAY));
+            stmt.setDate(16, date == null ? null : new Date(date.getTime() + MILLIS_IN_DAY));
             stmt.executeUpdate();
             
             stmt.setString(1, "varchar2");
@@ -1969,7 +1968,7 @@ public abstract class BaseTest {
             stmt.setInt(13, 5);
             stmt.setLong(14, 5L);
             stmt.setBigDecimal(15, new BigDecimal("5.3"));
-            stmt.setDate(16, date == null ? null : new Date(date.getTime() + 2 * TestUtil.MILLIS_IN_DAY));
+            stmt.setDate(16, date == null ? null : new Date(date.getTime() + 2 * MILLIS_IN_DAY));
             stmt.executeUpdate();
             
             conn.commit();

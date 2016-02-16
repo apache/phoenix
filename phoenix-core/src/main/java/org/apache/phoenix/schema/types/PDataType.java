@@ -1116,6 +1116,9 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
          */
         if (lowerRange != KeyRange.UNBOUND && !lowerInclusive && isFixedWidth()) {
             lowerRange = ByteUtil.nextKey(lowerRange);
+            if (lowerRange == null) { // overflow
+                lowerRange = KeyRange.UNBOUND;
+            }
             lowerInclusive = true;
         }
         return KeyRange.getKeyRange(lowerRange, lowerInclusive, upperRange, upperInclusive);
