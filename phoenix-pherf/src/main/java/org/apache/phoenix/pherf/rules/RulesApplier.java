@@ -19,6 +19,7 @@
 package org.apache.phoenix.pherf.rules;
 
 import com.google.common.base.Preconditions;
+
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.math3.random.RandomDataGenerator;
 import org.apache.phoenix.pherf.PherfConstants;
@@ -26,6 +27,7 @@ import org.apache.commons.lang.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
 import org.apache.phoenix.pherf.configuration.*;
 import org.joda.time.DateTime;
+import org.joda.time.DateTimeZone;
 import org.joda.time.format.DateTimeFormat;
 import org.joda.time.format.DateTimeFormatter;
 import org.slf4j.Logger;
@@ -130,7 +132,7 @@ public class RulesApplier {
             prefix = column.getPrefix();
         }
 
-        if (prefix.length() >= length) {
+        if ((prefix.length() >= length) && (length > 0)) {
             logger.warn("You are attempting to generate data with a prefix (" + prefix + ") "
                     + "That is longer than expected overall field length (" + length + "). "
                     + "This will certainly lead to unexpected data values.");
@@ -201,12 +203,19 @@ public class RulesApplier {
             case DATE:
                 if ((column.getDataValues() != null) && (column.getDataValues().size() > 0)) {
                     data = pickDataValueFromList(dataValues);
-                } else {
+                    // Check if date has right format or not
+                    data.setValue(checkDatePattern(data.getValue()));
+                } else if (column.getUseCurrentDate() != true){
                     int minYear = column.getMinValue();
                     int maxYear = column.getMaxValue();
                     Preconditions.checkArgument((minYear > 0) && (maxYear > 0), "min and max values need to be set in configuration");
 
                     String dt = generateRandomDate(minYear, maxYear);
+                    data = new DataValue(column.getType(), dt);
+                    data.setMaxValue(String.valueOf(minYear));
+                    data.setMinValue(String.valueOf(maxYear));
+                } else {
+                    String dt = getCurrentDate();
                     data = new DataValue(column.getType(), dt);
                 }
                 break;
@@ -218,30 +227,35 @@ public class RulesApplier {
         return data;
     }
 
-    public String generateRandomDate(int min, int max) {
-        int year = RandomUtils.nextInt(min, max);
-        int month = RandomUtils.nextInt(0, 11);
-        int day = RandomUtils.nextInt(0, 31);
-        Calendar calendar = Calendar.getInstance();
-        calendar.set(Calendar.YEAR, year);
-        calendar.set(Calendar.MONTH, month);
-        calendar.set(Calendar.DAY_OF_MONTH, day);
-        SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS z");
-
-        return df.format(calendar.getTime());
+    // Convert years into standard date format yyyy-MM-dd HH:mm:ss.SSS z
+    public String generateRandomDate(int min, int max) throws Exception {
+        String mindt = min + "-01-01 00:00:00.000"; // set min date as starting of min year
+        String maxdt = max + "-12-31 23:59:59.999"; // set max date as end of max year
+        return generateRandomDate(mindt, maxdt);
     }
 
     public String generateRandomDate(String min, String max) throws Exception {
-        DateTimeFormatter fmtr = DateTimeFormat.forPattern(PherfConstants.DEFAULT_DATE_PATTERN);
-        DateTime minDt = fmtr.parseDateTime(min);
-        DateTime maxDt = fmtr.parseDateTime(max);
+        DateTimeFormatter fmtr = DateTimeFormat.forPattern(PherfConstants.DEFAULT_DATE_PATTERN).withZone(DateTimeZone.UTC);
+        DateTime minDt;
+        DateTime maxDt;
         DateTime dt;
+
+        minDt = fmtr.parseDateTime(checkDatePattern(min));
+        maxDt = fmtr.parseDateTime(checkDatePattern(max));
+
         // Get Ms Date between min and max
         synchronized (randomDataGenerator) {
-            long rndLong = randomDataGenerator.nextLong(minDt.getMillis(), maxDt.getMillis());
-            dt = new DateTime(rndLong, minDt.getZone());
+            //Make sure date generated is exactly between the passed limits
+            long rndLong = randomDataGenerator.nextLong(minDt.getMillis()+1, maxDt.getMillis()-1);
+            dt = new DateTime(rndLong, PherfConstants.DEFAULT_TIME_ZONE);
         }
 
+        return fmtr.print(dt);
+    }
+
+    public String getCurrentDate() {
+        DateTimeFormatter fmtr = DateTimeFormat.forPattern(PherfConstants.DEFAULT_DATE_PATTERN).withZone(DateTimeZone.UTC);;
+        DateTime dt = new DateTime(PherfConstants.DEFAULT_TIME_ZONE);
         return fmtr.print(dt);
     }
 
@@ -264,7 +278,8 @@ public class RulesApplier {
             int dist = value.getDistribution();
             sum += dist;
         }
-        Preconditions.checkArgument((sum == 100) || (sum == 0), "Distributions need to add up to 100 or not exist.");
+        Preconditions.checkArgument((sum == 100) || (sum == 0),
+                "Distributions need to add up to 100 or not exist.");
 
         // Spin the wheel until we get a value.
         while (generatedDataValue == null) {
@@ -296,13 +311,30 @@ public class RulesApplier {
             return (rndVal.nextInt(100) <= chance) ? retValue : null;
         }
 
+        // Path taken when configuration specifies to use current date
+        if (valueRule.getUseCurrentDate() == true) {
+            int chance = (valueRule.getDistribution() == 0) ? 100 : valueRule.getDistribution();
+            retValue.setValue(getCurrentDate());
+            return (rndVal.nextInt(100) <= chance) ? retValue : null;
+        }
+
         // Later we can add support fo other data types if needed.Right now, we just do this for dates
         Preconditions.checkArgument((retValue.getMinValue() != null) || (retValue.getMaxValue() != null), "Both min/maxValue tags must be set if value tag is not used");
         Preconditions.checkArgument((retValue.getType() == DataTypeMapping.DATE), "Currently on DATE is supported for ranged random values");
 
         retValue.setValue(generateRandomDate(retValue.getMinValue(), retValue.getMaxValue()));
 
+        retValue.setValue(generateRandomDate(retValue.getMinValue(), retValue.getMaxValue()));
+        retValue.setMinValue(checkDatePattern(valueRule.getMinValue()));
+        retValue.setMaxValue(checkDatePattern(valueRule.getMaxValue()));
         return retValue;
+    }
+
+    // Checks if date is in defult pattern
+    public String checkDatePattern(String date) {
+        DateTimeFormatter fmtr = DateTimeFormat.forPattern(PherfConstants.DEFAULT_DATE_PATTERN).withZone(DateTimeZone.UTC);;
+        DateTime parsedDate = fmtr.parseDateTime(date);
+        return fmtr.print(parsedDate);
     }
 
     /**

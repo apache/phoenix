@@ -496,10 +496,9 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
         }
     }
 
-    private static class CountDownConnection extends DelegatingConnection {
+    private static class CountDownConnection extends DelegateConnection {
         private CountDownLatch commit;
 
-        @SuppressWarnings("unchecked")
         public CountDownConnection(Connection conn, CountDownLatch commit) {
             super(conn);
             this.commit = commit;

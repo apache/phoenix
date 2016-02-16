@@ -134,6 +134,7 @@ public class WriteWorkload implements Workload {
     }
 
     @Override public void complete() {
+        pool.shutdownNow();
     }
 
     public Runnable execute() throws Exception {
@@ -168,7 +169,7 @@ public class WriteWorkload implements Workload {
         // Execute any Scenario DDL before running workload
         pUtil.executeScenarioDdl(scenario);
         
-        List<Future> writeBatches = getBatches(dataLoadThreadTime, scenario);
+        List<Future<Info>> writeBatches = getBatches(dataLoadThreadTime, scenario);
 
         waitForBatches(dataLoadTimeSummary, scenario, start, writeBatches);
 
@@ -180,17 +181,14 @@ public class WriteWorkload implements Workload {
         } else {
         	logger.info("Phoenix table stats update not requested.");
         }
-
-        // always update stats for Phoenix base tables
-        updatePhoenixStats(scenario.getTableName(), scenario);
     }
 
-    private List<Future> getBatches(DataLoadThreadTime dataLoadThreadTime, Scenario scenario)
+    private List<Future<Info>> getBatches(DataLoadThreadTime dataLoadThreadTime, Scenario scenario)
             throws Exception {
         RowCalculator
                 rowCalculator =
                 new RowCalculator(getThreadPoolSize(), scenario.getRowCount());
-        List<Future> writeBatches = new ArrayList<>();
+        List<Future<Info>> writeBatches = new ArrayList<>();
 
         for (int i = 0; i < getThreadPoolSize(); i++) {
             List<Column>
@@ -215,7 +213,7 @@ public class WriteWorkload implements Workload {
     }
 
     private void waitForBatches(DataLoadTimeSummary dataLoadTimeSummary, Scenario scenario,
-            long start, List<Future> writeBatches)
+            long start, List<Future<Info>> writeBatches)
             throws InterruptedException, java.util.concurrent.ExecutionException {
         int sumRows = 0, sumDuration = 0;
         // Wait for all the batch threads to complete
@@ -226,22 +224,12 @@ public class WriteWorkload implements Workload {
             logger.info("Executor (" + this.hashCode() + ") writes complete with row count ("
                     + writeInfo.getRowCount() + ") in Ms (" + writeInfo.getDuration() + ")");
         }
-        logger.info("Writes completed with total row count (" + sumRows + ") with total time of("
-                + sumDuration + ") Ms");
+        long testDuration = System.currentTimeMillis() - start;
+        logger.info("Writes completed with total row count (" + sumRows
+                + ") with total elapsed time of (" + testDuration
+                + ") ms and total CPU execution time of (" + sumDuration + ") ms");
         dataLoadTimeSummary
-                .add(scenario.getTableName(), sumRows, (int) (System.currentTimeMillis() - start));
-    }
-
-    /**
-     * TODO Move this method to PhoenixUtil
-     * Update Phoenix table stats
-     *
-     * @param tableName
-     * @throws Exception
-     */
-    public void updatePhoenixStats(String tableName, Scenario scenario) throws Exception {
-        logger.info("Updating stats for " + tableName);
-        pUtil.executeStatement("UPDATE STATISTICS " + tableName, scenario);
+                .add(scenario.getTableName(), sumRows, (int) testDuration);
     }
 
     public Future<Info> upsertData(final Scenario scenario, final List<Column> columns,
@@ -250,9 +238,10 @@ public class WriteWorkload implements Workload {
         Future<Info> future = pool.submit(new Callable<Info>() {
             @Override public Info call() throws Exception {
                 int rowsCreated = 0;
-                long start = 0, duration, totalDuration;
+                long start = 0, last = 0, duration, totalDuration;
                 SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
                 Connection connection = null;
+                PreparedStatement stmt = null;
                 try {
                     connection = pUtil.getConnection(scenario.getTenantId());
                     long logStartTime = System.currentTimeMillis();
@@ -262,17 +251,16 @@ public class WriteWorkload implements Workload {
                                     Long.MAX_VALUE :
                                     WriteWorkload.this.writeParams.getExecutionDurationInMs();
 
+                    last = start = System.currentTimeMillis();
+                    String sql = buildSql(columns, tableName);
+                    stmt = connection.prepareStatement(sql);
                     for (long i = rowCount; (i > 0) && ((System.currentTimeMillis() - logStartTime)
                             < maxDuration); i--) {
-                        String sql = buildSql(columns, tableName);
-                        PreparedStatement stmt = connection.prepareStatement(sql);
                         stmt = buildStatement(scenario, columns, stmt, simpleDateFormat);
-                        start = System.currentTimeMillis();
                         rowsCreated += stmt.executeUpdate();
-                        stmt.close();
                         if ((i % getBatchSize()) == 0) {
                             connection.commit();
-                            duration = System.currentTimeMillis() - start;
+                            duration = System.currentTimeMillis() - last;
                             logger.info("Writer (" + Thread.currentThread().getName()
                                     + ") committed Batch. Total " + getBatchSize()
                                     + " rows for this thread (" + this.hashCode() + ") in ("
@@ -287,9 +275,14 @@ public class WriteWorkload implements Workload {
 
                             // Pause for throttling if configured to do so
                             Thread.sleep(threadSleepDuration);
+                            // Re-compute the start time for the next batch
+                            last = System.currentTimeMillis();
                         }
                     }
                 } finally {
+                    if (stmt != null) {
+                      stmt.close();
+                    }
                     if (connection != null) {
                         try {
                             connection.commit();

@@ -158,6 +158,7 @@ public class PUnsignedInt extends PWholeNumber<Integer> {
       checkForSufficientLength(b, o, Bytes.SIZEOF_INT);
       if (sortOrder == SortOrder.DESC) {
         b = SortOrder.invert(b, o, new byte[Bytes.SIZEOF_INT], 0, Bytes.SIZEOF_INT);
+        o = 0;
       }
       int v = Bytes.toInt(b, o);
       if (v < 0) {

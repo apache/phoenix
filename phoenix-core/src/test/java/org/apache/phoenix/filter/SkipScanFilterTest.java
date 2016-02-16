@@ -23,19 +23,17 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 
-import junit.framework.TestCase;
-
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.filter.Filter.ReturnCode;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.types.PChar;
-import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.PDatum;
-import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.types.PChar;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -44,6 +42,8 @@ import org.junit.runners.Parameterized.Parameters;
 
 import com.google.common.base.Function;
 import com.google.common.collect.Lists;
+
+import junit.framework.TestCase;
 
 //reset()
 //filterAllRemaining() -> true indicates scan is over, false, keep going on.
@@ -97,7 +97,6 @@ public class SkipScanFilterTest extends TestCase {
 
     @Test
     public void test() throws IOException {
-        System.out.println("CNF: " + cnf + "\n" + "Expectations: " + expectations);
         for (Expectation expectation : expectations) {
             expectation.examine(skipper);
         }
@@ -106,6 +105,62 @@ public class SkipScanFilterTest extends TestCase {
     @Parameters(name="{0} {1} {2}")
     public static Collection<Object> data() {
         List<Object> testCases = Lists.newArrayList();
+        // Variable length tests
+        testCases.addAll(
+                foreach(new KeyRange[][]{{
+                    PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true),
+                    PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("e"), true, Bytes.toBytes("e"), true),
+                    PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("f"), true, Bytes.toBytes("f"), true),
+                },
+                {
+                    PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
+                },
+                {
+                    KeyRange.EVERYTHING_RANGE,
+                },
+                {
+                    PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                }},
+                new int[4],
+                new Include(ByteUtil.concat(Bytes.toBytes("a"),QueryConstants.SEPARATOR_BYTE_ARRAY, 
+                                            Bytes.toBytes("b"), QueryConstants.SEPARATOR_BYTE_ARRAY,
+                                            QueryConstants.SEPARATOR_BYTE_ARRAY,
+                                            Bytes.toBytes("1") ) ),
+                new SeekNext(ByteUtil.concat(Bytes.toBytes("e.f"),QueryConstants.SEPARATOR_BYTE_ARRAY, 
+                                             Bytes.toBytes("b"), QueryConstants.SEPARATOR_BYTE_ARRAY,
+                                             QueryConstants.SEPARATOR_BYTE_ARRAY,
+                                             Bytes.toBytes("1") ), 
+                            ByteUtil.concat(Bytes.toBytes("f"),QueryConstants.SEPARATOR_BYTE_ARRAY, 
+                                            Bytes.toBytes("b") )),
+                new Include(ByteUtil.concat(Bytes.toBytes("f"),QueryConstants.SEPARATOR_BYTE_ARRAY, 
+                                            Bytes.toBytes("b"), QueryConstants.SEPARATOR_BYTE_ARRAY,
+                                            QueryConstants.SEPARATOR_BYTE_ARRAY,
+                                            Bytes.toBytes("1") ) ) )
+        );
+        testCases.addAll(
+                foreach(new KeyRange[][]{{
+                    PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("20160116121006"), true, Bytes.toBytes("20160116181006"), true),
+                },
+                {
+                    PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("2404787"), true, Bytes.toBytes("2404787"), true),
+                }/*,
+                {
+                    KeyRange.EVERYTHING_RANGE,
+                },
+                {
+                    KeyRange.EVERYTHING_RANGE,
+                }*/},
+                new int[4],
+                new SeekNext(ByteUtil.concat(Bytes.toBytes("20160116141006"),QueryConstants.SEPARATOR_BYTE_ARRAY, 
+                                            QueryConstants.SEPARATOR_BYTE_ARRAY,
+                                            Bytes.toBytes("servlet") ),
+                             ByteUtil.concat(Bytes.toBytes("20160116141006"),QueryConstants.SEPARATOR_BYTE_ARRAY, 
+                                             Bytes.toBytes("2404787") )),
+                new Include(ByteUtil.concat(Bytes.toBytes("20160116151006"),QueryConstants.SEPARATOR_BYTE_ARRAY, 
+                                            Bytes.toBytes("2404787"), QueryConstants.SEPARATOR_BYTE_ARRAY,
+                                            Bytes.toBytes("jdbc"), QueryConstants.SEPARATOR_BYTE_ARRAY ) ) )
+        );
+        // Fixed length tests
         testCases.addAll(
                 foreach(new KeyRange[][]{{
                     PChar.INSTANCE.getKeyRange(Bytes.toBytes("abc"), true, Bytes.toBytes("def"), true),
@@ -124,7 +179,6 @@ public class SkipScanFilterTest extends TestCase {
                     PChar.INSTANCE.getKeyRange(Bytes.toBytes("AA"), true, Bytes.toBytes("AB"), false),
                 }},
                 new int[]{3,2,2,2,2},
-                //new SeekNext("abcABABABAB", "abdAAAAAAAA"),
                 new SeekNext("defAAABABAB", "dzzAAAAAAAA"),
                 new Finished("xyyABABABAB"))
         );
@@ -309,26 +363,9 @@ public class SkipScanFilterTest extends TestCase {
                 new SeekNext("dzzAB250", "dzzAB701"),
                 new Finished("zzzAA000"))
         );
-// TODO variable length columns
-//        testCases.addAll(
-//                foreach(new KeyRange[][]{{
-//                    Char.INSTANCE.getKeyRange(Bytes.toBytes("apple"), true, Bytes.toBytes("lemon"), true),
-//                    Char.INSTANCE.getKeyRange(Bytes.toBytes("pear"), false, Bytes.toBytes("yam"), false),
-//                },
-//                {
-//                    Char.INSTANCE.getKeyRange(Bytes.toBytes("AB"), true, Bytes.toBytes("AX"), true),
-//                    Char.INSTANCE.getKeyRange(Bytes.toBytes("EA"), false, Bytes.toBytes("EZ"), false),
-//                    Char.INSTANCE.getKeyRange(Bytes.toBytes("PO"), true, Bytes.toBytes("PP"), false),
-//                },
-//                {
-//                    Char.INSTANCE.getKeyRange(Bytes.toBytes("100"), true, Bytes.toBytes("250"), false),
-//                    Char.INSTANCE.getKeyRange(Bytes.toBytes("700"), false, Bytes.toBytes("901"), false),
-//                }},
-//                new int[]{3,3})
-//        );
         return testCases;
     }
-
+    
     private static Collection<?> foreach(KeyRange[][] ranges, int[] widths, Expectation... expectations) {
         List<List<KeyRange>> cnf = Lists.transform(Lists.newArrayList(ranges), ARRAY_TO_LIST);
         List<Object> ret = Lists.newArrayList();
@@ -378,13 +415,17 @@ public class SkipScanFilterTest extends TestCase {
             this.rowkey = Bytes.toBytes(rowkey);
         }
         
+        public Include(byte[] rowkey) {
+            this.rowkey = rowkey;
+        }
+        
         @SuppressWarnings("deprecation")
         @Override public void examine(SkipScanFilter skipper) throws IOException {
             KeyValue kv = KeyValue.createFirstOnRow(rowkey);
             skipper.reset();
             assertFalse(skipper.filterAllRemaining());
             assertFalse(skipper.filterRowKey(kv.getBuffer(), kv.getRowOffset(), kv.getRowLength()));
-            assertEquals(kv.toString(), ReturnCode.INCLUDE, skipper.filterKeyValue(kv));
+            assertEquals(kv.toString(), ReturnCode.INCLUDE_AND_NEXT_COL, skipper.filterKeyValue(kv));
         }
 
         @Override public String toString() {

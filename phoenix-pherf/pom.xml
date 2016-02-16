@@ -15,7 +15,7 @@
 	<parent>
 		<groupId>org.apache.phoenix</groupId>
 		<artifactId>phoenix</artifactId>
-		<version>4.7.0-HBase-1.1-SNAPSHOT</version>
+		<version>4.7.0-HBase-1.1</version>
 	</parent>
 
 	<artifactId>phoenix-pherf</artifactId>
@@ -99,6 +99,12 @@
 			<type>test-jar</type>
 			<scope>test</scope>
 		</dependency>
+		<dependency>
+			<groupId>co.cask.tephra</groupId>
+			<artifactId>tephra-core</artifactId>
+			<type>test-jar</type>
+			<scope>test</scope>
+		</dependency>
 	</dependencies>
 
 	<build>
@@ -108,6 +114,10 @@
 			</resource>
 			<resource>
 				<directory>config</directory>
+				<excludes>
+					<exclude>**/*.sql</exclude>
+					<exclude>**/*.xml</exclude>
+				</excludes>
 			</resource>
 		</resources>
 		<testResources>
@@ -142,6 +152,10 @@
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-surefire-plugin</artifactId>
+					<configuration>
+						<workingDirectory>${java.io.tmpdir}</workingDirectory>
+						<forkCount>1</forkCount>
+					</configuration>
 			</plugin>
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
@@ -150,23 +164,6 @@
 			<plugin>
 				<artifactId>maven-assembly-plugin</artifactId>
 				<executions>
-					<execution>
-						<id>make-dependency-jar</id>
-						<phase>package</phase>
-						<goals>
-							<goal>single</goal>
-						</goals>
-						<configuration>
-							<descriptorRefs>
-								<descriptorRef>jar-with-dependencies</descriptorRef>
-							</descriptorRefs>
-							<archive>
-								<manifest>
-									<mainClass>org.apache.phoenix.pherf.Pherf</mainClass>
-								</manifest>
-							</archive>
-						</configuration>
-					</execution>
 					<execution>
 						<id>make-assembly</id>
 						<phase>package</phase>
@@ -177,11 +174,6 @@
 							<descriptors>
 								<!-- Produces minimal Pherf jar -->
 								<descriptor>src/main/assembly/minimal.xml</descriptor>
-								<!-- Produces standalone zip that bundles all required dependencies -->
-								<descriptor>src/main/assembly/standalone.xml</descriptor>
-								<!-- Produces cluster zip with minimal Pherf jar. Setting HBase classpath 
-									in env.sh is required for this configuration -->
-								<descriptor>src/main/assembly/cluster.xml</descriptor>
 							</descriptors>
 						</configuration>
 					</execution>

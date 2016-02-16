@@ -76,8 +76,8 @@ public class PUnsignedFloatArray extends PArrayDataType<float[]> {
         if (value == null) {
             return true;
         }
-        PhoenixArray pArr = (PhoenixArray) value;
-        Object[] floatArr = (Object[]) pArr.array;
+        PhoenixArray.PrimitiveFloatPhoenixArray pArr = (PhoenixArray.PrimitiveFloatPhoenixArray) value;
+        float[] floatArr = (float[]) pArr.array;
         for (Object i : floatArr) {
             if (!super.isCoercibleTo(PUnsignedFloat.INSTANCE, i)) {
                 return false;

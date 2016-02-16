@@ -216,10 +216,8 @@ public class OrderPreservingTracker {
                 return super.visit(node);
             }
             Expression expression = projector.getExpressions()[node.getPosition()];
-            // FIXME: prevents infinite recursion for union all in subquery, but
-            // should a ProjectedColumnExpression be used in this case? Wouldn't
-            // it make more sense to not create this wrapper in this case?
-            if (expression == node) {
+            // Only look one level down the projection.
+            if (expression instanceof ProjectedColumnExpression) {
                 return super.visit(node);
             }
             return expression.accept(this);

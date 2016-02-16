@@ -24,13 +24,20 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAM
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_FUNCTION_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES;
 
+import java.sql.Connection;
+import java.sql.DatabaseMetaData;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Properties;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
 
 import javax.annotation.Nullable;
 
@@ -51,19 +58,21 @@ import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PDatum;
-import org.apache.phoenix.schema.PMetaData;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
 import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.TableProperty;
 import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 
 /**
  * 
@@ -262,6 +271,9 @@ public class SchemaUtil {
 
     public static String getMetaDataEntityName(String schemaName, String tableName, String familyName, String columnName) {
         if ((schemaName == null || schemaName.isEmpty()) && (tableName == null || tableName.isEmpty())) {
+            if (columnName == null || columnName.isEmpty()) {
+                return familyName;
+            }
             return getName(familyName, columnName, false);
         }
         if ((familyName == null || familyName.isEmpty()) && (columnName == null || columnName.isEmpty())) {
@@ -388,6 +400,11 @@ public class SchemaUtil {
     public static byte[] getEmptyColumnFamily(PTable table) {
         List<PColumnFamily> families = table.getColumnFamilies();
         return families.isEmpty() ? table.getDefaultFamilyName() == null ? QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES : table.getDefaultFamilyName().getBytes() : families.get(0).getName().getBytes();
+    }
+
+    public static String getEmptyColumnFamilyAsString(PTable table) {
+        List<PColumnFamily> families = table.getColumnFamilies();
+        return families.isEmpty() ? table.getDefaultFamilyName() == null ? QueryConstants.DEFAULT_COLUMN_FAMILY : table.getDefaultFamilyName().getString() : families.get(0).getName().getString();
     }
 
     public static ImmutableBytesPtr getEmptyColumnFamilyPtr(PTable table) {
@@ -517,15 +534,10 @@ public class SchemaUtil {
     }
 
     protected static PhoenixConnection addMetaDataColumn(PhoenixConnection conn, long scn, String columnDef) throws SQLException {
-        String url = conn.getURL();
-        Properties props = conn.getClientInfo();
-        PMetaData metaData = conn.getMetaDataCache();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(scn));
         PhoenixConnection metaConnection = null;
-
         Statement stmt = null;
         try {
-            metaConnection = new PhoenixConnection(conn.getQueryServices(), url, props, metaData);
+            metaConnection = new PhoenixConnection(conn.getQueryServices(), conn, scn);
             try {
                 stmt = metaConnection.createStatement();
                 stmt.executeUpdate("ALTER TABLE SYSTEM.\"TABLE\" ADD IF NOT EXISTS " + columnDef);
@@ -711,6 +723,16 @@ public class SchemaUtil {
         checkArgument(!isNullOrEmpty(columnName), "Column name cannot be null or empty");
         return columnFamilyName == null ? ("\"" + columnName + "\"") : ("\"" + columnFamilyName + "\"" + QueryConstants.NAME_SEPARATOR + "\"" + columnName + "\"");
     }
+
+    public static boolean hasHTableDescriptorProps(Map<String, Object> tableProps) {
+        int pTablePropCount = 0;
+        for (String prop : tableProps.keySet()) {
+            if (TableProperty.isPhoenixTableProperty(prop)) {
+                pTablePropCount++;
+            }
+        }
+        return tableProps.size() - pTablePropCount > 0;
+    }
     
     /**
      * Replaces all occurrences of {@link #ESCAPE_CHARACTER} with an empty character. 
@@ -743,5 +765,136 @@ public class SchemaUtil {
     
     public static byte getSeparatorByte(boolean rowKeyOrderOptimizable, boolean isNullValue, Expression e) {
         return getSeparatorByte(rowKeyOrderOptimizable, isNullValue, e.getSortOrder());
+    }
+
+    /**
+     * Get list of ColumnInfos that contain Column Name and its associated
+     * PDataType for an import. The supplied list of columns can be null -- if it is non-null,
+     * it represents a user-supplied list of columns to be imported.
+     *
+     * @param conn Phoenix connection from which metadata will be read
+     * @param tableName Phoenix table name whose columns are to be checked. Can include a schema
+     *                  name
+     * @param columns user-supplied list of import columns, can be null
+     * @param strict if true, an exception will be thrown if unknown columns are supplied
+     */
+    public static List<ColumnInfo> generateColumnInfo(Connection conn,
+                                                      String tableName, List<String> columns, boolean strict)
+            throws SQLException {
+        Map<String, Integer> columnNameToTypeMap = Maps.newLinkedHashMap();
+        Set<String> ambiguousColumnNames = new HashSet<String>();
+        Map<String, Integer> fullColumnNameToTypeMap = Maps.newLinkedHashMap();
+        DatabaseMetaData dbmd = conn.getMetaData();
+        int unfoundColumnCount = 0;
+        // TODO: escape wildcard characters here because we don't want that
+        // behavior here
+        String escapedTableName = StringUtil.escapeLike(tableName);
+        String[] schemaAndTable = escapedTableName.split("\\.");
+        ResultSet rs = null;
+        try {
+            rs = dbmd.getColumns(null, (schemaAndTable.length == 1 ? ""
+                            : schemaAndTable[0]),
+                    (schemaAndTable.length == 1 ? escapedTableName
+                            : schemaAndTable[1]), null);
+            while (rs.next()) {
+                String colName = rs.getString(QueryUtil.COLUMN_NAME_POSITION);
+                String colFam = rs.getString(QueryUtil.COLUMN_FAMILY_POSITION);
+
+                // use family qualifier, if available, otherwise, use column name
+                String fullColumn = (colFam==null?colName:String.format("%s.%s",colFam,colName));
+                String sqlTypeName = rs.getString(QueryUtil.DATA_TYPE_NAME_POSITION);
+
+                // allow for both bare and family qualified names.
+                if (columnNameToTypeMap.keySet().contains(colName)) {
+                    ambiguousColumnNames.add(colName);
+                }
+                columnNameToTypeMap.put(
+                        colName,
+                        PDataType.fromSqlTypeName(sqlTypeName).getSqlType());
+                fullColumnNameToTypeMap.put(
+                        fullColumn,
+                        PDataType.fromSqlTypeName(sqlTypeName).getSqlType());
+            }
+            if (columnNameToTypeMap.isEmpty()) {
+                throw new IllegalArgumentException("Table " + tableName + " not found");
+            }
+        } finally {
+            if (rs != null) {
+                rs.close();
+            }
+        }
+        List<ColumnInfo> columnInfoList = Lists.newArrayList();
+        Set<String> unresolvedColumnNames = new TreeSet<String>();
+        if (columns == null) {
+            // use family qualified names by default, if no columns are specified.
+            for (Map.Entry<String, Integer> entry : fullColumnNameToTypeMap
+                    .entrySet()) {
+                columnInfoList.add(new ColumnInfo(entry.getKey(), entry.getValue()));
+            }
+        } else {
+            // Leave "null" as indication to skip b/c it doesn't exist
+            for (int i = 0; i < columns.size(); i++) {
+                String columnName = columns.get(i).trim();
+                Integer sqlType = null;
+                if (fullColumnNameToTypeMap.containsKey(columnName)) {
+                    sqlType = fullColumnNameToTypeMap.get(columnName);
+                } else if (columnNameToTypeMap.containsKey(columnName)) {
+                    if (ambiguousColumnNames.contains(columnName)) {
+                        unresolvedColumnNames.add(columnName);
+                    }
+                    // fall back to bare column name.
+                    sqlType = columnNameToTypeMap.get(columnName);
+                }
+                if (unresolvedColumnNames.size()>0) {
+                    StringBuilder exceptionMessage = new StringBuilder();
+                    boolean first = true;
+                    exceptionMessage.append("Unable to resolve these column names to a single column family:\n");
+                    for (String col : unresolvedColumnNames) {
+                        if (first) first = false;
+                        else exceptionMessage.append(",");
+                        exceptionMessage.append(col);
+                    }
+                    exceptionMessage.append("\nAvailable columns with column families:\n");
+                    first = true;
+                    for (String col : fullColumnNameToTypeMap.keySet()) {
+                        if (first) first = false;
+                        else exceptionMessage.append(",");
+                        exceptionMessage.append(col);
+                    }
+                    throw new SQLException(exceptionMessage.toString());
+                }
+
+                if (sqlType == null) {
+                    if (strict) {
+                        throw new SQLExceptionInfo.Builder(
+                                SQLExceptionCode.COLUMN_NOT_FOUND)
+                                .setColumnName(columnName)
+                                .setTableName(tableName).build()
+                                .buildException();
+                    }
+                    unfoundColumnCount++;
+                } else {
+                    columnInfoList.add(new ColumnInfo(columnName, sqlType));
+                }
+            }
+            if (unfoundColumnCount == columns.size()) {
+                throw new SQLExceptionInfo.Builder(
+                        SQLExceptionCode.COLUMN_NOT_FOUND)
+                        .setColumnName(
+                                Arrays.toString(columns.toArray(new String[0])))
+                        .setTableName(tableName).build().buildException();
+            }
+        }
+        return columnInfoList;
+    }
+    
+    public static boolean hasRowTimestampColumn(PTable table) {
+    	return table.getRowTimestampColPos()>0;
+    }
+
+    public static byte[] getTableKey(PTable dataTable) {
+        PName tenantId = dataTable.getTenantId();
+        PName schemaName = dataTable.getSchemaName();
+        return getTableKey(tenantId == null ? ByteUtil.EMPTY_BYTE_ARRAY : tenantId.getBytes(), schemaName == null ? ByteUtil.EMPTY_BYTE_ARRAY : schemaName.getBytes(), dataTable.getTableName().getBytes());
     }
 }

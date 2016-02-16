@@ -47,6 +47,10 @@ public class ToTimeFunction extends ToDateFunction {
     public ToTimeFunction() {
     }
 
+    public ToTimeFunction(List<Expression> children) throws SQLException {
+        this(children, null, null);
+    }
+
     public ToTimeFunction(List<Expression> children, String dateFormat, String timeZoneId) throws SQLException {
         super(children, dateFormat, timeZoneId);
     }

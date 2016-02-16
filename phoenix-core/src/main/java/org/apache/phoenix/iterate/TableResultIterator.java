@@ -17,18 +17,30 @@
  */
 package org.apache.phoenix.iterate;
 
+import static org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus.CLOSED;
+import static org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus.NOT_RENEWED;
+import static org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus.RENEWED;
+import static org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus.THRESHOLD_NOT_REACHED;
+import static org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus.UNINITIALIZED;
+
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.List;
 
+import javax.annotation.concurrent.GuardedBy;
+
+import org.apache.hadoop.hbase.client.AbstractClientScanner;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.monitoring.CombinableMetric;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.ServerUtil;
+
+import com.google.common.annotations.VisibleForTesting;
 
 
 /**
@@ -39,82 +51,117 @@ import org.apache.phoenix.util.ServerUtil;
  * 
  * @since 0.1
  */
-public class TableResultIterator extends ExplainTable implements ResultIterator {
-	public enum ScannerCreation {IMMEDIATE, DELAYED};
-	
+public class TableResultIterator implements ResultIterator {
     private final Scan scan;
     private final HTableInterface htable;
-    private volatile ResultIterator delegate;
     private final CombinableMetric scanMetrics;
-    
-    public TableResultIterator(StatementContext context, TableRef tableRef, CombinableMetric scanMetrics) throws SQLException {
-        this(context, tableRef, context.getScan(), scanMetrics);
+    private static final ResultIterator UNINITIALIZED_SCANNER = ResultIterator.EMPTY_ITERATOR;
+    private final long renewLeaseThreshold;
+
+    @GuardedBy("this")
+    private ResultIterator scanIterator;
+
+    @GuardedBy("this")
+    private boolean closed = false;
+
+    @GuardedBy("this")
+    private long renewLeaseTime = 0;
+
+    @VisibleForTesting // Exposed for testing. DON'T USE ANYWHERE ELSE!
+    TableResultIterator() {
+        this.scanMetrics = null;
+        this.renewLeaseThreshold = 0;
+        this.htable = null;
+        this.scan = null;
     }
 
-    /*
-     * Delay the creation of the underlying HBase ResultScanner if creationMode is DELAYED.
-     * Though no rows are returned when the scanner is created, it still makes several RPCs
-     * to open the scanner. In queries run serially (i.e. SELECT ... LIMIT 1), we do not
-     * want to be hit with this cost when it's likely we'll never execute those scanners.
-     */
-    private ResultIterator getDelegate(boolean isClosing) throws SQLException {
-        ResultIterator delegate = this.delegate;
-        if (delegate == null) {
-            synchronized (this) {
-                delegate = this.delegate;
-                if (delegate == null) {
-                    try {
-                        this.delegate = delegate = isClosing ? ResultIterator.EMPTY_ITERATOR : new ScanningResultIterator(htable.getScanner(scan), scanMetrics);
-                    } catch (IOException e) {
-                        Closeables.closeQuietly(htable);
-                        throw ServerUtil.parseServerException(e);
-                    }
-                }
-            }
-        }
-        return delegate;
-    }
-    
-    public TableResultIterator(StatementContext context, TableRef tableRef, Scan scan, CombinableMetric scanMetrics) throws SQLException {
-        this(context, tableRef, scan, scanMetrics, ScannerCreation.IMMEDIATE);
-    }
+    public static enum RenewLeaseStatus {
+        RENEWED, CLOSED, UNINITIALIZED, THRESHOLD_NOT_REACHED, NOT_RENEWED
+    };
 
-    public TableResultIterator(StatementContext context, TableRef tableRef, Scan scan, CombinableMetric scanMetrics, ScannerCreation creationMode) throws SQLException {
-        super(context, tableRef);
+
+    public TableResultIterator(MutationState mutationState, TableRef tableRef, Scan scan, CombinableMetric scanMetrics, long renewLeaseThreshold) throws SQLException {
         this.scan = scan;
         this.scanMetrics = scanMetrics;
-        htable = context.getConnection().getQueryServices().getTable(tableRef.getTable().getPhysicalName().getBytes());
-        if (creationMode == ScannerCreation.IMMEDIATE) {
-        	getDelegate(false);
-        }
+        PTable table = tableRef.getTable();
+        htable = mutationState.getHTable(table);
+        this.scanIterator = UNINITIALIZED_SCANNER;
+        this.renewLeaseThreshold = renewLeaseThreshold;
     }
 
     @Override
-    public void close() throws SQLException {
+    public synchronized void close() throws SQLException {
+        closed = true; // ok to say closed even if the below code throws an exception
         try {
-            getDelegate(true).close();
+            scanIterator.close();
         } finally {
             try {
+                scanIterator = UNINITIALIZED_SCANNER;
                 htable.close();
             } catch (IOException e) {
                 throw ServerUtil.parseServerException(e);
             }
         }
     }
+    
+    @Override
+    public synchronized Tuple next() throws SQLException {
+        initScanner();
+        Tuple t = scanIterator.next();
+        return t;
+    }
+
+    public synchronized void initScanner() throws SQLException {
+        if (closed) {
+            return;
+        }
+        ResultIterator delegate = this.scanIterator;
+        if (delegate == UNINITIALIZED_SCANNER) {
+            try {
+                this.scanIterator =
+                        new ScanningResultIterator(htable.getScanner(scan), scanMetrics);
+            } catch (IOException e) {
+                Closeables.closeQuietly(htable);
+                throw ServerUtil.parseServerException(e);
+            }
+        }
+    }
 
     @Override
-    public Tuple next() throws SQLException {
-        return getDelegate(false).next();
+    public String toString() {
+        return "TableResultIterator [htable=" + htable + ", scan=" + scan  + "]";
+    }
+
+    public synchronized RenewLeaseStatus renewLease() {
+        if (closed) {
+            return CLOSED;
+        }
+        if (scanIterator == UNINITIALIZED_SCANNER) {
+            return UNINITIALIZED;
+        }
+        long delay = now() - renewLeaseTime;
+        if (delay < renewLeaseThreshold) {
+            return THRESHOLD_NOT_REACHED;
+        }
+        if (scanIterator instanceof ScanningResultIterator
+                && ((ScanningResultIterator)scanIterator).getScanner() instanceof AbstractClientScanner) {
+            // Need this explicit cast because HBase's ResultScanner doesn't have this method exposed.
+            boolean leaseRenewed = ((AbstractClientScanner)((ScanningResultIterator)scanIterator).getScanner()).renewLease();
+            if (leaseRenewed) {
+                renewLeaseTime = now();
+                return RENEWED;
+            }
+        }
+        return NOT_RENEWED;
+    }
+
+    private static long now() {
+        return System.currentTimeMillis();
     }
 
     @Override
     public void explain(List<String> planSteps) {
-        StringBuilder buf = new StringBuilder();
-        explain(buf.toString(),planSteps);
+        scanIterator.explain(planSteps);
     }
 
-	@Override
-	public String toString() {
-		return "TableResultIterator [htable=" + htable + ", scan=" + scan  + "]";
-	}
 }

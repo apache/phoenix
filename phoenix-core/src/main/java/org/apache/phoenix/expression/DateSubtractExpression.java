@@ -52,7 +52,7 @@ public class DateSubtractExpression extends SubtractExpression {
             PDataType type = children.get(i).getDataType();
             SortOrder sortOrder = children.get(i).getSortOrder();
             if (type == PDecimal.INSTANCE) {
-                BigDecimal bd = (BigDecimal) PDecimal.INSTANCE.toObject(ptr, sortOrder);
+                BigDecimal bd = (BigDecimal) PDecimal.INSTANCE.toObject(ptr, type, sortOrder);
                 value = bd.multiply(BD_MILLIS_IN_DAY).longValue();
             } else if (type.isCoercibleTo(PLong.INSTANCE)) {
                 value = type.getCodec().decodeLong(ptr, sortOrder) * QueryConstants.MILLIS_IN_DAY;

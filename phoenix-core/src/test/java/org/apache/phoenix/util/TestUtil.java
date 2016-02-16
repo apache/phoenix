@@ -25,14 +25,17 @@ import static org.apache.phoenix.util.PhoenixRuntime.PHOENIX_TEST_DRIVER_URL_PAR
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.io.File;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.sql.Connection;
+import java.sql.Date;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
@@ -98,7 +101,7 @@ public class TestUtil {
     public static final String DEFAULT_INDEX_TABLE_NAME = "I";
     public static final String DEFAULT_DATA_TABLE_FULL_NAME = SchemaUtil.getTableName(DEFAULT_SCHEMA_NAME, "T");
     public static final String DEFAULT_INDEX_TABLE_FULL_NAME = SchemaUtil.getTableName(DEFAULT_SCHEMA_NAME, "I");
-
+    
     private TestUtil() {
     }
 
@@ -191,6 +194,7 @@ public class TestUtil {
     public static final String INDEX_DATA_SCHEMA = "INDEX_TEST";
     public static final String INDEX_DATA_TABLE = "INDEX_DATA_TABLE";
     public static final String MUTABLE_INDEX_DATA_TABLE = "MUTABLE_INDEX_DATA_TABLE";
+    public static final String TRANSACTIONAL_DATA_TABLE = "TRANSACTIONAL_DATA_TABLE";
     public static final String JOIN_SCHEMA = "Join";
     public static final String JOIN_ORDER_TABLE = "OrderTable";
     public static final String JOIN_CUSTOMER_TABLE = "CustomerTable";
@@ -208,6 +212,7 @@ public class TestUtil {
     public static final String JOIN_SUPPLIER_TABLE_DISPLAY_NAME = JOIN_SCHEMA + "." + JOIN_SUPPLIER_TABLE;
     public static final String JOIN_COITEM_TABLE_DISPLAY_NAME = JOIN_SCHEMA + "." + JOIN_COITEM_TABLE;
     public static final String BINARY_NAME = "BinaryTable";
+    public static final int NUM_MILLIS_IN_DAY = 86400000;
 
     /**
      * Read-only properties used by all tests
@@ -485,20 +490,20 @@ public class TestUtil {
     }
     
     public static List<KeyRange> getAllSplits(Connection conn, String tableName) throws SQLException {
-        return getSplits(conn, tableName, null, null, null, null);
+        return getSplits(conn, tableName, null, null, null, null, null);
     }
     
-    public static List<KeyRange> getAllSplits(Connection conn, String tableName, String where) throws SQLException {
-        return getSplits(conn, tableName, null, null, null, where);
+    public static List<KeyRange> getAllSplits(Connection conn, String tableName, String where, String selectClause) throws SQLException {
+        return getSplits(conn, tableName, null, null, null, where, selectClause);
     }
     
-    public static List<KeyRange> getSplits(Connection conn, String tableName, String pkCol, byte[] lowerRange, byte[] upperRange, String whereClauseSuffix) throws SQLException {
+    public static List<KeyRange> getSplits(Connection conn, String tableName, String pkCol, byte[] lowerRange, byte[] upperRange, String whereClauseSuffix, String selectClause) throws SQLException {
         String whereClauseStart = 
                 (lowerRange == null && upperRange == null ? "" : 
                     " WHERE " + ((lowerRange != null ? (pkCol + " >= ? " + (upperRange != null ? " AND " : "")) : "") 
                               + (upperRange != null ? (pkCol + " < ?") : "" )));
         String whereClause = whereClauseSuffix == null ? whereClauseStart : whereClauseStart.length() == 0 ? (" WHERE " + whereClauseSuffix) : (" AND " + whereClauseSuffix);
-        String query = "SELECT /*+ NO_INDEX */ COUNT(*) FROM " + tableName + whereClause;
+        String query = "SELECT /*+ NO_INDEX */ "+selectClause+" FROM " + tableName + whereClause;
         PhoenixPreparedStatement pstmt = conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class);
         if (lowerRange != null) {
             pstmt.setBytes(1, lowerRange);
@@ -543,7 +548,7 @@ public class TestUtil {
     }
 
     public static List<KeyRange> getSplits(Connection conn, byte[] lowerRange, byte[] upperRange) throws SQLException {
-        return getSplits(conn, STABLE_NAME, STABLE_PK_NAME, lowerRange, upperRange, null);
+        return getSplits(conn, STABLE_NAME, STABLE_PK_NAME, lowerRange, upperRange, null, "COUNT(*)");
     }
 
     public static List<KeyRange> getAllSplits(Connection conn) throws SQLException {
@@ -551,8 +556,14 @@ public class TestUtil {
     }
 
     public static void analyzeTable(Connection conn, String tableName) throws IOException, SQLException {
+    	analyzeTable(conn, tableName, false);
+    }
+    
+    public static void analyzeTable(Connection conn, String tableName, boolean transactional) throws IOException, SQLException {
         String query = "UPDATE STATISTICS " + tableName;
         conn.createStatement().execute(query);
+        // if the table is transactional burn a txn in order to make sure the next txn read pointer is close to wall clock time
+        conn.commit();
     }
     
     public static void analyzeTableIndex(Connection conn, String tableName) throws IOException, SQLException {
@@ -581,4 +592,36 @@ public class TestUtil {
         analyzeTable(conn, tableName);
         conn.close();
     }
+    
+    public static void setRowKeyColumns(PreparedStatement stmt, int i) throws SQLException {
+        // insert row
+        stmt.setString(1, "varchar" + String.valueOf(i));
+        stmt.setString(2, "char" + String.valueOf(i));
+        stmt.setInt(3, i);
+        stmt.setLong(4, i);
+        stmt.setBigDecimal(5, new BigDecimal(i*0.5d));
+        Date date = new Date(DateUtil.parseDate("2015-01-01 00:00:00").getTime() + (i - 1) * TestUtil.NUM_MILLIS_IN_DAY);
+        stmt.setDate(6, date);
+    }
+	
+    public static void validateRowKeyColumns(ResultSet rs, int i) throws SQLException {
+		assertTrue(rs.next());
+		assertEquals(rs.getString(1), "varchar" + String.valueOf(i));
+		assertEquals(rs.getString(2), "char" + String.valueOf(i));
+		assertEquals(rs.getInt(3), i);
+		assertEquals(rs.getInt(4), i);
+		assertEquals(rs.getBigDecimal(5), new BigDecimal(i*0.5d));
+		Date date = new Date(DateUtil.parseDate("2015-01-01 00:00:00").getTime() + (i - 1) * TestUtil.NUM_MILLIS_IN_DAY);
+		assertEquals(rs.getDate(6), date);
+	}
+    
+    public static String getTableName(Boolean mutable, Boolean transactional) {
+        StringBuilder tableNameBuilder = new StringBuilder(DEFAULT_DATA_TABLE_NAME);
+        if (mutable!=null)
+            tableNameBuilder.append(mutable ? "_MUTABLE" : "_IMMUTABLE");
+        if (transactional!=null)
+            tableNameBuilder.append(transactional ? "_TXN" : "_NON_TXN");
+        return tableNameBuilder.toString();
+    }
 }
+

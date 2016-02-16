@@ -46,6 +46,8 @@ import org.apache.phoenix.schema.SequenceAllocation;
 import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.stats.PTableStats;
 
+import co.cask.tephra.TransactionSystemClient;
+
 
 public class DelegateConnectionQueryServices extends DelegateQueryServices implements ConnectionQueryServices {
 
@@ -74,14 +76,19 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     }
 
     @Override
-    public PMetaData addTable(PTable table) throws SQLException {
-        return getDelegate().addTable(table);
+    public PMetaData addTable(PTable table, long resolvedTime) throws SQLException {
+        return getDelegate().addTable(table, resolvedTime);
+    }
+    
+    @Override
+    public PMetaData updateResolvedTimestamp(PTable table, long resolvedTimestamp) throws SQLException {
+        return getDelegate().updateResolvedTimestamp(table, resolvedTimestamp);
     }
 
     @Override
     public PMetaData addColumn(PName tenantId, String tableName, List<PColumn> columns, long tableTimeStamp,
-            long tableSeqNum, boolean isImmutableRows, boolean isWalDisabled, boolean isMultitenant, boolean storeNulls) throws SQLException {
-        return getDelegate().addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows, isWalDisabled, isMultitenant, storeNulls);
+            long tableSeqNum, boolean isImmutableRows, boolean isWalDisabled, boolean isMultitenant, boolean storeNulls, boolean isTransactional, long updateCacheFrequency, long resolvedTime) throws SQLException {
+        return getDelegate().addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows, isWalDisabled, isMultitenant, storeNulls, isTransactional, updateCacheFrequency, resolvedTime);
     }
 
     @Override
@@ -92,8 +99,8 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
 
     @Override
     public PMetaData removeColumn(PName tenantId, String tableName, List<PColumn> columnsToRemove, long tableTimeStamp,
-            long tableSeqNum) throws SQLException {
-        return getDelegate().removeColumn(tenantId, tableName, columnsToRemove, tableTimeStamp, tableSeqNum);
+            long tableSeqNum, long resolvedTime) throws SQLException {
+        return getDelegate().removeColumn(tenantId, tableName, columnsToRemove, tableTimeStamp, tableSeqNum, resolvedTime);
     }
 
     @Override
@@ -165,8 +172,8 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     }
 
     @Override
-    public boolean hasInvalidIndexConfiguration() {
-        return getDelegate().hasInvalidIndexConfiguration();
+    public boolean hasIndexWALCodec() {
+        return getDelegate().hasIndexWALCodec();
     }
 
     @Override
@@ -244,13 +251,18 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
 
 
     @Override
-    public void clearCache() throws SQLException {
-        getDelegate().clearCache();
+    public long clearCache() throws SQLException {
+        return getDelegate().clearCache();
     }
 
     @Override
     public int getSequenceSaltBuckets() {
         return getDelegate().getSequenceSaltBuckets();
+    }
+
+    @Override
+    public TransactionSystemClient getTransactionSystemClient() {
+        return getDelegate().getTransactionSystemClient();
     }
 
     @Override
@@ -281,5 +293,21 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     public MetaDataMutationResult dropFunction(List<Mutation> tableMetadata, boolean ifExists)
             throws SQLException {
         return getDelegate().dropFunction(tableMetadata, ifExists);
+    }
+
+    @Override
+    public long getRenewLeaseThresholdMilliSeconds() {
+        return getDelegate().getRenewLeaseThresholdMilliSeconds();
+    }
+
+    @Override
+    public boolean isRenewingLeasesEnabled() {
+        return getDelegate().isRenewingLeasesEnabled();
+    }
+
+    @Override
+    public HRegionLocation getTableRegionLocation(byte[] tableName, byte[] row)
+            throws SQLException {
+        return getDelegate().getTableRegionLocation(tableName, row);
     }
 }

@@ -4,7 +4,7 @@
   <parent>
     <groupId>org.apache.phoenix</groupId>
     <artifactId>phoenix</artifactId>
-    <version>4.7.0-HBase-1.1-SNAPSHOT</version>
+    <version>4.7.0-HBase-1.1</version>
   </parent>
   <artifactId>phoenix-server</artifactId>
   <name>Phoenix Query Server</name>
@@ -76,7 +76,6 @@
       <version>${calcite.version}</version>
     </dependency>
     <dependency>
-      <!-- TODO: really don't need all of Phoenix, just the thick client. -->
       <groupId>org.apache.phoenix</groupId>
       <artifactId>phoenix-core</artifactId>
     </dependency>
@@ -105,6 +104,12 @@
     <dependency>
       <groupId>org.apache.hbase</groupId>
       <artifactId>hbase-testing-util</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>co.cask.tephra</groupId>
+      <artifactId>tephra-core</artifactId>
+      <type>test-jar</type>
       <scope>test</scope>
     </dependency>
   </dependencies>

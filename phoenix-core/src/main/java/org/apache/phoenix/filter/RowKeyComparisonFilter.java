@@ -22,7 +22,6 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.exceptions.DeserializationException;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -38,8 +37,6 @@ import org.slf4j.LoggerFactory;
  *
  * Filter for use when expressions only reference row key columns
  *
- * 
- * @since 0.1
  */
 public class RowKeyComparisonFilter extends BooleanExpressionFilter {
     private static final Logger logger = LoggerFactory.getLogger(RowKeyComparisonFilter.class);
@@ -79,7 +76,7 @@ public class RowKeyComparisonFilter extends BooleanExpressionFilter {
             }
             evaluate = false;
         }
-        return keepRow ? ReturnCode.INCLUDE : ReturnCode.NEXT_ROW;
+        return keepRow ? ReturnCode.INCLUDE_AND_NEXT_COL : ReturnCode.NEXT_ROW;
     }
 
     private final class RowKeyTuple extends BaseTuple {
@@ -99,7 +96,7 @@ public class RowKeyComparisonFilter extends BooleanExpressionFilter {
         }
 
         @Override
-        public KeyValue getValue(byte[] cf, byte[] cq) {
+        public Cell getValue(byte[] cf, byte[] cq) {
             return null;
         }
 
@@ -119,7 +116,7 @@ public class RowKeyComparisonFilter extends BooleanExpressionFilter {
         }
 
         @Override
-        public KeyValue getValue(int index) {
+        public Cell getValue(int index) {
             throw new IndexOutOfBoundsException(Integer.toString(index));
         }
 
@@ -135,7 +132,7 @@ public class RowKeyComparisonFilter extends BooleanExpressionFilter {
         return !this.keepRow;
     }
 
-    @SuppressWarnings("all") // suppressing missing @Override since this doesn't exist for HBase 0.94.4
+    @Override
     public boolean isFamilyEssential(byte[] name) {
         // We only need our "guaranteed to have a key value" column family,
         // which we pass in and serialize through. In the case of a VIEW where

@@ -35,6 +35,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.schema.NewerTableAlreadyExistsException;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.Test;
@@ -406,5 +407,32 @@ public class CreateTableIT extends BaseClientManagedTimeIT {
         } catch (SQLException sqle) {
             assertEquals(SQLExceptionCode.COLUMN_FAMILY_NOT_ALLOWED_FOR_TTL.getErrorCode(),sqle.getErrorCode());
         }
+    }
+    
+    @Test
+    public void testAlterDeletedTable() throws Exception {
+        String ddl = "create table T ("
+                + " K varchar primary key,"
+                + " V1 varchar)";
+        long ts = nextTimestamp();
+        Properties props = new Properties();
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute(ddl);
+        conn.close();
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+50));
+        Connection connAt50 = DriverManager.getConnection(getUrl(), props);
+        connAt50.createStatement().execute("DROP TABLE T");
+        connAt50.close();
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+20));
+        Connection connAt20 = DriverManager.getConnection(getUrl(), props);
+        connAt20.createStatement().execute("UPDATE STATISTICS T"); // Invalidates from cache
+        try {
+            connAt20.createStatement().execute("ALTER TABLE T ADD V2 VARCHAR");
+            fail();
+        } catch (NewerTableAlreadyExistsException e) {
+            
+        }
+        connAt20.close();
     }
 }

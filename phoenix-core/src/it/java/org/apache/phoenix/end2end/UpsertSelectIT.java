@@ -1109,7 +1109,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         }
 
         // upsert data into base table without specifying the row timestamp column PK2
-        long upsertedTs = 5;
+        long upsertedTs = nextTimestamp();
         try (Connection conn = getConnection(upsertedTs)) {
             // Upsert select in the same table with the row_timestamp column PK2 not specified. This will end up
             // creating a new row whose timestamp is the SCN of the connection. The same SCN will be used
@@ -1318,6 +1318,92 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         }
     }
     
+    @Test
+    public void testUpsertSelectWithFixedWidthNullByteSizeArray() throws Exception {
+        long ts = nextTimestamp();
+        Properties props = new Properties();
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute(
+                "create table t1 (id bigint not null primary key, ca char(3)[])");
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute("upsert into t1 values (1, ARRAY['aaa', 'bbb'])");
+        conn.commit();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 15));
+        conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute(
+                "upsert into t1(id, ca) select id, ARRAY['ccc', 'ddd'] from t1 WHERE id = 1");
+        conn.commit();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
+        conn = DriverManager.getConnection(getUrl(), props);
+        ResultSet rs = conn.createStatement().executeQuery("select * from t1");
+
+        assertTrue(rs.next());
+        assertEquals(1, rs.getLong(1));
+        assertEquals("['ccc', 'ddd']", rs.getArray(2).toString());
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 25));
+        conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute(
+                "create table t2 (id bigint not null primary key, ba binary(4)[])");
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
+        conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute("upsert into t2 values (2, ARRAY[1, 27])");
+        conn.commit();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 35));
+        conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute(
+                "upsert into t2(id, ba) select id, ARRAY[54, 1024] from t2 WHERE id = 2");
+        conn.commit();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
+        conn = DriverManager.getConnection(getUrl(), props);
+        rs = conn.createStatement().executeQuery("select * from t2");
+
+        assertTrue(rs.next());
+        assertEquals(2, rs.getLong(1));
+        assertEquals("[[128,0,0,54], [128,0,4,0]]", rs.getArray(2).toString());
+    }
+
+
+    @Test
+    public void testParallelUpsertSelect() throws Exception {
+        long ts = nextTimestamp();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        props.setProperty(QueryServices.MUTATE_BATCH_SIZE_ATTRIB, Integer.toString(3));
+        props.setProperty(QueryServices.SCAN_CACHE_SIZE_ATTRIB, Integer.toString(3));
+        props.setProperty(QueryServices.SCAN_RESULT_CHUNK_SIZE, Integer.toString(3));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(false);
+        conn.createStatement().execute("CREATE SEQUENCE S1");
+        conn.createStatement().execute("CREATE TABLE SALTEDT1 (pk INTEGER PRIMARY KEY, val INTEGER) SALT_BUCKETS=4");
+        conn.createStatement().execute("CREATE TABLE T2 (pk INTEGER PRIMARY KEY, val INTEGER)");
+        conn.close();
+        
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        conn = DriverManager.getConnection(getUrl(), props);
+        for (int i = 0; i < 100; i++) {
+            conn.createStatement().execute("UPSERT INTO SALTEDT1 VALUES (NEXT VALUE FOR S1, " + (i%10) + ")");
+        }
+        conn.commit();
+        conn.close();
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
+        conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(true);
+        int upsertCount = conn.createStatement().executeUpdate("UPSERT INTO T2 SELECT pk, val FROM SALTEDT1");
+        assertEquals(100,upsertCount);
+        conn.close();
+    }
+
     private static Connection getConnection(long ts) throws SQLException {
         Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));

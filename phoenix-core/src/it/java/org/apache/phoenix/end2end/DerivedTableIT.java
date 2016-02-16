@@ -104,7 +104,8 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
                 "CLIENT MERGE SORT\n" +
                 "CLIENT SORTED BY [A]\n" +
                 "CLIENT AGGREGATE INTO DISTINCT ROWS BY [A]\n" +
-                "CLIENT DISTINCT ON [COLLECTDISTINCT(B)]"}});
+                "CLIENT DISTINCT ON [COLLECTDISTINCT(B)]\n" + 
+                "CLIENT SORTED BY [A DESC]"}});
         testCases.add(new String[][] {
                 {}, {
                 "CLIENT PARALLEL 4-WAY FULL SCAN OVER ATABLE\n" +
@@ -120,7 +121,8 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
                 "CLIENT MERGE SORT\n" +
                 "CLIENT SORTED BY [A]\n" +
                 "CLIENT AGGREGATE INTO DISTINCT ROWS BY [A]\n" +
-                "CLIENT DISTINCT ON [COLLECTDISTINCT(B)]"}});
+                "CLIENT DISTINCT ON [COLLECTDISTINCT(B)]\n" + 
+                "CLIENT SORTED BY [A DESC]"}});
         return testCases;
     }
 
@@ -311,8 +313,8 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
             assertEquals(plans[0], QueryUtil.getExplainPlan(rs));
             
-            // distinct b (groupby a, b) groupby a
-            query = "SELECT DISTINCT COLLECTDISTINCT(t.b) FROM (SELECT b_string b, a_string a FROM aTable GROUP BY a_string, b_string) AS t GROUP BY t.a";
+            // distinct b (groupby a, b) groupby a orderby a
+            query = "SELECT DISTINCT COLLECTDISTINCT(t.b) FROM (SELECT b_string b, a_string a FROM aTable GROUP BY a_string, b_string) AS t GROUP BY t.a ORDER BY t.a DESC";
             statement = conn.prepareStatement(query);
             rs = statement.executeQuery();
             assertTrue (rs.next());
@@ -332,6 +334,22 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
             
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
             assertEquals(plans[1], QueryUtil.getExplainPlan(rs));
+            
+            // (orderby) groupby
+            query = "SELECT t.a_string, count(*) FROM (SELECT * FROM aTable order by a_integer) AS t where a_byte != 8 group by t.a_string";
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(A_VALUE,rs.getString(1));
+            assertEquals(4,rs.getInt(2));
+            assertTrue (rs.next());
+            assertEquals(B_VALUE,rs.getString(1));
+            assertEquals(3,rs.getInt(2));
+            assertTrue (rs.next());
+            assertEquals(C_VALUE,rs.getString(1));
+            assertEquals(1,rs.getInt(2));
+
+            assertFalse(rs.next());
         } finally {
             conn.close();
         }
@@ -510,6 +528,19 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
             assertEquals(10,rs.getInt(2));
 
             assertFalse(rs.next());
+            
+            // (union) groupby limit
+            query = "SELECT a_string, count(*) FROM (SELECT a_string FROM aTable where a_byte < 4 union all SELECT a_string FROM aTable where a_byte > 8) group by a_string limit 2";
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(A_VALUE,rs.getString(1));
+            assertEquals(3,rs.getInt(2));
+            assertTrue (rs.next());
+            assertEquals(C_VALUE,rs.getString(1));
+            assertEquals(1,rs.getInt(2));
+
+            assertFalse(rs.next());            
         } finally {
             conn.close();
         }
@@ -672,6 +703,15 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
             
             // count (subquery)
             query = "SELECT count(*) FROM (SELECT * FROM aTable WHERE (organization_id, entity_id) in (SELECT organization_id, entity_id FROM aTable WHERE a_byte != 8)) AS t";
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(8,rs.getInt(1));
+
+            assertFalse(rs.next());
+            
+            // count (orderby)
+            query = "SELECT count(a_byte) FROM (SELECT * FROM aTable order by a_integer) AS t where a_byte != 8";
             statement = conn.prepareStatement(query);
             rs = statement.executeQuery();
             assertTrue (rs.next());

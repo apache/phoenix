@@ -17,12 +17,9 @@
  */
 package org.apache.phoenix.compile;
 
-import java.sql.ParameterMetaData;
 import java.sql.SQLException;
-import java.sql.SQLFeatureNotSupportedException;
 import java.util.Collections;
 
-import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -43,12 +40,7 @@ public class CreateFunctionCompiler {
         final StatementContext context = new StatementContext(statement);
         final MetaDataClient client = new MetaDataClient(connectionToBe);
         
-        return new MutationPlan() {
-
-            @Override
-            public ParameterMetaData getParameterMetaData() {
-                return context.getBindManager().getParameterMetaData();
-            }
+        return new BaseMutationPlan(context, create.getOperation()) {
 
             @Override
             public MutationState execute() throws SQLException {
@@ -68,11 +60,6 @@ public class CreateFunctionCompiler {
                         + " FUNCTION"));
             }
 
-            @Override
-            public PhoenixConnection getConnection() {
-                return connection;
-            }
-            
             @Override
             public StatementContext getContext() {
                 return context;

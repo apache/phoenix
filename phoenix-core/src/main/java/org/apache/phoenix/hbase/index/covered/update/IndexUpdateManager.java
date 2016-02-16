@@ -30,11 +30,10 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 
 import com.google.common.collect.Lists;
 import com.google.common.primitives.Longs;
-
-import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 
 /**
  * Keeps track of the index updates
@@ -182,8 +181,6 @@ public class IndexUpdateManager {
     for (Entry<ImmutableBytesPtr, Collection<Mutation>> updates : map.entrySet()) {
       // get is ok because we always set with just the bytes
       byte[] tableName = updates.getKey().get();
-      // TODO replace this as just storing a byte[], to avoid all the String <-> byte[] swapping
-      // HBase does
       for (Mutation m : updates.getValue()) {
         // skip elements that have been marked for delete
         if (shouldBeRemoved(m)) {

@@ -121,8 +121,11 @@ public class ScanPlan extends BaseQueryPlan {
             estRegionSize = StatisticsUtil.getGuidePostDepth(guidepostPerRegion, guidepostWidth, desc);
         } else {
             // Region size estimated based on total number of bytes divided by number of regions
-            long totByteSize = gpsInfo.getByteCount();
-            estRegionSize = totByteSize / (gpsInfo.getGuidePosts().size()+1);
+            long totByteSize = 0;
+            for (long byteCount : gpsInfo.getByteCounts()) {
+                totByteSize += byteCount;
+            }
+            estRegionSize = totByteSize / (gpsInfo.getGuidePostsCount()+1);
         }
         // TODO: configurable number of bytes?
         boolean isSerial = (perScanLimit * estRowSize < estRegionSize);
@@ -137,7 +140,9 @@ public class ScanPlan extends BaseQueryPlan {
     private static ParallelIteratorFactory buildResultIteratorFactory(StatementContext context,
             TableRef table, OrderBy orderBy, Integer limit, boolean allowPageFilter) throws SQLException {
 
-        if (isSerial(context, table, orderBy, limit, allowPageFilter) || ScanUtil.isRoundRobinPossible(orderBy, context)) {
+        if (isSerial(context, table, orderBy, limit, allowPageFilter)
+                || ScanUtil.isRoundRobinPossible(orderBy, context)
+                || ScanUtil.isPacingScannersPossible(context)) {
             return ParallelIteratorFactory.NOOP_FACTORY;
         }
         ParallelIteratorFactory spoolingResultIteratorFactory =
@@ -151,7 +156,7 @@ public class ScanPlan extends BaseQueryPlan {
             return spoolingResultIteratorFactory;
         } else {
             return new ChunkedResultIterator.ChunkedResultIteratorFactory(
-                    spoolingResultIteratorFactory, table);
+                    spoolingResultIteratorFactory, context.getConnection().getMutationState(), table);
         }
     }
 

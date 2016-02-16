@@ -37,6 +37,7 @@ REL_SRC=phoenix-$PHOENIX-src
 DIR_REL_SRC_TAR_PATH=$DIR_REL_ROOT/src
 DIR_REL_BIN_TAR_PATH=$DIR_REL_ROOT/bin
 DIR_BIN=$DIR_REL_BIN_PATH/bin
+DIR_PHERF_CONF=phoenix-pherf/config
 DIR_EXAMPLES=$DIR_REL_BIN_PATH/examples
 DIR_DOCS=dev/release_files
 
@@ -75,12 +76,9 @@ rm -rf $(find . -type d -name archive-tmp);
 phx_jars=$(find -iname phoenix-*.jar)
 cp $phx_jars $DIR_REL_BIN_PATH;
 
-# Exclude uber jars as it exceeds max upload limit for Apache SVN until PHOENIX-2248 is fixed
-rm $DIR_REL_BIN_PATH/*webapp*runnable*
-rm $DIR_REL_BIN_PATH/*pherf*dependencies*
-
 # Copy bin
 cp bin/* $DIR_BIN;
+cp -R $DIR_PHERF_CONF $DIR_BIN;
 
 # Copy release docs
 

@@ -100,6 +100,6 @@ Default quorum is localhost. If you want to override set the system variable.
 
 Run unit tests: `mvn test -DZK_QUORUM=localhost`<br />
 Run a specific method: `mvn -Dtest=ClassName#methodName test` <br />
-To test on a real cluster: `./pherf.sh -drop all -l -q -z localhost -schemaFile .*user_defined_schema.sql -scenarioFile .*user_defined_scenario.xml`
+To test: `./pherf-standalone.py -drop all -l -q -z localhost -schemaFile .*user_defined_schema.sql -scenarioFile .*user_defined_scenario.xml`
 
 More to come...

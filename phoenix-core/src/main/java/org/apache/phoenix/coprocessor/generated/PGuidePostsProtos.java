@@ -44,6 +44,64 @@ public final class PGuidePostsProtos {
      * <code>optional int64 rowCount = 3;</code>
      */
     long getRowCount();
+
+    // optional int32 maxLength = 4;
+    /**
+     * <code>optional int32 maxLength = 4;</code>
+     */
+    boolean hasMaxLength();
+    /**
+     * <code>optional int32 maxLength = 4;</code>
+     */
+    int getMaxLength();
+
+    // optional int32 encodedGuidePostsCount = 5;
+    /**
+     * <code>optional int32 encodedGuidePostsCount = 5;</code>
+     */
+    boolean hasEncodedGuidePostsCount();
+    /**
+     * <code>optional int32 encodedGuidePostsCount = 5;</code>
+     */
+    int getEncodedGuidePostsCount();
+
+    // optional bytes encodedGuidePosts = 6;
+    /**
+     * <code>optional bytes encodedGuidePosts = 6;</code>
+     */
+    boolean hasEncodedGuidePosts();
+    /**
+     * <code>optional bytes encodedGuidePosts = 6;</code>
+     */
+    com.google.protobuf.ByteString getEncodedGuidePosts();
+
+    // repeated int64 byteCounts = 7;
+    /**
+     * <code>repeated int64 byteCounts = 7;</code>
+     */
+    java.util.List<java.lang.Long> getByteCountsList();
+    /**
+     * <code>repeated int64 byteCounts = 7;</code>
+     */
+    int getByteCountsCount();
+    /**
+     * <code>repeated int64 byteCounts = 7;</code>
+     */
+    long getByteCounts(int index);
+
+    // repeated int64 rowCounts = 8;
+    /**
+     * <code>repeated int64 rowCounts = 8;</code>
+     */
+    java.util.List<java.lang.Long> getRowCountsList();
+    /**
+     * <code>repeated int64 rowCounts = 8;</code>
+     */
+    int getRowCountsCount();
+    /**
+     * <code>repeated int64 rowCounts = 8;</code>
+     */
+    long getRowCounts(int index);
   }
   /**
    * Protobuf type {@code PGuidePosts}
@@ -114,6 +172,63 @@ public final class PGuidePostsProtos {
               rowCount_ = input.readInt64();
               break;
             }
+            case 32: {
+              bitField0_ |= 0x00000004;
+              maxLength_ = input.readInt32();
+              break;
+            }
+            case 40: {
+              bitField0_ |= 0x00000008;
+              encodedGuidePostsCount_ = input.readInt32();
+              break;
+            }
+            case 50: {
+              bitField0_ |= 0x00000010;
+              encodedGuidePosts_ = input.readBytes();
+              break;
+            }
+            case 56: {
+              if (!((mutable_bitField0_ & 0x00000040) == 0x00000040)) {
+                byteCounts_ = new java.util.ArrayList<java.lang.Long>();
+                mutable_bitField0_ |= 0x00000040;
+              }
+              byteCounts_.add(input.readInt64());
+              break;
+            }
+            case 58: {
+              int length = input.readRawVarint32();
+              int limit = input.pushLimit(length);
+              if (!((mutable_bitField0_ & 0x00000040) == 0x00000040) && input.getBytesUntilLimit() > 0) {
+                byteCounts_ = new java.util.ArrayList<java.lang.Long>();
+                mutable_bitField0_ |= 0x00000040;
+              }
+              while (input.getBytesUntilLimit() > 0) {
+                byteCounts_.add(input.readInt64());
+              }
+              input.popLimit(limit);
+              break;
+            }
+            case 64: {
+              if (!((mutable_bitField0_ & 0x00000080) == 0x00000080)) {
+                rowCounts_ = new java.util.ArrayList<java.lang.Long>();
+                mutable_bitField0_ |= 0x00000080;
+              }
+              rowCounts_.add(input.readInt64());
+              break;
+            }
+            case 66: {
+              int length = input.readRawVarint32();
+              int limit = input.pushLimit(length);
+              if (!((mutable_bitField0_ & 0x00000080) == 0x00000080) && input.getBytesUntilLimit() > 0) {
+                rowCounts_ = new java.util.ArrayList<java.lang.Long>();
+                mutable_bitField0_ |= 0x00000080;
+              }
+              while (input.getBytesUntilLimit() > 0) {
+                rowCounts_.add(input.readInt64());
+              }
+              input.popLimit(limit);
+              break;
+            }
           }
         }
       } catch (com.google.protobuf.InvalidProtocolBufferException e) {
@@ -124,6 +239,12 @@ public final class PGuidePostsProtos {
       } finally {
         if (((mutable_bitField0_ & 0x00000001) == 0x00000001)) {
           guidePosts_ = java.util.Collections.unmodifiableList(guidePosts_);
+        }
+        if (((mutable_bitField0_ & 0x00000040) == 0x00000040)) {
+          byteCounts_ = java.util.Collections.unmodifiableList(byteCounts_);
+        }
+        if (((mutable_bitField0_ & 0x00000080) == 0x00000080)) {
+          rowCounts_ = java.util.Collections.unmodifiableList(rowCounts_);
         }
         this.unknownFields = unknownFields.build();
         makeExtensionsImmutable();
@@ -212,10 +333,109 @@ public final class PGuidePostsProtos {
       return rowCount_;
     }
 
+    // optional int32 maxLength = 4;
+    public static final int MAXLENGTH_FIELD_NUMBER = 4;
+    private int maxLength_;
+    /**
+     * <code>optional int32 maxLength = 4;</code>
+     */
+    public boolean hasMaxLength() {
+      return ((bitField0_ & 0x00000004) == 0x00000004);
+    }
+    /**
+     * <code>optional int32 maxLength = 4;</code>
+     */
+    public int getMaxLength() {
+      return maxLength_;
+    }
+
+    // optional int32 encodedGuidePostsCount = 5;
+    public static final int ENCODEDGUIDEPOSTSCOUNT_FIELD_NUMBER = 5;
+    private int encodedGuidePostsCount_;
+    /**
+     * <code>optional int32 encodedGuidePostsCount = 5;</code>
+     */
+    public boolean hasEncodedGuidePostsCount() {
+      return ((bitField0_ & 0x00000008) == 0x00000008);
+    }
+    /**
+     * <code>optional int32 encodedGuidePostsCount = 5;</code>
+     */
+    public int getEncodedGuidePostsCount() {
+      return encodedGuidePostsCount_;
+    }
+
+    // optional bytes encodedGuidePosts = 6;
+    public static final int ENCODEDGUIDEPOSTS_FIELD_NUMBER = 6;
+    private com.google.protobuf.ByteString encodedGuidePosts_;
+    /**
+     * <code>optional bytes encodedGuidePosts = 6;</code>
+     */
+    public boolean hasEncodedGuidePosts() {
+      return ((bitField0_ & 0x00000010) == 0x00000010);
+    }
+    /**
+     * <code>optional bytes encodedGuidePosts = 6;</code>
+     */
+    public com.google.protobuf.ByteString getEncodedGuidePosts() {
+      return encodedGuidePosts_;
+    }
+
+    // repeated int64 byteCounts = 7;
+    public static final int BYTECOUNTS_FIELD_NUMBER = 7;
+    private java.util.List<java.lang.Long> byteCounts_;
+    /**
+     * <code>repeated int64 byteCounts = 7;</code>
+     */
+    public java.util.List<java.lang.Long>
+        getByteCountsList() {
+      return byteCounts_;
+    }
+    /**
+     * <code>repeated int64 byteCounts = 7;</code>
+     */
+    public int getByteCountsCount() {
+      return byteCounts_.size();
+    }
+    /**
+     * <code>repeated int64 byteCounts = 7;</code>
+     */
+    public long getByteCounts(int index) {
+      return byteCounts_.get(index);
+    }
+
+    // repeated int64 rowCounts = 8;
+    public static final int ROWCOUNTS_FIELD_NUMBER = 8;
+    private java.util.List<java.lang.Long> rowCounts_;
+    /**
+     * <code>repeated int64 rowCounts = 8;</code>
+     */
+    public java.util.List<java.lang.Long>
+        getRowCountsList() {
+      return rowCounts_;
+    }
+    /**
+     * <code>repeated int64 rowCounts = 8;</code>
+     */
+    public int getRowCountsCount() {
+      return rowCounts_.size();
+    }
+    /**
+     * <code>repeated int64 rowCounts = 8;</code>
+     */
+    public long getRowCounts(int index) {
+      return rowCounts_.get(index);
+    }
+
     private void initFields() {
       guidePosts_ = java.util.Collections.emptyList();
       byteCount_ = 0L;
       rowCount_ = 0L;
+      maxLength_ = 0;
+      encodedGuidePostsCount_ = 0;
+      encodedGuidePosts_ = com.google.protobuf.ByteString.EMPTY;
+      byteCounts_ = java.util.Collections.emptyList();
+      rowCounts_ = java.util.Collections.emptyList();
     }
     private byte memoizedIsInitialized = -1;
     public final boolean isInitialized() {
@@ -237,6 +457,21 @@ public final class PGuidePostsProtos {
       }
       if (((bitField0_ & 0x00000002) == 0x00000002)) {
         output.writeInt64(3, rowCount_);
+      }
+      if (((bitField0_ & 0x00000004) == 0x00000004)) {
+        output.writeInt32(4, maxLength_);
+      }
+      if (((bitField0_ & 0x00000008) == 0x00000008)) {
+        output.writeInt32(5, encodedGuidePostsCount_);
+      }
+      if (((bitField0_ & 0x00000010) == 0x00000010)) {
+        output.writeBytes(6, encodedGuidePosts_);
+      }
+      for (int i = 0; i < byteCounts_.size(); i++) {
+        output.writeInt64(7, byteCounts_.get(i));
+      }
+      for (int i = 0; i < rowCounts_.size(); i++) {
+        output.writeInt64(8, rowCounts_.get(i));
       }
       getUnknownFields().writeTo(output);
     }
@@ -263,6 +498,36 @@ public final class PGuidePostsProtos {
       if (((bitField0_ & 0x00000002) == 0x00000002)) {
         size += com.google.protobuf.CodedOutputStream
           .computeInt64Size(3, rowCount_);
+      }
+      if (((bitField0_ & 0x00000004) == 0x00000004)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeInt32Size(4, maxLength_);
+      }
+      if (((bitField0_ & 0x00000008) == 0x00000008)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeInt32Size(5, encodedGuidePostsCount_);
+      }
+      if (((bitField0_ & 0x00000010) == 0x00000010)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeBytesSize(6, encodedGuidePosts_);
+      }
+      {
+        int dataSize = 0;
+        for (int i = 0; i < byteCounts_.size(); i++) {
+          dataSize += com.google.protobuf.CodedOutputStream
+            .computeInt64SizeNoTag(byteCounts_.get(i));
+        }
+        size += dataSize;
+        size += 1 * getByteCountsList().size();
+      }
+      {
+        int dataSize = 0;
+        for (int i = 0; i < rowCounts_.size(); i++) {
+          dataSize += com.google.protobuf.CodedOutputStream
+            .computeInt64SizeNoTag(rowCounts_.get(i));
+        }
+        size += dataSize;
+        size += 1 * getRowCountsList().size();
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSerializedSize = size;
@@ -299,6 +564,25 @@ public final class PGuidePostsProtos {
         result = result && (getRowCount()
             == other.getRowCount());
       }
+      result = result && (hasMaxLength() == other.hasMaxLength());
+      if (hasMaxLength()) {
+        result = result && (getMaxLength()
+            == other.getMaxLength());
+      }
+      result = result && (hasEncodedGuidePostsCount() == other.hasEncodedGuidePostsCount());
+      if (hasEncodedGuidePostsCount()) {
+        result = result && (getEncodedGuidePostsCount()
+            == other.getEncodedGuidePostsCount());
+      }
+      result = result && (hasEncodedGuidePosts() == other.hasEncodedGuidePosts());
+      if (hasEncodedGuidePosts()) {
+        result = result && getEncodedGuidePosts()
+            .equals(other.getEncodedGuidePosts());
+      }
+      result = result && getByteCountsList()
+          .equals(other.getByteCountsList());
+      result = result && getRowCountsList()
+          .equals(other.getRowCountsList());
       result = result &&
           getUnknownFields().equals(other.getUnknownFields());
       return result;
@@ -323,6 +607,26 @@ public final class PGuidePostsProtos {
       if (hasRowCount()) {
         hash = (37 * hash) + ROWCOUNT_FIELD_NUMBER;
         hash = (53 * hash) + hashLong(getRowCount());
+      }
+      if (hasMaxLength()) {
+        hash = (37 * hash) + MAXLENGTH_FIELD_NUMBER;
+        hash = (53 * hash) + getMaxLength();
+      }
+      if (hasEncodedGuidePostsCount()) {
+        hash = (37 * hash) + ENCODEDGUIDEPOSTSCOUNT_FIELD_NUMBER;
+        hash = (53 * hash) + getEncodedGuidePostsCount();
+      }
+      if (hasEncodedGuidePosts()) {
+        hash = (37 * hash) + ENCODEDGUIDEPOSTS_FIELD_NUMBER;
+        hash = (53 * hash) + getEncodedGuidePosts().hashCode();
+      }
+      if (getByteCountsCount() > 0) {
+        hash = (37 * hash) + BYTECOUNTS_FIELD_NUMBER;
+        hash = (53 * hash) + getByteCountsList().hashCode();
+      }
+      if (getRowCountsCount() > 0) {
+        hash = (37 * hash) + ROWCOUNTS_FIELD_NUMBER;
+        hash = (53 * hash) + getRowCountsList().hashCode();
       }
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
@@ -439,6 +743,16 @@ public final class PGuidePostsProtos {
         bitField0_ = (bitField0_ & ~0x00000002);
         rowCount_ = 0L;
         bitField0_ = (bitField0_ & ~0x00000004);
+        maxLength_ = 0;
+        bitField0_ = (bitField0_ & ~0x00000008);
+        encodedGuidePostsCount_ = 0;
+        bitField0_ = (bitField0_ & ~0x00000010);
+        encodedGuidePosts_ = com.google.protobuf.ByteString.EMPTY;
+        bitField0_ = (bitField0_ & ~0x00000020);
+        byteCounts_ = java.util.Collections.emptyList();
+        bitField0_ = (bitField0_ & ~0x00000040);
+        rowCounts_ = java.util.Collections.emptyList();
+        bitField0_ = (bitField0_ & ~0x00000080);
         return this;
       }
 
@@ -480,6 +794,28 @@ public final class PGuidePostsProtos {
           to_bitField0_ |= 0x00000002;
         }
         result.rowCount_ = rowCount_;
+        if (((from_bitField0_ & 0x00000008) == 0x00000008)) {
+          to_bitField0_ |= 0x00000004;
+        }
+        result.maxLength_ = maxLength_;
+        if (((from_bitField0_ & 0x00000010) == 0x00000010)) {
+          to_bitField0_ |= 0x00000008;
+        }
+        result.encodedGuidePostsCount_ = encodedGuidePostsCount_;
+        if (((from_bitField0_ & 0x00000020) == 0x00000020)) {
+          to_bitField0_ |= 0x00000010;
+        }
+        result.encodedGuidePosts_ = encodedGuidePosts_;
+        if (((bitField0_ & 0x00000040) == 0x00000040)) {
+          byteCounts_ = java.util.Collections.unmodifiableList(byteCounts_);
+          bitField0_ = (bitField0_ & ~0x00000040);
+        }
+        result.byteCounts_ = byteCounts_;
+        if (((bitField0_ & 0x00000080) == 0x00000080)) {
+          rowCounts_ = java.util.Collections.unmodifiableList(rowCounts_);
+          bitField0_ = (bitField0_ & ~0x00000080);
+        }
+        result.rowCounts_ = rowCounts_;
         result.bitField0_ = to_bitField0_;
         onBuilt();
         return result;
@@ -511,6 +847,35 @@ public final class PGuidePostsProtos {
         }
         if (other.hasRowCount()) {
           setRowCount(other.getRowCount());
+        }
+        if (other.hasMaxLength()) {
+          setMaxLength(other.getMaxLength());
+        }
+        if (other.hasEncodedGuidePostsCount()) {
+          setEncodedGuidePostsCount(other.getEncodedGuidePostsCount());
+        }
+        if (other.hasEncodedGuidePosts()) {
+          setEncodedGuidePosts(other.getEncodedGuidePosts());
+        }
+        if (!other.byteCounts_.isEmpty()) {
+          if (byteCounts_.isEmpty()) {
+            byteCounts_ = other.byteCounts_;
+            bitField0_ = (bitField0_ & ~0x00000040);
+          } else {
+            ensureByteCountsIsMutable();
+            byteCounts_.addAll(other.byteCounts_);
+          }
+          onChanged();
+        }
+        if (!other.rowCounts_.isEmpty()) {
+          if (rowCounts_.isEmpty()) {
+            rowCounts_ = other.rowCounts_;
+            bitField0_ = (bitField0_ & ~0x00000080);
+          } else {
+            ensureRowCountsIsMutable();
+            rowCounts_.addAll(other.rowCounts_);
+          }
+          onChanged();
         }
         this.mergeUnknownFields(other.getUnknownFields());
         return this;
@@ -677,6 +1042,240 @@ public final class PGuidePostsProtos {
         return this;
       }
 
+      // optional int32 maxLength = 4;
+      private int maxLength_ ;
+      /**
+       * <code>optional int32 maxLength = 4;</code>
+       */
+      public boolean hasMaxLength() {
+        return ((bitField0_ & 0x00000008) == 0x00000008);
+      }
+      /**
+       * <code>optional int32 maxLength = 4;</code>
+       */
+      public int getMaxLength() {
+        return maxLength_;
+      }
+      /**
+       * <code>optional int32 maxLength = 4;</code>
+       */
+      public Builder setMaxLength(int value) {
+        bitField0_ |= 0x00000008;
+        maxLength_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>optional int32 maxLength = 4;</code>
+       */
+      public Builder clearMaxLength() {
+        bitField0_ = (bitField0_ & ~0x00000008);
+        maxLength_ = 0;
+        onChanged();
+        return this;
+      }
+
+      // optional int32 encodedGuidePostsCount = 5;
+      private int encodedGuidePostsCount_ ;
+      /**
+       * <code>optional int32 encodedGuidePostsCount = 5;</code>
+       */
+      public boolean hasEncodedGuidePostsCount() {
+        return ((bitField0_ & 0x00000010) == 0x00000010);
+      }
+      /**
+       * <code>optional int32 encodedGuidePostsCount = 5;</code>
+       */
+      public int getEncodedGuidePostsCount() {
+        return encodedGuidePostsCount_;
+      }
+      /**
+       * <code>optional int32 encodedGuidePostsCount = 5;</code>
+       */
+      public Builder setEncodedGuidePostsCount(int value) {
+        bitField0_ |= 0x00000010;
+        encodedGuidePostsCount_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>optional int32 encodedGuidePostsCount = 5;</code>
+       */
+      public Builder clearEncodedGuidePostsCount() {
+        bitField0_ = (bitField0_ & ~0x00000010);
+        encodedGuidePostsCount_ = 0;
+        onChanged();
+        return this;
+      }
+
+      // optional bytes encodedGuidePosts = 6;
+      private com.google.protobuf.ByteString encodedGuidePosts_ = com.google.protobuf.ByteString.EMPTY;
+      /**
+       * <code>optional bytes encodedGuidePosts = 6;</code>
+       */
+      public boolean hasEncodedGuidePosts() {
+        return ((bitField0_ & 0x00000020) == 0x00000020);
+      }
+      /**
+       * <code>optional bytes encodedGuidePosts = 6;</code>
+       */
+      public com.google.protobuf.ByteString getEncodedGuidePosts() {
+        return encodedGuidePosts_;
+      }
+      /**
+       * <code>optional bytes encodedGuidePosts = 6;</code>
+       */
+      public Builder setEncodedGuidePosts(com.google.protobuf.ByteString value) {
+        if (value == null) {
+    throw new NullPointerException();
+  }
+  bitField0_ |= 0x00000020;
+        encodedGuidePosts_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>optional bytes encodedGuidePosts = 6;</code>
+       */
+      public Builder clearEncodedGuidePosts() {
+        bitField0_ = (bitField0_ & ~0x00000020);
+        encodedGuidePosts_ = getDefaultInstance().getEncodedGuidePosts();
+        onChanged();
+        return this;
+      }
+
+      // repeated int64 byteCounts = 7;
+      private java.util.List<java.lang.Long> byteCounts_ = java.util.Collections.emptyList();
+      private void ensureByteCountsIsMutable() {
+        if (!((bitField0_ & 0x00000040) == 0x00000040)) {
+          byteCounts_ = new java.util.ArrayList<java.lang.Long>(byteCounts_);
+          bitField0_ |= 0x00000040;
+         }
+      }
+      /**
+       * <code>repeated int64 byteCounts = 7;</code>
+       */
+      public java.util.List<java.lang.Long>
+          getByteCountsList() {
+        return java.util.Collections.unmodifiableList(byteCounts_);
+      }
+      /**
+       * <code>repeated int64 byteCounts = 7;</code>
+       */
+      public int getByteCountsCount() {
+        return byteCounts_.size();
+      }
+      /**
+       * <code>repeated int64 byteCounts = 7;</code>
+       */
+      public long getByteCounts(int index) {
+        return byteCounts_.get(index);
+      }
+      /**
+       * <code>repeated int64 byteCounts = 7;</code>
+       */
+      public Builder setByteCounts(
+          int index, long value) {
+        ensureByteCountsIsMutable();
+        byteCounts_.set(index, value);
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>repeated int64 byteCounts = 7;</code>
+       */
+      public Builder addByteCounts(long value) {
+        ensureByteCountsIsMutable();
+        byteCounts_.add(value);
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>repeated int64 byteCounts = 7;</code>
+       */
+      public Builder addAllByteCounts(
+          java.lang.Iterable<? extends java.lang.Long> values) {
+        ensureByteCountsIsMutable();
+        super.addAll(values, byteCounts_);
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>repeated int64 byteCounts = 7;</code>
+       */
+      public Builder clearByteCounts() {
+        byteCounts_ = java.util.Collections.emptyList();
+        bitField0_ = (bitField0_ & ~0x00000040);
+        onChanged();
+        return this;
+      }
+
+      // repeated int64 rowCounts = 8;
+      private java.util.List<java.lang.Long> rowCounts_ = java.util.Collections.emptyList();
+      private void ensureRowCountsIsMutable() {
+        if (!((bitField0_ & 0x00000080) == 0x00000080)) {
+          rowCounts_ = new java.util.ArrayList<java.lang.Long>(rowCounts_);
+          bitField0_ |= 0x00000080;
+         }
+      }
+      /**
+       * <code>repeated int64 rowCounts = 8;</code>
+       */
+      public java.util.List<java.lang.Long>
+          getRowCountsList() {
+        return java.util.Collections.unmodifiableList(rowCounts_);
+      }
+      /**
+       * <code>repeated int64 rowCounts = 8;</code>
+       */
+      public int getRowCountsCount() {
+        return rowCounts_.size();
+      }
+      /**
+       * <code>repeated int64 rowCounts = 8;</code>
+       */
+      public long getRowCounts(int index) {
+        return rowCounts_.get(index);
+      }
+      /**
+       * <code>repeated int64 rowCounts = 8;</code>
+       */
+      public Builder setRowCounts(
+          int index, long value) {
+        ensureRowCountsIsMutable();
+        rowCounts_.set(index, value);
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>repeated int64 rowCounts = 8;</code>
+       */
+      public Builder addRowCounts(long value) {
+        ensureRowCountsIsMutable();
+        rowCounts_.add(value);
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>repeated int64 rowCounts = 8;</code>
+       */
+      public Builder addAllRowCounts(
+          java.lang.Iterable<? extends java.lang.Long> values) {
+        ensureRowCountsIsMutable();
+        super.addAll(values, rowCounts_);
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>repeated int64 rowCounts = 8;</code>
+       */
+      public Builder clearRowCounts() {
+        rowCounts_ = java.util.Collections.emptyList();
+        bitField0_ = (bitField0_ & ~0x00000080);
+        onChanged();
+        return this;
+      }
+
       // @@protoc_insertion_point(builder_scope:PGuidePosts)
     }
 
@@ -702,11 +1301,13 @@ public final class PGuidePostsProtos {
       descriptor;
   static {
     java.lang.String[] descriptorData = {
-      "\n\021PGuidePosts.proto\"F\n\013PGuidePosts\022\022\n\ngu" +
-      "idePosts\030\001 \003(\014\022\021\n\tbyteCount\030\002 \001(\003\022\020\n\010row" +
-      "Count\030\003 \001(\003BE\n(org.apache.phoenix.coproc" +
-      "essor.generatedB\021PGuidePostsProtosH\001\210\001\001\240" +
-      "\001\001"
+      "\n\021PGuidePosts.proto\"\273\001\n\013PGuidePosts\022\022\n\ng" +
+      "uidePosts\030\001 \003(\014\022\021\n\tbyteCount\030\002 \001(\003\022\020\n\010ro" +
+      "wCount\030\003 \001(\003\022\021\n\tmaxLength\030\004 \001(\005\022\036\n\026encod" +
+      "edGuidePostsCount\030\005 \001(\005\022\031\n\021encodedGuideP" +
+      "osts\030\006 \001(\014\022\022\n\nbyteCounts\030\007 \003(\003\022\021\n\trowCou" +
+      "nts\030\010 \003(\003BE\n(org.apache.phoenix.coproces" +
+      "sor.generatedB\021PGuidePostsProtosH\001\210\001\001\240\001\001"
     };
     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
       new com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner() {
@@ -718,7 +1319,7 @@ public final class PGuidePostsProtos {
           internal_static_PGuidePosts_fieldAccessorTable = new
             com.google.protobuf.GeneratedMessage.FieldAccessorTable(
               internal_static_PGuidePosts_descriptor,
-              new java.lang.String[] { "GuidePosts", "ByteCount", "RowCount", });
+              new java.lang.String[] { "GuidePosts", "ByteCount", "RowCount", "MaxLength", "EncodedGuidePostsCount", "EncodedGuidePosts", "ByteCounts", "RowCounts", });
           return null;
         }
       };

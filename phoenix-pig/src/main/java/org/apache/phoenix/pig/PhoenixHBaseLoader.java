@@ -29,20 +29,19 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.mapreduce.TableMapReduceUtil;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapreduce.InputFormat;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.phoenix.mapreduce.PhoenixInputFormat;
+import org.apache.phoenix.mapreduce.PhoenixRecordWritable;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.SchemaType;
 import org.apache.phoenix.pig.util.PhoenixPigSchemaUtil;
 import org.apache.phoenix.pig.util.QuerySchemaParserFunction;
 import org.apache.phoenix.pig.util.TableSchemaParserFunction;
 import org.apache.phoenix.pig.util.TypeUtil;
-import org.apache.phoenix.pig.writable.PhoenixPigDBWritable;
 import org.apache.pig.Expression;
 import org.apache.pig.LoadFunc;
 import org.apache.pig.LoadMetadata;
@@ -56,6 +55,7 @@ import org.apache.pig.impl.util.ObjectSerializer;
 import org.apache.pig.impl.util.UDFContext;
 
 import com.google.common.base.Preconditions;
+
 
 /**
  * LoadFunc to load data from HBase using Phoenix .
@@ -90,8 +90,8 @@ public final class PhoenixHBaseLoader extends LoadFunc implements LoadMetadata {
     private String tableName;
     private String selectQuery;
     private String zkQuorum ;
-    private PhoenixInputFormat<PhoenixPigDBWritable> inputFormat;
-    private RecordReader<NullWritable,PhoenixPigDBWritable> reader;
+    private PhoenixInputFormat<PhoenixRecordWritable> inputFormat;
+    private RecordReader<NullWritable,PhoenixRecordWritable> reader;
     private String contextSignature;
     private ResourceSchema schema;
        
@@ -122,13 +122,13 @@ public final class PhoenixHBaseLoader extends LoadFunc implements LoadMetadata {
      * @param configuration
      * @throws PigException
      */
-    private void initializePhoenixPigConfiguration(final String location, final Configuration configuration) throws PigException {
+    private void initializePhoenixPigConfiguration(final String location, final Configuration configuration) throws IOException {
         if(this.config != null) {
             return;
         }
         this.config = configuration;
         this.config.set(HConstants.ZOOKEEPER_QUORUM,this.zkQuorum);
-        PhoenixConfigurationUtil.setInputClass(this.config, PhoenixPigDBWritable.class);
+        PhoenixConfigurationUtil.setInputClass(this.config, PhoenixRecordWritable.class);
         Pair<String,String> pair = null;
         try {
             if (location.startsWith(PHOENIX_TABLE_NAME_SCHEME)) {
@@ -167,8 +167,8 @@ public final class PhoenixHBaseLoader extends LoadFunc implements LoadMetadata {
     @Override
     public InputFormat getInputFormat() throws IOException {
         if(inputFormat == null) {
-            inputFormat = new PhoenixInputFormat<PhoenixPigDBWritable>();
-            PhoenixConfigurationUtil.setInputClass(this.config,PhoenixPigDBWritable.class);
+            inputFormat = new PhoenixInputFormat<PhoenixRecordWritable>();
+            PhoenixConfigurationUtil.setInputClass(this.config, PhoenixRecordWritable.class);
         }
         return inputFormat;
     }
@@ -198,17 +198,18 @@ public final class PhoenixHBaseLoader extends LoadFunc implements LoadMetadata {
             if(!reader.nextKeyValue()) {
                 return null; 
              }
-             final PhoenixPigDBWritable record = reader.getCurrentValue();
+            final PhoenixRecordWritable record = reader.getCurrentValue();
             if(record == null) {
                 return null;
             }
-            final Tuple tuple = TypeUtil.transformToTuple(record,schema.getFields());
+            final Tuple tuple = TypeUtil.transformToTuple(record, schema.getFields());
             return tuple;
        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
             int errCode = 6018;
             final String errMsg = "Error while reading input";
             throw new ExecException(errMsg, errCode,PigException.REMOTE_ENVIRONMENT, e);
-        }
+       } 
     }
     
     private void printUsage(final String location) throws PigException {

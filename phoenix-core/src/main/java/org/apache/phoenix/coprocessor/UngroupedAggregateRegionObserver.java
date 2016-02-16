@@ -22,6 +22,8 @@ import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_FAMILY;
 import static org.apache.phoenix.query.QueryConstants.UNGROUPED_AGG_ROW_KEY;
 import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_ATTRIB;
+import static org.apache.phoenix.schema.stats.StatisticsCollectionRunTracker.COMPACTION_UPDATE_STATS_ROW_COUNT;
+import static org.apache.phoenix.schema.stats.StatisticsCollectionRunTracker.CONCURRENT_UPDATE_STATS_ROW_COUNT;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -34,13 +36,17 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.Callable;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.MetaTableAccessor;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -55,6 +61,7 @@ import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScanType;
 import org.apache.hadoop.hbase.regionserver.Store;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.exception.DataExceedsCapacityException;
@@ -83,6 +90,7 @@ import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.ValueSchema.Field;
+import org.apache.phoenix.schema.stats.StatisticsCollectionRunTracker;
 import org.apache.phoenix.schema.stats.StatisticsCollector;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.schema.types.PBinary;
@@ -90,6 +98,7 @@ import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDouble;
 import org.apache.phoenix.schema.types.PFloat;
+import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.KeyValueUtil;
@@ -103,8 +112,11 @@ import org.apache.phoenix.util.TimeKeeper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.common.base.Throwables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+
+import co.cask.tephra.TxConstants;
 
 
 /**
@@ -113,7 +125,7 @@ import com.google.common.collect.Sets;
  *
  * @since 0.1
  */
-public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
+public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver {
     // TODO: move all constants into a single class
     public static final String UNGROUPED_AGG = "UngroupedAgg";
     public static final String DELETE_AGG = "DeleteAgg";
@@ -166,14 +178,19 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
 
     @Override
     protected RegionScanner doPostScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c, final Scan scan, final RegionScanner s) throws IOException {
-        Region region = c.getEnvironment().getRegion();
+        RegionCoprocessorEnvironment env = c.getEnvironment();
+        Region region = env.getRegion();
         long ts = scan.getTimeRange().getMax();
-        StatisticsCollector stats = null;
-        if(ScanUtil.isAnalyzeTable(scan)) {
-            byte[] gp_width_bytes = scan.getAttribute(BaseScannerRegionObserver.GUIDEPOST_WIDTH_BYTES);
-            byte[] gp_per_region_bytes = scan.getAttribute(BaseScannerRegionObserver.GUIDEPOST_PER_REGION);
+        if (ScanUtil.isAnalyzeTable(scan)) {
+            byte[] gp_width_bytes =
+                    scan.getAttribute(BaseScannerRegionObserver.GUIDEPOST_WIDTH_BYTES);
+            byte[] gp_per_region_bytes =
+                    scan.getAttribute(BaseScannerRegionObserver.GUIDEPOST_PER_REGION);
             // Let this throw, as this scan is being done for the sole purpose of collecting stats
-            stats = new StatisticsCollector(c.getEnvironment(), region.getRegionInfo().getTable().getNameAsString(), ts, gp_width_bytes, gp_per_region_bytes);
+            StatisticsCollector statsCollector =
+                    new StatisticsCollector(env, region.getRegionInfo().getTable()
+                            .getNameAsString(), ts, gp_width_bytes, gp_per_region_bytes);
+            return collectStats(s, statsCollector, region, scan, env.getConfiguration());
         }
         int offsetToBe = 0;
         if (ScanUtil.isLocalIndex(scan)) {
@@ -205,9 +222,9 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
         byte[] localIndexBytes = scan.getAttribute(LOCAL_INDEX_BUILD);
         List<IndexMaintainer> indexMaintainers = localIndexBytes == null ? null : IndexMaintainer.deserialize(localIndexBytes);
         List<Mutation> indexMutations = localIndexBytes == null ? Collections.<Mutation>emptyList() : Lists.<Mutation>newArrayListWithExpectedSize(1024);
-
+        
         RegionScanner theScanner = s;
-
+        
         byte[] indexUUID = scan.getAttribute(PhoenixIndexCodec.INDEX_UUID);
         List<Expression> selectExpressions = null;
         byte[] upsertSelectTable = scan.getAttribute(BaseScannerRegionObserver.UPSERT_SELECT_TABLE);
@@ -241,35 +258,35 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
         if ((localIndexScan && !isDelete && !isDescRowKeyOrderUpgrade) || (j == null && p != null)) {
             if (dataColumns != null) {
                 tupleProjector = IndexUtil.getTupleProjector(scan, dataColumns);
-                dataRegion = IndexUtil.getDataRegion(c.getEnvironment());
+                dataRegion = IndexUtil.getDataRegion(env);
                 viewConstants = IndexUtil.deserializeViewConstantsFromScan(scan);
             }
             ImmutableBytesWritable tempPtr = new ImmutableBytesWritable();
             theScanner =
-                    getWrappedScanner(c, theScanner, offset, scan, dataColumns, tupleProjector,
+                    getWrappedScanner(c, theScanner, offset, scan, dataColumns, tupleProjector, 
                             dataRegion, indexMaintainers == null ? null : indexMaintainers.get(0), viewConstants, p, tempPtr);
-        }
-
+        } 
+        
         if (j != null)  {
-            theScanner = new HashJoinRegionScanner(theScanner, p, j, ScanUtil.getTenantId(scan), c.getEnvironment());
+            theScanner = new HashJoinRegionScanner(theScanner, p, j, ScanUtil.getTenantId(scan), env);
         }
-
+        
         int batchSize = 0;
         List<Mutation> mutations = Collections.emptyList();
         boolean buildLocalIndex = indexMaintainers != null && dataColumns==null && !localIndexScan;
         if (isDescRowKeyOrderUpgrade || isDelete || isUpsert || (deleteCQ != null && deleteCF != null) || emptyCF != null || buildLocalIndex) {
             // TODO: size better
             mutations = Lists.newArrayListWithExpectedSize(1024);
-            batchSize = c.getEnvironment().getConfiguration().getInt(MUTATE_BATCH_SIZE_ATTRIB, QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE);
+            batchSize = env.getConfiguration().getInt(MUTATE_BATCH_SIZE_ATTRIB, QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE);
         }
         Aggregators aggregators = ServerAggregators.deserialize(
-                scan.getAttribute(BaseScannerRegionObserver.AGGREGATORS), c.getEnvironment().getConfiguration());
+                scan.getAttribute(BaseScannerRegionObserver.AGGREGATORS), env.getConfiguration());
         Aggregator[] rowAggregators = aggregators.getAggregators();
         boolean hasMore;
         boolean hasAny = false;
         MultiKeyValueTuple result = new MultiKeyValueTuple();
         if (logger.isDebugEnabled()) {
-        	logger.debug(LogUtil.addCustomAnnotations("Starting ungrouped coprocessor scan " + scan + " "+region.getRegionInfo(), ScanUtil.getCustomAnnotations(scan)));
+            logger.debug(LogUtil.addCustomAnnotations("Starting ungrouped coprocessor scan " + scan + " "+region.getRegionInfo(), ScanUtil.getCustomAnnotations(scan)));
         }
         long rowCount = 0;
         final RegionScanner innerScanner = theScanner;
@@ -282,9 +299,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
                     // since this is an indication of whether or not there are more values after the
                     // ones returned
                     hasMore = innerScanner.nextRaw(results);
-                    if (stats != null) {
-                        stats.collectStatistics(results);
-                    }
                     if (!results.isEmpty()) {
                         rowCount++;
                         result.setKeyValues(results);
@@ -304,8 +318,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
                                         // Special case for re-writing DESC ARRAY, as the actual byte value needs to change in this case
                                         if (field.getDataType().isArrayType()) {
                                             field.getDataType().coerceBytes(ptr, null, field.getDataType(),
-                                                    field.getMaxLength(), field.getScale(), field.getSortOrder(), 
-                                                    field.getMaxLength(), field.getScale(), field.getSortOrder(), true); // force to use correct separator byte
+                                                field.getMaxLength(), field.getScale(), field.getSortOrder(), 
+                                                field.getMaxLength(), field.getScale(), field.getSortOrder(), true); // force to use correct separator byte
                                         }
                                         // Special case for re-writing DESC CHAR or DESC BINARY, to force the re-writing of trailing space characters
                                         else if (field.getDataType() == PChar.INSTANCE || field.getDataType() == PBinary.INSTANCE) {
@@ -314,7 +328,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
                                                 len--;
                                             }
                                             ptr.set(ptr.get(), ptr.getOffset(), len);
-                                        // Special case for re-writing DESC FLOAT and DOUBLE, as they're not inverted like they should be (PHOENIX-2171)
+                                            // Special case for re-writing DESC FLOAT and DOUBLE, as they're not inverted like they should be (PHOENIX-2171)
                                         } else if (field.getDataType() == PFloat.INSTANCE || field.getDataType() == PDouble.INSTANCE) {
                                             byte[] invertedBytes = SortOrder.invert(ptr.get(), ptr.getOffset(), ptr.getLength());
                                             ptr.set(invertedBytes);
@@ -333,8 +347,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
                                 }
                                 writeToTable.newKey(ptr, values);
                                 if (Bytes.compareTo(
-                                        firstKV.getRowArray(), firstKV.getRowOffset() + offset, firstKV.getRowLength(), 
-                                        ptr.get(),ptr.getOffset() + offset,ptr.getLength()) == 0) {
+                                    firstKV.getRowArray(), firstKV.getRowOffset() + offset, firstKV.getRowLength(), 
+                                    ptr.get(),ptr.getOffset() + offset,ptr.getLength()) == 0) {
                                     continue;
                                 }
                                 byte[] newRow = ByteUtil.copyKeyBytesIfNecessary(ptr);
@@ -348,21 +362,21 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
                                 for (Cell cell : results) {
                                     // Copy existing cell but with new row key
                                     Cell newCell = new KeyValue(newRow, 0, newRow.length,
-                                            cell.getFamilyArray(), cell.getFamilyOffset(), cell.getFamilyLength(),
-                                            cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength(),
-                                            cell.getTimestamp(), KeyValue.Type.codeToType(cell.getTypeByte()),
-                                            cell.getValueArray(), cell.getValueOffset(), cell.getValueLength());
+                                        cell.getFamilyArray(), cell.getFamilyOffset(), cell.getFamilyLength(),
+                                        cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength(),
+                                        cell.getTimestamp(), KeyValue.Type.codeToType(cell.getTypeByte()),
+                                        cell.getValueArray(), cell.getValueOffset(), cell.getValueLength());
                                     switch (KeyValue.Type.codeToType(cell.getTypeByte())) {
                                     case Put:
                                         // If Put, point delete old Put
                                         Delete del = new Delete(oldRow);
                                         del.addDeleteMarker(new KeyValue(cell.getRowArray(), cell.getRowOffset(), cell.getRowLength(),
-                                                cell.getFamilyArray(), cell.getFamilyOffset(), cell.getFamilyLength(),
-                                                cell.getQualifierArray(), cell.getQualifierOffset(),
-                                                cell.getQualifierLength(), cell.getTimestamp(), KeyValue.Type.Delete,
-                                                ByteUtil.EMPTY_BYTE_ARRAY, 0, 0));
+                                            cell.getFamilyArray(), cell.getFamilyOffset(), cell.getFamilyLength(),
+                                            cell.getQualifierArray(), cell.getQualifierOffset(),
+                                            cell.getQualifierLength(), cell.getTimestamp(), KeyValue.Type.Delete,
+                                            ByteUtil.EMPTY_BYTE_ARRAY, 0, 0));
                                         mutations.add(del);
-                                        
+
                                         Put put = new Put(newRow);
                                         put.add(newCell);
                                         mutations.add(put);
@@ -382,13 +396,13 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
                                     if (!results.isEmpty()) {
                                         result.getKey(ptr);
                                         ValueGetter valueGetter =
-                                            maintainer.createGetterFromKeyValues(
-                                                ImmutableBytesPtr.copyBytesIfNecessary(ptr),
-                                                results);
+                                                maintainer.createGetterFromKeyValues(
+                                                    ImmutableBytesPtr.copyBytesIfNecessary(ptr),
+                                                    results);
                                         Put put = maintainer.buildUpdateMutation(kvBuilder,
                                             valueGetter, ptr, ts,
-                                            c.getEnvironment().getRegion().getRegionInfo().getStartKey(),
-                                            c.getEnvironment().getRegion().getRegionInfo().getEndKey());
+                                            env.getRegion().getRegionInfo().getStartKey(),
+                                            env.getRegion().getRegionInfo().getEndKey());
                                         indexMutations.add(put);
                                     }
                                 }
@@ -397,10 +411,12 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
                                 // FIXME: the version of the Delete constructor without the lock
                                 // args was introduced in 0.94.4, thus if we try to use it here
                                 // we can no longer use the 0.94.2 version of the client.
-                              Cell firstKV = results.get(0);
-                              Delete delete = new Delete(firstKV.getRowArray(),
-                                  firstKV.getRowOffset(), firstKV.getRowLength(),ts);
-                              mutations.add(delete);
+                                Cell firstKV = results.get(0);
+                                Delete delete = new Delete(firstKV.getRowArray(),
+                                    firstKV.getRowOffset(), firstKV.getRowLength(),ts);
+                                mutations.add(delete);
+                                // force tephra to ignore this deletes
+                                delete.setAttribute(TxConstants.TX_ROLLBACK_ATTRIBUTE_KEY, new byte[0]);
                             } else if (isUpsert) {
                                 Arrays.fill(values, null);
                                 int i = 0;
@@ -412,7 +428,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
                                         // If SortOrder from expression in SELECT doesn't match the
                                         // column being projected into then invert the bits.
                                         if (expression.getSortOrder() !=
-                                            projectedColumns.get(i).getSortOrder()) {
+                                                projectedColumns.get(i).getSortOrder()) {
                                             SortOrder.invert(values[i], 0, values[i], 0,
                                                 values[i].length);
                                         }
@@ -425,20 +441,20 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
                                     if (expression.evaluate(result, ptr)) {
                                         PColumn column = projectedColumns.get(i);
                                         Object value = expression.getDataType()
-                                            .toObject(ptr, column.getSortOrder());
+                                                .toObject(ptr, column.getSortOrder());
                                         // We are guaranteed that the two column will have the
                                         // same type.
                                         if (!column.getDataType().isSizeCompatible(ptr, value,
-                                                column.getDataType(), expression.getMaxLength(),
-                                                expression.getScale(), column.getMaxLength(),
-                                                column.getScale())) {
+                                            column.getDataType(), expression.getMaxLength(),
+                                            expression.getScale(), column.getMaxLength(),
+                                            column.getScale())) {
                                             throw new DataExceedsCapacityException(
                                                 column.getDataType(), column.getMaxLength(),
                                                 column.getScale());
                                         }
                                         column.getDataType().coerceBytes(ptr, value,
                                             expression.getDataType(), expression.getMaxLength(),
-                                            expression.getScale(), expression.getSortOrder(),
+                                            expression.getScale(), expression.getSortOrder(), 
                                             column.getMaxLength(), column.getScale(),
                                             column.getSortOrder(), projectedTable.rowKeyOrderOptimizable());
                                         byte[] bytes = ByteUtil.copyKeyBytesIfNecessary(ptr);
@@ -460,6 +476,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
                                         results.get(0).getRowOffset(),
                                         results.get(0).getRowLength());
                                     delete.deleteColumns(deleteCF,  deleteCQ, ts);
+                                    // force tephra to ignore this deletes
+                                    delete.setAttribute(TxConstants.TX_ROLLBACK_ATTRIBUTE_KEY, new byte[0]);
                                     mutations.add(delete);
                                 }
                             }
@@ -473,7 +491,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
                                  * We insert one empty key value per row per timestamp.
                                  */
                                 Set<Long> timeStamps =
-                                    Sets.newHashSetWithExpectedSize(results.size());
+                                        Sets.newHashSetWithExpectedSize(results.size());
                                 for (Cell kv : results) {
                                     long kvts = kv.getTimestamp();
                                     if (!timeStamps.contains(kvts)) {
@@ -499,9 +517,9 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
                         } catch (ConstraintViolationException e) {
                             // Log and ignore in count
                             logger.error(LogUtil.addCustomAnnotations("Failed to create row in " +
-                                region.getRegionInfo().getRegionNameAsString() + " with values " +
-                                SchemaUtil.toString(values),
-                                ScanUtil.getCustomAnnotations(scan)), e);
+                                    region.getRegionInfo().getRegionNameAsString() + " with values " +
+                                    SchemaUtil.toString(values),
+                                    ScanUtil.getCustomAnnotations(scan)), e);
                             continue;
                         }
                         aggregators.aggregate(rowAggregators, result);
@@ -511,24 +529,13 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
             }
         } finally {
             try {
-                if (stats != null) {
-                    try {
-                        stats.updateStatistic(region);
-                    } finally {
-                        stats.close();
-                    }
-                }
+                innerScanner.close();
             } finally {
-                try {
-                    innerScanner.close();
-                } finally {
-                    region.closeRegionOperation();
-                }
+                region.closeRegionOperation();
             }
         }
-
         if (logger.isDebugEnabled()) {
-        	logger.debug(LogUtil.addCustomAnnotations("Finished scanning " + rowCount + " rows for ungrouped coprocessor scan " + scan, ScanUtil.getCustomAnnotations(scan)));
+            logger.debug(LogUtil.addCustomAnnotations("Finished scanning " + rowCount + " rows for ungrouped coprocessor scan " + scan, ScanUtil.getCustomAnnotations(scan)));
         }
 
         if (!mutations.isEmpty()) {
@@ -547,22 +554,12 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
         }
         final KeyValue aggKeyValue = keyValue;
 
-        RegionScanner scanner = new BaseRegionScanner() {
+        RegionScanner scanner = new BaseRegionScanner(innerScanner) {
             private boolean done = !hadAny;
-
-            @Override
-            public HRegionInfo getRegionInfo() {
-                return innerScanner.getRegionInfo();
-            }
 
             @Override
             public boolean isFilterDone() {
                 return done;
-            }
-
-            @Override
-            public void close() throws IOException {
-                innerScanner.close();
             }
 
             @Override
@@ -575,12 +572,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
 
             @Override
             public long getMaxResultSize() {
-            	return scan.getMaxResultSize();
-            }
-
-            @Override
-            public int getBatch() {
-                return innerScanner.getBatch();
+                return scan.getMaxResultSize();
             }
         };
         return scanner;
@@ -601,6 +593,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
                 table = c.getEnvironment().getTable(indexTable);
                 table.batch(indexMutations);
             } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
                 ServerUtil.throwIOException(c.getEnvironment().getRegion().getRegionInfo().getRegionNameAsString(),
                     ie);
             } finally {
@@ -611,59 +604,38 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
     }
 
     @Override
-    public InternalScanner preCompact(ObserverContext<RegionCoprocessorEnvironment> c,
-        final Store store, InternalScanner scanner, final ScanType scanType)
-        throws IOException {
+    public InternalScanner preCompact(ObserverContext<RegionCoprocessorEnvironment> c, final Store store,
+            InternalScanner scanner, final ScanType scanType) throws IOException {
         TableName table = c.getEnvironment().getRegion().getRegionInfo().getTable();
         InternalScanner internalScanner = scanner;
         if (scanType.equals(ScanType.COMPACT_DROP_DELETES)) {
             try {
-                boolean useCurrentTime =
-                        c.getEnvironment().getConfiguration().getBoolean(QueryServices.STATS_USE_CURRENT_TIME_ATTRIB,
-                                QueryServicesOptions.DEFAULT_STATS_USE_CURRENT_TIME);
+                boolean useCurrentTime = c.getEnvironment().getConfiguration().getBoolean(
+                        QueryServices.STATS_USE_CURRENT_TIME_ATTRIB,
+                        QueryServicesOptions.DEFAULT_STATS_USE_CURRENT_TIME);
+                Connection conn = c.getEnvironment().getRegionServerServices().getConnection();
+                Pair<HRegionInfo, HRegionInfo> mergeRegions = null;
+                if (store.hasReferences()) {
+                    mergeRegions = MetaTableAccessor.getRegionsFromMergeQualifier(conn,
+                            c.getEnvironment().getRegion().getRegionInfo().getRegionName());
+                }
                 // Provides a means of clients controlling their timestamps to not use current time
                 // when background tasks are updating stats. Instead we track the max timestamp of
                 // the cells and use that.
-                long clientTimeStamp = useCurrentTime ? TimeKeeper.SYSTEM.getCurrentTime() : StatisticsCollector.NO_TIMESTAMP;
-                StatisticsCollector stats = new StatisticsCollector(
-                        c.getEnvironment(), table.getNameAsString(),
+                long clientTimeStamp = useCurrentTime ? TimeKeeper.SYSTEM.getCurrentTime()
+                        : StatisticsCollector.NO_TIMESTAMP;
+                StatisticsCollector stats = new StatisticsCollector(c.getEnvironment(), table.getNameAsString(),
                         clientTimeStamp, store.getFamily().getName());
-                internalScanner = stats.createCompactionScanner(c.getEnvironment().getRegion(), store, scanner);
+                internalScanner = stats.createCompactionScanner(c.getEnvironment(), store, scanner, mergeRegions);
             } catch (IOException e) {
                 // If we can't reach the stats table, don't interrupt the normal
                 // compaction operation, just log a warning.
-                if(logger.isWarnEnabled()) {
+                if (logger.isWarnEnabled()) {
                     logger.warn("Unable to collect stats for " + table, e);
                 }
             }
         }
         return internalScanner;
-    }
-
-
-    @Override
-    public void postSplit(ObserverContext<RegionCoprocessorEnvironment> e, Region l, Region r)
-            throws IOException {
-        Region region = e.getEnvironment().getRegion();
-        TableName table = region.getRegionInfo().getTable();
-        StatisticsCollector stats = null;
-        try {
-            boolean useCurrentTime =
-                    e.getEnvironment().getConfiguration().getBoolean(QueryServices.STATS_USE_CURRENT_TIME_ATTRIB,
-                            QueryServicesOptions.DEFAULT_STATS_USE_CURRENT_TIME);
-            // Provides a means of clients controlling their timestamps to not use current time
-            // when background tasks are updating stats. Instead we track the max timestamp of
-            // the cells and use that.
-            long clientTimeStamp = useCurrentTime ? TimeKeeper.SYSTEM.getCurrentTime() : StatisticsCollector.NO_TIMESTAMP;
-            stats = new StatisticsCollector(e.getEnvironment(), table.getNameAsString(), clientTimeStamp);
-            stats.splitStats(region, l, r);
-        } catch (IOException ioe) {
-            if(logger.isWarnEnabled()) {
-                logger.warn("Error while collecting stats during split for " + table,ioe);
-            }
-        } finally {
-            if (stats != null) stats.close();
-        }
     }
 
     private static PTable deserializeTable(byte[] b) {
@@ -672,6 +644,147 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
             return PTableImpl.createFromProto(ptableProto);
         } catch (IOException e) {
             throw new RuntimeException(e);
+        }
+    }
+    
+    private RegionScanner collectStats(final RegionScanner innerScanner, StatisticsCollector stats,
+            final Region region, final Scan scan, Configuration config) throws IOException {
+        StatsCollectionCallable callable =
+                new StatsCollectionCallable(stats, region, innerScanner, config);
+        byte[] asyncBytes = scan.getAttribute(BaseScannerRegionObserver.RUN_UPDATE_STATS_ASYNC_ATTRIB);
+        boolean async = false;
+        if (asyncBytes != null) {
+            async = Bytes.toBoolean(asyncBytes);
+        }
+        long rowCount = 0; // in case of async, we report 0 as number of rows updated
+        StatisticsCollectionRunTracker statsRunTracker =
+                StatisticsCollectionRunTracker.getInstance(config);
+        boolean runUpdateStats = statsRunTracker.addUpdateStatsCommandRegion(region.getRegionInfo());
+        if (runUpdateStats) {
+            if (!async) {
+                rowCount = callable.call();
+            } else {
+                statsRunTracker.runTask(callable);
+            }
+        } else {
+            rowCount = CONCURRENT_UPDATE_STATS_ROW_COUNT;
+            logger.info("UPDATE STATISTICS didn't run because another UPDATE STATISTICS command was already running on the region "
+                    + region.getRegionInfo().getRegionNameAsString());
+        }
+        byte[] rowCountBytes = PLong.INSTANCE.toBytes(Long.valueOf(rowCount));
+        final KeyValue aggKeyValue =
+                KeyValueUtil.newKeyValue(UNGROUPED_AGG_ROW_KEY, SINGLE_COLUMN_FAMILY,
+                    SINGLE_COLUMN, AGG_TIMESTAMP, rowCountBytes, 0, rowCountBytes.length);
+        RegionScanner scanner = new BaseRegionScanner(innerScanner) {
+            @Override
+            public HRegionInfo getRegionInfo() {
+                return region.getRegionInfo();
+            }
+
+            @Override
+            public boolean isFilterDone() {
+                return true;
+            }
+
+            @Override
+            public void close() throws IOException {
+                // no-op because we want to manage closing of the inner scanner ourselves.
+            }
+
+            @Override
+            public boolean next(List<Cell> results) throws IOException {
+                results.add(aggKeyValue);
+                return false;
+            }
+
+            @Override
+            public long getMaxResultSize() {
+                return scan.getMaxResultSize();
+            }
+        };
+        return scanner;
+    }
+
+    /**
+     * 
+     * Callable to encapsulate the collection of stats triggered by 
+     * UPDATE STATISTICS command.
+     *
+     * Package private for tests.
+     */
+    static class StatsCollectionCallable implements Callable<Long> {
+        private final StatisticsCollector stats;
+        private final Region region;
+        private final RegionScanner innerScanner;
+        private final Configuration config;
+
+        StatsCollectionCallable(StatisticsCollector s, Region r, RegionScanner rs,
+                Configuration config) {
+            this.stats = s;
+            this.region = r;
+            this.innerScanner = rs;
+            this.config = config;
+        }
+
+        @Override
+        public Long call() throws IOException {
+            return collectStatsInternal();
+        }
+
+        private boolean areStatsBeingCollectedViaCompaction() {
+            return StatisticsCollectionRunTracker.getInstance(config)
+                    .areStatsBeingCollectedOnCompaction(region.getRegionInfo());
+        }
+
+        private long collectStatsInternal() throws IOException {
+            long startTime = System.currentTimeMillis();
+            region.startRegionOperation();
+            boolean hasMore = false;
+            boolean noErrors = false;
+            boolean compactionRunning = areStatsBeingCollectedViaCompaction();
+            long rowCount = 0;
+            try {
+                if (!compactionRunning) {
+                    synchronized (innerScanner) {
+                        do {
+                            List<Cell> results = new ArrayList<Cell>();
+                            hasMore = innerScanner.nextRaw(results);
+                            stats.collectStatistics(results);
+                            rowCount++;
+                            compactionRunning = areStatsBeingCollectedViaCompaction();
+                        } while (hasMore && !compactionRunning);
+                        noErrors = true;
+                    }
+                }
+                return compactionRunning ? COMPACTION_UPDATE_STATS_ROW_COUNT : rowCount;
+            } catch (IOException e) {
+                logger.error("IOException in update stats: " + Throwables.getStackTraceAsString(e));
+                throw e;
+            } finally {
+                try {
+                    if (noErrors && !compactionRunning) {
+                        stats.updateStatistic(region);
+                        logger.info("UPDATE STATISTICS finished successfully for scanner: "
+                                + innerScanner + ". Number of rows scanned: " + rowCount
+                                + ". Time: " + (System.currentTimeMillis() - startTime));
+                    }
+                    if (compactionRunning) {
+                        logger.info("UPDATE STATISTICS stopped in between because major compaction was running for region "
+                                + region.getRegionInfo().getRegionNameAsString());
+                    }
+                } finally {
+                    try {
+                        StatisticsCollectionRunTracker.getInstance(config).removeUpdateStatsCommandRegion(region.getRegionInfo());
+                        stats.close();
+                    } finally {
+                        try {
+                            innerScanner.close();
+                        } finally {
+                            region.closeRegionOperation();
+                        }
+                    }
+                }
+            }
         }
     }
 

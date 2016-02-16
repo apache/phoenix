@@ -509,7 +509,8 @@ fam_prop_name returns [PropertyName ret]
     ;
     
 prop_value returns [Object ret]
-    :   l=literal { $ret = l.getValue(); }
+    :   v=identifier { $ret = v; }
+    |   l=literal { $ret = l.getValue(); }
     ;
     
 column_name returns [ColumnName ret]
@@ -1212,14 +1213,14 @@ DIGIT
 STRING_LITERAL
 @init{ StringBuilder sb = new StringBuilder(); }
     :   '\''
-    ( t=CHAR { sb.append(t.getText()); }
+    ( t=CHAR { sb.append(t.getText()); } 
     | t=CHAR_ESC { sb.append(getText()); }
     )* '\'' { setText(sb.toString()); }
     ;
 
 fragment
 CHAR
-    :   ( ~('\'' | '\\') )+
+    :   ( ~('\'' | '\\') )
     ;
 
 fragment
@@ -1241,6 +1242,7 @@ CHAR_ESC
         | '\\'  { setText("\\"); }
         | '_'   { setText("\\_"); }
         | '%'   { setText("\\\%"); }
+        |       { setText("\\"); }
         )
     |   '\'\''  { setText("\'"); }
     ;

@@ -22,6 +22,7 @@ import static org.junit.Assert.assertTrue;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
@@ -52,10 +53,12 @@ import org.apache.phoenix.hbase.index.IndexTestingUtils;
 import org.apache.phoenix.hbase.index.Indexer;
 import org.apache.phoenix.hbase.index.master.IndexMasterObserver;
 import org.apache.phoenix.util.ConfigUtil;
-import org.junit.AfterClass;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
+import org.junit.rules.Timeout;
 
 @Category(NeedsOwnMiniClusterTest.class)
 public class IndexLoadBalancerIT {
@@ -63,6 +66,9 @@ public class IndexLoadBalancerIT {
     private static HBaseTestingUtility UTIL = new HBaseTestingUtility();
 
     private static HBaseAdmin admin = null;
+    
+    @Rule
+    public Timeout timeout = new Timeout(300, TimeUnit.SECONDS);
 
     @BeforeClass
     public static void setupCluster() throws Exception {
@@ -81,21 +87,8 @@ public class IndexLoadBalancerIT {
         UTIL.startMiniCluster(NUM_RS);
         admin = UTIL.getHBaseAdmin();
     }
-
-    @AfterClass
-    public static void tearDownAfterClass() throws Exception {
-        try {
-            if (admin != null) {
-                admin.disableTables(".*");
-                admin.deleteTables(".*");
-                admin.close();
-            }
-        } finally {
-            UTIL.shutdownMiniCluster();
-        }
-    }
-
-    @Test(timeout = 180000)
+    
+    @Test
     public void testRoundRobinAssignmentDuringIndexTableCreation() throws Exception {
         MiniHBaseCluster cluster = UTIL.getHBaseCluster();
         HMaster master = cluster.getMaster();
@@ -108,8 +101,8 @@ public class IndexLoadBalancerIT {
                         .getNameAsString());
         assertTrue("User regions and index regions should colocate.", isRegionColocated);
     }
-
-    @Test(timeout = 180000)
+    
+    @Test
     public void testColocationAfterSplit() throws Exception {
         MiniHBaseCluster cluster = UTIL.getHBaseCluster();
         HMaster master = cluster.getMaster();
@@ -161,8 +154,8 @@ public class IndexLoadBalancerIT {
                         .getNameAsString());
         assertTrue("User regions and index regions should colocate.", isRegionColocated);
     }
-
-    @Test(timeout = 180000)
+    
+    @Test
     public void testColocationAfterRegionsMerge() throws Exception {
         MiniHBaseCluster cluster = UTIL.getHBaseCluster();
         HMaster master = cluster.getMaster();
@@ -253,8 +246,8 @@ public class IndexLoadBalancerIT {
         table.put(p4);
         admin.flush(tableName.getNameAsString());
     }
-
-    @Test(timeout = 180000)
+    
+    @Test
     public void testRandomAssignmentDuringIndexTableEnable() throws Exception {
         MiniHBaseCluster cluster = UTIL.getHBaseCluster();
         HMaster master = cluster.getMaster();
@@ -273,8 +266,8 @@ public class IndexLoadBalancerIT {
         assertTrue("User regions and index regions should colocate.", isRegionColocated);
 
     }
-
-    @Test(timeout = 180000)
+    
+    @Test
     public void testBalanceCluster() throws Exception {
         MiniHBaseCluster cluster = UTIL.getHBaseCluster();
         HMaster master = cluster.getMaster();
@@ -305,10 +298,10 @@ public class IndexLoadBalancerIT {
                         .getNameAsString());
         assertTrue("User regions and index regions should colocate.", isRegionsColocated);
     }
-
-    @Test(timeout = 180000)
+    
+    @Test
     public void testBalanceByTable() throws Exception {
-        ZooKeeperWatcher zkw = UTIL.getZooKeeperWatcher(UTIL);
+        ZooKeeperWatcher zkw = HBaseTestingUtility.getZooKeeperWatcher(UTIL);
         MiniHBaseCluster cluster = UTIL.getHBaseCluster();
         HMaster master = cluster.getMaster();
         master.getConfiguration().setBoolean("hbase.master.loadbalance.bytable", true);
@@ -342,10 +335,10 @@ public class IndexLoadBalancerIT {
                         .getNameAsString());
         assertTrue("User regions and index regions should colocate.", isRegionColocated);
     }
-
-    @Test(timeout = 180000)
+    
+    @Test
     public void testRoundRobinAssignmentAfterRegionServerDown() throws Exception {
-        ZooKeeperWatcher zkw = UTIL.getZooKeeperWatcher(UTIL);
+        ZooKeeperWatcher zkw = HBaseTestingUtility.getZooKeeperWatcher(UTIL);
         MiniHBaseCluster cluster = UTIL.getHBaseCluster();
         HMaster master = cluster.getMaster();
         TableName tableName = TableName.valueOf("testRoundRobinAssignmentAfterRegionServerDown");
@@ -367,10 +360,10 @@ public class IndexLoadBalancerIT {
         assertTrue("User regions and index regions should colocate.", isRegionColocated);
 
     }
-
-    @Test(timeout = 180000)
+    
+    @Test
     public void testRetainAssignmentDuringMasterStartUp() throws Exception {
-        ZooKeeperWatcher zkw = UTIL.getZooKeeperWatcher(UTIL);
+        ZooKeeperWatcher zkw = HBaseTestingUtility.getZooKeeperWatcher(UTIL);
         MiniHBaseCluster cluster = UTIL.getHBaseCluster();
         HMaster master = cluster.getMaster();
         master.getConfiguration().setBoolean("hbase.master.startup.retainassign", true);
@@ -396,8 +389,9 @@ public class IndexLoadBalancerIT {
         assertTrue("User regions and index regions should colocate.", isRegionColocated);
 
     }
-
-    @Test(timeout = 300000)
+    
+    @Ignore // FIXME: PHOENIX-2625 
+    @Test
     public void testRoundRobinAssignmentDuringMasterStartUp() throws Exception {
         MiniHBaseCluster cluster = UTIL.getHBaseCluster();
         HMaster master = cluster.getMaster();
@@ -461,7 +455,7 @@ public class IndexLoadBalancerIT {
         return startKeyAndLocationPairs;
 
     }
-
+    
     public boolean checkForColocation(HMaster master, String tableName, String indexTableName)
             throws IOException, InterruptedException {
         List<Pair<byte[], ServerName>> uTableStartKeysAndLocations =

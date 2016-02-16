@@ -18,6 +18,18 @@
 
 package org.apache.phoenix.pherf;
 
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import java.net.URL;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
+
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.pherf.configuration.Column;
 import org.apache.phoenix.pherf.configuration.DataModel;
@@ -27,19 +39,11 @@ import org.apache.phoenix.pherf.schema.SchemaReader;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
 import org.junit.Test;
 
-import java.net.URL;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.sql.Connection;
-import java.util.ArrayList;
-import java.util.List;
-
-import static org.junit.Assert.*;
-
 public class SchemaReaderIT extends BaseHBaseManagedTimeIT {
     protected static PhoenixUtil util = PhoenixUtil.create(true);
 
-    @Test public void testSchemaReader() {
+    @Test 
+    public void testSchemaReader() {
         // Test for the unit test version of the schema files.
         assertApplySchemaTest();
     }
@@ -52,10 +56,13 @@ public class SchemaReaderIT extends BaseHBaseManagedTimeIT {
             List<Path> resources = new ArrayList<>(reader.getResourceList());
             assertTrue("Could not pull list of schema files.", resources.size() > 0);
             assertNotNull("Could not read schema file.", this.getClass().getResourceAsStream(
-                    PherfConstants.RESOURCE_DATAMODEL + "/" + resources.get(0).getFileName()
-                            .toString()));
+                PherfConstants.RESOURCE_DATAMODEL + "/" + resources.get(0).getFileName().toString()));
             assertNotNull("Could not read schema file.", reader.resourceToString(resources.get(0)));
-            reader.applySchema();
+            try {
+                reader.applySchema();
+            } catch (SQLException e) {
+                fail("Failed to apply schema " + e.getMessage());
+            }
 
             Connection connection = null;
             URL resourceUrl = getClass().getResource("/scenario/test_scenario.xml");

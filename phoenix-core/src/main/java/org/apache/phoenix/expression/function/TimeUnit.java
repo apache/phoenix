@@ -24,7 +24,10 @@ public enum TimeUnit {
     HOUR("hour"), 
     MINUTE("minute"), 
     SECOND("second"), 
-    MILLISECOND("millisecond");
+    MILLISECOND("millisecond"),
+    WEEK("week"),
+    MONTH("month"),
+    YEAR("year");
     
     private String value;
     

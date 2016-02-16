@@ -76,8 +76,8 @@ public class PUnsignedDoubleArray extends PArrayDataType<double[]> {
         if (value == null) {
             return true;
         }
-        PhoenixArray pArr = (PhoenixArray) value;
-        Object[] doubleArr = (Object[]) pArr.array;
+        PhoenixArray.PrimitiveDoublePhoenixArray pArr = (PhoenixArray.PrimitiveDoublePhoenixArray) value;
+        double[] doubleArr = (double[]) pArr.array;
         for (Object i : doubleArr) {
             if (!super.isCoercibleTo(PUnsignedDouble.INSTANCE, i) && (!super.isCoercibleTo(
                     PUnsignedTimestamp.INSTANCE, i))

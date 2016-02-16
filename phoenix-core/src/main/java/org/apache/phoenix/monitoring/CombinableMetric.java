@@ -72,6 +72,9 @@ public interface CombinableMetric extends Metric {
         public CombinableMetric combine(CombinableMetric metric) {
             return INSTANCE;
         }
+
+        @Override
+        public void decrement() {}
     }
 
 }

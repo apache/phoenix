@@ -20,26 +20,24 @@ package org.apache.phoenix.end2end;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.getAllSplits;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.util.Collection;
+import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Random;
 
-import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -70,9 +68,8 @@ public class StatsCollectorWithSplitsAndMultiCFIT extends StatsCollectorAbstract
         PreparedStatement stmt;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         conn = DriverManager.getConnection(getUrl(), props);
-        conn.createStatement().execute(
-                "CREATE TABLE " + STATS_TEST_TABLE_NAME_NEW
-                        + "(k VARCHAR PRIMARY KEY, a.v INTEGER, b.v INTEGER, c.v INTEGER NULL, d.v INTEGER NULL) ");
+        conn.createStatement().execute("CREATE TABLE " + STATS_TEST_TABLE_NAME_NEW
+                + "(k VARCHAR PRIMARY KEY, a.v INTEGER, b.v INTEGER, c.v INTEGER NULL, d.v INTEGER NULL) ");
         stmt = conn.prepareStatement("UPSERT INTO " + STATS_TEST_TABLE_NAME_NEW + " VALUES(?,?, ?, ?, ?)");
         byte[] val = new byte[250];
         for (int i = 0; i < nRows; i++) {
@@ -105,173 +102,86 @@ public class StatsCollectorWithSplitsAndMultiCFIT extends StatsCollectorAbstract
         List<HRegionLocation> regions = services.getAllTableRegions(STATS_TEST_TABLE_NEW_BYTES);
         assertEquals(1, regions.size());
 
-        rs =
-                conn.createStatement()
-                        .executeQuery(
-                            "SELECT GUIDE_POSTS_COUNT, REGION_NAME, GUIDE_POSTS_ROW_COUNT, " +
-                            "MIN_KEY FROM SYSTEM.STATS WHERE PHYSICAL_NAME='"
-                                    + STATS_TEST_TABLE_NAME_NEW + "' AND REGION_NAME IS NOT NULL");
-        assertTrue(rs.next());
-        assertEquals(11, (rs.getLong(1)));
-        assertEquals(regions.get(0).getRegionInfo().getRegionNameAsString(), rs.getString(2));
-        // I get 25 here because for A there is an entry added with the default col
-        assertEquals(25, rs.getLong(3));
-        assertTrue(rs.next());
-        assertEquals(5, (rs.getLong(1)));
-        assertEquals(regions.get(0).getRegionInfo().getRegionNameAsString(), rs.getString(2));
-        // for b the count is lesser by 5
-        assertEquals(20, rs.getLong(3));
-        assertTrue(rs.next());
-        assertEquals(6, (rs.getLong(1)));
-        assertEquals(regions.get(0).getRegionInfo().getRegionNameAsString(), rs.getString(2));
-        assertEquals(25, rs.getLong(3));
-        assertTrue(rs.next());
-        assertEquals(6, (rs.getLong(1)));
-        assertEquals(regions.get(0).getRegionInfo().getRegionNameAsString(), rs.getString(2));
-        assertEquals(25, rs.getLong(3));
-        assertFalse(rs.next());
-        Collection<GuidePostsInfo> infos = TestUtil.getGuidePostsList(conn, STATS_TEST_TABLE_NAME_NEW);
-        long[] rowCountArr = new long[]{25, 20, 25, 25};
-        // CF A alone has double the bytecount because it has column qualifier A and column qualifier _0
-        long[] byteCountArr = new long[]{12120, 5540, 6652, 6652};
-        int i = 0;
-        for(GuidePostsInfo info : infos) {
-            assertRowCountAndByteCount(info, rowCountArr[i], byteCountArr[i]);
-            i++;
-        }
-        
         TestUtil.analyzeTable(conn, STATS_TEST_TABLE_NAME_NEW);
-        String query = "UPDATE STATISTICS " + STATS_TEST_TABLE_NAME_NEW + " SET \"" + QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB + "\"=" + Long.toString(2000);
+        String query = "UPDATE STATISTICS " + STATS_TEST_TABLE_NAME_NEW + " SET \""
+                + QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB + "\"=" + Long.toString(250);
         conn.createStatement().execute(query);
         keyRanges = getAllSplits(conn, STATS_TEST_TABLE_NAME_NEW);
-        assertEquals(6, keyRanges.size());
-    }
+        assertEquals(26, keyRanges.size());
 
-    protected void assertRowCountAndByteCount(GuidePostsInfo info, long rowCount, long byteCount) {
-        assertEquals(info.getRowCount(), rowCount);
-        assertEquals(info.getByteCount(), byteCount);
+        rs = conn.createStatement().executeQuery(
+                "SELECT COLUMN_FAMILY,SUM(GUIDE_POSTS_ROW_COUNT),SUM(GUIDE_POSTS_WIDTH),COUNT(*) from SYSTEM.STATS where PHYSICAL_NAME = '"
+                        + STATS_TEST_TABLE_NAME_NEW + "' GROUP BY COLUMN_FAMILY");
+
+        assertTrue(rs.next());
+        assertTrue(rs.next());
+        assertEquals("A", rs.getString(1));
+        assertEquals(25, rs.getInt(2));
+        assertEquals(12420, rs.getInt(3));
+        assertEquals(25, rs.getInt(4));
+
+        assertTrue(rs.next());
+        assertEquals("B", rs.getString(1));
+        assertEquals(20, rs.getInt(2));
+        assertEquals(5540, rs.getInt(3));
+        assertEquals(20, rs.getInt(4));
+
+        assertTrue(rs.next());
+        assertEquals("C", rs.getString(1));
+        assertEquals(25, rs.getInt(2));
+        assertEquals(6930, rs.getInt(3));
+        assertEquals(25, rs.getInt(4));
+
+        assertTrue(rs.next());
+        assertEquals("D", rs.getString(1));
+        assertEquals(25, rs.getInt(2));
+        assertEquals(6930, rs.getInt(3));
+        assertEquals(25, rs.getInt(4));
+
     }
 
     @Test
-    public void testSplitUpdatesStats() throws Exception {
-        int nRows = 20;
+    public void testRowCountAndByteCounts() throws SQLException {
         Connection conn;
-        PreparedStatement stmt;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         conn = DriverManager.getConnection(getUrl(), props);
-        conn.createStatement().execute(
-                "CREATE TABLE " + STATS_TEST_TABLE_NAME + "(k VARCHAR PRIMARY KEY, v INTEGER) "
-                        + HColumnDescriptor.KEEP_DELETED_CELLS + "=" + Boolean.FALSE);
-        stmt = conn.prepareStatement("UPSERT INTO " + STATS_TEST_TABLE_NAME + " VALUES(?,?)");
-        byte[] val = new byte[250];
-        for (int i = 0; i < nRows; i++) {
-            stmt.setString(1, Character.toString((char)('a' + i)) + Bytes.toString(val));
-            stmt.setInt(2, i);
-            stmt.executeUpdate();
+        String tableName = "T";
+        String ddl = "CREATE TABLE " + tableName + " (t_id VARCHAR NOT NULL,\n" + "k1 INTEGER NOT NULL,\n"
+                + "k2 INTEGER NOT NULL,\n" + "C3.k3 INTEGER,\n" + "C2.v1 VARCHAR,\n"
+                + "CONSTRAINT pk PRIMARY KEY (t_id, k1, k2)) split on ('e','j','o')";
+        conn.createStatement().execute(ddl);
+        String[] strings = { "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r",
+                "s", "t", "u", "v", "w", "x", "y", "z" };
+        for (int i = 0; i < 26; i++) {
+            conn.createStatement().execute("UPSERT INTO " + tableName + " values('" + strings[i] + "'," + i + ","
+                    + (i + 1) + "," + (i + 2) + ",'" + strings[25 - i] + "')");
         }
         conn.commit();
-
         ResultSet rs;
-        TestUtil.analyzeTable(conn, STATS_TEST_TABLE_NAME);
-        Collection<GuidePostsInfo> infos = TestUtil.getGuidePostsList(conn, STATS_TEST_TABLE_NAME);
-        for (GuidePostsInfo info : infos) {
-            assertEquals(20, info.getRowCount());
-            assertEquals(11020, info.getByteCount());
-            break;
+        String query = "UPDATE STATISTICS " + tableName + " SET \"" + QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB
+                + "\"=" + Long.toString(20);
+        conn.createStatement().execute(query);
+        Random r = new Random();
+        int count = 0;
+        while (count < 4) {
+            int startIndex = r.nextInt(strings.length);
+            int endIndex = r.nextInt(strings.length - startIndex) + startIndex;
+            long rows = endIndex - startIndex;
+            long c2Bytes = rows * 35;
+            System.out.println(rows + ":" + startIndex + ":" + endIndex);
+            rs = conn.createStatement().executeQuery(
+                    "SELECT COLUMN_FAMILY,SUM(GUIDE_POSTS_ROW_COUNT),SUM(GUIDE_POSTS_WIDTH) from SYSTEM.STATS where PHYSICAL_NAME = '"
+                            + tableName + "' AND GUIDE_POST_KEY>= cast('" + strings[startIndex]
+                            + "' as varbinary) AND  GUIDE_POST_KEY<cast('" + strings[endIndex]
+                            + "' as varbinary) and COLUMN_FAMILY='C2' group by COLUMN_FAMILY");
+            if (startIndex < endIndex) {
+                assertTrue(rs.next());
+                assertEquals("C2", rs.getString(1));
+                assertEquals(rows, rs.getLong(2));
+                assertEquals(c2Bytes, rs.getLong(3));
+                count++;
+            }
         }
-        List<KeyRange> keyRanges = getAllSplits(conn, STATS_TEST_TABLE_NAME);
-        assertEquals((nRows / 2) + 1, keyRanges.size());
-        rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + STATS_TEST_TABLE_NAME);
-        assertEquals("CLIENT " + ((nRows / 2) + 1) + "-CHUNK " + "PARALLEL 1-WAY FULL SCAN OVER "
-                + STATS_TEST_TABLE_NAME, QueryUtil.getExplainPlan(rs));
-
-        ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
-        List<HRegionLocation> regions = services.getAllTableRegions(STATS_TEST_TABLE_BYTES);
-        assertEquals(1, regions.size());
-
-        rs = conn.createStatement().executeQuery(
-                "SELECT GUIDE_POSTS_COUNT, REGION_NAME, GUIDE_POSTS_ROW_COUNT, MIN_KEY " +
-                " FROM SYSTEM.STATS WHERE PHYSICAL_NAME='"
-                        + STATS_TEST_TABLE_NAME + "' AND REGION_NAME IS NOT NULL");
-        assertTrue(rs.next());
-        assertEquals(nRows / 2, (rs.getLong(1)));
-        assertEquals(regions.get(0).getRegionInfo().getRegionNameAsString(), rs.getString(2));
-        //PhoenixArray arr = (PhoenixArray)rs.getArray(3);
-        assertEquals(20, rs.getLong(3));
-        assertTrue(Bytes.toString(rs.getBytes(4)).startsWith("a"));
-        assertFalse(rs.next());
-
-        byte[] midPoint = Bytes.toBytes(Character.toString((char)('a' + (5))));
-        splitTable(conn, midPoint, STATS_TEST_TABLE_BYTES);
-
-        keyRanges = getAllSplits(conn, STATS_TEST_TABLE_NAME);
-        assertEquals(12, keyRanges.size()); // Same number as before because split was at guidepost
-
-        regions = services.getAllTableRegions(STATS_TEST_TABLE_BYTES);
-        assertEquals(2, regions.size());
-        rs =
-                conn.createStatement()
-                        .executeQuery(
-                            "SELECT GUIDE_POSTS_COUNT, REGION_NAME, "
-                                    + "GUIDE_POSTS_ROW_COUNT, MIN_KEY " +
-                                    " FROM SYSTEM.STATS WHERE PHYSICAL_NAME='"
-                                    + STATS_TEST_TABLE_NAME + "' AND REGION_NAME IS NOT NULL");
-        assertTrue(rs.next());
-        assertEquals(2, rs.getLong(1));
-        assertEquals(regions.get(0).getRegionInfo().getRegionNameAsString(), rs.getString(2));
-        //assertEquals(5, rs.getLong(3));
-        assertTrue(Bytes.toString(rs.getBytes(4)).startsWith("a"));
-        assertTrue(rs.next());
-        assertEquals(8, rs.getLong(1));
-        assertEquals(regions.get(1).getRegionInfo().getRegionNameAsString(), rs.getString(2));
-        // This could even be 15 if the compaction thread completes after the update from split
-        //assertEquals(16, rs.getLong(3));
-        assertTrue(Bytes.toString(rs.getBytes(4)).startsWith("f"));
-        assertFalse(rs.next());
-
-        byte[] midPoint2 = Bytes.toBytes("cj");
-        splitTable(conn, midPoint2, STATS_TEST_TABLE_BYTES);
-
-        keyRanges = getAllSplits(conn, STATS_TEST_TABLE_NAME);
-        assertEquals((nRows / 2) + 3, keyRanges.size()); // One extra due to split between guideposts
-
-        regions = services.getAllTableRegions(STATS_TEST_TABLE_BYTES);
-        assertEquals(3, regions.size());
-        rs = conn.createStatement().executeQuery(
-                "SELECT GUIDE_POSTS_COUNT, REGION_NAME, GUIDE_POSTS_ROW_COUNT, MIN_KEY " +
-                "FROM SYSTEM.STATS WHERE PHYSICAL_NAME='"
-                        + STATS_TEST_TABLE_NAME + "' AND REGION_NAME IS NOT NULL");
-        assertTrue(rs.next());
-        assertEquals(1, rs.getLong(1));
-        assertEquals(regions.get(0).getRegionInfo().getRegionNameAsString(), rs.getString(2));
-        // This value varies based on whether compaction updates or split updates the GPs
-        //assertEquals(3, rs.getLong(3));
-        assertTrue(Bytes.toString(rs.getBytes(4)).startsWith("a"));
-        assertTrue(rs.next());
-        assertEquals(1, rs.getLong(1));
-        assertEquals(regions.get(1).getRegionInfo().getRegionNameAsString(), rs.getString(2));
-        assertTrue(Bytes.toString(rs.getBytes(4)).startsWith("d"));
-        //assertEquals(2, rs.getLong(3));
-        assertTrue(rs.next());
-        assertEquals(8, rs.getLong(1));
-        assertEquals(regions.get(2).getRegionInfo().getRegionNameAsString(), rs.getString(2));
-        assertTrue(Bytes.toString(rs.getBytes(4)).startsWith("f"));
-        //assertEquals(16, rs.getLong(3));
-        assertFalse(rs.next());
-        rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + STATS_TEST_TABLE_NAME);
-        assertEquals("CLIENT " + ((nRows / 2) + 3) + "-CHUNK " + "PARALLEL 1-WAY FULL SCAN OVER "
-                + STATS_TEST_TABLE_NAME, QueryUtil.getExplainPlan(rs));
-
-        TestUtil.analyzeTable(conn, STATS_TEST_TABLE_NAME);
-        rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + STATS_TEST_TABLE_NAME);
-        assertEquals("CLIENT " + ((nRows / 2) + 2) + "-CHUNK " + "PARALLEL 1-WAY FULL SCAN OVER "
-                + STATS_TEST_TABLE_NAME, QueryUtil.getExplainPlan(rs));
-        infos = TestUtil.getGuidePostsList(conn, STATS_TEST_TABLE_NAME);
-        for (GuidePostsInfo info : infos) {
-            assertEquals(20, info.getRowCount());
-            assertEquals(9918, info.getByteCount());
-            break;
-        }
-        conn.close();
     }
+
 }

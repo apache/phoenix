@@ -98,14 +98,6 @@ import com.google.common.collect.Lists;
  */
 public class PhoenixRuntime {
     /**
-     * Use this connection property to control HBase timestamps
-     * by specifying your own long timestamp value at connection time. All
-     * queries will use this as the upper bound of the time range for scans
-     * and DDL, and DML will use this as t he timestamp for key values.
-     */
-    public static final String CURRENT_SCN_ATTRIB = "CurrentSCN";
-
-    /**
      * Root for the JDBC URL that the Phoenix accepts accepts.
      */
     public final static String JDBC_PROTOCOL = "jdbc:phoenix";
@@ -121,13 +113,12 @@ public class PhoenixRuntime {
     public final static String EMBEDDED_JDBC_PROTOCOL = PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
 
     /**
-     * Use this connection property to control the number of rows that are
-     * batched together on an UPSERT INTO table1... SELECT ... FROM table2.
-     * It's only used when autoCommit is true and your source table is
-     * different than your target table or your SELECT statement has a
-     * GROUP BY clause.
+     * Use this connection property to control HBase timestamps
+     * by specifying your own long timestamp value at connection time. All
+     * queries will use this as the upper bound of the time range for scans
+     * and DDL, and DML will use this as t he timestamp for key values.
      */
-    public final static String UPSERT_BATCH_SIZE_ATTRIB = "UpsertBatchSize";
+    public static final String CURRENT_SCN_ATTRIB = "CurrentSCN";
 
     /**
      * Use this connection property to help with fairness of resource allocation
@@ -139,11 +130,18 @@ public class PhoenixRuntime {
     public static final String TENANT_ID_ATTRIB = "TenantId";
 
     /**
-     * Use this connection property prefix for annotations that you want to show up in traces and log lines emitted by Phoenix.
-     * This is useful for annotating connections with information available on the client (e.g. user or session identifier) and
-     * having these annotation automatically passed into log lines and traces by Phoenix.
+     * Use this connection property to prevent an upgrade from occurring when
+     * connecting to a new server version.
      */
-    public static final String ANNOTATION_ATTRIB_PREFIX = "phoenix.annotation.";
+    public static final String NO_UPGRADE_ATTRIB = "NoUpgrade";
+    /**
+     * Use this connection property to control the number of rows that are
+     * batched together on an UPSERT INTO table1... SELECT ... FROM table2.
+     * It's only used when autoCommit is true and your source table is
+     * different than your target table or your SELECT statement has a
+     * GROUP BY clause.
+     */
+    public final static String UPSERT_BATCH_SIZE_ATTRIB = "UpsertBatchSize";
 
     /**
      * Use this connection property to explicitly enable or disable auto-commit on a new connection.
@@ -156,6 +154,25 @@ public class PhoenixRuntime {
     public static final String CONSISTENCY_ATTRIB = "Consistency";
 
     /**
+     * Use this connection property to explicitly enable or disable request level metric collection.
+     */
+    public static final String REQUEST_METRIC_ATTRIB = "RequestMetric";
+
+    /**
+     * All Phoenix specific connection properties
+     * TODO: use enum instead
+     */
+    public final static String[] CONNECTION_PROPERTIES = {
+            CURRENT_SCN_ATTRIB,
+            TENANT_ID_ATTRIB,
+            UPSERT_BATCH_SIZE_ATTRIB,
+            AUTO_COMMIT_ATTRIB,
+            CONSISTENCY_ATTRIB,
+            REQUEST_METRIC_ATTRIB,
+            NO_UPGRADE_ATTRIB
+            };
+
+    /**
      * Use this as the zookeeper quorum name to have a connection-less connection. This enables
      * Phoenix-compatible HFiles to be created in a map/reduce job by creating tables,
      * upserting data into them, and getting the uncommitted state through {@link #getUncommittedData(Connection)}
@@ -163,9 +180,11 @@ public class PhoenixRuntime {
     public final static String CONNECTIONLESS = "none";
     
     /**
-     * Use this connection property to explicitly enable or disable request level metric collection.
+     * Use this connection property prefix for annotations that you want to show up in traces and log lines emitted by Phoenix.
+     * This is useful for annotating connections with information available on the client (e.g. user or session identifier) and
+     * having these annotation automatically passed into log lines and traces by Phoenix.
      */
-    public static final String REQUEST_METRIC_ATTRIB = "RequestMetric";
+    public static final String ANNOTATION_ATTRIB_PREFIX = "phoenix.annotation.";
 
     private static final String HEADER_IN_LINE = "in-line";
     private static final String SQL_FILE_EXT = ".sql";
@@ -355,7 +374,7 @@ public class PhoenixRuntime {
         PTable table = null;
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
         try {
-            table = pconn.getMetaDataCache().getTable(new PTableKey(pconn.getTenantId(), name));
+            table = pconn.getTable(new PTableKey(pconn.getTenantId(), name));
         } catch (TableNotFoundException e) {
             String schemaName = SchemaUtil.getSchemaNameFromFullName(name);
             String tableName = SchemaUtil.getTableNameFromFullName(name);
@@ -389,8 +408,7 @@ public class PhoenixRuntime {
         	int offset = (table.getBucketNum() == null ? 0 : 1);
         	for (int i = offset; i < table.getColumns().size(); i++) {
         	   PColumn pColumn = table.getColumns().get(i);
-               int sqlType = pColumn.getDataType().getSqlType();
-               columnInfoList.add(new ColumnInfo(pColumn.toString(), sqlType)); 
+               columnInfoList.add(PhoenixRuntime.getColumnInfo(pColumn)); 
             }
         } else {
             // Leave "null" as indication to skip b/c it doesn't exist
@@ -459,19 +477,18 @@ public class PhoenixRuntime {
         return getColumnInfo(pColumn);
     }
 
-   /**
+    /**
      * Constructs a column info for the supplied pColumn
      * @param pColumn
      * @return columnInfo
      * @throws SQLException if the parameter is null.
      */
     public static ColumnInfo getColumnInfo(PColumn pColumn) throws SQLException {
-        if (pColumn==null) {
+        if (pColumn == null) {
             throw new SQLException("pColumn must not be null.");
         }
-        int sqlType = pColumn.getDataType().getSqlType();
-        ColumnInfo columnInfo = new ColumnInfo(pColumn.toString(),sqlType);
-        return columnInfo;
+        return ColumnInfo.create(pColumn.toString(), pColumn.getDataType().getSqlType(),
+                pColumn.getMaxLength(), pColumn.getScale());
     }
 
    /**
@@ -784,6 +801,10 @@ public class PhoenixRuntime {
         PDataType dataType = pCol.getDataType();
         Integer maxLength = pCol.getMaxLength();
         Integer scale = pCol.getScale();
+        return getSqlTypeName(dataType, maxLength, scale);
+    }
+
+    public static String getSqlTypeName(PDataType dataType, Integer maxLength, Integer scale) {
         return dataType.isArrayType() ? getArraySqlTypeName(maxLength, scale, dataType) : appendMaxLengthAndScale(maxLength, scale, dataType.getSqlTypeName());
     }
     

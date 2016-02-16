@@ -62,7 +62,7 @@ public class ContextClassloaderIT  extends BaseTest {
         String clientPort = hbaseTestUtil.getConfiguration().get(QueryServices.ZOOKEEPER_PORT_ATTRIB);
         String url = JDBC_PROTOCOL + JDBC_PROTOCOL_SEPARATOR + LOCALHOST + JDBC_PROTOCOL_SEPARATOR + clientPort
                 + JDBC_PROTOCOL_TERMINATOR + PHOENIX_TEST_DRIVER_URL_PARAM;
-        driver = initAndRegisterDriver(url, ReadOnlyProps.EMPTY_PROPS);
+        driver = initAndRegisterTestDriver(url, ReadOnlyProps.EMPTY_PROPS);
         
         Connection conn = DriverManager.getConnection(url);
         Statement stmt = conn.createStatement();

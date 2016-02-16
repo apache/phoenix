@@ -34,6 +34,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HTableDescriptor;
@@ -82,6 +83,7 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
 
     private static CountDownLatch latch1 = new CountDownLatch(1);
     private static CountDownLatch latch2 = new CountDownLatch(1);
+    private static final int WAIT_TIME_SECONDS = 60;
 
     @BeforeClass 
     @Shadower(classBeingShadowed = BaseHBaseManagedTimeIT.class)
@@ -113,7 +115,7 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
         Connection conn1 = DriverManager.getConnection(getUrl());
         conn1.createStatement().execute("CREATE LOCAL INDEX " + TestUtil.DEFAULT_INDEX_TABLE_NAME + " ON " + TestUtil.DEFAULT_DATA_TABLE_NAME + "(v1)");
         conn1.createStatement().executeQuery("SELECT * FROM " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME).next();
-        PTable localIndex = conn1.unwrap(PhoenixConnection.class).getMetaDataCache().getTable(new PTableKey(null,TestUtil.DEFAULT_INDEX_TABLE_NAME));
+        PTable localIndex = conn1.unwrap(PhoenixConnection.class).getTable(new PTableKey(null,TestUtil.DEFAULT_INDEX_TABLE_NAME));
         assertEquals(IndexType.LOCAL, localIndex.getIndexType());
         assertNotNull(localIndex.getViewIndexId());
     }
@@ -129,7 +131,7 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
         } catch (SQLException e) { }
         try {
             conn2.createStatement().executeQuery("SELECT * FROM " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME).next();
-            conn2.unwrap(PhoenixConnection.class).getMetaDataCache().getTable(new PTableKey(null,TestUtil.DEFAULT_INDEX_TABLE_NAME));
+            conn2.unwrap(PhoenixConnection.class).getTable(new PTableKey(null,TestUtil.DEFAULT_INDEX_TABLE_NAME));
             fail("Local index should not be created.");
         } catch (TableNotFoundException e) { }
     }
@@ -145,7 +147,7 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
         } catch (SQLException e) { }
         try {
             conn2.createStatement().executeQuery("SELECT * FROM " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME).next();
-            conn2.unwrap(PhoenixConnection.class).getMetaDataCache().getTable(new PTableKey(null,TestUtil.DEFAULT_INDEX_TABLE_NAME));
+            conn2.unwrap(PhoenixConnection.class).getTable(new PTableKey(null,TestUtil.DEFAULT_INDEX_TABLE_NAME));
             fail("Local index should not be created.");
         } catch (TableNotFoundException e) { }
     }
@@ -967,7 +969,8 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
             }
 
             assertEquals(5, regionsOfIndexTable.size());
-            latch1.await();
+            boolean success = latch1.await(WAIT_TIME_SECONDS, TimeUnit.SECONDS);
+            assertTrue("Timed out waiting for MockedLocalIndexSplitter.preSplitAfterPONR to complete", success);
             // Verify the metadata for index is correct.
             rs = conn1.getMetaData().getTables(null, StringUtil.escapeLike(TestUtil.DEFAULT_SCHEMA_NAME), TestUtil.DEFAULT_INDEX_TABLE_NAME,
                     new String[] { PTableType.INDEX.toString() });
@@ -999,10 +1002,13 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
         public void postCompact(ObserverContext<RegionCoprocessorEnvironment> e, Store store,
                 StoreFile resultFile) throws IOException {
             try {
-                latch2.await();
+                boolean success = latch2.await(WAIT_TIME_SECONDS, TimeUnit.SECONDS);
+                assertTrue("Timed out waiting for test to complete", success);
+                super.postCompact(e, store, resultFile);
             } catch (InterruptedException e1) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException(e1);
             }
-            super.postCompact(e, store, resultFile);
         }
     }
 

@@ -44,7 +44,7 @@ public interface Scanner extends Closeable {
    * @return <tt>true</tt> if there are values left in <tt>this</tt>, <tt>false</tt> otherwise
    * @throws IOException if there is an error reading the underlying data.
    */
-  public boolean seek(KeyValue next) throws IOException;
+  public boolean seek(Cell next) throws IOException;
 
   /**
    * Read the {@link KeyValue} at the top of <tt>this</tt> without 'popping' it off the top of the

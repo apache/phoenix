@@ -32,8 +32,6 @@ import org.apache.phoenix.schema.types.PVarchar;
  * 
  * Base class for built-in FLOOR function.
  *
- * 
- * @since 3.0.0
  */
 @BuiltInFunction(name = FloorFunction.NAME,
                  nodeClass = FloorParseNode.class,
@@ -46,6 +44,8 @@ import org.apache.phoenix.schema.types.PVarchar;
 public abstract class FloorFunction extends ScalarFunction {
     
     public static final String NAME = "FLOOR";
+    
+    public FloorFunction() {}
     
     public FloorFunction(List<Expression> children) {
         super(children);

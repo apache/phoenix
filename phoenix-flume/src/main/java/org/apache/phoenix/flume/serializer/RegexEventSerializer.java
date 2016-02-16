@@ -31,11 +31,11 @@ import java.util.regex.Pattern;
 
 import org.apache.flume.Context;
 import org.apache.flume.Event;
+import org.apache.phoenix.schema.types.PDataType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Preconditions;
-import org.apache.phoenix.schema.types.PDataType;
 
 public class RegexEventSerializer extends BaseEventSerializer {
 
@@ -69,13 +69,11 @@ public class RegexEventSerializer extends BaseEventSerializer {
        Preconditions.checkNotNull(connection);
        Preconditions.checkNotNull(this.upsertStatement);
        
-       PreparedStatement colUpsert = connection.prepareStatement(upsertStatement);
        boolean wasAutoCommit = connection.getAutoCommit();
        connection.setAutoCommit(false);
-       
-       String value = null;
-       Integer sqlType = null;
-       try {
+       try (PreparedStatement colUpsert = connection.prepareStatement(upsertStatement)) {
+           String value = null;
+           Integer sqlType = null;
            for(Event event : events) {
                byte [] payloadBytes = event.getBody();
                if(payloadBytes == null || payloadBytes.length == 0) {
@@ -136,7 +134,7 @@ public class RegexEventSerializer extends BaseEventSerializer {
        } catch(Exception ex){
            logger.error("An error {} occurred during persisting the event ",ex.getMessage());
            throw new SQLException(ex.getMessage());
-       }finally {
+       } finally {
            if(wasAutoCommit) {
                connection.setAutoCommit(true);
            }

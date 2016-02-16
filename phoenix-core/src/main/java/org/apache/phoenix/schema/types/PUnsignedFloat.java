@@ -142,6 +142,7 @@ public class PUnsignedFloat extends PRealNumber<PFloat> {
       checkForSufficientLength(b, o, Bytes.SIZEOF_FLOAT);
       if (sortOrder == SortOrder.DESC) {
         b = SortOrder.invert(b, o, new byte[Bytes.SIZEOF_FLOAT], 0, Bytes.SIZEOF_FLOAT);
+        o = 0;
       }
       float v = Bytes.toFloat(b, o);
       if (v < 0) {

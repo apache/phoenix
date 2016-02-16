@@ -71,6 +71,7 @@ import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.ScanUtil;
 
 import com.google.common.collect.ImmutableSet;
+import com.google.protobuf.HBaseZeroCopyByteString;
 
 /**
  * 
@@ -144,7 +145,7 @@ public class ServerCacheClient {
 
     }
     
-    public ServerCache addServerCache(ScanRanges keyRanges, final ImmutableBytesWritable cachePtr, final ServerCacheFactory cacheFactory, final TableRef cacheUsingTableRef) throws SQLException {
+    public ServerCache addServerCache(ScanRanges keyRanges, final ImmutableBytesWritable cachePtr, final byte[] txState, final ServerCacheFactory cacheFactory, final TableRef cacheUsingTableRef) throws SQLException {
         ConnectionQueryServices services = connection.getQueryServices();
         MemoryChunk chunk = services.getMemoryManager().allocate(cachePtr.getLength());
         List<Closeable> closeables = new ArrayList<Closeable>();
@@ -161,7 +162,7 @@ public class ServerCacheClient {
         ExecutorService executor = services.getExecutor();
         List<Future<Boolean>> futures = Collections.emptyList();
         try {
-            PTable cacheUsingTable = cacheUsingTableRef.getTable();
+            final PTable cacheUsingTable = cacheUsingTableRef.getTable();
             List<HRegionLocation> locations = services.getAllTableRegions(cacheUsingTable.getPhysicalName().getBytes());
             int nRegions = locations.size();
             // Size these based on worst case
@@ -196,13 +197,24 @@ public class ServerCacheClient {
                                                             new BlockingRpcCallback<AddServerCacheResponse>();
                                                     AddServerCacheRequest.Builder builder = AddServerCacheRequest.newBuilder();
                                                     if(connection.getTenantId() != null){
-                                                        builder.setTenantId(ByteStringer.wrap(connection.getTenantId().getBytes()));
+                                                        try {
+                                                            byte[] tenantIdBytes =
+                                                                    ScanUtil.getTenantIdBytes(
+                                                                            cacheUsingTable.getRowKeySchema(),
+                                                                            cacheUsingTable.getBucketNum()!=null,
+                                                                            connection.getTenantId(),
+                                                                            cacheUsingTable.isMultiTenant());
+                                                            builder.setTenantId(ByteStringer.wrap(tenantIdBytes));
+                                                        } catch (SQLException e) {
+                                                            new IOException(e);
+                                                        }
                                                     }
                                                     builder.setCacheId(ByteStringer.wrap(cacheId));
                                                     builder.setCachePtr(org.apache.phoenix.protobuf.ProtobufUtil.toProto(cachePtr));
                                                     ServerCacheFactoryProtos.ServerCacheFactory.Builder svrCacheFactoryBuider = ServerCacheFactoryProtos.ServerCacheFactory.newBuilder();
                                                     svrCacheFactoryBuider.setClassName(cacheFactory.getClass().getName());
                                                     builder.setCacheFactory(svrCacheFactoryBuider.build());
+                                                    builder.setTxState(HBaseZeroCopyByteString.wrap(txState));
                                                     instance.addServerCache(controller, builder.build(), rpcCallback);
                                                     if(controller.getFailedOn() != null) {
                                                         throw controller.getFailedOn();
@@ -289,6 +301,7 @@ public class ServerCacheClient {
     	ConnectionQueryServices services = connection.getQueryServices();
     	Throwable lastThrowable = null;
     	TableRef cacheUsingTableRef = cacheUsingTableRefMap.get(Bytes.mapKey(cacheId));
+    	final PTable cacheUsingTable = cacheUsingTableRef.getTable();
     	byte[] tableName = cacheUsingTableRef.getTable().getPhysicalName().getBytes();
     	HTableInterface iterateOverTable = services.getTable(tableName);
     	try {
@@ -314,7 +327,17 @@ public class ServerCacheClient {
     									new BlockingRpcCallback<RemoveServerCacheResponse>();
     							RemoveServerCacheRequest.Builder builder = RemoveServerCacheRequest.newBuilder();
     							if(connection.getTenantId() != null){
-    								builder.setTenantId(ByteStringer.wrap(connection.getTenantId().getBytes()));
+                                    try {
+                                        byte[] tenantIdBytes =
+                                                ScanUtil.getTenantIdBytes(
+                                                        cacheUsingTable.getRowKeySchema(),
+                                                        cacheUsingTable.getBucketNum()!=null,
+                                                        connection.getTenantId(),
+                                                        cacheUsingTable.isMultiTenant());
+                                        builder.setTenantId(ByteStringer.wrap(tenantIdBytes));
+                                    } catch (SQLException e) {
+                                        new IOException(e);
+                                    }
     							}
     							builder.setCacheId(ByteStringer.wrap(cacheId));
     							instance.removeServerCache(controller, builder.build(), rpcCallback);

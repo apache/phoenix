@@ -82,11 +82,13 @@ import static org.apache.phoenix.util.TestUtil.STABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.TABLE_WITH_ARRAY;
 import static org.apache.phoenix.util.TestUtil.TABLE_WITH_SALTING;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.apache.phoenix.util.TestUtil.TRANSACTIONAL_DATA_TABLE;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
@@ -106,6 +108,13 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Properties;
 import java.util.Set;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import javax.annotation.Nonnull;
 
@@ -116,38 +125,64 @@ import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.IntegrationTestingUtility;
-import org.apache.hadoop.hbase.TableNotEnabledException;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.coprocessor.CoprocessorHost;
 import org.apache.hadoop.hbase.coprocessor.RegionServerObserver;
 import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
 import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
 import org.apache.hadoop.hbase.ipc.controller.ServerRpcControllerFactory;
+import org.apache.hadoop.hbase.master.LoadBalancer;
 import org.apache.hadoop.hbase.regionserver.LocalIndexMerger;
 import org.apache.hadoop.hbase.regionserver.RSRpcServices;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.BaseClientManagedTimeIT;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.hbase.index.balancer.IndexLoadBalancer;
+import org.apache.phoenix.hbase.index.master.IndexMasterObserver;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
+import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
 import org.apache.phoenix.schema.NewerTableAlreadyExistsException;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.ConfigUtil;
+import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.apache.twill.discovery.DiscoveryService;
+import org.apache.twill.discovery.ZKDiscoveryService;
+import org.apache.twill.internal.utils.Networks;
+import org.apache.twill.zookeeper.RetryStrategies;
+import org.apache.twill.zookeeper.ZKClientService;
+import org.apache.twill.zookeeper.ZKClientServices;
+import org.apache.twill.zookeeper.ZKClients;
+import org.junit.ClassRule;
+import org.junit.rules.TemporaryFolder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import com.google.inject.util.Providers;
+
+import co.cask.tephra.TransactionManager;
+import co.cask.tephra.TxConstants;
+import co.cask.tephra.distributed.TransactionService;
+import co.cask.tephra.metrics.TxMetricsCollector;
+import co.cask.tephra.persist.InMemoryTransactionStateStorage;
 
 /**
  * 
@@ -164,9 +199,40 @@ import com.google.common.collect.Sets;
  *
  */
 public abstract class BaseTest {
+    protected static final String TEST_TABLE_SCHEMA = "(" +
+            "   varchar_pk VARCHAR NOT NULL, " +
+            "   char_pk CHAR(10) NOT NULL, " +
+            "   int_pk INTEGER NOT NULL, "+ 
+            "   long_pk BIGINT NOT NULL, " +
+            "   decimal_pk DECIMAL(31, 10) NOT NULL, " +
+            "   date_pk DATE NOT NULL, " +
+            "   a.varchar_col1 VARCHAR, " +
+            "   a.char_col1 CHAR(10), " +
+            "   a.int_col1 INTEGER, " +
+            "   a.long_col1 BIGINT, " +
+            "   a.decimal_col1 DECIMAL(31, 10), " +
+            "   a.date1 DATE, " +
+            "   b.varchar_col2 VARCHAR, " +
+            "   b.char_col2 CHAR(10), " +
+            "   b.int_col2 INTEGER, " +
+            "   b.long_col2 BIGINT, " +
+            "   b.decimal_col2 DECIMAL(31, 10), " +
+            "   b.date2 DATE " +
+            "   CONSTRAINT pk PRIMARY KEY (varchar_pk, char_pk, int_pk, long_pk DESC, decimal_pk, date_pk)) ";
     private static final Map<String,String> tableDDLMap;
     private static final Logger logger = LoggerFactory.getLogger(BaseTest.class);
-
+    protected static final int DEFAULT_TXN_TIMEOUT_SECONDS = 30;
+    private static ZKClientService zkClient;
+    private static TransactionService txService;
+    protected static TransactionManager txManager;
+    @ClassRule
+    public static TemporaryFolder tmpFolder = new TemporaryFolder();
+    private static final int dropTableTimeout = 300; // 5 mins should be long enough.
+    private static final ThreadFactory factory = new ThreadFactoryBuilder().setDaemon(true)
+            .setNameFormat("DROP-TABLE-BASETEST" + "-thread-%s").build();
+    private static final ExecutorService dropHTableService = Executors
+            .newSingleThreadExecutor(factory);
+    
     static {
         ImmutableMap.Builder<String,String> builder = ImmutableMap.builder();
         builder.put(ENTITY_HISTORY_TABLE_NAME,"create table " + ENTITY_HISTORY_TABLE_NAME +
@@ -363,8 +429,6 @@ public abstract class BaseTest {
                 "   (i integer not null primary key)");
         builder.put("IntIntKeyTest","create table IntIntKeyTest" +
                 "   (i integer not null primary key, j integer)");
-        builder.put("LongInKeyTest","create table LongInKeyTest" +
-                "   (l bigint not null primary key)");
         builder.put("PKIntValueTest", "create table PKIntValueTest" +
                 "   (pk integer not null primary key)");
         builder.put("PKBigIntValueTest", "create table PKBigIntValueTest" +
@@ -380,48 +444,9 @@ public abstract class BaseTest {
         builder.put("KVBigIntValueTest", "create table KVBigIntValueTest" +
                 "   (pk integer not null primary key,\n" +
                 "    kv bigint)\n");
-        builder.put(INDEX_DATA_TABLE, "create table " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE + "(" +
-                "   varchar_pk VARCHAR NOT NULL, " +
-                "   char_pk CHAR(6) NOT NULL, " +
-                "   int_pk INTEGER NOT NULL, "+ 
-                "   long_pk BIGINT NOT NULL, " +
-                "   decimal_pk DECIMAL(31, 10) NOT NULL, " +
-                "   date_pk DATE NOT NULL, " +
-                "   a.varchar_col1 VARCHAR, " +
-                "   a.char_col1 CHAR(10), " +
-                "   a.int_col1 INTEGER, " +
-                "   a.long_col1 BIGINT, " +
-                "   a.decimal_col1 DECIMAL(31, 10), " +
-                "   a.date1 DATE, " +
-                "   b.varchar_col2 VARCHAR, " +
-                "   b.char_col2 CHAR(10), " +
-                "   b.int_col2 INTEGER, " +
-                "   b.long_col2 BIGINT, " +
-                "   b.decimal_col2 DECIMAL(31, 10), " +
-                "   b.date2 DATE " +
-                "   CONSTRAINT pk PRIMARY KEY (varchar_pk, char_pk, int_pk, long_pk DESC, decimal_pk, date_pk)) " +
-                "IMMUTABLE_ROWS=true");
-        builder.put(MUTABLE_INDEX_DATA_TABLE, "create table " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + MUTABLE_INDEX_DATA_TABLE + "(" +
-                "   varchar_pk VARCHAR NOT NULL, " +
-                "   char_pk CHAR(6) NOT NULL, " +
-                "   int_pk INTEGER NOT NULL, "+ 
-                "   long_pk BIGINT NOT NULL, " +
-                "   decimal_pk DECIMAL(31, 10) NOT NULL, " +
-                "   date_pk DATE NOT NULL, " +
-                "   a.varchar_col1 VARCHAR, " +
-                "   a.char_col1 CHAR(10), " +
-                "   a.int_col1 INTEGER, " +
-                "   a.long_col1 BIGINT, " +
-                "   a.decimal_col1 DECIMAL(31, 10), " +
-                "   a.date1 DATE, " +
-                "   b.varchar_col2 VARCHAR, " +
-                "   b.char_col2 CHAR(10), " +
-                "   b.int_col2 INTEGER, " +
-                "   b.long_col2 BIGINT, " +
-                "   b.decimal_col2 DECIMAL(31, 10), " +
-                "   b.date2 DATE " +
-                "   CONSTRAINT pk PRIMARY KEY (varchar_pk, char_pk, int_pk, long_pk DESC, decimal_pk, date_pk)) "
-                );
+        builder.put(INDEX_DATA_TABLE, "create table " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE + TEST_TABLE_SCHEMA + "IMMUTABLE_ROWS=true");
+        builder.put(MUTABLE_INDEX_DATA_TABLE, "create table " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + MUTABLE_INDEX_DATA_TABLE + TEST_TABLE_SCHEMA);
+        builder.put(TRANSACTIONAL_DATA_TABLE, "create table " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + TRANSACTIONAL_DATA_TABLE + TEST_TABLE_SCHEMA + "TRANSACTIONAL=true");
         builder.put("SumDoubleTest","create table SumDoubleTest" +
                 "   (id varchar not null primary key, d DOUBLE, f FLOAT, ud UNSIGNED_DOUBLE, uf UNSIGNED_FLOAT, i integer, de decimal)");
         builder.put(JOIN_ORDER_TABLE_FULL_NAME, "create table " + JOIN_ORDER_TABLE_FULL_NAME +
@@ -478,9 +503,10 @@ public abstract class BaseTest {
         return conf.get(QueryServices.ZOOKEEPER_PORT_ATTRIB);
     }
     
-    private static String url;
+    protected static String url;
     protected static PhoenixTestDriver driver;
-    private static boolean clusterInitialized = false;
+    protected static PhoenixDriver realDriver;
+    protected static boolean clusterInitialized = false;
     private static HBaseTestingUtility utility;
     protected static final Configuration config = HBaseConfiguration.create(); 
     
@@ -491,7 +517,49 @@ public abstract class BaseTest {
         return url;
     }
     
-    protected static String checkClusterInitialized(ReadOnlyProps overrideProps) {
+    private static void teardownTxManager() throws SQLException {
+        try {
+            if (txService != null) txService.stopAndWait();
+        } finally {
+            try {
+                if (zkClient != null) zkClient.stopAndWait();
+            } finally {
+                txService = null;
+                zkClient = null;
+            }
+        }
+        
+    }
+    
+    protected static void setupTxManager() throws SQLException, IOException {
+        config.setBoolean(TxConstants.Manager.CFG_DO_PERSIST, false);
+        config.set(TxConstants.Service.CFG_DATA_TX_CLIENT_RETRY_STRATEGY, "n-times");
+        config.setInt(TxConstants.Service.CFG_DATA_TX_CLIENT_ATTEMPTS, 1);
+        config.setInt(TxConstants.Service.CFG_DATA_TX_BIND_PORT, Networks.getRandomPort());
+        config.set(TxConstants.Manager.CFG_TX_SNAPSHOT_DIR, tmpFolder.newFolder().getAbsolutePath());
+        config.setInt(TxConstants.Manager.CFG_TX_TIMEOUT, DEFAULT_TXN_TIMEOUT_SECONDS);
+
+        ConnectionInfo connInfo = ConnectionInfo.create(getUrl());
+        zkClient = ZKClientServices.delegate(
+          ZKClients.reWatchOnExpire(
+            ZKClients.retryOnFailure(
+              ZKClientService.Builder.of(connInfo.getZookeeperConnectionString())
+                .setSessionTimeout(config.getInt(HConstants.ZK_SESSION_TIMEOUT,
+                        HConstants.DEFAULT_ZK_SESSION_TIMEOUT))
+                .build(),
+              RetryStrategies.exponentialDelay(500, 2000, TimeUnit.MILLISECONDS)
+            )
+          )
+        );
+        zkClient.startAndWait();
+
+        DiscoveryService discovery = new ZKDiscoveryService(zkClient);
+        txManager = new TransactionManager(config, new InMemoryTransactionStateStorage(), new TxMetricsCollector());
+        txService = new TransactionService(config, zkClient, discovery, Providers.of(txManager));
+        txService.startAndWait();
+    }
+
+    protected static String checkClusterInitialized(ReadOnlyProps overrideProps) throws Exception {
         if (!clusterInitialized) {
             url = setUpTestCluster(config, overrideProps);
             clusterInitialized = true;
@@ -520,6 +588,14 @@ public abstract class BaseTest {
                 driver = null;
             }
         }
+        if (realDriver != null) {
+            try {
+                assertTrue(destroyDriver(realDriver));
+            } finally {
+                realDriver = null;
+            }
+        }
+        teardownTxManager();
     }
     
     protected static void dropNonSystemTables() throws Exception {
@@ -536,7 +612,11 @@ public abstract class BaseTest {
         } finally {
             try {
                 if (utility != null) {
-                    utility.shutdownMiniCluster();
+                    try {
+                        utility.shutdownMiniMapReduceCluster();
+                    } finally {
+                        utility.shutdownMiniCluster();
+                    }
                 }
             } finally {
                 utility = null;
@@ -552,7 +632,31 @@ public abstract class BaseTest {
     protected static void setUpTestDriver(ReadOnlyProps serverProps, ReadOnlyProps clientProps) throws Exception {
         String url = checkClusterInitialized(serverProps);
         if (driver == null) {
-            driver = initAndRegisterDriver(url, clientProps);
+            driver = initAndRegisterTestDriver(url, clientProps);
+            if (clientProps.getBoolean(QueryServices.TRANSACTIONS_ENABLED, QueryServicesOptions.DEFAULT_TRANSACTIONS_ENABLED)) {
+                setupTxManager();
+            }
+        }
+    }
+    
+    protected static void setUpRealDriver(ReadOnlyProps serverProps, ReadOnlyProps clientProps) throws Exception {
+        if (!clusterInitialized) {
+            setUpConfigForMiniCluster(config, serverProps);
+            utility = new HBaseTestingUtility(config);
+            try {
+                utility.startMiniCluster(NUM_SLAVES_BASE);
+                utility.startMiniMapReduceCluster();
+                url = QueryUtil.getConnectionUrl(new Properties(), utility.getConfiguration());
+            } catch (Throwable t) {
+                throw new RuntimeException(t);
+            }
+            clusterInitialized = true;
+        }
+        Class.forName(PhoenixDriver.class.getName());
+        realDriver = PhoenixDriver.INSTANCE;
+        DriverManager.registerDriver(realDriver);
+        if (clientProps.getBoolean(QueryServices.TRANSACTIONS_ENABLED, QueryServicesOptions.DEFAULT_TRANSACTIONS_ENABLED)) {
+            setupTxManager();
         }
     }
 
@@ -577,17 +681,6 @@ public abstract class BaseTest {
         utility = new HBaseTestingUtility(conf);
         try {
             utility.startMiniCluster(NUM_SLAVES_BASE);
-            // add shutdown hook to kill the mini cluster
-            Runtime.getRuntime().addShutdownHook(new Thread() {
-                @Override
-                public void run() {
-                    try {
-                        if (utility != null) utility.shutdownMiniCluster();
-                    } catch (Exception e) {
-                        logger.warn("Exception caught when shutting down mini cluster", e);
-                    }
-                }
-            });
             return getLocalClusterUrl(utility);
         } catch (Throwable t) {
             throw new RuntimeException(t);
@@ -654,6 +747,9 @@ public abstract class BaseTest {
         conf.setInt(HConstants.REGION_SERVER_HANDLER_COUNT, 5);
         conf.setInt("hbase.regionserver.metahandler.count", 2);
         conf.setInt(HConstants.MASTER_HANDLER_COUNT, 2);
+        conf.set(CoprocessorHost.MASTER_COPROCESSOR_CONF_KEY, IndexMasterObserver.class.getName());
+        conf.setClass(HConstants.HBASE_MASTER_LOADBALANCER_CLASS, IndexLoadBalancer.class,
+            LoadBalancer.class);
         conf.setClass("hbase.coprocessor.regionserver.classes", LocalIndexMerger.class,
             RegionServerObserver.class);
         conf.setInt("dfs.namenode.handler.count", 2);
@@ -661,9 +757,6 @@ public abstract class BaseTest {
         conf.setInt("dfs.datanode.handler.count", 2);
         conf.setInt("ipc.server.read.threadpool.size", 2);
         conf.setInt("ipc.server.handler.threadpool.size", 2);
-        conf.setInt("hbase.hconnection.threads.max", 2);
-        conf.setInt("hbase.hconnection.threads.core", 2);
-        conf.setInt("hbase.htable.threads.max", 2);
         conf.setInt("hbase.regionserver.hlog.syncer.count", 2);
         conf.setInt("hbase.hlog.asyncer.number", 2);
         conf.setInt("hbase.assignment.zkevent.workers", 5);
@@ -676,14 +769,15 @@ public abstract class BaseTest {
      * Create a {@link PhoenixTestDriver} and register it.
      * @return an initialized and registered {@link PhoenixTestDriver} 
      */
-    public static PhoenixTestDriver initAndRegisterDriver(String url, ReadOnlyProps props) throws Exception {
+    public static PhoenixTestDriver initAndRegisterTestDriver(String url, ReadOnlyProps props) throws Exception {
         PhoenixTestDriver newDriver = new PhoenixTestDriver(props);
         DriverManager.registerDriver(newDriver);
         Driver oldDriver = DriverManager.getDriver(url); 
         if (oldDriver != newDriver) {
             destroyDriver(oldDriver);
         }
-        Connection conn = newDriver.connect(url, PropertiesUtil.deepCopy(TEST_PROPERTIES));
+        Properties driverProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = newDriver.connect(url, driverProps);
         conn.close();
         return newDriver;
     }
@@ -722,7 +816,7 @@ public abstract class BaseTest {
         ensureTableCreated(url, tableName, null, null);
     }
 
-    protected static void ensureTableCreated(String url, String tableName, byte[][] splits) throws SQLException {
+    public static void ensureTableCreated(String url, String tableName, byte[][] splits) throws SQLException {
         ensureTableCreated(url, tableName, splits, null);
     }
 
@@ -1643,17 +1737,47 @@ public abstract class BaseTest {
             for (HTableDescriptor table : tables) {
                 String schemaName = SchemaUtil.getSchemaNameFromFullName(table.getName());
                 if (!QueryConstants.SYSTEM_SCHEMA_NAME.equals(schemaName)) {
-                    try{
-                        admin.disableTable(table.getName());
-                    } catch (TableNotEnabledException ignored){}
-                    admin.deleteTable(table.getName());
+                    disableAndDropTable(admin, table.getTableName());
                 }
             }
         } finally {
             admin.close();
         }
     }
-
+    
+    private static void disableAndDropTable(final HBaseAdmin admin, final TableName tableName)
+            throws Exception {
+        Future<Void> future = null;
+        boolean success = false;
+        try {
+            try {
+                future = dropHTableService.submit(new Callable<Void>() {
+                    @Override
+                    public Void call() throws Exception {
+                        if (admin.isTableEnabled(tableName)) {
+                            admin.disableTable(tableName);
+                            admin.deleteTable(tableName);
+                        }
+                        return null;
+                    }
+                });
+                future.get(dropTableTimeout, TimeUnit.SECONDS);
+                success = true;
+            } catch (TimeoutException e) {
+                throw new SQLExceptionInfo.Builder(SQLExceptionCode.OPERATION_TIMED_OUT)
+                .setMessage(
+                    "Not able to disable and delete table " + tableName.getNameAsString()
+                    + " in " + dropTableTimeout + " seconds.").build().buildException();
+            } catch (Exception e) {
+                throw e;
+            }
+        } finally { 
+            if (future != null && !success) {
+                future.cancel(true);
+            }
+        }
+    }
+    
     public static void assertOneOfValuesEqualsResultSet(ResultSet rs, List<List<Object>>... expectedResultsArray) throws SQLException {
         List<List<Object>> results = Lists.newArrayList();
         while (rs.next()) {
@@ -1710,11 +1834,52 @@ public abstract class BaseTest {
         assertEquals(expectedCount, count);
     }
     
-    public HBaseTestingUtility getUtility() {
+    public static HBaseTestingUtility getUtility() {
         return utility;
     }
+    
+    public static void upsertRows(Connection conn, String fullTableName, int numRows) throws SQLException {
+    	for (int i=1; i<=numRows; ++i) {
+	        upsertRow(conn, fullTableName, i, false);
+    	}
+    }
 
-    protected static void createMultiCFTestTable(String tableName) throws SQLException {
+    public static void upsertRow(Connection conn, String fullTableName, int index, boolean firstRowInBatch) throws SQLException {
+    	String upsert = "UPSERT INTO " + fullTableName
+                + " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+		PreparedStatement stmt = conn.prepareStatement(upsert);
+		stmt.setString(1, firstRowInBatch ? "firstRowInBatch_" : "" + "varchar"+index);
+		stmt.setString(2, "char"+index);
+		stmt.setInt(3, index);
+		stmt.setLong(4, index);
+		stmt.setBigDecimal(5, new BigDecimal(index));
+		Date date = DateUtil.parseDate("2015-01-01 00:00:00");
+		stmt.setDate(6, date);
+		stmt.setString(7, "varchar_a");
+		stmt.setString(8, "chara");
+		stmt.setInt(9, index+1);
+		stmt.setLong(10, index+1);
+		stmt.setBigDecimal(11, new BigDecimal(index+1));
+		stmt.setDate(12, date);
+		stmt.setString(13, "varchar_b");
+		stmt.setString(14, "charb");
+		stmt.setInt(15, index+2);
+		stmt.setLong(16, index+2);
+		stmt.setBigDecimal(17, new BigDecimal(index+2));
+		stmt.setDate(18, date);
+		stmt.executeUpdate();
+	}
+
+    // Populate the test table with data.
+    public static void populateTestTable(String fullTableName) throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+        	upsertRows(conn, fullTableName, 3);
+            conn.commit();
+        }
+    }
+
+    protected static void createMultiCFTestTable(String tableName, String options) throws SQLException {
         String ddl = "create table if not exists " + tableName + "(" +
                 "   varchar_pk VARCHAR NOT NULL, " +
                 "   char_pk CHAR(5) NOT NULL, " +
@@ -1732,13 +1897,14 @@ public abstract class BaseTest {
                 "   b.long_col2 BIGINT, " +
                 "   b.decimal_col2 DECIMAL, " +
                 "   b.date_col DATE " + 
-                "   CONSTRAINT pk PRIMARY KEY (varchar_pk, char_pk, int_pk, long_pk DESC, decimal_pk))";
+                "   CONSTRAINT pk PRIMARY KEY (varchar_pk, char_pk, int_pk, long_pk DESC, decimal_pk)) "
+                + (options!=null? options : "");
             Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             Connection conn = DriverManager.getConnection(getUrl(), props);
             conn.createStatement().execute(ddl);
             conn.close();
     }
-    
+        
     // Populate the test table with data.
     protected static void populateMultiCFTestTable(String tableName) throws SQLException {
         populateMultiCFTestTable(tableName, null);

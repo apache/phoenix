@@ -61,7 +61,7 @@ message GetTableRequest {
   required bytes tableName = 3;
   required int64 tableTimestamp = 4;
   required int64 clientTimestamp = 5;
-  optional int32 clientVersion = 6;
+  optional int32 clientVersion = 6;	
 }
 
 message GetFunctionsRequest {
@@ -119,6 +119,7 @@ message ClearCacheRequest {
 }
 
 message ClearCacheResponse {
+  optional int64 unfreedBytes = 1;
 }
 
 message GetVersionRequest {

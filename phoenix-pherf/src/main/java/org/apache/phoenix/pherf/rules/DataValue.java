@@ -28,6 +28,7 @@ public class DataValue {
     private String maxValue;
     private String minValue;
     private int distribution;
+    private boolean useCurrentDate;
 
     public DataValue() {
         super();
@@ -37,6 +38,7 @@ public class DataValue {
         this.type = type;
         this.value = value;
         this.distribution = Integer.MIN_VALUE;
+        this.useCurrentDate = false;
     }
 
     public DataValue(DataValue dataValue) {
@@ -44,6 +46,7 @@ public class DataValue {
         this.setDistribution(dataValue.getDistribution());
         this.setMinValue(dataValue.getMinValue());
         this.setMaxValue(dataValue.getMaxValue());
+        this.setUseCurrentDate(dataValue.getUseCurrentDate());
     }
 
     public String getValue() {
@@ -85,5 +88,13 @@ public class DataValue {
 
     public void setMaxValue(String maxValue) {
         this.maxValue = maxValue;
+    }
+
+    public boolean getUseCurrentDate() {
+        return useCurrentDate;
+    }
+
+    public void setUseCurrentDate(boolean useCurrentDate) {
+        this.useCurrentDate = useCurrentDate;
     }
 }

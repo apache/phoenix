@@ -23,29 +23,44 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
+import com.google.common.collect.Maps;
 import com.google.common.io.Files;
 
 
 
 public class SpooledTmpFileDeleteIT extends BaseHBaseManagedTimeIT {
-	private Connection conn = null;
-	private Properties props = null;
-	private File spoolDir;
+	
+    private Connection conn = null;
+    private Properties props = null;
+    private File spoolDir;
 
+    @BeforeClass
+    @Shadower(classBeingShadowed = BaseClientManagedTimeIT.class)
+    public static void doSetup() throws Exception {
+        Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
+        // disable renewing leases. This will force spooling to happen.
+        props.put(QueryServices.RENEW_LEASE_ENABLED, Boolean.toString(false));
+        // Must update config before starting server
+        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+    }
+	
 	@Before 
 	public void setup() throws SQLException {
 		props = new Properties();
 		spoolDir =  Files.createTempDir();
 		props.put(QueryServices.SPOOL_DIRECTORY, spoolDir.getPath());
         props.setProperty(QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB, Integer.toString(1));
-		conn = DriverManager.getConnection(getUrl(), props);
+        conn = DriverManager.getConnection(getUrl(), props);
 		Statement stmt = conn.createStatement();
 		stmt.execute("CREATE TABLE test (ID varchar NOT NULL PRIMARY KEY) SPLIT ON ('EA','EZ')");
 		stmt.execute("UPSERT INTO test VALUES ('AA')");

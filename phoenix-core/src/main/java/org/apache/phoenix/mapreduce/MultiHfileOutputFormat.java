@@ -66,9 +66,9 @@ import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.mapreduce.lib.partition.TotalOrderPartitioner;
-import org.apache.phoenix.mapreduce.CsvBulkLoadTool.TargetTableRef;
-import org.apache.phoenix.mapreduce.CsvBulkLoadTool.TargetTableRefFunctions;
-import org.apache.phoenix.mapreduce.bulkload.CsvTableRowkeyPair;
+import org.apache.phoenix.mapreduce.bulkload.TableRowkeyPair;
+import org.apache.phoenix.mapreduce.bulkload.TargetTableRef;
+import org.apache.phoenix.mapreduce.bulkload.TargetTableRefFunctions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -81,7 +81,7 @@ import com.google.common.collect.Sets;
  * It has been adapted from {#link HFileOutputFormat2} but differs from the fact it creates
  * HFiles for multiple tables.
  */
-public class MultiHfileOutputFormat extends FileOutputFormat<CsvTableRowkeyPair, Cell> {
+public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Cell> {
 
     private static final Logger LOG = LoggerFactory.getLogger(MultiHfileOutputFormat.class);
 
@@ -101,7 +101,7 @@ public class MultiHfileOutputFormat extends FileOutputFormat<CsvTableRowkeyPair,
     private static final String AT_DELIMITER = "@";
     
     @Override
-    public RecordWriter<CsvTableRowkeyPair, Cell> getRecordWriter(TaskAttemptContext context)
+    public RecordWriter<TableRowkeyPair, Cell> getRecordWriter(TaskAttemptContext context)
             throws IOException, InterruptedException {
         return createRecordWriter(context);
     }
@@ -112,7 +112,7 @@ public class MultiHfileOutputFormat extends FileOutputFormat<CsvTableRowkeyPair,
      * @return
      * @throws IOException 
      */
-    static <V extends Cell> RecordWriter<CsvTableRowkeyPair, V> createRecordWriter(final TaskAttemptContext context) 
+    static <V extends Cell> RecordWriter<TableRowkeyPair, V> createRecordWriter(final TaskAttemptContext context)
             throws IOException {
         // Get the path of the temporary output file
         final Path outputPath = FileOutputFormat.getOutputPath(context);
@@ -130,7 +130,7 @@ public class MultiHfileOutputFormat extends FileOutputFormat<CsvTableRowkeyPair,
         final boolean compactionExclude = conf.getBoolean(
             "hbase.mapreduce.hfileoutputformat.compaction.exclude", false);
 
-        return new RecordWriter<CsvTableRowkeyPair, V>() {
+        return new RecordWriter<TableRowkeyPair, V>() {
           // Map of families to writers and how much has been output on the writer.
             private final Map<byte [], WriterLength> writers =
                     new TreeMap<byte [], WriterLength>(Bytes.BYTES_COMPARATOR);
@@ -139,7 +139,7 @@ public class MultiHfileOutputFormat extends FileOutputFormat<CsvTableRowkeyPair,
             private boolean rollRequested = false;
 
             @Override
-            public void write(CsvTableRowkeyPair row, V cell)
+            public void write(TableRowkeyPair row, V cell)
                     throws IOException {
                 KeyValue kv = KeyValueUtil.ensureKeyValue(cell);
                 // null input == user explicitly wants to flush
@@ -450,7 +450,7 @@ public class MultiHfileOutputFormat extends FileOutputFormat<CsvTableRowkeyPair,
      * Configure <code>job</code> with a TotalOrderPartitioner, partitioning against
      * <code>splitPoints</code>. Cleans up the partitions file after job exists.
      */
-    static void configurePartitioner(Job job, Set<CsvTableRowkeyPair> tablesStartKeys) 
+    static void configurePartitioner(Job job, Set<TableRowkeyPair> tablesStartKeys)
             throws IOException {
         
         Configuration conf = job.getConfiguration();
@@ -467,7 +467,7 @@ public class MultiHfileOutputFormat extends FileOutputFormat<CsvTableRowkeyPair,
     }
 
     private static void writePartitions(Configuration conf, Path partitionsPath,
-            Set<CsvTableRowkeyPair> tablesStartKeys) throws IOException {
+            Set<TableRowkeyPair> tablesStartKeys) throws IOException {
         
         LOG.info("Writing partition information to " + partitionsPath);
         if (tablesStartKeys.isEmpty()) {
@@ -478,9 +478,9 @@ public class MultiHfileOutputFormat extends FileOutputFormat<CsvTableRowkeyPair,
         // have keys < the first region (which has an empty start key)
         // so we need to remove it. Otherwise we would end up with an
         // empty reducer with index 0
-        TreeSet<CsvTableRowkeyPair> sorted = new TreeSet<CsvTableRowkeyPair>(tablesStartKeys);
+        TreeSet<TableRowkeyPair> sorted = new TreeSet<TableRowkeyPair>(tablesStartKeys);
 
-        CsvTableRowkeyPair first = sorted.first();
+        TableRowkeyPair first = sorted.first();
         if (!first.getRowkey().equals(HConstants.EMPTY_BYTE_ARRAY)) {
           throw new IllegalArgumentException(
               "First region of table should have empty start key. Instead has: "
@@ -491,11 +491,11 @@ public class MultiHfileOutputFormat extends FileOutputFormat<CsvTableRowkeyPair,
         // Write the actual file
         FileSystem fs = partitionsPath.getFileSystem(conf);
         SequenceFile.Writer writer = SequenceFile.createWriter(
-          fs, conf, partitionsPath, CsvTableRowkeyPair.class,
+          fs, conf, partitionsPath, TableRowkeyPair.class,
           NullWritable.class);
 
         try {
-          for (CsvTableRowkeyPair startKey : sorted) {
+          for (TableRowkeyPair startKey : sorted) {
             writer.append(startKey, NullWritable.get());
           }
         } finally {
@@ -658,11 +658,11 @@ public class MultiHfileOutputFormat extends FileOutputFormat<CsvTableRowkeyPair,
                 KeyValueSerialization.class.getName());
 
         // tableStartKeys for all tables.
-        Set<CsvTableRowkeyPair> tablesStartKeys = Sets.newTreeSet();
+        Set<TableRowkeyPair> tablesStartKeys = Sets.newTreeSet();
         for(TargetTableRef table : tablesToBeLoaded) {
            final String tableName = table.getPhysicalName();
            try(HTable htable = new HTable(conf,tableName);){
-               Set<CsvTableRowkeyPair> startKeys = getRegionStartKeys(tableName , htable.getRegionLocator());
+               Set<TableRowkeyPair> startKeys = getRegionStartKeys(tableName , htable.getRegionLocator());
                tablesStartKeys.addAll(startKeys);
                String compressionConfig = configureCompression(htable.getTableDescriptor());
                String bloomTypeConfig = configureBloomType(htable.getTableDescriptor());
@@ -687,7 +687,7 @@ public class MultiHfileOutputFormat extends FileOutputFormat<CsvTableRowkeyPair,
                conf.set(tableName, tableDefns);
                
                TargetTableRef tbl = TargetTableRefFunctions.FROM_JSON.apply(tableDefns);
-               LOG.error(" the table logical name is "+ tbl.getLogicalName());
+               LOG.info(" the table logical name is "+ tbl.getLogicalName());
            }
        }
     
@@ -704,12 +704,12 @@ public class MultiHfileOutputFormat extends FileOutputFormat<CsvTableRowkeyPair,
      * Return the start keys of all of the regions in this table,
      * as a list of ImmutableBytesWritable.
      */
-    private static Set<CsvTableRowkeyPair> getRegionStartKeys(String tableName , RegionLocator table) throws IOException {
+    private static Set<TableRowkeyPair> getRegionStartKeys(String tableName , RegionLocator table) throws IOException {
       byte[][] byteKeys = table.getStartKeys();
-      Set<CsvTableRowkeyPair> ret = new TreeSet<CsvTableRowkeyPair>();
+      Set<TableRowkeyPair> ret = new TreeSet<TableRowkeyPair>();
       for (byte[] byteKey : byteKeys) {
           // phoenix-2216: start : passing the table name and startkey  
-        ret.add(new CsvTableRowkeyPair(tableName, new ImmutableBytesWritable(byteKey)));
+        ret.add(new TableRowkeyPair(tableName, new ImmutableBytesWritable(byteKey)));
       }
       return ret;
     }

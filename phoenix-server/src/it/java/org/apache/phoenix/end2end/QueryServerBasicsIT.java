@@ -20,8 +20,8 @@ package org.apache.phoenix.end2end;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.queryserver.client.ThinClientUtil;
-import org.apache.phoenix.queryserver.server.Main;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -57,7 +57,7 @@ public class QueryServerBasicsIT extends BaseHBaseManagedTimeIT {
   @BeforeClass
   public static void beforeClass() throws Exception {
     CONF = getTestClusterConfig();
-    CONF.setInt(Main.QUERY_SERVER_HTTP_PORT_KEY, 0);
+    CONF.setInt(QueryServices.QUERY_SERVER_HTTP_PORT_ATTRIB, 0);
     String url = getUrl();
     AVATICA_SERVER = new QueryServerThread(new String[] { url }, CONF,
             QueryServerBasicsIT.class.getName());

@@ -39,12 +39,12 @@ import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.util.Addressing;
 import org.apache.hadoop.hbase.zookeeper.ZKConfig;
 import org.apache.phoenix.iterate.ResultIterator;
-import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.parse.WildcardParseNode;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 
 import com.google.common.base.Function;
 import com.google.common.base.Joiner;
@@ -303,15 +303,11 @@ public final class QueryUtil {
     public static String getConnectionUrl(Properties props, Configuration conf)
             throws ClassNotFoundException, SQLException {
         // TODO: props is ignored!
-        // make sure we load the phoenix driver
-        Class.forName(PhoenixDriver.class.getName());
-
         // read the hbase properties from the configuration
         String server = ZKConfig.getZKQuorumServersString(conf);
         // could be a comma-separated list
         String[] rawServers = server.split(",");
         List<String> servers = new ArrayList<String>(rawServers.length);
-        boolean first = true;
         int port = -1;
         for (String serverPort : rawServers) {
             try {
@@ -340,8 +336,13 @@ public final class QueryUtil {
         server = Joiner.on(',').join(servers);
         String znodeParent = conf.get(HConstants.ZOOKEEPER_ZNODE_PARENT,
                 HConstants.DEFAULT_ZOOKEEPER_ZNODE_PARENT);
-
-        return getUrl(server, port, znodeParent);
+        String url = getUrl(server, port, znodeParent);
+        // Mainly for testing to tack on the test=true part to ensure driver is found on server
+        String extraArgs = conf.get(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
+        if (extraArgs.length() > 0) {
+            url += extraArgs + PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
+        }
+        return url;
     }
     
     public static String getViewStatement(String schemaName, String tableName, String where) {

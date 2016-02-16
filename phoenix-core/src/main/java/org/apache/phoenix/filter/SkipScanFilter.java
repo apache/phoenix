@@ -38,12 +38,11 @@ import org.apache.hadoop.io.Writable;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.KeyRange.Bound;
 import org.apache.phoenix.schema.RowKeySchema;
+import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ScanUtil.BytesComparator;
 import org.apache.phoenix.util.SchemaUtil;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Objects;
 import com.google.common.collect.Lists;
@@ -62,8 +61,6 @@ import com.google.common.hash.Hashing;
  * @since 0.1
  */
 public class SkipScanFilter extends FilterBase implements Writable {
-    private static final Logger logger = LoggerFactory.getLogger(SkipScanFilter.class);
-
     private enum Terminate {AT, AFTER};
     // Conjunctive normal form of or-ed ranges or point lookups
     private List<List<KeyRange>> slots;
@@ -71,6 +68,7 @@ public class SkipScanFilter extends FilterBase implements Writable {
     private int[] slotSpan;
     // schema of the row key
     private RowKeySchema schema;
+    private boolean includeMultipleVersions;
     // current position for each slot
     private int[] position;
     // buffer used for skip hint
@@ -93,19 +91,27 @@ public class SkipScanFilter extends FilterBase implements Writable {
     public SkipScanFilter() {
     }
 
+    public SkipScanFilter(SkipScanFilter filter, boolean includeMultipleVersions) {
+        this(filter.slots, filter.slotSpan, filter.schema, includeMultipleVersions);
+    }
+
     public SkipScanFilter(List<List<KeyRange>> slots, RowKeySchema schema) {
         this(slots, ScanUtil.getDefaultSlotSpans(slots.size()), schema);
     }
 
     public SkipScanFilter(List<List<KeyRange>> slots, int[] slotSpan, RowKeySchema schema) {
-        init(slots, slotSpan, schema);
+        this(slots, slotSpan, schema, false);
+    }
+    
+    private SkipScanFilter(List<List<KeyRange>> slots, int[] slotSpan, RowKeySchema schema, boolean includeMultipleVersions) {
+        init(slots, slotSpan, schema, includeMultipleVersions);
     }
     
     public void setOffset(int offset) {
         this.offset = offset;
     }
 
-    private void init(List<List<KeyRange>> slots, int[] slotSpan, RowKeySchema schema) {
+    private void init(List<List<KeyRange>> slots, int[] slotSpan, RowKeySchema schema, boolean includeMultipleVersions) {
         for (List<KeyRange> ranges : slots) {
             if (ranges.isEmpty()) {
                 throw new IllegalStateException();
@@ -116,9 +122,10 @@ public class SkipScanFilter extends FilterBase implements Writable {
         this.schema = schema;
         this.maxKeyLength = SchemaUtil.getMaxKeyLength(schema, slots);
         this.position = new int[slots.size()];
-        startKey = new byte[maxKeyLength];
-        endKey = new byte[maxKeyLength];
-        endKeyLength = 0;
+        this.startKey = new byte[maxKeyLength];
+        this.endKey = new byte[maxKeyLength];
+        this.endKeyLength = 0;
+        this.includeMultipleVersions = includeMultipleVersions;
     }
 
     // Exposed for testing.
@@ -161,8 +168,7 @@ public class SkipScanFilter extends FilterBase implements Writable {
                                 .getRowOffset(), previousCellHint.getRowLength()) > 0;
         if (!isHintAfterPrevious) {
             String msg = "The next hint must come after previous hint (prev=" + previousCellHint + ", next=" + nextCellHint + ", kv=" + kv + ")";
-            assert isHintAfterPrevious : msg;
-            logger.warn(msg);
+            throw new IllegalStateException(msg);
         }
     }
     
@@ -243,11 +249,6 @@ public class SkipScanFilter extends FilterBase implements Writable {
         }
         // Short circuit out if we only have a single set of keys
         if (slots.size() == 1) {
-//            int offset = slots.get(0).get(endPos).compareLowerToUpperBound(upperExclusiveKey) < 0 ? 1 : 0;
-//            if (endPos + offset <= startPos) {
-//                return false;
-//            }
-//            List<KeyRange> newRanges = slots.get(0).subList(startPos, endPos + offset);
             if (newSlots != null) {
                 List<KeyRange> newRanges = slots.get(0).subList(startPos, endPos+1);
                 newSlots.add(newRanges);
@@ -274,7 +275,7 @@ public class SkipScanFilter extends FilterBase implements Writable {
         // more than we need. We can optimize this by tracking whether each range in each slot position
         // intersects.
         ReturnCode endCode = navigate(upperExclusiveKey, 0, upperExclusiveKey.length, Terminate.AT);
-        if (endCode == ReturnCode.INCLUDE) {
+        if (endCode == ReturnCode.INCLUDE || endCode == ReturnCode.INCLUDE_AND_NEXT_COL) {
             setStartKey();
             // If the upperExclusiveKey is equal to the start key, we've gone one position too far, since
             // our upper key is exclusive. In that case, go to the previous key
@@ -350,15 +351,20 @@ public class SkipScanFilter extends FilterBase implements Writable {
         return i;
     }
     
+    private ReturnCode getIncludeReturnCode() {
+        return includeMultipleVersions ? ReturnCode.INCLUDE : ReturnCode.INCLUDE_AND_NEXT_COL;
+    }
+    
     @edu.umd.cs.findbugs.annotations.SuppressWarnings(
             value="QBA_QUESTIONABLE_BOOLEAN_ASSIGNMENT", 
             justification="Assignment designed to work this way.")
     private ReturnCode navigate(final byte[] currentKey, final int offset, final int length, Terminate terminate) {
         int nSlots = slots.size();
+
         // First check to see if we're in-range until we reach our end key
         if (endKeyLength > 0) {
             if (Bytes.compareTo(currentKey, offset, length, endKey, 0, endKeyLength) < 0) {
-                return ReturnCode.INCLUDE;
+                return getIncludeReturnCode();
             }
 
             // If key range of last slot is a single key, we can increment our position
@@ -439,7 +445,7 @@ public class SkipScanFilter extends FilterBase implements Writable {
                     setStartKey();
                     schema.reposition(ptr, ScanUtil.getRowKeyPosition(slotSpan, i), ScanUtil.getRowKeyPosition(slotSpan, j), minOffset, maxOffset, slotSpan[j]);
                 } else {
-                    int currentLength = setStartKey(ptr, minOffset, j+1, nSlots);
+                    int currentLength = setStartKey(ptr, minOffset, j+1, nSlots, false);
                     // From here on, we use startKey as our buffer (resetting minOffset and maxOffset)
                     // We've copied the part of the current key above that we need into startKey
                     // Reinitialize the iterator to be positioned at previous slot position
@@ -454,7 +460,7 @@ public class SkipScanFilter extends FilterBase implements Writable {
             } else if (slots.get(i).get(position[i]).compareLowerToUpperBound(ptr, comparator) > 0) {
                 // Our current key is less than the lower range of the current position in the current slot.
                 // Seek to the lower range, since it's bigger than the current key
-                setStartKey(ptr, minOffset, i, nSlots);
+                setStartKey(ptr, minOffset, i, nSlots, false);
                 return ReturnCode.SEEK_NEXT_USING_HINT;
             } else { // We're in range, check the next slot
                 if (!slots.get(i).get(position[i]).isSingleKey() && i < earliestRangeIndex) {
@@ -477,7 +483,7 @@ public class SkipScanFilter extends FilterBase implements Writable {
                         break;
                     }
                     // Otherwise we seek to the next start key because we're before it now
-                    setStartKey(ptr, minOffset, i, nSlots);
+                    setStartKey(ptr, minOffset, i, nSlots, true);
                     return ReturnCode.SEEK_NEXT_USING_HINT;
                 }
             }
@@ -490,7 +496,7 @@ public class SkipScanFilter extends FilterBase implements Writable {
         // up to the upper range of our last slot. We do this for ranges and single keys
         // since we potentially have multiple key values for the same row key.
         setEndKey(ptr, minOffset, i);
-        return ReturnCode.INCLUDE;
+        return getIncludeReturnCode();
     }
 
     private boolean allTrailingNulls(int i) {
@@ -521,13 +527,16 @@ public class SkipScanFilter extends FilterBase implements Writable {
         startKeyLength = setKey(Bound.LOWER, startKey, 0, 0);
     }
 
-    private int setStartKey(ImmutableBytesWritable ptr, int offset, int i, int nSlots) {
+    private int setStartKey(ImmutableBytesWritable ptr, int offset, int i, int nSlots, boolean atEndOfKey) {
         int length = ptr.getOffset() - offset;
         startKey = copyKey(startKey, length + this.maxKeyLength, ptr.get(), offset, length);
         startKeyLength = length;
         // Add separator byte if we're at end of the key, since trailing separator bytes are stripped
-        if (ptr.getLength() == 0 && i > 0 && i-1 < nSlots && !schema.getField(i-1).getDataType().isFixedWidth()) {
-            startKey[startKeyLength++] = SchemaUtil.getSeparatorByte(schema.rowKeyOrderOptimizable(), ptr.getLength()==0, schema.getField(i-1));
+        if (atEndOfKey && i > 0 && i-1 < nSlots) {
+            Field field = schema.getField(i-1);
+            if (!field.getDataType().isFixedWidth()) {
+                startKey[startKeyLength++] = SchemaUtil.getSeparatorByte(schema.rowKeyOrderOptimizable(), true, field);
+            }
         }
         startKeyLength += setKey(Bound.LOWER, startKey, startKeyLength, i);
         return length;
@@ -561,9 +570,14 @@ public class SkipScanFilter extends FilterBase implements Writable {
         RowKeySchema schema = new RowKeySchema();
         schema.readFields(in);
         int andLen = in.readInt();
+        boolean includeMultipleVersions = false;
+        if (andLen < 0) {
+            andLen = -andLen;
+            includeMultipleVersions = true;
+        }
         int[] slotSpan = new int[andLen];
         List<List<KeyRange>> slots = Lists.newArrayListWithExpectedSize(andLen);
-        for (int i=0; i<andLen; i++) {
+        for (int i = 0; i < andLen; i++) {
             int orLenWithSlotSpan = in.readInt();
             int orLen = orLenWithSlotSpan;
             /*
@@ -580,20 +594,20 @@ public class SkipScanFilter extends FilterBase implements Writable {
             List<KeyRange> orClause = Lists.newArrayListWithExpectedSize(orLen);
             slots.add(orClause);
             for (int j=0; j<orLen; j++) {
-                KeyRange range = new KeyRange();
-                range.readFields(in);
+                KeyRange range = KeyRange.read(in);
                 orClause.add(range);
             }
         }
-        this.init(slots, slotSpan, schema);
+        this.init(slots, slotSpan, schema, includeMultipleVersions);
     }
 
     @Override
     public void write(DataOutput out) throws IOException {
         assert(slots.size() == slotSpan.length);
         schema.write(out);
-        out.writeInt(slots.size());
-        for (int i = 0; i < slots.size(); i++) {
+        int nSlots = slots.size();
+        out.writeInt(this.includeMultipleVersions ? -nSlots : nSlots);
+        for (int i = 0; i < nSlots; i++) {
             List<KeyRange> orLen = slots.get(i);
             int span = slotSpan[i];
             int orLenWithSlotSpan = -( ( (span << KEY_RANGE_LENGTH_BITS) | orLen.size() ) + 1);

@@ -26,7 +26,7 @@
   <parent>
     <groupId>org.apache.phoenix</groupId>
     <artifactId>phoenix</artifactId>
-    <version>4.7.0-HBase-1.1-SNAPSHOT</version>
+    <version>4.7.0-HBase-1.1</version>
   </parent>
   <artifactId>phoenix-assembly</artifactId>
   <name>Phoenix Assembly</name>
@@ -64,6 +64,23 @@
               </descriptors>
             </configuration>
           </execution>
+          <!-- Due to SPARK-8332 and Calcite's fasterxml dependency, we need a custom spark client -->
+          <execution>
+            <id>client-spark</id>
+            <phase>package</phase>
+            <goals>
+              <goal>single</goal>
+            </goals>
+            <configuration>
+              <finalName>phoenix-${project.version}</finalName>
+              <attach>false</attach>
+              <appendAssemblyId>true</appendAssemblyId>
+              <descriptors>
+                <!-- build the phoenix spark client jar -->
+                <descriptor>src/build/client-spark.xml</descriptor>
+              </descriptors>
+            </configuration>
+          </execution>
           <execution>
             <id>client-minimal</id>
             <phase>package</phase>
@@ -81,8 +98,6 @@
                 <descriptor>src/build/client-minimal.xml</descriptor>
                <!-- build the phoenix server side jar, that includes phoenix-hadoopX-compat, phoenix-hadoop-compat and antlr -->
                 <descriptor>src/build/server.xml</descriptor>
-               <!-- build the phoenix server side jar, that includes phoenix-hadoopX-compat and phoenix-hadoop-compat. -->
-                <descriptor>src/build/server-without-antlr.xml</descriptor>
               </descriptors>
             </configuration>
           </execution>

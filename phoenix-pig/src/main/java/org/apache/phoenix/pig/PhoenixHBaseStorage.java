@@ -37,16 +37,21 @@ import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.OutputFormat;
 import org.apache.hadoop.mapreduce.RecordWriter;
 import org.apache.phoenix.mapreduce.PhoenixOutputFormat;
+import org.apache.phoenix.mapreduce.PhoenixRecordWritable;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.pig.util.TableSchemaParserFunction;
-import org.apache.phoenix.pig.writable.PhoenixPigDBWritable;
+import org.apache.phoenix.pig.util.TypeUtil;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.ColumnInfo;
 import org.apache.pig.ResourceSchema;
 import org.apache.pig.ResourceSchema.ResourceFieldSchema;
 import org.apache.pig.StoreFuncInterface;
+import org.apache.pig.data.DataType;
 import org.apache.pig.data.Tuple;
 import org.apache.pig.impl.util.ObjectSerializer;
 import org.apache.pig.impl.util.UDFContext;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * StoreFunc that uses Phoenix to store data into HBase.
@@ -81,8 +86,10 @@ import org.apache.pig.impl.util.UDFContext;
 @SuppressWarnings("rawtypes")
 public class PhoenixHBaseStorage implements StoreFuncInterface {
 
+    private static final Logger LOG = LoggerFactory.getLogger(PhoenixHBaseStorage.class);
+    
     private Configuration config;
-    private RecordWriter<NullWritable, PhoenixPigDBWritable> writer;
+    private RecordWriter<NullWritable, PhoenixRecordWritable> writer;
     private List<ColumnInfo> columnInfo = null;
     private String contextSignature = null;
     private ResourceSchema schema;  
@@ -167,15 +174,28 @@ public class PhoenixHBaseStorage implements StoreFuncInterface {
 
     @Override
     public void putNext(Tuple t) throws IOException {
-        ResourceFieldSchema[] fieldSchemas = (schema == null) ? null : schema.getFields();      
-        PhoenixPigDBWritable record = PhoenixPigDBWritable.newInstance(fieldSchemas,this.columnInfo);
-        for(int i=0; i<t.size(); i++) {
-            record.add(t.get(i));
-        }
+        ResourceFieldSchema[] fieldSchemas = (schema == null) ? null : schema.getFields();
+        PhoenixRecordWritable record = new PhoenixRecordWritable(this.columnInfo);
         try {
+            for(int i=0; i<t.size(); i++) {
+                Object value = t.get(i);
+                if(value == null) {
+                    record.add(null);
+                    continue;
+                }
+                ColumnInfo cinfo = this.columnInfo.get(i);
+                byte type = (fieldSchemas == null) ? DataType.findType(value) : fieldSchemas[i].getType();
+                PDataType pDataType = PDataType.fromTypeId(cinfo.getSqlType());
+                Object v =  TypeUtil.castPigTypeToPhoenix(value, type, pDataType);
+                record.add(v);
+            }
             this.writer.write(null, record);
         } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
             throw new RuntimeException(e);
+        } catch (SQLException e) {
+            LOG.error("Error on tuple {} .",t);
+            throw new IOException(e);
         }
         
     }

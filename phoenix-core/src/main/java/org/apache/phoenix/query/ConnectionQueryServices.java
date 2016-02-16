@@ -23,6 +23,8 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 
+import co.cask.tephra.TransactionSystemClient;
+
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
@@ -67,6 +69,7 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
 
     public HTableDescriptor getTableDescriptor(byte[] tableName) throws SQLException;
 
+    public HRegionLocation getTableRegionLocation(byte[] tableName, byte[] row) throws SQLException;
     public List<HRegionLocation> getAllTableRegions(byte[] tableName) throws SQLException;
 
     public PhoenixConnection connect(String url, Properties info) throws SQLException;
@@ -88,7 +91,7 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
 
     void clearTableRegionCache(byte[] tableName) throws SQLException;
 
-    boolean hasInvalidIndexConfiguration();
+    boolean hasIndexWALCodec();
     
     long createSequence(String tenantId, String schemaName, String sequenceName, long startWith, long incrementBy, long cacheSize, long minValue, long maxValue, boolean cycle, long timestamp) throws SQLException;
     long dropSequence(String tenantId, String schemaName, String sequenceName, long timestamp) throws SQLException;
@@ -106,7 +109,7 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
      */
     public KeyValueBuilder getKeyValueBuilder();
     
-    public enum Feature {LOCAL_INDEX};
+    public enum Feature {LOCAL_INDEX, RENEW_LEASE};
     public boolean supportsFeature(Feature feature);
     
     public String getUserName();
@@ -114,6 +117,10 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
 
     public PTableStats getTableStats(byte[] physicalName, long clientTimeStamp) throws SQLException;
     
-    public void clearCache() throws SQLException;
+    public long clearCache() throws SQLException;
     public int getSequenceSaltBuckets();
+
+    TransactionSystemClient getTransactionSystemClient();
+    public long getRenewLeaseThresholdMilliSeconds();
+    public boolean isRenewingLeasesEnabled();
 }

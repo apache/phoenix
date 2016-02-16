@@ -77,8 +77,8 @@ public class PUnsignedTinyintArray extends PArrayDataType<byte[]> {
         if (value == null) {
             return true;
         }
-        PhoenixArray pArr = (PhoenixArray) value;
-        Object[] byteArr = (Object[]) pArr.array;
+        PhoenixArray.PrimitiveBytePhoenixArray pArr = (PhoenixArray.PrimitiveBytePhoenixArray) value;
+        byte[] byteArr = (byte[]) pArr.array;
         for (Object i : byteArr) {
             if (!super.isCoercibleTo(PUnsignedTinyint.INSTANCE, i)) {
                 return false;

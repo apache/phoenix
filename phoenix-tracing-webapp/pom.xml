@@ -27,7 +27,7 @@
     <parent>
       <groupId>org.apache.phoenix</groupId>
       <artifactId>phoenix</artifactId>
-      <version>4.7.0-HBase-1.1-SNAPSHOT</version>
+      <version>4.7.0-HBase-1.1</version>
     </parent>
 
     <artifactId>phoenix-tracing-webapp</artifactId>
@@ -44,14 +44,12 @@
         <artifactId>jetty-server</artifactId>
         <!-- TODO : pick the same jetty version throughout the project (PHOENIX-2211)-->
         <version>${jettyVersion}</version>
-        <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-webapp</artifactId>
         <!-- TODO : pick the same jetty version throughout the project (PHOENIX-2211)-->
         <version>${jettyVersion}</version>
-        <scope>provided</scope>
       </dependency>
       <dependency>
           <groupId>org.apache.hadoop</groupId>

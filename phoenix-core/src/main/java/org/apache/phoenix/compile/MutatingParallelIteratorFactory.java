@@ -32,9 +32,6 @@ import org.apache.phoenix.iterate.ParallelIteratorFactory;
 import org.apache.phoenix.iterate.PeekingResultIterator;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.query.ConnectionQueryServices;
-import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.tuple.SingleKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PLong;
@@ -64,20 +61,7 @@ public abstract class MutatingParallelIteratorFactory implements ParallelIterato
         long totalRowCount = state.getUpdateCount();
         if (clonedConnection.getAutoCommit()) {
             clonedConnection.getMutationState().join(state);
-            clonedConnection.commit();
-            ConnectionQueryServices services = clonedConnection.getQueryServices();
-            int maxSize = services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_ATTRIB, QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE);
-            /*
-             * Everything that was mutated as part of the clonedConnection has been committed. However, we want to
-             * report the mutation work done using this clonedConnection as part of the overall mutation work of the
-             * parent connection. So we need to set those metrics in the empty mutation state so that they could be
-             * combined with the parent connection's mutation metrics (as part of combining mutation state) in the
-             * close() method of the iterator being returned. Don't combine the read metrics in parent context yet
-             * though because they are possibly being concurrently modified by other threads at this stage. Instead we
-             * will get hold of the read metrics when all the mutating iterators are done.
-             */
-            state = MutationState.emptyMutationState(maxSize, clonedConnection);
-            state.getMutationMetricQueue().combineMetricQueues(clonedConnection.getMutationState().getMutationMetricQueue());
+            state = clonedConnection.getMutationState();
         }
         final MutationState finalState = state;
         

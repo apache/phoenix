@@ -78,12 +78,11 @@ import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.PTable.IndexType;
-import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeySchema;
+import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.tuple.Tuple;
@@ -107,6 +106,7 @@ import com.google.common.collect.Sets;
  * @since 0.1
  */
 public class ProjectionCompiler {
+    private static final Expression NULL_EXPRESSION = LiteralExpression.newConstant(null);
     private ProjectionCompiler() {
     }
     
@@ -116,7 +116,9 @@ public class ProjectionCompiler {
     }
     
     public static RowProjector compile(StatementContext context, SelectStatement statement, GroupBy groupBy) throws SQLException  {
-        return compile(context, statement, groupBy, Collections.<PColumn>emptyList());
+        return compile(context, statement, groupBy, Collections.<PColumn>emptyList(), 
+                NULL_EXPRESSION// Pass null expression because we don't want empty key value to be projected
+                );
     }
     
     private static int getMinPKOffset(PTable table, PName tenantId) {
@@ -184,11 +186,11 @@ public class ProjectionCompiler {
         String tableName = index.getParentName().getString();
         PTable dataTable = null;
         try {
-        	dataTable = conn.getMetaDataCache().getTable(new PTableKey(tenantId, tableName));
+        	dataTable = conn.getTable(new PTableKey(tenantId, tableName));
         } catch (TableNotFoundException e) {
             if (tenantId != null) { 
             	// Check with null tenantId 
-            	dataTable = conn.getMetaDataCache().getTable(new PTableKey(null, tableName));
+            	dataTable = conn.getTable(new PTableKey(null, tableName));
             }
             else {
             	throw e;
@@ -279,7 +281,7 @@ public class ProjectionCompiler {
         PTable index = tableRef.getTable();
         PhoenixConnection conn = context.getConnection();
         String tableName = index.getParentName().getString();
-        PTable table = conn.getMetaDataCache().getTable(new PTableKey(conn.getTenantId(), tableName));
+        PTable table = conn.getTable(new PTableKey(conn.getTenantId(), tableName));
         PColumnFamily pfamily = table.getColumnFamily(cfName);
         for (PColumn column : pfamily.getColumns()) {
             String indexColName = IndexUtil.getIndexColumnName(column);
@@ -323,7 +325,7 @@ public class ProjectionCompiler {
                 if (expression.getDataType() != null && !expression.getDataType().isCastableTo(targetType)) {
                     throw new ArgumentTypeMismatchException(targetType, expression.getDataType(), "column: " + targetColumn);
                 }
-                expression = CoerceExpression.create(expression, targetType);
+                expression = CoerceExpression.create(expression, targetType, targetColumn.getSortOrder(), targetColumn.getMaxLength());
             }
         }
         return expression;
@@ -338,7 +340,7 @@ public class ProjectionCompiler {
      * @return projector used to access row values during scan
      * @throws SQLException 
      */
-    public static RowProjector compile(StatementContext context, SelectStatement statement, GroupBy groupBy, List<? extends PDatum> targetColumns) throws SQLException {
+    public static RowProjector compile(StatementContext context, SelectStatement statement, GroupBy groupBy, List<? extends PDatum> targetColumns, Expression where) throws SQLException {
         List<KeyValueColumnExpression> arrayKVRefs = new ArrayList<KeyValueColumnExpression>();
         List<ProjectedColumnExpression> arrayProjectedColumnRefs = new ArrayList<ProjectedColumnExpression>();
         List<Expression> arrayKVFuncs = new ArrayList<Expression>();
@@ -364,6 +366,9 @@ public class ProjectionCompiler {
                 if (statement.isAggregate()) {
                     ExpressionCompiler.throwNonAggExpressionInAggException(node.toString());
                 }
+                if (tableRef == TableRef.EMPTY_TABLE_REF) {
+                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.NO_TABLE_SPECIFIED_FOR_WILDCARD_SELECT).build().buildException();
+                }
                 isWildcard = true;
                 if (tableRef.getTable().getType() == PTableType.INDEX && ((WildcardParseNode)node).isRewrite()) {
                 	projectAllIndexColumns(context, tableRef, resolveColumn, projectedExpressions, projectedColumns, targetColumns);
@@ -381,7 +386,10 @@ public class ProjectionCompiler {
                 } else {
                     projectAllTableColumns(context, tRef, true, projectedExpressions, projectedColumns, targetColumns);
                 }                
-            } else if (node instanceof  FamilyWildcardParseNode){
+            } else if (node instanceof  FamilyWildcardParseNode) {
+                if (tableRef == TableRef.EMPTY_TABLE_REF) {
+                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.NO_TABLE_SPECIFIED_FOR_WILDCARD_SELECT).build().buildException();
+                }
                 // Project everything for SELECT cf.*
                 String cfName = ((FamilyWildcardParseNode) node).getName();
                 // Delay projecting to scan, as when any other column in the column family gets
@@ -477,16 +485,16 @@ public class ProjectionCompiler {
         }
         
         selectVisitor.compile();
-        boolean isProjectEmptyKeyValue = (table.getType() != PTableType.VIEW || table.getViewType() != ViewType.MAPPED)
-                && !isWildcard;
+        boolean isProjectEmptyKeyValue = false;
         if (isWildcard) {
             projectAllColumnFamilies(table, scan);
         } else {
+            isProjectEmptyKeyValue = where == null || LiteralExpression.isTrue(where) || where.requiresFinalEvaluation();
             for (byte[] family : projectedFamilies) {
                 projectColumnFamily(table, scan, family);
             }
         }
-        return new RowProjector(projectedColumns, estimatedByteSize, isProjectEmptyKeyValue, resolver.hasUDFs());
+        return new RowProjector(projectedColumns, estimatedByteSize, isProjectEmptyKeyValue, resolver.hasUDFs(), isWildcard);
     }
 
     private static void projectAllColumnFamilies(PTable table, Scan scan) {

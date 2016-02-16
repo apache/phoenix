@@ -39,6 +39,14 @@ public class NamedTableNode extends ConcreteTableNode {
         return new NamedTableNode(alias, name, dynColumns);
     }
     
+    public static NamedTableNode create (TableName name) {
+        return new NamedTableNode(null, name, Collections.<ColumnDef>emptyList());
+    }
+    
+    public static NamedTableNode create (String schemaName, String tableName) {
+        return new NamedTableNode(null, TableName.create(schemaName, tableName), Collections.<ColumnDef>emptyList());
+    }
+    
     NamedTableNode(String alias, TableName name) {
         super(alias, name);
         dynColumns = Collections.<ColumnDef> emptyList();

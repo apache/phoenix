@@ -19,13 +19,15 @@
 package org.apache.phoenix.pherf;
 
 import org.apache.phoenix.pherf.result.ResultUtil;
+import org.junit.AfterClass;
 import org.junit.BeforeClass;
 
 import java.util.Properties;
 
 public class ResultBaseTest {
-    protected static PherfConstants constants;
+    private static PherfConstants constants;
     private static boolean isSetUpDone = false;
+    private static Properties properties;
 
     @BeforeClass
     public static void setUp() throws Exception {
@@ -33,13 +35,13 @@ public class ResultBaseTest {
             return;
         }
 
-        ResultUtil util = new ResultUtil();
         constants = PherfConstants.create();
-        Properties properties = constants.getProperties(PherfConstants.PHERF_PROPERTIES, false);
-        String dir = properties.getProperty("pherf.default.results.dir");
-        String targetDir = "target/" + dir;
-        properties.setProperty("pherf.default.results.dir", targetDir);
-        util.ensureBaseDirExists(targetDir);
+        properties = constants.getProperties(PherfConstants.PHERF_PROPERTIES, false);
+        new ResultUtil().ensureBaseDirExists(properties.getProperty("pherf.default.results.dir"));
         isSetUpDone = true;
+    }
+    
+    @AfterClass public static void tearDown() throws Exception {
+    	new ResultUtil().deleteDir(properties.getProperty("pherf.default.results.dir"));
     }
 }

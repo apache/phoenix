@@ -28,9 +28,9 @@ import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
+import org.apache.phoenix.monitoring.CombinableMetric;
 import org.apache.phoenix.monitoring.CombinableMetric.NoOpRequestMetric;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
-import org.apache.phoenix.monitoring.CombinableMetric;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ServerUtil;
@@ -38,12 +38,12 @@ import org.apache.phoenix.util.ServerUtil;
 public class ScanningResultIterator implements ResultIterator {
     private final ResultScanner scanner;
     private final CombinableMetric scanMetrics;
-    
+
     public ScanningResultIterator(ResultScanner scanner, CombinableMetric scanMetrics) {
         this.scanner = scanner;
         this.scanMetrics = scanMetrics;
     }
-    
+
     @Override
     public void close() throws SQLException {
         scanner.close();
@@ -53,10 +53,14 @@ public class ScanningResultIterator implements ResultIterator {
     public Tuple next() throws SQLException {
         try {
             Result result = scanner.next();
+            if (result == null) {
+                close(); // Free up resources early
+                return null;
+            }
             calculateScanSize(result);
-            // TODO: use ResultTuple.setResult(result)
+            // TODO: use ResultTuple.setResult(result)?
             // Need to create a new one if holding on to it (i.e. OrderedResultIterator)
-            return result == null ? null : new ResultTuple(result);
+            return new ResultTuple(result);
         } catch (IOException e) {
             throw ServerUtil.parseServerException(e);
         }
@@ -66,11 +70,11 @@ public class ScanningResultIterator implements ResultIterator {
     public void explain(List<String> planSteps) {
     }
 
-	@Override
-	public String toString() {
-		return "ScanningResultIterator [scanner=" + scanner + "]";
-	}
-	
+    @Override
+    public String toString() {
+        return "ScanningResultIterator [scanner=" + scanner + "]";
+    }
+
     private void calculateScanSize(Result result) {
         if (GlobalClientMetrics.isMetricsEnabled() || scanMetrics != NoOpRequestMetric.INSTANCE) {
             if (result != null) {
@@ -84,5 +88,10 @@ public class ScanningResultIterator implements ResultIterator {
                 GLOBAL_SCAN_BYTES.update(scanResultSize);
             }
         }
+    }
+
+
+    public ResultScanner getScanner() {
+        return scanner;
     }
 }

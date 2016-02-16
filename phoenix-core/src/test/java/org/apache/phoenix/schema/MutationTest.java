@@ -1,0 +1,74 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.phoenix.schema;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+import java.util.Iterator;
+import java.util.List;
+
+import org.apache.hadoop.hbase.client.Durability;
+import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.query.BaseConnectionlessQueryTest;
+import org.junit.Test;
+
+public class MutationTest extends BaseConnectionlessQueryTest {
+    @Test
+    public void testDurability() throws Exception {
+        testDurability(true);
+        testDurability(false);
+    }
+
+    private void testDurability(boolean disableWAL) throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        try {
+            Durability expectedDurability = disableWAL ? Durability.SKIP_WAL : Durability.USE_DEFAULT;
+            conn.setAutoCommit(false);
+            conn.createStatement().execute("CREATE TABLE t1 (k integer not null primary key, a.k varchar, b.k varchar) " + (disableWAL ? "DISABLE_WAL=true" : ""));
+            conn.createStatement().execute("UPSERT INTO t1 VALUES(1,'a','b')");
+            conn.createStatement().execute("DELETE FROM t1 WHERE k=2");
+            assertDurability(conn,expectedDurability);
+            conn.createStatement().execute("DELETE FROM t1 WHERE k=1");
+            assertDurability(conn,expectedDurability);
+            conn.createStatement().execute("DROP TABLE t1");
+        } finally {
+            conn.close();
+        }
+    }
+    
+    private void assertDurability(Connection conn, Durability durability) throws SQLException {
+        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        Iterator<Pair<byte[], List<Mutation>>> it = pconn.getMutationState().toMutations();
+        assertTrue(it.hasNext());
+        while (it.hasNext()) {
+            Pair<byte[], List<Mutation>> pair = it.next();
+            assertFalse(pair.getSecond().isEmpty());
+            for (Mutation m : pair.getSecond()) {
+                assertEquals(durability, m.getDurability());
+            }
+        }
+    }
+
+}

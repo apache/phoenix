@@ -31,20 +31,20 @@ import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.ViewType;
-import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 
 public class ViewCompilerTest extends BaseConnectionlessQueryTest {
     @Test
     public void testViewTypeCalculation() throws Exception {
-        assertViewType(new String[] {
+        assertViewType(new String[] {"V1","V2","V3","V4"}, new String[] {
             "CREATE VIEW v1 AS SELECT * FROM t WHERE k1 = 1 AND k2 = 'foo'",
             "CREATE VIEW v2 AS SELECT * FROM t WHERE k2 = 'foo'",
             "CREATE VIEW v3 AS SELECT * FROM t WHERE v = 'bar'||'bas'",
             "CREATE VIEW v4 AS SELECT * FROM t WHERE 'bar'=v and 5+3/2 = k1",
         }, ViewType.UPDATABLE);
-        assertViewType(new String[] {
+        assertViewType(new String[] {"V1","V2","V3","V4"}, new String[] {
                 "CREATE VIEW v1 AS SELECT * FROM t WHERE k1 < 1 AND k2 = 'foo'",
                 "CREATE VIEW v2 AS SELECT * FROM t WHERE substr(k2,0,3) = 'foo'",
                 "CREATE VIEW v3 AS SELECT * FROM t WHERE v = TO_CHAR(CURRENT_DATE())",
@@ -52,28 +52,27 @@ public class ViewCompilerTest extends BaseConnectionlessQueryTest {
             }, ViewType.READ_ONLY);
     }
     
-    public void assertViewType(String[] views, ViewType viewType) throws Exception {
+    public void assertViewType(String[] viewNames, String[] viewDDLs, ViewType viewType) throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         PhoenixConnection conn = DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class);
         String ct = "CREATE TABLE t (k1 INTEGER NOT NULL, k2 VARCHAR, v VARCHAR, CONSTRAINT pk PRIMARY KEY (k1,k2))";
         conn.createStatement().execute(ct);
         
-        for (String view : views) {
-            conn.createStatement().execute(view);
+        for (String viewDDL : viewDDLs) {
+            conn.createStatement().execute(viewDDL);
         }
         
         StringBuilder buf = new StringBuilder();
         int count = 0;
-        for (PTable table : conn.getMetaDataCache()) {
-            if (table.getType() == PTableType.VIEW) {
-                assertEquals(viewType, table.getViewType());
-                conn.createStatement().execute("DROP VIEW " + table.getName().getString());
-                buf.append(' ');
-                buf.append(table.getName().getString());
-                count++;
-            }
+        for (String view : viewNames) {
+        	PTable table = conn.getTable(new PTableKey(null, view));
+            assertEquals(viewType, table.getViewType());
+            conn.createStatement().execute("DROP VIEW " + table.getName().getString());
+            buf.append(' ');
+            buf.append(table.getName().getString());
+            count++;
         }
-        assertEquals("Expected " + views.length + ", but got " + count + ":"+ buf.toString(), views.length, count);
+        assertEquals("Expected " + viewDDLs.length + ", but got " + count + ":"+ buf.toString(), viewDDLs.length, count);
     }
 
     @Test

@@ -50,6 +50,7 @@ public class PhoenixClientRpcIT extends BaseOwnClusterHBaseManagedTimeIT {
     @AfterClass
     public static void cleanUpAfterTestSuite() throws Exception {
         TestPhoenixIndexRpcSchedulerFactory.reset();
+        tearDownMiniCluster();
     }
 
     @Test

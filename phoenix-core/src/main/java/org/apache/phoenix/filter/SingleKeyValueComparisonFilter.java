@@ -21,7 +21,6 @@ import java.io.DataInput;
 import java.io.IOException;
 
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
@@ -37,8 +36,6 @@ import org.apache.phoenix.schema.tuple.SingleKeyValueTuple;
  * but for general expression evaluation in the case where only a single KeyValue
  * column is referenced in the expression.
  *
- * 
- * @since 0.1
  */
 public abstract class SingleKeyValueComparisonFilter extends BooleanExpressionFilter {
     private final SingleKeyValueTuple inputTuple = new SingleKeyValueTuple();
@@ -76,8 +73,7 @@ public abstract class SingleKeyValueComparisonFilter extends BooleanExpressionFi
     public ReturnCode filterKeyValue(Cell keyValue) {
         if (this.matchedColumn) {
           // We already found and matched the single column, all keys now pass
-          // TODO: why won't this cause earlier versions of a kv to be included?
-          return ReturnCode.INCLUDE;
+          return ReturnCode.INCLUDE_AND_NEXT_COL;
         }
         if (this.foundColumn()) {
           // We found all the columns, but did not match the expression, so skip to next row
@@ -87,19 +83,18 @@ public abstract class SingleKeyValueComparisonFilter extends BooleanExpressionFi
                 keyValue.getQualifierArray(), keyValue.getQualifierOffset(), keyValue.getQualifierLength()) != 0) {
             // Remember the key in case this is the only key value we see.
             // We'll need it if we have row key columns too.
-            inputTuple.setKey(KeyValueUtil.ensureKeyValue(keyValue));
+            inputTuple.setKey(keyValue);
             // This is a key value we're not interested in
-            // TODO: use NEXT_COL when bug fix comes through that includes the row still
-            return ReturnCode.INCLUDE;
+            return ReturnCode.INCLUDE_AND_NEXT_COL;
         }
-        inputTuple.setKeyValue(KeyValueUtil.ensureKeyValue(keyValue));
+        inputTuple.setCell(keyValue);
 
         // We have the columns, so evaluate here
         if (!Boolean.TRUE.equals(evaluate(inputTuple))) {
             return ReturnCode.NEXT_ROW;
         }
         this.matchedColumn = true;
-        return ReturnCode.INCLUDE;
+        return ReturnCode.INCLUDE_AND_NEXT_COL;
     }
 
     @Override
@@ -124,7 +119,7 @@ public abstract class SingleKeyValueComparisonFilter extends BooleanExpressionFi
         return true;
     }
 
-      @Override
+    @Override
     public void reset() {
         inputTuple.reset();
         matchedColumn = false;
@@ -137,7 +132,7 @@ public abstract class SingleKeyValueComparisonFilter extends BooleanExpressionFi
         init();
     }
 
-    @SuppressWarnings("all") // suppressing missing @Override since this doesn't exist for HBase 0.94.4
+    @Override
     public boolean isFamilyEssential(byte[] name) {
         // Only the column families involved in the expression are essential.
         // The others are for columns projected in the select expression

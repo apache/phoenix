@@ -27,10 +27,9 @@ import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.util.Pair;
-
+import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.covered.update.IndexedColumnGroup;
-import org.apache.phoenix.hbase.index.scanner.Scanner;
 
 /**
  * Interface for the current state of the table. This is generally going to be as of a timestamp - a
@@ -52,47 +51,19 @@ public interface TableState {
   public long getCurrentTimestamp();
 
   /**
-   * Set the current timestamp up to which the table should allow access to the underlying table.
-   * This overrides the timestamp view provided by the indexer - use with care!
-   * @param timestamp timestamp up to which the table should allow access.
-   */
-  public void setCurrentTimestamp(long timestamp);
-
-  /**
    * @return the attributes attached to the current update (e.g. {@link Mutation}).
    */
   public Map<String, byte[]> getUpdateAttributes();
 
   /**
-   * Get a scanner on the columns that are needed by the index.
-   * <p>
-   * The returned scanner is already pre-seeked to the first {@link KeyValue} that matches the given
-   * columns with a timestamp earlier than the timestamp to which the table is currently set (the
-   * current state of the table for which we need to build an update).
-   * <p>
-   * If none of the passed columns matches any of the columns in the pending update (as determined
-   * by {@link ColumnReference#matchesFamily(byte[])} and
-   * {@link ColumnReference#matchesQualifier(byte[])}, then an empty scanner will be returned. This
-   * is because it doesn't make sense to build index updates when there is no change in the table
-   * state for any of the columns you are indexing.
-   * <p>
-   * <i>NOTE:</i> This method should <b>not</b> be used during
-   * {@link IndexCodec#getIndexDeletes(TableState)} as the pending update will not yet have been
-   * applied - you are merely attempting to cleanup the current state and therefore do <i>not</i>
-   * need to track the indexed columns.
-   * <p>
-   * As a side-effect, we update a timestamp for the next-most-recent timestamp for the columns you
-   * request - you will never see a column with the timestamp we are tracking, but the next oldest
-   * timestamp for that column.
-   * @param indexedColumns the columns to that will be indexed
-   * @return an iterator over the columns and the {@link IndexUpdate} that should be passed back to
-   *         the builder. Even if no update is necessary for the requested columns, you still need
-   *         to return the {@link IndexUpdate}, just don't set the update for the
-   *         {@link IndexUpdate}.
-   * @throws IOException
+   * Get a getter interface for the state of the index row
+   * @param indexedColumns list of indexed columns.
+   * @param ignoreNewerMutations ignore mutations newer than m when determining current state. Useful
+   *        when replaying mutation state for partial index rebuild where writes succeeded to the data
+   *        table, but not to the index table.
    */
-  Pair<Scanner, IndexUpdate> getIndexedColumnsTableState(
-      Collection<? extends ColumnReference> indexedColumns) throws IOException;
+  Pair<ValueGetter, IndexUpdate> getIndexUpdateState(
+      Collection<? extends ColumnReference> indexedColumns, boolean ignoreNewerMutations) throws IOException;
 
   /**
    * @return the row key for the current row for which we are building an index update.

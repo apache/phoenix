@@ -32,12 +32,11 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Properties;
 
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 
 
-public class GroupByCaseIT extends BaseClientManagedTimeIT {
+public class GroupByCaseIT extends BaseHBaseManagedTimeIT {
 
     private static String GROUPBY1 = "select " +
             "case when uri LIKE 'Report%' then 'Reports' else 'Other' END category" +
@@ -54,18 +53,10 @@ public class GroupByCaseIT extends BaseClientManagedTimeIT {
             ", avg(appcpu) from " + GROUPBYTEST_NAME +
             " group by avg(appcpu), category";
     
-    private int id;
+    private static int id;
 
-    private long createTable() throws Exception {
-        long ts = nextTimestamp();
-        ensureTableCreated(getUrl(), GROUPBYTEST_NAME, null, ts-2);
-        return ts;
-    }
-
-    private void loadData(long ts) throws SQLException {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
-        Connection conn = DriverManager.getConnection(getUrl(), props);
+    private static void initData(Connection conn) throws SQLException {
+        ensureTableCreated(getUrl(), GROUPBYTEST_NAME);
         insertRow(conn, "Report1", 10);
         insertRow(conn, "Report2", 10);
         insertRow(conn, "Report3", 30);
@@ -78,7 +69,7 @@ public class GroupByCaseIT extends BaseClientManagedTimeIT {
         conn.close();
     }
 
-    private void insertRow(Connection conn, String uri, int appcpu) throws SQLException {
+    private static void insertRow(Connection conn, String uri, int appcpu) throws SQLException {
         PreparedStatement statement = conn.prepareStatement("UPSERT INTO " + GROUPBYTEST_NAME + "(id, uri, appcpu) values (?,?,?)");
         statement.setString(1, "id" + id);
         statement.setString(2, uri);
@@ -87,43 +78,102 @@ public class GroupByCaseIT extends BaseClientManagedTimeIT {
         id++;
     }
 
-    /*
     @Test
-    public void testGroupByCaseWithIndex() throws Exception {
-        Connection conn;
+    public void testExpressionInGroupBy() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        GroupByCaseIT gbt = new GroupByCaseIT();
-        long ts = gbt.createTable();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
-        conn = DriverManager.getConnection(getUrl(), props);
-        conn.createStatement().execute("ALTER TABLE " + GROUPBYTEST_NAME + " SET IMMUTABLE_ROWS=true");
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
-        conn = DriverManager.getConnection(getUrl(), props);
-        conn.createStatement().execute("CREATE INDEX idx ON " + GROUPBYTEST_NAME + "(uri)");
-        gbt.loadData(ts);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
-        conn = DriverManager.getConnection(getUrl(), props);
-        gbt.executeQuery(conn,GROUPBY1);
-        gbt.executeQuery(conn,GROUPBY2);
-        // TODO: validate query results
-        try {
-            gbt.executeQuery(conn,GROUPBY3);
-            fail();
-        } catch (SQLException e) {
-            assertTrue(e.getMessage().contains("Aggregate expressions may not be used in GROUP BY"));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String ddl = " create table tgb_counter(tgb_id integer NOT NULL,utc_date_epoch integer NOT NULL,tgb_name varchar(40),ack_success_count integer" +
+                ",ack_success_one_ack_count integer, CONSTRAINT pk_tgb_counter PRIMARY KEY(tgb_id, utc_date_epoch))";
+        String query = "SELECT tgb_id, tgb_name, (utc_date_epoch/10)*10 AS utc_epoch_hour,SUM(ack_success_count + ack_success_one_ack_count) AS ack_tx_sum" +
+                " FROM tgb_counter GROUP BY tgb_id, tgb_name, utc_epoch_hour";
+
+        createTestTable(getUrl(), ddl);
+        String dml = "UPSERT INTO tgb_counter VALUES(?,?,?,?,?)";
+        PreparedStatement stmt = conn.prepareStatement(dml);
+        stmt.setInt(1, 1);
+        stmt.setInt(2, 1000);
+        stmt.setString(3, "aaa");
+        stmt.setInt(4, 1);
+        stmt.setInt(5, 1);
+        stmt.execute();
+        stmt.setInt(1, 2);
+        stmt.setInt(2, 2000);
+        stmt.setString(3, "bbb");
+        stmt.setInt(4, 2);
+        stmt.setInt(5, 2);
+        stmt.execute();
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery(query);
+        assertTrue(rs.next());
+        assertEquals(1,rs.getInt(1));
+        assertEquals("aaa",rs.getString(2));
+        assertEquals(1000,rs.getInt(3));
+        assertEquals(2,rs.getInt(4));
+        assertTrue(rs.next());
+        assertEquals(2,rs.getInt(1));
+        assertEquals("bbb",rs.getString(2));
+        assertEquals(2000,rs.getInt(3));
+        assertEquals(4,rs.getInt(4));
+        assertFalse(rs.next());
+        rs.close();
+        conn.close();
+    }
+    
+    @Test
+    public void testBooleanInGroupBy() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String ddl = " create table bool_gb(id varchar primary key,v1 boolean, v2 integer, v3 integer)";
+
+        createTestTable(getUrl(), ddl);
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO bool_gb(id,v2,v3) VALUES(?,?,?)");
+        stmt.setString(1, "a");
+        stmt.setInt(2, 1);
+        stmt.setInt(3, 1);
+        stmt.execute();
+        stmt.close();
+        stmt = conn.prepareStatement("UPSERT INTO bool_gb VALUES(?,?,?,?)");
+        stmt.setString(1, "b");
+        stmt.setBoolean(2, false);
+        stmt.setInt(3, 2);
+        stmt.setInt(4, 2);
+        stmt.execute();
+        stmt.setString(1, "c");
+        stmt.setBoolean(2, true);
+        stmt.setInt(3, 3);
+        stmt.setInt(4, 3);
+        stmt.execute();
+        conn.commit();
+
+        String[] gbs = {"v1,v2,v3","v1,v3,v2","v2,v1,v3"};
+        for (String gb : gbs) {
+            ResultSet rs = conn.createStatement().executeQuery("SELECT v1, v2, v3 from bool_gb group by " + gb);
+            assertTrue(rs.next());
+            assertEquals(false,rs.getBoolean("v1"));
+            assertTrue(rs.wasNull());
+            assertEquals(1,rs.getInt("v2"));
+            assertEquals(1,rs.getInt("v3"));
+            assertTrue(rs.next());
+            assertEquals(false,rs.getBoolean("v1"));
+            assertFalse(rs.wasNull());
+            assertEquals(2,rs.getInt("v2"));
+            assertEquals(2,rs.getInt("v3"));
+            assertTrue(rs.next());
+            assertEquals(true,rs.getBoolean("v1"));
+            assertEquals(3,rs.getInt("v2"));
+            assertEquals(3,rs.getInt("v3"));
+            assertFalse(rs.next());
+            rs.close();
         }
         conn.close();
     }
-    */
-
+    
     @Test
     public void testScanUri() throws Exception {
-        GroupByCaseIT gbt = new GroupByCaseIT();
-        long ts = gbt.createTable();
-        gbt.loadData(ts);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 1));
         Connection conn = DriverManager.getConnection(getUrl(), props);
+        initData(conn);
         Statement stmt = conn.createStatement();
         ResultSet rs = stmt.executeQuery("select uri from " + GROUPBYTEST_NAME);
         assertTrue(rs.next());
@@ -148,12 +198,9 @@ public class GroupByCaseIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testCount() throws Exception {
-        GroupByCaseIT gbt = new GroupByCaseIT();
-        long ts = gbt.createTable();
-        gbt.loadData(ts);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 1));
         Connection conn = DriverManager.getConnection(getUrl(), props);
+        initData(conn);
         Statement stmt = conn.createStatement();
         ResultSet rs = stmt.executeQuery("select count(1) from " + GROUPBYTEST_NAME);
         assertTrue(rs.next());
@@ -162,27 +209,16 @@ public class GroupByCaseIT extends BaseClientManagedTimeIT {
         conn.close();
     }
 
-    @edu.umd.cs.findbugs.annotations.SuppressWarnings(
-            value="RV_RETURN_VALUE_IGNORED",
-            justification="Test code.")
-    private void executeQuery(Connection conn, String query) throws SQLException {
-        PreparedStatement st = conn.prepareStatement(query);
-        st.executeQuery();
-    }
-    
     @Test
     public void testGroupByCase() throws Exception {
-        GroupByCaseIT gbt = new GroupByCaseIT();
-        long ts = gbt.createTable();
-        gbt.loadData(ts);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 1));
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        gbt.executeQuery(conn,GROUPBY1);
-        gbt.executeQuery(conn,GROUPBY2);
+        initData(conn);
+        conn.createStatement().executeQuery(GROUPBY1);
+        conn.createStatement().executeQuery(GROUPBY2);
         // TODO: validate query results
         try {
-            gbt.executeQuery(conn,GROUPBY3);
+            conn.createStatement().executeQuery(GROUPBY3);
             fail();
         } catch (SQLException e) {
             assertTrue(e.getMessage().contains("Aggregate expressions may not be used in GROUP BY"));

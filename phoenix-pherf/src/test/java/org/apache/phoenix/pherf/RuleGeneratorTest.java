@@ -18,6 +18,12 @@
 
 package org.apache.phoenix.pherf;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -35,14 +41,14 @@ import org.apache.phoenix.pherf.rules.DataValue;
 import org.apache.phoenix.pherf.rules.RulesApplier;
 import org.apache.phoenix.pherf.workload.WriteWorkload;
 import org.joda.time.DateTime;
+import org.joda.time.DateTimeZone;
 import org.joda.time.format.DateTimeFormat;
 import org.joda.time.format.DateTimeFormatter;
+import org.junit.Ignore;
 import org.junit.Test;
 
-import static org.junit.Assert.*;
-
 public class RuleGeneratorTest {
-    private static final String matcherScenario = PherfConstants.SCENARIO_ROOT_PATTERN + ".xml";
+    private static final String matcherScenario = PherfConstants.TEST_SCENARIO_ROOT_PATTERN + ".xml";
 
     @Test
     public void testDateGenerator() throws Exception {
@@ -69,6 +75,64 @@ public class RuleGeneratorTest {
                 }
             }
         }
+    }
+    
+    //Test to check the current date is generated correctly between the timestamps at column level and datavalue level
+    @Test
+    public void testCurrentDateGenerator() throws Exception {
+        XMLConfigParser parser = new XMLConfigParser(matcherScenario);
+        DataModel model = parser.getDataModels().get(0);
+        WriteWorkload loader = new WriteWorkload(parser);
+        RulesApplier rulesApplier = loader.getRulesApplier();
+
+        // Time before generating the date
+        String timeStamp1 = rulesApplier.getCurrentDate();
+        sleep(2); //sleep for few mili-sec
+
+        for (Column dataMapping : model.getDataMappingColumns()) {
+            if ((dataMapping.getType() == DataTypeMapping.DATE)
+                    && (dataMapping.getUseCurrentDate() == true)) {
+
+                // Generate the date using rules
+                DataValue value = rulesApplier.getDataValue(dataMapping);
+                assertNotNull("Could not retrieve DataValue for random DATE.", value);
+                assertNotNull("Could not retrieve a value in DataValue for random DATE.",
+                        value.getValue());
+
+                sleep(2);
+                // Time after generating the date
+                String timeStamp2 = rulesApplier.getCurrentDate();
+
+                // Check that dates are between timestamp1 & timestamp2
+                value.setMinValue(timeStamp1);
+                value.setMaxValue(timeStamp2);
+                assertDateBetween(value);
+            }
+
+            // Check at list level
+            if ((dataMapping.getType() == DataTypeMapping.DATE)
+                    && (dataMapping.getName().equals("PRESENT_DATE"))) {
+                // Do this 20 times and we should and every time generated data should be between
+                // timestamps
+                for (int i = 0; i < 1; i++) {
+                    DataValue value = rulesApplier.getDataValue(dataMapping);
+                    assertNotNull("Could not retrieve DataValue for random DATE.", value);
+                    assertNotNull("Could not retrieve a value in DataValue for random DATE.",
+                            value.getValue());
+
+                    sleep(2);
+                    // Time after generating the date
+                    String timeStamp2 = rulesApplier.getCurrentDate();
+
+                    // Check generated date is between timestamp1 & timestamp2
+                    value.setMinValue(timeStamp1);
+                    value.setMaxValue(timeStamp2);
+                    assertDateBetween(value);
+
+                }
+            }
+        }
+
     }
 
     @Test
@@ -188,7 +252,7 @@ public class RuleGeneratorTest {
         expectedValues.add("bBByYhnNbBs9kWu");
         expectedValues.add("cCCyYhnNbBs9kWr");
 
-        XMLConfigParser parser = new XMLConfigParser(".*test_scenario.xml");
+        XMLConfigParser parser = new XMLConfigParser(matcherScenario);
         WriteWorkload loader = new WriteWorkload(parser);
         RulesApplier rulesApplier = loader.getRulesApplier();
         Scenario scenario = parser.getScenarios().get(0);
@@ -206,7 +270,7 @@ public class RuleGeneratorTest {
 
     @Test
     public void testRuleOverrides() throws Exception {
-        XMLConfigParser parser = new XMLConfigParser(".*test_scenario.xml");
+        XMLConfigParser parser = new XMLConfigParser(matcherScenario);
         WriteWorkload loader = new WriteWorkload(parser);
         RulesApplier rulesApplier = loader.getRulesApplier();
         Scenario scenario = parser.getScenarios().get(0);
@@ -250,7 +314,7 @@ public class RuleGeneratorTest {
      * @param value
      */
     private void assertDateBetween(DataValue value) {
-        DateTimeFormatter fmtr = DateTimeFormat.forPattern(PherfConstants.DEFAULT_DATE_PATTERN);
+        DateTimeFormatter fmtr = DateTimeFormat.forPattern(PherfConstants.DEFAULT_DATE_PATTERN).withZone(DateTimeZone.UTC);
 
         DateTime dt = fmtr.parseDateTime(value.getValue());
         DateTime min = fmtr.parseDateTime(value.getMinValue());
@@ -258,5 +322,13 @@ public class RuleGeneratorTest {
 
         assertTrue("Value " + dt + " is not after minValue", dt.isAfter(min));
         assertTrue("Value " + dt + " is not before maxValue", dt.isBefore(max));
+    }
+
+    private void sleep(int time) {
+        try {
+            Thread.sleep(time);
+        } catch(InterruptedException ex) {
+            Thread.currentThread().interrupt();
+        }
     }
 }

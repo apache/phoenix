@@ -19,6 +19,10 @@ package org.apache.phoenix.compile;
 
 import java.sql.ParameterMetaData;
 import java.sql.SQLException;
+import java.util.Set;
+
+import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
+import org.apache.phoenix.schema.TableRef;
 
 
 public interface StatementPlan {
@@ -29,4 +33,6 @@ public interface StatementPlan {
     ParameterMetaData getParameterMetaData();
     
     ExplainPlan getExplainPlan() throws SQLException;
+    public Set<TableRef> getSourceRefs();
+    Operation getOperation();
 }

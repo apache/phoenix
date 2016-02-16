@@ -8767,6 +8767,16 @@ public final class MetaDataProtos {
 
   public interface ClearCacheResponseOrBuilder
       extends com.google.protobuf.MessageOrBuilder {
+
+    // optional int64 unfreedBytes = 1;
+    /**
+     * <code>optional int64 unfreedBytes = 1;</code>
+     */
+    boolean hasUnfreedBytes();
+    /**
+     * <code>optional int64 unfreedBytes = 1;</code>
+     */
+    long getUnfreedBytes();
   }
   /**
    * Protobuf type {@code ClearCacheResponse}
@@ -8801,6 +8811,7 @@ public final class MetaDataProtos {
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws com.google.protobuf.InvalidProtocolBufferException {
       initFields();
+      int mutable_bitField0_ = 0;
       com.google.protobuf.UnknownFieldSet.Builder unknownFields =
           com.google.protobuf.UnknownFieldSet.newBuilder();
       try {
@@ -8816,6 +8827,11 @@ public final class MetaDataProtos {
                                      extensionRegistry, tag)) {
                 done = true;
               }
+              break;
+            }
+            case 8: {
+              bitField0_ |= 0x00000001;
+              unfreedBytes_ = input.readInt64();
               break;
             }
           }
@@ -8857,7 +8873,25 @@ public final class MetaDataProtos {
       return PARSER;
     }
 
+    private int bitField0_;
+    // optional int64 unfreedBytes = 1;
+    public static final int UNFREEDBYTES_FIELD_NUMBER = 1;
+    private long unfreedBytes_;
+    /**
+     * <code>optional int64 unfreedBytes = 1;</code>
+     */
+    public boolean hasUnfreedBytes() {
+      return ((bitField0_ & 0x00000001) == 0x00000001);
+    }
+    /**
+     * <code>optional int64 unfreedBytes = 1;</code>
+     */
+    public long getUnfreedBytes() {
+      return unfreedBytes_;
+    }
+
     private void initFields() {
+      unfreedBytes_ = 0L;
     }
     private byte memoizedIsInitialized = -1;
     public final boolean isInitialized() {
@@ -8871,6 +8905,9 @@ public final class MetaDataProtos {
     public void writeTo(com.google.protobuf.CodedOutputStream output)
                         throws java.io.IOException {
       getSerializedSize();
+      if (((bitField0_ & 0x00000001) == 0x00000001)) {
+        output.writeInt64(1, unfreedBytes_);
+      }
       getUnknownFields().writeTo(output);
     }
 
@@ -8880,6 +8917,10 @@ public final class MetaDataProtos {
       if (size != -1) return size;
 
       size = 0;
+      if (((bitField0_ & 0x00000001) == 0x00000001)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeInt64Size(1, unfreedBytes_);
+      }
       size += getUnknownFields().getSerializedSize();
       memoizedSerializedSize = size;
       return size;
@@ -8903,6 +8944,11 @@ public final class MetaDataProtos {
       org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheResponse other = (org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheResponse) obj;
 
       boolean result = true;
+      result = result && (hasUnfreedBytes() == other.hasUnfreedBytes());
+      if (hasUnfreedBytes()) {
+        result = result && (getUnfreedBytes()
+            == other.getUnfreedBytes());
+      }
       result = result &&
           getUnknownFields().equals(other.getUnknownFields());
       return result;
@@ -8916,6 +8962,10 @@ public final class MetaDataProtos {
       }
       int hash = 41;
       hash = (19 * hash) + getDescriptorForType().hashCode();
+      if (hasUnfreedBytes()) {
+        hash = (37 * hash) + UNFREEDBYTES_FIELD_NUMBER;
+        hash = (53 * hash) + hashLong(getUnfreedBytes());
+      }
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
       return hash;
@@ -9025,6 +9075,8 @@ public final class MetaDataProtos {
 
       public Builder clear() {
         super.clear();
+        unfreedBytes_ = 0L;
+        bitField0_ = (bitField0_ & ~0x00000001);
         return this;
       }
 
@@ -9051,6 +9103,13 @@ public final class MetaDataProtos {
 
       public org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheResponse buildPartial() {
         org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheResponse result = new org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheResponse(this);
+        int from_bitField0_ = bitField0_;
+        int to_bitField0_ = 0;
+        if (((from_bitField0_ & 0x00000001) == 0x00000001)) {
+          to_bitField0_ |= 0x00000001;
+        }
+        result.unfreedBytes_ = unfreedBytes_;
+        result.bitField0_ = to_bitField0_;
         onBuilt();
         return result;
       }
@@ -9066,6 +9125,9 @@ public final class MetaDataProtos {
 
       public Builder mergeFrom(org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheResponse other) {
         if (other == org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheResponse.getDefaultInstance()) return this;
+        if (other.hasUnfreedBytes()) {
+          setUnfreedBytes(other.getUnfreedBytes());
+        }
         this.mergeUnknownFields(other.getUnknownFields());
         return this;
       }
@@ -9089,6 +9151,40 @@ public final class MetaDataProtos {
             mergeFrom(parsedMessage);
           }
         }
+        return this;
+      }
+      private int bitField0_;
+
+      // optional int64 unfreedBytes = 1;
+      private long unfreedBytes_ ;
+      /**
+       * <code>optional int64 unfreedBytes = 1;</code>
+       */
+      public boolean hasUnfreedBytes() {
+        return ((bitField0_ & 0x00000001) == 0x00000001);
+      }
+      /**
+       * <code>optional int64 unfreedBytes = 1;</code>
+       */
+      public long getUnfreedBytes() {
+        return unfreedBytes_;
+      }
+      /**
+       * <code>optional int64 unfreedBytes = 1;</code>
+       */
+      public Builder setUnfreedBytes(long value) {
+        bitField0_ |= 0x00000001;
+        unfreedBytes_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>optional int64 unfreedBytes = 1;</code>
+       */
+      public Builder clearUnfreedBytes() {
+        bitField0_ = (bitField0_ & ~0x00000001);
+        unfreedBytes_ = 0L;
+        onChanged();
         return this;
       }
 
@@ -12285,42 +12381,43 @@ public final class MetaDataProtos {
       "ateIndexStateRequest\022\036\n\026tableMetadataMut" +
       "ations\030\001 \003(\014\022\025\n\rclientVersion\030\002 \001(\005\"*\n\021C",
       "learCacheRequest\022\025\n\rclientVersion\030\001 \001(\005\"" +
-      "\024\n\022ClearCacheResponse\"*\n\021GetVersionReque" +
-      "st\022\025\n\rclientVersion\030\001 \001(\005\"%\n\022GetVersionR" +
-      "esponse\022\017\n\007version\030\001 \002(\003\"\205\001\n\032ClearTableF" +
-      "romCacheRequest\022\020\n\010tenantId\030\001 \002(\014\022\022\n\nsch" +
-      "emaName\030\002 \002(\014\022\021\n\ttableName\030\003 \002(\014\022\027\n\017clie" +
-      "ntTimestamp\030\004 \002(\003\022\025\n\rclientVersion\030\005 \001(\005" +
-      "\"\035\n\033ClearTableFromCacheResponse*\365\002\n\014Muta" +
-      "tionCode\022\030\n\024TABLE_ALREADY_EXISTS\020\000\022\023\n\017TA" +
-      "BLE_NOT_FOUND\020\001\022\024\n\020COLUMN_NOT_FOUND\020\002\022\031\n",
-      "\025COLUMN_ALREADY_EXISTS\020\003\022\035\n\031CONCURRENT_T" +
-      "ABLE_MUTATION\020\004\022\027\n\023TABLE_NOT_IN_REGION\020\005" +
-      "\022\025\n\021NEWER_TABLE_FOUND\020\006\022\034\n\030UNALLOWED_TAB" +
-      "LE_MUTATION\020\007\022\021\n\rNO_PK_COLUMNS\020\010\022\032\n\026PARE" +
-      "NT_TABLE_NOT_FOUND\020\t\022\033\n\027FUNCTION_ALREADY" +
-      "_EXISTS\020\n\022\026\n\022FUNCTION_NOT_FOUND\020\013\022\030\n\024NEW" +
-      "ER_FUNCTION_FOUND\020\014\022\032\n\026FUNCTION_NOT_IN_R" +
-      "EGION\020\r2\304\005\n\017MetaDataService\022/\n\010getTable\022" +
-      "\020.GetTableRequest\032\021.MetaDataResponse\0227\n\014" +
-      "getFunctions\022\024.GetFunctionsRequest\032\021.Met",
-      "aDataResponse\0225\n\013createTable\022\023.CreateTab" +
-      "leRequest\032\021.MetaDataResponse\022;\n\016createFu" +
-      "nction\022\026.CreateFunctionRequest\032\021.MetaDat" +
-      "aResponse\0221\n\tdropTable\022\021.DropTableReques" +
-      "t\032\021.MetaDataResponse\0227\n\014dropFunction\022\024.D" +
-      "ropFunctionRequest\032\021.MetaDataResponse\0221\n" +
-      "\taddColumn\022\021.AddColumnRequest\032\021.MetaData" +
-      "Response\0223\n\ndropColumn\022\022.DropColumnReque" +
-      "st\032\021.MetaDataResponse\022?\n\020updateIndexStat" +
-      "e\022\030.UpdateIndexStateRequest\032\021.MetaDataRe",
-      "sponse\0225\n\nclearCache\022\022.ClearCacheRequest" +
-      "\032\023.ClearCacheResponse\0225\n\ngetVersion\022\022.Ge" +
-      "tVersionRequest\032\023.GetVersionResponse\022P\n\023" +
-      "clearTableFromCache\022\033.ClearTableFromCach" +
-      "eRequest\032\034.ClearTableFromCacheResponseBB" +
-      "\n(org.apache.phoenix.coprocessor.generat" +
-      "edB\016MetaDataProtosH\001\210\001\001\240\001\001"
+      "*\n\022ClearCacheResponse\022\024\n\014unfreedBytes\030\001 " +
+      "\001(\003\"*\n\021GetVersionRequest\022\025\n\rclientVersio" +
+      "n\030\001 \001(\005\"%\n\022GetVersionResponse\022\017\n\007version" +
+      "\030\001 \002(\003\"\205\001\n\032ClearTableFromCacheRequest\022\020\n" +
+      "\010tenantId\030\001 \002(\014\022\022\n\nschemaName\030\002 \002(\014\022\021\n\tt" +
+      "ableName\030\003 \002(\014\022\027\n\017clientTimestamp\030\004 \002(\003\022" +
+      "\025\n\rclientVersion\030\005 \001(\005\"\035\n\033ClearTableFrom" +
+      "CacheResponse*\365\002\n\014MutationCode\022\030\n\024TABLE_" +
+      "ALREADY_EXISTS\020\000\022\023\n\017TABLE_NOT_FOUND\020\001\022\024\n",
+      "\020COLUMN_NOT_FOUND\020\002\022\031\n\025COLUMN_ALREADY_EX" +
+      "ISTS\020\003\022\035\n\031CONCURRENT_TABLE_MUTATION\020\004\022\027\n" +
+      "\023TABLE_NOT_IN_REGION\020\005\022\025\n\021NEWER_TABLE_FO" +
+      "UND\020\006\022\034\n\030UNALLOWED_TABLE_MUTATION\020\007\022\021\n\rN" +
+      "O_PK_COLUMNS\020\010\022\032\n\026PARENT_TABLE_NOT_FOUND" +
+      "\020\t\022\033\n\027FUNCTION_ALREADY_EXISTS\020\n\022\026\n\022FUNCT" +
+      "ION_NOT_FOUND\020\013\022\030\n\024NEWER_FUNCTION_FOUND\020" +
+      "\014\022\032\n\026FUNCTION_NOT_IN_REGION\020\r2\304\005\n\017MetaDa" +
+      "taService\022/\n\010getTable\022\020.GetTableRequest\032" +
+      "\021.MetaDataResponse\0227\n\014getFunctions\022\024.Get",
+      "FunctionsRequest\032\021.MetaDataResponse\0225\n\013c" +
+      "reateTable\022\023.CreateTableRequest\032\021.MetaDa" +
+      "taResponse\022;\n\016createFunction\022\026.CreateFun" +
+      "ctionRequest\032\021.MetaDataResponse\0221\n\tdropT" +
+      "able\022\021.DropTableRequest\032\021.MetaDataRespon" +
+      "se\0227\n\014dropFunction\022\024.DropFunctionRequest" +
+      "\032\021.MetaDataResponse\0221\n\taddColumn\022\021.AddCo" +
+      "lumnRequest\032\021.MetaDataResponse\0223\n\ndropCo" +
+      "lumn\022\022.DropColumnRequest\032\021.MetaDataRespo" +
+      "nse\022?\n\020updateIndexState\022\030.UpdateIndexSta",
+      "teRequest\032\021.MetaDataResponse\0225\n\nclearCac" +
+      "he\022\022.ClearCacheRequest\032\023.ClearCacheRespo" +
+      "nse\0225\n\ngetVersion\022\022.GetVersionRequest\032\023." +
+      "GetVersionResponse\022P\n\023clearTableFromCach" +
+      "e\022\033.ClearTableFromCacheRequest\032\034.ClearTa" +
+      "bleFromCacheResponseBB\n(org.apache.phoen" +
+      "ix.coprocessor.generatedB\016MetaDataProtos" +
+      "H\001\210\001\001\240\001\001"
     };
     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
       new com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner() {
@@ -12398,7 +12495,7 @@ public final class MetaDataProtos {
           internal_static_ClearCacheResponse_fieldAccessorTable = new
             com.google.protobuf.GeneratedMessage.FieldAccessorTable(
               internal_static_ClearCacheResponse_descriptor,
-              new java.lang.String[] { });
+              new java.lang.String[] { "UnfreedBytes", });
           internal_static_GetVersionRequest_descriptor =
             getDescriptor().getMessageTypes().get(12);
           internal_static_GetVersionRequest_fieldAccessorTable = new

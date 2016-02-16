@@ -123,7 +123,7 @@ public class BaseConnectionlessQueryTest extends BaseTest {
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(HConstants.LATEST_TIMESTAMP));
         PhoenixConnection conn = DriverManager.getConnection(PHOENIX_CONNECTIONLESS_JDBC_URL, props).unwrap(PhoenixConnection.class);
         try {
-            PTable table = conn.getMetaDataCache().getTable(new PTableKey(null, ATABLE_NAME));
+            PTable table = conn.getTable(new PTableKey(null, ATABLE_NAME));
             ATABLE = table;
             ORGANIZATION_ID = new ColumnRef(new TableRef(table), table.getColumn("ORGANIZATION_ID").getPosition()).newColumnExpression();
             ENTITY_ID = new ColumnRef(new TableRef(table), table.getColumn("ENTITY_ID").getPosition()).newColumnExpression();

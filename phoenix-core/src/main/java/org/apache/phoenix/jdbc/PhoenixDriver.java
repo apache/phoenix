@@ -17,27 +17,41 @@
  */
 package org.apache.phoenix.jdbc;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
-import java.util.Collection;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import javax.annotation.concurrent.GuardedBy;
 
+import org.apache.hadoop.conf.Configuration;
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.query.ConnectionlessQueryServicesImpl;
+import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesImpl;
-import org.apache.phoenix.util.SQLCloseables;
+import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 
 /**
@@ -67,13 +81,48 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
                 Runtime.getRuntime().addShutdownHook(new Thread() {
                     @Override
                     public void run() {
-                        closeInstance(INSTANCE);
+                        final Configuration config =
+                                HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
+                        final ThreadFactory threadFactory =
+                                new ThreadFactoryBuilder()
+                                        .setDaemon(true)
+                                        .setNameFormat("PHOENIX-DRIVER-SHUTDOWNHOOK" + "-thread-%s")
+                                        .build();
+                        final ExecutorService svc =
+                                Executors.newSingleThreadExecutor(threadFactory);
+                        try {
+                            Future<?> future = svc.submit(new Runnable() {
+                                @Override
+                                public void run() {
+                                    closeInstance(INSTANCE);
+                                }
+                            });
+                            // Pull the timeout value (default 5s).
+                            long millisBeforeShutdown =
+                                    config.getLong(QueryServices.DRIVER_SHUTDOWN_TIMEOUT_MS,
+                                        QueryServicesOptions.DEFAULT_DRIVER_SHUTDOWN_TIMEOUT_MS);
+
+                            // Close with a timeout. If this is running, we know the JVM wants to
+                            // go down. There may be other threads running that are holding the
+                            // lock. We don't want to be blocked on them (for the normal HBase retry
+                            // policy). We don't care about any exceptions, we're going down anyways.
+                            future.get(millisBeforeShutdown, TimeUnit.MILLISECONDS);
+                        } catch (ExecutionException e) {
+                            logger.warn("Failed to close instance", e);
+                        } catch (InterruptedException e) {
+                            logger.warn("Interrupted waiting to close instance", e);
+                        } catch (TimeoutException e) {
+                            logger.warn("Timed out waiting to close instance", e);
+                        } finally {
+                            // We're going down, but try to clean up.
+                            svc.shutdownNow();
+                        }
                     }
                 });
 
                 // Only register the driver when we successfully register the shutdown hook
                 // Don't want to register it if we're already in the process of going down.
-                DriverManager.registerDriver( INSTANCE );
+                DriverManager.registerDriver(INSTANCE);
             } catch (IllegalStateException e) {
                 logger.warn("Failed to register PhoenixDriver shutdown hook as the JVM is already shutting down");
 
@@ -114,11 +163,10 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
     
 
     @Override
-    public QueryServices getQueryServices() {
+    public QueryServices getQueryServices() throws SQLException {
         try {
-            closeLock.readLock().lock();
+            lockInterruptibly(LockMode.READ);
             checkClosed();
-
             // Lazy initialize QueryServices so that we only attempt to create an HBase Configuration
             // object upon the first attempt to connect to any cluster. Otherwise, an attempt will be
             // made at driver initialization time which is too early for some systems.
@@ -133,7 +181,7 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
             }
             return result;
         } finally {
-            closeLock.readLock().unlock();
+            unlock(LockMode.READ);
         }
     }
 
@@ -145,19 +193,22 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
     
     @Override
     public Connection connect(String url, Properties info) throws SQLException {
+        if (!acceptsURL(url)) {
+          return null;
+        }
         try {
-            closeLock.readLock().lock();
+            lockInterruptibly(LockMode.READ);
             checkClosed();
-            return super.connect(url, info);
+            return createConnection(url, info);
         } finally {
-            closeLock.readLock().unlock();
+            unlock(LockMode.READ);
         }
     }
     
     @Override
     protected ConnectionQueryServices getConnectionQueryServices(String url, Properties info) throws SQLException {
         try {
-            closeLock.readLock().lock();
+            lockInterruptibly(LockMode.READ);
             checkClosed();
             ConnectionInfo connInfo = ConnectionInfo.create(url);
             QueryServices services = getQueryServices();
@@ -165,7 +216,7 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
             ConnectionQueryServices connectionQueryServices = connectionQueryServicesMap.get(normalizedConnInfo);
             if (connectionQueryServices == null) {
                 if (normalizedConnInfo.isConnectionless()) {
-                    connectionQueryServices = new ConnectionlessQueryServicesImpl(services, normalizedConnInfo);
+                    connectionQueryServices = new ConnectionlessQueryServicesImpl(services, normalizedConnInfo, info);
                 } else {
                     connectionQueryServices = new ConnectionQueryServicesImpl(services, normalizedConnInfo, info);
                 }
@@ -174,25 +225,18 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
                     connectionQueryServices = prevValue;
                 }
             }
-            boolean success = false;
-            SQLException sqlE = null;
-            try {
-                connectionQueryServices.init(url, info);
-                success = true;
-            } catch (SQLException e) {
-                sqlE = e;
-            }
-            finally {
-                if (!success) {
-                    try {
-                        connectionQueryServices.close();
-                    } catch (SQLException e) {
-                        if (sqlE == null) {
-                            sqlE = e;
-                        } else {
-                            sqlE.setNextException(e);
-                        }
-                    } finally {
+            String noUpgradeProp = info.getProperty(PhoenixRuntime.NO_UPGRADE_ATTRIB);
+            if (!Boolean.TRUE.equals(noUpgradeProp)) {
+                boolean success = false;
+                SQLException sqlE = null;
+                try {
+                    connectionQueryServices.init(url, info);
+                    success = true;
+                } catch (SQLException e) {
+                    sqlE = e;
+                }
+                finally {
+                    if (!success) {
                         // Remove from map, as initialization failed
                         connectionQueryServicesMap.remove(normalizedConnInfo);
                         if (sqlE != null) {
@@ -203,10 +247,11 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
             }
             return connectionQueryServices;
         } finally {
-            closeLock.readLock().unlock();
+            unlock(LockMode.READ);
         }
     }
-
+    
+    @GuardedBy("closeLock")
     private void checkClosed() {
         if (closed) {
             throwDriverClosedException();
@@ -220,35 +265,59 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
     @Override
     public synchronized void close() throws SQLException {
         try {
-            closeLock.writeLock().lock();
+            lockInterruptibly(LockMode.WRITE);
             if (closed) {
                 return;
             }
             closed = true;
         } finally {
-            closeLock.writeLock().unlock();
+            unlock(LockMode.WRITE);
         }
 
-        try {
-            Collection<ConnectionQueryServices> connectionQueryServices = connectionQueryServicesMap.values();
+        if (services != null) {
             try {
-                SQLCloseables.closeAll(connectionQueryServices);
+                services.close();
             } finally {
-                connectionQueryServices.clear();
+                services = null;
             }
-        } finally {
-            if (services != null) {
-                try {
-                    services.close();
-                } finally {
-                    ExecutorService executor = services.getExecutor();
-                    // Even if something wrong happened while closing services above, we still
-                    // want to set it to null. Otherwise, we will end up having a possibly non-working
-                    // services instance. 
-                    services = null;
-                    executor.shutdown();
-                }
+        }
+    }
+    
+    private enum LockMode {
+        READ, WRITE
+    };
+
+    private void lockInterruptibly(LockMode mode) throws SQLException {
+        checkNotNull(mode);
+        switch (mode) {
+        case READ:
+            try {
+                closeLock.readLock().lockInterruptibly();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new SQLExceptionInfo.Builder(SQLExceptionCode.INTERRUPTED_EXCEPTION)
+                        .setRootCause(e).build().buildException();
             }
+            break;
+        case WRITE:
+            try {
+                closeLock.writeLock().lockInterruptibly();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new SQLExceptionInfo.Builder(SQLExceptionCode.INTERRUPTED_EXCEPTION)
+                        .setRootCause(e).build().buildException();
+            }
+        }
+    }
+
+    private void unlock(LockMode mode) {
+        checkNotNull(mode);
+        switch (mode) {
+        case READ:
+            closeLock.readLock().unlock();
+            break;
+        case WRITE:
+            closeLock.writeLock().unlock();
         }
     }
 }

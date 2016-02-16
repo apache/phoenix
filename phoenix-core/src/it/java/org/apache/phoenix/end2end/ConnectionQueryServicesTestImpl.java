@@ -17,12 +17,19 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.junit.Assert.assertEquals;
+
 import java.sql.SQLException;
 import java.util.Properties;
+import java.util.Set;
 
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.util.SQLCloseables;
+
+import com.google.common.collect.Sets;
 
 /**
  * 
@@ -34,11 +41,23 @@ import org.apache.phoenix.query.QueryServices;
  */
 public class ConnectionQueryServicesTestImpl extends ConnectionQueryServicesImpl {
     protected int NUM_SLAVES_BASE = 1; // number of slaves for the cluster
+    // Track open connections to free them on close as unit tests don't always do this.
+    private Set<PhoenixConnection> connections = Sets.newHashSet();
     
-    public ConnectionQueryServicesTestImpl(QueryServices services, ConnectionInfo info) throws SQLException {
-        super(services, info, null);
+    public ConnectionQueryServicesTestImpl(QueryServices services, ConnectionInfo info, Properties props) throws SQLException {
+        super(services, info, props);
     }
     
+    @Override
+    public void addConnection(PhoenixConnection connection) throws SQLException {
+        connections.add(connection);
+    }
+    
+    @Override
+    public void removeConnection(PhoenixConnection connection) throws SQLException {
+        connections.remove(connection);
+    }
+
     @Override
     public void init(String url, Properties props) throws SQLException {
         try {
@@ -61,8 +80,11 @@ public class ConnectionQueryServicesTestImpl extends ConnectionQueryServicesImpl
     @Override
     public void close() throws SQLException {
         try {
-            // Attempt to fix apparent memory leak...
-            clearCache();
+            Set<PhoenixConnection> connections = this.connections;
+            this.connections = Sets.newHashSet();
+            SQLCloseables.closeAll(connections);
+            long unfreedBytes = clearCache();
+            assertEquals("Found unfreed bytes in server-side cache", 0, unfreedBytes);
         } finally {
             super.close();
         }

@@ -699,6 +699,16 @@ public final class ServerCachingProtos {
      * <code>required .ServerCacheFactory cacheFactory = 4;</code>
      */
     org.apache.phoenix.coprocessor.generated.ServerCacheFactoryProtos.ServerCacheFactoryOrBuilder getCacheFactoryOrBuilder();
+
+    // optional bytes txState = 5;
+    /**
+     * <code>optional bytes txState = 5;</code>
+     */
+    boolean hasTxState();
+    /**
+     * <code>optional bytes txState = 5;</code>
+     */
+    com.google.protobuf.ByteString getTxState();
   }
   /**
    * Protobuf type {@code AddServerCacheRequest}
@@ -785,6 +795,11 @@ public final class ServerCachingProtos {
                 cacheFactory_ = subBuilder.buildPartial();
               }
               bitField0_ |= 0x00000008;
+              break;
+            }
+            case 42: {
+              bitField0_ |= 0x00000010;
+              txState_ = input.readBytes();
               break;
             }
           }
@@ -903,11 +918,28 @@ public final class ServerCachingProtos {
       return cacheFactory_;
     }
 
+    // optional bytes txState = 5;
+    public static final int TXSTATE_FIELD_NUMBER = 5;
+    private com.google.protobuf.ByteString txState_;
+    /**
+     * <code>optional bytes txState = 5;</code>
+     */
+    public boolean hasTxState() {
+      return ((bitField0_ & 0x00000010) == 0x00000010);
+    }
+    /**
+     * <code>optional bytes txState = 5;</code>
+     */
+    public com.google.protobuf.ByteString getTxState() {
+      return txState_;
+    }
+
     private void initFields() {
       tenantId_ = com.google.protobuf.ByteString.EMPTY;
       cacheId_ = com.google.protobuf.ByteString.EMPTY;
       cachePtr_ = org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ImmutableBytesWritable.getDefaultInstance();
       cacheFactory_ = org.apache.phoenix.coprocessor.generated.ServerCacheFactoryProtos.ServerCacheFactory.getDefaultInstance();
+      txState_ = com.google.protobuf.ByteString.EMPTY;
     }
     private byte memoizedIsInitialized = -1;
     public final boolean isInitialized() {
@@ -953,6 +985,9 @@ public final class ServerCachingProtos {
       if (((bitField0_ & 0x00000008) == 0x00000008)) {
         output.writeMessage(4, cacheFactory_);
       }
+      if (((bitField0_ & 0x00000010) == 0x00000010)) {
+        output.writeBytes(5, txState_);
+      }
       getUnknownFields().writeTo(output);
     }
 
@@ -977,6 +1012,10 @@ public final class ServerCachingProtos {
       if (((bitField0_ & 0x00000008) == 0x00000008)) {
         size += com.google.protobuf.CodedOutputStream
           .computeMessageSize(4, cacheFactory_);
+      }
+      if (((bitField0_ & 0x00000010) == 0x00000010)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeBytesSize(5, txState_);
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSerializedSize = size;
@@ -1021,6 +1060,11 @@ public final class ServerCachingProtos {
         result = result && getCacheFactory()
             .equals(other.getCacheFactory());
       }
+      result = result && (hasTxState() == other.hasTxState());
+      if (hasTxState()) {
+        result = result && getTxState()
+            .equals(other.getTxState());
+      }
       result = result &&
           getUnknownFields().equals(other.getUnknownFields());
       return result;
@@ -1049,6 +1093,10 @@ public final class ServerCachingProtos {
       if (hasCacheFactory()) {
         hash = (37 * hash) + CACHEFACTORY_FIELD_NUMBER;
         hash = (53 * hash) + getCacheFactory().hashCode();
+      }
+      if (hasTxState()) {
+        hash = (37 * hash) + TXSTATE_FIELD_NUMBER;
+        hash = (53 * hash) + getTxState().hashCode();
       }
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
@@ -1177,6 +1225,8 @@ public final class ServerCachingProtos {
           cacheFactoryBuilder_.clear();
         }
         bitField0_ = (bitField0_ & ~0x00000008);
+        txState_ = com.google.protobuf.ByteString.EMPTY;
+        bitField0_ = (bitField0_ & ~0x00000010);
         return this;
       }
 
@@ -1229,6 +1279,10 @@ public final class ServerCachingProtos {
         } else {
           result.cacheFactory_ = cacheFactoryBuilder_.build();
         }
+        if (((from_bitField0_ & 0x00000010) == 0x00000010)) {
+          to_bitField0_ |= 0x00000010;
+        }
+        result.txState_ = txState_;
         result.bitField0_ = to_bitField0_;
         onBuilt();
         return result;
@@ -1256,6 +1310,9 @@ public final class ServerCachingProtos {
         }
         if (other.hasCacheFactory()) {
           mergeCacheFactory(other.getCacheFactory());
+        }
+        if (other.hasTxState()) {
+          setTxState(other.getTxState());
         }
         this.mergeUnknownFields(other.getUnknownFields());
         return this;
@@ -1608,6 +1665,42 @@ public final class ServerCachingProtos {
           cacheFactory_ = null;
         }
         return cacheFactoryBuilder_;
+      }
+
+      // optional bytes txState = 5;
+      private com.google.protobuf.ByteString txState_ = com.google.protobuf.ByteString.EMPTY;
+      /**
+       * <code>optional bytes txState = 5;</code>
+       */
+      public boolean hasTxState() {
+        return ((bitField0_ & 0x00000010) == 0x00000010);
+      }
+      /**
+       * <code>optional bytes txState = 5;</code>
+       */
+      public com.google.protobuf.ByteString getTxState() {
+        return txState_;
+      }
+      /**
+       * <code>optional bytes txState = 5;</code>
+       */
+      public Builder setTxState(com.google.protobuf.ByteString value) {
+        if (value == null) {
+    throw new NullPointerException();
+  }
+  bitField0_ |= 0x00000010;
+        txState_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>optional bytes txState = 5;</code>
+       */
+      public Builder clearTxState() {
+        bitField0_ = (bitField0_ & ~0x00000010);
+        txState_ = getDefaultInstance().getTxState();
+        onChanged();
+        return this;
       }
 
       // @@protoc_insertion_point(builder_scope:AddServerCacheRequest)
@@ -3383,20 +3476,21 @@ public final class ServerCachingProtos {
       "\n\032ServerCachingService.proto\032\030ServerCach" +
       "eFactory.proto\"K\n\026ImmutableBytesWritable" +
       "\022\021\n\tbyteArray\030\001 \002(\014\022\016\n\006offset\030\002 \002(\005\022\016\n\006l" +
-      "ength\030\003 \002(\005\"\220\001\n\025AddServerCacheRequest\022\020\n" +
+      "ength\030\003 \002(\005\"\241\001\n\025AddServerCacheRequest\022\020\n" +
       "\010tenantId\030\001 \001(\014\022\017\n\007cacheId\030\002 \002(\014\022)\n\010cach" +
       "ePtr\030\003 \002(\0132\027.ImmutableBytesWritable\022)\n\014c" +
-      "acheFactory\030\004 \002(\0132\023.ServerCacheFactory\"(" +
-      "\n\026AddServerCacheResponse\022\016\n\006return\030\001 \002(\010" +
-      "\"=\n\030RemoveServerCacheRequest\022\020\n\010tenantId" +
-      "\030\001 \001(\014\022\017\n\007cacheId\030\002 \002(\014\"+\n\031RemoveServerC",
-      "acheResponse\022\016\n\006return\030\001 \002(\0102\245\001\n\024ServerC" +
-      "achingService\022A\n\016addServerCache\022\026.AddSer" +
-      "verCacheRequest\032\027.AddServerCacheResponse" +
-      "\022J\n\021removeServerCache\022\031.RemoveServerCach" +
-      "eRequest\032\032.RemoveServerCacheResponseBG\n(" +
-      "org.apache.phoenix.coprocessor.generated" +
-      "B\023ServerCachingProtosH\001\210\001\001\240\001\001"
+      "acheFactory\030\004 \002(\0132\023.ServerCacheFactory\022\017" +
+      "\n\007txState\030\005 \001(\014\"(\n\026AddServerCacheRespons" +
+      "e\022\016\n\006return\030\001 \002(\010\"=\n\030RemoveServerCacheRe" +
+      "quest\022\020\n\010tenantId\030\001 \001(\014\022\017\n\007cacheId\030\002 \002(\014",
+      "\"+\n\031RemoveServerCacheResponse\022\016\n\006return\030" +
+      "\001 \002(\0102\245\001\n\024ServerCachingService\022A\n\016addSer" +
+      "verCache\022\026.AddServerCacheRequest\032\027.AddSe" +
+      "rverCacheResponse\022J\n\021removeServerCache\022\031" +
+      ".RemoveServerCacheRequest\032\032.RemoveServer" +
+      "CacheResponseBG\n(org.apache.phoenix.copr" +
+      "ocessor.generatedB\023ServerCachingProtosH\001" +
+      "\210\001\001\240\001\001"
     };
     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
       new com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner() {
@@ -3414,7 +3508,7 @@ public final class ServerCachingProtos {
           internal_static_AddServerCacheRequest_fieldAccessorTable = new
             com.google.protobuf.GeneratedMessage.FieldAccessorTable(
               internal_static_AddServerCacheRequest_descriptor,
-              new java.lang.String[] { "TenantId", "CacheId", "CachePtr", "CacheFactory", });
+              new java.lang.String[] { "TenantId", "CacheId", "CachePtr", "CacheFactory", "TxState", });
           internal_static_AddServerCacheResponse_descriptor =
             getDescriptor().getMessageTypes().get(2);
           internal_static_AddServerCacheResponse_fieldAccessorTable = new

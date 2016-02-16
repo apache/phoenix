@@ -22,7 +22,6 @@ import java.io.IOException;
 import org.apache.hadoop.hbase.exceptions.DeserializationException;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Writables;
-
 import org.apache.phoenix.expression.Expression;
 
 
@@ -32,8 +31,6 @@ import org.apache.phoenix.expression.Expression;
  * part of the key value since the column qualifier is unique across all column
  * families.
  *
- * 
- * @since 0.1
  */
 public class SingleCQKeyValueComparisonFilter extends SingleKeyValueComparisonFilter {
     public SingleCQKeyValueComparisonFilter() {

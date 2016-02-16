@@ -18,7 +18,6 @@
 package org.apache.phoenix.coprocessor;
 
 import java.io.IOException;
-import java.sql.SQLException;
 
 import org.apache.hadoop.hbase.Coprocessor;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
@@ -26,18 +25,17 @@ import org.apache.hadoop.hbase.coprocessor.CoprocessorException;
 import org.apache.hadoop.hbase.coprocessor.CoprocessorService;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
 import org.apache.phoenix.cache.GlobalCache;
 import org.apache.phoenix.cache.TenantCache;
-import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
-
 import org.apache.phoenix.coprocessor.ServerCachingProtocol.ServerCacheFactory;
 import org.apache.phoenix.coprocessor.generated.ServerCachingProtos.AddServerCacheRequest;
 import org.apache.phoenix.coprocessor.generated.ServerCachingProtos.AddServerCacheResponse;
 import org.apache.phoenix.coprocessor.generated.ServerCachingProtos.RemoveServerCacheRequest;
 import org.apache.phoenix.coprocessor.generated.ServerCachingProtos.RemoveServerCacheResponse;
 import org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ServerCachingService;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.protobuf.ProtobufUtil;
+import org.apache.phoenix.util.ByteUtil;
 
 import com.google.protobuf.RpcCallback;
 import com.google.protobuf.RpcController;
@@ -66,6 +64,7 @@ public class ServerCachingEndpointImpl extends ServerCachingService implements C
     ImmutableBytesWritable cachePtr =
         org.apache.phoenix.protobuf.ProtobufUtil
             .toImmutableBytesWritable(request.getCachePtr());
+    byte[] txState = request.hasTxState() ? request.getTxState().toByteArray() : ByteUtil.EMPTY_BYTE_ARRAY;
 
     try {
       @SuppressWarnings("unchecked")
@@ -73,7 +72,7 @@ public class ServerCachingEndpointImpl extends ServerCachingService implements C
           (Class<ServerCacheFactory>) Class.forName(request.getCacheFactory().getClassName());
       ServerCacheFactory cacheFactory = serverCacheFactoryClass.newInstance();
       tenantCache.addServerCache(new ImmutableBytesPtr(request.getCacheId().toByteArray()),
-        cachePtr, cacheFactory);
+        cachePtr, txState, cacheFactory);
     } catch (Throwable e) {
       ProtobufUtil.setControllerException(controller, new IOException(e));
     }
@@ -91,11 +90,7 @@ public class ServerCachingEndpointImpl extends ServerCachingService implements C
       tenantId = new ImmutableBytesPtr(request.getTenantId().toByteArray());
     }
     TenantCache tenantCache = GlobalCache.getTenantCache(this.env, tenantId);
-    try {
-      tenantCache.removeServerCache(new ImmutableBytesPtr(request.getCacheId().toByteArray()));
-    } catch (SQLException e) {
-      ProtobufUtil.setControllerException(controller, new IOException(e));
-    }
+    tenantCache.removeServerCache(new ImmutableBytesPtr(request.getCacheId().toByteArray()));
     RemoveServerCacheResponse.Builder responseBuilder = RemoveServerCacheResponse.newBuilder();
     responseBuilder.setReturn(true);
     RemoveServerCacheResponse result = responseBuilder.build();

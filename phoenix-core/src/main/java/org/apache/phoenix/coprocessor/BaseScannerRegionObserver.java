@@ -35,6 +35,7 @@ import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
@@ -58,6 +59,8 @@ import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 
 import com.google.common.collect.ImmutableList;
+
+import co.cask.tephra.Transaction;
 
 
 abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
@@ -86,10 +89,16 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
     public static final String EXPECTED_UPPER_REGION_KEY = "_ExpectedUpperRegionKey";
     public static final String REVERSE_SCAN = "_ReverseScan";
     public static final String ANALYZE_TABLE = "_ANALYZETABLE";
+    public static final String TX_STATE = "_TxState";
     public static final String GUIDEPOST_WIDTH_BYTES = "_GUIDEPOST_WIDTH_BYTES";
     public static final String GUIDEPOST_PER_REGION = "_GUIDEPOST_PER_REGION";
     public static final String UPGRADE_DESC_ROW_KEY = "_UPGRADE_DESC_ROW_KEY";
     public static final String SCAN_REGION_SERVER = "_SCAN_REGION_SERVER";
+    public static final String RUN_UPDATE_STATS_ASYNC_ATTRIB = "_RunUpdateStatsAsync";
+    public static final String SKIP_REGION_BOUNDARY_CHECK = "_SKIP_REGION_BOUNDARY_CHECK";
+    public static final String TX_SCN = "_TxScn";
+    public static final String SCAN_ACTUAL_START_ROW = "_ScanActualStartRow";
+    public static final String IGNORE_NEWER_MUTATIONS = "_IGNORE_NEWER_MUTATIONS";
     
     /**
      * Attribute name used to pass custom annotations in Scans and Mutations (later). Custom annotations
@@ -130,7 +139,8 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
                     Bytes.compareTo(upperExclusiveRegionKey, expectedUpperRegionKey) != 0;
         } else {
             isStaleRegionBoundaries = Bytes.compareTo(lowerInclusiveScanKey, lowerInclusiveRegionKey) < 0 ||
-                    ( Bytes.compareTo(upperExclusiveScanKey, upperExclusiveRegionKey) > 0 && upperExclusiveRegionKey.length != 0);
+                    ( Bytes.compareTo(upperExclusiveScanKey, upperExclusiveRegionKey) > 0 && upperExclusiveRegionKey.length != 0) ||
+                    (upperExclusiveRegionKey.length != 0 && upperExclusiveScanKey.length == 0);
         }
         if (isStaleRegionBoundaries) {
             Exception cause = new StaleRegionBoundaryCacheException(region.getRegionInfo().getTable().getNameAsString());
@@ -141,11 +151,23 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
     abstract protected boolean isRegionObserverFor(Scan scan);
     abstract protected RegionScanner doPostScannerOpen(ObserverContext<RegionCoprocessorEnvironment> c, final Scan scan, final RegionScanner s) throws Throwable;
 
+    protected boolean skipRegionBoundaryCheck(Scan scan) {
+        byte[] skipCheckBytes = scan.getAttribute(SKIP_REGION_BOUNDARY_CHECK);
+        return skipCheckBytes != null && Bytes.toBoolean(skipCheckBytes);
+    }
+
     @Override
     public RegionScanner preScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c,
         final Scan scan, final RegionScanner s) throws IOException {
+        byte[] txnScn = scan.getAttribute(TX_SCN);
+        if (txnScn!=null) {
+            TimeRange timeRange = scan.getTimeRange();
+            scan.setTimeRange(timeRange.getMin(), Bytes.toLong(txnScn));
+        }
         if (isRegionObserverFor(scan)) {
-            throwIfScanOutOfRegion(scan, c.getEnvironment().getRegion());
+            if (! skipRegionBoundaryCheck(scan)) {
+                throwIfScanOutOfRegion(scan, c.getEnvironment().getRegion());
+            }
             // Muck with the start/stop row of the scan and set as reversed at the
             // last possible moment. You need to swap the start/stop and make the
             // start exclusive and the stop inclusive.
@@ -167,7 +189,7 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
             if (!isRegionObserverFor(scan)) {
                 return s;
             }
-            boolean success =false;
+            boolean success = false;
             // Save the current span. When done with the child span, reset the span back to
             // what it was. Otherwise, this causes the thread local storing the current span
             // to not be reset back to null causing catastrophic infinite loops
@@ -228,7 +250,7 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
             final byte[][] viewConstants, final TupleProjector projector,
             final ImmutableBytesWritable ptr) {
         return getWrappedScanner(c, s, null, null, offset, scan, dataColumns, tupleProjector,
-                dataRegion, indexMaintainer, viewConstants, null, null, projector, ptr);
+                dataRegion, indexMaintainer, null, viewConstants, null, null, projector, ptr);
     }
 
     /**
@@ -236,13 +258,14 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
      * re-throws as DoNotRetryIOException to prevent needless retrying hanging the query
      * for 30 seconds. Unfortunately, until HBASE-7481 gets fixed, there's no way to do
      * the same from a custom filter.
-     * @param arrayFuncRefs
      * @param arrayKVRefs
+     * @param arrayFuncRefs
      * @param offset starting position in the rowkey.
      * @param scan
      * @param tupleProjector
      * @param dataRegion
      * @param indexMaintainer
+     * @param tx current transaction
      * @param viewConstants
      */
     protected RegionScanner getWrappedScanner(final ObserverContext<RegionCoprocessorEnvironment> c,
@@ -250,6 +273,7 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
             final Expression[] arrayFuncRefs, final int offset, final Scan scan,
             final ColumnReference[] dataColumns, final TupleProjector tupleProjector,
             final Region dataRegion, final IndexMaintainer indexMaintainer,
+            Transaction tx, 
             final byte[][] viewConstants, final KeyValueSchema kvSchema,
             final ValueBitSet kvSchemaBitSet, final TupleProjector projector,
             final ImmutableBytesWritable ptr) {

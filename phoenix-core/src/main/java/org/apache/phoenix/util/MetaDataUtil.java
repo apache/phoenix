@@ -107,14 +107,14 @@ public class MetaDataUtil {
     }
     
     // TODO: generalize this to use two bytes to return a SQL error code instead
-    public static long encodeMutableIndexConfiguredProperly(long version, boolean isValid) {
+    public static long encodeHasIndexWALCodec(long version, boolean isValid) {
         if (!isValid) {
             return version | 1;
         }
         return version;
     }
     
-    public static boolean decodeMutableIndexConfiguredProperly(long version) {
+    public static boolean decodeHasIndexWALCodec(long version) {
         return (version & 0xF) == 0;
     }
 
@@ -267,6 +267,13 @@ public class MetaDataUtil {
     
     public static boolean isMultiTenant(Mutation m, KeyValueBuilder builder, ImmutableBytesWritable ptr) {
         if (getMutationValue(m, PhoenixDatabaseMetaData.MULTI_TENANT_BYTES, builder, ptr)) {
+            return Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(ptr));
+        }
+        return false;
+    }
+    
+    public static boolean isTransactional(Mutation m, KeyValueBuilder builder, ImmutableBytesWritable ptr) {
+        if (getMutationValue(m, PhoenixDatabaseMetaData.TRANSACTIONAL_BYTES, builder, ptr)) {
             return Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(ptr));
         }
         return false;
@@ -429,24 +436,31 @@ public class MetaDataUtil {
     public static final String IS_LOCAL_INDEX_TABLE_PROP_NAME = "IS_LOCAL_INDEX_TABLE";
     public static final byte[] IS_LOCAL_INDEX_TABLE_PROP_BYTES = Bytes.toBytes(IS_LOCAL_INDEX_TABLE_PROP_NAME);
 
-    public static Scan newTableRowsScan(byte[] key, long startTimeStamp, long stopTimeStamp)
-            throws IOException {
-        Scan scan = new Scan();
-        scan.setTimeRange(startTimeStamp, stopTimeStamp);
-        scan.setStartRow(key);
-        byte[] stopKey = ByteUtil.concat(key, QueryConstants.SEPARATOR_BYTE_ARRAY);
-        ByteUtil.nextKey(stopKey, stopKey.length);
-        scan.setStopRow(stopKey);
-        return scan;
+    public static Scan newTableRowsScan(byte[] key, long startTimeStamp, long stopTimeStamp){
+        return newTableRowsScan(key, null, startTimeStamp, stopTimeStamp);
     }
-    
+
+	public static Scan newTableRowsScan(byte[] startKey, byte[] stopKey, long startTimeStamp, long stopTimeStamp) {
+		Scan scan = new Scan();
+		ScanUtil.setTimeRange(scan, startTimeStamp, stopTimeStamp);
+		scan.setStartRow(startKey);
+		if (stopKey == null) {
+			stopKey = ByteUtil.concat(startKey, QueryConstants.SEPARATOR_BYTE_ARRAY);
+			ByteUtil.nextKey(stopKey, stopKey.length);
+		}
+		scan.setStopRow(stopKey);
+		return scan;
+	}
+
     public static LinkType getLinkType(Mutation tableMutation) {
         List<Cell> kvs = tableMutation.getFamilyCellMap().get(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES);
         if (kvs != null) {
             for (Cell kv : kvs) {
-                if (Bytes.compareTo(kv.getQualifierArray(), kv.getQualifierOffset(), kv.getQualifierLength(), PhoenixDatabaseMetaData.LINK_TYPE_BYTES, 0, PhoenixDatabaseMetaData.LINK_TYPE_BYTES.length) == 0) {
-                    return LinkType.fromSerializedValue(PUnsignedTinyint.INSTANCE.getCodec().decodeByte(kv.getValueArray(), kv.getValueOffset(), SortOrder.getDefault()));
-                }
+                if (Bytes.compareTo(kv.getQualifierArray(), kv.getQualifierOffset(), kv.getQualifierLength(),
+                        PhoenixDatabaseMetaData.LINK_TYPE_BYTES, 0,
+                        PhoenixDatabaseMetaData.LINK_TYPE_BYTES.length) == 0) { return LinkType
+                                .fromSerializedValue(PUnsignedTinyint.INSTANCE.getCodec().decodeByte(kv.getValueArray(),
+                                        kv.getValueOffset(), SortOrder.getDefault())); }
             }
         }
         return null;

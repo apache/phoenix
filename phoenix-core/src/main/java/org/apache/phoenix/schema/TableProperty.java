@@ -26,6 +26,7 @@ import static org.apache.phoenix.exception.SQLExceptionCode.VIEW_WITH_PROPERTIES
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAMILY_NAME;
 
 import java.sql.SQLException;
+import java.util.Map;
 
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -46,7 +47,27 @@ public enum TableProperty {
 
 	TTL(HColumnDescriptor.TTL, COLUMN_FAMILY_NOT_ALLOWED_FOR_TTL, true, CANNOT_ALTER_PROPERTY, false),
 
-    STORE_NULLS(PhoenixDatabaseMetaData.STORE_NULLS, COLUMN_FAMILY_NOT_ALLOWED_TABLE_PROPERTY, true, false);
+    STORE_NULLS(PhoenixDatabaseMetaData.STORE_NULLS, COLUMN_FAMILY_NOT_ALLOWED_TABLE_PROPERTY, true, false),
+    
+    TRANSACTIONAL(PhoenixDatabaseMetaData.TRANSACTIONAL, COLUMN_FAMILY_NOT_ALLOWED_TABLE_PROPERTY, true, false),
+
+    UPDATE_CACHE_FREQUENCY(PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY, true, true) {
+	    @Override
+        public Object getValue(Object value) {
+	        if (value instanceof String) {
+	            String strValue = (String) value;
+	            if ("ALWAYS".equalsIgnoreCase(strValue)) {
+	                return 0L;
+	            } else if ("NEVER".equalsIgnoreCase(strValue)) {
+	                return Long.MAX_VALUE;
+	            }
+	        } else {
+	            return value == null ? null : ((Number) value).longValue();
+	        }
+	        return value;
+	    }	    
+	},
+    ;
 
 
 	private final String propertyName;
@@ -84,6 +105,14 @@ public enum TableProperty {
 		return true;
 	}
 
+	public Object getValue(Object value) {
+	    return value;
+	}
+	
+    public Object getValue(Map<String, Object> props) {
+        return getValue(props.get(this.toString()));
+    }
+    
 	// isQualified is true if column family name is specified in property name
 	public void validate(boolean isMutating, boolean isQualified, PTableType tableType) throws SQLException {
 		checkForColumnFamily(isQualified);

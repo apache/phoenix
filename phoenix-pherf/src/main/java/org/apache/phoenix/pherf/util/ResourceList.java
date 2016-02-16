@@ -18,11 +18,13 @@
 
 package org.apache.phoenix.pherf.util;
 
+import org.apache.commons.lang3.StringUtils;
 import org.apache.phoenix.pherf.exception.PherfException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URL;
@@ -108,7 +110,7 @@ public class ResourceList {
             final String element,
             final Pattern pattern) {
         final List<String> retVal = new ArrayList<>();
-        if (element.equals("")) {
+        if (StringUtils.isBlank(element)) {
             return retVal;
         }
         final File file = new File(element);
@@ -120,13 +122,17 @@ public class ResourceList {
         return retVal;
     }
 
-    private Collection<String> getResourcesFromJarFile(
+    // Visible for testing
+    Collection<String> getResourcesFromJarFile(
             final File file,
             final Pattern pattern) {
         final List<String> retVal = new ArrayList<>();
         ZipFile zf;
         try {
             zf = new ZipFile(file);
+        } catch (FileNotFoundException e) {
+            // Gracefully handle a jar listed on the classpath that doesn't actually exist.
+            return Collections.emptyList();
         } catch (final ZipException e) {
             throw new Error(e);
         } catch (final IOException e) {

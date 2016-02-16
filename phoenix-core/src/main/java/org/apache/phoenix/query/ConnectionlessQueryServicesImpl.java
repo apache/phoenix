@@ -24,9 +24,11 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Properties;
 import java.util.Set;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HRegionLocation;
@@ -84,6 +86,10 @@ import org.apache.phoenix.util.SequenceUtil;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 
+import co.cask.tephra.TransactionManager;
+import co.cask.tephra.TransactionSystemClient;
+import co.cask.tephra.inmemory.InMemoryTxSystemClient;
+
 
 /**
  *
@@ -99,18 +105,37 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     private PMetaData metaData;
     private final Map<SequenceKey, SequenceInfo> sequenceMap = Maps.newHashMap();
     private final String userName;
+    private final TransactionSystemClient txSystemClient;
     private KeyValueBuilder kvBuilder;
     private volatile boolean initialized;
     private volatile SQLException initializationException;
     private final Map<String, List<HRegionLocation>> tableSplits = Maps.newHashMap();
     
-    public ConnectionlessQueryServicesImpl(QueryServices queryServices, ConnectionInfo connInfo) {
-        super(queryServices);
+    public ConnectionlessQueryServicesImpl(QueryServices services, ConnectionInfo connInfo, Properties info) {
+        super(services);
         userName = connInfo.getPrincipal();
         metaData = newEmptyMetaData();
         
         // Use KeyValueBuilder that builds real KeyValues, as our test utils require this
         this.kvBuilder = GenericKeyValueBuilder.INSTANCE;
+        Configuration config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
+        for (Entry<String,String> entry : services.getProps()) {
+            config.set(entry.getKey(), entry.getValue());
+        }
+        if (info != null) {
+            for (Object key : info.keySet()) {
+                config.set((String) key, info.getProperty((String) key));
+            }
+        }
+        for (Entry<String,String> entry : connInfo.asProps()) {
+            config.set(entry.getKey(), entry.getValue());
+        }
+
+        // Without making a copy of the configuration we cons up, we lose some of our properties
+        // on the server side during testing.
+        config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration(config);
+        TransactionManager txnManager = new TransactionManager(config);
+        this.txSystemClient = new InMemoryTxSystemClient(txnManager);
     }
 
     private PMetaData newEmptyMetaData() {
@@ -141,14 +166,19 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
 
     @Override
-    public PMetaData addTable(PTable table) throws SQLException {
-        return metaData = metaData.addTable(table);
+    public PMetaData addTable(PTable table, long resolvedTime) throws SQLException {
+        return metaData = metaData.addTable(table, resolvedTime);
+    }
+    
+    @Override
+    public PMetaData updateResolvedTimestamp(PTable table, long resolvedTimestamp) throws SQLException {
+        return metaData = metaData.updateResolvedTimestamp(table, resolvedTimestamp);
     }
 
     @Override
     public PMetaData addColumn(PName tenantId, String tableName, List<PColumn> columns, long tableTimeStamp,
-            long tableSeqNum, boolean isImmutableRows, boolean isWalDisabled, boolean isMultitenant, boolean storeNulls) throws SQLException {
-        return metaData = metaData.addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows, isWalDisabled, isMultitenant, storeNulls);
+            long tableSeqNum, boolean isImmutableRows, boolean isWalDisabled, boolean isMultitenant, boolean storeNulls, boolean isTransactional, long updateCacheFrequency, long resolvedTime) throws SQLException {
+        return metaData = metaData.addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows, isWalDisabled, isMultitenant, storeNulls, isTransactional, updateCacheFrequency, resolvedTime);
     }
 
     @Override
@@ -159,8 +189,8 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
 
     @Override
     public PMetaData removeColumn(PName tenantId, String tableName, List<PColumn> columnsToRemove, long tableTimeStamp,
-            long tableSeqNum) throws SQLException {
-        return metaData = metaData.removeColumn(tenantId, tableName, columnsToRemove, tableTimeStamp, tableSeqNum);
+            long tableSeqNum, long resolvedTime) throws SQLException {
+        return metaData = metaData.removeColumn(tenantId, tableName, columnsToRemove, tableTimeStamp, tableSeqNum, resolvedTime);
     }
 
     
@@ -175,7 +205,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
         // to get anything from the server (since we don't have a connection)
         try {
             String fullTableName = SchemaUtil.getTableName(schemaBytes, tableBytes);
-            PTable table = metaData.getTable(new PTableKey(tenantId, fullTableName));
+            PTable table = metaData.getTableRef(new PTableKey(tenantId, fullTableName)).getTable();
             return new MetaDataMutationResult(MutationCode.TABLE_ALREADY_EXISTS, 0, table, true);
         } catch (TableNotFoundException e) {
             return new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND, 0, null);
@@ -317,7 +347,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
 
     @Override
     public MutationState updateData(MutationPlan plan) throws SQLException {
-        return new MutationState(0, plan.getConnection());
+        return new MutationState(0, plan.getContext().getConnection());
     }
 
     @Override
@@ -345,7 +375,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
         String indexName = Bytes.toString(rowKeyMetadata[PhoenixDatabaseMetaData.TABLE_NAME_INDEX]);
         String indexTableName = SchemaUtil.getTableName(schemaName, indexName);
         PName tenantId = tenantIdBytes.length == 0 ? null : PNameFactory.newName(tenantIdBytes);
-        PTable index = metaData.getTable(new PTableKey(tenantId, indexTableName));
+        PTable index = metaData.getTableRef(new PTableKey(tenantId, indexTableName)).getTable();
         index = PTableImpl.makePTable(index,newState == PIndexState.USABLE ? PIndexState.ACTIVE : newState == PIndexState.UNUSABLE ? PIndexState.INACTIVE : newState);
         return new MetaDataMutationResult(MutationCode.TABLE_ALREADY_EXISTS, 0, index);
     }
@@ -360,8 +390,8 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
 
     @Override
-    public boolean hasInvalidIndexConfiguration() {
-        return false;
+    public boolean hasIndexWALCodec() {
+        return true;
     }
 
     @Override
@@ -482,7 +512,8 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
 
     @Override
-    public void clearCache() throws SQLException {
+    public long clearCache() throws SQLException {
+        return 0;
     }
 
     @Override
@@ -492,6 +523,10 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
 
     @Override
+    public TransactionSystemClient getTransactionSystemClient() {
+        return txSystemClient;
+    }
+ 
     public MetaDataMutationResult createFunction(List<Mutation> functionData, PFunction function, boolean temporary)
             throws SQLException {
         return new MetaDataMutationResult(MutationCode.FUNCTION_NOT_FOUND, 0l, null);
@@ -531,5 +566,30 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     public MetaDataMutationResult dropFunction(List<Mutation> tableMetadata, boolean ifExists)
             throws SQLException {
         return new MetaDataMutationResult(MutationCode.FUNCTION_ALREADY_EXISTS, 0, null);
+    }
+
+    @Override
+    public long getRenewLeaseThresholdMilliSeconds() {
+        return 0;
+    }
+
+    @Override
+    public boolean isRenewingLeasesEnabled() {
+        return false;
+    }
+
+    public HRegionLocation getTableRegionLocation(byte[] tableName, byte[] row) throws SQLException {
+       List<HRegionLocation> regions = tableSplits.get(Bytes.toString(tableName));
+       if (regions != null) {
+               for(HRegionLocation region: regions) {
+                       if (Bytes.compareTo(region.getRegionInfo().getStartKey(), row) <= 0
+                                       && Bytes.compareTo(region.getRegionInfo().getEndKey(), row) > 0) {
+                           return region;
+                       }
+               }
+       }
+       return new HRegionLocation(
+                       new HRegionInfo(TableName.valueOf(tableName), HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW),
+                       SERVER_NAME, -1);
     }
 }

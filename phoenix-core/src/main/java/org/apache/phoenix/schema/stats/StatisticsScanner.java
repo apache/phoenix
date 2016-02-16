@@ -17,18 +17,26 @@
  */
 package org.apache.phoenix.schema.stats;
 
+import static org.apache.phoenix.query.QueryServices.COMMIT_STATS_ASYNC;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_COMMIT_STATS_ASYNC;
+
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Callable;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
-import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.regionserver.Region;
+import org.apache.hadoop.hbase.regionserver.ScannerContext;
+import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 
 /**
@@ -41,14 +49,19 @@ public class StatisticsScanner implements InternalScanner {
     private Region region;
     private StatisticsCollector tracker;
     private ImmutableBytesPtr family;
+    private Pair<HRegionInfo, HRegionInfo> mergeRegions;
+    private final Configuration config;
 
-    public StatisticsScanner(StatisticsCollector tracker, StatisticsWriter stats, Region region,
-            InternalScanner delegate, ImmutableBytesPtr family) {
+    public StatisticsScanner(StatisticsCollector tracker, StatisticsWriter stats, RegionCoprocessorEnvironment env,
+            InternalScanner delegate, ImmutableBytesPtr family, Pair<HRegionInfo, HRegionInfo> mergeRegions) {
         this.tracker = tracker;
         this.stats = stats;
         this.delegate = delegate;
-        this.region = region;
+        this.region = env.getRegion();
         this.family = family;
+        this.mergeRegions = mergeRegions;
+        this.config = env.getConfiguration();
+        StatisticsCollectionRunTracker.getInstance(config).addCompactingRegion(region.getRegionInfo());
     }
 
     @Override
@@ -79,48 +92,66 @@ public class StatisticsScanner implements InternalScanner {
 
     @Override
     public void close() throws IOException {
-        IOException toThrow = null;
-        try {
-            // update the statistics table
-            // Just verify if this if fine
-            ArrayList<Mutation> mutations = new ArrayList<Mutation>();
-            if (LOG.isDebugEnabled()) {
-                LOG.debug("Deleting the stats for the region " + region.getRegionInfo().getRegionNameAsString()
-                        + " as part of major compaction");
-            }
-            stats.deleteStats(region.getRegionInfo().getRegionName(), this.tracker, family, mutations);
-            if (LOG.isDebugEnabled()) {
-                LOG.debug("Adding new stats for the region " + region.getRegionInfo().getRegionNameAsString()
-                        + " as part of major compaction");
-            }
-            stats.addStats(region.getRegionInfo().getRegionName(), this.tracker, family, mutations);
-            if (LOG.isDebugEnabled()) {
-                LOG.debug("Committing new stats for the region " + region.getRegionInfo().getRegionNameAsString()
-                        + " as part of major compaction");
-            }
-            stats.commitStats(mutations);
-        } catch (IOException e) {
-            LOG.error("Failed to update statistics table!", e);
-            toThrow = e;
-        } finally {
+        boolean async = config.getBoolean(COMMIT_STATS_ASYNC, DEFAULT_COMMIT_STATS_ASYNC);
+        StatisticsCollectionRunTracker collectionTracker = StatisticsCollectionRunTracker.getInstance(config);
+        StatisticsScannerCallable callable = new StatisticsScannerCallable();
+        if (!async) {
+            callable.call();
+        } else {
+            collectionTracker.runTask(callable);
+        }
+    }
+
+    private class StatisticsScannerCallable implements Callable<Void> {
+        @Override
+        public Void call() throws IOException {
+            IOException toThrow = null;
+            StatisticsCollectionRunTracker collectionTracker = StatisticsCollectionRunTracker.getInstance(config);
+            final HRegionInfo regionInfo = region.getRegionInfo();
             try {
-                stats.close();
+                // update the statistics table
+                // Just verify if this if fine
+                ArrayList<Mutation> mutations = new ArrayList<Mutation>();
+
+                if (LOG.isDebugEnabled()) {
+                    LOG.debug("Deleting the stats for the region " + regionInfo.getRegionNameAsString()
+                            + " as part of major compaction");
+                }
+                stats.deleteStats(region, tracker, family, mutations);
+                if (LOG.isDebugEnabled()) {
+                    LOG.debug("Adding new stats for the region " + regionInfo.getRegionNameAsString()
+                            + " as part of major compaction");
+                }
+                stats.addStats(tracker, family, mutations);
+                if (LOG.isDebugEnabled()) {
+                    LOG.debug("Committing new stats for the region " + regionInfo.getRegionNameAsString()
+                            + " as part of major compaction");
+                }
+                stats.commitStats(mutations);
             } catch (IOException e) {
-                if (toThrow == null) toThrow = e;
-                LOG.error("Error while closing the stats table", e);
+                LOG.error("Failed to update statistics table!", e);
+                toThrow = e;
             } finally {
-                // close the delegate scanner
                 try {
-                    delegate.close();
+                    collectionTracker.removeCompactingRegion(regionInfo);
+                    stats.close();// close the writer
+                    tracker.close();// close the tracker
                 } catch (IOException e) {
                     if (toThrow == null) toThrow = e;
-                    LOG.error("Error while closing the scanner", e);
+                    LOG.error("Error while closing the stats table", e);
                 } finally {
-                    if (toThrow != null) {
-                        throw toThrow;
+                    // close the delegate scanner
+                    try {
+                        delegate.close();
+                    } catch (IOException e) {
+                        if (toThrow == null) toThrow = e;
+                        LOG.error("Error while closing the scanner", e);
+                    } finally {
+                        if (toThrow != null) { throw toThrow; }
                     }
                 }
             }
+            return null;
         }
     }
 

@@ -65,6 +65,7 @@ import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TransactionUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -191,9 +192,13 @@ public class IndexTool extends Configured implements Tool {
             final PTable pindexTable = PhoenixRuntime.getTable(connection, qIndexTable);
 
             // this is set to ensure index tables remains consistent post population.
-            long indxTimestamp = pindexTable.getTimeStamp();
+            long maxTimeRange = pindexTable.getTimeStamp()+1;
+            if (pdataTable.isTransactional()) {
+                configuration.set(PhoenixConfigurationUtil.TX_SCN_VALUE,
+                    Long.toString(TransactionUtil.convertToNanoseconds(maxTimeRange)));
+            }
             configuration.set(PhoenixConfigurationUtil.CURRENT_SCN_VALUE,
-                Long.toString(indxTimestamp + 1));
+                Long.toString(maxTimeRange));
 
             // check if the index type is LOCAL, if so, derive and set the physicalIndexName that is
             // computed from the qDataTable name.

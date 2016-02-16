@@ -20,14 +20,17 @@ package org.apache.phoenix.pig.util;
 
 import java.io.IOException;
 import java.sql.Date;
+import java.sql.SQLException;
 import java.sql.Time;
 import java.sql.Timestamp;
 import java.sql.Types;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.phoenix.pig.writable.PhoenixPigDBWritable;
+import org.apache.phoenix.mapreduce.PhoenixRecordWritable;
+import org.apache.phoenix.schema.types.PArrayDataType;
 import org.apache.phoenix.schema.types.PBinary;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PChar;
@@ -53,6 +56,7 @@ import org.apache.phoenix.schema.types.PUnsignedTimestamp;
 import org.apache.phoenix.schema.types.PUnsignedTinyint;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.schema.types.PhoenixArray;
 import org.apache.pig.PigException;
 import org.apache.pig.ResourceSchema.ResourceFieldSchema;
 import org.apache.pig.backend.hadoop.hbase.HBaseBinaryConverter;
@@ -72,7 +76,7 @@ public final class TypeUtil {
     private static final HBaseBinaryConverter BINARY_CONVERTER = new HBaseBinaryConverter();
     private static final ImmutableMap<PDataType, Byte> PHOENIX_TO_PIG_TYPE = init();
     private static final TupleFactory TUPLE_FACTORY = TupleFactory.getInstance();
-
+    
     private TypeUtil() {}
 
     /**
@@ -157,15 +161,24 @@ public final class TypeUtil {
     }
 
     /**
-     * This method encodes a value with Phoenix data type. It begins with checking whether an object is BINARY and makes
+     * This method encodes a value with Phoenix data type. It begins with checking whether an object is TUPLE. A {@link Tuple} is mapped
+     * to a {@link PArrayDataType} .  It then checks if it is BINARY and makes
      * a call to {@link #castBytes(Object, PDataType)} to convert bytes to targetPhoenixType. It returns a {@link RuntimeException}
      * when object can not be coerced.
      * 
      * @param o
      * @param targetPhoenixType
      * @return Object
+     * @throws SQLException 
      */
-    public static Object castPigTypeToPhoenix(Object o, byte objectType, PDataType targetPhoenixType) {
+    public static Object castPigTypeToPhoenix(Object o, byte objectType, PDataType targetPhoenixType) throws SQLException {
+        
+        if(DataType.TUPLE == objectType) {
+            Tuple tuple = (Tuple)o;
+            List<Object> data = tuple.getAll();
+            return data.toArray();
+        }
+        
         PDataType inferredPType = getType(o, objectType);
 
         if (inferredPType == null) { return null; }
@@ -237,20 +250,22 @@ public final class TypeUtil {
      * @return
      * @throws IOException
      */
-    public static Tuple transformToTuple(final PhoenixPigDBWritable record, final ResourceFieldSchema[] projectedColumns)
+    public static Tuple transformToTuple(final PhoenixRecordWritable record, final ResourceFieldSchema[] projectedColumns) 
             throws IOException {
 
-        List<Object> columnValues = record.getValues();
+        Map<String, Object> columnValues = record.getResultMap();
+        
         if (columnValues == null || columnValues.size() == 0 || projectedColumns == null
                 || projectedColumns.length != columnValues.size()) { return null; }
         int numColumns = columnValues.size();
         Tuple tuple = TUPLE_FACTORY.newTuple(numColumns);
         try {
-            for (int i = 0; i < numColumns; i++) {
+            int i = 0;
+            for (Map.Entry<String,Object> entry : columnValues.entrySet()) {
                 final ResourceFieldSchema fieldSchema = projectedColumns[i];
-                Object object = columnValues.get(i);
+                Object object = entry.getValue();
                 if (object == null) {
-                    tuple.set(i, null);
+                    tuple.set(i++, null);
                     continue;
                 }
 
@@ -289,9 +304,20 @@ public final class TypeUtil {
                 case DataType.BIGINTEGER:
                     tuple.set(i, DataType.toBigInteger(object));
                     break;
+                case DataType.TUPLE:
+                {
+                    PhoenixArray array = (PhoenixArray)object;
+                    Tuple t = TUPLE_FACTORY.newTuple(array.getDimensions());;
+                    for(int j = 0 ; j < array.getDimensions() ; j++) {
+                        t.set(j,array.getElement(j));
+                    }
+                    tuple.set(i, t);
+                    break;
+                }
                 default:
                     throw new RuntimeException(String.format(" Not supported [%s] pig type", fieldSchema));
                 }
+                i++;
             }
         } catch (Exception ex) {
             final String errorMsg = String.format(" Error transforming PhoenixRecord to Tuple [%s] ", ex.getMessage());
@@ -300,7 +326,7 @@ public final class TypeUtil {
         }
         return tuple;
     }
-
+    
     /**
      * Returns the mapping pig data type for a given phoenix data type.
      * 
@@ -309,6 +335,9 @@ public final class TypeUtil {
      */
     public static Byte getPigDataTypeForPhoenixType(final PDataType phoenixDataType) {
         Preconditions.checkNotNull(phoenixDataType);
+        if(phoenixDataType instanceof PArrayDataType) {
+            return DataType.TUPLE;
+        }
         final Byte pigDataType = PHOENIX_TO_PIG_TYPE.get(phoenixDataType);
         if (LOG.isDebugEnabled()) {
             LOG.debug(String.format(" For PhoenixDataType [%s] , pigDataType is [%s] ",

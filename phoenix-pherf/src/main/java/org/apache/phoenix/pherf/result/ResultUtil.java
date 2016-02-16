@@ -18,6 +18,7 @@
 
 package org.apache.phoenix.pherf.result;
 
+import org.apache.commons.io.FileUtils;
 import org.apache.phoenix.pherf.PherfConstants;
 import org.apache.phoenix.pherf.result.file.ResultFileDetails;
 import org.apache.phoenix.pherf.result.impl.CSVFileResultHandler;
@@ -83,7 +84,12 @@ public class ResultUtil {
         ensureBaseResultDirExists();
 
         CSVResultHandler writer = null;
-        ResultFileDetails resultFileDetails = ResultFileDetails.CSV_AGGREGATE_DATA_LOAD;
+        ResultFileDetails resultFileDetails;
+        if (PhoenixUtil.isThinDriver()) {
+            resultFileDetails = ResultFileDetails.CSV_THIN_AGGREGATE_DATA_LOAD;
+        } else {
+            resultFileDetails = ResultFileDetails.CSV_AGGREGATE_DATA_LOAD;
+        }
         try {
             writer = new CSVFileResultHandler();
             writer.setResultFileDetails(resultFileDetails);
@@ -91,7 +97,11 @@ public class ResultUtil {
 
             for (TableLoadTime loadTime : dataLoadTime.getTableLoadTime()) {
                 List<ResultValue> rowValues = new ArrayList<>();
-                rowValues.add(new ResultValue(PhoenixUtil.getZookeeper()));
+                if (PhoenixUtil.isThinDriver()) {
+                    rowValues.add(new ResultValue(PhoenixUtil.getQueryServerUrl()));
+                } else {
+                    rowValues.add(new ResultValue(PhoenixUtil.getZookeeper()));
+                }
                 rowValues.addAll(loadTime.getCsvRepresentation(this));
                 Result
                         result =
@@ -146,6 +156,17 @@ public class ResultUtil {
         File baseDir = new File(directory);
         if (!baseDir.exists()) {
             baseDir.mkdir();
+        }
+    }
+    
+    /**
+     * Utility method to delete directory
+     * @throws IOException 
+     */
+    public void deleteDir(String directory) throws IOException {
+        File baseDir = new File(directory);
+        if (baseDir.exists()) {
+            FileUtils.deleteDirectory(baseDir);
         }
     }
 

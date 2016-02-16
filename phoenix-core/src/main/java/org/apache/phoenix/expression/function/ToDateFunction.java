@@ -59,6 +59,10 @@ public class ToDateFunction extends ScalarFunction {
     public ToDateFunction() {
     }
 
+    public ToDateFunction(List<Expression> children) throws SQLException {
+        this(children, null, null);
+    }
+    
     public ToDateFunction(List<Expression> children, String dateFormat, String timeZoneId) throws SQLException {
         super(children);
         init(dateFormat, timeZoneId);

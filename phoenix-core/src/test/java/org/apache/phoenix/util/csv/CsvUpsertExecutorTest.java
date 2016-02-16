@@ -17,130 +17,63 @@
  */
 package org.apache.phoenix.util.csv;
 
+import java.io.IOException;
+import java.sql.SQLException;
+import java.util.List;
+
 import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
-import org.apache.phoenix.query.BaseConnectionlessQueryTest;
-import org.apache.phoenix.schema.types.PInteger;
-import org.apache.phoenix.schema.types.PIntegerArray;
-import org.apache.phoenix.schema.types.PArrayDataType;
-import org.apache.phoenix.util.ColumnInfo;
-import org.junit.After;
+import org.apache.phoenix.util.AbstractUpsertExecutorTest;
+import org.apache.phoenix.util.UpsertExecutor;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.io.IOException;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
-import java.sql.Types;
-import java.util.List;
-
 import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.anyString;
 import static org.mockito.Matchers.eq;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
 
-public class CsvUpsertExecutorTest extends BaseConnectionlessQueryTest {
+public class CsvUpsertExecutorTest extends AbstractUpsertExecutorTest<CSVRecord, String> {
 
-    private Connection conn;
-    private List<ColumnInfo> columnInfoList;
-    private PreparedStatement preparedStatement;
-    private CsvUpsertExecutor.UpsertListener upsertListener;
+    private static final String ARRAY_SEP = ":";
 
-    private CsvUpsertExecutor upsertExecutor;
+    private UpsertExecutor<CSVRecord, String> upsertExecutor;
+
+    @Override
+    public UpsertExecutor<CSVRecord, String> getUpsertExecutor() {
+        return upsertExecutor;
+    }
+
+    @Override
+    public CSVRecord createRecord(Object... columnValues) throws IOException {
+        for (int i = 0; i < columnValues.length; i++) {
+            if (columnValues[i] == null) {
+                // Joiner.join throws on nulls, replace with empty string.
+                columnValues[i] = "";
+            }
+            if (columnValues[i] instanceof List) {
+                columnValues[i] = Joiner.on(ARRAY_SEP).join((List<?>) columnValues[i]);
+            }
+        }
+        String inputRecord = Joiner.on(',').join(columnValues);
+        return Iterables.getFirst(CSVParser.parse(inputRecord, CSVFormat.DEFAULT), null);
+    }
 
     @Before
     public void setUp() throws SQLException {
-        columnInfoList = ImmutableList.of(
-                new ColumnInfo("ID", Types.BIGINT),
-                new ColumnInfo("NAME", Types.VARCHAR),
-                new ColumnInfo("AGE", Types.INTEGER),
-                new ColumnInfo("VALUES", PIntegerArray.INSTANCE.getSqlType()));
-
-        preparedStatement = mock(PreparedStatement.class);
-        upsertListener = mock(CsvUpsertExecutor.UpsertListener.class);
-        conn = DriverManager.getConnection(getUrl());
-        upsertExecutor = new CsvUpsertExecutor(conn, columnInfoList, preparedStatement, upsertListener, ":");
-    }
-
-    @After
-    public void tearDown() throws SQLException {
-        conn.close();
+        super.setUp();
+        upsertExecutor = new CsvUpsertExecutor(conn, columnInfoList, preparedStatement,
+                upsertListener, ARRAY_SEP);
     }
 
     @Test
-    public void testExecute() throws Exception {
-        upsertExecutor.execute(createCsvRecord("123,NameValue,42,1:2:3"));
-
-        verify(upsertListener).upsertDone(1L);
-        verifyNoMoreInteractions(upsertListener);
-
-        verify(preparedStatement).setObject(1, Long.valueOf(123L));
-        verify(preparedStatement).setObject(2, "NameValue");
-        verify(preparedStatement).setObject(3, Integer.valueOf(42));
-        verify(preparedStatement).setObject(4, PArrayDataType.instantiatePhoenixArray(PInteger.INSTANCE, new Object[]{1,2,3}));
-        verify(preparedStatement).execute();
-        verifyNoMoreInteractions(preparedStatement);
-    }
-
-    @Test
-    public void testExecute_TooFewFields() throws Exception {
-        CSVRecord csvRecordWithTooFewFields = createCsvRecord("123,NameValue");
-        upsertExecutor.execute(csvRecordWithTooFewFields);
-
-        verify(upsertListener).errorOnRecord(eq(csvRecordWithTooFewFields), any(Throwable.class));
-        verifyNoMoreInteractions(upsertListener);
-    }
-
-    @Test
-    public void testExecute_TooManyFields() throws Exception {
-        CSVRecord csvRecordWithTooManyFields = createCsvRecord("123,NameValue,42,1:2:3,Garbage");
-        upsertExecutor.execute(csvRecordWithTooManyFields);
-
-        verify(upsertListener).upsertDone(1L);
-        verifyNoMoreInteractions(upsertListener);
-
-        verify(preparedStatement).setObject(1, Long.valueOf(123L));
-        verify(preparedStatement).setObject(2, "NameValue");
-        verify(preparedStatement).setObject(3, Integer.valueOf(42));
-        verify(preparedStatement).setObject(4, PArrayDataType.instantiatePhoenixArray(PInteger.INSTANCE, new Object[]{1,2,3}));
-        verify(preparedStatement).execute();
-        verifyNoMoreInteractions(preparedStatement);
-    }
-
-    @Test
-    public void testExecute_NullField() throws Exception {
-        upsertExecutor.execute(createCsvRecord("123,NameValue,,1:2:3"));
-
-        verify(upsertListener).upsertDone(1L);
-        verifyNoMoreInteractions(upsertListener);
-
-        verify(preparedStatement).setObject(1, Long.valueOf(123L));
-        verify(preparedStatement).setObject(2, "NameValue");
-        verify(preparedStatement).setNull(3, columnInfoList.get(2).getSqlType());
-        verify(preparedStatement).setObject(4, PArrayDataType.instantiatePhoenixArray(PInteger.INSTANCE, new Object[]{1,2,3}));
-        verify(preparedStatement).execute();
-        verifyNoMoreInteractions(preparedStatement);
-    }
-
-    @Test
-    public void testExecute_InvalidType() throws Exception {
-        CSVRecord csvRecordWithInvalidType = createCsvRecord("123,NameValue,ThisIsNotANumber,1:2:3");
-        upsertExecutor.execute(csvRecordWithInvalidType);
+    public void testExecute_InvalidBoolean() throws Exception {
+        CSVRecord csvRecordWithInvalidType = createRecord("123,NameValue,42,1:2:3,NotABoolean");
+        upsertExecutor.execute(ImmutableList.of(csvRecordWithInvalidType));
 
         verify(upsertListener).errorOnRecord(eq(csvRecordWithInvalidType), any(Throwable.class));
-        verifyNoMoreInteractions(upsertListener);
-    }
-
-    private CSVRecord createCsvRecord(String...columnValues) throws IOException {
-        String inputRecord = Joiner.on(',').join(columnValues);
-        return Iterables.getFirst(CSVParser.parse(inputRecord, CSVFormat.DEFAULT), null);
     }
 }

@@ -31,7 +31,6 @@ import java.util.logging.Logger;
 
 import javax.annotation.concurrent.Immutable;
 
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -55,7 +54,7 @@ import com.google.common.collect.Maps;
  * @since 0.1
  */
 @Immutable
-public abstract class PhoenixEmbeddedDriver implements Driver, org.apache.phoenix.jdbc.Jdbc7Shim.Driver, SQLCloseable {
+public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
     /**
      * The protocol for Phoenix Network Client 
      */ 
@@ -84,7 +83,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, org.apache.phoeni
         return DEFFAULT_PROPS;
     }
     
-    abstract public QueryServices getQueryServices();
+    abstract public QueryServices getQueryServices() throws SQLException;
      
     @Override
     public boolean acceptsURL(String url) throws SQLException {
@@ -127,11 +126,15 @@ public abstract class PhoenixEmbeddedDriver implements Driver, org.apache.phoeni
             return null;
         }
 
-        Properties augmentedInfo = PropertiesUtil.deepCopy(info);
-        augmentedInfo.putAll(getDefaultProps().asMap());
-        ConnectionQueryServices connectionServices = getConnectionQueryServices(url, augmentedInfo);
-        PhoenixConnection connection = connectionServices.connect(url, augmentedInfo);
-        return connection;
+        return createConnection(url, info);
+    }
+
+    protected final Connection createConnection(String url, Properties info) throws SQLException {
+      Properties augmentedInfo = PropertiesUtil.deepCopy(info);
+      augmentedInfo.putAll(getDefaultProps().asMap());
+      ConnectionQueryServices connectionServices = getConnectionQueryServices(url, augmentedInfo);
+      PhoenixConnection connection = connectionServices.connect(url, augmentedInfo);
+      return connection;
     }
 
     /**
@@ -186,6 +189,10 @@ public abstract class PhoenixEmbeddedDriver implements Driver, org.apache.phoeni
             return new SQLExceptionInfo.Builder(SQLExceptionCode.MALFORMED_CONNECTION_URL)
             .setMessage(url).build().buildException();
         }
+        
+		public String getZookeeperConnectionString() {
+			return getZookeeperQuorum() + ":" + getPort();
+		}
         
         /**
          * Detect url with quorum:1,quorum:2 as HBase does not handle different port numbers

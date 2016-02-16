@@ -148,6 +148,7 @@ public class PUnsignedDouble extends PRealNumber<PDouble> {
       checkForSufficientLength(b, o, Bytes.SIZEOF_DOUBLE);
       if (sortOrder == SortOrder.DESC) {
         b = SortOrder.invert(b, o, new byte[Bytes.SIZEOF_DOUBLE], 0, Bytes.SIZEOF_DOUBLE);
+        o = 0;
       }
       double v = Bytes.toDouble(b, o);
       if (v < 0) {

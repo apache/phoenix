@@ -52,12 +52,14 @@ import java.util.Set;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Delete;
+import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -100,6 +102,7 @@ import com.google.common.collect.Sets;
 public class UpgradeUtil {
     private static final Logger logger = LoggerFactory.getLogger(UpgradeUtil.class);
     private static final byte[] SEQ_PREFIX_BYTES = ByteUtil.concat(QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes("_SEQ_"));
+    public static final byte[] UPGRADE_TO_4_7_COLUMN_NAME = Bytes.toBytes("UPGRADE_TO_4_7");
     
     public static String UPSERT_BASE_COLUMN_COUNT_IN_HEADER_ROW = "UPSERT "
             + "INTO SYSTEM.CATALOG "
@@ -1214,5 +1217,66 @@ public class UpgradeUtil {
         put.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                 MetaDataEndpointImpl.ROW_KEY_ORDER_OPTIMIZABLE_BYTES, PBoolean.INSTANCE.toBytes(true));
         tableMetadata.add(put);
+    }
+
+    public static boolean truncateStats(HTableInterface metaTable, HTableInterface statsTable)
+            throws IOException, InterruptedException {
+        byte[] statsTableKey = SchemaUtil.getTableKey(null, PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME,
+                PhoenixDatabaseMetaData.SYSTEM_STATS_TABLE);
+        List<Cell> columnCells = metaTable.get(new Get(statsTableKey))
+                .getColumnCells(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES);
+        long timestamp;
+        if (!columnCells.isEmpty() && (timestamp = columnCells.get(0)
+                .getTimestamp()) < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0) {
+
+            KeyValue upgradeKV = KeyValueUtil.newKeyValue(statsTableKey, PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                    UPGRADE_TO_4_7_COLUMN_NAME, timestamp, PBoolean.INSTANCE.toBytes(true));
+            Put upgradePut = new Put(statsTableKey);
+            upgradePut.add(upgradeKV);
+
+            // check for null in UPGRADE_TO_4_7_COLUMN_NAME in checkAndPut so that only single client
+            // drop the rows of SYSTEM.STATS
+            if (metaTable.checkAndPut(statsTableKey, PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                    UPGRADE_TO_4_7_COLUMN_NAME, null, upgradePut)) {
+                List<Mutation> mutations = Lists.newArrayListWithExpectedSize(1000);
+                Scan scan = new Scan();
+                scan.setRaw(true);
+                scan.setMaxVersions();
+                ResultScanner statsScanner = statsTable.getScanner(scan);
+                Result r;
+                mutations.clear();
+                int count = 0;
+                while ((r = statsScanner.next()) != null) {
+                    Delete delete = null;
+                    for (KeyValue keyValue : r.raw()) {
+                        if (KeyValue.Type.codeToType(keyValue.getType()) == KeyValue.Type.Put) {
+                            if (delete == null) {
+                                delete = new Delete(keyValue.getRow());
+                            }
+                            KeyValue deleteKeyValue = new KeyValue(keyValue.getRowArray(), keyValue.getRowOffset(),
+                                    keyValue.getRowLength(), keyValue.getFamilyArray(), keyValue.getFamilyOffset(),
+                                    keyValue.getFamilyLength(), keyValue.getQualifierArray(),
+                                    keyValue.getQualifierOffset(), keyValue.getQualifierLength(),
+                                    keyValue.getTimestamp(), KeyValue.Type.Delete, ByteUtil.EMPTY_BYTE_ARRAY, 0, 0);
+                            delete.addDeleteMarker(deleteKeyValue);
+                        }
+                    }
+                    if (delete != null) {
+                        mutations.add(delete);
+                        if (count > 10) {
+                            statsTable.batch(mutations);
+                            mutations.clear();
+                            count = 0;
+                        }
+                        count++;
+                    }
+                }
+                if (!mutations.isEmpty()) {
+                    statsTable.batch(mutations);
+                }
+                return true;
+            }
+        }
+        return false;
     }
 }

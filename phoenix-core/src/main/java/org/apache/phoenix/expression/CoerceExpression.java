@@ -50,8 +50,14 @@ public class CoerceExpression extends BaseSingleExpression {
         return new CoerceExpression(expression, toType);
     }
     
+    public static Expression create(Expression expression, PDataType toType, SortOrder toSortOrder, Integer maxLength) throws SQLException {
+        return create(expression, toType, toSortOrder, maxLength, true);
+    }
+    
     public static Expression create(Expression expression, PDataType toType, SortOrder toSortOrder, Integer maxLength, boolean rowKeyOrderOptimizable) throws SQLException {
-        if (toType == expression.getDataType() && toSortOrder == expression.getSortOrder()) {
+        if (    toType == expression.getDataType() && 
+                toSortOrder == expression.getSortOrder() && 
+                (maxLength == null || maxLength.equals(expression.getMaxLength()))   ) {
             return expression;
         }
         return new CoerceExpression(expression, toType, toSortOrder, maxLength, rowKeyOrderOptimizable);

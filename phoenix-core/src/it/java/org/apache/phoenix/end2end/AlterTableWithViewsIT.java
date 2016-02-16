@@ -34,29 +34,43 @@ import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.coprocessor.PhoenixTransactionalProcessor;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
-import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import com.google.common.base.Objects;
+import com.google.common.collect.Maps;
 
 public class AlterTableWithViewsIT extends BaseHBaseManagedTimeIT {
+	
+	@BeforeClass
+    @Shadower(classBeingShadowed = BaseHBaseManagedTimeIT.class)
+    public static void doSetup() throws Exception {
+        Map<String,String> props = Maps.newHashMapWithExpectedSize(1);
+        props.put(QueryServices.TRANSACTIONS_ENABLED, Boolean.toString(true));
+        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+    }
     
     @Test
     public void testAddNewColumnsToBaseTableWithViews() throws Exception {
@@ -778,7 +792,7 @@ public class AlterTableWithViewsIT extends BaseHBaseManagedTimeIT {
     
     private boolean checkColumnPartOfPk(PhoenixConnection conn, String columnName, String tableName) throws SQLException {
         String normalizedTableName = SchemaUtil.normalizeIdentifier(tableName);
-        PTable table = conn.getMetaDataCache().getTable(new PTableKey(conn.getTenantId(), normalizedTableName));
+        PTable table = conn.getTable(new PTableKey(conn.getTenantId(), normalizedTableName));
         List<PColumn> pkCols = table.getPKColumns();
         String normalizedColumnName = SchemaUtil.normalizeIdentifier(columnName);
         for (PColumn pkCol : pkCols) {
@@ -791,7 +805,7 @@ public class AlterTableWithViewsIT extends BaseHBaseManagedTimeIT {
     
     private int getIndexOfPkColumn(PhoenixConnection conn, String columnName, String tableName) throws SQLException {
         String normalizedTableName = SchemaUtil.normalizeIdentifier(tableName);
-        PTable table = conn.getMetaDataCache().getTable(new PTableKey(conn.getTenantId(), normalizedTableName));
+        PTable table = conn.getTable(new PTableKey(conn.getTenantId(), normalizedTableName));
         List<PColumn> pkCols = table.getPKColumns();
         String normalizedColumnName = SchemaUtil.normalizeIdentifier(columnName);
         int i = 0;
@@ -1096,13 +1110,44 @@ public class AlterTableWithViewsIT extends BaseHBaseManagedTimeIT {
         }
     }
     
+    @Test
+    public void testMakeBaseTableTransactional() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {       
+            conn.createStatement().execute("CREATE TABLE IF NOT EXISTS TABLEWITHVIEW ("
+                    + " ID char(1) NOT NULL,"
+                    + " COL1 integer NOT NULL,"
+                    + " COL2 bigint NOT NULL,"
+                    + " CONSTRAINT NAME_PK PRIMARY KEY (ID, COL1, COL2)"
+                    + " )");
+            assertTableDefinition(conn, "TABLEWITHVIEW", PTableType.TABLE, null, 0, 3, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, "ID", "COL1", "COL2");
+            
+            conn.createStatement().execute("CREATE VIEW VIEWOFTABLE ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR ) AS SELECT * FROM TABLEWITHVIEW");
+            assertTableDefinition(conn, "VIEWOFTABLE", PTableType.VIEW, "TABLEWITHVIEW", 0, 5, 3, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
+            
+            HTableInterface htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes("TABLEWITHVIEW"));
+            assertFalse(htable.getTableDescriptor().getCoprocessors().contains(PhoenixTransactionalProcessor.class.getName()));
+            assertFalse(conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, "TABLEWITHVIEW")).isTransactional());
+            assertFalse(conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, "VIEWOFTABLE")).isTransactional());
+            
+            // make the base table transactional
+            conn.createStatement().execute("ALTER TABLE TABLEWITHVIEW SET TRANSACTIONAL=true");
+            // query the view to force the table cache to be updated
+            conn.createStatement().execute("SELECT * FROM VIEWOFTABLE");
+            htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes("TABLEWITHVIEW"));
+            assertTrue(htable.getTableDescriptor().getCoprocessors().contains(PhoenixTransactionalProcessor.class.getName()));
+            assertTrue(conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, "TABLEWITHVIEW")).isTransactional());
+            assertTrue(conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, "VIEWOFTABLE")).isTransactional());
+        } 
+    
+    }
+    
     private static long getTableSequenceNumber(PhoenixConnection conn, String tableName) throws SQLException {
-        PTable table = conn.getMetaDataCache().getTable(new PTableKey(conn.getTenantId(), SchemaUtil.normalizeIdentifier(tableName)));
+        PTable table = conn.getTable(new PTableKey(conn.getTenantId(), SchemaUtil.normalizeIdentifier(tableName)));
         return table.getSequenceNumber();
     }
     
     private static short getMaxKeySequenceNumber(PhoenixConnection conn, String tableName) throws SQLException {
-        PTable table = conn.getMetaDataCache().getTable(new PTableKey(conn.getTenantId(), SchemaUtil.normalizeIdentifier(tableName)));
+        PTable table = conn.getTable(new PTableKey(conn.getTenantId(), SchemaUtil.normalizeIdentifier(tableName)));
         return SchemaUtil.getMaxKeySeq(table);
     }
     

@@ -28,15 +28,12 @@
   <parent>
     <groupId>org.apache.phoenix</groupId>
     <artifactId>phoenix</artifactId>
-    <version>4.7.0-HBase-1.1-SNAPSHOT</version>
+    <version>4.7.0-HBase-1.1</version>
   </parent>
   <artifactId>phoenix-spark</artifactId>
   <name>Phoenix - Spark</name>
 
   <properties>
-    <spark.version>1.5.0</spark.version>
-    <scala.version>2.10.4</scala.version>
-    <scala.binary.version>2.10</scala.binary.version>
     <top.dir>${project.basedir}/..</top.dir>
   </properties>
 
@@ -477,6 +474,12 @@
       <version>${hbase.version}</version>
       <type>test-jar</type>
       <scope>test</scope>
+    </dependency>
+    <dependency>
+        <groupId>co.cask.tephra</groupId>
+        <artifactId>tephra-core</artifactId>
+        <type>test-jar</type>
+        <scope>test</scope>
     </dependency>
   </dependencies>
 

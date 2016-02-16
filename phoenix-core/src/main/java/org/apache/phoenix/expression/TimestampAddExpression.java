@@ -67,7 +67,7 @@ public class TimestampAddExpression extends AddExpression {
             if(type == PTimestamp.INSTANCE || type == PUnsignedTimestamp.INSTANCE) {
                 value = (BigDecimal)(PDecimal.INSTANCE.toObject(ptr, type, sortOrder));
             } else if (type.isCoercibleTo(PDecimal.INSTANCE)) {
-                value = (((BigDecimal) PDecimal.INSTANCE.toObject(ptr, sortOrder)).multiply(QueryConstants.BD_MILLIS_IN_DAY)).setScale(6, RoundingMode.HALF_UP);
+                value = (((BigDecimal) PDecimal.INSTANCE.toObject(ptr, type, sortOrder)).multiply(QueryConstants.BD_MILLIS_IN_DAY)).setScale(6, RoundingMode.HALF_UP);
             } else if (type.isCoercibleTo(PDouble.INSTANCE)) {
                 value = ((BigDecimal.valueOf(type.getCodec().decodeDouble(ptr, sortOrder))).multiply(QueryConstants.BD_MILLIS_IN_DAY)).setScale(6, RoundingMode.HALF_UP);
             } else {

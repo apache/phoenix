@@ -58,4 +58,6 @@ public interface PColumn extends PDatum {
      * @return whether this column represents/stores the hbase cell timestamp.
      */
     boolean isRowTimestamp();
+    
+    boolean isDynamic();
 }

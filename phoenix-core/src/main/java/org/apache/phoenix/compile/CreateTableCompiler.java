@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.compile;
 
-import java.sql.ParameterMetaData;
 import java.sql.SQLException;
 import java.util.BitSet;
 import java.util.Collections;
@@ -41,6 +40,7 @@ import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.expression.visitor.StatelessTraverseNoExpressionVisitor;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.parse.BindParseNode;
 import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.parse.CreateTableStatement;
@@ -69,9 +69,11 @@ import com.google.common.collect.Iterators;
 public class CreateTableCompiler {
     private static final PDatum VARBINARY_DATUM = new VarbinaryDatum();
     private final PhoenixStatement statement;
+    private final Operation operation;
     
-    public CreateTableCompiler(PhoenixStatement statement) {
+    public CreateTableCompiler(PhoenixStatement statement, Operation operation) {
         this.statement = statement;
+        this.operation = operation;
     }
 
     public MutationPlan compile(final CreateTableStatement create) throws SQLException {
@@ -118,8 +120,8 @@ public class CreateTableCompiler {
                 }
                 if (viewTypeToBe != ViewType.MAPPED) {
                     Long scn = connection.getSCN();
-                    connectionToBe = scn != null ? connection :
-                        // If we haved no SCN on our connection, freeze the SCN at when
+                    connectionToBe = (scn != null || tableRef.getTable().isTransactional()) ? connection :
+                        // If we haved no SCN on our connection and the base table is not transactional, freeze the SCN at when
                         // the base table was resolved to prevent any race condition on
                         // the error checking we do for the base table. The only potential
                         // issue is if the base table lives on a different region server
@@ -130,8 +132,8 @@ public class CreateTableCompiler {
                             // on our connection.
                             new DelegateConnectionQueryServices(connection.getQueryServices()) {
                                 @Override
-                                public PMetaData addTable(PTable table) throws SQLException {
-                                    return connection.addTable(table);
+                                public PMetaData addTable(PTable table, long resolvedTime) throws SQLException {
+                                    return connection.addTable(table, resolvedTime);
                                 }
                             },
                             connection, tableRef.getTimeStamp());
@@ -173,12 +175,7 @@ public class CreateTableCompiler {
         final MetaDataClient client = new MetaDataClient(connectionToBe);
         final PTable parent = parentToBe;
         
-        return new MutationPlan() {
-
-            @Override
-            public ParameterMetaData getParameterMetaData() {
-                return context.getBindManager().getParameterMetaData();
-            }
+        return new BaseMutationPlan(context, operation) {
 
             @Override
             public MutationState execute() throws SQLException {
@@ -194,16 +191,6 @@ public class CreateTableCompiler {
             @Override
             public ExplainPlan getExplainPlan() throws SQLException {
                 return new ExplainPlan(Collections.singletonList("CREATE TABLE"));
-            }
-
-            @Override
-            public PhoenixConnection getConnection() {
-                return connection;
-            }
-            
-            @Override
-            public StatementContext getContext() {
-                return context;
             }
         };
     }

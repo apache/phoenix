@@ -33,6 +33,7 @@ import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
 import org.apache.phoenix.pherf.PherfConstants;
+import org.apache.phoenix.pherf.PherfConstants.CompareType;
 import org.apache.phoenix.pherf.result.file.ResultFileDetails;
 
 /**
@@ -41,13 +42,15 @@ import org.apache.phoenix.pherf.result.file.ResultFileDetails;
 public class GoogleChartGenerator {
 
 	private String[] labels;
+	private CompareType compareType;
 	private final Map<String, DataNode> datanodes = new TreeMap<String, DataNode>();
 	private final PherfConstants constants = PherfConstants.create();
 	private final String resultDir = constants.getProperty("pherf.default.results.dir");
 	private final double threshold = Double.parseDouble(constants.getProperty("pherf.default.comparison.threshold"));
 
-	public GoogleChartGenerator(String labels) {
+	public GoogleChartGenerator(String labels, CompareType compareType) {
 		this.setLabels(labels);
+		this.setCompareType(compareType);
 	}
 	
 	String[] getLabels() {
@@ -60,6 +63,14 @@ public class GoogleChartGenerator {
 
 	void setLabels(String labels) {
 		this.labels = labels.split(",");
+	}
+	
+	CompareType getCompareType() {
+		return this.compareType;
+	}
+	
+    void setCompareType(CompareType compareType) {
+		this.compareType = compareType;
 	}
 	
 	public void readAndRender() {
@@ -122,13 +133,13 @@ public class GoogleChartGenerator {
     	for (Map.Entry<String, DataNode> dn : datanodes.entrySet()) {    	   	
         	for (Map.Entry<String, Node> node : dn.getValue().getDataSet().entrySet()) {
         		if (timeToCompare == -1) {
-        			timeToCompare = node.getValue().getMinTime();
+        			timeToCompare = node.getValue().getTime(getCompareType());
         			if (timeToCompare < 10) { // extremely small query time in ms therefore don't compare
         				return true;
         			}
         		}
-				if ((((double) (timeToCompare - node.getValue().getMinTime())) / (double) node
-						.getValue().getMinTime()) > threshold) {
+				if ((((double) (timeToCompare - node.getValue().getTime(getCompareType()))) / (double) node
+						.getValue().getTime(getCompareType())) > threshold) {
 					return false;
 				}
         	}
@@ -158,7 +169,7 @@ public class GoogleChartGenerator {
     		lastKeyPrefix = currentKeyPrefix;
         	sb.append("['" + dn.getKey() + "'");
         	for (Map.Entry<String, Node> nodeSet : dn.getValue().getDataSet().entrySet()) {
-        		sb.append (", " + nodeSet.getValue().getMinTime());
+        		sb.append (", " + nodeSet.getValue().getTime(getCompareType()));
         		sb.append (",'" + getToolTipAsHTML(dn.getValue().getDataSet()) + "'");
         	}
         	sb.append("],\n");
@@ -220,7 +231,7 @@ public class GoogleChartGenerator {
         		+ node.getQueryAsHTML();
     }
     
-    /**
+	/**
      * DataNode to store results to render and compare 
      */
     class DataNode {
@@ -271,6 +282,10 @@ public class GoogleChartGenerator {
 		void setExplainPlan(String explainPlan) {
 			this.explainPlan = explainPlan;
 		}
+		long getTime(CompareType compareType) {
+			return (compareType == CompareType.AVERAGE ? getAvgTime() : getMinTime());
+		}
+		
 		long getMinTime() {
 			if (minTime <= 2) 
 				return 2;

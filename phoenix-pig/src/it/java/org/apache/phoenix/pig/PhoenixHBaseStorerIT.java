@@ -19,69 +19,30 @@
  */
 package org.apache.phoenix.pig;
 
-import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
-import static org.apache.phoenix.util.TestUtil.LOCALHOST;
+import static org.apache.pig.builtin.mock.Storage.tuple;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
+import java.sql.Array;
 import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.Collection;
 
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.util.SchemaUtil;
-import org.apache.pig.ExecType;
-import org.apache.pig.PigServer;
 import org.apache.pig.backend.executionengine.ExecJob.JOB_STATUS;
 import org.apache.pig.builtin.mock.Storage;
 import org.apache.pig.builtin.mock.Storage.Data;
 import org.apache.pig.data.DataByteArray;
 import org.apache.pig.data.Tuple;
-import org.apache.pig.data.TupleFactory;
 import org.joda.time.DateTime;
-import org.junit.After;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Test;
 
 import com.google.common.collect.Lists;
 
 
-public class PhoenixHBaseStorerIT extends BaseHBaseManagedTimeIT {
-
-    private static TupleFactory tupleFactory;
-    private static Connection conn;
-    private static PigServer pigServer;
-    private static String zkQuorum;
-    
-    @BeforeClass
-    public static void setUpBeforeClass() throws Exception {
-        conn = DriverManager.getConnection(getUrl());
-        zkQuorum = LOCALHOST + JDBC_PROTOCOL_SEPARATOR + getZKClientPort(getTestClusterConfig());
-        // Pig variables
-        tupleFactory = TupleFactory.getInstance();
-    }
-    
-    @Before
-    public void setUp() throws Exception {
-        pigServer = new PigServer(ExecType.LOCAL, getTestClusterConfig());
-    }
-    
-    @After
-    public void tearDown() throws Exception {
-         pigServer.shutdown();
-    }
-
-    @AfterClass
-    public static void tearDownAfterClass() throws Exception {
-        conn.close();
-    }
-
+public class PhoenixHBaseStorerIT extends BasePigIT {
     /**
      * Basic test - writes data to a Phoenix table and compares the data written
      * to expected
@@ -294,5 +255,40 @@ public class PhoenixHBaseStorerIT extends BaseHBaseManagedTimeIT {
         assertEquals(now, rs.getTime(3).getTime());
         assertEquals(now, rs.getTimestamp(4).getTime());
      
+    }
+    
+    @Test
+    public void testStoreForArray() throws Exception {
+     
+        final String tableName = "TABLE5";
+        final Statement stmt = conn.createStatement();
+        String ddl = "CREATE TABLE  " + tableName
+                + " ( ID INTEGER PRIMARY KEY, dbl double array[], a_varchar_array varchar array)";
+      
+        stmt.execute(ddl);
+      
+        final Data data = Storage.resetData(pigServer);
+        data.set("in",  tuple(1, tuple(2.2)),
+                        tuple(2, tuple(2.4, 2.5)),
+                        tuple(3, tuple(2.3)));
+
+        pigServer.setBatchOn();
+        pigServer.registerQuery("A = LOAD 'in' USING mock.Storage() as (id:int, dbl:tuple());");
+        pigServer.registerQuery("Store A into 'hbase://" + tableName + "/ID,DBL"
+                               + "' using " + PhoenixHBaseStorage.class.getName() + "('"
+                                + zkQuorum + "', '-batchSize 1000');");
+
+        if (pigServer.executeBatch().get(0).getStatus() != JOB_STATUS.COMPLETED) {
+             throw new RuntimeException("Job failed", pigServer.executeBatch()
+                    .get(0).getException());
+        }
+
+        final ResultSet rs = stmt
+                .executeQuery(String.format("SELECT id , dbl FROM %s where id = 2" , tableName));
+
+        assertTrue(rs.next());
+        assertEquals(2, rs.getInt(1));
+        Array expectedDoubleArr = conn.createArrayOf("DOUBLE", new Double[] { 2.4, 2.5 });
+        assertEquals(expectedDoubleArr,rs.getArray(2));
     }
 }

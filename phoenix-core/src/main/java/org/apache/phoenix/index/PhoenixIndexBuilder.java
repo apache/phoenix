@@ -23,16 +23,21 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.phoenix.compile.ScanRanges;
-import org.apache.phoenix.hbase.index.covered.CoveredColumnsIndexBuilder;
+import org.apache.phoenix.filter.SkipScanFilter;
+import org.apache.phoenix.hbase.index.covered.IndexMetaData;
+import org.apache.phoenix.hbase.index.covered.NonTxIndexBuilder;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
+import org.apache.phoenix.hbase.index.write.IndexWriter;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.types.PVarbinary;
 
@@ -41,13 +46,33 @@ import com.google.common.collect.Lists;
 /**
  * Index builder for covered-columns index that ties into phoenix for faster use.
  */
-public class PhoenixIndexBuilder extends CoveredColumnsIndexBuilder {
+public class PhoenixIndexBuilder extends NonTxIndexBuilder {
 
     @Override
-    public void batchStarted(MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
+    public IndexMetaData getIndexMetaData(MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
+        return new PhoenixIndexMetaData(env, miniBatchOp.getOperation(0).getAttributesMap());
+    }
+
+    protected PhoenixIndexCodec getCodec() {
+        return (PhoenixIndexCodec)codec;
+    }
+
+    @Override
+    public void setup(RegionCoprocessorEnvironment env) throws IOException {
+        super.setup(env);
+        Configuration conf = env.getConfiguration();
+        // Install handler that will attempt to disable the index first before killing the region
+        // server
+        conf.setIfUnset(IndexWriter.INDEX_FAILURE_POLICY_CONF_KEY,
+            PhoenixIndexFailurePolicy.class.getName());
+    }
+
+    @Override
+    public void batchStarted(MiniBatchOperationInProgress<Mutation> miniBatchOp, IndexMetaData context) throws IOException {
         // The entire purpose of this method impl is to get the existing rows for the
         // table rows being indexed into the block cache, as the index maintenance code
-        // does a point scan per row
+        // does a point scan per row.
+        List<IndexMaintainer> indexMaintainers = ((PhoenixIndexMetaData)context).getIndexMaintainers();
         List<KeyRange> keys = Lists.newArrayListWithExpectedSize(miniBatchOp.size());
         Map<ImmutableBytesWritable, IndexMaintainer> maintainers =
                 new HashMap<ImmutableBytesWritable, IndexMaintainer>();
@@ -55,10 +80,9 @@ public class PhoenixIndexBuilder extends CoveredColumnsIndexBuilder {
         for (int i = 0; i < miniBatchOp.size(); i++) {
             Mutation m = miniBatchOp.getOperation(i);
             keys.add(PVarbinary.INSTANCE.getKeyRange(m.getRow()));
-            List<IndexMaintainer> indexMaintainers = getCodec().getIndexMaintainers(m.getAttributesMap());
-
+            
             for(IndexMaintainer indexMaintainer: indexMaintainers) {
-                if (indexMaintainer.isImmutableRows() && indexMaintainer.isLocalIndex()) continue;
+                if (indexMaintainer.isImmutableRows()) continue;
                 indexTableName.set(indexMaintainer.getIndexTableName());
                 if (maintainers.get(indexTableName) != null) continue;
                 maintainers.put(indexTableName, indexMaintainer);
@@ -69,8 +93,8 @@ public class PhoenixIndexBuilder extends CoveredColumnsIndexBuilder {
         Scan scan = IndexManagementUtil.newLocalStateScan(new ArrayList<IndexMaintainer>(maintainers.values()));
         ScanRanges scanRanges = ScanRanges.createPointLookup(keys);
         scanRanges.initializeScan(scan);
-        scan.setFilter(scanRanges.getSkipScanFilter());
-        Region region = this.env.getRegion();
+        scan.setFilter(new SkipScanFilter(scanRanges.getSkipScanFilter(),true));
+        Region region = env.getRegion();
         RegionScanner scanner = region.getScanner(scan);
         // Run through the scanner using internal nextRaw method
         region.startRegionOperation();
@@ -92,14 +116,5 @@ public class PhoenixIndexBuilder extends CoveredColumnsIndexBuilder {
                 region.closeRegionOperation();
             }
         }
-    }
-
-    private PhoenixIndexCodec getCodec() {
-        return (PhoenixIndexCodec)this.codec;
-    }
-
-    @Override
-    public byte[] getBatchId(Mutation m){
-        return this.codec.getBatchId(m);
     }
 }

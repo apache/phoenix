@@ -35,6 +35,8 @@ nodeClass=CurrentDateParseNode.class, args= {})
 public abstract class NowFunction extends ScalarFunction {
     
     public static final String NAME = "NOW";
+
+    public NowFunction() {}
     
     public NowFunction(List<Expression> children) throws SQLException {
         super(children);

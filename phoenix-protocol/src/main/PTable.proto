@@ -48,6 +48,7 @@ message PColumn {
   optional bool viewReferenced = 11;
   optional string expression = 12;
   optional bool isRowTimestamp = 13;
+  optional bool isDynamic = 14;
 }
 
 message PTableStats {
@@ -86,4 +87,7 @@ message PTable {
   optional bool storeNulls = 24;
   optional int32 baseColumnCount = 25;
   optional bool rowKeyOrderOptimizable = 26;
+  optional bool transactional = 27;
+  optional int64 updateCacheFrequency = 28;
+  optional int64 indexDisableTimestamp = 29;
 }

@@ -57,6 +57,7 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.util.ScanUtil;
 
 
 
@@ -143,7 +144,11 @@ public class AggregatePlan extends BaseQueryPlan {
         ParallelIteratorFactory innerFactory;
         QueryServices services = context.getConnection().getQueryServices();
         if (groupBy.isEmpty() || groupBy.isOrderPreserving()) {
-            innerFactory = new SpoolingResultIterator.SpoolingResultIteratorFactory(services);
+            if (ScanUtil.isPacingScannersPossible(context)) {
+                innerFactory = ParallelIteratorFactory.NOOP_FACTORY;
+            } else {
+                innerFactory = new SpoolingResultIterator.SpoolingResultIteratorFactory(services);
+            }
         } else {
             innerFactory = new OrderingResultIteratorFactory(services);
         }

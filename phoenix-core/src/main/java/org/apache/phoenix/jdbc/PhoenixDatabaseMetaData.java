@@ -73,32 +73,10 @@ import com.google.common.collect.Lists;
 
 /**
  *
- * JDBC DatabaseMetaData implementation of Phoenix reflecting read-only nature of driver.
- * Supported metadata methods include:
- * {@link #getTables(String, String, String, String[])}
- * {@link #getColumns(String, String, String, String)}
- * {@link #getTableTypes()}
- * {@link #getPrimaryKeys(String, String, String)}
- * {@link #getIndexInfo(String, String, String, boolean, boolean)}
- * {@link #getSchemas()}
- * {@link #getSchemas(String, String)}
- * {@link #getDatabaseMajorVersion()}
- * {@link #getDatabaseMinorVersion()}
- * {@link #getClientInfoProperties()}
- * {@link #getConnection()}
- * {@link #getDatabaseProductName()}
- * {@link #getDatabaseProductVersion()}
- * {@link #getDefaultTransactionIsolation()}
- * {@link #getDriverName()}
- * {@link #getDriverVersion()}
- * {@link #getSuperTables(String, String, String)}
- * {@link #getCatalogs()}
- * Other ResultSet methods return an empty result set.
- *
- *
- * @since 0.1
+ * JDBC DatabaseMetaData implementation of Phoenix.
+ * 
  */
-public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.phoenix.jdbc.Jdbc7Shim.DatabaseMetaData {
+public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final int INDEX_NAME_INDEX = 4; // Shared with FAMILY_NAME_INDEX
     public static final int FAMILY_NAME_INDEX = 4;
     public static final int COLUMN_NAME_INDEX = 3;
@@ -106,22 +84,24 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
     public static final int SCHEMA_NAME_INDEX = 1;
     public static final int TENANT_ID_INDEX = 0;
 
-
     public static final int TYPE_INDEX = 2;
     public static final int FUNTION_NAME_INDEX = 1;
-    
 
     public static final String SYSTEM_CATALOG_SCHEMA = QueryConstants.SYSTEM_SCHEMA_NAME;
     public static final byte[] SYSTEM_CATALOG_SCHEMA_BYTES = QueryConstants.SYSTEM_SCHEMA_NAME_BYTES;
+    public static final String SYSTEM_SCHEMA_NAME = QueryConstants.SYSTEM_SCHEMA_NAME;
+    public static final byte[] SYSTEM_SCHEMA_NAME_BYTES = QueryConstants.SYSTEM_SCHEMA_NAME_BYTES;
+
     public static final String SYSTEM_CATALOG_TABLE = "CATALOG";
     public static final byte[] SYSTEM_CATALOG_TABLE_BYTES = Bytes.toBytes(SYSTEM_CATALOG_TABLE);
     public static final String SYSTEM_CATALOG = SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"";
-    public static final String SYSTEM_CATALOG_NAME = SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA, SYSTEM_CATALOG_TABLE);
+    public static final String SYSTEM_CATALOG_NAME = SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA,
+            SYSTEM_CATALOG_TABLE);
     public static final byte[] SYSTEM_CATALOG_NAME_BYTES = Bytes.toBytes(SYSTEM_CATALOG_NAME);
     public static final String SYSTEM_STATS_TABLE = "STATS";
     public static final String SYSTEM_STATS_NAME = SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA, SYSTEM_STATS_TABLE);
     public static final byte[] SYSTEM_STATS_NAME_BYTES = Bytes.toBytes(SYSTEM_STATS_NAME);
-
+    public static final byte[] SYSTEM_STATS_TABLE_BYTES = Bytes.toBytes(SYSTEM_STATS_TABLE);
     public static final String SYSTEM_CATALOG_ALIAS = "\"SYSTEM.TABLE\"";
 
     public static final String TABLE_NAME = "TABLE_NAME";
@@ -294,6 +274,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
     public static final byte[] MAX_KEY_BYTES = Bytes.toBytes(MAX_KEY);
     public static final String LAST_STATS_UPDATE_TIME = "LAST_STATS_UPDATE_TIME";
     public static final byte[] LAST_STATS_UPDATE_TIME_BYTES = Bytes.toBytes(LAST_STATS_UPDATE_TIME);
+    public static final String GUIDE_POST_KEY = "GUIDE_POST_KEY";
 
     public static final String PARENT_TENANT_ID = "PARENT_TENANT_ID";
     public static final byte[] PARENT_TENANT_ID_BYTES = Bytes.toBytes(PARENT_TENANT_ID);
@@ -301,11 +282,20 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
     private static final String TENANT_POS_SHIFT = "TENANT_POS_SHIFT";
     private static final byte[] TENANT_POS_SHIFT_BYTES = Bytes.toBytes(TENANT_POS_SHIFT);
 
+    public static final String TRANSACTIONAL = "TRANSACTIONAL";
+    public static final byte[] TRANSACTIONAL_BYTES = Bytes.toBytes(TRANSACTIONAL);
+
+    public static final String UPDATE_CACHE_FREQUENCY = "UPDATE_CACHE_FREQUENCY";
+    public static final byte[] UPDATE_CACHE_FREQUENCY_BYTES = Bytes.toBytes(UPDATE_CACHE_FREQUENCY);
+
+    public static final String ASYNC_CREATED_DATE = "ASYNC_CREATED_DATE";
+
     private final PhoenixConnection connection;
     private final ResultSet emptyResultSet;
     public static final int MAX_LOCAL_SI_VERSION_DISALLOW = VersionUtil.encodeVersion("0", "98", "8");
     public static final int MIN_LOCAL_SI_VERSION_DISALLOW = VersionUtil.encodeVersion("0", "98", "6");
-
+    public static final int MIN_RENEW_LEASE_VERSION = VersionUtil.encodeVersion("1", "1", "4");
+    
     // Version below which we should turn off essential column family.
     public static final int ESSENTIAL_FAMILY_VERSION_THRESHOLD = VersionUtil.encodeVersion("0", "94", "7");
     // Version below which we should disallow usage of mutable secondary indexing.
@@ -1151,32 +1141,32 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
 
     @Override
     public boolean othersDeletesAreVisible(int type) throws SQLException {
-        return true;
+        return false;
     }
 
     @Override
     public boolean othersInsertsAreVisible(int type) throws SQLException {
-        return true;
+        return false;
     }
 
     @Override
     public boolean othersUpdatesAreVisible(int type) throws SQLException {
-        return true;
+        return false;
     }
 
     @Override
     public boolean ownDeletesAreVisible(int type) throws SQLException {
-        return false;
+        return true;
     }
 
     @Override
     public boolean ownInsertsAreVisible(int type) throws SQLException {
-        return false;
+        return true;
     }
 
     @Override
     public boolean ownUpdatesAreVisible(int type) throws SQLException {
-        return false;
+        return true;
     }
 
     @Override
@@ -1382,7 +1372,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
 
     @Override
     public boolean supportsMultipleTransactions() throws SQLException {
-        return false;
+        return true;
     }
 
     @Override
@@ -1529,12 +1519,12 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
 
     @Override
     public boolean supportsTransactionIsolationLevel(int level) throws SQLException {
-        return level == connection.getTransactionIsolation();
+        return true;
     }
 
     @Override
     public boolean supportsTransactions() throws SQLException {
-        return false;
+        return true;
     }
 
     @Override

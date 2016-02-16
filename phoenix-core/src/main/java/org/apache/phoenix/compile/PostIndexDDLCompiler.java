@@ -20,6 +20,7 @@ package org.apache.phoenix.compile;
 import java.sql.SQLException;
 import java.util.List;
 
+import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.schema.PColumn;
@@ -100,9 +101,10 @@ public class PostIndexDDLCompiler {
             }
         }
 
+        final PTable dataTable = dataTableRef.getTable();
         dataColumns.setLength(dataColumns.length()-1);
         indexColumns.setLength(indexColumns.length()-1);
-        String schemaName = dataTableRef.getTable().getSchemaName().getString();
+        String schemaName = dataTable.getSchemaName().getString();
         String tableName = indexTable.getTableName().getString();
         
         StringBuilder updateStmtStr = new StringBuilder();
@@ -110,12 +112,19 @@ public class PostIndexDDLCompiler {
            .append(indexColumns).append(") ");
         final StringBuilder selectQueryBuilder = new StringBuilder();
         selectQueryBuilder.append(" SELECT ").append(dataColumns).append(" FROM ")
-        .append(schemaName.length() == 0 ? "" : '"' + schemaName + "\".").append('"').append(dataTableRef.getTable().getTableName().getString()).append('"');
+        .append(schemaName.length() == 0 ? "" : '"' + schemaName + "\".").append('"').append(dataTable.getTableName().getString()).append('"');
         this.selectQuery = selectQueryBuilder.toString();
         updateStmtStr.append(this.selectQuery);
         
         try (final PhoenixStatement statement = new PhoenixStatement(connection)) {
-            return statement.compileMutation(updateStmtStr.toString());
+            DelegateMutationPlan delegate = new DelegateMutationPlan(statement.compileMutation(updateStmtStr.toString())) {
+                @Override
+                public MutationState execute() throws SQLException {
+                    connection.getMutationState().commitDDLFence(dataTable);
+                    return super.execute();
+                }
+            };
+            return delegate;
         }
     }
 

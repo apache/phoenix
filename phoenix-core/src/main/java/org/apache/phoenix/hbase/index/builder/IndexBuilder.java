@@ -24,13 +24,13 @@ import java.util.Map;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.Stoppable;
 import org.apache.hadoop.hbase.client.Delete;
-import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.hbase.index.Indexer;
+import org.apache.phoenix.hbase.index.covered.IndexMetaData;
 
 /**
  * Interface to build updates ({@link Mutation}s) to the index tables, based on the primary table
@@ -65,39 +65,44 @@ public interface IndexBuilder extends Stoppable {
    * Implementers must ensure that this method is thread-safe - it could (and probably will) be
    * called concurrently for different mutations, which may or may not be part of the same batch.
    * @param mutation update to the primary table to be indexed.
+ * @param context TODO
    * @return a Map of the mutations to make -> target index table name
    * @throws IOException on failure
    */
-  public Collection<Pair<Mutation, byte[]>> getIndexUpdate(Mutation mutation) throws IOException;
+  /* TODO:
+  Create BaseIndexBuilder with everything except getIndexUpdate(). 
+  Derive two concrete classes: NonTxIndexBuilder and TxIndexBuilder.
+  NonTxIndexBuilder will be current impl of this method.
+  TxIndexBuilder will use a scan with skipScan over TxAwareHBase to find the latest values.
+  Conditionally don't do WALEdit stuff for txnal table (ensure Phoenix/HBase tolerates index WAl edit info not being there)
+  Noop Failure mode
+  */
+  
+  public Collection<Pair<Mutation, byte[]>> getIndexUpdate(Mutation mutation, IndexMetaData context) throws IOException;
 
-  /**
-   * The counter-part to {@link #getIndexUpdate(Mutation)} - your opportunity to update any/all
-   * index tables based on the delete of the primary table row. This is only called for cases where
-   * the client sends a single delete ({@link HTable#delete}). We separate this method from
-   * {@link #getIndexUpdate(Mutation)} only for the ease of implementation as the delete path has
-   * subtly different semantics for updating the families/timestamps from the generic batch path.
-   * <p>
-   * Its up to your implementation to ensure that timestamps match between the primary and index
-   * tables.
-   * <p>
-   * Implementers must ensure that this method is thread-safe - it could (and probably will) be
-   * called concurrently for different mutations, which may or may not be part of the same batch.
-   * @param delete {@link Delete} to the primary table that may be indexed
-   * @return a {@link Map} of the mutations to make -> target index table name
-   * @throws IOException on failure
-   */
-  public Collection<Pair<Mutation, byte[]>> getIndexUpdate(Delete delete) throws IOException;
-
-  /**
-   * Build an index update to cleanup the index when we remove {@link KeyValue}s via the normal
-   * flush or compaction mechanisms.
-   * @param filtered {@link KeyValue}s that previously existed, but won't be included in further
-   *          output from HBase.
-   * @return a {@link Map} of the mutations to make -> target index table name
-   * @throws IOException on failure
-   */
+    /**
+     * Build an index update to cleanup the index when we remove {@link KeyValue}s via the normal flush or compaction
+     * mechanisms. Currently not implemented by any implementors nor called, but left here to be implemented if we
+     * ever need it. In Jesse's words:
+     * 
+     * Arguably, this is a correctness piece that should be used, but isn't. Basically, it *could* be that
+     * if a compaction/flush were to remove a key (too old, too many versions) you might want to cleanup the index table
+     * as well, if it were to get out of sync with the primary table. For instance, you might get multiple versions of
+     * the same row, which should eventually age of the oldest version. However, in the index table there would only
+     * ever be two entries for that row - the first one, matching the original row, and the delete marker for the index
+     * update, set when we got a newer version of the primary row. So, a basic HBase scan wouldn't show the index update
+     * b/c its covered by the delete marker, but an older timestamp based read would actually show the index row, even
+     * after the primary table row is gone due to MAX_VERSIONS requirement.
+     *  
+     * @param filtered {@link KeyValue}s that previously existed, but won't be included
+     * in further output from HBase.
+     * @param context TODO
+     * 
+     * @return a {@link Map} of the mutations to make -> target index table name
+     * @throws IOException on failure
+     */
   public Collection<Pair<Mutation, byte[]>> getIndexUpdateForFilteredRows(
-      Collection<KeyValue> filtered)
+      Collection<KeyValue> filtered, IndexMetaData context)
       throws IOException;
 
   /**
@@ -113,10 +118,13 @@ public interface IndexBuilder extends Stoppable {
    * <i>after</i> the {@link #getIndexUpdate} methods. Therefore, you will likely need an attribute
    * on your {@link Put}/{@link Delete} to indicate it is a batch operation.
    * @param miniBatchOp the full batch operation to be written
+ * @param context TODO
  * @throws IOException 
    */
-  public void batchStarted(MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException;
+  public void batchStarted(MiniBatchOperationInProgress<Mutation> miniBatchOp, IndexMetaData context) throws IOException;
 
+  public IndexMetaData getIndexMetaData(MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException;
+  
   /**
    * This allows the codec to dynamically change whether or not indexing should take place for a
    * table. If it doesn't take place, we can save a lot of time on the regular Put patch. By making
@@ -131,11 +139,4 @@ public interface IndexBuilder extends Stoppable {
  * @throws IOException 
    */
   public boolean isEnabled(Mutation m) throws IOException;
-
-  /**
-   * @param m mutation that has been received by the indexer and is waiting to be indexed
-   * @return the ID of batch to which the Mutation belongs, or <tt>null</tt> if the mutation is not
-   *         part of a batch.
-   */
-  public byte[] getBatchId(Mutation m);
 }

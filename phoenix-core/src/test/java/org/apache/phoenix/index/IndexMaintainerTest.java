@@ -31,6 +31,8 @@ import java.sql.Timestamp;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
 
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -48,7 +50,9 @@ import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
 import com.google.common.collect.Maps;
@@ -73,7 +77,7 @@ public class IndexMaintainerTest  extends BaseConnectionlessQueryTest {
         return new ValueGetter() {
 
             @Override
-            public ImmutableBytesPtr getLatestValue(ColumnReference ref) {
+            public ImmutableBytesWritable getLatestValue(ColumnReference ref) {
                 return new ImmutableBytesPtr(valueMap.get(ref));
             }
 
@@ -100,8 +104,8 @@ public class IndexMaintainerTest  extends BaseConnectionlessQueryTest {
         try {
             conn.createStatement().execute("CREATE INDEX idx ON " + fullTableName + "(" + indexColumns + ") " + (includeColumns.isEmpty() ? "" : "INCLUDE (" + includeColumns + ") ") + (indexProps.isEmpty() ? "" : indexProps));
             PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-            PTable table = pconn.getMetaDataCache().getTable(new PTableKey(pconn.getTenantId(), fullTableName));
-            PTable index = pconn.getMetaDataCache().getTable(new PTableKey(pconn.getTenantId(),fullIndexName));
+            PTable table = pconn.getTable(new PTableKey(pconn.getTenantId(), fullTableName));
+            PTable index = pconn.getTable(new PTableKey(pconn.getTenantId(),fullIndexName));
             ImmutableBytesWritable ptr = new ImmutableBytesWritable();
             table.getIndexMaintainers(ptr, pconn);
             List<IndexMaintainer> c1 = IndexMaintainer.deserialize(ptr, builder);
@@ -292,5 +296,27 @@ public class IndexMaintainerTest  extends BaseConnectionlessQueryTest {
         testIndexRowKeyBuilding(
                 "k1 CHAR(1) NOT NULL, k2 INTEGER NOT NULL, v1 BOOLEAN, v2 CHAR(2), v3 BIGINT, v4 CHAR(10)", "k1, k2",
                 "v1 DESC, k2 DESC", new Object[] { "a", 1, false, "bb" });
+    }
+    
+    @Test
+    public void tesIndexedExpressionSerialization() throws Exception {
+    	Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            conn.setAutoCommit(true);
+            conn.createStatement().execute("CREATE TABLE IF NOT EXISTS FHA (ORGANIZATION_ID CHAR(15) NOT NULL, PARENT_ID CHAR(15) NOT NULL, CREATED_DATE DATE NOT NULL, ENTITY_HISTORY_ID CHAR(15) NOT NULL, FIELD_HISTORY_ARCHIVE_ID CHAR(15), CREATED_BY_ID VARCHAR, FIELD VARCHAR, DATA_TYPE VARCHAR, OLDVAL_STRING VARCHAR, NEWVAL_STRING VARCHAR, OLDVAL_FIRST_NAME VARCHAR, NEWVAL_FIRST_NAME VARCHAR, OLDVAL_LAST_NAME VARCHAR, NEWVAL_LAST_NAME VARCHAR, OLDVAL_NUMBER DECIMAL, NEWVAL_NUMBER DECIMAL, OLDVAL_DATE DATE,  NEWVAL_DATE DATE, ARCHIVE_PARENT_TYPE VARCHAR, ARCHIVE_FIELD_NAME VARCHAR, ARCHIVE_TIMESTAMP DATE, ARCHIVE_PARENT_NAME VARCHAR, DIVISION INTEGER, CONNECTION_ID VARCHAR CONSTRAINT PK PRIMARY KEY (ORGANIZATION_ID, PARENT_ID, CREATED_DATE DESC, ENTITY_HISTORY_ID )) VERSIONS=1,MULTI_TENANT=true");
+            conn.createStatement().execute("CREATE INDEX IDX ON FHA (FIELD_HISTORY_ARCHIVE_ID, UPPER(OLDVAL_STRING) || UPPER(NEWVAL_STRING), NEWVAL_DATE - NEWVAL_DATE)");
+            PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+            PTable table = pconn.getTable(new PTableKey(pconn.getTenantId(), "FHA"));
+            ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+            table.getIndexMaintainers(ptr, pconn);
+            List<IndexMaintainer> indexMaintainerList = IndexMaintainer.deserialize(ptr, GenericKeyValueBuilder.INSTANCE);
+            assertEquals(1,indexMaintainerList.size());
+            IndexMaintainer indexMaintainer = indexMaintainerList.get(0);
+            Set<ColumnReference> indexedColumns = indexMaintainer.getIndexedColumns();
+            assertEquals("Unexpected Number of indexed columns ", indexedColumns.size(), 4);
+        } finally {
+            conn.close();
+        }
     }
 }

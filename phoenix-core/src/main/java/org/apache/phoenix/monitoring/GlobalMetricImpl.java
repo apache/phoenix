@@ -71,4 +71,10 @@ public class GlobalMetricImpl implements GlobalMetric {
     public String getCurrentMetricState() {
         return metric.getCurrentMetricState() + ", Number of samples: " + numberOfSamples.get();
     }
+
+    @Override
+    public void decrement() {
+        metric.decrement();
+        numberOfSamples.incrementAndGet();
+    }
 }

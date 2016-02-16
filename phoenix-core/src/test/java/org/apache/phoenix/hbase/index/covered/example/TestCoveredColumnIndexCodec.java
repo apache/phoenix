@@ -32,26 +32,23 @@ import java.util.List;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.hbase.index.covered.IndexCodec;
+import org.apache.phoenix.hbase.index.covered.IndexMetaData;
+import org.apache.phoenix.hbase.index.covered.IndexUpdate;
+import org.apache.phoenix.hbase.index.covered.LocalTableState;
+import org.apache.phoenix.hbase.index.covered.data.LocalHBaseState;
+import org.apache.phoenix.hbase.index.covered.example.CoveredColumnIndexCodec.ColumnEntry;
+import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.junit.Test;
 import org.mockito.Mockito;
 
 import com.google.common.collect.Lists;
-import org.apache.phoenix.hbase.index.covered.IndexCodec;
-import org.apache.phoenix.hbase.index.covered.IndexUpdate;
-import org.apache.phoenix.hbase.index.covered.LocalTableState;
-import org.apache.phoenix.hbase.index.covered.data.LocalHBaseState;
-import org.apache.phoenix.hbase.index.covered.example.ColumnGroup;
-import org.apache.phoenix.hbase.index.covered.example.CoveredColumn;
-import org.apache.phoenix.hbase.index.covered.example.CoveredColumnIndexCodec;
-import org.apache.phoenix.hbase.index.covered.example.CoveredColumnIndexCodec.ColumnEntry;
-import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 
 public class TestCoveredColumnIndexCodec {
   private static final byte[] PK = new byte[] { 'a' };
@@ -141,7 +138,7 @@ public class TestCoveredColumnIndexCodec {
     }
 
     @Override
-    public Result getCurrentRowState(Mutation m, Collection<? extends ColumnReference> toCover)
+    public Result getCurrentRowState(Mutation m, Collection<? extends ColumnReference> toCover, boolean preMutationStateOnly)
         throws IOException {
       return r;
     }
@@ -172,7 +169,7 @@ public class TestCoveredColumnIndexCodec {
     // start with a basic put that has some keyvalues
     Put p = new Put(PK);
     // setup the kvs to add
-    List<Cell> kvs = new ArrayList<Cell>();
+    List<KeyValue> kvs = new ArrayList<KeyValue>();
     byte[] v1 = Bytes.toBytes("v1");
     KeyValue kv = new KeyValue(PK, FAMILY, QUAL, 1, v1);
     kvs.add(kv);
@@ -184,14 +181,14 @@ public class TestCoveredColumnIndexCodec {
 
     // check the codec for deletes it should send
     LocalTableState state = new LocalTableState(env, table, p);
-    Iterable<IndexUpdate> updates = codec.getIndexDeletes(state);
+    Iterable<IndexUpdate> updates = codec.getIndexDeletes(state, IndexMetaData.NULL_INDEX_META_DATA);
     assertFalse("Found index updates without any existing kvs in table!", updates.iterator().next()
         .isValid());
 
     // get the updates with the pending update
     state.setCurrentTimestamp(1);
-    state.addPendingUpdates(KeyValueUtil.ensureKeyValues(kvs));
-    updates = codec.getIndexUpserts(state);
+    state.addPendingUpdates(kvs);
+    updates = codec.getIndexUpserts(state, IndexMetaData.NULL_INDEX_META_DATA);
     assertTrue("Didn't find index updates for pending primary table update!", updates.iterator()
         .hasNext());
     for (IndexUpdate update : updates) {
@@ -210,11 +207,11 @@ public class TestCoveredColumnIndexCodec {
     d.deleteFamily(FAMILY, 2);
     // setup the next batch of 'current state', basically just ripping out the current state from
     // the last round
-    table = new SimpleTableState(Result.create(kvs));
+    table = new SimpleTableState(new Result(kvs));
     state = new LocalTableState(env, table, d);
     state.setCurrentTimestamp(2);
     // check the cleanup of the current table, after the puts (mocking a 'next' update)
-    updates = codec.getIndexDeletes(state);
+    updates = codec.getIndexDeletes(state, IndexMetaData.NULL_INDEX_META_DATA);
     for (IndexUpdate update : updates) {
       assertTrue("Didn't have any index cleanup, even though there is current state",
         update.isValid());
@@ -237,14 +234,14 @@ public class TestCoveredColumnIndexCodec {
     ensureNoUpdatesWhenCoveredByDelete(env, codec, kvs, d);
   }
 
-  private void ensureNoUpdatesWhenCoveredByDelete(RegionCoprocessorEnvironment env, IndexCodec codec, List<Cell> currentState,
+  private void ensureNoUpdatesWhenCoveredByDelete(RegionCoprocessorEnvironment env, IndexCodec codec, List<KeyValue> currentState,
       Delete d) throws IOException {
-    LocalHBaseState table = new SimpleTableState(Result.create(currentState));
+    LocalHBaseState table = new SimpleTableState(new Result(currentState));
     LocalTableState state = new LocalTableState(env, table, d);
     state.setCurrentTimestamp(d.getTimeStamp());
     // now we shouldn't see anything when getting the index update
-    state.addPendingUpdates(KeyValueUtil.ensureKeyValues(d.getFamilyCellMap().get(FAMILY)));
-    Iterable<IndexUpdate> updates = codec.getIndexUpserts(state);
+    state.addPendingUpdates(d.getFamilyMap().get(FAMILY));
+    Iterable<IndexUpdate> updates = codec.getIndexUpserts(state, IndexMetaData.NULL_INDEX_META_DATA);
     for (IndexUpdate update : updates) {
       assertFalse("Had some index updates, though it should have been covered by the delete",
         update.isValid());

@@ -29,7 +29,7 @@ import java.util.concurrent.Future;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.QueryPlan;
-import org.apache.phoenix.iterate.TableResultIterator.ScannerCreation;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.job.JobManager.JobCallable;
 import org.apache.phoenix.monitoring.TaskExecutionMetricsHolder;
 import org.apache.phoenix.trace.util.Tracing;
@@ -75,12 +75,15 @@ public class SerialIterators extends BaseResultIterators {
             overallScan.setStopRow(lastScan.getStopRow());
             final String tableName = tableRef.getTable().getPhysicalName().getString();
             final TaskExecutionMetricsHolder taskMetrics = new TaskExecutionMetricsHolder(context.getReadMetricsQueue(), tableName);
+            final PhoenixConnection conn = context.getConnection();
+            final long renewLeaseThreshold = conn.getQueryServices().getRenewLeaseThresholdMilliSeconds();
             Future<PeekingResultIterator> future = executor.submit(Tracing.wrap(new JobCallable<PeekingResultIterator>() {
                 @Override
                 public PeekingResultIterator call() throws Exception {
                 	List<PeekingResultIterator> concatIterators = Lists.newArrayListWithExpectedSize(scans.size());
                 	for (final Scan scan : scans) {
-                	    ResultIterator scanner = new TableResultIterator(context, tableRef, scan, context.getReadMetricsQueue().allotMetric(SCAN_BYTES, tableName), ScannerCreation.DELAYED);
+                	    TableResultIterator scanner = new TableResultIterator(mutationState, tableRef, scan, context.getReadMetricsQueue().allotMetric(SCAN_BYTES, tableName), renewLeaseThreshold);
+                	    conn.addIterator(scanner);
                 	    concatIterators.add(iteratorFactory.newIterator(context, scanner, scan, tableName));
                 	}
                 	PeekingResultIterator concatIterator = ConcatResultIterator.newIterator(concatIterators);

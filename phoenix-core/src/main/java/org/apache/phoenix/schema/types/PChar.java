@@ -104,11 +104,11 @@ public class PChar extends PDataType<String> {
 
     @Override
     public Object toObject(byte[] bytes, int offset, int length, PDataType actualType, SortOrder sortOrder, Integer maxLength, Integer scale) {
-      if (!actualType.isCoercibleTo(this)) { // TODO: have isCoercibleTo that takes bytes, offset?
-        throwConstraintViolationException(actualType,this);
-      }
       if (length == 0) {
         return null;
+      }
+      if (!actualType.isCoercibleTo(this)) {
+        throwConstraintViolationException(actualType, this);
       }
       length = StringUtil.getUnpaddedCharLength(bytes, offset, length, sortOrder);
       if (sortOrder == SortOrder.DESC) {

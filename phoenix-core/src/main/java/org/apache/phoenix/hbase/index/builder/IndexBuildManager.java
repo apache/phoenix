@@ -29,17 +29,18 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.Stoppable;
-import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.hbase.index.Indexer;
+import org.apache.phoenix.hbase.index.covered.IndexMetaData;
 import org.apache.phoenix.hbase.index.parallel.QuickFailingTaskRunner;
 import org.apache.phoenix.hbase.index.parallel.Task;
 import org.apache.phoenix.hbase.index.parallel.TaskBatch;
 import org.apache.phoenix.hbase.index.parallel.ThreadPoolBuilder;
-import org.apache.phoenix.hbase.index.parallel.ThreadPoolManager;
+
+import com.google.common.util.concurrent.MoreExecutors;
 
 /**
  * Manage the building of index updates from primary table updates.
@@ -77,10 +78,11 @@ public class IndexBuildManager implements Stoppable {
    * @throws IOException if an {@link IndexBuilder} cannot be correctly steup
    */
   public IndexBuildManager(RegionCoprocessorEnvironment env) throws IOException {
-    this(getIndexBuilder(env), new QuickFailingTaskRunner(ThreadPoolManager.getExecutor(
-      getPoolBuilder(env), env)));
+    // Prevent deadlock by using single thread for all reads so that we know
+    // we can get the ReentrantRWLock. See PHOENIX-2671 for more details.
+    this(getIndexBuilder(env), new QuickFailingTaskRunner(MoreExecutors.sameThreadExecutor()));
   }
-
+  
   private static IndexBuilder getIndexBuilder(RegionCoprocessorEnvironment e) throws IOException {
     Configuration conf = e.getConfiguration();
     Class<? extends IndexBuilder> builderClass =
@@ -116,7 +118,8 @@ public class IndexBuildManager implements Stoppable {
       MiniBatchOperationInProgress<Mutation> miniBatchOp,
       Collection<? extends Mutation> mutations) throws Throwable {
     // notify the delegate that we have started processing a batch
-    this.delegate.batchStarted(miniBatchOp);
+    final IndexMetaData indexMetaData = this.delegate.getIndexMetaData(miniBatchOp);
+    this.delegate.batchStarted(miniBatchOp, indexMetaData);
 
     // parallelize each mutation into its own task
     // each task is cancelable via two mechanisms: (1) underlying HRegion is closing (which would
@@ -130,7 +133,7 @@ public class IndexBuildManager implements Stoppable {
 
         @Override
         public Collection<Pair<Mutation, byte[]>> call() throws IOException {
-          return delegate.getIndexUpdate(m);
+          return delegate.getIndexUpdate(m, indexMetaData);
         }
 
       });
@@ -156,40 +159,23 @@ public class IndexBuildManager implements Stoppable {
     return results;
   }
 
-  public Collection<Pair<Mutation, byte[]>> getIndexUpdate(Delete delete) throws IOException {
-    // all we get is a single update, so it would probably just go slower if we needed to queue it
-    // up. It will increase underlying resource contention a little bit, but the mutation case is
-    // far more common, so let's not worry about it for now.
-    // short circuit so we don't waste time.
-    if (!this.delegate.isEnabled(delete)) {
-      return null;
-    }
-
-    return delegate.getIndexUpdate(delete);
-
-  }
-
   public Collection<Pair<Mutation, byte[]>> getIndexUpdateForFilteredRows(
-      Collection<KeyValue> filtered) throws IOException {
+      Collection<KeyValue> filtered, IndexMetaData indexMetaData) throws IOException {
     // this is run async, so we can take our time here
-    return delegate.getIndexUpdateForFilteredRows(filtered);
+    return delegate.getIndexUpdateForFilteredRows(filtered, indexMetaData);
   }
 
   public void batchCompleted(MiniBatchOperationInProgress<Mutation> miniBatchOp) {
     delegate.batchCompleted(miniBatchOp);
   }
 
-  public void batchStarted(MiniBatchOperationInProgress<Mutation> miniBatchOp)
+  public void batchStarted(MiniBatchOperationInProgress<Mutation> miniBatchOp, IndexMetaData indexMetaData)
       throws IOException {
-    delegate.batchStarted(miniBatchOp);
+    delegate.batchStarted(miniBatchOp, indexMetaData);
   }
 
   public boolean isEnabled(Mutation m) throws IOException {
     return delegate.isEnabled(m);
-  }
-
-  public byte[] getBatchId(Mutation m) {
-    return delegate.getBatchId(m);
   }
 
   @Override

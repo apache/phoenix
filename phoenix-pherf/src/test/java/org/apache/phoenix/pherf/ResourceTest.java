@@ -43,7 +43,7 @@ public class ResourceTest {
     @Test
     public void testScenarioResourceList() throws Exception {
         String extension = ".xml";
-        assertResources(PherfConstants.SCENARIO_ROOT_PATTERN + extension, PherfConstants.RESOURCE_SCENARIO, extension);
+        assertResources(PherfConstants.TEST_SCENARIO_ROOT_PATTERN + extension, PherfConstants.RESOURCE_SCENARIO, extension);
     }
 
     @Test

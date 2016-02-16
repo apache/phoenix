@@ -157,6 +157,7 @@ public interface PTable extends PMetaDataEntity {
 
     long getTimeStamp();
     long getSequenceNumber();
+    long getIndexDisableTimestamp();
     /**
      * @return table name
      */
@@ -307,13 +308,14 @@ public interface PTable extends PMetaDataEntity {
     PName getPhysicalName();
     boolean isImmutableRows();
 
-    void getIndexMaintainers(ImmutableBytesWritable ptr, PhoenixConnection connection);
+    boolean getIndexMaintainers(ImmutableBytesWritable ptr, PhoenixConnection connection);
     IndexMaintainer getIndexMaintainer(PTable dataTable, PhoenixConnection connection);
     PName getDefaultFamilyName();
 
     boolean isWALDisabled();
     boolean isMultiTenant();
     boolean getStoreNulls();
+    boolean isTransactional();
 
     ViewType getViewType();
     String getViewStatement();
@@ -338,4 +340,5 @@ public interface PTable extends PMetaDataEntity {
      * -1 if there is no such column.
      */
     int getRowTimestampColPos();
+    long getUpdateCacheFrequency();
 }

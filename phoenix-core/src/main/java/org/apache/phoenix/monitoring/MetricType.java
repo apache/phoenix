@@ -40,7 +40,8 @@ public enum MetricType {
     SPOOL_FILE_COUNTER("Number of spool files created"),
     CACHE_REFRESH_SPLITS_COUNTER("Number of times cache was refreshed because of splits"),
     WALL_CLOCK_TIME_MS("Wall clock time elapsed for the overall query execution"),
-    RESULT_SET_TIME_MS("Wall clock time elapsed for reading all records using resultSet.next()");
+    RESULT_SET_TIME_MS("Wall clock time elapsed for reading all records using resultSet.next()"),
+    OPEN_PHOENIX_CONNECTIONS_COUNTER("Number of open phoenix connections");
     
     private final String description;
 

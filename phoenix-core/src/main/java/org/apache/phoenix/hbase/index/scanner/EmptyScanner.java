@@ -20,7 +20,7 @@ package org.apache.phoenix.hbase.index.scanner;
 
 import java.io.IOException;
 
-import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.Cell;
 
 
 /**
@@ -29,17 +29,17 @@ import org.apache.hadoop.hbase.KeyValue;
 public class EmptyScanner implements Scanner {
 
   @Override
-  public KeyValue next() throws IOException {
+  public Cell next() throws IOException {
     return null;
   }
 
   @Override
-  public boolean seek(KeyValue next) throws IOException {
+  public boolean seek(Cell next) throws IOException {
     return false;
   }
 
   @Override
-  public KeyValue peek() throws IOException {
+  public Cell peek() throws IOException {
     return null;
   }
 

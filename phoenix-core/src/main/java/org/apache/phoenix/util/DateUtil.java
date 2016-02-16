@@ -285,7 +285,7 @@ public class DateUtil {
             return INSTANCE;
         }
 
-        private final DateTimeFormatter formatter = ISO_DATE_TIME_FORMATTER.withZoneUTC();
+        private final DateTimeFormatter formatter = ISO_DATE_TIME_FORMATTER.withZone(DateTimeZone.UTC);
 
         private ISODateFormatParser() {}
 

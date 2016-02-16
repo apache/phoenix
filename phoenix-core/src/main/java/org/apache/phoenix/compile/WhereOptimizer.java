@@ -456,6 +456,11 @@ public class WhereOptimizer {
             public KeyRange getMinMaxRange() {
                 return null;
             }
+
+            @Override
+            public boolean isPartialExtraction() {
+                return false;
+            }
         };
 
         private static boolean isDegenerate(List<KeyRange> keyRanges) {
@@ -643,10 +648,12 @@ public class WhereOptimizer {
             KeyRange minMaxRange = KeyRange.EVERYTHING_RANGE;
             List<Expression> minMaxExtractNodes = Lists.<Expression>newArrayList();
             int initPosition = (table.getBucketNum() ==null ? 0 : 1) + (this.context.getConnection().getTenantId() != null && table.isMultiTenant() ? 1 : 0) + (table.getViewIndexId() == null ? 0 : 1);
+            boolean partialExtraction = andExpression.getChildren().size() != childSlots.size();
             for (KeySlots childSlot : childSlots) {
                 if (childSlot == EMPTY_KEY_SLOTS) {
                     return EMPTY_KEY_SLOTS;
                 }
+                partialExtraction |= childSlot.isPartialExtraction();
                 // FIXME: get rid of this special-cased min/max range now that a key range can span multiple columns
                 if (childSlot.getMinMaxRange() != null) { // Only set if in initial pk position
                     // TODO: fix intersectSlots so that it works with RVCs. We'd just need to fill in the leading parts
@@ -688,7 +695,7 @@ public class WhereOptimizer {
             // If we have a salt column, skip that slot because
             // they'll never be an expression contained by it.
             keySlots = keySlots.subList(initPosition, keySlots.size());
-            return new MultiKeySlot(keySlots, minMaxRange == KeyRange.EVERYTHING_RANGE ? null : minMaxRange);
+            return new MultiKeySlot(keySlots, minMaxRange == KeyRange.EVERYTHING_RANGE ? null : minMaxRange, partialExtraction);
         }
 
         private KeySlots orKeySlots(OrExpression orExpression, List<KeySlots> childSlots) {
@@ -708,7 +715,7 @@ public class WhereOptimizer {
             KeySlot theSlot = null;
             List<Expression> slotExtractNodes = Lists.<Expression>newArrayList();
             int thePosition = -1;
-            boolean extractAll = true;
+            boolean partialExtraction = false;
             // TODO: Have separate list for single span versus multi span
             // For multi-span, we only need to keep a single range.
             List<KeyRange> slotRanges = Lists.newArrayList();
@@ -718,6 +725,10 @@ public class WhereOptimizer {
                     // TODO: can this ever happen and can we safely filter the expression tree?
                     continue;
                 }
+                // When we OR together expressions, we can only extract the entire OR expression
+                // if all sub-expressions have been completely extracted. Otherwise, we must
+                // leave the OR as a post filter.
+                partialExtraction |= childSlot.isPartialExtraction();
                 if (childSlot.getMinMaxRange() != null) {
                     if (!slotRanges.isEmpty() && thePosition != initialPos) { // ORing together rvc in initial slot with other slots
                         return null;
@@ -726,9 +737,7 @@ public class WhereOptimizer {
                     thePosition = initialPos;
                     for (KeySlot slot : childSlot) {
                     	if (slot != null) {
-                    		List<Expression> extractNodes = slot.getKeyPart().getExtractNodes();
-                    		extractAll &= !extractNodes.isEmpty();
-                    		slotExtractNodes.addAll(extractNodes);
+                    		slotExtractNodes.addAll(slot.getKeyPart().getExtractNodes());
                     	}
                     }
                 } else {
@@ -757,9 +766,7 @@ public class WhereOptimizer {
                         } else if (thePosition != slot.getPKPosition()) {
                             return null;
                         }
-                        List<Expression> extractNodes = slot.getKeyPart().getExtractNodes();
-                        extractAll &= !extractNodes.isEmpty();
-                        slotExtractNodes.addAll(extractNodes);
+                        slotExtractNodes.addAll(slot.getKeyPart().getExtractNodes());
                         slotRanges.addAll(slot.getKeyRanges());
                     }
                 }
@@ -790,7 +797,7 @@ public class WhereOptimizer {
                     minMaxRange = minMaxRange.union(range);
                 }
                 if (clearExtracts) {
-                    extractAll = false;
+                    partialExtraction = true;
                     slotExtractNodes = Collections.emptyList();
                 }
                 slotRanges = Collections.emptyList();
@@ -802,7 +809,7 @@ public class WhereOptimizer {
             }
             return newKeyParts(
                     theSlot, 
-                    extractAll ? Collections.<Expression>singletonList(orExpression) : slotExtractNodes, 
+                    partialExtraction ? slotExtractNodes : Collections.<Expression>singletonList(orExpression), 
                     slotRanges.isEmpty() ? EVERYTHING_RANGES : KeyRange.coalesce(slotRanges), 
                     minMaxRange == KeyRange.EMPTY_RANGE ? null : minMaxRange);
         }
@@ -1029,6 +1036,17 @@ public class WhereOptimizer {
         private static interface KeySlots extends Iterable<KeySlot> {
             @Override public Iterator<KeySlot> iterator();
             public KeyRange getMinMaxRange();
+            /**
+             * Tracks whether or not the contained KeySlot(s) contain
+             * a slot that includes only a partial extraction of the
+             * involved expressions. For example: (A AND B) in the case
+             * of A being a PK column and B being a KV column, the
+             * KeySlots representing the AND would return true for
+             * isPartialExtraction.
+             * @return true if a partial expression extraction was
+             * done and false otherwise.
+             */
+            public boolean isPartialExtraction();
         }
 
         private final class KeySlot {
@@ -1154,10 +1172,12 @@ public class WhereOptimizer {
         private static class MultiKeySlot implements KeySlots {
             private final List<KeySlot> childSlots;
             private final KeyRange minMaxRange;
+            private final boolean partialExtraction;
 
-            private MultiKeySlot(List<KeySlot> childSlots, KeyRange minMaxRange) {
+            private MultiKeySlot(List<KeySlot> childSlots, KeyRange minMaxRange, boolean partialExtraction) {
                 this.childSlots = childSlots;
                 this.minMaxRange = minMaxRange;
+                this.partialExtraction = partialExtraction;
             }
 
             @Override
@@ -1168,6 +1188,11 @@ public class WhereOptimizer {
             @Override
             public KeyRange getMinMaxRange() {
                 return minMaxRange;
+            }
+
+            @Override
+            public boolean isPartialExtraction() {
+                return partialExtraction;
             }
         }
 
@@ -1204,6 +1229,11 @@ public class WhereOptimizer {
             @Override
             public KeyRange getMinMaxRange() {
                 return minMaxRange;
+            }
+
+            @Override
+            public boolean isPartialExtraction() {
+                return this.slot.getKeyPart().getExtractNodes().isEmpty();
             }
             
         }

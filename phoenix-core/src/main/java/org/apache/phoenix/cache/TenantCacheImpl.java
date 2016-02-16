@@ -23,13 +23,17 @@ import java.util.Collections;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
-import com.google.common.cache.*;
 import org.apache.phoenix.coprocessor.ServerCachingProtocol.ServerCacheFactory;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.memory.MemoryManager;
 import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
 import org.apache.phoenix.util.Closeables;
+
+import com.google.common.base.Ticker;
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.RemovalListener;
+import com.google.common.cache.RemovalNotification;
 
 /**
  * 
@@ -42,11 +46,30 @@ import org.apache.phoenix.util.Closeables;
 public class TenantCacheImpl implements TenantCache {
     private final int maxTimeToLiveMs;
     private final MemoryManager memoryManager;
+    private final Ticker ticker;
     private volatile Cache<ImmutableBytesPtr, Closeable> serverCaches;
 
     public TenantCacheImpl(MemoryManager memoryManager, int maxTimeToLiveMs) {
+        this(memoryManager, maxTimeToLiveMs, Ticker.systemTicker());
+    }
+    
+    public TenantCacheImpl(MemoryManager memoryManager, int maxTimeToLiveMs, Ticker ticker) {
         this.memoryManager = memoryManager;
         this.maxTimeToLiveMs = maxTimeToLiveMs;
+        this.ticker = ticker;
+    }
+    
+    public Ticker getTicker() {
+        return ticker;
+    }
+    
+    // For testing
+    public void cleanUp() {
+        synchronized(this) {
+            if (serverCaches != null) {
+                serverCaches.cleanUp();
+            }
+        }
     }
     
     @Override
@@ -61,6 +84,7 @@ public class TenantCacheImpl implements TenantCache {
                 if (serverCaches == null) {
                     serverCaches = CacheBuilder.newBuilder()
                         .expireAfterAccess(maxTimeToLiveMs, TimeUnit.MILLISECONDS)
+                        .ticker(getTicker())
                         .removalListener(new RemovalListener<ImmutableBytesPtr, Closeable>(){
                             @Override
                             public void onRemoval(RemovalNotification<ImmutableBytesPtr, Closeable> notification) {
@@ -80,11 +104,11 @@ public class TenantCacheImpl implements TenantCache {
     }
     
     @Override
-    public Closeable addServerCache(ImmutableBytesPtr cacheId, ImmutableBytesWritable cachePtr, ServerCacheFactory cacheFactory) throws SQLException {
-        MemoryChunk chunk = this.getMemoryManager().allocate(cachePtr.getLength());
+    public Closeable addServerCache(ImmutableBytesPtr cacheId, ImmutableBytesWritable cachePtr, byte[] txState, ServerCacheFactory cacheFactory) throws SQLException {
+        MemoryChunk chunk = this.getMemoryManager().allocate(cachePtr.getLength() + txState.length);
         boolean success = false;
         try {
-            Closeable element = cacheFactory.newCache(cachePtr, chunk);
+            Closeable element = cacheFactory.newCache(cachePtr, txState, chunk);
             getServerCaches().put(cacheId, element);
             success = true;
             return element;
@@ -96,7 +120,12 @@ public class TenantCacheImpl implements TenantCache {
     }
     
     @Override
-    public void removeServerCache(ImmutableBytesPtr cacheId) throws SQLException {
+    public void removeServerCache(ImmutableBytesPtr cacheId) {
         getServerCaches().invalidate(cacheId);
+    }
+
+    @Override
+    public void removeAllServerCache() {
+        getServerCaches().invalidateAll();
     }
 }

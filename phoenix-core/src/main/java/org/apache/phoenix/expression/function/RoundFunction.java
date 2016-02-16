@@ -31,8 +31,6 @@ import org.apache.phoenix.schema.types.PVarchar;
 /**
  * Base class for RoundFunction.
  * 
- * 
- * @since 0.1
  */
 @BuiltInFunction(name = RoundFunction.NAME, 
                  nodeClass = RoundParseNode.class,
@@ -45,6 +43,8 @@ import org.apache.phoenix.schema.types.PVarchar;
 public abstract class RoundFunction extends ScalarFunction {
     
     public static final String NAME = "ROUND";
+    
+    public RoundFunction() {}
     
     public RoundFunction(List<Expression> children) {
         super(children);

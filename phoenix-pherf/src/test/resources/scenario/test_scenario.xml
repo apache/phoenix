@@ -45,6 +45,17 @@
             <name>GENERAL_DATE</name>
         </column>
         <column>
+            <type>DATE</type>
+            <!--SEQUENTIAL is unsupported for DATE -->
+            <dataSequence>RANDOM</dataSequence>
+            <!-- Number [0-100] that represents the probability of creating a null value -->
+            <!-- The higher the number, the more like the value will returned will be null -->
+            <!-- Leaving this tag out is equivalent to having a 0 probability. i.e. never null -->
+            <nullChance>0</nullChance>
+            <useCurrentDate>true</useCurrentDate>
+            <name>NOW_DATE</name>
+        </column>
+        <column>
             <type>DECIMAL</type>
             <dataSequence>RANDOM</dataSequence>
             <minValue>0</minValue>
@@ -82,11 +93,27 @@
                     <maxValue>2019-09-15 11:00:00.000</maxValue>
                 </datavalue>
                 <datavalue distribution="10">
-                    <value>2019-09-19 00:01:00</value>
+                    <value>2019-09-19 00:01:00.000</value>
                 </datavalue>
                 <datavalue distribution="10">
                     <minValue>2019-09-22 00:01:00.000</minValue>
                     <maxValue>2019-09-22 00:01:00.300</maxValue>
+                </datavalue>
+            </valuelist>
+        </column>
+        <column>
+            <type>DATE</type>
+            <name>PRESENT_DATE</name>
+            <minValue>1975</minValue>
+            <maxValue>2025</maxValue>
+            <valuelist>
+                <!-- Distributes randomly with equal chance of being picked -->
+                <datavalue distribution="80">
+                    <!-- Joda time format: yyyy-MM-dd HH:mm:ss.SSS z -->
+                    <useCurrentDate>true</useCurrentDate>
+                </datavalue>
+                <datavalue distribution="20">
+                    <useCurrentDate>true</useCurrentDate>
                 </datavalue>
             </valuelist>
         </column>

@@ -22,6 +22,7 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -42,8 +43,8 @@ import org.apache.phoenix.iterate.DefaultParallelScanGrouper;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixParameterMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.metrics.MetricInfo;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.LiteralParseNode;
@@ -76,7 +77,7 @@ public class TraceQueryPlan implements QueryPlan {
         PColumn column =
                 new PColumnImpl(PNameFactory.newName(MetricInfo.TRACE.columnName), null,
                         PLong.INSTANCE, null, null, false, 0, SortOrder.getDefault(), 0, null,
-                        false, null, false);
+                        false, null, false, false);
         List<PColumn> columns = new ArrayList<PColumn>();
         columns.add(column);
         Expression expression =
@@ -87,12 +88,17 @@ public class TraceQueryPlan implements QueryPlan {
         TRACE_PROJECTOR = new RowProjector(projectedColumns, estimatedByteSize, false);
     }
 
-    public TraceQueryPlan(TraceStatement traceStatement, PhoenixStatement stmt) {
+    public TraceQueryPlan(TraceStatement traceStatement, PhoenixStatement stmt ) {
         this.traceStatement = traceStatement;
         this.stmt = stmt;
         this.context = new StatementContext(stmt);
     }
 
+	@Override
+	public Operation getOperation() {
+		return traceStatement.getOperation();
+	}
+	
     @Override
     public StatementContext getContext() {
         return this.context;
@@ -100,12 +106,7 @@ public class TraceQueryPlan implements QueryPlan {
 
     @Override
     public ParameterMetaData getParameterMetaData() {
-        return PhoenixParameterMetaData.EMPTY_PARAMETER_META_DATA;
-    }
-
-    @Override
-    public ExplainPlan getExplainPlan() throws SQLException {
-        return ExplainPlan.EMPTY_PLAN;
+        return context.getBindManager().getParameterMetaData();
     }
     
     @Override
@@ -185,6 +186,11 @@ public class TraceQueryPlan implements QueryPlan {
     }
 
     @Override
+    public Set<TableRef> getSourceRefs() {
+        return Collections.emptySet();
+    }
+
+    @Override
     public TableRef getTableRef() {
         return null;
     }
@@ -232,6 +238,11 @@ public class TraceQueryPlan implements QueryPlan {
     @Override
     public boolean isRowKeyOrdered() {
         return false;
+    }
+
+    @Override
+    public ExplainPlan getExplainPlan() throws SQLException {
+        return ExplainPlan.EMPTY_PLAN;
     }
     
     @Override

@@ -46,6 +46,8 @@ import org.apache.phoenix.schema.types.PVarchar;
 public abstract class CeilFunction extends ScalarFunction {
     
     public static final String NAME = "CEIL";
+
+    public CeilFunction() {}
     
     public CeilFunction(List<Expression> children) {
         super(children);

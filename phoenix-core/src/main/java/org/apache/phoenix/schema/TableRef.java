@@ -17,7 +17,8 @@
  */
 package org.apache.phoenix.schema;
 
-import org.apache.hadoop.hbase.HConstants;
+import java.util.Objects;
+
 import org.apache.phoenix.compile.TupleProjectionCompiler;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.util.IndexUtil;
@@ -29,17 +30,25 @@ public class TableRef {
     public static final TableRef EMPTY_TABLE_REF = new TableRef(new PTableImpl());
     
     private PTable table;
+    private long upperBoundTimeStamp;
     private final String alias;
-    private final long upperBoundTimeStamp;
     private final long lowerBoundTimeStamp;
     private final boolean hasDynamicCols;
 
+    public TableRef(TableRef tableRef) {
+        this(tableRef.alias, tableRef.table, tableRef.upperBoundTimeStamp, tableRef.lowerBoundTimeStamp, tableRef.hasDynamicCols);
+    }
+    
     public TableRef(TableRef tableRef, long timeStamp) {
-        this(tableRef.alias, tableRef.table, timeStamp, tableRef.hasDynamicCols);
+        this(tableRef.alias, tableRef.table, timeStamp, tableRef.lowerBoundTimeStamp, tableRef.hasDynamicCols);
+    }
+    
+    public TableRef(TableRef tableRef, String alias) {
+        this(alias, tableRef.table, tableRef.upperBoundTimeStamp, tableRef.lowerBoundTimeStamp, tableRef.hasDynamicCols);
     }
     
     public TableRef(PTable table) {
-        this(null, table, HConstants.LATEST_TIMESTAMP, false);
+        this(null, table, QueryConstants.UNSET_TIMESTAMP, false);
     }
     
     public TableRef(PTable table, long upperBoundTimeStamp, long lowerBoundTimeStamp) {
@@ -65,6 +74,10 @@ public class TableRef {
     
     public void setTable(PTable value) {
         this.table = value;
+    }
+
+    public void setTimeStamp(long timeStamp) {
+        this.upperBoundTimeStamp = timeStamp;
     }
 
     public String getTableAlias() {
@@ -101,7 +114,7 @@ public class TableRef {
     public int hashCode() {
         final int prime = 31;
         int result = alias == null ? 0 : alias.hashCode();
-        result = prime * result + this.table.getName().getString().hashCode();
+        result = prime * result + ( this.table.getName()!=null ? this.table.getName().hashCode() : 0);
         return result;
     }
 
@@ -111,8 +124,8 @@ public class TableRef {
         if (obj == null) return false;
         if (getClass() != obj.getClass()) return false;
         TableRef other = (TableRef)obj;
-        if ((alias == null && other.alias != null) || (alias != null && !alias.equals(other.alias))) return false;
-        if (!table.getName().getString().equals(other.table.getName().getString())) return false;
+        if (!Objects.equals(alias, other.alias)) return false;
+        if (!Objects.equals(table.getName(), other.table.getName())) return false;
         return true;
     }
 

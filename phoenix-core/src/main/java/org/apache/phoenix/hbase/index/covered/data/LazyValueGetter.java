@@ -24,7 +24,8 @@ import java.util.Map;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
-
+import org.apache.hadoop.hbase.KeyValueUtil;
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.scanner.Scanner;
@@ -37,7 +38,7 @@ import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 public class LazyValueGetter implements ValueGetter {
 
   private Scanner scan;
-  private volatile Map<ColumnReference, ImmutableBytesPtr> values;
+  private volatile Map<ColumnReference, ImmutableBytesWritable> values;
   private byte[] row;
   
   /**
@@ -51,16 +52,16 @@ public class LazyValueGetter implements ValueGetter {
   }
 
   @Override
-  public ImmutableBytesPtr getLatestValue(ColumnReference ref) throws IOException {
+  public ImmutableBytesWritable getLatestValue(ColumnReference ref) throws IOException {
     // ensure we have a backing map
     if (values == null) {
       synchronized (this) {
-        values = Collections.synchronizedMap(new HashMap<ColumnReference, ImmutableBytesPtr>());
+        values = Collections.synchronizedMap(new HashMap<ColumnReference, ImmutableBytesWritable>());
       }
     }
 
     // check the value in the map
-    ImmutableBytesPtr value = values.get(ref);
+    ImmutableBytesWritable value = values.get(ref);
     if (value == null) {
       value = get(ref);
       values.put(ref, value);
@@ -80,7 +81,7 @@ public class LazyValueGetter implements ValueGetter {
     }
     // there is a next value - we only care about the current value, so we can just snag that
     Cell next = scan.next();
-    if (ref.matches(next)) {
+    if (ref.matches(KeyValueUtil.ensureKeyValue(next))) {
       return new ImmutableBytesPtr(next.getValueArray(), next.getValueOffset(), next.getValueLength());
     }
     return null;

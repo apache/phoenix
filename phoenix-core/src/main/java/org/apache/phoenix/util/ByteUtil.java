@@ -49,6 +49,8 @@ public class ByteUtil {
     public static final byte[] EMPTY_BYTE_ARRAY = new byte[0];
     public static final ImmutableBytesPtr EMPTY_BYTE_ARRAY_PTR = new ImmutableBytesPtr(
             EMPTY_BYTE_ARRAY);
+    public static final ImmutableBytesWritable EMPTY_IMMUTABLE_BYTE_ARRAY = new ImmutableBytesWritable(
+            EMPTY_BYTE_ARRAY);
     
     public static final Comparator<ImmutableBytesPtr> BYTES_PTR_COMPARATOR = new Comparator<ImmutableBytesPtr>() {
 

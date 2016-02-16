@@ -59,11 +59,11 @@ public class PVarchar extends PDataType<String> {
   @Override
   public Object toObject(byte[] bytes, int offset, int length, PDataType actualType,
       SortOrder sortOrder, Integer maxLength, Integer scale) {
-    if (!actualType.isCoercibleTo(this)) {
-      throwConstraintViolationException(actualType, this);
-    }
     if (length == 0) {
       return null;
+    }
+    if (!actualType.isCoercibleTo(this)) {
+      throwConstraintViolationException(actualType, this);
     }
     if (sortOrder == SortOrder.DESC) {
       bytes = SortOrder.invert(bytes, offset, length);

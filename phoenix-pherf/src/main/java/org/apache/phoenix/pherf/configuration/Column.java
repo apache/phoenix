@@ -33,6 +33,7 @@ public class Column {
     private boolean userDefined;
     private List<DataValue> dataValues;
 	private DataTypeMapping type;
+    private boolean useCurrentDate;
 
     public Column() {
         super();
@@ -44,6 +45,7 @@ public class Column {
         this.precision = Integer.MIN_VALUE;
         this.nullChance = Integer.MIN_VALUE;
         this.userDefined = false;
+        this.useCurrentDate = false;
     }
 
     public Column(Column column) {
@@ -119,6 +121,10 @@ public class Column {
         this.precision = precision;
     }
 
+    public void setUseCurrentDate(boolean useCurrentDate) { this.useCurrentDate = useCurrentDate; }
+
+    public boolean getUseCurrentDate() { return useCurrentDate; }
+
     /**
      * Changes fields of this object to match existing fields from the passed Column
      * null object members are ignored.
@@ -166,6 +172,10 @@ public class Column {
 
         if (column.dataValues != null) {
            setDataValues(column.getDataValues());
+        }
+
+        if(column.getUseCurrentDate()) {
+            setUseCurrentDate(column.getUseCurrentDate());
         }
     }
 

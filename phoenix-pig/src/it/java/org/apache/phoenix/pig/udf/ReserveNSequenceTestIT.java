@@ -17,8 +17,6 @@
  */
 package org.apache.phoenix.pig.udf;
 
-import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
-import static org.apache.phoenix.util.TestUtil.LOCALHOST;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
@@ -27,17 +25,14 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Properties;
 
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.HConstants;
-import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
+import org.apache.phoenix.pig.BasePigIT;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.pig.data.Tuple;
-import org.apache.pig.data.TupleFactory;
 import org.apache.pig.impl.util.UDFContext;
 import org.junit.After;
-import org.junit.AfterClass;
 import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -45,36 +40,31 @@ import org.junit.rules.ExpectedException;
 /**
  * Test class to run all the Pig Sequence UDF integration tests against a virtual map reduce cluster.
  */
-public class ReserveNSequenceTestIT extends BaseHBaseManagedTimeIT {
+public class ReserveNSequenceTestIT extends BasePigIT {
 
     private static final String CREATE_SEQUENCE_SYNTAX = "CREATE SEQUENCE %s START WITH %s INCREMENT BY %s MINVALUE %s MAXVALUE %s CACHE %s";
     private static final String SEQUENCE_NAME = "my_schema.my_sequence";
     private static final long MAX_VALUE = 10;
 
-    private static TupleFactory TF;
-    private static Connection conn;
-    private static String zkQuorum;
-    private static Configuration conf;
     private static UDFContext udfContext;
 
     @Rule
     public ExpectedException thrown = ExpectedException.none();
 
-    @BeforeClass
-    public static void setUpBeforeClass() throws Exception {
-        conf = getTestClusterConfig();
-        zkQuorum = LOCALHOST + JDBC_PROTOCOL_SEPARATOR + getZKClientPort(getTestClusterConfig());
-        conf.set(HConstants.ZOOKEEPER_QUORUM, zkQuorum);
-        // Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
-        conn = DriverManager.getConnection(getUrl());
-        // Pig variables
-        TF = TupleFactory.getInstance();
+    @Override
+    @Before
+    public void setUp() throws Exception {
+        super.setUp();
+        createSequence(conn);
+        createUdfContext();
     }
 
-    @Before
-    public void setUp() throws SQLException {
-        createSequence();
-        createUdfContext();
+    @Override
+    @After
+    public void tearDown() throws Exception {
+        udfContext.reset();
+        dropSequence(conn);
+        super.tearDown();
     }
 
     @Test
@@ -140,18 +130,71 @@ public class ReserveNSequenceTestIT extends BaseHBaseManagedTimeIT {
         props.setErrorMessage("Sequence undefined");
         doTest(props);
     }
+    
+    /**
+     * Test reserving sequence with tenant Id passed to udf.
+     * @throws Exception
+     */
+    @Test
+    public void testTenantSequence() throws Exception {
+        Properties tentantProps = new Properties();
+        String tenantId = "TENANT";
+        tentantProps.put(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+        Connection tenantConn = DriverManager.getConnection(getUrl(), tentantProps);
+        createSequence(tenantConn);
 
+        try {
+            UDFTestProperties props = new UDFTestProperties(3);
+
+            // validates UDF reservation is for that tentant
+            doTest(tenantConn, props);
+
+            // validate global sequence value is still set to 1
+            assertEquals(1L, getNextSequenceValue(conn));
+        } finally {
+            dropSequence(tenantConn);
+        }
+    }
+    
+    /**
+     * Test Use the udf to reserve multiple tuples
+     * 
+     * @throws Exception
+     */
+    @Test
+    public void testMultipleTuples() throws Exception {
+        Tuple tuple = tupleFactory.newTuple(2);
+        tuple.set(0, 2L);
+        tuple.set(1, SEQUENCE_NAME);
+
+        final String tentantId = conn.getClientInfo(PhoenixRuntime.TENANT_ID_ATTRIB);
+        ReserveNSequence udf = new ReserveNSequence(zkQuorum, tentantId);
+
+        for (int i = 0; i < 2; i++) {
+            udf.exec(tuple);
+        }
+        long nextValue = getNextSequenceValue(conn);
+        assertEquals(5L, nextValue);
+    }
+    
     private void doTest(UDFTestProperties props) throws Exception {
-        setCurrentValue(props.getCurrentValue());
-        Tuple tuple = TF.newTuple(3);
+        doTest(conn, props);
+    }
+
+    private void doTest(Connection conn, UDFTestProperties props) throws Exception {
+        setCurrentValue(conn, props.getCurrentValue());
+        Tuple tuple = tupleFactory.newTuple(3);
         tuple.set(0, props.getNumToReserve());
         tuple.set(1, props.getSequenceName());
         tuple.set(2, zkQuorum);
         Long result = null;
         try {
-            ReserveNSequence udf = new ReserveNSequence();
+            final String tenantId = conn.getClientInfo(PhoenixRuntime.TENANT_ID_ATTRIB);
+            ReserveNSequence udf = new ReserveNSequence(zkQuorum, tenantId);
             result = udf.exec(tuple);
-            validateReservedSequence(props.getCurrentValue(), props.getNumToReserve(), result);
+            validateReservedSequence(conn, props.getCurrentValue(), props.getNumToReserve(), result);
+            // Calling this to cleanup for the udf. To close the connection
+            udf.finish();
         } catch (Exception e) {
             if (props.isExceptionExpected()) {
                 assertEquals(props.getExceptionClass(), e.getClass());
@@ -160,34 +203,32 @@ public class ReserveNSequenceTestIT extends BaseHBaseManagedTimeIT {
                 throw e;
             }
         }
-
     }
 
     private void createUdfContext() {
-        conf.set(ReserveNSequence.SEQUENCE_NAME_CONF_KEY, SEQUENCE_NAME);
         udfContext = UDFContext.getUDFContext();
         udfContext.addJobConf(conf);
     }
 
-    private void validateReservedSequence(Long currentValue, long count, Long result) throws SQLException {
+    private void validateReservedSequence(Connection conn, Long currentValue, long count, Long result) throws SQLException {
         Long startIndex = currentValue + 1;
         assertEquals("Start index is incorrect", startIndex, result);
-        final long newNextSequenceValue = getNextSequenceValue();
+        final long newNextSequenceValue = getNextSequenceValue(conn);
         assertEquals(startIndex + count, newNextSequenceValue);
     }
 
-    private void createSequence() throws SQLException {
+    private void createSequence(Connection conn) throws SQLException {
         conn.createStatement().execute(String.format(CREATE_SEQUENCE_SYNTAX, SEQUENCE_NAME, 1, 1, 1, MAX_VALUE, 1));
         conn.commit();
     }
 
-    private void setCurrentValue(long currentValue) throws SQLException {
+    private void setCurrentValue(Connection conn, long currentValue) throws SQLException {
         for (int i = 1; i <= currentValue; i++) {
-            getNextSequenceValue();
+            getNextSequenceValue(conn);
         }
     }
 
-    private long getNextSequenceValue() throws SQLException {
+    private long getNextSequenceValue(Connection conn) throws SQLException {
         String ddl = new StringBuilder().append("SELECT NEXT VALUE FOR ").append(SEQUENCE_NAME).toString();
         ResultSet rs = conn.createStatement().executeQuery(ddl);
         assertTrue(rs.next());
@@ -195,21 +236,10 @@ public class ReserveNSequenceTestIT extends BaseHBaseManagedTimeIT {
         return rs.getLong(1);
     }
 
-    private void dropSequence() throws Exception {
+    private void dropSequence(Connection conn) throws Exception {
         String ddl = new StringBuilder().append("DROP SEQUENCE ").append(SEQUENCE_NAME).toString();
         conn.createStatement().execute(ddl);
         conn.commit();
-    }
-
-    @After
-    public void tearDown() throws Exception {
-        udfContext.reset();
-        dropSequence();
-    }
-
-    @AfterClass
-    public static void tearDownAfterClass() throws Exception {
-        conn.close();
     }
 
     /**
