@@ -163,7 +163,8 @@ public class RulesApplier {
 						data = getSuperSequentialDataValue(column);
 					}
                     else if (column.getDataSequence() == DataSequence.SEQUENTIAL) {
-                        data = getSequentialDataValue(column);
+                        //data = getSequentialDataValue(column);
+						data = getSuperSequentialDataValue(column);
                     } else {
                         data = getRandomDataValue(column);
                     }
