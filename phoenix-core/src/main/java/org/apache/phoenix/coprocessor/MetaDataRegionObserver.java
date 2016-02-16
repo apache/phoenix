@@ -56,6 +56,7 @@ import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 import org.apache.phoenix.cache.GlobalCache;
 import org.apache.phoenix.cache.ServerCacheClient;
+import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -320,8 +321,12 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
                     long timeStamp = Math.max(0, earliestDisableTimestamp - overlapTime);
                     
                     LOG.info("Starting to build indexes=" + indexesToPartiallyRebuild + " from timestamp=" + timeStamp);
-                    Scan dataTableScan = new Scan();
-                    dataTableScan.setRaw(true);
+                    new Scan();
+                    List<IndexMaintainer> maintainers = Lists.newArrayListWithExpectedSize(indexesToPartiallyRebuild.size());
+                    for (PTable index : indexesToPartiallyRebuild) {
+                        maintainers.add(index.getIndexMaintainer(dataPTable, conn));
+                    }
+                    Scan dataTableScan = IndexManagementUtil.newLocalStateScan(maintainers);
                     dataTableScan.setTimeRange(timeStamp, HConstants.LATEST_TIMESTAMP);
                     byte[] physicalTableName = dataPTable.getPhysicalName().getBytes();
                     try (HTableInterface dataHTable = conn.getQueryServices().getTable(physicalTableName)) {
