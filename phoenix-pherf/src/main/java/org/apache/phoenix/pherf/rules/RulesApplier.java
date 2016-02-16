@@ -158,6 +158,7 @@ public class RulesApplier {
                     data = pickDataValueFromList(dataValues);
                 } else {
                     Preconditions.checkArgument(length > 0, "length needs to be > 0");
+					System.out.print(column.getDataSequence());
 					if(column.getDataSequence() == DataSequence.SUPERSEQUENTIAL) {
 						data = getSuperSequentialDataValue(column);
 					}
