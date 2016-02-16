@@ -71,7 +71,6 @@ import org.apache.phoenix.iterate.ParallelIteratorFactory;
 import org.apache.phoenix.iterate.TableResultIterator;
 import org.apache.phoenix.iterate.TableResultIteratorFactory;
 import org.apache.phoenix.jdbc.PhoenixStatement.PhoenixStatementParser;
-import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.ConnectionQueryServices.Feature;
@@ -300,7 +299,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     private static Properties filterKnownNonProperties(Properties info) {
         Properties prunedProperties = info;
         for (String property : PhoenixRuntime.CONNECTION_PROPERTIES) {
-            if (info.contains(property)) {
+            if (info.containsKey(property)) {
                 if (prunedProperties == info) {
                     prunedProperties = PropertiesUtil.deepCopy(info);
                 }
