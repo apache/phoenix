@@ -160,7 +160,7 @@ public class RulesApplier {
                     Preconditions.checkArgument(length > 0, "length needs to be > 0");
 					System.out.print(column.getDataSequence());
 					if(column.getDataSequence() == DataSequence.SUPERSEQUENTIAL) {
-						data = getSuperSequentialDataValue(column);
+						//data = getSuperSequentialDataValue(column);
 					}
                     else if (column.getDataSequence() == DataSequence.SEQUENTIAL) {
                         data = getSequentialDataValue(column);
