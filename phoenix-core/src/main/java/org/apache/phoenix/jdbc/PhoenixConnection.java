@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.jdbc;
 
+import static com.google.common.base.Preconditions.checkNotNull;
 import static java.util.Collections.emptyMap;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_OPEN_PHOENIX_CONNECTIONS;
 
@@ -24,6 +25,7 @@ import java.io.EOFException;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.io.Reader;
+import java.lang.ref.WeakReference;
 import java.sql.Array;
 import java.sql.Blob;
 import java.sql.CallableStatement;
@@ -51,7 +53,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.Executor;
+import java.util.concurrent.LinkedBlockingQueue;
 
+import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 import org.apache.hadoop.hbase.HConstants;
@@ -65,9 +69,11 @@ import org.apache.phoenix.execute.CommitException;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.expression.function.FunctionArgumentType;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
+import org.apache.phoenix.iterate.DefaultTableResultIteratorFactory;
 import org.apache.phoenix.iterate.ParallelIteratorFactory;
+import org.apache.phoenix.iterate.TableResultIterator;
+import org.apache.phoenix.iterate.TableResultIteratorFactory;
 import org.apache.phoenix.jdbc.PhoenixStatement.PhoenixStatementParser;
-import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.DelegateConnectionQueryServices;
@@ -103,6 +109,7 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Objects;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
@@ -110,14 +117,7 @@ import com.google.common.collect.ImmutableMap.Builder;
 import com.google.common.collect.Lists;
 
 import co.cask.tephra.TransactionContext;
-import java.lang.ref.WeakReference;
-import java.util.concurrent.LinkedBlockingQueue;
-import javax.annotation.Nonnull;
-import org.apache.phoenix.iterate.DefaultTableResultIteratorFactory;
-import org.apache.phoenix.iterate.TableResultIterator;
-import org.apache.phoenix.iterate.TableResultIteratorFactory;
-import com.google.common.annotations.VisibleForTesting;
-import static com.google.common.base.Preconditions.checkNotNull;
+
 /**
  * 
  * JDBC Connection implementation of Phoenix.
@@ -303,7 +303,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     private static Properties filterKnownNonProperties(Properties info) {
         Properties prunedProperties = info;
         for (String property : PhoenixRuntime.CONNECTION_PROPERTIES) {
-            if (info.contains(property)) {
+            if (info.containsKey(property)) {
                 if (prunedProperties == info) {
                     prunedProperties = PropertiesUtil.deepCopy(info);
                 }
