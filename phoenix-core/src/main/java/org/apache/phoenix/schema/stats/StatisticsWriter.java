@@ -140,28 +140,28 @@ public class StatisticsWriter implements Closeable {
         }
         GuidePostsInfo gps = tracker.getGuidePosts(cfKey);
         if (gps != null) {
-            boolean rowColumnAdded = false;
+            List<Long> byteCounts = gps.getByteCounts();
+            List<Long> rowCounts = gps.getRowCounts();
             ImmutableBytesWritable keys = gps.getGuidePosts();
             ByteArrayInputStream stream = new ByteArrayInputStream(keys.get(), keys.getOffset(), keys.getLength());
             DataInput input = new DataInputStream(stream);
             PrefixByteDecoder decoder = new PrefixByteDecoder(gps.getMaxLength());
+            int guidePostCount = 0;
             try {
                 while (true) {
                     ImmutableBytesWritable ptr = decoder.decode(input);
                     byte[] prefix = StatisticsUtil.getRowKey(tableName, cfKey, ptr);
                     Put put = new Put(prefix);
-                    if (!rowColumnAdded) {
-                        put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH_BYTES,
-                                timeStamp, PLong.INSTANCE.toBytes(gps.getByteCount()));
-                        put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
-                                PhoenixDatabaseMetaData.GUIDE_POSTS_ROW_COUNT_BYTES, timeStamp,
-                                PLong.INSTANCE.toBytes(gps.getRowCount()));
-                        rowColumnAdded = true;
-                    }
+                    put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH_BYTES,
+                            timeStamp, PLong.INSTANCE.toBytes(byteCounts.get(guidePostCount)));
+                    put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
+                            PhoenixDatabaseMetaData.GUIDE_POSTS_ROW_COUNT_BYTES, timeStamp,
+                            PLong.INSTANCE.toBytes(rowCounts.get(guidePostCount)));
                     // Add our empty column value so queries behave correctly
                     put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES, timeStamp,
                             ByteUtil.EMPTY_BYTE_ARRAY);
                     mutations.add(put);
+                    guidePostCount++;
                 }
             } catch (EOFException e) { // Ignore as this signifies we're done
 
