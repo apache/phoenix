@@ -80,7 +80,6 @@ import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.ConstraintViolationException;
 import org.apache.phoenix.schema.PColumn;
@@ -610,20 +609,13 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         InternalScanner internalScanner = scanner;
         if (scanType.equals(ScanType.COMPACT_DROP_DELETES)) {
             try {
-                boolean useCurrentTime = c.getEnvironment().getConfiguration().getBoolean(
-                        QueryServices.STATS_USE_CURRENT_TIME_ATTRIB,
-                        QueryServicesOptions.DEFAULT_STATS_USE_CURRENT_TIME);
                 Connection conn = c.getEnvironment().getRegionServerServices().getConnection();
                 Pair<HRegionInfo, HRegionInfo> mergeRegions = null;
                 if (store.hasReferences()) {
                     mergeRegions = MetaTableAccessor.getRegionsFromMergeQualifier(conn,
                             c.getEnvironment().getRegion().getRegionInfo().getRegionName());
                 }
-                // Provides a means of clients controlling their timestamps to not use current time
-                // when background tasks are updating stats. Instead we track the max timestamp of
-                // the cells and use that.
-                long clientTimeStamp = useCurrentTime ? TimeKeeper.SYSTEM.getCurrentTime()
-                        : StatisticsCollector.NO_TIMESTAMP;
+                long clientTimeStamp = TimeKeeper.SYSTEM.getCurrentTime();
                 StatisticsCollector stats = new StatisticsCollector(c.getEnvironment(), table.getNameAsString(),
                         clientTimeStamp, store.getFamily().getName());
                 internalScanner = stats.createCompactionScanner(c.getEnvironment(), store, scanner, mergeRegions);
