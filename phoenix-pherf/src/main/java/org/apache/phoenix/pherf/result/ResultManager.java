@@ -18,17 +18,20 @@
 
 package org.apache.phoenix.pherf.result;
 
+import org.apache.commons.collections.IteratorUtils;
 import org.apache.phoenix.pherf.PherfConstants;
 import org.apache.phoenix.pherf.result.file.ResultFileDetails;
 import org.apache.phoenix.pherf.result.impl.CSVFileResultHandler;
 import org.apache.phoenix.pherf.result.impl.ImageResultHandler;
 import org.apache.phoenix.pherf.result.impl.XMLResultHandler;
-import org.apache.phoenix.util.InstanceResolver;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
+import java.util.ServiceLoader;
 
 public class ResultManager {
     private static final Logger logger = LoggerFactory.getLogger(ResultManager.class);
@@ -71,9 +74,24 @@ public class ResultManager {
     @SuppressWarnings("unchecked")
 	public ResultManager(String fileNameSeed, boolean writeRuntimeResults) {
         this(fileNameSeed, writeRuntimeResults ?
-        		InstanceResolver.get(ResultHandler.class, defaultHandlers) :
-        		InstanceResolver.get(ResultHandler.class, minimalHandlers));
+        		instanceResolverGet(ResultHandler.class, defaultHandlers) :  
+                instanceResolverGet(ResultHandler.class, minimalHandlers)); 
+
     }
+
+	 // Workaround running against phoenix-4.4 not having this method in InstanceResolver.  
+   @SuppressWarnings("unchecked")  
+    public static <T> List<T> instanceResolverGet(Class<T> clazz, List<T> defaultInstances) {  
+      Iterator<T> iterator = ServiceLoader.load(clazz).iterator();  
+      if (defaultInstances != null) {  
+          defaultInstances.addAll(IteratorUtils.toList(iterator));  
+      } else {  
+          defaultInstances = IteratorUtils.toList(iterator);  
+      }  
+  
+      return defaultInstances;  
+  }  
+  
 
     public ResultManager(String fileNameSeed, List<ResultHandler> resultHandlers) {
         this.resultHandlers = resultHandlers;
