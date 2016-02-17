@@ -29,7 +29,6 @@ import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.regionserver.NoLimitScannerContext;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -274,7 +273,7 @@ public class HashJoinRegionScanner implements RegionScanner {
         try {
             while (shouldAdvance()) {
                 hasMore = scanner.nextRaw(result, scannerContext);
-                processResults(result, scannerContext != NoLimitScannerContext.getInstance());
+                processResults(result, false); // TODO detect if limit used here
                 result.clear();
             }
             
@@ -316,7 +315,7 @@ public class HashJoinRegionScanner implements RegionScanner {
         try {
             while (shouldAdvance()) {
                 hasMore = scanner.next(result, scannerContext);
-                processResults(result, scannerContext != NoLimitScannerContext.getInstance());
+                processResults(result, false); // TODO detect if limit used here
                 result.clear();
             }
             
