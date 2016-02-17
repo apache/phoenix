@@ -63,11 +63,6 @@ public class StatisticsCollector {
     protected StatisticsWriter statsTable;
     private Pair<Long, GuidePostsInfoBuilder> cachedGps = null;
 
-    public StatisticsCollector(RegionCoprocessorEnvironment env, String tableName, long clientTimeStamp)
-            throws IOException {
-        this(env, tableName, clientTimeStamp, null, null, null);
-    }
-
     public StatisticsCollector(RegionCoprocessorEnvironment env, String tableName, long clientTimeStamp,
             byte[] gp_width_bytes, byte[] gp_per_region_bytes) throws IOException {
         this(env, tableName, clientTimeStamp, null, gp_width_bytes, gp_per_region_bytes);
@@ -78,7 +73,7 @@ public class StatisticsCollector {
         this(env, tableName, clientTimeStamp, family, null, null);
     }
 
-    public StatisticsCollector(RegionCoprocessorEnvironment env, String tableName, long clientTimeStamp, byte[] family,
+    private StatisticsCollector(RegionCoprocessorEnvironment env, String tableName, long clientTimeStamp, byte[] family,
             byte[] gp_width_bytes, byte[] gp_per_region_bytes) throws IOException {
         Configuration config = env.getConfiguration();
         int guidepostPerRegion = gp_per_region_bytes == null
@@ -91,6 +86,15 @@ public class StatisticsCollector {
                 : PLong.INSTANCE.getCodec().decodeInt(gp_width_bytes, 0, SortOrder.getDefault());
         this.guidepostDepth = StatisticsUtil.getGuidePostDepth(guidepostPerRegion, guidepostWidth,
                 env.getRegion().getTableDesc());
+        // Provides a means of clients controlling their timestamps to not use current time
+        // when background tasks are updating stats. Instead we track the max timestamp of
+        // the cells and use that.
+        boolean useCurrentTime = env.getConfiguration().getBoolean(
+                QueryServices.STATS_USE_CURRENT_TIME_ATTRIB,
+                QueryServicesOptions.DEFAULT_STATS_USE_CURRENT_TIME);
+        if (!useCurrentTime) {
+            clientTimeStamp = StatisticsCollector.NO_TIMESTAMP;
+        }
         // Get the stats table associated with the current table on which the CP is
         // triggered
         this.statsTable = StatisticsWriter.newWriter(env, tableName, clientTimeStamp);
