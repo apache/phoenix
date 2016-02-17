@@ -44,9 +44,7 @@ import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.MetaTableAccessor;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -609,16 +607,11 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         InternalScanner internalScanner = scanner;
         if (scanType.equals(ScanType.COMPACT_DROP_DELETES)) {
             try {
-                Connection conn = c.getEnvironment().getRegionServerServices().getConnection();
                 Pair<HRegionInfo, HRegionInfo> mergeRegions = null;
-                if (store.hasReferences()) {
-                    mergeRegions = MetaTableAccessor.getRegionsFromMergeQualifier(conn,
-                            c.getEnvironment().getRegion().getRegionInfo().getRegionName());
-                }
                 long clientTimeStamp = TimeKeeper.SYSTEM.getCurrentTime();
                 StatisticsCollector stats = new StatisticsCollector(c.getEnvironment(), table.getNameAsString(),
                         clientTimeStamp, store.getFamily().getName());
-                internalScanner = stats.createCompactionScanner(c.getEnvironment(), store, scanner, mergeRegions);
+                internalScanner = stats.createCompactionScanner(c.getEnvironment(), store, scanner);
             } catch (IOException e) {
                 // If we can't reach the stats table, don't interrupt the normal
                 // compaction operation, just log a warning.
