@@ -29,13 +29,11 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
-import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 
 
@@ -49,18 +47,17 @@ public class StatisticsScanner implements InternalScanner {
     private HRegion region;
     private StatisticsCollector tracker;
     private ImmutableBytesPtr family;
-    private Pair<HRegionInfo, HRegionInfo> mergeRegions;
     private final Configuration config;
 
     public StatisticsScanner(StatisticsCollector tracker, StatisticsWriter stats, RegionCoprocessorEnvironment env,
-            InternalScanner delegate, ImmutableBytesPtr family, Pair<HRegionInfo, HRegionInfo> mergeRegions) {
+            InternalScanner delegate, ImmutableBytesPtr family) {
         this.tracker = tracker;
         this.stats = stats;
         this.delegate = delegate;
         this.region = env.getRegion();
         this.config = env.getConfiguration();
         this.family = family;
-        this.mergeRegions = mergeRegions;
+
         StatisticsCollectionRunTracker.getInstance(config).addCompactingRegion(region.getRegionInfo());
     }
 

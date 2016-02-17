@@ -44,9 +44,7 @@ import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.MetaTableAccessor;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -61,7 +59,6 @@ import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScanType;
 import org.apache.hadoop.hbase.regionserver.Store;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.exception.DataExceedsCapacityException;
@@ -111,11 +108,11 @@ import org.apache.phoenix.util.TimeKeeper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import co.cask.tephra.TxConstants;
-
 import com.google.common.base.Throwables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+
+import co.cask.tephra.TxConstants;
 
 
 /**
@@ -610,16 +607,10 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         InternalScanner internalScanner = scanner;
         if (scanType.equals(ScanType.COMPACT_DROP_DELETES)) {
             try {
-                Pair<HRegionInfo, HRegionInfo> mergeRegions = null;
-                if (store.hasReferences()) {
-                    Connection conn = c.getEnvironment().getRegionServerServices().getConnection();
-                    mergeRegions = MetaTableAccessor.getRegionsFromMergeQualifier(conn,
-                            c.getEnvironment().getRegion().getRegionInfo().getRegionName());
-                }
                 long clientTimeStamp = TimeKeeper.SYSTEM.getCurrentTime();
                 StatisticsCollector stats = new StatisticsCollector(c.getEnvironment(), table.getNameAsString(),
                         clientTimeStamp, store.getFamily().getName());
-                internalScanner = stats.createCompactionScanner(c.getEnvironment(), store, scanner, mergeRegions);
+                internalScanner = stats.createCompactionScanner(c.getEnvironment(), store, scanner);
             } catch (IOException e) {
                 // If we can't reach the stats table, don't interrupt the normal
                 // compaction operation, just log a warning.
