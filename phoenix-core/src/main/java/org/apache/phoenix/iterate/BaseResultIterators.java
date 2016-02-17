@@ -18,10 +18,10 @@
 package org.apache.phoenix.iterate;
 
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.EXPECTED_UPPER_REGION_KEY;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_ACTUAL_START_ROW;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_FAILED_QUERY_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_QUERY_TIMEOUT_COUNTER;
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_ACTUAL_START_ROW;
 
 import java.io.ByteArrayInputStream;
 import java.io.DataInput;
@@ -179,8 +179,15 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     // Project the one column family. We must project a column family since it's possible
                     // that there are other non declared column families that we need to ignore.
                     scan.addFamily(table.getColumnFamilies().get(0).getName().getBytes());
-                } else {
-                    if (projector.projectEveryRow()) {
+                } else if (projector.projectEveryRow()) {
+                    if (table.getViewType() == ViewType.MAPPED) {
+                        // Since we don't have the empty key value in MAPPED tables, 
+                        // we must select all CFs in HRS. However, only the
+                        // selected column values are returned back to client.
+                        for (PColumnFamily family : table.getColumnFamilies()) {
+                            scan.addFamily(family.getName().getBytes());
+                        }
+                    } else {
                         byte[] ecf = SchemaUtil.getEmptyColumnFamily(table);
                         // Project empty key value unless the column family containing it has
                         // been projected in its entirety.
@@ -188,32 +195,25 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                             scan.addColumn(ecf, QueryConstants.EMPTY_COLUMN_BYTES);
                         }
                     }
-                }
-                if (table.getViewType() == ViewType.MAPPED) {
-                    if (projector.projectEveryRow()) {
-                        // Since we don't have the empty key value in MAPPED tables, 
-                        // we must select all CFs in HRS. However, only the
-                        // selected column values are returned back to client.
-                        for (PColumnFamily family : table.getColumnFamilies()) {
-                            scan.addFamily(family.getName().getBytes());
-                        }
+                } else {
+                    for (Pair<byte[], byte[]> whereColumn : context.getWhereConditionColumns()) {
+                        scan.addColumn(whereColumn.getFirst(), whereColumn.getSecond());
                     }
-            } 
+                }
             }
             // Add FirstKeyOnlyFilter if there are no references to key value columns
             if (keyOnlyFilter) {
                 ScanUtil.andFilterAtBeginning(scan, new FirstKeyOnlyFilter());
             }
-            
-            // TODO adding all CFs here is not correct. It should be done only after ColumnProjectionOptimization.
+
             if (perScanLimit != null) {
                 ScanUtil.andFilterAtEnd(scan, new PageFilter(perScanLimit));
             }
-    
+
             doColumnProjectionOptimization(context, scan, table, statement);
         }
     }
-    
+
     public BaseResultIterators(QueryPlan plan, Integer perScanLimit, ParallelScanGrouper scanGrouper) throws SQLException {
         super(plan.getContext(), plan.getTableRef(), plan.getGroupBy(), plan.getOrderBy(), plan.getStatement().getHint(), plan.getLimit());
         this.plan = plan;
