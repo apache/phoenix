@@ -130,8 +130,9 @@ public class Scenario {
     		if(qs.isRandomPointRead()){
     			List<Query> queryList = new ArrayList<Query>();
     			Query query = new Query();
-    			
-    			query.setStatement("select * from " + this.getTableName() + " where TENANT_ID = 'user145'");
+    			String tableName = this.getTableName();
+    			String primaryKey = qs.getPrimaryKey();
+    			query.setStatement("select * from " + this.getTableName() + " where " + primaryKey + " = 'user145'");
     			queryList.add(query);
     			qs.setQuery(queryList);
     		}

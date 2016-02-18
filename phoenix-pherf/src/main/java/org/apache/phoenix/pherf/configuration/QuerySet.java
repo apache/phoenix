@@ -32,7 +32,15 @@ public class QuerySet {
 	private long executionDurationInMs = PherfConstants.DEFAULT_THREAD_DURATION_IN_MS;
 	private ExecutionType executionType = ExecutionType.SERIAL;
 	private boolean randomPointRead = false;
+	private String primaryKey = PherfConstants.DEFAULT_PRIMARY_KEY;
 	
+	@XmlAttribute
+	public String getPrimaryKey() {
+		return primaryKey;
+	}
+	public void setPrimaryKey(String pk){
+		primaryKey=pk;
+	}
 	@XmlAttribute
 	public boolean isRandomPointRead() {
 		return randomPointRead;
