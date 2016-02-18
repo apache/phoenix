@@ -21,12 +21,11 @@ package org.apache.phoenix.expression;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
-import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
 
 
@@ -67,11 +66,25 @@ public class StringConcatExpression extends BaseCompoundExpression {
     }
 
     @Override
+    public boolean requiresFinalEvaluation() {
+        return true;
+    }
+    
+    @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
         byte[] result = ByteUtil.EMPTY_BYTE_ARRAY;
         for (int i=0; i<children.size(); i++) {
-            if (children.get(i).getDataType() == null || !children.get(i).evaluate(tuple, ptr)) {
+            if (children.get(i).getDataType() == null) {
                 continue;
+            }
+            if (!children.get(i).evaluate(tuple, ptr)) {
+                // If not incremental evaluation, skip null children
+                if (tuple.isImmutable()) {
+                    continue;
+                }
+                // Otherwise, return false as an indication that we don't
+                // have enough information yet.
+                return false;
             }
             PDataType childType = children.get(i).getDataType();
             SortOrder sortOrder = children.get(i).getSortOrder();
