@@ -27,6 +27,7 @@ import javax.xml.bind.annotation.XmlElement;
 import javax.xml.bind.annotation.XmlRootElement;
 
 import org.apache.commons.lang.builder.HashCodeBuilder;
+import org.apache.commons.lang3.RandomUtils;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
 
 @XmlRootElement(namespace = "org.apache.phoenix.pherf.configuration.DataModel")
@@ -128,13 +129,13 @@ public class Scenario {
     public List<QuerySet> getQuerySet() {
     	for(QuerySet qs : querySet){
     		if(qs.isRandomPointRead()){
-    			List<Query> queryList = new ArrayList<Query>();
-    			
+    			List<Query> queryList = new ArrayList<Query>();    			
     			String tableName = this.getTableName();
     			String primaryKey = qs.getPrimaryKey();
-    			for(int i = 10; i < 20; i++) {
+    			for(int i = 0; i < 10; i++) {
     				Query query = new Query();
-    				query.setStatement("select * from " + this.getTableName() + " where " + primaryKey + " = 'user1" + i+"'");
+    				long keyInt = RandomUtils.nextLong(100, 10000100);
+    				query.setStatement("select * from " + this.getTableName() + " where " + primaryKey + " = 'user" + keyInt+"'");
         			queryList.add(query);
     			}
     			
