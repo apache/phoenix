@@ -132,6 +132,7 @@ public class Scenario {
     			Query query = new Query();
     			query.setStatement("select * from PHERF.SIMPLE where TENANT_ID = 'user145');");
     			queryList.add(query);
+    			qs.setQuery(queryList);
     		}
     	}
         return querySet;
