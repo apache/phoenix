@@ -126,6 +126,14 @@ public class Scenario {
      * @return
      */
     public List<QuerySet> getQuerySet() {
+    	for(QuerySet qs : querySet){
+    		if(qs.isRandomPointRead()){
+    			List<Query> queryList = new ArrayList<Query>();
+    			Query query = new Query();
+    			query.setStatement("select * from PHERF.SIMPLE where TENANT_ID = 'user145');");
+    			queryList.add(query);
+    		}
+    	}
         return querySet;
     }
 
