@@ -168,6 +168,16 @@ public class XMLConfigParser {
         }
         for (Path path : this.paths) {
             System.out.println("Adding model for path:" + path.toString());
+            DataModel dm = XMLConfigParser.readDataModel(path);
+            List<Scenario> sl = dm.getScenarios();
+            for(Scenario s : sl) {
+            	List<QuerySet> lqs = s.getQuerySet();
+            	for(QuerySet qs : lqs) {
+            		System.out.println("Concurrency is " + qs.getConcurrency());
+            		System.out.println("Exec duration is " + qs.getExecutionDurationInMs());
+            		System.out.println("RandomPointRead is " + qs.isRandomPointRead());
+            	}
+            }
             this.dataModels.add(XMLConfigParser.readDataModel(path));
         }
     }
@@ -176,3 +186,4 @@ public class XMLConfigParser {
         return resourceList.getResourceList(pattern);
     }
 }
+;
