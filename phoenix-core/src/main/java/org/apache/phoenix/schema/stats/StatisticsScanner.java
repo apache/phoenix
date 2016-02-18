@@ -38,7 +38,7 @@ import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 
 
 /**
- * The scanner that does the scanning to collect the stats during major compaction.{@link StatisticsCollector}
+ * The scanner that does the scanning to collect the stats during major compaction.{@link DefaultStatisticsCollector}
  */
 public class StatisticsScanner implements InternalScanner {
     private static final Log LOG = LogFactory.getLog(StatisticsScanner.class);

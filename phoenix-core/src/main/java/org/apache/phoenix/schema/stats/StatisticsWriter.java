@@ -79,7 +79,7 @@ public class StatisticsWriter implements Closeable {
         HTableInterface statsReaderTable = ServerUtil.getHTableForCoprocessorScan(env, statsWriterTable);
         StatisticsWriter statsTable = new StatisticsWriter(statsReaderTable, statsWriterTable, tableName,
                 clientTimeStamp);
-        if (clientTimeStamp != StatisticsCollector.NO_TIMESTAMP) { // Otherwise we do this later as we don't know the ts
+        if (clientTimeStamp != DefaultStatisticsCollector.NO_TIMESTAMP) { // Otherwise we do this later as we don't know the ts
                                                                    // yet
             statsTable.commitLastStatsUpdatedTime();
         }
@@ -131,7 +131,7 @@ public class StatisticsWriter implements Closeable {
     public void addStats(StatisticsCollector tracker, ImmutableBytesPtr cfKey, List<Mutation> mutations)
             throws IOException {
         if (tracker == null) { return; }
-        boolean useMaxTimeStamp = clientTimeStamp == StatisticsCollector.NO_TIMESTAMP;
+        boolean useMaxTimeStamp = clientTimeStamp == DefaultStatisticsCollector.NO_TIMESTAMP;
         long timeStamp = clientTimeStamp;
         if (useMaxTimeStamp) { // When using max timestamp, we write the update time later because we only know the ts
                                // now
@@ -217,7 +217,7 @@ public class StatisticsWriter implements Closeable {
 
     public void deleteStats(HRegion region, StatisticsCollector tracker, ImmutableBytesPtr fam, List<Mutation> mutations)
             throws IOException {
-        long timeStamp = clientTimeStamp == StatisticsCollector.NO_TIMESTAMP ? tracker.getMaxTimeStamp()
+        long timeStamp = clientTimeStamp == DefaultStatisticsCollector.NO_TIMESTAMP ? tracker.getMaxTimeStamp()
                 : clientTimeStamp;
         List<Result> statsForRegion = StatisticsUtil.readStatistics(statsWriterTable, tableName, fam,
                 region.getRegionInfo().getStartKey(), region.getRegionInfo().getEndKey(), timeStamp);
