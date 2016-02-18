@@ -226,4 +226,39 @@ public class GroupByCaseIT extends BaseHBaseManagedTimeIT {
         conn.close();
     }
 
+
+    @Test
+    public void testGroupByArray() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute("CREATE TABLE test1(\n" + 
+                "  a VARCHAR NOT NULL,\n" + 
+                "  b VARCHAR,\n" + 
+                "  c INTEGER,\n" + 
+                "  d VARCHAR,\n" + 
+                "  e VARCHAR ARRAY,\n" + 
+                "  f BIGINT,\n" + 
+                "  g BIGINT,\n" + 
+                "  CONSTRAINT pk PRIMARY KEY(a)\n" + 
+                ")");
+        conn.createStatement().execute("UPSERT INTO test1 VALUES('1', 'val', 100, 'a', ARRAY ['b'], 1, 2)");
+        conn.createStatement().execute("UPSERT INTO test1 VALUES('2', 'val', 100, 'a', ARRAY ['b'], 3, 4)");
+        conn.createStatement().execute("UPSERT INTO test1 VALUES('3', 'val', 100, 'a', ARRAY ['b','c'], 5, 6)");
+        conn.commit();
+        
+        ResultSet rs = conn.createStatement().executeQuery("SELECT c, SUM(f + g) AS sumone, d, e\n" + 
+                "FROM test1\n" + 
+                "WHERE b = 'val'\n" + 
+                "  AND a IN ('1','2','3')\n" + 
+                "GROUP BY c, d, e\n" + 
+                "ORDER BY sumone DESC");
+        assertTrue(rs.next());
+        assertEquals(100, rs.getInt(1));
+        assertEquals(11, rs.getLong(2));
+        assertTrue(rs.next());
+        assertEquals(100, rs.getInt(1));
+        assertEquals(10, rs.getLong(2));
+        assertFalse(rs.next());
+        conn.close();
+    }
 }
