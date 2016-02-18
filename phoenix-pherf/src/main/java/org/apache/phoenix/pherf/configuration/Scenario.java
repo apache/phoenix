@@ -130,7 +130,8 @@ public class Scenario {
     		if(qs.isRandomPointRead()){
     			List<Query> queryList = new ArrayList<Query>();
     			Query query = new Query();
-    			query.setStatement("select * from PHERF.SIMPLE where TENANT_ID = 'user145');");
+    			
+    			query.setStatement("select * from " + this.getTableName() + " where TENANT_ID = 'user145'");
     			queryList.add(query);
     			qs.setQuery(queryList);
     		}
