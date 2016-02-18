@@ -17,55 +17,56 @@
  */
 package org.apache.phoenix.schema.stats;
 
-import java.io.Closeable;
 import java.io.IOException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.Store;
+import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 
 /**
- * Statistics tracker that helps to collect stats like min key, max key and guideposts.
+ * A drop-in statistics collector that does nothing. An instance of this class is used for tables
+ * or environments where statistics collection is disabled.
  */
-public interface StatisticsCollector extends Closeable {
+public class NoOpStatisticsCollector implements StatisticsCollector {
 
-    /** Constant used if no max timestamp is available */
-    long NO_TIMESTAMP = -1;
+    @Override
+    public long getMaxTimeStamp() {
+        return NO_TIMESTAMP;
+    }
 
-    /**
-     * Returns the maximum timestamp of all cells encountered while collecting statistics.
-     */
-    long getMaxTimeStamp();
+    @Override
+    public void close() throws IOException {
+        // No-op
+    }
 
-    /**
-     * Write the collected statistics for the given region.
-     */
-    void updateStatistic(Region region);
+    @Override
+    public void updateStatistic(Region region) {
+        // No-op
+    }
 
-    /**
-     * Collect statistics for the given list of cells. This method can be called multiple times
-     * during collection of statistics.
-     */
-    void collectStatistics(List<Cell> results);
+    @Override
+    public void collectStatistics(List<Cell> results) {
+        // No-op
+    }
 
-    /**
-     * Wrap a compaction scanner with a scanner that will collect statistics using this instance.
-     */
-    InternalScanner createCompactionScanner(RegionCoprocessorEnvironment env, Store store,
-            InternalScanner delegate) throws IOException;
+    @Override
+    public InternalScanner createCompactionScanner(RegionCoprocessorEnvironment env, Store store,
+            InternalScanner delegate) throws IOException {
+        return delegate;
+    }
 
-    /**
-     * Clear all statistics information that has been collected.
-     */
-    void clear();
+    @Override public void clear() {
+        // No-op
+    }
 
-    /**
-     * Retrieve the calculated guide post info for the given column family.
-     */
-    GuidePostsInfo getGuidePosts(ImmutableBytesPtr fam);
+    @Override public GuidePostsInfo getGuidePosts(ImmutableBytesPtr fam) {
+        return null;
+    }
 }
