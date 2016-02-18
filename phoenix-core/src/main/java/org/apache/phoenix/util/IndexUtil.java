@@ -87,9 +87,9 @@ import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
 
-import co.cask.tephra.TxConstants;
-
 import com.google.common.collect.Lists;
+
+import co.cask.tephra.TxConstants;
 
 public class IndexUtil {
     public static final String INDEX_COLUMN_NAME_SEP = ":";
@@ -129,7 +129,7 @@ public class IndexUtil {
         if (PBinary.INSTANCE.equals(dataType)) {
             return PVarbinary.INSTANCE;
         }
-        throw new IllegalArgumentException("Unsupported non nullable index type " + dataType);
+        throw new IllegalArgumentException("Unsupported non nullable type " + dataType);
     }
     
 

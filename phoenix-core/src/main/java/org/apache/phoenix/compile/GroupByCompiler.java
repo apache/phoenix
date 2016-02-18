@@ -38,8 +38,8 @@ import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PDecimal;
-import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.util.IndexUtil;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
@@ -217,34 +217,53 @@ public class GroupByCompiler {
                 public int compare(Pair<Integer,Expression> gb1, Pair<Integer,Expression> gb2) {
                     Expression e1 = gb1.getSecond();
                     Expression e2 = gb2.getSecond();
-                    boolean isFixed1 = e1.getDataType().isFixedWidth();
-                    boolean isFixed2 = e2.getDataType().isFixedWidth();
+                    PDataType t1 = e1.getDataType();
+                    PDataType t2 = e2.getDataType();
+                    boolean isFixed1 = t1.isFixedWidth();
+                    boolean isFixed2 = t2.isFixedWidth();
                     boolean isFixedNullable1 = e1.isNullable() &&isFixed1;
                     boolean isFixedNullable2 = e2.isNullable() && isFixed2;
-                    if (isFixedNullable1 == isFixedNullable2) {
-                        if (isFixed1 == isFixed2) {
-                            // Not strictly necessary, but forces the order to match the schema
-                            // column order (with PK columns before value columns).
-                            //return o1.getColumnPosition() - o2.getColumnPosition();
-                            return gb1.getFirst() - gb2.getFirst();
-                        } else if (isFixed1) {
-                            return -1;
-                        } else {
+                    boolean oae1 = onlyAtEndType(e1);
+                    boolean oae2 = onlyAtEndType(e2);
+                    if (oae1 == oae2) {
+                        if (isFixedNullable1 == isFixedNullable2) {
+                            if (isFixed1 == isFixed2) {
+                                // Not strictly necessary, but forces the order to match the schema
+                                // column order (with PK columns before value columns).
+                                //return o1.getColumnPosition() - o2.getColumnPosition();
+                                return gb1.getFirst() - gb2.getFirst();
+                            } else if (isFixed1) {
+                                return -1;
+                            } else {
+                                return 1;
+                            }
+                        } else if (isFixedNullable1) {
                             return 1;
+                        } else {
+                            return -1;
                         }
-                    } else if (isFixedNullable1) {
+                    } else if (oae1) {
                         return 1;
                     } else {
                         return -1;
                     }
                 }
             });
+            boolean foundOnlyAtEndType = false;
             for (Pair<Integer,Expression> groupBy : groupBys) {
-                expressions.add(groupBy.getSecond());
+                Expression e = groupBy.getSecond();
+                if (onlyAtEndType(e)) {
+                    if (foundOnlyAtEndType) {
+                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.UNSUPPORTED_GROUP_BY_EXPRESSIONS)
+                        .setMessage(e.toString()).build().buildException();
+                    }
+                    foundOnlyAtEndType  = true;
+                }
+                expressions.add(e);
             }
             for (int i = expressions.size()-2; i >= 0; i--) {
                 Expression expression = expressions.get(i);
-                PDataType keyType = getKeyType(expression);
+                PDataType keyType = getGroupByDataType(expression);
                 if (keyType == expression.getDataType()) {
                     continue;
                 }
@@ -263,19 +282,16 @@ public class GroupByCompiler {
         return groupBy;
     }
     
-    private static PDataType getKeyType(Expression expression) {
-        PDataType type = expression.getDataType();
-        if (!expression.isNullable() || !type.isFixedWidth()) {
-            return type;
-        }
-        if (type.isCastableTo(PDecimal.INSTANCE)) {
-            return PDecimal.INSTANCE;
-        }
-        if (type.isCastableTo(PVarchar.INSTANCE)) {
-            return PVarchar.INSTANCE;
-        }
-        // This might happen if someone tries to group by an array
-        throw new IllegalStateException("Multiple occurrences of type " + type + " may not occur in a GROUP BY clause");
+    private static boolean onlyAtEndType(Expression expression) {
+        // Due to the encoding schema of these types, they may only be
+        // used once in a group by and are located at the end of the
+        // group by row key.
+        PDataType type = getGroupByDataType(expression);
+        return type.isArrayType() || type == PVarbinary.INSTANCE;
+    }
+    
+    private static PDataType getGroupByDataType(Expression expression) {
+        return IndexUtil.getIndexColumnDataType(expression.isNullable(), expression.getDataType());
     }
     
     private GroupByCompiler() {
