@@ -132,7 +132,7 @@ public class Scenario {
     			
     			String tableName = this.getTableName();
     			String primaryKey = qs.getPrimaryKey();
-    			for(int i = 0; i < 10; i++) {
+    			for(int i = 10; i < 20; i++) {
     				Query query = new Query();
     				query.setStatement("select * from " + this.getTableName() + " where " + primaryKey + " = 'user1" + i+"'");
         			queryList.add(query);
