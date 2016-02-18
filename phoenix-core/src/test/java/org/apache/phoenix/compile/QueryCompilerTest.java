@@ -2136,6 +2136,42 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     }
 
     @Test
+    public void testGroupByVarbinaryOrArray() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute("CREATE TABLE T1 (PK VARCHAR PRIMARY KEY, c1 VARCHAR, c2 VARBINARY, C3 VARCHAR ARRAY, c4 VARBINARY, C5 VARCHAR ARRAY, C6 BINARY(10)) ");
+        try {
+            conn.createStatement().executeQuery("SELECT c1 FROM t1 GROUP BY c1,c2,c3");
+            fail();
+        } catch(SQLException e) {
+            assertEquals(SQLExceptionCode.UNSUPPORTED_GROUP_BY_EXPRESSIONS.getErrorCode(), e.getErrorCode());
+        }
+        try {
+            conn.createStatement().executeQuery("SELECT c1 FROM t1 GROUP BY c1,c3,c2");
+            fail();
+        } catch(SQLException e) {
+            assertEquals(SQLExceptionCode.UNSUPPORTED_GROUP_BY_EXPRESSIONS.getErrorCode(), e.getErrorCode());
+        }
+        try {
+            conn.createStatement().executeQuery("SELECT c1 FROM t1 GROUP BY c1,c2,c4");
+            fail();
+        } catch(SQLException e) {
+            assertEquals(SQLExceptionCode.UNSUPPORTED_GROUP_BY_EXPRESSIONS.getErrorCode(), e.getErrorCode());
+        }
+        try {
+            conn.createStatement().executeQuery("SELECT c1 FROM t1 GROUP BY c1,c3,c5");
+            fail();
+        } catch(SQLException e) {
+            assertEquals(SQLExceptionCode.UNSUPPORTED_GROUP_BY_EXPRESSIONS.getErrorCode(), e.getErrorCode());
+        }
+        try {
+            conn.createStatement().executeQuery("SELECT c1 FROM t1 GROUP BY c1,c6,c5");
+            fail();
+        } catch(SQLException e) {
+            assertEquals(SQLExceptionCode.UNSUPPORTED_GROUP_BY_EXPRESSIONS.getErrorCode(), e.getErrorCode());
+        }
+    }
+    
+    @Test
     public void testQueryWithSCN() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(1000));
