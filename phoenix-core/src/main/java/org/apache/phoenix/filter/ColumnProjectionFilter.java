@@ -66,6 +66,7 @@ public class ColumnProjectionFilter extends FilterBase implements Writable {
         this.conditionOnlyCfs = conditionOnlyCfs;
     }
 
+    @Override
     public void readFields(DataInput input) throws IOException {
         this.emptyCFName = WritableUtils.readCompressedByteArray(input);
         int familyMapSize = WritableUtils.readVInt(input);
@@ -93,6 +94,7 @@ public class ColumnProjectionFilter extends FilterBase implements Writable {
         }
     }
 
+    @Override
     public void write(DataOutput output) throws IOException {
         WritableUtils.writeCompressedByteArray(output, this.emptyCFName);
         WritableUtils.writeVInt(output, this.columnsTracker.size());
