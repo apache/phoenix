@@ -89,6 +89,7 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.stats.StatisticsCollectionRunTracker;
 import org.apache.phoenix.schema.stats.StatisticsCollector;
+import org.apache.phoenix.schema.stats.StatisticsCollectorFactory;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.schema.types.PBinary;
 import org.apache.phoenix.schema.types.PChar;
@@ -184,9 +185,9 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             byte[] gp_per_region_bytes =
                     scan.getAttribute(BaseScannerRegionObserver.GUIDEPOST_PER_REGION);
             // Let this throw, as this scan is being done for the sole purpose of collecting stats
-            StatisticsCollector statsCollector =
-                    new StatisticsCollector(env, region.getRegionInfo().getTable()
-                            .getNameAsString(), ts, gp_width_bytes, gp_per_region_bytes);
+            StatisticsCollector statsCollector = StatisticsCollectorFactory.createStatisticsCollector(
+                    env, region.getRegionInfo().getTable().getNameAsString(), ts,
+                    gp_width_bytes, gp_per_region_bytes);
             return collectStats(s, statsCollector, region, scan, env.getConfiguration());
         }
         int offsetToBe = 0;
@@ -610,8 +611,9 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             try {
                 Pair<HRegionInfo, HRegionInfo> mergeRegions = null;
                 long clientTimeStamp = TimeKeeper.SYSTEM.getCurrentTime();
-                StatisticsCollector stats = new StatisticsCollector(c.getEnvironment(), table.getNameAsString(),
-                        clientTimeStamp, store.getFamily().getName());
+                StatisticsCollector stats = StatisticsCollectorFactory.createStatisticsCollector(
+                        c.getEnvironment(), table.getNameAsString(), clientTimeStamp,
+                        store.getFamily().getName());
                 internalScanner = stats.createCompactionScanner(c.getEnvironment(), store, scanner);
             } catch (IOException e) {
                 // If we can't reach the stats table, don't interrupt the normal
