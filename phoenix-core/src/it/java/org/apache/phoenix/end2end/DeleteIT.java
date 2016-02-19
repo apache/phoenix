@@ -205,7 +205,8 @@ public class DeleteIT extends BaseHBaseManagedTimeIT {
         deleteStmt = "DELETE FROM IntIntKeyTest WHERE j IS NULL";
         stmt = conn.prepareStatement(deleteStmt);
         assertIndexUsed(conn, deleteStmt, indexName, createIndex);
-        stmt.execute();
+        int deleteCount = stmt.executeUpdate();
+        assertEquals(3, deleteCount);
         if (!autoCommit) {
             conn.commit();
         }
