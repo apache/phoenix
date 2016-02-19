@@ -128,8 +128,8 @@ public class DefaultStatisticsCollector implements StatisticsCollector {
             // This will not impact a stats collection of single column family during compaction as
             // guidePostsInfoWriterMap cannot be empty in this case.
             if (guidePostsInfoWriterMap.keySet().isEmpty()) {
-                for (Store store : region.getStores()) {
-                    statsTable.deleteStats(region, this, new ImmutableBytesPtr(store.getFamily().getName()), mutations);
+                for (byte[] fam : region.getStores().keySet()) {
+                    statsTable.deleteStats(region, this, new ImmutableBytesPtr(fam), mutations);
                 }
             }
             for (ImmutableBytesPtr fam : guidePostsInfoWriterMap.keySet()) {
