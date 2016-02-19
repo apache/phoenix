@@ -193,6 +193,7 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Throwables;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
+import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
@@ -204,6 +205,7 @@ import co.cask.tephra.TransactionSystemClient;
 import co.cask.tephra.TxConstants;
 import co.cask.tephra.distributed.PooledClientProvider;
 import co.cask.tephra.distributed.TransactionServiceClient;
+import co.cask.tephra.zookeeper.TephraZKClientService;
 
 
 public class ConnectionQueryServicesImpl extends DelegateQueryServices implements ConnectionQueryServices {
@@ -351,14 +353,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         if (zkQuorumServersString==null) {
             zkQuorumServersString = connectionInfo.getZookeeperQuorum()+":"+connectionInfo.getPort();
         }
+
+        int timeOut = props.getInt(HConstants.ZK_SESSION_TIMEOUT, HConstants.DEFAULT_ZK_SESSION_TIMEOUT);
+        // Create instance of the tephra zookeeper client 
+        ZKClientService tephraZKClientService = new TephraZKClientService(zkQuorumServersString, timeOut, null, ArrayListMultimap.<String, byte[]>create());
+        
         ZKClientService zkClientService = ZKClientServices.delegate(
                   ZKClients.reWatchOnExpire(
-                    ZKClients.retryOnFailure(
-                      ZKClientService.Builder.of(zkQuorumServersString)
-                        .setSessionTimeout(props.getInt(HConstants.ZK_SESSION_TIMEOUT, HConstants.DEFAULT_ZK_SESSION_TIMEOUT))
-                        .build(),
-                      RetryStrategies.exponentialDelay(500, 2000, TimeUnit.MILLISECONDS)
-                    )
+                         ZKClients.retryOnFailure(tephraZKClientService, RetryStrategies.exponentialDelay(500, 2000, TimeUnit.MILLISECONDS))
                   )
                 );
         zkClientService.startAndWait();
