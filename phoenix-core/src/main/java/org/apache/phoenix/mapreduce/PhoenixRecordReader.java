@@ -53,7 +53,7 @@ import com.google.common.collect.Lists;
 import org.apache.phoenix.query.ConnectionQueryServices;
 
 /**
- * {@link RecordReader} implementation that iterates over the the records.
+ * PhoenixRecordReader implementation that iterates over the the records.
  */
 public class PhoenixRecordReader<T extends DBWritable> extends RecordReader<NullWritable,T> {
     
