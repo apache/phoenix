@@ -111,9 +111,8 @@ public class StatsCollectorWithSplitsAndMultiCFIT extends StatsCollectorAbstract
 
         rs = conn.createStatement().executeQuery(
                 "SELECT COLUMN_FAMILY,SUM(GUIDE_POSTS_ROW_COUNT),SUM(GUIDE_POSTS_WIDTH),COUNT(*) from SYSTEM.STATS where PHYSICAL_NAME = '"
-                        + STATS_TEST_TABLE_NAME_NEW + "' GROUP BY COLUMN_FAMILY");
+                        + STATS_TEST_TABLE_NAME_NEW + "' GROUP BY COLUMN_FAMILY ORDER BY COLUMN_FAMILY");
 
-        assertTrue(rs.next());
         assertTrue(rs.next());
         assertEquals("A", rs.getString(1));
         assertEquals(25, rs.getInt(2));
