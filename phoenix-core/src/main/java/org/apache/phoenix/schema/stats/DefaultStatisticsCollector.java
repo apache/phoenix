@@ -125,6 +125,14 @@ class DefaultStatisticsCollector implements StatisticsCollector {
             throws IOException {
         try {
             // update the statistics table
+            // Delete statistics for a region if no guidepost is collected for that region during UPDATE STATISTICS
+            // This will not impact a stats collection of single column family during compaction as
+            // guidePostsInfoWriterMap cannot be empty in this case.
+            if (guidePostsInfoWriterMap.keySet().isEmpty()) {
+                for (Store store : region.getStores()) {
+                    statsTable.deleteStats(region, this, new ImmutableBytesPtr(store.getFamily().getName()), mutations);
+                }
+            }
             for (ImmutableBytesPtr fam : guidePostsInfoWriterMap.keySet()) {
                 if (delete) {
                     if (logger.isDebugEnabled()) {
