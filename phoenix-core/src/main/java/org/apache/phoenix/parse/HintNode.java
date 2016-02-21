@@ -100,6 +100,10 @@ public class HintNode {
        * Saves an RPC call on the scan. See Scan.setSmall(true) in HBase documentation.
        */
      SMALL,
+     /**
+      * Enforces a serial scan.
+      */
+     SERIAL,
     };
 
     private final Map<Hint,String> hints;

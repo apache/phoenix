@@ -61,17 +61,17 @@ public class StatementHintsCompilationTest extends BaseConnectionlessQueryTest {
         return filter instanceof SkipScanFilter;
     }
 
-    private static StatementContext compileStatement(String query) throws SQLException {
+    private static QueryPlan compileStatement(String query) throws SQLException {
         return compileStatement(query, Collections.emptyList(), null);
     }
 
-    private static StatementContext compileStatement(String query, List<Object> binds, Integer limit) throws SQLException {
+    private static QueryPlan compileStatement(String query, List<Object> binds, Integer limit) throws SQLException {
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
         PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
         TestUtil.bindParams(pstmt, binds);
         QueryPlan plan = pstmt.compileQuery();
         assertEquals(limit, plan.getLimit());
-        return plan.getContext();
+        return plan;
     }
 
     @Test
@@ -80,7 +80,7 @@ public class StatementHintsCompilationTest extends BaseConnectionlessQueryTest {
         // A where clause without the first column usually compiles into a range scan.
         String query = "SELECT /*+ SKIP_SCAN */ * FROM atable WHERE entity_id='" + id + "'";
         
-        Scan scan = compileStatement(query).getScan();
+        Scan scan = compileStatement(query).getContext().getScan();
         assertTrue("The first filter should be SkipScanFilter.", usingSkipScan(scan));
     }
 
@@ -88,7 +88,7 @@ public class StatementHintsCompilationTest extends BaseConnectionlessQueryTest {
     public void testSelectForceRangeScan() throws Exception {
         String query = "SELECT /*+ RANGE_SCAN */ * FROM atable WHERE organization_id in (" +
                 "'000000000000001', '000000000000002', '000000000000003', '000000000000004')";
-        Scan scan = compileStatement(query).getScan();
+        Scan scan = compileStatement(query).getContext().getScan();
         // Verify that it is not using SkipScanFilter.
         assertFalse("The first filter should not be SkipScanFilter.", usingSkipScan(scan));
     }
@@ -102,5 +102,16 @@ public class StatementHintsCompilationTest extends BaseConnectionlessQueryTest {
                 "    SERVER FILTER BY FIRST KEY ONLY AND (CREATED_DATE >= DATE '2012-11-01 00:00:00.000' AND CREATED_DATE < DATE '2012-11-30 00:00:00.000')\n" + 
                 "    SERVER TOP 100 ROWS SORTED BY [ORGANIZATION_ID, PARENT_ID, CREATED_DATE DESC, ENTITY_HISTORY_ID]\n" + 
                 "CLIENT MERGE SORT",QueryUtil.getExplainPlan(rs));
+    }
+
+    @Test
+    public void testSerialHint() throws Exception {
+        // test ScanPlan
+        String query = "SELECT /*+ SERIAL */ COUNT(*) FROM atable";
+        assertTrue("Expected a SERIAL query", compileStatement(query).getExplainPlan().getPlanSteps().get(0).contains("SERIAL"));
+
+        // test AggregatePlan
+        query = "SELECT /*+ SERIAL */ * FROM atable";
+        assertTrue("Expected a SERIAL query", compileStatement(query).getExplainPlan().getPlanSteps().get(0).contains("SERIAL"));
     }
 }
