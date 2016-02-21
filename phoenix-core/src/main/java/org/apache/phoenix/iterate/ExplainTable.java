@@ -106,7 +106,7 @@ public abstract class ExplainTable {
         Scan scan = context.getScan();
 
         if (hint.hasHint(Hint.SMALL)) {
-            buf.append("SMALL ");
+            buf.append(Hint.SMALL).append(" ");
         }
         if (OrderBy.REV_ROW_KEY_ORDER_BY.equals(orderBy)) {
             buf.append("REVERSE ");
