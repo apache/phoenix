@@ -108,7 +108,7 @@ import com.google.common.collect.Lists;
 public abstract class BaseResultIterators extends ExplainTable implements ResultIterators {
 	private static final Logger logger = LoggerFactory.getLogger(BaseResultIterators.class);
     private static final int ESTIMATED_GUIDEPOSTS_PER_REGION = 20;
-    private static final int MIN_SEEK_TO_COLUMN_VERSION = VersionUtil.encodeVersion("0", "94", "12");
+    private static final int MIN_SEEK_TO_COLUMN_VERSION = VersionUtil.encodeVersion("0", "98", "12");
 
     private final List<List<Scan>> scans;
     private final List<KeyRange> splits;
