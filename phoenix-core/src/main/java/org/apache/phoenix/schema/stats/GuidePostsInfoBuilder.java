@@ -104,7 +104,7 @@ public class GuidePostsInfoBuilder {
     }
 
     public boolean addGuidePosts(byte[] row, long byteCount, long rowCount) {
-        return addGuidePosts(new ImmutableBytesWritable(row), byteCount, 0);
+        return addGuidePosts(new ImmutableBytesWritable(row), byteCount, rowCount);
     }
 
     private void close() {
