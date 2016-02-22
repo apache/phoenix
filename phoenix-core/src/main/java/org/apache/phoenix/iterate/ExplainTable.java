@@ -116,7 +116,7 @@ public abstract class ExplainTable {
         } else {
             explainSkipScan(buf);
         }
-        buf.append("OVER " + tableRef.getTable().getPhysicalName().getString());
+        buf.append("OVER ").append(tableRef.getTable().getPhysicalName().getString());
         if (!scanRanges.isPointLookup()) {
             appendKeyRanges(buf);
         }

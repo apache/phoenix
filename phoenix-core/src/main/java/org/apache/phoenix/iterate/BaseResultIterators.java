@@ -120,6 +120,8 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
     private final ParallelScanGrouper scanGrouper;
     // TODO: too much nesting here - breakup into new classes.
     private final List<List<List<Pair<Scan,Future<PeekingResultIterator>>>>> allFutures;
+    private long estimatedRows;
+    private long estimatedSize;
     
     static final Function<HRegionLocation, KeyRange> TO_KEY_RANGE = new Function<HRegionLocation, KeyRange>() {
         @Override
@@ -558,6 +560,8 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 while (guideIndex < gpsSize && (currentGuidePost.compareTo(endKey) <= 0 || endKey.length == 0)) {
                     Scan newScan = scanRanges.intersectScan(scan, currentKeyBytes, currentGuidePostBytes, keyOffset,
                             false);
+                    estimatedRows += gps.getRowCounts().get(guideIndex);
+                    estimatedSize += gps.getByteCounts().get(guideIndex);
                     scans = addNewScan(parallelScans, scans, newScan, currentGuidePostBytes, false, regionLocation);
                     currentKeyBytes = currentGuidePost.copyBytes();
                     currentGuidePost = PrefixByteCodec.decode(decoder, input);
@@ -851,7 +855,15 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 QueryServices.EXPLAIN_CHUNK_COUNT_ATTRIB,
                 QueryServicesOptions.DEFAULT_EXPLAIN_CHUNK_COUNT);
         StringBuilder buf = new StringBuilder();
-        buf.append("CLIENT " + (displayChunkCount ? (this.splits.size() + "-CHUNK ") : "") + getName() + " " + size() + "-WAY ");
+        buf.append("CLIENT ");
+        if (displayChunkCount) {
+            buf.append(this.splits.size()).append("-CHUNK ");
+            if (estimatedRows > 0) {
+                buf.append(estimatedRows).append(" ROWS ");
+                buf.append(estimatedSize).append(" BYTES ");
+            }
+        }
+        buf.append(getName()).append(" ").append(size()).append("-WAY ");
         explain(buf.toString(),planSteps);
     }
 
