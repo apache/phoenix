@@ -76,6 +76,7 @@ import org.apache.phoenix.schema.SequenceNotFoundException;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.stats.PTableStats;
+import org.apache.phoenix.schema.stats.StatisticsUtil;
 import org.apache.phoenix.util.JDBCUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -106,7 +107,8 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     private final Map<SequenceKey, SequenceInfo> sequenceMap = Maps.newHashMap();
     private final String userName;
     private final TransactionSystemClient txSystemClient;
-    private KeyValueBuilder kvBuilder;
+    private final KeyValueBuilder kvBuilder;
+    private volatile boolean areStatsEnabled;
     private volatile boolean initialized;
     private volatile SQLException initializationException;
     private final Map<String, List<HRegionLocation>> tableSplits = Maps.newHashMap();
@@ -136,6 +138,8 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
         config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration(config);
         TransactionManager txnManager = new TransactionManager(config);
         this.txSystemClient = new InMemoryTxSystemClient(txnManager);
+        // Just check the properties on the client side (instead of normally the server side)
+        this.areStatsEnabled = StatisticsUtil.isStatsEnabled(config);
     }
 
     private PMetaData newEmptyMetaData() {
@@ -527,6 +531,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
         return txSystemClient;
     }
  
+    @Override
     public MetaDataMutationResult createFunction(List<Mutation> functionData, PFunction function, boolean temporary)
             throws SQLException {
         return new MetaDataMutationResult(MutationCode.FUNCTION_NOT_FOUND, 0l, null);
@@ -578,6 +583,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
         return false;
     }
 
+    @Override
     public HRegionLocation getTableRegionLocation(byte[] tableName, byte[] row) throws SQLException {
        List<HRegionLocation> regions = tableSplits.get(Bytes.toString(tableName));
        if (regions != null) {
@@ -591,5 +597,15 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
        return new HRegionLocation(
                        new HRegionInfo(TableName.valueOf(tableName), HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW),
                        SERVER_NAME, -1);
+    }
+
+    @Override
+    public boolean areStatsEnabled() {
+        return areStatsEnabled;
+    }
+
+    @Override
+    public void setStatsEnabled(boolean statsEnabled) {
+        this.areStatsEnabled = statsEnabled;
     }
 }

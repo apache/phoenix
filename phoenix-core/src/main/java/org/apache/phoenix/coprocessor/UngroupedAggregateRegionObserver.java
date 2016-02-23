@@ -22,8 +22,9 @@ import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_FAMILY;
 import static org.apache.phoenix.query.QueryConstants.UNGROUPED_AGG_ROW_KEY;
 import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_ATTRIB;
-import static org.apache.phoenix.schema.stats.StatisticsCollectionRunTracker.COMPACTION_UPDATE_STATS_ROW_COUNT;
-import static org.apache.phoenix.schema.stats.StatisticsCollectionRunTracker.CONCURRENT_UPDATE_STATS_ROW_COUNT;
+import static org.apache.phoenix.schema.stats.StatisticsCollectionRunTracker.UPDATE_STATS_DISABLED;
+import static org.apache.phoenix.schema.stats.StatisticsCollectionRunTracker.UPDATE_STATS_RUN;
+import static org.apache.phoenix.schema.stats.StatisticsCollectionRunTracker.UPDATE_STATS_SKIPPED;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -89,6 +90,7 @@ import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.stats.StatisticsCollectionRunTracker;
 import org.apache.phoenix.schema.stats.StatisticsCollector;
 import org.apache.phoenix.schema.stats.StatisticsCollectorFactory;
+import org.apache.phoenix.schema.stats.StatisticsUtil;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.schema.types.PBinary;
 import org.apache.phoenix.schema.types.PChar;
@@ -643,22 +645,23 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         if (asyncBytes != null) {
             async = Bytes.toBoolean(asyncBytes);
         }
-        long rowCount = 0; // in case of async, we report 0 as number of rows updated
+        long returnValue = UPDATE_STATS_RUN; // in case of async, we report 1 as number of rows updated
+        boolean statsEnabled = StatisticsUtil.isStatsEnabled(config);
         StatisticsCollectionRunTracker statsRunTracker =
                 StatisticsCollectionRunTracker.getInstance(config);
-        boolean runUpdateStats = statsRunTracker.addUpdateStatsCommandRegion(region.getRegionInfo());
+        boolean runUpdateStats = statsEnabled && statsRunTracker.addUpdateStatsCommandRegion(region.getRegionInfo());
         if (runUpdateStats) {
             if (!async) {
-                rowCount = callable.call();
+                returnValue = callable.call();
             } else {
                 statsRunTracker.runTask(callable);
             }
         } else {
-            rowCount = CONCURRENT_UPDATE_STATS_ROW_COUNT;
-            logger.info("UPDATE STATISTICS didn't run because another UPDATE STATISTICS command was already running on the region "
+            returnValue = statsEnabled ? UPDATE_STATS_SKIPPED : UPDATE_STATS_DISABLED;
+            logger.info("UPDATE STATISTICS didn't run because " + (statsEnabled ? " another UPDATE STATISTICS command was already running on the region " : " stats are disabled ")
                     + region.getRegionInfo().getRegionNameAsString());
         }
-        byte[] rowCountBytes = PLong.INSTANCE.toBytes(Long.valueOf(rowCount));
+        byte[] rowCountBytes = PLong.INSTANCE.toBytes(Long.valueOf(returnValue));
         final KeyValue aggKeyValue =
                 KeyValueUtil.newKeyValue(UNGROUPED_AGG_ROW_KEY, SINGLE_COLUMN_FAMILY,
                     SINGLE_COLUMN, AGG_TIMESTAMP, rowCountBytes, 0, rowCountBytes.length);
@@ -728,22 +731,22 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             region.startRegionOperation();
             boolean hasMore = false;
             boolean noErrors = false;
-            boolean compactionRunning = areStatsBeingCollectedViaCompaction();
             long rowCount = 0;
+            boolean compactionRunning = areStatsBeingCollectedViaCompaction();
             try {
                 if (!compactionRunning) {
                     synchronized (innerScanner) {
                         do {
                             List<Cell> results = new ArrayList<Cell>();
                             hasMore = innerScanner.nextRaw(results);
-                            stats.collectStatistics(results);
                             rowCount++;
+                            stats.collectStatistics(results);
                             compactionRunning = areStatsBeingCollectedViaCompaction();
                         } while (hasMore && !compactionRunning);
                         noErrors = true;
                     }
                 }
-                return compactionRunning ? COMPACTION_UPDATE_STATS_ROW_COUNT : rowCount;
+                return compactionRunning ? UPDATE_STATS_SKIPPED : UPDATE_STATS_RUN;
             } catch (IOException e) {
                 logger.error("IOException in update stats: " + Throwables.getStackTraceAsString(e));
                 throw e;

@@ -21,15 +21,19 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.VersionInfo;
+import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.query.HBaseFactoryProvider;
+import org.apache.phoenix.query.QueryServices;
 import org.junit.Test;
 
 
@@ -58,6 +62,35 @@ public class MetaDataUtilTest {
         assertFalse(MetaDataUtil.areClientAndServerCompatible(VersionUtil.encodeVersion(3,1,10), 3, 5));
     }
 
+    @Test
+    public void testEncodeDecode() {
+        String hbaseVersionStr = "0.98.14";
+        Configuration config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
+        config.setBoolean(QueryServices.STATS_ENABLED_ATTRIB, false);
+        
+        long version = MetaDataUtil.encodeVersion(hbaseVersionStr, config);
+        int hbaseVersion = MetaDataUtil.decodeHBaseVersion(version);
+        int expectedHBaseVersion = VersionUtil.encodeVersion(0, 98, 14);
+        assertEquals(expectedHBaseVersion, hbaseVersion);
+        boolean areStatsEnabled = MetaDataUtil.decodeStatsEnabled(version);
+        assertFalse(areStatsEnabled);
+        int phoenixVersion = MetaDataUtil.decodePhoenixVersion(version);
+        int expectedPhoenixVersion = VersionUtil.encodeVersion(MetaDataProtocol.PHOENIX_MAJOR_VERSION, MetaDataProtocol.PHOENIX_MINOR_VERSION,
+                MetaDataProtocol.PHOENIX_PATCH_NUMBER);
+        assertEquals(expectedPhoenixVersion, phoenixVersion);
+        
+        config.setBoolean(QueryServices.STATS_ENABLED_ATTRIB, true);
+        version = MetaDataUtil.encodeVersion(hbaseVersionStr, config);
+        hbaseVersion = MetaDataUtil.decodeHBaseVersion(version);
+        expectedHBaseVersion = VersionUtil.encodeVersion(0, 98, 14);
+        assertEquals(expectedHBaseVersion, hbaseVersion);
+        areStatsEnabled = MetaDataUtil.decodeStatsEnabled(version);
+        assertTrue(areStatsEnabled);
+        phoenixVersion = MetaDataUtil.decodePhoenixVersion(version);
+        expectedPhoenixVersion = VersionUtil.encodeVersion(MetaDataProtocol.PHOENIX_MAJOR_VERSION, MetaDataProtocol.PHOENIX_MINOR_VERSION,
+                MetaDataProtocol.PHOENIX_PATCH_NUMBER);
+        assertEquals(expectedPhoenixVersion, phoenixVersion);
+    }
   /**
    * Ensure it supports {@link GenericKeyValueBuilder}
    * @throws Exception on failure
