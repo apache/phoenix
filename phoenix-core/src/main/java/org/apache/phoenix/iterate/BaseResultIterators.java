@@ -122,7 +122,6 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
     private final List<List<List<Pair<Scan,Future<PeekingResultIterator>>>>> allFutures;
     private long estimatedRows;
     private long estimatedSize;
-    private boolean areStatsEnabled;
     
     static final Function<HRegionLocation, KeyRange> TO_KEY_RANGE = new Function<HRegionLocation, KeyRange>() {
         @Override
@@ -370,11 +369,6 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             return scans;
     }
 
-    // TODO: add to ResultIterators and QueryPlan interfaces?
-    public boolean areStatsEnabled() {
-        return this.areStatsEnabled;
-    }
-
     private static List<byte[]> toBoundaries(List<HRegionLocation> regionLocations) {
         int nBoundaries = regionLocations.size() - 1;
         List<byte[]> ranges = Lists.newArrayListWithExpectedSize(nBoundaries);
@@ -530,17 +524,6 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         ImmutableBytesWritable currentGuidePost = ByteUtil.EMPTY_IMMUTABLE_BYTE_ARRAY;
         List<Scan> scans = Lists.newArrayListWithExpectedSize(estGuidepostsPerRegion);
         ImmutableBytesWritable guidePosts = gps.getGuidePosts();
-        // If we have any guideposts, then we can definitely say that stats are enabled.
-        // If we have no guideposts, though, we cannot assume that stats are disabled,
-        // as the table may just be too small to have them.
-        if (guidePosts.getLength() > 0) {
-            areStatsEnabled = true;
-            // It's possible that the server was bounced and stats have changed
-            // to become enabled without a client bounce.
-            this.context.getConnection().getQueryServices().setStatsEnabled(true);
-        } else {
-            areStatsEnabled = this.context.getConnection().getQueryServices().areStatsEnabled();
-        }
         ByteArrayInputStream stream = null;
         DataInput input = null;
         PrefixByteDecoder decoder = null;
@@ -868,18 +851,14 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
 
     @Override
     public void explain(List<String> planSteps) {
-        ConnectionQueryServices services = context.getConnection().getQueryServices();
-        boolean displayChunkCount = services.getProps().getBoolean(
+        boolean displayChunkCount = context.getConnection().getQueryServices().getProps().getBoolean(
                 QueryServices.EXPLAIN_CHUNK_COUNT_ATTRIB,
                 QueryServicesOptions.DEFAULT_EXPLAIN_CHUNK_COUNT);
-        boolean displayRowCount = services.getProps().getBoolean(
-                QueryServices.EXPLAIN_ROW_COUNT_ATTRIB,
-                QueryServicesOptions.DEFAULT_EXPLAIN_ROW_COUNT);
         StringBuilder buf = new StringBuilder();
         buf.append("CLIENT ");
         if (displayChunkCount) {
             buf.append(this.splits.size()).append("-CHUNK ");
-            if (displayRowCount && areStatsEnabled) {
+            if (estimatedRows > 0) {
                 buf.append(estimatedRows).append(" ROWS ");
                 buf.append(estimatedSize).append(" BYTES ");
             }

@@ -61,7 +61,6 @@ public class MutableIndexToolIT extends BaseOwnClusterHBaseManagedTimeIT {
         final String dataTable = "DATA_TABLE5";
         final String indxTable = String.format("%s_%s",dataTable,"INDX");
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(QueryServices.EXPLAIN_ROW_COUNT_ATTRIB, Boolean.FALSE.toString());
         Connection conn = DriverManager.getConnection(getUrl(), props);
         Statement stmt = conn.createStatement();
         try {
