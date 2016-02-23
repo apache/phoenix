@@ -24,7 +24,6 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.PrefixByteCodec;
 import org.apache.phoenix.util.PrefixByteEncoder;
 import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 
@@ -107,15 +106,10 @@ public class GuidePostsInfoBuilder {
         return addGuidePosts(new ImmutableBytesWritable(row), byteCount, rowCount);
     }
 
-    private void close() {
-        PrefixByteCodec.close(stream);
-    }
-
     public GuidePostsInfo build() {
         this.guidePosts.set(stream.getBuffer(), 0, stream.size());
         GuidePostsInfo guidePostsInfo = new GuidePostsInfo(this.byteCounts, this.guidePosts, this.rowCounts,
                 this.maxLength, this.guidePostsCount);
-        this.close();
         return guidePostsInfo;
     }
 

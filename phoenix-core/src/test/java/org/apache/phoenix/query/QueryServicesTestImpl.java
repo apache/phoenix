@@ -54,6 +54,7 @@ public final class QueryServicesTestImpl extends BaseQueryServicesImpl {
     public static final long DEFAULT_MAX_CLIENT_METADATA_CACHE_SIZE =  1024L*1024L*2L; // 2 Mb
     public static final int DEFAULT_MIN_STATS_UPDATE_FREQ_MS = 0;
     public static final boolean DEFAULT_EXPLAIN_CHUNK_COUNT = false; // TODO: update explain plans in test and set to true
+    public static final boolean DEFAULT_EXPLAIN_ROW_COUNT = false; // TODO: update explain plans in test and set to true
     public static final String DEFAULT_EXTRA_JDBC_ARGUMENTS = PhoenixRuntime.PHOENIX_TEST_DRIVER_URL_PARAM;
     private static final boolean DEFAULT_RUN_UPDATE_STATS_ASYNC = false;
     private static final boolean DEFAULT_COMMIT_STATS_ASYNC = false;
@@ -80,6 +81,7 @@ public final class QueryServicesTestImpl extends BaseQueryServicesImpl {
     private static QueryServicesOptions getDefaultServicesOptions() {
     	return withDefaults()
     	        .setExplainChunkCount(DEFAULT_EXPLAIN_CHUNK_COUNT)
+                .setExplainRowCount(DEFAULT_EXPLAIN_ROW_COUNT)
     	        .setSequenceSaltBuckets(DEFAULT_SEQUENCE_TABLE_SALT_BUCKETS)
                 .setMinStatsUpdateFrequencyMs(DEFAULT_MIN_STATS_UPDATE_FREQ_MS)
                 .setThreadPoolSize(DEFAULT_THREAD_POOL_SIZE)
