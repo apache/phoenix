@@ -23,8 +23,6 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 
-import co.cask.tephra.TransactionSystemClient;
-
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
@@ -45,6 +43,8 @@ import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.SequenceAllocation;
 import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.stats.PTableStats;
+
+import co.cask.tephra.TransactionSystemClient;
 
 
 public interface ConnectionQueryServices extends QueryServices, MetaDataMutated {
@@ -123,4 +123,7 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
     TransactionSystemClient getTransactionSystemClient();
     public long getRenewLeaseThresholdMilliSeconds();
     public boolean isRenewingLeasesEnabled();
+    
+    public boolean areStatsEnabled();
+    public void setStatsEnabled(boolean statsEnabled);
 }
