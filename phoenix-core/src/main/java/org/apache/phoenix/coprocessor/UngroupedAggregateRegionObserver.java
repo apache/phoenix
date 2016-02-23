@@ -152,7 +152,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
       }
       Mutation[] mutationArray = new Mutation[mutations.size()];
       // TODO: should we use the one that is all or none?
-      logger.warn("Committing bactch of " + mutations.size() + " mutations for " + region.getRegionInfo().getTable().getNameAsString());
+      logger.debug("Committing bactch of " + mutations.size() + " mutations for " + region.getRegionInfo().getTable().getNameAsString());
       region.batchMutate(mutations.toArray(mutationArray), HConstants.NO_NONCE, HConstants.NO_NONCE);
     }
 
@@ -209,7 +209,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         byte[] descRowKeyTableBytes = scan.getAttribute(UPGRADE_DESC_ROW_KEY);
         boolean isDescRowKeyOrderUpgrade = descRowKeyTableBytes != null;
         if (isDescRowKeyOrderUpgrade) {
-            logger.warn("Upgrading row key for " + region.getRegionInfo().getTable().getNameAsString());
+            logger.debug("Upgrading row key for " + region.getRegionInfo().getTable().getNameAsString());
             projectedTable = deserializeTable(descRowKeyTableBytes);
             try {
                 writeToTable = PTableImpl.makePTable(projectedTable, true);
