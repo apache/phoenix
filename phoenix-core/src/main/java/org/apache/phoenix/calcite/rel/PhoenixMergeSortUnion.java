@@ -59,9 +59,9 @@ public class PhoenixMergeSortUnion extends Union implements PhoenixRel {
             }
         }
         
-        double rowCount = mq.getRowCount(this);
         double mergeSortFactor = 1.1;
-        return planner.getCostFactory().makeCost(0, rowCount * mergeSortFactor, 0);
+        return super.computeSelfCost(planner, mq)
+                .multiplyBy(PHOENIX_FACTOR).multiplyBy(mergeSortFactor);
     }
 
     @Override

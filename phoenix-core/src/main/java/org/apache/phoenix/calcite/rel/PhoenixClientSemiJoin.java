@@ -87,9 +87,9 @@ public class PhoenixClientSemiJoin extends PhoenixAbstractSemiJoin implements
                 rowCount += rightRowCount;
             }
         }            
-        RelOptCost cost = planner.getCostFactory().makeCost(0, rowCount, 0);
+        RelOptCost cost = planner.getCostFactory().makeCost(rowCount, 0, 0);
 
-        return cost.multiplyBy(SERVER_FACTOR);
+        return cost.multiplyBy(SERVER_FACTOR).multiplyBy(PHOENIX_FACTOR);
     }
 
     @Override

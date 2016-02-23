@@ -168,7 +168,7 @@ public class CalciteIndexIT extends BaseCalciteIT {
                            "    PhoenixTableScan(table=[[phoenix, IDXSALTED_SALTED_TEST_TABLE]], filter=[>(CAST($0):INTEGER, 4)])\n")
                 .resultIs(false, new Object[][]{{999L}})
                 .close();
-        start(true, 0.001f).sql("select * from " + SALTED_TABLE_NAME + " where col1 <= 5 order by col1")
+        start(true, 1f).sql("select * from " + SALTED_TABLE_NAME + " where col1 <= 5 order by col1")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixServerProject(MYPK0=[$1], MYPK1=[$2], COL0=[$3], COL1=[CAST($0):INTEGER])\n" +
                            "    PhoenixTableScan(table=[[phoenix, IDXSALTED_SALTED_TEST_TABLE]], filter=[<=(CAST($0):INTEGER, 5)], scanOrder=[FORWARD])\n")

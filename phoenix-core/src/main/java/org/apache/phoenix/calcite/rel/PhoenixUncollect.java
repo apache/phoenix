@@ -20,30 +20,29 @@ import org.apache.phoenix.schema.types.PDataType;
 
 public class PhoenixUncollect extends Uncollect implements PhoenixRel {
     
-    public static PhoenixUncollect create(RelNode input, boolean withOrdinality) {
+    public static PhoenixUncollect create(RelNode input) {
         RelOptCluster cluster = input.getCluster();
         RelTraitSet traits = cluster.traitSetOf(PhoenixConvention.CLIENT);
-        return new PhoenixUncollect(cluster, traits, input, withOrdinality);
+        return new PhoenixUncollect(cluster, traits, input);
     }
 
     private PhoenixUncollect(RelOptCluster cluster, RelTraitSet traitSet,
-            RelNode child, boolean withOrdinality) {
-        super(cluster, traitSet, child, withOrdinality);
+            RelNode child) {
+        super(cluster, traitSet, child);
     }
 
     @Override
     public PhoenixUncollect copy(RelTraitSet traitSet,
         RelNode newInput) {
-        return create(newInput, withOrdinality);
+        return create(newInput);
     }
 
     @Override
     public RelOptCost computeSelfCost(RelOptPlanner planner, RelMetadataQuery mq) {
         if (!getInput().getConvention().satisfies(PhoenixConvention.GENERIC))
             return planner.getCostFactory().makeInfiniteCost();
-                
-        double rowCount = mq.getRowCount(this);
-        return planner.getCostFactory().makeCost(0, rowCount, 0);
+        
+        return super.computeSelfCost(planner, mq).multiplyBy(PHOENIX_FACTOR);
     }
     
     @Override

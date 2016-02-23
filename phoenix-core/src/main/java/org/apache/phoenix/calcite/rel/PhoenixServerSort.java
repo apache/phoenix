@@ -44,7 +44,8 @@ public class PhoenixServerSort extends PhoenixAbstractSort {
             return planner.getCostFactory().makeInfiniteCost();
         
         return super.computeSelfCost(planner, mq)
-                .multiplyBy(SERVER_FACTOR);
+                .multiplyBy(SERVER_FACTOR)
+                .multiplyBy(PHOENIX_FACTOR);
     }
 
     @Override

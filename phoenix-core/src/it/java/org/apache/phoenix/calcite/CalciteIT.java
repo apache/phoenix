@@ -293,17 +293,17 @@ public class CalciteIT extends BaseCalciteIT {
         
         start(false, 1000f).sql("select t1.entity_id, t2.a_string, t3.organization_id from aTable t1 join aTable t2 on t1.entity_id = t2.entity_id and t1.organization_id = t2.organization_id join atable t3 on t1.entity_id = t3.entity_id and t1.organization_id = t3.organization_id")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixClientProject(ENTITY_ID=[$1], A_STRING=[$4], ORGANIZATION_ID=[$5])\n" +
-                           "    PhoenixClientJoin(condition=[AND(=($1, $6), =($0, $5))], joinType=[inner])\n" +
+                           "  PhoenixClientProject(ENTITY_ID=[$1], A_STRING=[$6], ORGANIZATION_ID=[$2])\n" +
+                           "    PhoenixClientJoin(condition=[AND(=($1, $5), =($0, $4))], joinType=[inner])\n" +
                            "      PhoenixClientJoin(condition=[AND(=($1, $3), =($0, $2))], joinType=[inner])\n" +
                            "        PhoenixServerSort(sort0=[$1], sort1=[$0], dir0=[ASC], dir1=[ASC])\n" +
                            "          PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1])\n" +
                            "            PhoenixTableScan(table=[[phoenix, ATABLE]])\n" +
                            "        PhoenixServerSort(sort0=[$1], sort1=[$0], dir0=[ASC], dir1=[ASC])\n" +
-                           "          PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1], A_STRING=[$2])\n" +
+                           "          PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1])\n" +
                            "            PhoenixTableScan(table=[[phoenix, ATABLE]])\n" +
                            "      PhoenixServerSort(sort0=[$1], sort1=[$0], dir0=[ASC], dir1=[ASC])\n" +
-                           "        PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1])\n" +
+                           "        PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1], A_STRING=[$2])\n" +
                            "          PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
                 .resultIs(false, new Object[][] {
                           {"00A123122312312", "a", "00D300000000XHP"},

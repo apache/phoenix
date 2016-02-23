@@ -48,7 +48,8 @@ public class PhoenixClientSort extends PhoenixAbstractSort {
         if (!getInput().getConvention().satisfies(PhoenixConvention.CLIENT))
             return planner.getCostFactory().makeInfiniteCost();
         
-        return super.computeSelfCost(planner, mq);
+        return super.computeSelfCost(planner, mq)
+                .multiplyBy(PHOENIX_FACTOR);
     }
 
     @Override

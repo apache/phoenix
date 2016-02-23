@@ -47,8 +47,8 @@ public class PhoenixUnion extends Union implements PhoenixRel {
             }
         }
         
-        double rowCount = mq.getRowCount(this);
-        return planner.getCostFactory().makeCost(0, rowCount, 0);
+        return super.computeSelfCost(planner, mq)
+                .multiplyBy(PHOENIX_FACTOR);
     }
 
     @Override

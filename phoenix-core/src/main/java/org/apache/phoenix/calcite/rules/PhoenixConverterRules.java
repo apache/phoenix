@@ -680,8 +680,7 @@ public class PhoenixConverterRules {
             return PhoenixUncollect.create(
                 convert(
                         uncollect.getInput(), 
-                        uncollect.getInput().getTraitSet().replace(PhoenixConvention.GENERIC)),
-                uncollect.withOrdinality);
+                        uncollect.getInput().getTraitSet().replace(PhoenixConvention.GENERIC)));
         }
     }
 

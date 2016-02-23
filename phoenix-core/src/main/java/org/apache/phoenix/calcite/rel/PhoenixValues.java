@@ -101,9 +101,8 @@ public class PhoenixValues extends Values implements PhoenixRel {
     }
 
     @Override
-    public RelOptCost computeSelfCost(RelOptPlanner planner, RelMetadataQuery mq) {        
-        double rowCount = mq.getRowCount(this);
-        return planner.getCostFactory().makeCost(0, rowCount, 0);
+    public RelOptCost computeSelfCost(RelOptPlanner planner, RelMetadataQuery mq) {
+        return super.computeSelfCost(planner, mq).multiplyBy(PHOENIX_FACTOR);
     }
 
     @Override
