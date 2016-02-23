@@ -271,7 +271,7 @@ public interface QueryConstants {
             "CREATE TABLE " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_STATS_TABLE + "\"(\n" +
             // PK columns
             PHYSICAL_NAME  + " VARCHAR NOT NULL," +
-            COLUMN_FAMILY + " VARCHAR," +
+            COLUMN_FAMILY + " VARCHAR NOT NULL," +
             GUIDE_POST_KEY  + " VARBINARY," +
             GUIDE_POSTS_WIDTH + " BIGINT," +
             LAST_STATS_UPDATE_TIME+ " DATE, "+

@@ -108,7 +108,8 @@ public class IndexToolIT extends BaseOwnClusterHBaseManagedTimeIT {
         final String fullTableName = SchemaUtil.getTableName(schemaName, dataTable);
         final String indxTable = String.format("%s_%s", dataTable, "INDX");
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(QueryServices.TRANSACTIONS_ENABLED, "true");
+        props.setProperty(QueryServices.TRANSACTIONS_ENABLED, Boolean.TRUE.toString());
+        props.setProperty(QueryServices.EXPLAIN_ROW_COUNT_ATTRIB, Boolean.FALSE.toString());
         Connection conn = DriverManager.getConnection(getUrl(), props);
         Statement stmt = conn.createStatement();
         try {

@@ -17,24 +17,26 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+
 import java.sql.Connection;
 import java.sql.DriverManager;
-import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Map;
 import java.util.Properties;
 
-import com.google.common.collect.Maps;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-import static org.junit.Assert.assertFalse;
+import com.google.common.collect.Maps;
 
 /**
  * Verifies that statistics are not collected if they are disabled via a setting
@@ -43,10 +45,12 @@ public class StatsCollectionDisabledIT extends StatsCollectorAbstractIT {
 
     @BeforeClass
     public static void doSetup() throws Exception {
-        Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
+        Map<String,String> props = Maps.newHashMapWithExpectedSize(5);
         // Must update config before starting server
         props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20));
         props.put(QueryServices.STATS_ENABLED_ATTRIB, Boolean.toString(false));
+        props.put(QueryServices.EXPLAIN_CHUNK_COUNT_ATTRIB, Boolean.TRUE.toString());
+        props.put(QueryServices.EXPLAIN_ROW_COUNT_ATTRIB, Boolean.TRUE.toString());
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 
@@ -65,6 +69,11 @@ public class StatsCollectionDisabledIT extends StatsCollectorAbstractIT {
         assertFalse(rs.next());
         rs.close();
         stmt.close();
-        conn.close();
+        rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM T1");
+        String explainPlan = QueryUtil.getExplainPlan(rs);
+        assertEquals(
+                "CLIENT 1-CHUNK PARALLEL 1-WAY FULL SCAN OVER T1",
+                explainPlan);
+       conn.close();
     }
 }

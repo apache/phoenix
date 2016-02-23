@@ -24,7 +24,6 @@ import java.util.Map;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -49,18 +48,15 @@ import com.google.common.collect.Maps;
 
 /**
  * A default implementation of the Statistics tracker that helps to collect stats like min key, max key and guideposts.
- * TODO: review timestamps used for stats. We support the user controlling the timestamps, so we should honor that with
- * timestamps for stats as well. The issue is for compaction, though. I don't know of a way for the user to specify any
- * timestamp for that. Perhaps best to use current time across the board for now.
  */
 class DefaultStatisticsCollector implements StatisticsCollector {
     private static final Logger logger = LoggerFactory.getLogger(DefaultStatisticsCollector.class);
+    private final Map<ImmutableBytesPtr, Pair<Long, GuidePostsInfoBuilder>> guidePostsInfoWriterMap = Maps.newHashMap();
+    private final StatisticsWriter statsWriter;
+    private final Pair<Long, GuidePostsInfoBuilder> cachedGps;
 
     private long guidepostDepth;
     private long maxTimeStamp = MetaDataProtocol.MIN_TABLE_TIMESTAMP;
-    private Map<ImmutableBytesPtr, Pair<Long, GuidePostsInfoBuilder>> guidePostsInfoWriterMap = Maps.newHashMap();
-    protected StatisticsWriter statsTable;
-    private Pair<Long, GuidePostsInfoBuilder> cachedGps = null;
 
     DefaultStatisticsCollector(RegionCoprocessorEnvironment env, String tableName, long clientTimeStamp, byte[] family,
             byte[] gp_width_bytes, byte[] gp_per_region_bytes) throws IOException {
@@ -86,12 +82,14 @@ class DefaultStatisticsCollector implements StatisticsCollector {
         }
         // Get the stats table associated with the current table on which the CP is
         // triggered
-        this.statsTable = StatisticsWriter.newWriter(env, tableName, clientTimeStamp);
+        this.statsWriter = StatisticsWriter.newWriter(env, tableName, clientTimeStamp);
         // in a compaction we know the one family ahead of time
         if (family != null) {
             ImmutableBytesPtr cfKey = new ImmutableBytesPtr(family);
             cachedGps = new Pair<Long, GuidePostsInfoBuilder>(0l, new GuidePostsInfoBuilder());
             guidePostsInfoWriterMap.put(cfKey, cachedGps);
+        } else {
+            cachedGps = null;
         }
     }
 
@@ -102,7 +100,7 @@ class DefaultStatisticsCollector implements StatisticsCollector {
 
     @Override
     public void close() throws IOException {
-        this.statsTable.close();
+        this.statsWriter.close();
     }
 
     @Override
@@ -128,9 +126,13 @@ class DefaultStatisticsCollector implements StatisticsCollector {
             // Delete statistics for a region if no guidepost is collected for that region during UPDATE STATISTICS
             // This will not impact a stats collection of single column family during compaction as
             // guidePostsInfoWriterMap cannot be empty in this case.
-            if (guidePostsInfoWriterMap.keySet().isEmpty()) {
+            if (cachedGps == null) {
                 for (byte[] fam : region.getStores().keySet()) {
-                    statsTable.deleteStats(region, this, new ImmutableBytesPtr(fam), mutations);
+                    ImmutableBytesPtr cfKey = new ImmutableBytesPtr(fam);
+                    if (!guidePostsInfoWriterMap.containsKey(cfKey)) {
+                        Pair<Long, GuidePostsInfoBuilder> emptyGps = new Pair<Long, GuidePostsInfoBuilder>(0l, new GuidePostsInfoBuilder());
+                        guidePostsInfoWriterMap.put(cfKey, emptyGps);
+                    }
                 }
             }
             for (ImmutableBytesPtr fam : guidePostsInfoWriterMap.keySet()) {
@@ -138,12 +140,12 @@ class DefaultStatisticsCollector implements StatisticsCollector {
                     if (logger.isDebugEnabled()) {
                         logger.debug("Deleting the stats for the region " + region.getRegionInfo());
                     }
-                    statsTable.deleteStats(region, this, fam, mutations);
+                    statsWriter.deleteStats(region, this, fam, mutations);
                 }
                 if (logger.isDebugEnabled()) {
                     logger.debug("Adding new stats for the region " + region.getRegionInfo());
                 }
-                statsTable.addStats(this, fam, mutations);
+                statsWriter.addStats(this, fam, mutations);
             }
         } catch (IOException e) {
             logger.error("Failed to update statistics table!", e);
@@ -152,7 +154,7 @@ class DefaultStatisticsCollector implements StatisticsCollector {
     }
 
     private void commitStats(List<Mutation> mutations) throws IOException {
-        statsTable.commitStats(mutations);
+        statsWriter.commitStats(mutations);
     }
 
     /**
@@ -211,7 +213,7 @@ class DefaultStatisticsCollector implements StatisticsCollector {
 
     protected InternalScanner getInternalScanner(RegionCoprocessorEnvironment env, InternalScanner internalScan,
             ImmutableBytesPtr family) {
-        return new StatisticsScanner(this, statsTable, env, internalScan, family);
+        return new StatisticsScanner(this, statsWriter, env, internalScan, family);
     }
 
     @Override

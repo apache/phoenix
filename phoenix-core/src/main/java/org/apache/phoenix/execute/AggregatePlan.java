@@ -35,6 +35,7 @@ import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.expression.RowKeyExpression;
 import org.apache.phoenix.expression.aggregator.Aggregators;
 import org.apache.phoenix.iterate.AggregatingResultIterator;
+import org.apache.phoenix.iterate.BaseResultIterators;
 import org.apache.phoenix.iterate.ConcatResultIterator;
 import org.apache.phoenix.iterate.DistinctAggregatingResultIterator;
 import org.apache.phoenix.iterate.FilterAggregatingResultIterator;
@@ -48,7 +49,6 @@ import org.apache.phoenix.iterate.ParallelIterators;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.PeekingResultIterator;
 import org.apache.phoenix.iterate.ResultIterator;
-import org.apache.phoenix.iterate.ResultIterators;
 import org.apache.phoenix.iterate.SequenceResultIterator;
 import org.apache.phoenix.iterate.SerialIterators;
 import org.apache.phoenix.iterate.SpoolingResultIterator;
@@ -197,12 +197,14 @@ public class AggregatePlan extends BaseQueryPlan {
                 context.getScan().setAttribute(BaseScannerRegionObserver.GROUP_BY_LIMIT, PInteger.INSTANCE.toBytes(limit));
             }
         }
-        ResultIterators iterators = statement.getHint().hasHint(HintNode.Hint.SERIAL) ?
+        BaseResultIterators iterators = statement.getHint().hasHint(HintNode.Hint.SERIAL) ?
                 new SerialIterators(this, null, wrapParallelIteratorFactory(), scanGrouper) :
                 new ParallelIterators(this, null, wrapParallelIteratorFactory());
 
         splits = iterators.getSplits();
         scans = iterators.getScans();
+        estimatedSize = iterators.getEstimatedByteCount();
+        estimatedRows = iterators.getEstimatedRowCount();
 
         AggregatingResultIterator aggResultIterator;
         // No need to merge sort for ungrouped aggregation
