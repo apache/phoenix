@@ -242,6 +242,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private TransactionServiceClient txServiceClient;
     private volatile boolean initialized;
     private volatile int nSequenceSaltBuckets;
+    private volatile boolean areStatsEnabled;
 
     // writes guarded by "this"
     private volatile boolean closed;
@@ -1109,6 +1110,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private void checkClientServerCompatibility() throws SQLException {
         StringBuilder buf = new StringBuilder("The following servers require an updated " + QueryConstants.DEFAULT_COPROCESS_PATH + " to be put in the classpath of HBase: ");
         boolean isIncompatible = false;
+        boolean areStatsEnabled = false;
         int minHBaseVersion = Integer.MAX_VALUE;
         try {
             List<HRegionLocation> locations = this.getAllTableRegions(SYSTEM_CATALOG_NAME_BYTES);
@@ -1142,18 +1144,23 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     });
             for (Map.Entry<byte[],Long> result : results.entrySet()) {
                 // This is the "phoenix.jar" is in-place, but server is out-of-sync with client case.
-                if (!isCompatible(result.getValue())) {
+                long version = result.getValue();
+                // Set stats as being enabled if enabled on *any* region server (though it should
+                // really match across all regions servers).
+                areStatsEnabled |= MetaDataUtil.decodeStatsEnabled(version);
+                if (!isCompatible(version)) {
                     isIncompatible = true;
                     HRegionLocation name = regionMap.get(result.getKey());
                     buf.append(name);
                     buf.append(';');
                 }
-                hasIndexWALCodec &= hasIndexWALCodec(result.getValue());
-                if (minHBaseVersion > MetaDataUtil.decodeHBaseVersion(result.getValue())) {
-                    minHBaseVersion = MetaDataUtil.decodeHBaseVersion(result.getValue());
+                hasIndexWALCodec &= hasIndexWALCodec(version);
+                if (minHBaseVersion > MetaDataUtil.decodeHBaseVersion(version)) {
+                    minHBaseVersion = MetaDataUtil.decodeHBaseVersion(version);
                 }
             }
             lowestClusterHBaseVersion = minHBaseVersion;
+            this.areStatsEnabled = areStatsEnabled;
         } catch (SQLException e) {
             throw e;
         } catch (Throwable t) {
@@ -3375,5 +3382,15 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 }
         }
      }
+
+    @Override
+    public boolean areStatsEnabled() {
+        return areStatsEnabled;
+    }
+
+    @Override
+    public void setStatsEnabled(boolean statsEnabled) {
+        this.areStatsEnabled = statsEnabled;
+    }
 
 }

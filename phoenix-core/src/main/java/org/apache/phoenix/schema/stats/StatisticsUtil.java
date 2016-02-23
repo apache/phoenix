@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.SortedMap;
 import java.util.TreeMap;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellScanner;
 import org.apache.hadoop.hbase.HConstants;
@@ -40,6 +41,8 @@ import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.ByteUtil;
@@ -220,4 +223,17 @@ public class StatisticsUtil {
 		ptr.set(row, gpOffset, row.length - gpOffset);
 		return ByteUtil.copyKeyBytesIfNecessary(ptr);
 	}
+
+    public static boolean isStatsEnabled(Configuration conf) {
+        if (conf.getBoolean(QueryServices.STATS_ENABLED_ATTRIB, true)) {
+            if (conf.getInt(QueryServices.STATS_GUIDEPOST_PER_REGION_ATTRIB,
+                            QueryServicesOptions.DEFAULT_STATS_GUIDEPOST_PER_REGION) != 1) {
+                if (conf.getLong(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB,
+                                 QueryServicesOptions.DEFAULT_STATS_GUIDEPOST_WIDTH_BYTES) < HConstants.DEFAULT_MAX_FILE_SIZE) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
 }

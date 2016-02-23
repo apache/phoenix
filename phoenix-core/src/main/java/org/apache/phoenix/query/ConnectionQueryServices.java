@@ -123,4 +123,7 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
     TransactionSystemClient getTransactionSystemClient();
     public long getRenewLeaseThresholdMilliSeconds();
     public boolean isRenewingLeasesEnabled();
+    
+    public boolean areStatsEnabled();
+    public void setStatsEnabled(boolean statsEnabled);
 }
