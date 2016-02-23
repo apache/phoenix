@@ -168,6 +168,27 @@ public class ReverseScanIT extends BaseHBaseManagedTimeIT {
     }
 
     @Test
+    public void testReverseScanForSpecificRangeInRegion() throws Exception {
+        Connection conn;
+        ResultSet rs;
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement()
+                .execute("CREATE TABLE T" + " ( k VARCHAR, c1.a bigint,c2.b bigint CONSTRAINT pk PRIMARY KEY (k)) ");
+        conn.createStatement().execute("upsert into T values ('a',1,3)");
+        conn.createStatement().execute("upsert into T values ('b',1,3)");
+        conn.createStatement().execute("upsert into T values ('c',1,3)");
+        conn.createStatement().execute("upsert into T values ('d',1,3)");
+        conn.createStatement().execute("upsert into T values ('e',1,3)");
+        conn.commit();
+        rs = conn.createStatement().executeQuery("SELECT k FROM T where k>'b' and k<'d' order by k desc");
+        assertTrue(rs.next());
+        assertEquals("c", rs.getString(1));
+        assertTrue(!rs.next());
+        conn.close();
+    }
+
+    @Test
     public void testReverseScanIndex() throws Exception {
         String tenantId = getOrganizationId();
         initATableValues(tenantId, getSplitsAtRowKeys(tenantId), getUrl());

@@ -41,6 +41,7 @@ import org.apache.phoenix.pherf.rules.DataValue;
 import org.apache.phoenix.pherf.rules.RulesApplier;
 import org.apache.phoenix.pherf.workload.WriteWorkload;
 import org.joda.time.DateTime;
+import org.joda.time.DateTimeZone;
 import org.joda.time.format.DateTimeFormat;
 import org.joda.time.format.DateTimeFormatter;
 import org.junit.Ignore;
@@ -75,7 +76,7 @@ public class RuleGeneratorTest {
             }
         }
     }
-
+    
     //Test to check the current date is generated correctly between the timestamps at column level and datavalue level
     @Test
     public void testCurrentDateGenerator() throws Exception {
@@ -313,7 +314,7 @@ public class RuleGeneratorTest {
      * @param value
      */
     private void assertDateBetween(DataValue value) {
-        DateTimeFormatter fmtr = DateTimeFormat.forPattern(PherfConstants.DEFAULT_DATE_PATTERN);
+        DateTimeFormatter fmtr = DateTimeFormat.forPattern(PherfConstants.DEFAULT_DATE_PATTERN).withZone(DateTimeZone.UTC);
 
         DateTime dt = fmtr.parseDateTime(value.getValue());
         DateTime min = fmtr.parseDateTime(value.getMinValue());

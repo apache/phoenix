@@ -766,4 +766,10 @@ public class QueryParserTest {
         String sql = "select * from t where 'a' <= ALL(a-b+1)";
         parseQuery(sql);
     }
+
+    @Test
+    public void testDoubleBackslash() throws Exception {
+        String sql = "SELECT * FROM T WHERE A LIKE 'a\\(d'";
+        parseQuery(sql);
+    }
 }

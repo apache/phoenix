@@ -30,24 +30,17 @@ import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import java.util.Timer;
-import java.util.TimerTask;
-import java.util.concurrent.atomic.AtomicInteger;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.hbase.HBaseCluster;
-import org.apache.hadoop.hbase.HRegionInfo;
-import org.apache.hadoop.hbase.HTableDescriptor;
-import org.apache.hadoop.hbase.ServerName;
-import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.TableNotFoundException;
-import org.apache.hadoop.hbase.Waiter;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.DoNotRetryIOException;
+import org.apache.hadoop.hbase.HBaseIOException;
+import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.coprocessor.ObserverContext;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
+import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.phoenix.end2end.BaseOwnClusterHBaseManagedTimeIT;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.query.QueryServices;
@@ -61,7 +54,6 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
@@ -75,28 +67,29 @@ import com.google.common.collect.Maps;
  * For some reason dropping tables after running this test
  * fails unless it runs its own mini cluster. 
  * 
- * 
- * @since 2.1
  */
 
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
-    private Timer scheduleTimer;
-
+    public static volatile boolean FAIL_WRITE = false;
+    public static final String INDEX_NAME = "IDX";
+    
     private String tableName;
     private String indexName;
     private String fullTableName;
     private String fullIndexName;
 
-    private boolean transactional;
+    private final boolean transactional;
+    private final boolean localIndex;
     private final String tableDDLOptions;
 
-    public MutableIndexFailureIT(boolean transactional) {
+    public MutableIndexFailureIT(boolean transactional, boolean localIndex) {
         this.transactional = transactional;
+        this.localIndex = localIndex;
         this.tableDDLOptions = transactional ? " TRANSACTIONAL=true " : "";
-        this.tableName = TestUtil.DEFAULT_DATA_TABLE_NAME + (transactional ? "_TXN" : "");
-        this.indexName = "IDX";
+        this.tableName = (localIndex ? "L_" : "") + TestUtil.DEFAULT_DATA_TABLE_NAME + (transactional ? "_TXN" : "");
+        this.indexName = INDEX_NAME;
         this.fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
         this.fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
     }
@@ -104,31 +97,28 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
     @BeforeClass
     public static void doSetup() throws Exception {
         Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(10);
-        serverProps.put("hbase.client.retries.number", "2");
+        serverProps.put("hbase.coprocessor.region.classes", FailingRegionObserver.class.getName());
+        serverProps.put(HConstants.HBASE_CLIENT_RETRIES_NUMBER, "2");
+        serverProps.put(HConstants.HBASE_RPC_TIMEOUT_KEY, "10000");
         serverProps.put("hbase.client.pause", "5000");
+        serverProps.put("data.tx.snapshot.dir", "/tmp");
         serverProps.put("hbase.balancer.period", String.valueOf(Integer.MAX_VALUE));
-        serverProps.put(QueryServices.INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_TIME_ATTRIB, "0");
         Map<String, String> clientProps = Collections.singletonMap(QueryServices.TRANSACTIONS_ENABLED, "true");
         NUM_SLAVES_BASE = 4;
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
     }
 
-    @Parameters(name = "transactional = {0}")
+    @Parameters(name = "transactional = {0}, localIndex = {1}")
     public static Collection<Boolean[]> data() {
-        return Arrays.asList(new Boolean[][] { { false }, { true } });
-    }
-
-    @Test
-    public void testWriteFailureDisablesLocalIndex() throws Exception {
-        helpTestWriteFailureDisablesIndex(true);
+        return Arrays.asList(new Boolean[][] { { false, false }, { false, true }, { true, false }, { true, true } });
     }
 
     @Test
     public void testWriteFailureDisablesIndex() throws Exception {
-        helpTestWriteFailureDisablesIndex(false);
+        helpTestWriteFailureDisablesIndex();
     }
 
-    public void helpTestWriteFailureDisablesIndex(boolean localIndex) throws Exception {
+    public void helpTestWriteFailureDisablesIndex() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = driver.connect(url, props)) {
             String query;
@@ -140,15 +130,9 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
             rs = conn.createStatement().executeQuery(query);
             assertFalse(rs.next());
 
-            if(localIndex) {
-                conn.createStatement().execute(
-                        "CREATE LOCAL INDEX " + indexName + " ON " + fullTableName + " (v1) INCLUDE (v2)");
-                conn.createStatement().execute(
-                        "CREATE LOCAL INDEX " + indexName+ "_2" + " ON " + fullTableName + " (v2) INCLUDE (v1)");
-            } else {
-                conn.createStatement().execute(
-                        "CREATE INDEX " + indexName + " ON " + fullTableName + " (v1) INCLUDE (v2)");
-            }
+            FAIL_WRITE = false;
+            conn.createStatement().execute(
+                    "CREATE " + (localIndex ? "LOCAL " : "") + "INDEX " + indexName + " ON " + fullTableName + " (v1) INCLUDE (v2)");
 
             query = "SELECT * FROM " + fullIndexName;
             rs = conn.createStatement().executeQuery(query);
@@ -167,37 +151,54 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
             stmt.setString(2, "x");
             stmt.setString(3, "1");
             stmt.execute();
+            stmt.setString(1, "b");
+            stmt.setString(2, "y");
+            stmt.setString(3, "2");
+            stmt.execute();
+            stmt.setString(1, "c");
+            stmt.setString(2, "z");
+            stmt.setString(3, "3");
+            stmt.execute();
             conn.commit();
 
-            TableName indexTable =
-                    TableName.valueOf(localIndex ? MetaDataUtil
-                            .getLocalIndexTableName(fullTableName) : fullIndexName);
-            HBaseAdmin admin = this.getUtility().getHBaseAdmin();
-            HTableDescriptor indexTableDesc = admin.getTableDescriptor(indexTable);
-            try{
-                admin.disableTable(indexTable);
-                admin.deleteTable(indexTable);
-            } catch (TableNotFoundException ignore) {}
+            query = "SELECT /*+ NO_INDEX */ k,v1 FROM " + fullTableName;
+            rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+            String expectedPlan =
+                    "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + fullTableName;
+            assertEquals(expectedPlan, QueryUtil.getExplainPlan(rs));
+            rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals("a", rs.getString(1));
+            assertEquals("x", rs.getString(2));
+            assertTrue(rs.next());
+            assertEquals("b", rs.getString(1));
+            assertEquals("y", rs.getString(2));
+            assertTrue(rs.next());
+            assertEquals("c", rs.getString(1));
+            assertEquals("z", rs.getString(2));
+            assertFalse(rs.next());
+
+            FAIL_WRITE = true;
 
             stmt = conn.prepareStatement("UPSERT INTO " + fullTableName + " VALUES(?,?,?)");
-            stmt.setString(1, "a2");
+            // Insert new row
+            stmt.setString(1, "d");
+            stmt.setString(2, "d");
+            stmt.setString(3, "4");
+            stmt.execute();
+            // Update existing row
+            stmt.setString(1, "a");
             stmt.setString(2, "x2");
             stmt.setString(3, "2");
             stmt.execute();
-            if (transactional) {
-                try {
-                    conn.commit();
-                    fail();
-                } catch (SQLException e) {
-                    conn.rollback();
-                }
-            }
-            else {
-                try {
-                    conn.commit();
-                    fail();
-                } catch (SQLException e) {
-                }
+            // Delete existing row
+            stmt = conn.prepareStatement("DELETE FROM " + fullTableName + " WHERE k=?");
+            stmt.setString(1, "b");
+            stmt.execute();
+            try {
+                conn.commit();
+                fail();
+            } catch (SQLException e) {
             }
 
             // Verify the metadata for index is correct.
@@ -206,20 +207,17 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
             assertTrue(rs.next());
             assertEquals(indexName, rs.getString(3));
             // the index is only disabled for non-txn tables upon index table write failure
-            PIndexState indexState =  transactional ? PIndexState.ACTIVE : PIndexState.DISABLE;
-            assertEquals(indexState.toString(), rs.getString("INDEX_STATE"));
-            assertFalse(rs.next());
-            if(localIndex) {
-                rs = conn.getMetaData().getTables(null, StringUtil.escapeLike(TestUtil.DEFAULT_SCHEMA_NAME), indexName + "_2",
-                        new String[] { PTableType.INDEX.toString() });
-                assertTrue(rs.next());
-                assertEquals(indexName + "_2", rs.getString(3));
-                assertEquals(indexState.toString(), rs.getString("INDEX_STATE"));
-                assertFalse(rs.next());
+            if (transactional) {
+                assertEquals(PIndexState.ACTIVE.toString(), rs.getString("INDEX_STATE"));
+            } else {
+                String indexState = rs.getString("INDEX_STATE");
+                assertTrue(PIndexState.DISABLE.toString().equals(indexState) || PIndexState.INACTIVE.toString().equals(indexState));
             }
+            assertFalse(rs.next());
 
-            // if the table is transactional the write to the index table will fail because the
-            // index has not been disabled
+            // If the table is transactional the write to both the data and index table will fail 
+            // in an all or none manner. If the table is not transactional, then the data writes
+            // would have succeeded while the index writes would have failed.
             if (!transactional) {
                 // Verify UPSERT on data table still work after index is disabled
                 stmt = conn.prepareStatement("UPSERT INTO " + fullTableName + " VALUES(?,?,?)");
@@ -228,209 +226,101 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
                 stmt.setString(3, "3");
                 stmt.execute();
                 conn.commit();
-            }
 
-            if (transactional) {
-                // if the table was transactional there should be 1 row (written before the index
-                // was disabled)
-                query = "SELECT /*+ NO_INDEX */ v2 FROM " + fullTableName;
+                // Verify previous writes succeeded to data table
+                query = "SELECT /*+ NO_INDEX */ k,v1 FROM " + fullTableName;
                 rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-                String expectedPlan =
+                expectedPlan =
                         "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + fullTableName;
                 assertEquals(expectedPlan, QueryUtil.getExplainPlan(rs));
                 rs = conn.createStatement().executeQuery(query);
                 assertTrue(rs.next());
-                assertEquals("1", rs.getString(1));
-                assertFalse(rs.next());
-            } else {
-                // if the table was not transactional there should be three rows (all writes to data
-                // table should succeed)
-                query = "SELECT v2 FROM " + fullTableName;
-                rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-                String expectedPlan =
-                        "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + fullTableName;
-                assertEquals(expectedPlan, QueryUtil.getExplainPlan(rs));
-                rs = conn.createStatement().executeQuery(query);
+                assertEquals("a", rs.getString(1));
+                assertEquals("x2", rs.getString(2));
                 assertTrue(rs.next());
-                assertEquals("1", rs.getString(1));
+                assertEquals("a3", rs.getString(1));
+                assertEquals("x3", rs.getString(2));
                 assertTrue(rs.next());
-                assertEquals("2", rs.getString(1));
+                assertEquals("c", rs.getString(1));
+                assertEquals("z", rs.getString(2));
                 assertTrue(rs.next());
-                assertEquals("3", rs.getString(1));
+                assertEquals("d", rs.getString(1));
+                assertEquals("d", rs.getString(2));
                 assertFalse(rs.next());
             }
 
-            // recreate index table
-            admin.createTable(indexTableDesc);
-            do {
-                Thread.sleep(15 * 1000); // sleep 15 secs
-                rs = conn.getMetaData().getTables(null, StringUtil.escapeLike(TestUtil.DEFAULT_SCHEMA_NAME), indexName,
-                        new String[] { PTableType.INDEX.toString() });
-                assertTrue(rs.next());
-                if(PIndexState.ACTIVE.toString().equals(rs.getString("INDEX_STATE"))){
-                    break;
-                }
-                if(localIndex) {
-                    rs = conn.getMetaData().getTables(null, StringUtil.escapeLike(TestUtil.DEFAULT_SCHEMA_NAME), indexName + "_2",
+            // re-enable index table
+            FAIL_WRITE = false;
+            
+            boolean isActive = false;
+            if (!transactional) {
+                int maxTries = 3, nTries = 0;
+                do {
+                    Thread.sleep(15 * 1000); // sleep 15 secs
+                    rs = conn.getMetaData().getTables(null, StringUtil.escapeLike(TestUtil.DEFAULT_SCHEMA_NAME), indexName,
                             new String[] { PTableType.INDEX.toString() });
                     assertTrue(rs.next());
                     if(PIndexState.ACTIVE.toString().equals(rs.getString("INDEX_STATE"))){
+                        isActive = true;
                         break;
                     }
-                }
-            } while(true);
+                } while(++nTries < maxTries);
+                assertTrue(isActive);
+            }
 
             // Verify UPSERT on data table still work after index table is recreated
             stmt = conn.prepareStatement("UPSERT INTO " + fullTableName + " VALUES(?,?,?)");
-            stmt.setString(1, "a4");
+            stmt.setString(1, "a3");
             stmt.setString(2, "x4");
             stmt.setString(3, "4");
             stmt.execute();
             conn.commit();
 
-            // verify index table has data
-            query = "SELECT count(1) FROM " + fullIndexName;
+            // verify index table has correct data
+            query = "SELECT /*+ INDEX(" + indexName + ") */ k,v1 FROM " + fullTableName;
+            rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+            expectedPlan =
+                    " OVER " + (localIndex ? MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + tableName : fullIndexName);
+            String explainPlan = QueryUtil.getExplainPlan(rs);
+            assertTrue(explainPlan.contains(expectedPlan));
             rs = conn.createStatement().executeQuery(query);
-            assertTrue(rs.next());
-
-            // for txn tables there will be only one row in the index (a4)
-            // for non txn tables there will be three rows because we only partially build index
-            // from where we failed and the oldest
-            // index row has been deleted when we dropped the index table during test
-            assertEquals(transactional ? 1 : 3, rs.getInt(1));
-        }
-    }
-
-
-    @Ignore("See PHOENIX-2332")
-    @Test
-    public void testWriteFailureWithRegionServerDown() throws Exception {
-        String query;
-        ResultSet rs;
-
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        try (Connection conn = driver.connect(url, props);) {
-            conn.setAutoCommit(false);
-            conn.createStatement().execute(
-                    "CREATE TABLE " + fullTableName + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) "+tableDDLOptions);
-            query = "SELECT * FROM " + fullTableName;
-            rs = conn.createStatement().executeQuery(query);
-            assertFalse(rs.next());
-
-            conn.createStatement().execute(
-                    "CREATE INDEX " + indexName + " ON " + fullTableName + " (v1) INCLUDE (v2)");
-            query = "SELECT * FROM " + fullIndexName;
-            rs = conn.createStatement().executeQuery(query);
-            assertFalse(rs.next());
-
-            // Verify the metadata for index is correct.
-            rs = conn.getMetaData().getTables(null, StringUtil.escapeLike(TestUtil.DEFAULT_SCHEMA_NAME), indexName,
-                    new String[] { PTableType.INDEX.toString() });
-            assertTrue(rs.next());
-            assertEquals(indexName, rs.getString(3));
-            assertEquals(PIndexState.ACTIVE.toString(), rs.getString("INDEX_STATE"));
-            assertFalse(rs.next());
-
-            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + fullTableName + " VALUES(?,?,?)");
-            stmt.setString(1, "a");
-            stmt.setString(2, "x");
-            stmt.setString(3, "1");
-            stmt.execute();
-            conn.commit();
-
-            // find a RS which doesn't has CATALOG table
-            TableName catalogTable = TableName.valueOf("SYSTEM.CATALOG");
-            TableName indexTable = TableName.valueOf(fullIndexName);
-            final HBaseCluster cluster = this.getUtility().getHBaseCluster();
-            Collection<ServerName> rss = cluster.getClusterStatus().getServers();
-            HBaseAdmin admin = this.getUtility().getHBaseAdmin();
-            List<HRegionInfo> regions = admin.getTableRegions(catalogTable);
-            ServerName catalogRS = cluster.getServerHoldingRegion(regions.get(0).getTable(),
-                    regions.get(0).getRegionName());
-            ServerName metaRS = cluster.getServerHoldingMeta();
-            ServerName rsToBeKilled = null;
-
-            // find first RS isn't holding META or CATALOG table
-            for(ServerName curRS : rss) {
-                if(!curRS.equals(catalogRS) && !metaRS.equals(curRS)) {
-                    rsToBeKilled = curRS;
-                    break;
-                }
-            }
-            assertTrue(rsToBeKilled != null);
-
-            regions = admin.getTableRegions(indexTable);
-            final HRegionInfo indexRegion = regions.get(0);
-            final ServerName dstRS = rsToBeKilled;
-            admin.move(indexRegion.getEncodedNameAsBytes(), Bytes.toBytes(rsToBeKilled.getServerName()));
-            this.getUtility().waitFor(30000, 200, new Waiter.Predicate<Exception>() {
-                @Override
-                public boolean evaluate() throws Exception {
-                    ServerName sn = cluster.getServerHoldingRegion(indexRegion.getTable(),
-                            indexRegion.getRegionName());
-                    return (sn != null && sn.equals(dstRS));
-                }
-            });
-
-            // use timer sending updates in every 10ms
-            this.scheduleTimer = new Timer(true);
-            this.scheduleTimer.schedule(new SendingUpdatesScheduleTask(conn, fullTableName), 0, 10);
-            // let timer sending some updates
-            Thread.sleep(100);
-
-            // kill RS hosting index table
-            this.getUtility().getHBaseCluster().killRegionServer(rsToBeKilled);
-
-            // wait for index table completes recovery
-            this.getUtility().waitUntilAllRegionsAssigned(indexTable);
-
-            // Verify the metadata for index is correct.       
-            do {
-                Thread.sleep(15 * 1000); // sleep 15 secs
-                rs = conn.getMetaData().getTables(null, StringUtil.escapeLike(TestUtil.DEFAULT_SCHEMA_NAME), indexName,
-                        new String[] { PTableType.INDEX.toString() });
+            if (transactional) { // failed commit does not get retried
                 assertTrue(rs.next());
-                if(PIndexState.ACTIVE.toString().equals(rs.getString("INDEX_STATE"))){
-                    break;
-                }
-            } while(true);
-            this.scheduleTimer.cancel();
+                assertEquals("a", rs.getString(1));
+                assertEquals("x", rs.getString(2));
+                assertTrue(rs.next());
+                assertEquals("a3", rs.getString(1));
+                assertEquals("x4", rs.getString(2));
+                assertTrue(rs.next());
+                assertEquals("b", rs.getString(1));
+                assertEquals("y", rs.getString(2));
+                assertTrue(rs.next());
+                assertEquals("c", rs.getString(1));
+                assertEquals("z", rs.getString(2));
+                assertFalse(rs.next());
+            } else { // failed commit eventually succeeds
+                assertTrue(rs.next());
+                assertEquals("d", rs.getString(1));
+                assertEquals("d", rs.getString(2));
+                assertTrue(rs.next());
+                assertEquals("a", rs.getString(1));
+                assertEquals("x2", rs.getString(2));
+                assertTrue(rs.next());
+                assertEquals("a3", rs.getString(1));
+                assertEquals("x4", rs.getString(2));
+                assertTrue(rs.next());
+                assertEquals("c", rs.getString(1));
+                assertEquals("z", rs.getString(2));
+                assertFalse(rs.next());
+            }
         }
     }
-
-    static class SendingUpdatesScheduleTask extends TimerTask {
-        private static final Log LOG = LogFactory.getLog(SendingUpdatesScheduleTask.class);
-
-        // inProgress is to prevent timer from invoking a new task while previous one is still
-        // running
-        private final static AtomicInteger inProgress = new AtomicInteger(0);
-        private final Connection conn;
-        private final String fullTableName;
-        private int inserts = 0;
-
-        public SendingUpdatesScheduleTask(Connection conn, String fullTableName) {
-            this.conn = conn;
-            this.fullTableName = fullTableName;
-        }
-
-        public void run() {
-            if(inProgress.get() > 0){
-                return;
-            }
-
-            try {
-                inProgress.incrementAndGet();
-                inserts++;
-                PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + fullTableName + " VALUES(?,?,?)");
-                stmt.setString(1, "a" + inserts);
-                stmt.setString(2, "x" + inserts);
-                stmt.setString(3, String.valueOf(inserts));
-                stmt.execute();
-                conn.commit();
-            } catch (Throwable t) {
-                LOG.warn("ScheduledBuildIndexTask failed!", t);
-            } finally {
-                inProgress.decrementAndGet();
+    
+    public static class FailingRegionObserver extends SimpleRegionObserver {
+        @Override
+        public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c, MiniBatchOperationInProgress<Mutation> miniBatchOp) throws HBaseIOException {
+            if (c.getEnvironment().getRegionInfo().getTable().getNameAsString().contains(INDEX_NAME) && FAIL_WRITE) {
+                throw new DoNotRetryIOException();
             }
         }
     }

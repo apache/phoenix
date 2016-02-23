@@ -37,10 +37,12 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
@@ -52,6 +54,7 @@ import org.apache.phoenix.expression.aggregator.Aggregator;
 import org.apache.phoenix.expression.aggregator.CountAggregator;
 import org.apache.phoenix.expression.aggregator.ServerAggregators;
 import org.apache.phoenix.expression.function.TimeUnit;
+import org.apache.phoenix.filter.ColumnProjectionFilter;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
@@ -68,6 +71,7 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 
@@ -2136,6 +2140,42 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     }
 
     @Test
+    public void testGroupByVarbinaryOrArray() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute("CREATE TABLE T1 (PK VARCHAR PRIMARY KEY, c1 VARCHAR, c2 VARBINARY, C3 VARCHAR ARRAY, c4 VARBINARY, C5 VARCHAR ARRAY, C6 BINARY(10)) ");
+        try {
+            conn.createStatement().executeQuery("SELECT c1 FROM t1 GROUP BY c1,c2,c3");
+            fail();
+        } catch(SQLException e) {
+            assertEquals(SQLExceptionCode.UNSUPPORTED_GROUP_BY_EXPRESSIONS.getErrorCode(), e.getErrorCode());
+        }
+        try {
+            conn.createStatement().executeQuery("SELECT c1 FROM t1 GROUP BY c1,c3,c2");
+            fail();
+        } catch(SQLException e) {
+            assertEquals(SQLExceptionCode.UNSUPPORTED_GROUP_BY_EXPRESSIONS.getErrorCode(), e.getErrorCode());
+        }
+        try {
+            conn.createStatement().executeQuery("SELECT c1 FROM t1 GROUP BY c1,c2,c4");
+            fail();
+        } catch(SQLException e) {
+            assertEquals(SQLExceptionCode.UNSUPPORTED_GROUP_BY_EXPRESSIONS.getErrorCode(), e.getErrorCode());
+        }
+        try {
+            conn.createStatement().executeQuery("SELECT c1 FROM t1 GROUP BY c1,c3,c5");
+            fail();
+        } catch(SQLException e) {
+            assertEquals(SQLExceptionCode.UNSUPPORTED_GROUP_BY_EXPRESSIONS.getErrorCode(), e.getErrorCode());
+        }
+        try {
+            conn.createStatement().executeQuery("SELECT c1 FROM t1 GROUP BY c1,c6,c5");
+            fail();
+        } catch(SQLException e) {
+            assertEquals(SQLExceptionCode.UNSUPPORTED_GROUP_BY_EXPRESSIONS.getErrorCode(), e.getErrorCode());
+        }
+    }
+    
+    @Test
     public void testQueryWithSCN() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(1000));
@@ -2177,5 +2217,30 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         }
     }
     
+    private static boolean hasColumnProjectionFilter(Scan scan) {
+        Iterator<Filter> iterator = ScanUtil.getFilterIterator(scan);
+        while (iterator.hasNext()) {
+            Filter filter = iterator.next();
+            if (filter instanceof ColumnProjectionFilter) {
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    @Test
+    public void testColumnProjectionOptimized() throws SQLException {
+        Connection conn = DriverManager.getConnection(getUrl());
+        try {
+            conn.createStatement().execute("CREATE TABLE t(k INTEGER PRIMARY KEY, a.v1 VARCHAR, a.v1b VARCHAR, b.v2 VARCHAR, c.v3 VARCHAR)");
+            assertTrue(hasColumnProjectionFilter(projectQuery("SELECT k, v1 FROM t WHERE v2 = 'foo'")));
+            assertFalse(hasColumnProjectionFilter(projectQuery("SELECT k, v1 FROM t WHERE v1 = 'foo'")));
+            assertFalse(hasColumnProjectionFilter(projectQuery("SELECT v1,v2 FROM t WHERE v1 = 'foo'")));
+            assertTrue(hasColumnProjectionFilter(projectQuery("SELECT v1,v2 FROM t WHERE v1 = 'foo' and v2 = 'bar' and v3 = 'bas'")));
+            assertFalse(hasColumnProjectionFilter(projectQuery("SELECT a.* FROM t WHERE v1 = 'foo' and v1b = 'bar'")));
+        } finally {
+            conn.close();
+        }
+    }
 
 }

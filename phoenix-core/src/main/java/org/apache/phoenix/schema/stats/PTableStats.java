@@ -40,7 +40,7 @@ public interface PTableStats {
 
         @Override
         public long getTimestamp() {
-            return StatisticsCollector.NO_TIMESTAMP;
+            return DefaultStatisticsCollector.NO_TIMESTAMP;
         }
     };
 

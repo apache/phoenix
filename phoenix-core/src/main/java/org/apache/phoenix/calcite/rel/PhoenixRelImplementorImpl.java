@@ -179,7 +179,7 @@ public class PhoenixRelImplementorImpl implements PhoenixRel.Implementor {
                     PTableType.SUBQUERY, null, MetaDataProtocol.MIN_TABLE_TIMESTAMP, PTable.INITIAL_SEQ_NUM,
                     null, null, columns, null, null, Collections.<PTable>emptyList(),
                     false, Collections.<PName>emptyList(), null, null, false, false, false, null,
-                    null, null, true, false, 0);
+                    null, null, true, false, 0, 0);
             this.setTableRef(new TableRef(CalciteUtils.createTempAlias(), pTable, HConstants.LATEST_TIMESTAMP, false));
         } catch (SQLException e) {
             throw new RuntimeException(e);

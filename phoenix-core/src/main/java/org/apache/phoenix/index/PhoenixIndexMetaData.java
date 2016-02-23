@@ -22,8 +22,6 @@ import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 
-import co.cask.tephra.Transaction;
-
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.cache.GlobalCache;
@@ -39,9 +37,12 @@ import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ServerUtil;
 
+import co.cask.tephra.Transaction;
+
 public class PhoenixIndexMetaData implements IndexMetaData {
     private final Map<String, byte[]> attributes;
     private final IndexMetaDataCache indexMetaDataCache;
+    private final boolean ignoreNewerMutations;
     
     private static IndexMetaDataCache getIndexMetaData(RegionCoprocessorEnvironment env, Map<String, byte[]> attributes) throws IOException {
         if (attributes == null) { return IndexMetaDataCache.EMPTY_INDEX_META_DATA_CACHE; }
@@ -87,6 +88,7 @@ public class PhoenixIndexMetaData implements IndexMetaData {
     public PhoenixIndexMetaData(RegionCoprocessorEnvironment env, Map<String,byte[]> attributes) throws IOException {
         this.indexMetaDataCache = getIndexMetaData(env, attributes);
         this.attributes = attributes;
+        this.ignoreNewerMutations = attributes.get(BaseScannerRegionObserver.IGNORE_NEWER_MUTATIONS) != null;
     }
     
     public Transaction getTransaction() {
@@ -99,5 +101,9 @@ public class PhoenixIndexMetaData implements IndexMetaData {
 
     public Map<String, byte[]> getAttributes() {
         return attributes;
+    }
+    
+    public boolean ignoreNewerMutations() {
+        return ignoreNewerMutations;
     }
 }

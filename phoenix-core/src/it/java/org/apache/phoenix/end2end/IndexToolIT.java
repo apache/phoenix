@@ -17,9 +17,9 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.apache.phoenix.query.BaseTest.setUpConfigForMiniCluster;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
@@ -28,117 +28,114 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.UUID;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.HBaseTestingUtility;
-import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.MetaDataUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
-import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameters;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 
 /**
  * Tests for the {@link IndexTool}
  */
-@Category(NeedsOwnMiniClusterTest.class)
-public class IndexToolIT {
+@RunWith(Parameterized.class)
+public class IndexToolIT extends BaseOwnClusterHBaseManagedTimeIT {
     
-    private static HBaseTestingUtility hbaseTestUtil;
-    private static String zkQuorum;
-  
+    private final String schemaName;
+    private final String dataTable;
+    
+    private final boolean localIndex;
+    private final boolean transactional;
+    private final boolean directApi;
+    private final String tableDDLOptions;
+    
+    public IndexToolIT(boolean transactional, boolean localIndex, boolean mutable, boolean directApi) {
+        this.schemaName = "S";
+        this.dataTable = "T" + (transactional ? "_TXN" : "");
+        this.localIndex = localIndex;
+        this.transactional = transactional;
+        this.directApi = directApi;
+        StringBuilder optionBuilder = new StringBuilder();
+        if (!mutable) 
+            optionBuilder.append(" IMMUTABLE_ROWS=true ");
+        if (transactional) {
+            if (!(optionBuilder.length()==0))
+                optionBuilder.append(",");
+            optionBuilder.append(" TRANSACTIONAL=true ");
+        }
+        this.tableDDLOptions = optionBuilder.toString();
+    }
+    
     @BeforeClass
-    public static void setUp() throws Exception {
-        hbaseTestUtil = new HBaseTestingUtility();
-        Configuration conf = hbaseTestUtil.getConfiguration();
-        conf.setBoolean("hbase.defaults.for.version.skip", true);
-        // Since we're using the real PhoenixDriver in this test, remove the
-        // extra JDBC argument that causes the test driver to be used.
-        conf.set(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
-        setUpConfigForMiniCluster(conf);
-        hbaseTestUtil.startMiniCluster();
-        hbaseTestUtil.startMiniMapReduceCluster();
-        Class.forName(PhoenixDriver.class.getName());
-        DriverManager.registerDriver(PhoenixDriver.INSTANCE);
-        zkQuorum = "localhost:" + hbaseTestUtil.getZkCluster().getClientPort();
+    public static void doSetup() throws Exception {
+        Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(1);
+        serverProps.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
+        Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(1);
+        clientProps.put(QueryServices.TRANSACTIONS_ENABLED, "true");
+        setUpRealDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
+    }
+    
+    @Parameters(name="transactional = {0} , mutable = {1} , localIndex = {2}, directApi = {3}")
+    public static Collection<Boolean[]> data() {
+        return Arrays.asList(new Boolean[][] {     
+                 { false, false, false, false }, { false, false, false, true }, { false, false, true, false }, { false, false, true, true }, 
+                 { false, true, false, false }, { false, true, false, true }, { false, true, true, false }, { false, true, true, true }, 
+                 { true, false, false, false }, { true, false, false, true }, { true, false, true, false }, { true, false, true, true }, 
+                 { true, true, false, false }, { true, true, false, true }, { true, true, true, false }, { true, true, true, true }
+           });
     }
     
     @Test
-    public void testImmutableGlobalIndex() throws Exception {
-        testSecondaryIndex("SCHEMA", "DATA_TABLE1", true, false);
-    }
-    
-    @Test
-    public void testImmutableLocalIndex() throws Exception {
-        testSecondaryIndex("SCHEMA", "DATA_TABLE2", true, true);
-    }
-    
-    @Test
-    public void testMutableGlobalIndex() throws Exception {
-        testSecondaryIndex("SCHEMA", "DATA_TABLE3", false, false);
-    }
-    
-    @Test
-    public void testMutableLocalIndex() throws Exception {
-        testSecondaryIndex("SCHEMA", "DATA_TABLE4", false, true);
-    }
-    
-    @Test
-    public void testImmutableGlobalIndexDirectApi() throws Exception {
-    	testSecondaryIndex("SCHEMA", "DATA_TABLE5", true, false, true);
-    }
-    
-    @Test
-    public void testImmutableLocalIndexDirectApi() throws Exception {
-    	testSecondaryIndex("SCHEMA", "DATA_TABLE6", true, true, true);
-    }
-    
-    @Test
-    public void testMutableGlobalIndexDirectApi() throws Exception {
-    	testSecondaryIndex("SCHEMA", "DATA_TABLE7", false, false, true);
-    }
-    
-    @Test
-    public void testMutableLocalIndexDirectApi() throws Exception {
-    	testSecondaryIndex("SCHEMA", "DATA_TABLE8", false, true, true);
-    }
-    
-    public void testSecondaryIndex(final String schemaName, final String dataTable, final boolean isImmutable , final boolean isLocal) throws Exception {
-    	testSecondaryIndex(schemaName, dataTable, isImmutable, isLocal, false);
-    }
-    
-    public void testSecondaryIndex(final String schemaName, final String dataTable, final boolean isImmutable , final boolean isLocal, final boolean directApi) throws Exception {
-        
-    	final String fullTableName = SchemaUtil.getTableName(schemaName, dataTable);
-        final String indxTable = String.format("%s_%s",dataTable,"INDX");
+    public void testSecondaryIndex() throws Exception {
+        final String fullTableName = SchemaUtil.getTableName(schemaName, dataTable);
+        final String indxTable = String.format("%s_%s", dataTable, "INDX");
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum,props);
+        props.setProperty(QueryServices.TRANSACTIONS_ENABLED, "true");
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         Statement stmt = conn.createStatement();
         try {
         
-            stmt.execute(String.format("CREATE TABLE %s (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, ZIP INTEGER) %s", fullTableName, (isImmutable ? "IMMUTABLE_ROWS=true" :"")));
+            stmt.execute(String.format("CREATE TABLE %s (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, ZIP INTEGER) %s", fullTableName, tableDDLOptions));
             String upsertQuery = String.format("UPSERT INTO %s VALUES(?, ?, ?)", fullTableName);
             PreparedStatement stmt1 = conn.prepareStatement(upsertQuery);
             
-            int id = 1;
             // insert two rows
-            upsertRow(stmt1, id++);
-            upsertRow(stmt1, id++);
+            upsertRow(stmt1, 1);
+            upsertRow(stmt1, 2);
             conn.commit();
             
-            stmt.execute(String.format("CREATE %s INDEX %s ON %s  (LPAD(UPPER(NAME),8,'x')||'_xyz') ASYNC ", (isLocal ? "LOCAL" : ""), indxTable, fullTableName));
+            if (transactional) {
+                // insert two rows in another connection without committing so that they are not visible to other transactions
+                try (Connection conn2 = DriverManager.getConnection(getUrl(), props)) {
+                    PreparedStatement stmt2 = conn.prepareStatement(upsertQuery);
+                    upsertRow(stmt2, 5);
+                    upsertRow(stmt2, 6);
+                    ResultSet rs = conn.createStatement().executeQuery("SELECT count(*) from "+fullTableName);
+                    assertTrue(rs.next());
+                    assertEquals("Unexpected row count ", 4, rs.getInt(1));
+                    assertFalse(rs.next());
+                }
+            }
+            
+            stmt.execute(String.format("CREATE %s INDEX %s ON %s  (LPAD(UPPER(NAME),8,'x')||'_xyz') ASYNC ", (localIndex ? "LOCAL" : ""), indxTable, fullTableName));
    
             //verify rows are fetched from data table.
             String selectSql = String.format("SELECT LPAD(UPPER(NAME),8,'x')||'_xyz',ID FROM %s", fullTableName);
@@ -153,10 +150,12 @@ public class IndexToolIT {
             assertEquals("xxUNAME1_xyz", rs.getString(1));    
             assertTrue(rs.next());
             assertEquals("xxUNAME2_xyz", rs.getString(1));
+            assertFalse(rs.next());
+            conn.commit();
            
             //run the index MR job.
             final IndexTool indexingTool = new IndexTool();
-            indexingTool.setConf(new Configuration(hbaseTestUtil.getConfiguration()));
+            indexingTool.setConf(new Configuration(getUtility().getConfiguration()));
             
             final String[] cmdArgs = getArgValues(schemaName, dataTable, indxTable, directApi);
             int status = indexingTool.run(cmdArgs);
@@ -167,31 +166,31 @@ public class IndexToolIT {
             upsertRow(stmt1, 4);
             conn.commit();
             
-            rs = stmt1.executeQuery("SELECT * FROM "+SchemaUtil.getTableName(schemaName, indxTable));
+            rs = stmt1.executeQuery("SELECT LPAD(UPPER(NAME),8,'x')||'_xyz',ID FROM "+fullTableName);
 
             //assert we are pulling from index table.
             rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
             actualExplainPlan = QueryUtil.getExplainPlan(rs);
-            assertExplainPlan(actualExplainPlan,schemaName,dataTable,indxTable,isLocal);
+            assertExplainPlan(actualExplainPlan, schemaName, dataTable, indxTable, localIndex);
             
             rs = stmt.executeQuery(selectSql);
-//            assertTrue(rs.next());
-//            assertEquals("xxUNAME1_xyz", rs.getString(1));
-//            assertEquals(1, rs.getInt(2));
-//            
-//            assertTrue(rs.next());
-//            assertEquals("xxUNAME2_xyz", rs.getString(1));
-//            assertEquals(2, rs.getInt(2));
-//
-//            assertTrue(rs.next());
-//            assertEquals("xxUNAME3_xyz", rs.getString(1));
-//            assertEquals(3, rs.getInt(2));
-//            
-//            assertTrue(rs.next());
-//            assertEquals("xxUNAME4_xyz", rs.getString(1));
-//            assertEquals(4, rs.getInt(2));
-//      
-//            assertFalse(rs.next());
+            assertTrue(rs.next());
+            assertEquals("xxUNAME1_xyz", rs.getString(1));
+            assertEquals(1, rs.getInt(2));
+            
+            assertTrue(rs.next());
+            assertEquals("xxUNAME2_xyz", rs.getString(1));
+            assertEquals(2, rs.getInt(2));
+
+            assertTrue(rs.next());
+            assertEquals("xxUNAME3_xyz", rs.getString(1));
+            assertEquals(3, rs.getInt(2));
+            
+            assertTrue(rs.next());
+            assertEquals("xxUNAME4_xyz", rs.getString(1));
+            assertEquals(4, rs.getInt(2));
+      
+            assertFalse(rs.next());
             
             conn.createStatement().execute(String.format("DROP INDEX  %s ON %s",indxTable , fullTableName));
         } finally {
@@ -199,83 +198,7 @@ public class IndexToolIT {
         }
     }
     
-    
-    /**
-     * This test is to assert that updates that happen to rows of a mutable table after an index is created in ASYNC mode and before
-     * the MR job runs, do show up in the index table . 
-     * @throws Exception
-     */
-    @Test
-    public void testMutalbleIndexWithUpdates() throws Exception {
-        
-        final String dataTable = "DATA_TABLE5";
-        final String indxTable = String.format("%s_%s",dataTable,"INDX");
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum,props);
-        Statement stmt = conn.createStatement();
-        try {
-        
-            stmt.execute(String.format("CREATE TABLE %s (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, ZIP INTEGER)",dataTable));
-            String upsertQuery = String.format("UPSERT INTO %s VALUES(?, ?, ?)",dataTable);
-            PreparedStatement stmt1 = conn.prepareStatement(upsertQuery);
-            
-            int id = 1;
-            // insert two rows
-            upsertRow(stmt1, id++);
-            upsertRow(stmt1, id++);
-            conn.commit();
-            
-            stmt.execute(String.format("CREATE INDEX %s ON %s (UPPER(NAME)) ASYNC ", indxTable,dataTable));
-            
-            //update a row 
-            stmt1.setInt(1, 1);
-            stmt1.setString(2, "uname" + String.valueOf(10));
-            stmt1.setInt(3, 95050 + 1);
-            stmt1.executeUpdate();
-            conn.commit();  
-            
-            //verify rows are fetched from data table.
-            String selectSql = String.format("SELECT UPPER(NAME),ID FROM %s",dataTable);
-            ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
-            String actualExplainPlan = QueryUtil.getExplainPlan(rs);
-            
-            //assert we are pulling from data table.
-            assertEquals(String.format("CLIENT 1-CHUNK PARALLEL 1-WAY FULL SCAN OVER %s",dataTable),actualExplainPlan);
-            
-            rs = stmt1.executeQuery(selectSql);
-            assertTrue(rs.next());
-            assertEquals("UNAME10", rs.getString(1));
-            assertTrue(rs.next());
-            assertEquals("UNAME2", rs.getString(1));
-           
-            //run the index MR job.
-            final IndexTool indexingTool = new IndexTool();
-            indexingTool.setConf(new Configuration(hbaseTestUtil.getConfiguration()));
-            
-            final String[] cmdArgs = getArgValues(null, dataTable,indxTable);
-            int status = indexingTool.run(cmdArgs);
-            assertEquals(0, status);
-            
-            //assert we are pulling from index table.
-            rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
-            actualExplainPlan = QueryUtil.getExplainPlan(rs);
-            assertExplainPlan(actualExplainPlan,null,dataTable,indxTable,false);
-            
-            rs = stmt.executeQuery(selectSql);
-            assertTrue(rs.next());
-            assertEquals("UNAME10", rs.getString(1));
-            assertEquals(1, rs.getInt(2));
-            
-            assertTrue(rs.next());
-            assertEquals("UNAME2", rs.getString(1));
-            assertEquals(2, rs.getInt(2));
-            conn.createStatement().execute(String.format("DROP INDEX  %s ON %s",indxTable , dataTable));
-        } finally {
-            conn.close();
-        }
-    }
-    
-    private void assertExplainPlan(final String actualExplainPlan, String schemaName, String dataTable,
+    public static void assertExplainPlan(final String actualExplainPlan, String schemaName, String dataTable,
             String indxTable, boolean isLocal) {
         
         String expectedExplainPlan = "";
@@ -290,11 +213,11 @@ public class IndexToolIT {
         assertEquals(expectedExplainPlan,actualExplainPlan);
     }
 
-    private String[] getArgValues(String schemaName, String dataTable, String indxTable) {
+    public static String[] getArgValues(String schemaName, String dataTable, String indxTable) {
         return getArgValues(schemaName, dataTable, indxTable, false);
     }
     
-    private String[] getArgValues(String schemaName, String dataTable, String indxTable, boolean directApi) {
+    public static String[] getArgValues(String schemaName, String dataTable, String indxTable, boolean directApi) {
         final List<String> args = Lists.newArrayList();
         if (schemaName!=null) {
             args.add("-s");
@@ -315,24 +238,12 @@ public class IndexToolIT {
         return args.toArray(new String[0]);
     }
 
-    private void upsertRow(PreparedStatement stmt, int i) throws SQLException {
+    public static void upsertRow(PreparedStatement stmt, int i) throws SQLException {
         // insert row
         stmt.setInt(1, i);
         stmt.setString(2, "uname" + String.valueOf(i));
         stmt.setInt(3, 95050 + i);
         stmt.executeUpdate();
     }
-
-    @AfterClass
-    public static void tearDownAfterClass() throws Exception {
-        try {
-            DriverManager.deregisterDriver(PhoenixDriver.INSTANCE);
-        } finally {
-            try {
-                hbaseTestUtil.shutdownMiniMapReduceCluster();
-            } finally {
-                hbaseTestUtil.shutdownMiniCluster();
-            }
-        }
-    }
+    
 }

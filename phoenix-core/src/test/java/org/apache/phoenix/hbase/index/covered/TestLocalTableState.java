@@ -91,7 +91,7 @@ public class TestLocalTableState {
     ColumnReference col = new ColumnReference(fam, qual);
     table.setCurrentTimestamp(ts);
     //check that our value still shows up first on scan, even though this is a lazy load
-    Pair<Scanner, IndexUpdate> p = table.getIndexedColumnsTableState(Arrays.asList(col));
+    Pair<Scanner, IndexUpdate> p = table.getIndexedColumnsTableState(Arrays.asList(col), false);
     Scanner s = p.getFirst();
     assertEquals("Didn't get the pending mutation's value first", m.get(fam, qual).get(0), s.next());
   }
@@ -135,13 +135,13 @@ public class TestLocalTableState {
     ColumnReference col = new ColumnReference(fam, qual);
     table.setCurrentTimestamp(ts);
     // check that the value is there
-    Pair<Scanner, IndexUpdate> p = table.getIndexedColumnsTableState(Arrays.asList(col));
+    Pair<Scanner, IndexUpdate> p = table.getIndexedColumnsTableState(Arrays.asList(col), false);
     Scanner s = p.getFirst();
     assertEquals("Didn't get the pending mutation's value first", kv, s.next());
 
     // rollback that value
     table.rollback(Arrays.asList(kv));
-    p = table.getIndexedColumnsTableState(Arrays.asList(col));
+    p = table.getIndexedColumnsTableState(Arrays.asList(col), false);
     s = p.getFirst();
     assertEquals("Didn't correctly rollback the row - still found it!", null, s.next());
     Mockito.verify(env, Mockito.times(1)).getRegion();
@@ -179,14 +179,14 @@ public class TestLocalTableState {
     ColumnReference col = new ColumnReference(fam, qual);
     table.setCurrentTimestamp(ts);
     // check that the value is there
-    Pair<Scanner, IndexUpdate> p = table.getIndexedColumnsTableState(Arrays.asList(col));
+    Pair<Scanner, IndexUpdate> p = table.getIndexedColumnsTableState(Arrays.asList(col), false);
     Scanner s = p.getFirst();
     // make sure it read the table the one time
     assertEquals("Didn't get the stored keyvalue!", storedKv, s.next());
 
     // on the second lookup it shouldn't access the underlying table again - the cached columns
     // should know they are done
-    p = table.getIndexedColumnsTableState(Arrays.asList(col));
+    p = table.getIndexedColumnsTableState(Arrays.asList(col), false);
     s = p.getFirst();
     assertEquals("Lost already loaded update!", storedKv, s.next());
     Mockito.verify(env, Mockito.times(1)).getRegion();

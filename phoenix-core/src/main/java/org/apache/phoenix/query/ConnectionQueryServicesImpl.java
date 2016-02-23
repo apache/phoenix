@@ -94,6 +94,7 @@ import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MutationCode;
 import org.apache.phoenix.coprocessor.MetaDataRegionObserver;
+import org.apache.phoenix.coprocessor.PhoenixTransactionalProcessor;
 import org.apache.phoenix.coprocessor.ScanRegionObserver;
 import org.apache.phoenix.coprocessor.SequenceRegionObserver;
 import org.apache.phoenix.coprocessor.ServerCachingEndpointImpl;
@@ -192,6 +193,7 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Throwables;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
+import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
@@ -203,7 +205,7 @@ import co.cask.tephra.TransactionSystemClient;
 import co.cask.tephra.TxConstants;
 import co.cask.tephra.distributed.PooledClientProvider;
 import co.cask.tephra.distributed.TransactionServiceClient;
-import co.cask.tephra.hbase11.coprocessor.TransactionProcessor;
+import co.cask.tephra.zookeeper.TephraZKClientService;
 
 
 public class ConnectionQueryServicesImpl extends DelegateQueryServices implements ConnectionQueryServices {
@@ -346,15 +348,18 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
     
     private void initTxServiceClient() {
-        String zkQuorumServersString = connectionInfo.getZookeeperQuorum()+":"+connectionInfo.getPort();
+        String zkQuorumServersString = this.getProps().get(TxConstants.Service.CFG_DATA_TX_ZOOKEEPER_QUORUM);
+        if (zkQuorumServersString==null) {
+            zkQuorumServersString = connectionInfo.getZookeeperQuorum()+":"+connectionInfo.getPort();
+        }
+
+        int timeOut = props.getInt(HConstants.ZK_SESSION_TIMEOUT, HConstants.DEFAULT_ZK_SESSION_TIMEOUT);
+        // Create instance of the tephra zookeeper client 
+        ZKClientService tephraZKClientService = new TephraZKClientService(zkQuorumServersString, timeOut, null, ArrayListMultimap.<String, byte[]>create());
+        
         ZKClientService zkClientService = ZKClientServices.delegate(
                   ZKClients.reWatchOnExpire(
-                    ZKClients.retryOnFailure(
-                      ZKClientService.Builder.of(zkQuorumServersString)
-                        .setSessionTimeout(props.getInt(HConstants.ZK_SESSION_TIMEOUT, HConstants.DEFAULT_ZK_SESSION_TIMEOUT))
-                        .build(),
-                      RetryStrategies.exponentialDelay(500, 2000, TimeUnit.MILLISECONDS)
-                    )
+                         ZKClients.retryOnFailure(tephraZKClientService, RetryStrategies.exponentialDelay(500, 2000, TimeUnit.MILLISECONDS))
                   )
                 );
         zkClientService.startAndWait();
@@ -864,13 +869,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
             
             if (isTransactional) {
-                if (!descriptor.hasCoprocessor(TransactionProcessor.class.getName())) {
-                    descriptor.addCoprocessor(TransactionProcessor.class.getName(), null, priority - 10, null);
+                if (!descriptor.hasCoprocessor(PhoenixTransactionalProcessor.class.getName())) {
+                    descriptor.addCoprocessor(PhoenixTransactionalProcessor.class.getName(), null, priority - 10, null);
                 }
             } else {
                 // If exception on alter table to transition back to non transactional
-                if (descriptor.hasCoprocessor(TransactionProcessor.class.getName())) {
-                    descriptor.removeCoprocessor(TransactionProcessor.class.getName());
+                if (descriptor.hasCoprocessor(PhoenixTransactionalProcessor.class.getName())) {
+                    descriptor.removeCoprocessor(PhoenixTransactionalProcessor.class.getName());
                 }                
             }
         } catch (IOException e) {
@@ -1039,7 +1044,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 } else {
                     // If we think we're creating a non transactional table when it's already
                     // transactional, don't allow.
-                    if (existingDesc.hasCoprocessor(TransactionProcessor.class.getName())) {
+                    if (existingDesc.hasCoprocessor(PhoenixTransactionalProcessor.class.getName())) {
                         throw new SQLExceptionInfo.Builder(SQLExceptionCode.TX_MAY_NOT_SWITCH_TO_NON_TX)
                         .setSchemaName(SchemaUtil.getSchemaNameFromFullName(tableName))
                         .setTableName(SchemaUtil.getTableNameFromFullName(tableName)).build().buildException();
@@ -2367,14 +2372,16 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                     // parts we haven't yet done).
                                     metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG, MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0 - 2,
                                             PhoenixDatabaseMetaData.TRANSACTIONAL + " " + PBoolean.INSTANCE.getSqlTypeName());
-                                    metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG, MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0 - 1, 
-                                            PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY + " " + PLong.INSTANCE.getSqlTypeName());
+                                    // Drop old stats table so that new stats table is created
+                                    metaConnection = dropStatsTable(metaConnection,
+                                            MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0 - 1);
+                                    metaConnection = addColumnsIfNotExists(metaConnection,
+                                            PhoenixDatabaseMetaData.SYSTEM_CATALOG,
+                                            MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0,
+                                            PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY + " "
+                                                    + PLong.INSTANCE.getSqlTypeName());
                                     setImmutableTableIndexesImmutable(metaConnection);
-									// Drop old stats table so that new stats table is created
-									metaConnection = dropStatsTable(metaConnection,
-											MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0);
-									// Clear the server cache so the above changes make it over to any clients
-									// that already have cached data.
+                                    // that already have cached data.
 									clearCache();
                                 }
                                 
@@ -2508,7 +2515,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private PhoenixConnection dropStatsTable(PhoenixConnection oldMetaConnection, long timestamp)
 			throws SQLException, IOException {
 		Properties props = PropertiesUtil.deepCopy(oldMetaConnection.getClientInfo());
-		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(timestamp-1));
+		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(timestamp));
 		PhoenixConnection metaConnection = new PhoenixConnection(oldMetaConnection, this, props);
 		SQLException sqlE = null;
 		boolean wasCommit = metaConnection.getAutoCommit();
@@ -2525,26 +2532,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 		} finally {
 			try {
 				metaConnection.setAutoCommit(wasCommit);
-				oldMetaConnection.close();
-			} catch (SQLException e) {
-				if (sqlE != null) {
-					sqlE.setNextException(e);
-				} else {
-					sqlE = e;
-				}
-			}
-			if (sqlE != null) {
-				throw sqlE;
-			}
-		}
-
-		oldMetaConnection = metaConnection;
-		props = PropertiesUtil.deepCopy(oldMetaConnection.getClientInfo());
-		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(timestamp));
-		try {
-			metaConnection = new PhoenixConnection(oldMetaConnection, ConnectionQueryServicesImpl.this, props);
-		} finally {
-			try {
 				oldMetaConnection.close();
 			} catch (SQLException e) {
 				if (sqlE != null) {
@@ -3365,4 +3352,31 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     public boolean isRenewingLeasesEnabled() {
         return supportsFeature(ConnectionQueryServices.Feature.RENEW_LEASE) && renewLeaseEnabled;
     }
+
+
+    @Override
+    public HRegionLocation getTableRegionLocation(byte[] tableName, byte[] row) throws SQLException {
+       /*
+        * Use HConnection.getRegionLocation as it uses the cache in HConnection, to get the region
+        * to which specified row belongs to.
+         */
+        int retryCount = 0, maxRetryCount = 1;
+        boolean reload =false;
+        while (true) {
+                try {
+                        return connection.getRegionLocation(TableName.valueOf(tableName), row, reload);
+                } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
+                        String fullName = Bytes.toString(tableName);
+                        throw new TableNotFoundException(SchemaUtil.getSchemaNameFromFullName(fullName), SchemaUtil.getTableNameFromFullName(fullName));
+                } catch (IOException e) {
+                        if (retryCount++ < maxRetryCount) { // One retry, in case split occurs while navigating
+                                reload = true;
+                                continue;
+                        }
+                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.GET_TABLE_REGIONS_FAIL)
+                        .setRootCause(e).build().buildException();
+                }
+        }
+     }
+
 }

@@ -17,8 +17,7 @@
  */
 package org.apache.phoenix.hbase.index.covered.example;
 
-
-import static org.apache.phoenix.query.BaseTest.initAndRegisterDriver;
+import static org.apache.phoenix.query.BaseTest.initAndRegisterTestDriver;
 import static org.apache.phoenix.query.BaseTest.setUpConfigForMiniCluster;
 
 import java.io.IOException;
@@ -123,7 +122,7 @@ public class EndToEndCoveredIndexingIT {
                 PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum + 
                 PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR + 
                 conf.get(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
-        initAndRegisterDriver(url, ReadOnlyProps.EMPTY_PROPS);
+        initAndRegisterTestDriver(url, ReadOnlyProps.EMPTY_PROPS);
     }
 
     @BeforeClass

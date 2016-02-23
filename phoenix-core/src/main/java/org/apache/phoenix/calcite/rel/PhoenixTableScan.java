@@ -219,7 +219,10 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
                 byteCount = phoenixTable.byteCount;
             } else {
                 if (filteredGuideposts != null) {
-                    byteCount = filteredGuideposts.getByteCount();
+                    byteCount = 0;
+                    for (long b : filteredGuideposts.getByteCounts()) {
+                        byteCount += b;
+                    }
                     // TODO why zero byteCount? a bug?
                     if (byteCount == 0 && filteredGuideposts.getGuidePostsCount() > 0) {
                         PTable pTable = phoenixTable.getTable();

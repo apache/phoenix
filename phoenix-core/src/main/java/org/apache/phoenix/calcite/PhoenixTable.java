@@ -91,8 +91,8 @@ public class PhoenixTable extends AbstractTable implements TranslatableTable {
       this.collation = RelCollationTraitDef.INSTANCE.canonize(RelCollations.of(fieldCollations));
       byte[] emptyCf = SchemaUtil.getEmptyColumnFamily(pTable);
       GuidePostsInfo info = pTable.getTableStats().getGuidePosts().get(emptyCf);
-      long rowCount;
-      long byteCount;
+      long rowCount = 0;
+      long byteCount = 0;
       try {
           if (info == null) {
               // TODO The props might not be the same as server props.
@@ -127,8 +127,12 @@ public class PhoenixTable extends AbstractTable implements TranslatableTable {
               }
               rowCount = byteCount / rowSize;
           } else {
-              byteCount = info.getByteCount();
-              rowCount = info.getRowCount();
+              for (long b : info.getByteCounts()) {
+                  byteCount += b;
+              }
+              for (long r : info.getRowCounts()) {
+                  rowCount += r;
+              }
           }
       } catch (SQLException | IOException e) {
           throw new RuntimeException(e);

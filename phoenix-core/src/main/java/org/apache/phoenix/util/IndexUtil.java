@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Delete;
@@ -86,9 +87,9 @@ import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
 
-import co.cask.tephra.TxConstants;
-
 import com.google.common.collect.Lists;
+
+import co.cask.tephra.TxConstants;
 
 public class IndexUtil {
     public static final String INDEX_COLUMN_NAME_SEP = ":";
@@ -128,7 +129,7 @@ public class IndexUtil {
         if (PBinary.INSTANCE.equals(dataType)) {
             return PVarbinary.INSTANCE;
         }
-        throw new IllegalArgumentException("Unsupported non nullable index type " + dataType);
+        throw new IllegalArgumentException("Unsupported non nullable type " + dataType);
     }
     
 
@@ -283,7 +284,14 @@ public class IndexUtil {
                         }
                         
                     };
-                    indexMutations.add(maintainer.buildUpdateMutation(kvBuilder, valueGetter, ptr, ts, null, null));
+                    byte[] regionStartKey = null;
+                    byte[] regionEndkey = null;
+                    if(maintainer.isLocalIndex()) {
+                        HRegionLocation tableRegionLocation = connection.getQueryServices().getTableRegionLocation(table.getName().getBytes(), dataMutation.getRow());
+                        regionStartKey = tableRegionLocation.getRegionInfo().getStartKey();
+                        regionEndkey = tableRegionLocation.getRegionInfo().getEndKey();
+                    }
+                    indexMutations.add(maintainer.buildUpdateMutation(kvBuilder, valueGetter, ptr, ts, regionStartKey, regionEndkey));
                 }
             }
             return indexMutations;

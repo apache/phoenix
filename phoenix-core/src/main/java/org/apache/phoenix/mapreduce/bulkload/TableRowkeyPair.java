@@ -22,12 +22,13 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.io.BytesWritable;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.io.WritableComparator;
 import org.apache.hadoop.io.WritableUtils;
 
 import com.google.common.base.Preconditions;
+
 
 
 /**
@@ -84,6 +85,13 @@ public class TableRowkeyPair implements WritableComparable<TableRowkeyPair> {
         WritableUtils.writeString(output,tableName);
         rowkey.write(output);
     }
+    
+    @Override
+    public int hashCode() {
+        int result = this.tableName.hashCode();
+        result = 31 * result + this.rowkey.hashCode();
+        return result;
+    }
 
     @Override
     public int compareTo(TableRowkeyPair other) {
@@ -94,11 +102,10 @@ public class TableRowkeyPair implements WritableComparable<TableRowkeyPair> {
             return this.tableName.compareTo(otherTableName);
         }
     }
-    
-    /** Comparator optimized for <code>TableRowkeyPair</code>. */
+
+    /** Comparator for <code>TableRowkeyPair</code>. */
     public static class Comparator extends WritableComparator {
-        private BytesWritable.Comparator comparator = new BytesWritable.Comparator();
-        
+
         public Comparator() {
             super(TableRowkeyPair.class);
         }
@@ -106,28 +113,26 @@ public class TableRowkeyPair implements WritableComparable<TableRowkeyPair> {
         @Override
         public int compare(byte[] b1, int s1, int l1, byte[] b2, int s2, int l2) {
             try {
-                int vintL1 = WritableUtils.decodeVIntSize(b1[s1]);
-                int vintL2 = WritableUtils.decodeVIntSize(b2[s2]);
-                int strL1 = readVInt(b1, s1);
-                int strL2 = readVInt(b2, s2);
-                int cmp = compareBytes(b1, s1 + vintL1, strL1, b2, s2 + vintL2, strL2);
+                // Compare table names
+                int strL1 = readInt(b1, s1);
+                int strL2 = readInt(b2, s2);
+                int cmp = compareBytes(b1, s1 + Bytes.SIZEOF_INT, strL1, b2, s2 + Bytes.SIZEOF_INT, strL2);
                 if (cmp != 0) {
-                  return cmp;
+                    return cmp;
                 }
-                int vintL3 = WritableUtils.decodeVIntSize(b1[s1 + vintL1 + strL1]);
-                int vintL4 = WritableUtils.decodeVIntSize(b2[s2 + vintL2 + strL2]);
-                int strL3 = readVInt(b1, s1 + vintL1 + strL1);
-                int strL4 = readVInt(b2, s2 + vintL2 + strL2);
-                return comparator.compare(b1, s1 + vintL1 + strL1 + vintL3, strL3, b2, s2
-                    + vintL2 + strL2 + vintL4, strL4);
-                
+                // Compare row keys
+                int strL3 = readInt(b1, s1 + Bytes.SIZEOF_INT + strL1);
+                int strL4 = readInt(b2, s2 + Bytes.SIZEOF_INT + strL2);
+                int i = compareBytes(b1, s1 + Bytes.SIZEOF_INT*2 + strL1, strL3, b2, s2
+                        + Bytes.SIZEOF_INT*2 + strL2, strL4);
+                return i;
             } catch(Exception ex) {
                 throw new IllegalArgumentException(ex);
             }
         }
     }
- 
-    static { 
+
+    static {
         WritableComparator.define(TableRowkeyPair.class, new Comparator());
     }
 

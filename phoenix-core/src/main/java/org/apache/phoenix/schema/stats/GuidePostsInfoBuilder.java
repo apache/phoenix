@@ -19,9 +19,10 @@ package org.apache.phoenix.schema.stats;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.util.LinkedList;
+import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PrefixByteCodec;
 import org.apache.phoenix.util.PrefixByteEncoder;
@@ -33,25 +34,31 @@ import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 
 public class GuidePostsInfoBuilder {
     private PrefixByteEncoder encoder;
-    private byte[] lastRow;
+    private ImmutableBytesWritable lastRow;
     private ImmutableBytesWritable guidePosts=new ImmutableBytesWritable(ByteUtil.EMPTY_BYTE_ARRAY);
-    private long byteCount = 0;
     private int guidePostsCount;
     
     /**
      * The rowCount that is flattened across the total number of guide posts.
      */
     private long rowCount = 0;
-    
+
     /**
      * Maximum length of a guidePost collected
      */
     private int maxLength;
     private DataOutputStream output;
     private TrustedByteArrayOutputStream stream;
-    
-    public final static GuidePostsInfo EMPTY_GUIDEPOST = new GuidePostsInfo(0,
-            new ImmutableBytesWritable(ByteUtil.EMPTY_BYTE_ARRAY), 0, 0, 0);
+    private List<Long> rowCounts = new LinkedList<Long>();
+    private List<Long> byteCounts = new LinkedList<Long>();
+
+    public List<Long> getRowCounts() {
+        return rowCounts;
+    }
+
+    public List<Long> getByteCounts() {
+        return byteCounts;
+    }
 
     public int getMaxLength() {
         return maxLength;
@@ -60,7 +67,7 @@ public class GuidePostsInfoBuilder {
         this.stream = new TrustedByteArrayOutputStream(1);
         this.output = new DataOutputStream(stream);
         this.encoder=new PrefixByteEncoder();
-        lastRow = ByteUtil.EMPTY_BYTE_ARRAY;
+        lastRow = new ImmutableBytesWritable(ByteUtil.EMPTY_BYTE_ARRAY);
     }
 
     /**
@@ -71,14 +78,14 @@ public class GuidePostsInfoBuilder {
      * @return
      * @throws IOException 
      */
-    public boolean addGuidePosts( byte[] row, long byteCount, long rowCount) {
-        if (row.length != 0 && Bytes.compareTo(lastRow, row) < 0) {
+    public boolean addGuidePosts(ImmutableBytesWritable row, long byteCount, long rowCount) {
+        if (row.getLength() != 0 && lastRow.compareTo(row) < 0) {
             try {
-                encoder.encode(output, row, 0, row.length);
-                this.byteCount += byteCount;
+                encoder.encode(output, row.get(), row.getOffset(), row.getLength());
+                rowCounts.add(rowCount);
+                byteCounts.add(byteCount);
                 this.guidePostsCount++;
                 this.maxLength = encoder.getMaxLength();
-                this.rowCount += rowCount;
                 lastRow = row;
                 return true;
             } catch (IOException e) {
@@ -87,13 +94,17 @@ public class GuidePostsInfoBuilder {
         }
         return false;
     }
-    
-    public boolean addGuidePosts(byte[] row){
-        return addGuidePosts(row, 0, 0);
+
+    public boolean addGuidePosts(byte[] row) {
+        return addGuidePosts(new ImmutableBytesWritable(row), 0, 0);
     }
 
-    public boolean addGuidePosts(byte[] row, long byteCount){
-        return addGuidePosts(row, byteCount, 0);
+    public boolean addGuidePosts(byte[] row, long byteCount) {
+        return addGuidePosts(new ImmutableBytesWritable(row), byteCount, 0);
+    }
+
+    public boolean addGuidePosts(byte[] row, long byteCount, long rowCount) {
+        return addGuidePosts(new ImmutableBytesWritable(row), byteCount, rowCount);
     }
 
     private void close() {
@@ -102,12 +113,22 @@ public class GuidePostsInfoBuilder {
 
     public GuidePostsInfo build() {
         this.guidePosts.set(stream.getBuffer(), 0, stream.size());
-        GuidePostsInfo guidePostsInfo = new GuidePostsInfo(this.byteCount, this.guidePosts, this.rowCount, this.maxLength, this.guidePostsCount);
+        GuidePostsInfo guidePostsInfo = new GuidePostsInfo(this.byteCounts, this.guidePosts, this.rowCounts,
+                this.maxLength, this.guidePostsCount);
         this.close();
         return guidePostsInfo;
     }
+
     public void incrementRowCount() {
-      this.rowCount++;
+        this.rowCount++;
+    }
+
+    public void resetRowCount() {
+        this.rowCount = 0;
+    }
+
+    public long getRowCount() {
+        return rowCount;
     }
 
 }

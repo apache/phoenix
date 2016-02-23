@@ -225,4 +225,61 @@ public class SaltedTableUpsertSelectIT extends BaseHBaseManagedTimeIT {
             conn.close();
         }
     }
+
+    @Test
+    public void testUpsertSelectWithJoinOnSaltedTables() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(false);
+        try {
+            String ddl = "CREATE TABLE IF NOT EXISTS source1" +
+                    " (pk1 varchar NULL, pk2 varchar NULL, pk3 integer NOT NULL, col1 INTEGER" +
+                    " CONSTRAINT pk PRIMARY KEY (pk1, pk2, pk3)) SALT_BUCKETS=4";
+            createTestTable(getUrl(), ddl);
+
+            for (int i = 0; i < 1000; i++) {
+                String upsert = "UPSERT INTO source1(pk1, pk2, pk3, col1) VALUES (?,?,?,?)";
+                PreparedStatement stmt = conn.prepareStatement(upsert);
+                stmt.setString(1, Integer.toString(i));
+                stmt.setString(2, Integer.toString(i));
+                stmt.setInt(3, i);
+                stmt.setInt(4, i);
+                stmt.execute();
+            }
+            conn.commit();
+
+            String ddl2 = "CREATE TABLE IF NOT EXISTS source2" +
+                    " (pk1 varchar NULL, pk2 varchar NULL, pk3 integer NOT NULL, col1 INTEGER" +
+                    " CONSTRAINT pk PRIMARY KEY (pk1, pk2, pk3)) SALT_BUCKETS=4";
+            createTestTable(getUrl(), ddl2);
+
+            for (int i = 0; i < 1000; i++) {
+                String upsert = "UPSERT INTO source2(pk1, pk2, pk3, col1) VALUES (?,?,?,?)";
+                PreparedStatement stmt = conn.prepareStatement(upsert);
+                stmt.setString(1, Integer.toString(i));
+                stmt.setString(2, Integer.toString(i));
+                stmt.setInt(3, i);
+                stmt.setInt(4, i);
+                stmt.execute();
+            }
+            conn.commit();
+
+            String ddl3 = "CREATE TABLE IF NOT EXISTS dest" +
+                    " (pk1 varchar NULL, pk2 varchar NULL, pk3 integer NOT NULL, col1 INTEGER" +
+                    " CONSTRAINT pk PRIMARY KEY (pk1, pk2, pk3)) SALT_BUCKETS=4";
+            createTestTable(getUrl(), ddl3);
+
+            String query = "UPSERT INTO dest(pk1, pk2, pk3, col1) SELECT S1.pk1, S1.pk2, S2.pk3, S2.col1 FROM source1 AS S1 JOIN source2 AS S2 ON S1.pk1 = S2.pk1 AND S1.pk2 = S2.pk2 AND S1.pk3 = S2.pk3";
+            conn.createStatement().execute(query);
+            conn.commit();
+
+            query = "SELECT COUNT(*) FROM dest";
+            PreparedStatement stmt = conn.prepareStatement(query);
+            ResultSet rs = stmt.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(1000, rs.getInt(1));
+        } finally {
+            conn.close();
+        }
+    }
 }

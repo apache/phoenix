@@ -59,7 +59,6 @@ public class ScannerBuilder {
 
   public Scanner buildIndexedColumnScanner(Collection<? extends ColumnReference> indexedColumns, ColumnTracker tracker, long ts) {
 
-    // TODO: This needs to use some form of the filter that Tephra has when transactional
     Filter columnFilters = getColumnFilters(indexedColumns);
     FilterList filters = new FilterList(Lists.newArrayList(columnFilters));
 

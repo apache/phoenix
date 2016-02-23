@@ -49,10 +49,13 @@ import org.apache.phoenix.iterate.ParallelIterators;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.PeekingResultIterator;
 import org.apache.phoenix.iterate.ResultIterator;
+import org.apache.phoenix.iterate.ResultIterators;
 import org.apache.phoenix.iterate.SequenceResultIterator;
+import org.apache.phoenix.iterate.SerialIterators;
 import org.apache.phoenix.iterate.SpoolingResultIterator;
 import org.apache.phoenix.iterate.UngroupedAggregatingResultIterator;
 import org.apache.phoenix.parse.FilterableStatement;
+import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -199,16 +202,19 @@ public class AggregatePlan extends BaseQueryPlan {
                 context.getScan().setAttribute(BaseScannerRegionObserver.GROUP_BY_LIMIT, PInteger.INSTANCE.toBytes(limit));
             }
         }
-        ParallelIterators parallelIterators = new ParallelIterators(this, null, wrapParallelIteratorFactory());
-        splits = parallelIterators.getSplits();
-        scans = parallelIterators.getScans();
+        ResultIterators iterators = statement.getHint().hasHint(HintNode.Hint.SERIAL) ?
+                new SerialIterators(this, null, wrapParallelIteratorFactory(), scanGrouper) :
+                new ParallelIterators(this, null, wrapParallelIteratorFactory());
+
+        splits = iterators.getSplits();
+        scans = iterators.getScans();
 
         AggregatingResultIterator aggResultIterator;
         // No need to merge sort for ungrouped aggregation
         if (groupBy.isEmpty()) {
-            aggResultIterator = new UngroupedAggregatingResultIterator(new ConcatResultIterator(parallelIterators), aggregators);
+            aggResultIterator = new UngroupedAggregatingResultIterator(new ConcatResultIterator(iterators), aggregators);
         } else {
-            aggResultIterator = new GroupedAggregatingResultIterator(new MergeSortRowKeyResultIterator(parallelIterators), aggregators);
+            aggResultIterator = new GroupedAggregatingResultIterator(new MergeSortRowKeyResultIterator(iterators), aggregators);
         }
 
         if (having != null) {

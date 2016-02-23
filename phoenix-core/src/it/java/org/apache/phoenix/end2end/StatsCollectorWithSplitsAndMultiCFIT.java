@@ -26,9 +26,11 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Random;
 
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -102,40 +104,83 @@ public class StatsCollectorWithSplitsAndMultiCFIT extends StatsCollectorAbstract
 
         TestUtil.analyzeTable(conn, STATS_TEST_TABLE_NAME_NEW);
         String query = "UPDATE STATISTICS " + STATS_TEST_TABLE_NAME_NEW + " SET \""
-                + QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB + "\"=" + Long.toString(2000);
+                + QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB + "\"=" + Long.toString(250);
         conn.createStatement().execute(query);
         keyRanges = getAllSplits(conn, STATS_TEST_TABLE_NAME_NEW);
-        assertEquals(6, keyRanges.size());
+        assertEquals(26, keyRanges.size());
 
         rs = conn.createStatement().executeQuery(
                 "SELECT COLUMN_FAMILY,SUM(GUIDE_POSTS_ROW_COUNT),SUM(GUIDE_POSTS_WIDTH),COUNT(*) from SYSTEM.STATS where PHYSICAL_NAME = '"
-                        + STATS_TEST_TABLE_NAME_NEW + "' GROUP BY COLUMN_FAMILY");
+                        + STATS_TEST_TABLE_NAME_NEW + "' GROUP BY COLUMN_FAMILY ORDER BY COLUMN_FAMILY");
 
-        assertTrue(rs.next());
         assertTrue(rs.next());
         assertEquals("A", rs.getString(1));
         assertEquals(25, rs.getInt(2));
-        assertEquals(11040, rs.getInt(3));
-        assertEquals(5, rs.getInt(4));
+        assertEquals(12420, rs.getInt(3));
+        assertEquals(25, rs.getInt(4));
 
         assertTrue(rs.next());
         assertEquals("B", rs.getString(1));
         assertEquals(20, rs.getInt(2));
-        assertEquals(4432, rs.getInt(3));
-        assertEquals(2, rs.getInt(4));
+        assertEquals(5540, rs.getInt(3));
+        assertEquals(20, rs.getInt(4));
 
         assertTrue(rs.next());
         assertEquals("C", rs.getString(1));
         assertEquals(25, rs.getInt(2));
-        assertEquals(6652, rs.getInt(3));
-        assertEquals(3, rs.getInt(4));
+        assertEquals(6930, rs.getInt(3));
+        assertEquals(25, rs.getInt(4));
 
         assertTrue(rs.next());
         assertEquals("D", rs.getString(1));
         assertEquals(25, rs.getInt(2));
-        assertEquals(6652, rs.getInt(3));
-        assertEquals(3, rs.getInt(4));
+        assertEquals(6930, rs.getInt(3));
+        assertEquals(25, rs.getInt(4));
 
+    }
+
+    @Test
+    public void testRowCountAndByteCounts() throws SQLException {
+        Connection conn;
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = "T";
+        String ddl = "CREATE TABLE " + tableName + " (t_id VARCHAR NOT NULL,\n" + "k1 INTEGER NOT NULL,\n"
+                + "k2 INTEGER NOT NULL,\n" + "C3.k3 INTEGER,\n" + "C2.v1 VARCHAR,\n"
+                + "CONSTRAINT pk PRIMARY KEY (t_id, k1, k2)) split on ('e','j','o')";
+        conn.createStatement().execute(ddl);
+        String[] strings = { "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r",
+                "s", "t", "u", "v", "w", "x", "y", "z" };
+        for (int i = 0; i < 26; i++) {
+            conn.createStatement().execute("UPSERT INTO " + tableName + " values('" + strings[i] + "'," + i + ","
+                    + (i + 1) + "," + (i + 2) + ",'" + strings[25 - i] + "')");
+        }
+        conn.commit();
+        ResultSet rs;
+        String query = "UPDATE STATISTICS " + tableName + " SET \"" + QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB
+                + "\"=" + Long.toString(20);
+        conn.createStatement().execute(query);
+        Random r = new Random();
+        int count = 0;
+        while (count < 4) {
+            int startIndex = r.nextInt(strings.length);
+            int endIndex = r.nextInt(strings.length - startIndex) + startIndex;
+            long rows = endIndex - startIndex;
+            long c2Bytes = rows * 35;
+            System.out.println(rows + ":" + startIndex + ":" + endIndex);
+            rs = conn.createStatement().executeQuery(
+                    "SELECT COLUMN_FAMILY,SUM(GUIDE_POSTS_ROW_COUNT),SUM(GUIDE_POSTS_WIDTH) from SYSTEM.STATS where PHYSICAL_NAME = '"
+                            + tableName + "' AND GUIDE_POST_KEY>= cast('" + strings[startIndex]
+                            + "' as varbinary) AND  GUIDE_POST_KEY<cast('" + strings[endIndex]
+                            + "' as varbinary) and COLUMN_FAMILY='C2' group by COLUMN_FAMILY");
+            if (startIndex < endIndex) {
+                assertTrue(rs.next());
+                assertEquals("C2", rs.getString(1));
+                assertEquals(rows, rs.getLong(2));
+                assertEquals(c2Bytes, rs.getLong(3));
+                count++;
+            }
+        }
     }
 
 }

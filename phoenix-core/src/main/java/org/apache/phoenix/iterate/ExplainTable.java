@@ -110,7 +110,7 @@ public abstract class ExplainTable {
             buf.append("TIMELINE-CONSISTENCY ");
         }
         if (hint.hasHint(Hint.SMALL)) {
-            buf.append("SMALL ");
+            buf.append(Hint.SMALL).append(" ");
         }
         if (OrderBy.REV_ROW_KEY_ORDER_BY.equals(orderBy)) {
             buf.append("REVERSE ");
@@ -120,7 +120,7 @@ public abstract class ExplainTable {
         } else {
             explainSkipScan(buf);
         }
-        buf.append("OVER " + tableRef.getTable().getPhysicalName().getString());
+        buf.append("OVER ").append(tableRef.getTable().getPhysicalName().getString());
         if (!scanRanges.isPointLookup()) {
             appendKeyRanges(buf);
         }
@@ -130,11 +130,11 @@ public abstract class ExplainTable {
             planSteps.add("    ROW TIMESTAMP FILTER [" + range.getMin() + ", " + range.getMax() + ")");
         }
         
+        PageFilter pageFilter = null;
+        FirstKeyOnlyFilter firstKeyOnlyFilter = null;
+        BooleanExpressionFilter whereFilter = null;
         Iterator<Filter> filterIterator = ScanUtil.getFilterIterator(scan);
         if (filterIterator.hasNext()) {
-            PageFilter pageFilter = null;
-            FirstKeyOnlyFilter firstKeyOnlyFilter = null;
-            BooleanExpressionFilter whereFilter = null;
             do {
                 Filter filter = filterIterator.next();
                 if (filter instanceof FirstKeyOnlyFilter) {
@@ -145,17 +145,17 @@ public abstract class ExplainTable {
                     whereFilter = (BooleanExpressionFilter)filter;
                 }
             } while (filterIterator.hasNext());
-            if (whereFilter != null) {
-                planSteps.add("    SERVER FILTER BY " + (firstKeyOnlyFilter == null ? "" : "FIRST KEY ONLY AND ") + whereFilter.toString());
-            } else if (firstKeyOnlyFilter != null) {
-                planSteps.add("    SERVER FILTER BY FIRST KEY ONLY");
-            }
-            if (!orderBy.getOrderByExpressions().isEmpty() && groupBy.isEmpty()) { // with GROUP BY, sort happens client-side
-                planSteps.add("    SERVER" + (limit == null ? "" : " TOP " + limit + " ROW" + (limit == 1 ? "" : "S"))
-                        + " SORTED BY " + orderBy.getOrderByExpressions().toString());
-            } else if (pageFilter != null) {
-                planSteps.add("    SERVER " + pageFilter.getPageSize() + " ROW LIMIT");                
-            }
+        }
+        if (whereFilter != null) {
+            planSteps.add("    SERVER FILTER BY " + (firstKeyOnlyFilter == null ? "" : "FIRST KEY ONLY AND ") + whereFilter.toString());
+        } else if (firstKeyOnlyFilter != null) {
+            planSteps.add("    SERVER FILTER BY FIRST KEY ONLY");
+        }
+        if (!orderBy.getOrderByExpressions().isEmpty() && groupBy.isEmpty()) { // with GROUP BY, sort happens client-side
+            planSteps.add("    SERVER" + (limit == null ? "" : " TOP " + limit + " ROW" + (limit == 1 ? "" : "S"))
+                    + " SORTED BY " + orderBy.getOrderByExpressions().toString());
+        } else if (pageFilter != null) {
+            planSteps.add("    SERVER " + pageFilter.getPageSize() + " ROW LIMIT");                
         }
         Integer groupByLimit = null;
         byte[] groupByLimitBytes = scan.getAttribute(BaseScannerRegionObserver.GROUP_BY_LIMIT);

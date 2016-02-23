@@ -204,8 +204,6 @@ import org.apache.phoenix.util.UpgradeUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import co.cask.tephra.TxConstants;
-
 import com.google.common.base.Objects;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.ListMultimap;
@@ -213,6 +211,8 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.primitives.Ints;
+
+import co.cask.tephra.TxConstants;
 
 public class MetaDataClient {
     private static final Logger logger = LoggerFactory.getLogger(MetaDataClient.class);
@@ -1013,7 +1013,6 @@ public class MetaDataClient {
     private MutationState buildIndex(PTable index, TableRef dataTableRef) throws SQLException {
         AlterIndexStatement indexStatement = null;
         boolean wasAutoCommit = connection.getAutoCommit();
-        connection.rollback();
         try {
             connection.setAutoCommit(true);
             MutationPlan mutationPlan;
@@ -1094,32 +1093,6 @@ public class MetaDataClient {
                 schemaName == null ? ("\"" + tableName + "\"") : ("\"" + schemaName + "\""
                         + QueryConstants.NAME_SEPARATOR + "\"" + tableName + "\"");
         return fullName;
-    }
-
-    /**
-     * Rebuild indexes from a timestamp which is the value from hbase row key timestamp field
-     */
-    public void buildPartialIndexFromTimeStamp(PTable index, TableRef dataTableRef) throws SQLException {
-        boolean needRestoreIndexState = false;
-        // Need to change index state from Disable to InActive when build index partially so that
-        // new changes will be indexed during index rebuilding
-        AlterIndexStatement indexStatement = FACTORY.alterIndex(FACTORY.namedTable(null,
-            TableName.create(index.getSchemaName().getString(), index.getTableName().getString())),
-            dataTableRef.getTable().getTableName().getString(), false, PIndexState.INACTIVE);
-        alterIndex(indexStatement);
-        needRestoreIndexState = true;
-        try {
-            buildIndex(index, dataTableRef);
-            needRestoreIndexState = false;
-        } finally {
-            if(needRestoreIndexState) {
-                // reset index state to disable
-                indexStatement = FACTORY.alterIndex(FACTORY.namedTable(null,
-                    TableName.create(index.getSchemaName().getString(), index.getTableName().getString())),
-                    dataTableRef.getTable().getTableName().getString(), false, PIndexState.DISABLE);
-                alterIndex(indexStatement);
-            }
-        }
     }
 
     /**
@@ -2005,7 +1978,7 @@ public class MetaDataClient {
                         Collections.<PTable>emptyList(), isImmutableRows,
                         Collections.<PName>emptyList(), defaultFamilyName == null ? null :
                                 PNameFactory.newName(defaultFamilyName), null,
-                        Boolean.TRUE.equals(disableWAL), false, false, null, indexId, indexType, true, false, 0);
+                        Boolean.TRUE.equals(disableWAL), false, false, null, indexId, indexType, true, false, 0, 0L);
                 connection.addTable(table, MetaDataProtocol.MIN_TABLE_TIMESTAMP);
             } else if (tableType == PTableType.INDEX && indexId == null) {
                 if (tableProps.get(HTableDescriptor.MAX_FILESIZE) == null) {
@@ -2159,7 +2132,9 @@ public class MetaDataClient {
             case NEWER_TABLE_FOUND:
                 // Add table to ConnectionQueryServices so it's cached, but don't add
                 // it to this connection as we can't see it.
-                throw new NewerTableAlreadyExistsException(schemaName, tableName, result.getTable());
+                if (!statement.ifNotExists()) {
+                    throw new NewerTableAlreadyExistsException(schemaName, tableName, result.getTable());
+                }
             case UNALLOWED_TABLE_MUTATION:
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_MUTATE_TABLE)
                     .setSchemaName(schemaName).setTableName(tableName).build().buildException();
@@ -2173,7 +2148,7 @@ public class MetaDataClient {
                         PTable.INITIAL_SEQ_NUM, pkName == null ? null : PNameFactory.newName(pkName), saltBucketNum, columns,
                         dataTableName == null ? null : newSchemaName, dataTableName == null ? null : PNameFactory.newName(dataTableName), Collections.<PTable>emptyList(), isImmutableRows,
                         physicalNames, defaultFamilyName == null ? null : PNameFactory.newName(defaultFamilyName), viewStatement, Boolean.TRUE.equals(disableWAL), multiTenant, storeNulls, viewType,
-                        indexId, indexType, rowKeyOrderOptimizable, transactional, updateCacheFrequency);
+                        indexId, indexType, rowKeyOrderOptimizable, transactional, updateCacheFrequency, 0L);
                 result = new MetaDataMutationResult(code, result.getMutationTime(), table, true);
                 addTableToCache(result);
                 return table;

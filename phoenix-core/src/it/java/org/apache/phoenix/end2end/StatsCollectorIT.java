@@ -123,28 +123,38 @@ public class StatsCollectorIT extends StatsCollectorAbstractIT {
         conn.close();
     }
 
-    @Test
-    public void testNoDuplicatesAfterUpdateStats() throws Throwable {
+    private void testNoDuplicatesAfterUpdateStats(String splitKey) throws Throwable {
         Connection conn;
         PreparedStatement stmt;
         ResultSet rs;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement()
-                .execute("CREATE TABLE " + fullTableName +" ( k VARCHAR, c1.a bigint,c2.b bigint CONSTRAINT pk PRIMARY KEY (k))" + tableDDLOptions );
-        conn.createStatement().execute("upsert into " + fullTableName +" values ('abc',1,3)");
-        conn.createStatement().execute("upsert into " + fullTableName +" values ('def',2,4)");
+                .execute("CREATE TABLE " + fullTableName
+                        + " ( k VARCHAR, c1.a bigint,c2.b bigint CONSTRAINT pk PRIMARY KEY (k))"+ tableDDLOptions
+                        + (splitKey != null ? " split on (" + splitKey + ")" : "") );
+        conn.createStatement().execute("upsert into " + fullTableName + " values ('abc',1,3)");
+        conn.createStatement().execute("upsert into " + fullTableName + " values ('def',2,4)");
         conn.commit();
-        // CAll the update statistics query here
         stmt = conn.prepareStatement("UPDATE STATISTICS " + fullTableName);
         stmt.execute();
-        rs = conn.createStatement().executeQuery("SELECT k FROM " + fullTableName);
-        assertTrue(rs.next());
-        assertEquals("abc", rs.getString(1));
+        rs = conn.createStatement().executeQuery("SELECT k FROM " + fullTableName + " order by k desc");
         assertTrue(rs.next());
         assertEquals("def", rs.getString(1));
+        assertTrue(rs.next());
+        assertEquals("abc", rs.getString(1));
         assertTrue(!rs.next());
         conn.close();
+    }
+
+    @Test
+    public void testNoDuplicatesAfterUpdateStatsWithSplits() throws Throwable {
+        testNoDuplicatesAfterUpdateStats("'abc','def'");
+    }
+
+    @Test
+    public void testNoDuplicatesAfterUpdateStatsWithDesc() throws Throwable {
+        testNoDuplicatesAfterUpdateStats(null);
     }
 
     @Test

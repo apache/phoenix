@@ -47,6 +47,7 @@ import org.apache.phoenix.iterate.SequenceResultIterator;
 import org.apache.phoenix.iterate.SerialIterators;
 import org.apache.phoenix.iterate.SpoolingResultIterator;
 import org.apache.phoenix.parse.FilterableStatement;
+import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
@@ -90,7 +91,7 @@ public class ScanPlan extends BaseQueryPlan {
     public ScanPlan(StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector, Integer limit, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory, boolean allowPageFilter, Expression dynamicFilter) throws SQLException {
         super(context, statement, table, projector, context.getBindManager().getParameterMetaData(), limit, orderBy, GroupBy.EMPTY_GROUP_BY,
                 parallelIteratorFactory != null ? parallelIteratorFactory :
-                        buildResultIteratorFactory(context, table, orderBy, limit, allowPageFilter), dynamicFilter);
+                        buildResultIteratorFactory(context, statement, table, orderBy, limit, allowPageFilter), dynamicFilter);
         this.allowPageFilter = allowPageFilter;
         if (!orderBy.getOrderByExpressions().isEmpty()) { // TopN
             int thresholdBytes = context.getConnection().getQueryServices().getProps().getInt(
@@ -99,8 +100,11 @@ public class ScanPlan extends BaseQueryPlan {
         }
     }
 
-    private static boolean isSerial(StatementContext context,
+    private static boolean isSerial(StatementContext context, FilterableStatement statement,
             TableRef tableRef, OrderBy orderBy, Integer limit, boolean allowPageFilter) throws SQLException {
+        if (statement.getHint().hasHint(HintNode.Hint.SERIAL)) {
+            return true;
+        }
         Scan scan = context.getScan();
         /*
          * If a limit is provided and we have no filter, run the scan serially when we estimate that
@@ -126,7 +130,10 @@ public class ScanPlan extends BaseQueryPlan {
             estRegionSize = StatisticsUtil.getGuidePostDepth(guidepostPerRegion, guidepostWidth, desc);
         } else {
             // Region size estimated based on total number of bytes divided by number of regions
-            long totByteSize = gpsInfo.getByteCount();
+            long totByteSize = 0;
+            for (long byteCount : gpsInfo.getByteCounts()) {
+                totByteSize += byteCount;
+            }
             estRegionSize = totByteSize / (gpsInfo.getGuidePostsCount()+1);
         }
         // TODO: configurable number of bytes?
@@ -139,10 +146,10 @@ public class ScanPlan extends BaseQueryPlan {
         return isSerial;
     }
     
-    private static ParallelIteratorFactory buildResultIteratorFactory(StatementContext context,
+    private static ParallelIteratorFactory buildResultIteratorFactory(StatementContext context, FilterableStatement statement,
             TableRef table, OrderBy orderBy, Integer limit, boolean allowPageFilter) throws SQLException {
 
-        if (isSerial(context, table, orderBy, limit, allowPageFilter)
+        if (isSerial(context, statement, table, orderBy, limit, allowPageFilter)
                 || ScanUtil.isRoundRobinPossible(orderBy, context)
                 || ScanUtil.isPacingScannersPossible(context)) {
             return ParallelIteratorFactory.NOOP_FACTORY;
@@ -191,7 +198,7 @@ public class ScanPlan extends BaseQueryPlan {
          * limit is provided, run query serially.
          */
         boolean isOrdered = !orderBy.getOrderByExpressions().isEmpty();
-        boolean isSerial = isSerial(context, tableRef, orderBy, limit, allowPageFilter);
+        boolean isSerial = isSerial(context, statement, tableRef, orderBy, limit, allowPageFilter);
         Integer perScanLimit = !allowPageFilter || isOrdered ? null : limit;
         ResultIterators iterators;
         if (isSerial) {
