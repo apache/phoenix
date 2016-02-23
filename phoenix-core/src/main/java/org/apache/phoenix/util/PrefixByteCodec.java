@@ -18,7 +18,6 @@
 package org.apache.phoenix.util;
 
 import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.DataOutput;
@@ -52,15 +51,15 @@ public class PrefixByteCodec {
     }
     
     public static int encodeBytes(List<byte[]> listOfBytes, ImmutableBytesWritable ptr) throws IOException {
-        TrustedByteArrayOutputStream stream = new TrustedByteArrayOutputStream(calculateSize(listOfBytes));
-        DataOutput output = new DataOutputStream(stream);
-        PrefixByteEncoder encoder = new PrefixByteEncoder();
-        for (byte[] bytes : listOfBytes) {
-            encoder.encode(output, bytes, 0, bytes.length);
+        try (TrustedByteArrayOutputStream stream = new TrustedByteArrayOutputStream(calculateSize(listOfBytes))) {
+            DataOutput output = new DataOutputStream(stream);
+            PrefixByteEncoder encoder = new PrefixByteEncoder();
+            for (byte[] bytes : listOfBytes) {
+                encoder.encode(output, bytes, 0, bytes.length);
+            }
+            ptr.set(stream.getBuffer(), 0, stream.size());
+            return encoder.getMaxLength();
         }
-        close(stream);
-        ptr.set(stream.getBuffer(), 0, stream.size());
-        return encoder.getMaxLength();
     }
     
     public static int calculateSize(List<byte[]> listOfBytes) {
@@ -79,26 +78,6 @@ public class PrefixByteCodec {
             throw eof;
         }catch (IOException e) {
             throw new RuntimeException(e);
-        }
-    }
-
-    public static void close(ByteArrayInputStream stream) {
-        if (stream != null) {
-            try {
-                stream.close();
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-        }
-    }
-
-    public static void close(ByteArrayOutputStream stream) {
-        if (stream != null) {
-            try {
-                stream.close();
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
         }
     }
 }

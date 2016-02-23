@@ -95,6 +95,7 @@ import org.slf4j.LoggerFactory;
 import com.google.common.base.Function;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.google.common.io.Closeables;
 
 
 /**
@@ -120,8 +121,9 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
     private final ParallelScanGrouper scanGrouper;
     // TODO: too much nesting here - breakup into new classes.
     private final List<List<List<Pair<Scan,Future<PeekingResultIterator>>>>> allFutures;
-    private long estimatedRows;
-    private long estimatedSize;
+    private Long estimatedRows;
+    private Long estimatedSize;
+    private boolean hasGuidePosts;
     
     static final Function<HRegionLocation, KeyRange> TO_KEY_RANGE = new Function<HRegionLocation, KeyRange>() {
         @Override
@@ -401,7 +403,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
          * be further parallelized. TODO: pref test to verify 2) We're collecting stats, as in this case we need to scan
          * entire regions worth of data to track where to put the guide posts.
          */
-        if (!useStats()) { return GuidePostsInfo.EMPTY_GUIDEPOST; }
+        if (!useStats()) { return GuidePostsInfo.NO_GUIDEPOST; }
 
         GuidePostsInfo gps = null;
         PTable table = getTable();
@@ -424,7 +426,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 }
             }
         }
-        if (gps == null) { return GuidePostsInfo.EMPTY_GUIDEPOST; }
+        if (gps == null) { return GuidePostsInfo.NO_GUIDEPOST; }
         return gps;
     }
 
@@ -490,6 +492,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             }
         }
         GuidePostsInfo gps = getGuidePosts(whereConditions);
+        hasGuidePosts = gps != GuidePostsInfo.NO_GUIDEPOST;
         boolean traverseAllRegions = isSalted || isLocalIndex;
         if (!traverseAllRegions) {
             byte[] scanStartRow = scan.getStartRow();
@@ -528,63 +531,75 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         DataInput input = null;
         PrefixByteDecoder decoder = null;
         int guideIndex = 0;
-        if (gpsSize > 0) {
-            stream = new ByteArrayInputStream(guidePosts.get(), guidePosts.getOffset(), guidePosts.getLength());
-            input = new DataInputStream(stream);
-            decoder = new PrefixByteDecoder(gps.getMaxLength());
-            try {
-                while (currentKey.compareTo(currentGuidePost = PrefixByteCodec.decode(decoder, input)) >= 0
-                        && currentKey.getLength() != 0) {
-                    guideIndex++;
+        long estimatedRows = 0;
+        long estimatedSize = 0;
+        try {
+            if (gpsSize > 0) {
+                stream = new ByteArrayInputStream(guidePosts.get(), guidePosts.getOffset(), guidePosts.getLength());
+                input = new DataInputStream(stream);
+                decoder = new PrefixByteDecoder(gps.getMaxLength());
+                try {
+                    while (currentKey.compareTo(currentGuidePost = PrefixByteCodec.decode(decoder, input)) >= 0
+                            && currentKey.getLength() != 0) {
+                        guideIndex++;
+                    }
+                } catch (EOFException e) {}
+            }
+            byte[] currentKeyBytes = currentKey.copyBytes();
+    
+            // Merge bisect with guideposts for all but the last region
+            while (regionIndex <= stopIndex) {
+                byte[] currentGuidePostBytes = currentGuidePost.copyBytes();
+                byte[] endKey, endRegionKey = EMPTY_BYTE_ARRAY;
+                if (regionIndex == stopIndex) {
+                    endKey = stopKey;
+                } else {
+                    endKey = regionBoundaries.get(regionIndex);
                 }
-            } catch (EOFException e) {}
-        }
-        byte[] currentKeyBytes = currentKey.copyBytes();
-
-        // Merge bisect with guideposts for all but the last region
-        while (regionIndex <= stopIndex) {
-            byte[] currentGuidePostBytes = currentGuidePost.copyBytes();
-            byte[] endKey, endRegionKey = EMPTY_BYTE_ARRAY;
-            if (regionIndex == stopIndex) {
-                endKey = stopKey;
+                HRegionLocation regionLocation = regionLocations.get(regionIndex);
+                if (isLocalIndex) {
+                    HRegionInfo regionInfo = regionLocation.getRegionInfo();
+                    endRegionKey = regionInfo.getEndKey();
+                    keyOffset = ScanUtil.getRowKeyOffset(regionInfo.getStartKey(), endRegionKey);
+                }
+                try {
+                    while (guideIndex < gpsSize && (currentGuidePost.compareTo(endKey) <= 0 || endKey.length == 0)) {
+                        Scan newScan = scanRanges.intersectScan(scan, currentKeyBytes, currentGuidePostBytes, keyOffset,
+                                false);
+                        estimatedRows += gps.getRowCounts().get(guideIndex);
+                        estimatedSize += gps.getByteCounts().get(guideIndex);
+                        scans = addNewScan(parallelScans, scans, newScan, currentGuidePostBytes, false, regionLocation);
+                        currentKeyBytes = currentGuidePost.copyBytes();
+                        currentGuidePost = PrefixByteCodec.decode(decoder, input);
+                        currentGuidePostBytes = currentGuidePost.copyBytes();
+                        guideIndex++;
+                    }
+                } catch (EOFException e) {}
+                Scan newScan = scanRanges.intersectScan(scan, currentKeyBytes, endKey, keyOffset, true);
+                if (isLocalIndex) {
+                    if (newScan != null) {
+                        newScan.setAttribute(EXPECTED_UPPER_REGION_KEY, endRegionKey);
+                    } else if (!scans.isEmpty()) {
+                        scans.get(scans.size()-1).setAttribute(EXPECTED_UPPER_REGION_KEY, endRegionKey);
+                    }
+                }
+                scans = addNewScan(parallelScans, scans, newScan, endKey, true, regionLocation);
+                currentKeyBytes = endKey;
+                regionIndex++;
+            }
+            if (hasGuidePosts) {
+                this.estimatedRows = estimatedRows;
+                this.estimatedSize = estimatedSize;
             } else {
-                endKey = regionBoundaries.get(regionIndex);
+                this.estimatedRows = null;
+                this.estimatedSize = null;
             }
-            HRegionLocation regionLocation = regionLocations.get(regionIndex);
-            if (isLocalIndex) {
-                HRegionInfo regionInfo = regionLocation.getRegionInfo();
-                endRegionKey = regionInfo.getEndKey();
-                keyOffset = ScanUtil.getRowKeyOffset(regionInfo.getStartKey(), endRegionKey);
+            if (!scans.isEmpty()) { // Add any remaining scans
+                parallelScans.add(scans);
             }
-            try {
-                while (guideIndex < gpsSize && (currentGuidePost.compareTo(endKey) <= 0 || endKey.length == 0)) {
-                    Scan newScan = scanRanges.intersectScan(scan, currentKeyBytes, currentGuidePostBytes, keyOffset,
-                            false);
-                    estimatedRows += gps.getRowCounts().get(guideIndex);
-                    estimatedSize += gps.getByteCounts().get(guideIndex);
-                    scans = addNewScan(parallelScans, scans, newScan, currentGuidePostBytes, false, regionLocation);
-                    currentKeyBytes = currentGuidePost.copyBytes();
-                    currentGuidePost = PrefixByteCodec.decode(decoder, input);
-                    currentGuidePostBytes = currentGuidePost.copyBytes();
-                    guideIndex++;
-                }
-            } catch (EOFException e) {}
-            Scan newScan = scanRanges.intersectScan(scan, currentKeyBytes, endKey, keyOffset, true);
-            if (isLocalIndex) {
-                if (newScan != null) {
-                    newScan.setAttribute(EXPECTED_UPPER_REGION_KEY, endRegionKey);
-                } else if (!scans.isEmpty()) {
-                    scans.get(scans.size()-1).setAttribute(EXPECTED_UPPER_REGION_KEY, endRegionKey);
-                }
-            }
-            scans = addNewScan(parallelScans, scans, newScan, endKey, true, regionLocation);
-            currentKeyBytes = endKey;
-            regionIndex++;
+        } finally {
+            if (stream != null) Closeables.closeQuietly(stream);
         }
-        if (!scans.isEmpty()) { // Add any remaining scans
-            parallelScans.add(scans);
-        }
-        PrefixByteCodec.close(stream);
         return parallelScans;
     }
 
@@ -857,8 +872,11 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         StringBuilder buf = new StringBuilder();
         buf.append("CLIENT ");
         if (displayChunkCount) {
+            boolean displayRowCount = context.getConnection().getQueryServices().getProps().getBoolean(
+                    QueryServices.EXPLAIN_ROW_COUNT_ATTRIB,
+                    QueryServicesOptions.DEFAULT_EXPLAIN_ROW_COUNT);
             buf.append(this.splits.size()).append("-CHUNK ");
-            if (estimatedRows > 0) {
+            if (displayRowCount && hasGuidePosts) {
                 buf.append(estimatedRows).append(" ROWS ");
                 buf.append(estimatedSize).append(" BYTES ");
             }
@@ -867,6 +885,14 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         explain(buf.toString(),planSteps);
     }
 
+    public Long getEstimatedRowCount() {
+        return this.estimatedRows;
+    }
+    
+    public Long getEstimatedByteCount() {
+        return this.estimatedSize;
+    }
+    
     @Override
     public String toString() {
         return "ResultIterators [name=" + getName() + ",id=" + scanId + ",scans=" + scans + "]";

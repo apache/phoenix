@@ -32,6 +32,7 @@ import org.apache.phoenix.util.PrefixByteCodec;
 import org.apache.phoenix.util.PrefixByteDecoder;
 import org.apache.phoenix.util.SizedUtil;
 
+import com.google.common.io.Closeables;
 import com.sun.istack.NotNull;
  
  /**
@@ -89,13 +90,13 @@ public class PTableStatsImpl implements PTableStats {
                     } catch (EOFException e) { // Ignore as this signifies we're done
 
                     } finally {
-                        PrefixByteCodec.close(stream);
+                        Closeables.closeQuietly(stream);
                     }
                     buf.setLength(buf.length() - 1);
                 }
                 buf.append(")");
             } finally {
-                PrefixByteCodec.close(stream);
+                Closeables.closeQuietly(stream);
             }
         }
         buf.append("]");
