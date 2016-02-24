@@ -31,6 +31,7 @@ import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.ScanRegionObserver;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.iterate.BaseResultIterators;
 import org.apache.phoenix.iterate.ChunkedResultIterator;
 import org.apache.phoenix.iterate.ConcatResultIterator;
 import org.apache.phoenix.iterate.LimitingResultIterator;
@@ -40,7 +41,6 @@ import org.apache.phoenix.iterate.ParallelIteratorFactory;
 import org.apache.phoenix.iterate.ParallelIterators;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
-import org.apache.phoenix.iterate.ResultIterators;
 import org.apache.phoenix.iterate.RoundRobinResultIterator;
 import org.apache.phoenix.iterate.SequenceResultIterator;
 import org.apache.phoenix.iterate.SerialIterators;
@@ -195,7 +195,7 @@ public class ScanPlan extends BaseQueryPlan {
         boolean isOrdered = !orderBy.getOrderByExpressions().isEmpty();
         boolean isSerial = isSerial(context, statement, tableRef, orderBy, limit, allowPageFilter);
         Integer perScanLimit = !allowPageFilter || isOrdered ? null : limit;
-        ResultIterators iterators;
+        BaseResultIterators iterators;
         if (isSerial) {
         	iterators = new SerialIterators(this, perScanLimit, parallelIteratorFactory, scanGrouper);
         } else {
@@ -203,6 +203,9 @@ public class ScanPlan extends BaseQueryPlan {
         }
         splits = iterators.getSplits();
         scans = iterators.getScans();
+        estimatedSize = iterators.getEstimatedByteCount();
+        estimatedRows = iterators.getEstimatedRowCount();
+        
         if (isOrdered) {
             scanner = new MergeSortTopNResultIterator(iterators, limit, orderBy.getOrderByExpressions());
         } else {
