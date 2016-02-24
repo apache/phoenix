@@ -182,7 +182,6 @@ import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTable.LinkType;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.stats.PTableStats;
-import org.apache.phoenix.schema.stats.StatisticsCollectionRunTracker;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PInteger;
@@ -956,7 +955,6 @@ public class MetaDataClient {
             }
             MutationState mutationState = plan.execute();
             rowCount = mutationState.getUpdateCount();
-            this.getConnection().getQueryServices().setStatsEnabled(rowCount != StatisticsCollectionRunTracker.UPDATE_STATS_DISABLED);
         }
 
         /*

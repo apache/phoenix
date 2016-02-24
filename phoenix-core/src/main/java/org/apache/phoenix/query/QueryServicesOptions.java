@@ -29,7 +29,6 @@ import static org.apache.phoenix.query.QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB
 import static org.apache.phoenix.query.QueryServices.DELAY_FOR_SCHEMA_UPDATE_CHECK;
 import static org.apache.phoenix.query.QueryServices.DROP_METADATA_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.EXPLAIN_CHUNK_COUNT_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.EXPLAIN_ROW_COUNT_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.GLOBAL_METRICS_ENABLED;
@@ -196,7 +195,6 @@ public class QueryServicesOptions {
      */
     public static final int DEFAULT_COPROCESSOR_PRIORITY = Coprocessor.PRIORITY_SYSTEM/2 + Coprocessor.PRIORITY_USER/2; // Divide individually to prevent any overflow
     public static final boolean DEFAULT_EXPLAIN_CHUNK_COUNT = true;
-    public static final boolean DEFAULT_EXPLAIN_ROW_COUNT = true;
     public static final boolean DEFAULT_ALLOW_ONLINE_TABLE_SCHEMA_UPDATE = true;
     public static final int DEFAULT_RETRIES_FOR_SCHEMA_UPDATE_CHECK = 10;
     public static final long DEFAULT_DELAY_FOR_SCHEMA_UPDATE_CHECK = 5 * 1000; // 5 seconds.
@@ -568,11 +566,6 @@ public class QueryServicesOptions {
 
     public QueryServicesOptions setExplainChunkCount(boolean showChunkCount) {
         config.setBoolean(EXPLAIN_CHUNK_COUNT_ATTRIB, showChunkCount);
-        return this;
-    }
-
-    public QueryServicesOptions setExplainRowCount(boolean showRowCount) {
-        config.setBoolean(EXPLAIN_ROW_COUNT_ATTRIB, showRowCount);
         return this;
     }
 

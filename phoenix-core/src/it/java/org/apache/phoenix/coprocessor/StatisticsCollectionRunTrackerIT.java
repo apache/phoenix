@@ -17,7 +17,8 @@
  */
 package org.apache.phoenix.coprocessor;
 
-import static org.apache.phoenix.schema.stats.StatisticsCollectionRunTracker.UPDATE_STATS_SKIPPED;
+import static org.apache.phoenix.schema.stats.StatisticsCollectionRunTracker.COMPACTION_UPDATE_STATS_ROW_COUNT;
+import static org.apache.phoenix.schema.stats.StatisticsCollectionRunTracker.CONCURRENT_UPDATE_STATS_ROW_COUNT;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -36,6 +37,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.stats.StatisticsCollectionRunTracker;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -100,8 +102,7 @@ public class StatisticsCollectionRunTrackerIT extends BaseOwnClusterHBaseManaged
         HRegionInfo regionInfo = createTableAndGetRegion(tableName);
         // simulate stats collection via major compaction by marking the region as compacting in the tracker
         markRegionAsCompacting(regionInfo);
-        long returnValue = runUpdateStats(tableName);
-        assertTrue("Update stats should have been skipped", returnValue >= UPDATE_STATS_SKIPPED);
+        Assert.assertEquals("Row count didn't match", COMPACTION_UPDATE_STATS_ROW_COUNT, runUpdateStats(tableName));
         StatisticsCollectionRunTracker tracker =
                 StatisticsCollectionRunTracker.getInstance(new Configuration());
         // assert that the tracker state was cleared.
@@ -113,10 +114,10 @@ public class StatisticsCollectionRunTrackerIT extends BaseOwnClusterHBaseManaged
         String tableName = "testUpdateStatsPreventsAnotherUpdateStatsFromRunning".toUpperCase();
         HRegionInfo regionInfo = createTableAndGetRegion(tableName);
         markRunningUpdateStats(regionInfo);
+        Assert.assertEquals("Row count didn't match", CONCURRENT_UPDATE_STATS_ROW_COUNT,
+            runUpdateStats(tableName));
         StatisticsCollectionRunTracker tracker =
                 StatisticsCollectionRunTracker.getInstance(new Configuration());
-        assertTrue("Update stats should have been skipped", runUpdateStats(tableName) >= UPDATE_STATS_SKIPPED);
-        
         // assert that running the concurrent and race-losing update stats didn't clear the region
         // from the tracker. If the method returned true it means the tracker was still tracking
         // the region. Slightly counter-intuitive, yes.
