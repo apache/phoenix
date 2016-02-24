@@ -2370,17 +2370,20 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                     // Add these columns one at a time, each with different timestamps so that if folks have
                                     // run the upgrade code already for a snapshot, we'll still enter this block (and do the
                                     // parts we haven't yet done).
-                                    metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG, MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0 - 2,
+                                    metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG, MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0 - 4,
                                             PhoenixDatabaseMetaData.TRANSACTIONAL + " " + PBoolean.INSTANCE.getSqlTypeName());
                                     // Drop old stats table so that new stats table is created
                                     metaConnection = dropStatsTable(metaConnection,
-                                            MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0 - 1);
+                                            MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0 - 3);
                                     metaConnection = addColumnsIfNotExists(metaConnection,
                                             PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-                                            MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0,
+                                            MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0 - 2,
                                             PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY + " "
                                                     + PLong.INSTANCE.getSqlTypeName());
-                                    setImmutableTableIndexesImmutable(metaConnection);
+                                    metaConnection = setImmutableTableIndexesImmutable(metaConnection, MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0 - 1);
+                                    Properties props = PropertiesUtil.deepCopy(metaConnection.getClientInfo());
+                                    props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0));
+                                    metaConnection = new PhoenixConnection(metaConnection, ConnectionQueryServicesImpl.this, props);
                                     // that already have cached data.
 									clearCache();
                                 }
@@ -2490,7 +2493,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
      * @param metaConnection connection over which to run the upgrade
      * @throws SQLException
      */
-    private static void setImmutableTableIndexesImmutable(PhoenixConnection metaConnection) throws SQLException {
+    private PhoenixConnection setImmutableTableIndexesImmutable(PhoenixConnection oldMetaConnection, long timestamp) throws SQLException {
+        SQLException sqlE = null;
+        Properties props = PropertiesUtil.deepCopy(oldMetaConnection.getClientInfo());
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(timestamp));
+        PhoenixConnection metaConnection = new PhoenixConnection(oldMetaConnection, this, props);
         boolean autoCommit = metaConnection.getAutoCommit();
         try {
             metaConnection.setAutoCommit(true);
@@ -2507,9 +2514,25 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     "WHERE A.COLUMN_FAMILY IS NULL AND\n" + 
                     " B.COLUMN_FAMILY IS NOT NULL AND\n" + 
                     " A.IMMUTABLE_ROWS = TRUE");
+        } catch (SQLException e) {
+            logger.warn("exception during upgrading stats table:" + e);
+            sqlE = e;
         } finally {
-            metaConnection.setAutoCommit(autoCommit);
+            try {
+                metaConnection.setAutoCommit(autoCommit);
+                oldMetaConnection.close();
+            } catch (SQLException e) {
+                if (sqlE != null) {
+                    sqlE.setNextException(e);
+                } else {
+                    sqlE = e;
+                }
+            }
+            if (sqlE != null) {
+                throw sqlE;
+            }
         }
+        return metaConnection;
     }
 
     private PhoenixConnection dropStatsTable(PhoenixConnection oldMetaConnection, long timestamp)
