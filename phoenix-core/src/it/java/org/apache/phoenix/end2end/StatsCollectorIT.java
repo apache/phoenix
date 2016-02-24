@@ -95,7 +95,6 @@ public class StatsCollectorIT extends StatsCollectorAbstractIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         // props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         conn = DriverManager.getConnection(getUrl(), props);
-        assertTrue(conn.unwrap(PhoenixConnection.class).getQueryServices().areStatsEnabled());
         conn.createStatement().execute(
                 "CREATE TABLE " + fullTableName +" ( k VARCHAR, a_string_array VARCHAR(100) ARRAY[4], b_string_array VARCHAR(100) ARRAY[4] \n"
                         + " CONSTRAINT pk PRIMARY KEY (k, b_string_array DESC))"
@@ -106,7 +105,6 @@ public class StatsCollectorIT extends StatsCollectorAbstractIT {
         // CAll the update statistics query here. If already major compaction has run this will not get executed.
         stmt = conn.prepareStatement("UPDATE STATISTICS " + tableName);
         stmt.execute();
-        assertTrue(conn.unwrap(PhoenixConnection.class).getQueryServices().areStatsEnabled());
         stmt = upsertStmt(conn, tableName);
         stmt.setString(1, "z");
         s = new String[] { "xyz", "def", "ghi", "jkll", null, null, "xxx" };
@@ -123,7 +121,6 @@ public class StatsCollectorIT extends StatsCollectorAbstractIT {
         stmt.execute();
         rs = conn.createStatement().executeQuery("SELECT k FROM " + tableName);
         assertTrue(rs.next());
-        assertTrue(conn.unwrap(PhoenixConnection.class).getQueryServices().areStatsEnabled());
         conn.close();
     }
 

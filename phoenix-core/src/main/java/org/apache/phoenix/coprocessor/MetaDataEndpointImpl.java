@@ -140,6 +140,7 @@ import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -2718,7 +2719,16 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             RpcCallback<GetVersionResponse> done) {
 
         GetVersionResponse.Builder builder = GetVersionResponse.newBuilder();
-        long version = MetaDataUtil.encodeVersion(env.getHBaseVersion(), env.getConfiguration());
+        // The first 3 bytes of the long is used to encoding the HBase version as major.minor.patch.
+        // The next 4 bytes of the value is used to encode the Phoenix version as major.minor.patch.
+        long version = MetaDataUtil.encodeHBaseAndPhoenixVersions(this.env.getHBaseVersion());
+
+        // The last byte is used to communicate whether or not mutable secondary indexing
+        // was configured properly.
+        version =
+                MetaDataUtil.encodeHasIndexWALCodec(version,
+                    IndexManagementUtil.isWALEditCodecSet(this.env.getConfiguration()));
+
         builder.setVersion(version);
         done.run(builder.build());
     }

@@ -24,6 +24,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.ThreadFactory;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HRegionInfo;
@@ -44,9 +45,9 @@ public class StatisticsCollectionRunTracker {
             .newSetFromMap(new ConcurrentHashMap<HRegionInfo, Boolean>());
     private final ExecutorService executor;
     
-    public static final long UPDATE_STATS_RUN = 1L;
-    public static final long UPDATE_STATS_SKIPPED = 100000L;
-    public static final long UPDATE_STATS_DISABLED = 0;
+    // Constants added for testing purposes
+    public static final long CONCURRENT_UPDATE_STATS_ROW_COUNT = -100l;
+    public static final long COMPACTION_UPDATE_STATS_ROW_COUNT = -200l;
     
     public static StatisticsCollectionRunTracker getInstance(Configuration config) {
         StatisticsCollectionRunTracker result = INSTANCE;

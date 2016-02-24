@@ -310,14 +310,4 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
             throws SQLException {
         return getDelegate().getTableRegionLocation(tableName, row);
     }
-
-    @Override
-    public boolean areStatsEnabled() {
-        return getDelegate().areStatsEnabled();
-    }
-
-    @Override
-    public void setStatsEnabled(boolean statsEnabled) {
-        getDelegate().setStatsEnabled(statsEnabled);
-    }
 }
