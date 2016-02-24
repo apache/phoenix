@@ -168,14 +168,28 @@ public class BaseCalciteIT extends BaseClientManagedTimeIT {
             start.close();
         }
 
-        public Sql resultIs(boolean ordered, Object[][] expected) throws SQLException {
+        public Sql resultIs(Object[][] expected) throws SQLException {
             final Statement statement = start.getConnection().createStatement();
             final ResultSet resultSet = statement.executeQuery(sql);
-            if (ordered) {
-                checkResultOrdered(resultSet, expected);
-            } else {
-                checkResultUnordered(resultSet, expected);
-            }
+            checkResultOrdered(resultSet, expected);
+            resultSet.close();
+            statement.close();
+            return this;
+        }
+
+        public Sql resultIs(int orderedCount, Object[][] expected) throws SQLException {
+            final Statement statement = start.getConnection().createStatement();
+            final ResultSet resultSet = statement.executeQuery(sql);
+            checkResultUnordered(resultSet, expected, orderedCount, null);
+            resultSet.close();
+            statement.close();
+            return this;
+        }
+
+        public Sql resultIsSomeOf(int count, Object[][] expected) throws SQLException {
+            final Statement statement = start.getConnection().createStatement();
+            final ResultSet resultSet = statement.executeQuery(sql);
+            checkResultUnordered(resultSet, expected, 0, count);
             resultSet.close();
             statement.close();
             return this;
@@ -198,21 +212,28 @@ public class BaseCalciteIT extends BaseClientManagedTimeIT {
             assertFalse("Got more rows than expected.", resultSet.next());            
         }
         
-        private void checkResultUnordered(ResultSet resultSet, Object[][] expected) throws SQLException {
+        private void checkResultUnordered(ResultSet resultSet, Object[][] expected, int orderedCount, Integer checkContains) throws SQLException {
             List<List<Object>> expectedResults = Lists.newArrayList();
             List<List<Object>> actualResults = Lists.newArrayList();
             List<List<Object>> errorResults = Lists.newArrayList();
             int columnCount = expected.length > 0 ? expected[0].length : 0;
             for (Object[] e : expected) {
                 List<Object> row = Lists.newArrayList();
-                for (Object o : e) {
-                    row.add(canonicalize(o));
+                for (int i = orderedCount; i < e.length; i++) {
+                    row.add(canonicalize(e[i]));
                 }
                 expectedResults.add(row);
             }
             while (resultSet.next()) {
+                // check the ordered part
+                Object[] row = expected[actualResults.size()];
+                for (int i = 0; i < orderedCount; i++) {
+                    Object obj = resultSet.getObject(i + 1);
+                    assertEquals(canonicalize(row[i]), canonicalize(obj));
+                }
+                // check the unordered part
                 List<Object> result = Lists.newArrayList();
-                for (int i = 0; i < columnCount; i++) {
+                for (int i = orderedCount; i < columnCount; i++) {
                     result.add(canonicalize(resultSet.getObject(i+1)));
                 }
                 if (!expectedResults.remove(result)) {
@@ -220,10 +241,15 @@ public class BaseCalciteIT extends BaseClientManagedTimeIT {
                 }
                 actualResults.add(result);
             }
+            boolean allContainedInExpected = errorResults.isEmpty();
+            boolean allExpectedFound = checkContains == null ? expectedResults.isEmpty() : checkContains == actualResults.size();
             assertTrue(
-                    (expectedResults.isEmpty() ? "" : ("Count not find " + expectedResults + " in actual results: " + actualResults + ".\n")) +
-                    (errorResults.isEmpty() ? "" : "Could not find " + errorResults + " in expected results.\n"),
-                    errorResults.isEmpty() && expectedResults.isEmpty());
+                    (allContainedInExpected ? "" : "Could not find " + errorResults + " in expected results.\n") +
+                    (allExpectedFound ? "" : 
+                        (checkContains == null
+                              ? ("Count not find " + expectedResults + " in actual results: " + actualResults + ".\n")
+                              : ("Expected " + checkContains + " rows, but got " + actualResults.size() + " rows."))),
+                    allContainedInExpected && allExpectedFound);
         }
         
         private Object canonicalize(Object obj) {

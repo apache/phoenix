@@ -100,6 +100,11 @@ public class MergeSortResultIteratorTest {
             @Override
             public void close() throws SQLException {
             }
+
+            @Override
+            public long getEstimatedSize() {
+                return 0;
+            }
         };
         ResultIterators reverseIterators = new ResultIterators() {
 
@@ -129,6 +134,11 @@ public class MergeSortResultIteratorTest {
 
             @Override
             public void close() throws SQLException {
+            }
+
+            @Override
+            public long getEstimatedSize() {
+                return 0;
             }
         };
         ResultIterator scanner = new MergeSortRowKeyResultIterator(iterators);
@@ -192,6 +202,11 @@ public class MergeSortResultIteratorTest {
 
             @Override
             public void close() throws SQLException {
+            }
+
+            @Override
+            public long getEstimatedSize() {
+                return 0;
             }
         };
         ResultIterator scanner = new MergeSortRowKeyResultIterator(iterators, 0, true);

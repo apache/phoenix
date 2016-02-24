@@ -85,6 +85,11 @@ public class ConcatResultIteratorTest {
             @Override
             public void close() throws SQLException {
             }
+
+            @Override
+            public long getEstimatedSize() {
+                return 0;
+            }
         };
 
         Tuple[] expectedResults = new Tuple[] {
@@ -147,6 +152,11 @@ public class ConcatResultIteratorTest {
 
             @Override
             public void close() throws SQLException {
+            }
+
+            @Override
+            public long getEstimatedSize() {
+                return 0;
             }
         };
         ResultIterator scanner = new MergeSortRowKeyResultIterator(iterators);

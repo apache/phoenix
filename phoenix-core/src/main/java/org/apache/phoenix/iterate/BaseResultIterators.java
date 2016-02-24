@@ -147,7 +147,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         if (isPointLookup || ScanUtil.isAnalyzeTable(scan)) {
             return false;
         }
-        return false;
+        return true;
     }
     
     private static void initializeScan(QueryPlan plan, Integer perScanLimit) {
@@ -560,8 +560,10 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 while (guideIndex < gpsSize && (currentGuidePost.compareTo(endKey) <= 0 || endKey.length == 0)) {
                     Scan newScan = scanRanges.intersectScan(scan, currentKeyBytes, currentGuidePostBytes, keyOffset,
                             false);
-                    estimatedRows += gps.getRowCounts().get(guideIndex);
-                    estimatedSize += gps.getByteCounts().get(guideIndex);
+                    if (newScan != null) {
+                        estimatedRows += gps.getRowCounts().get(guideIndex);
+                        estimatedSize += gps.getByteCounts().get(guideIndex);
+                    }
                     scans = addNewScan(parallelScans, scans, newScan, currentGuidePostBytes, false, regionLocation);
                     currentKeyBytes = currentGuidePost.copyBytes();
                     currentGuidePost = PrefixByteCodec.decode(decoder, input);
@@ -872,4 +874,8 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         return "ResultIterators [name=" + getName() + ",id=" + scanId + ",scans=" + scans + "]";
     }
 
+    @Override
+    public long getEstimatedSize() {
+        return estimatedSize;
+    }
 }

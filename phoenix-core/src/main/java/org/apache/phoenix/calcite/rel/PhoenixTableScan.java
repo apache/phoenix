@@ -1,6 +1,5 @@
 package org.apache.phoenix.calcite.rel;
 
-import java.io.IOException;
 import java.sql.SQLException;
 import java.util.List;
 
@@ -20,7 +19,6 @@ import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.util.ImmutableBitSet;
 import org.apache.calcite.util.ImmutableIntList;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.calcite.CalciteUtils;
 import org.apache.phoenix.calcite.PhoenixTable;
@@ -38,9 +36,7 @@ import org.apache.phoenix.execute.ScanPlan;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
-import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.iterate.ParallelIteratorFactory;
-import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.query.QueryServices;
@@ -49,11 +45,7 @@ import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableRef;
-import org.apache.phoenix.schema.stats.GuidePostsInfo;
-import org.apache.phoenix.schema.stats.StatisticsUtil;
 import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.util.SchemaUtil;
-
 import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableList.Builder;
@@ -72,7 +64,7 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
     public final ScanOrder scanOrder;
     public final ScanRanges scanRanges;
     
-    protected final GuidePostsInfo filteredGuideposts;
+    protected final long estimatedBytes;
     protected final float rowCountFactor;
     
     public static PhoenixTableScan create(RelOptCluster cluster, final RelOptTable table) {
@@ -106,8 +98,7 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
                 .getProps().getFloat(PhoenixRel.ROW_COUNT_FACTOR, 1f);
         
         ScanRanges scanRanges = null;
-        GuidePostsInfo info = null;
-        HTableInterface statsHTable = null;
+        long estimatedSize = 0;
         if (filter != null) {
             try {
                 // TODO simplify this code
@@ -138,35 +129,16 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
                 StatementContext context = new StatementContext(stmt, resolver, new Scan(), new SequenceManager(stmt));
                 Expression filterExpr = CalciteUtils.toExpression(filter, tmpImplementor);
                 filterExpr = WhereOptimizer.pushKeyExpressionsToScan(context, select, filterExpr);
+                WhereCompiler.setScanFilter(context, select, filterExpr, true, false);
                 scanRanges = context.getScanRanges();
-                if (!scanRanges.isPointLookup()
-                        && !scanRanges.isDegenerate()
-                        && !scanRanges.isEverything()) {
-                    // TODO get the cf and timestamp right.
-                    Scan scan = context.getScan();
-                    byte[] cf = SchemaUtil.getEmptyColumnFamily(pTable);
-                    statsHTable = phoenixTable.pc.getQueryServices()
-                            .getTable(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES);
-                    info = StatisticsUtil.readStatistics(
-                            statsHTable, pTable.getPhysicalName().getBytes(),
-                            new ImmutableBytesPtr(cf),
-                            scan.getStartRow(),
-                            scan.getStopRow(),
-                            HConstants.LATEST_TIMESTAMP).getGuidePosts().get(cf);
-                }
-            } catch (SQLException | IOException e) {
+                ScanPlan plan = new ScanPlan(context, select, tableRef, RowProjector.EMPTY_PROJECTOR, null, OrderBy.EMPTY_ORDER_BY, null, true, null);
+                estimatedSize = plan.getEstimatedBytes();
+            } catch (SQLException e) {
                 throw new RuntimeException(e);
-            } finally {
-                if (statsHTable != null) {
-                    try {
-                        statsHTable.close();
-                    } catch (IOException e) {
-                    }
-                }
             }
         }        
         this.scanRanges = scanRanges;
-        this.filteredGuideposts = info;
+        this.estimatedBytes = estimatedSize;
     }
     
     private static ScanOrder getDefaultScanOrder(PhoenixTable table) {
@@ -211,37 +183,7 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
         double byteCount;
         PhoenixTable phoenixTable = table.unwrap(PhoenixTable.class);
         if (scanRanges != null) {
-            if (scanRanges.isPointLookup()) {
-                byteCount = 1.0;
-            } else if (scanRanges.isDegenerate()) {
-                byteCount = 0.0;
-            } else if (scanRanges.isEverything()) {
-                byteCount = phoenixTable.byteCount;
-            } else {
-                if (filteredGuideposts != null) {
-                    byteCount = 0;
-                    for (long b : filteredGuideposts.getByteCounts()) {
-                        byteCount += b;
-                    }
-                    // TODO why zero byteCount? a bug?
-                    if (byteCount == 0 && filteredGuideposts.getGuidePostsCount() > 0) {
-                        PTable pTable = phoenixTable.getTable();
-                        byte[] emptyCf = SchemaUtil.getEmptyColumnFamily(pTable);
-                        GuidePostsInfo info = pTable.getTableStats().getGuidePosts().get(emptyCf);
-                        byteCount = phoenixTable.byteCount * filteredGuideposts.getGuidePostsCount() / info.getGuidePostsCount();                        
-                    }
-                } else {
-                    PTable pTable = phoenixTable.getTable();
-                    byte[] emptyCf = SchemaUtil.getEmptyColumnFamily(pTable);
-                    GuidePostsInfo info = pTable.getTableStats().getGuidePosts().get(emptyCf);
-                    if (info != null) {
-                        byteCount = phoenixTable.byteCount / info.getGuidePostsCount() / 2;
-                    } else {
-                        int pkCount = scanRanges.getBoundPkColumnCount();
-                        byteCount = phoenixTable.byteCount * Math.pow(mq.getSelectivity(this, filter), pkCount);
-                    }
-                }
-            }
+            byteCount = estimatedBytes;
         } else {
             byteCount = phoenixTable.byteCount;
         }

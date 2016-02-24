@@ -963,6 +963,9 @@ public class MetaDataClient {
          *  This supports scenarios in which a major compaction was manually initiated and the
          *  client wants the modified stats to be reflected immediately.
          */
+        connection.getQueryServices().clearTableFromCache(logicalTable.getTenantId() == null ? ByteUtil.EMPTY_BYTE_ARRAY : logicalTable.getTenantId().getBytes(),
+                Bytes.toBytes(SchemaUtil.getSchemaNameFromFullName(logicalTable.getName().toString())),
+                Bytes.toBytes(SchemaUtil.getTableNameFromFullName(logicalTable.getName().toString())), clientTimeStamp);
         connection.getQueryServices().clearTableFromCache(tenantIdBytes,
                 Bytes.toBytes(SchemaUtil.getSchemaNameFromFullName(physicalName.getString())),
                 Bytes.toBytes(SchemaUtil.getTableNameFromFullName(physicalName.getString())), clientTimeStamp);
