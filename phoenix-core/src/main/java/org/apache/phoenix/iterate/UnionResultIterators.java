@@ -139,9 +139,4 @@ public class UnionResultIterators implements ResultIterators {
     public List<PeekingResultIterator> getIterators() throws SQLException {    
         return iterators;
     }
-
-    @Override
-    public long getEstimatedSize() {
-        return 0;
-    }
 }

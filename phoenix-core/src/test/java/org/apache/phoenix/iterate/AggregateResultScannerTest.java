@@ -168,11 +168,6 @@ public class AggregateResultScannerTest extends BaseConnectionlessQueryTest {
             @Override
             public void close() throws SQLException {
             }
-
-            @Override
-            public long getEstimatedSize() {
-                return 0;
-            }
             
         };
         ResultIterator scanner = new GroupedAggregatingResultIterator(new MergeSortRowKeyResultIterator(iterators), aggregationManager.getAggregators());

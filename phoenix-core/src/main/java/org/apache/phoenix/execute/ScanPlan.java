@@ -34,7 +34,6 @@ import org.apache.phoenix.coprocessor.ScanRegionObserver;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.iterate.ChunkedResultIterator;
 import org.apache.phoenix.iterate.ConcatResultIterator;
-import org.apache.phoenix.iterate.DefaultParallelScanGrouper;
 import org.apache.phoenix.iterate.LimitingResultIterator;
 import org.apache.phoenix.iterate.MergeSortRowKeyResultIterator;
 import org.apache.phoenix.iterate.MergeSortTopNResultIterator;
@@ -256,10 +255,6 @@ public class ScanPlan extends BaseQueryPlan {
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
-    }
-
-    public long getEstimatedBytes() throws SQLException {
-        return new ParallelIterators(this, null, parallelIteratorFactory, DefaultParallelScanGrouper.getInstance()).getEstimatedSize();
     }
 
 }

@@ -26,7 +26,6 @@ import org.apache.phoenix.util.SQLCloseable;
 
 public interface ResultIterators extends SQLCloseable {
     public int size();
-    public long getEstimatedSize();
     public List<KeyRange> getSplits();
     public List<List<Scan>> getScans();
     public void explain(List<String> planSteps);
