@@ -267,7 +267,7 @@ public class WriteWorkload implements Workload {
                     	stmt.addBatch();
                         //rowsCreated += stmt.executeUpdate();
                         if ((i % getBatchSize()) == 0) {
-                        	System.out.print("Executing batch");
+                        	//System.out.print("Executing batch");
                         	stmt.executeBatch();
                             connection.commit();
                             stmt.clearBatch();
