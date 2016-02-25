@@ -255,9 +255,9 @@ public class WriteWorkload implements Workload {
 
                     last = start = System.currentTimeMillis();
                     String sql = buildSql(columns, tableName);
-                    System.out.print("going to create statement");
+                    //System.out.print("going to create statement");
                     
-                    System.out.print("statement created");
+                    //System.out.print("statement created");
                     stmt = connection.prepareStatement(sql);
                     for (long i = rowCount; (i > 0) && ((System.currentTimeMillis() - logStartTime)
                             < maxDuration); i--) {
@@ -320,7 +320,7 @@ public class WriteWorkload implements Workload {
             PreparedStatement statement, SimpleDateFormat simpleDateFormat) throws Exception {
         int count = 1;
         for (Column column : columns) {
-        	System.out.print("Column is " + column.getName());
+        	//System.out.print("Column is " + column.getName());
             DataValue dataValue = getRulesApplier().getDataForRule(scenario, column);
             switch (column.getType()) {
             case VARCHAR:
@@ -367,7 +367,7 @@ public class WriteWorkload implements Workload {
             }
             count++;
         }
-        System.out.print("Returning statement " + statement.toString());
+        //System.out.print("Returning statement " + statement.toString());
         return statement;
     }
 
