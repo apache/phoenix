@@ -320,7 +320,7 @@ public class WriteWorkload implements Workload {
             PreparedStatement statement, SimpleDateFormat simpleDateFormat) throws Exception {
         int count = 1;
         for (Column column : columns) {
-
+        	System.out.print("Column is " + column.getName());
             DataValue dataValue = getRulesApplier().getDataForRule(scenario, column);
             switch (column.getType()) {
             case VARCHAR:
@@ -367,6 +367,7 @@ public class WriteWorkload implements Workload {
             }
             count++;
         }
+        System.out.print("Returning statement " + statement.toString());
         return statement;
     }
 
