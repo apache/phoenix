@@ -23,6 +23,7 @@ import java.sql.Connection;
 import java.sql.Date;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.sql.Types;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -241,7 +242,8 @@ public class WriteWorkload implements Workload {
                 long start = 0, last = 0, duration, totalDuration;
                 SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
                 Connection connection = null;
-                PreparedStatement stmt = null;
+                //PreparedStatement stmt = null;
+                Statement stmt = null;
                 try {
                     connection = pUtil.getConnection(scenario.getTenantId());
                     long logStartTime = System.currentTimeMillis();
@@ -253,13 +255,20 @@ public class WriteWorkload implements Workload {
 
                     last = start = System.currentTimeMillis();
                     String sql = buildSql(columns, tableName);
-                    stmt = connection.prepareStatement(sql);
+                    stmt = connection.createStatement();
+                    //stmt = connection.prepareStatement(sql);
                     for (long i = rowCount; (i > 0) && ((System.currentTimeMillis() - logStartTime)
                             < maxDuration); i--) {
-                        stmt = buildStatement(scenario, columns, stmt, simpleDateFormat);
-                        rowsCreated += stmt.executeUpdate();
+                        //stmt = buildStatement(scenario, columns, stmt, simpleDateFormat);
+                    	String specificSql = buildStatement(scenario, columns, (PreparedStatement) stmt, simpleDateFormat).toString();
+                    	System.out.print(specificSql);
+                    	stmt.addBatch(specificSql);
+                        //rowsCreated += stmt.executeUpdate();
                         if ((i % getBatchSize()) == 0) {
+                        	System.out.print("Executing batch");
+                        	stmt.executeBatch();
                             connection.commit();
+                            stmt.clearBatch();
                             duration = System.currentTimeMillis() - last;
                             logger.info("Writer (" + Thread.currentThread().getName()
                                     + ") committed Batch. Total " + getBatchSize()
@@ -281,6 +290,8 @@ public class WriteWorkload implements Workload {
                     }
                 } finally {
                     if (stmt != null) {
+                    	System.out.print("Executing batch");
+                    	stmt.executeBatch();
                       stmt.close();
                     }
                     if (connection != null) {
