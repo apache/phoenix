@@ -255,7 +255,9 @@ public class WriteWorkload implements Workload {
 
                     last = start = System.currentTimeMillis();
                     String sql = buildSql(columns, tableName);
+                    System.out.print("going to create statement");
                     stmt = connection.createStatement();
+                    System.out.print("statement created");
                     //stmt = connection.prepareStatement(sql);
                     for (long i = rowCount; (i > 0) && ((System.currentTimeMillis() - logStartTime)
                             < maxDuration); i--) {
