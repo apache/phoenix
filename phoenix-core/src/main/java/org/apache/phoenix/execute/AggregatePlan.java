@@ -208,8 +208,6 @@ public class AggregatePlan extends BaseQueryPlan {
 
         splits = iterators.getSplits();
         scans = iterators.getScans();
-        estimatedSize = iterators.getEstimatedByteCount();
-        estimatedRows = iterators.getEstimatedRowCount();
 
         AggregatingResultIterator aggResultIterator;
         // No need to merge sort for ungrouped aggregation

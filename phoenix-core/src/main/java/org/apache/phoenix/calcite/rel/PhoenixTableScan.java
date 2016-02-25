@@ -36,6 +36,7 @@ import org.apache.phoenix.execute.ScanPlan;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
+import org.apache.phoenix.iterate.BaseResultIterators;
 import org.apache.phoenix.iterate.ParallelIteratorFactory;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.SelectStatement;
@@ -131,8 +132,7 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
                 filterExpr = WhereOptimizer.pushKeyExpressionsToScan(context, select, filterExpr);
                 WhereCompiler.setScanFilter(context, select, filterExpr, true, false);
                 scanRanges = context.getScanRanges();
-                ScanPlan plan = new ScanPlan(context, select, tableRef, RowProjector.EMPTY_PROJECTOR, null, OrderBy.EMPTY_ORDER_BY, null, true, null);
-                estimatedSize = plan.getEstimatedBytes();
+                estimatedSize = BaseResultIterators.getEstimatedCount(context, tableRef.getTable()).getSecond();
             } catch (SQLException e) {
                 throw new RuntimeException(e);
             }

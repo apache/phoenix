@@ -108,8 +108,6 @@ public abstract class BaseQueryPlan implements QueryPlan {
      * immediately before creating the ResultIterator.
      */
     protected final Expression dynamicFilter;
-    protected Long estimatedRows;
-    protected Long estimatedSize;
     
 
     protected BaseQueryPlan(
@@ -129,16 +127,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
         this.parallelIteratorFactory = parallelIteratorFactory;
         this.dynamicFilter = dynamicFilter;
     }
-
-    public Long getEstimatedRowCount() {
-        return this.estimatedRows;
-    }
     
-    public Long getEstimatedByteCount() {
-        return this.estimatedSize;
-    }
-    
-
 	@Override
 	public Operation getOperation() {
 		return Operation.QUERY;
