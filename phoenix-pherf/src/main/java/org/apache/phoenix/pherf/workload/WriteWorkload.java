@@ -262,7 +262,7 @@ public class WriteWorkload implements Workload {
                     for (long i = rowCount; (i > 0) && ((System.currentTimeMillis() - logStartTime)
                             < maxDuration); i--) {
                         
-                    	stmt = buildStatement(scenario, columns, pstmt, simpleDateFormat);
+                    	stmt = buildStatement(scenario, columns, stmt, simpleDateFormat);
                     	//System.out.print(specificSql);
                     	stmt.addBatch();
                         //rowsCreated += stmt.executeUpdate();
