@@ -242,7 +242,7 @@ public class WriteWorkload implements Workload {
                 long start = 0, last = 0, duration, totalDuration;
                 SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
                 Connection connection = null;
-                //PreparedStatement stmt = null;
+                PreparedStatement pstmt = null;
                 Statement stmt = null;
                 try {
                     connection = pUtil.getConnection(scenario.getTenantId());
@@ -258,11 +258,11 @@ public class WriteWorkload implements Workload {
                     System.out.print("going to create statement");
                     stmt = connection.createStatement();
                     System.out.print("statement created");
-                    //stmt = connection.prepareStatement(sql);
+                    pstmt = connection.prepareStatement(sql);
                     for (long i = rowCount; (i > 0) && ((System.currentTimeMillis() - logStartTime)
                             < maxDuration); i--) {
                         //stmt = buildStatement(scenario, columns, stmt, simpleDateFormat);
-                    	String specificSql = buildStatement(scenario, columns, (PreparedStatement) stmt, simpleDateFormat).toString();
+                    	String specificSql = buildStatement(scenario, columns, pstmt, simpleDateFormat).toString();
                     	System.out.print(specificSql);
                     	stmt.addBatch(specificSql);
                         //rowsCreated += stmt.executeUpdate();
