@@ -62,15 +62,19 @@ public class StatisticsUtil {
 
     public static byte[] getRowKey(byte[] table, ImmutableBytesPtr fam, ImmutableBytesWritable guidePostStartKey) {
         // always starts with the source table
-        byte[] rowKey = new byte[table.length + fam.getLength() + guidePostStartKey.getLength() + 2];
+        int guidePostLength = guidePostStartKey.getLength();
+        boolean hasGuidePost = guidePostLength > 0;
+        byte[] rowKey = new byte[table.length + fam.getLength() + guidePostLength + (hasGuidePost ? 2 : 1)];
         int offset = 0;
         System.arraycopy(table, 0, rowKey, offset, table.length);
         offset += table.length;
         rowKey[offset++] = QueryConstants.SEPARATOR_BYTE; // assumes stats table columns not DESC
         System.arraycopy(fam.get(), fam.getOffset(), rowKey, offset, fam.getLength());
-        offset += fam.getLength();
-        rowKey[offset++] = QueryConstants.SEPARATOR_BYTE; // assumes stats table columns not DESC
-        System.arraycopy(guidePostStartKey.get(), 0, rowKey, offset, guidePostStartKey.getLength());
+        if (hasGuidePost) {
+            offset += fam.getLength();
+            rowKey[offset++] = QueryConstants.SEPARATOR_BYTE; // assumes stats table columns not DESC
+            System.arraycopy(guidePostStartKey.get(), 0, rowKey, offset, guidePostLength);
+        }
         return rowKey;
     }
 
@@ -229,9 +233,12 @@ public class StatisticsUtil {
     }
 
 	public static byte[] getGuidePostsInfoFromRowKey(byte[] tableNameBytes, byte[] fam, byte[] row) {
-		ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-		int gpOffset = tableNameBytes.length + 1 + fam.length + 1;
-		ptr.set(row, gpOffset, row.length - gpOffset);
-		return ByteUtil.copyKeyBytesIfNecessary(ptr);
+	    if (row.length > tableNameBytes.length + 1 + fam.length) {
+    		ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+    		int gpOffset = tableNameBytes.length + 1 + fam.length + 1;
+    		ptr.set(row, gpOffset, row.length - gpOffset);
+    		return ByteUtil.copyKeyBytesIfNecessary(ptr);
+	    }
+	    return ByteUtil.EMPTY_BYTE_ARRAY;
 	}
 }

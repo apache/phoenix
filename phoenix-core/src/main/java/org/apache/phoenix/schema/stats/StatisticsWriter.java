@@ -49,7 +49,6 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.PrefixByteCodec;
 import org.apache.phoenix.util.PrefixByteDecoder;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.TimeKeeper;
@@ -143,32 +142,45 @@ public class StatisticsWriter implements Closeable {
             List<Long> byteCounts = gps.getByteCounts();
             List<Long> rowCounts = gps.getRowCounts();
             ImmutableBytesWritable keys = gps.getGuidePosts();
-            ByteArrayInputStream stream = new ByteArrayInputStream(keys.get(), keys.getOffset(), keys.getLength());
-            DataInput input = new DataInputStream(stream);
-            PrefixByteDecoder decoder = new PrefixByteDecoder(gps.getMaxLength());
-            int guidePostCount = 0;
-            try {
-                while (true) {
-                    ImmutableBytesWritable ptr = decoder.decode(input);
-                    byte[] prefix = StatisticsUtil.getRowKey(tableName, cfKey, ptr);
-                    Put put = new Put(prefix);
-                    put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH_BYTES,
-                            timeStamp, PLong.INSTANCE.toBytes(byteCounts.get(guidePostCount)));
-                    put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
-                            PhoenixDatabaseMetaData.GUIDE_POSTS_ROW_COUNT_BYTES, timeStamp,
-                            PLong.INSTANCE.toBytes(rowCounts.get(guidePostCount)));
-                    // Add our empty column value so queries behave correctly
-                    put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES, timeStamp,
-                            ByteUtil.EMPTY_BYTE_ARRAY);
-                    mutations.add(put);
-                    guidePostCount++;
-                }
-            } catch (EOFException e) { // Ignore as this signifies we're done
+            boolean hasGuidePosts = keys.getLength() > 0;
+            if (hasGuidePosts) {
+                int guidePostCount = 0;
+                try (ByteArrayInputStream stream = new ByteArrayInputStream(keys.get(), keys.getOffset(), keys.getLength())) {
+                    DataInput input = new DataInputStream(stream);
+                    PrefixByteDecoder decoder = new PrefixByteDecoder(gps.getMaxLength());
+                    do {
+                        ImmutableBytesWritable ptr = decoder.decode(input);
+                        addGuidepost(cfKey, mutations, ptr, byteCounts.get(guidePostCount), rowCounts.get(guidePostCount), timeStamp);
+                        guidePostCount++;
+                    } while (decoder != null);
+                } catch (EOFException e) { // Ignore as this signifies we're done
 
-            } finally {
-                PrefixByteCodec.close(stream);
+                }
+                // If we've written guideposts with a guidepost key, then delete the
+                // empty guidepost indicator that may have been written by other
+                // regions.
+                byte[] rowKey = StatisticsUtil.getRowKey(tableName, cfKey, ByteUtil.EMPTY_IMMUTABLE_BYTE_ARRAY);
+                Delete delete = new Delete(rowKey, timeStamp);
+                mutations.add(delete);
+            } else {
+                addGuidepost(cfKey, mutations, ByteUtil.EMPTY_IMMUTABLE_BYTE_ARRAY, 0, 0, timeStamp);
             }
         }
+    }
+    
+    @SuppressWarnings("deprecation")
+    private void addGuidepost(ImmutableBytesPtr cfKey, List<Mutation> mutations, ImmutableBytesWritable ptr, long byteCount, long rowCount, long timeStamp) {
+        byte[] prefix = StatisticsUtil.getRowKey(tableName, cfKey, ptr);
+        Put put = new Put(prefix);
+        put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH_BYTES,
+                timeStamp, PLong.INSTANCE.toBytes(byteCount));
+        put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
+                PhoenixDatabaseMetaData.GUIDE_POSTS_ROW_COUNT_BYTES, timeStamp,
+                PLong.INSTANCE.toBytes(rowCount));
+        // Add our empty column value so queries behave correctly
+        put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES, timeStamp,
+                ByteUtil.EMPTY_BYTE_ARRAY);
+        mutations.add(put);
     }
 
     private static MutationType getMutationType(Mutation m) throws IOException {
