@@ -869,14 +869,16 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 schemaName.getString(), tableName.getString())) : physicalTables.get(0);
         PTableStats stats = PTableStats.EMPTY_STATS;
         HTableInterface statsHTable = null;
-        try {
-            statsHTable = ServerUtil.getHTableForCoprocessorScan(env, PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES);
-            stats = StatisticsUtil.readStatistics(statsHTable, physicalTableName.getBytes(), clientTimeStamp);
-            timeStamp = Math.max(timeStamp, stats.getTimestamp());
-        } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
-            logger.warn(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME + " not online yet?");
-        } finally {
-            if (statsHTable != null) statsHTable.close();
+        if (tenantId == null) {
+            try {
+                statsHTable = ServerUtil.getHTableForCoprocessorScan(env, PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES);
+                stats = StatisticsUtil.readStatistics(statsHTable, physicalTableName.getBytes(), clientTimeStamp);
+                timeStamp = Math.max(timeStamp, stats.getTimestamp());
+            } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
+                logger.warn(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME + " not online yet?");
+            } finally {
+                if (statsHTable != null) statsHTable.close();
+            }
         }
         return PTableImpl.makePTable(tenantId, schemaName, tableName, tableType, indexState, timeStamp,
             tableSeqNum, pkName, saltBucketNum, columns, tableType == INDEX ? schemaName : null,

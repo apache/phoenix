@@ -65,7 +65,7 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
     public final ScanOrder scanOrder;
     public final ScanRanges scanRanges;
     
-    protected final long estimatedBytes;
+    protected final Long estimatedBytes;
     protected final float rowCountFactor;
     
     public static PhoenixTableScan create(RelOptCluster cluster, final RelOptTable table) {
@@ -96,15 +96,16 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
         this.scanOrder = scanOrder;
         final PhoenixTable phoenixTable = table.unwrap(PhoenixTable.class);
         this.rowCountFactor = phoenixTable.pc.getQueryServices()
-                .getProps().getFloat(PhoenixRel.ROW_COUNT_FACTOR, 1f);
-        
-        ScanRanges scanRanges = null;
-        long estimatedSize = 0;
-        if (filter != null) {
-            try {
-                // TODO simplify this code
-                PTable pTable = phoenixTable.getTable();
-                TableRef tableRef = new TableRef(CalciteUtils.createTempAlias(), pTable, HConstants.LATEST_TIMESTAMP, false);
+                .getProps().getFloat(PhoenixRel.ROW_COUNT_FACTOR, 1f);        
+        try {
+            // TODO simplify this code
+            PTable pTable = phoenixTable.getTable();
+            TableRef tableRef = new TableRef(CalciteUtils.createTempAlias(), pTable, HConstants.LATEST_TIMESTAMP, false);
+            SelectStatement select = SelectStatement.SELECT_ONE;
+            PhoenixStatement stmt = new PhoenixStatement(phoenixTable.pc);
+            ColumnResolver resolver = FromCompiler.getResolver(tableRef);
+            StatementContext context = new StatementContext(stmt, resolver, new Scan(), new SequenceManager(stmt));
+            if (filter != null) {
                 // We use a implementor with a special implementation for field access
                 // here, which translates RexFieldAccess into a LiteralExpression
                 // with a sample value. This will achieve 3 goals at a time:
@@ -124,21 +125,15 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
                     }                    
                 };
                 tmpImplementor.setTableRef(tableRef);
-                SelectStatement select = SelectStatement.SELECT_ONE;
-                PhoenixStatement stmt = new PhoenixStatement(phoenixTable.pc);
-                ColumnResolver resolver = FromCompiler.getResolver(tableRef);
-                StatementContext context = new StatementContext(stmt, resolver, new Scan(), new SequenceManager(stmt));
                 Expression filterExpr = CalciteUtils.toExpression(filter, tmpImplementor);
                 filterExpr = WhereOptimizer.pushKeyExpressionsToScan(context, select, filterExpr);
                 WhereCompiler.setScanFilter(context, select, filterExpr, true, false);
-                scanRanges = context.getScanRanges();
-                estimatedSize = BaseResultIterators.getEstimatedCount(context, tableRef.getTable()).getSecond();
-            } catch (SQLException e) {
-                throw new RuntimeException(e);
-            }
-        }        
-        this.scanRanges = scanRanges;
-        this.estimatedBytes = estimatedSize;
+            }        
+            this.scanRanges = context.getScanRanges();
+            this.estimatedBytes = BaseResultIterators.getEstimatedCount(context, pTable).getSecond();
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
     }
     
     private static ScanOrder getDefaultScanOrder(PhoenixTable table) {
@@ -182,10 +177,16 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
     public RelOptCost computeSelfCost(RelOptPlanner planner, RelMetadataQuery mq) {
         double byteCount;
         PhoenixTable phoenixTable = table.unwrap(PhoenixTable.class);
-        if (scanRanges != null) {
+        if (estimatedBytes != null) {
             byteCount = estimatedBytes;
         } else {
-            byteCount = phoenixTable.byteCount;
+            // If stats are not available, we estimate based on selectivity.
+            int pkCount = scanRanges.getBoundPkColumnCount();
+            if (pkCount > 0) {
+                byteCount = phoenixTable.byteCount * Math.pow(mq.getSelectivity(this, filter), pkCount);
+            } else {
+                byteCount = phoenixTable.byteCount;
+            }
         }
         byteCount *= rowCountFactor;
         if (scanOrder != ScanOrder.NONE) {

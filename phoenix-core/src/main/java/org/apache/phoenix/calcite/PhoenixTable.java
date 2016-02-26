@@ -20,22 +20,27 @@ import org.apache.calcite.schema.TranslatableTable;
 import org.apache.calcite.schema.impl.AbstractTable;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.util.ImmutableBitSet;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.calcite.rel.PhoenixTableScan;
+import org.apache.phoenix.compile.ColumnResolver;
+import org.apache.phoenix.compile.FromCompiler;
+import org.apache.phoenix.compile.SequenceManager;
+import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.iterate.BaseResultIterators;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PColumn;
-import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.schema.stats.GuidePostsInfo;
+import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.stats.StatisticsUtil;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.SizedUtil;
-
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
@@ -89,12 +94,18 @@ public class PhoenixTable extends AbstractTable implements TranslatableTable {
       }
       this.pkBitSet = ImmutableBitSet.of(pkPositions);
       this.collation = RelCollationTraitDef.INSTANCE.canonize(RelCollations.of(fieldCollations));
-      byte[] emptyCf = SchemaUtil.getEmptyColumnFamily(pTable);
-      GuidePostsInfo info = pTable.getTableStats().getGuidePosts().get(emptyCf);
       long rowCount = 0;
       long byteCount = 0;
       try {
-          if (info == null) {
+          PhoenixStatement stmt = new PhoenixStatement(pc);
+          TableRef tableRef = new TableRef(CalciteUtils.createTempAlias(), pTable, HConstants.LATEST_TIMESTAMP, false);
+          ColumnResolver resolver = FromCompiler.getResolver(tableRef);
+          StatementContext context = new StatementContext(stmt, resolver, new Scan(), new SequenceManager(stmt));
+          Pair<Long, Long> estimatedCount = BaseResultIterators.getEstimatedCount(context, pTable);
+          if (estimatedCount != null) {
+              rowCount = estimatedCount.getFirst();
+              byteCount = estimatedCount.getSecond();
+          } else {
               // TODO The props might not be the same as server props.
               int guidepostPerRegion = pc.getQueryServices().getProps().getInt(
                       QueryServices.STATS_GUIDEPOST_PER_REGION_ATTRIB,
@@ -109,30 +120,8 @@ public class PhoenixTable extends AbstractTable implements TranslatableTable {
               }
               byteCount = StatisticsUtil.getGuidePostDepth(
                       guidepostPerRegion, guidepostWidth, desc) / 2;
-              long keySize = pTable.getRowKeySchema().getEstimatedByteSize();
-              long rowSize = 0;
-              for (PColumnFamily cf : pTable.getColumnFamilies()) {
-                  for (PColumn column : cf.getColumns()) {
-                      Integer maxLength = column.getMaxLength();
-                      int byteSize = column.getDataType().isFixedWidth() ?
-                              maxLength == null ?
-                                      column.getDataType().getByteSize()
-                                      : maxLength
-                                      : RowKeySchema.ESTIMATED_VARIABLE_LENGTH_SIZE;
-                      rowSize += SizedUtil.KEY_VALUE_SIZE + keySize + byteSize;
-                  }
-              }
-              if (rowSize == 0) {
-                  rowSize = keySize;
-              }
+              long rowSize = SchemaUtil.estimateRowSize(pTable);
               rowCount = byteCount / rowSize;
-          } else {
-              for (long b : info.getByteCounts()) {
-                  byteCount += b;
-              }
-              for (long r : info.getRowCounts()) {
-                  rowCount += r;
-              }
           }
       } catch (SQLException | IOException e) {
           throw new RuntimeException(e);
