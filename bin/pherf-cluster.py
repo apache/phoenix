@@ -75,7 +75,7 @@ hbasecp, stderr = subprocess.Popen(hbase_path + "/bin/hbase classpath",
                                   stderr=subprocess.PIPE).communicate()
 
 java_cmd = java +' -cp "' + hbasecp + os.pathsep + phoenix_utils.pherf_conf_path + os.pathsep + phoenix_utils.hbase_conf_dir + os.pathsep + phoenix_utils.phoenix_pherf_jar + \
-    '" -Dlog4j.configuration=file:' + \
+    os.pathsep + phoenix_utils.phoenix_thin_client_jar + '" -Dlog4j.configuration=file:' + \
     os.path.join(phoenix_utils.current_dir, "log4j.properties") + \
     " org.apache.phoenix.pherf.Pherf " + args 
 
