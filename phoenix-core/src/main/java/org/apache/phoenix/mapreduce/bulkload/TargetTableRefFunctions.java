@@ -78,25 +78,7 @@ public class TargetTableRefFunctions {
          }
      };
 
-    public static Function<List<TargetTableRef>,String> LOGICAN_NAMES_TO_JSON =  new Function<List<TargetTableRef>,String>() {
-
-        @Override
-        public String apply(List<TargetTableRef> input) {
-            try {
-                List<String> tableNames = Lists.newArrayListWithCapacity(input.size());
-                for(TargetTableRef table : input) {
-                    tableNames.add(table.getLogicalName());
-                }
-                ObjectMapper mapper = new ObjectMapper();
-                return mapper.writeValueAsString(tableNames);
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-
-        }
-    };
-
-    public static Function<String,List<String>> NAMES_FROM_JSON =  new Function<String,List<String>>() {
+     public static Function<String,List<String>> NAMES_FROM_JSON =  new Function<String,List<String>>() {
 
          @SuppressWarnings("unchecked")
          @Override
@@ -110,4 +92,4 @@ public class TargetTableRefFunctions {
 
          }
      };
-}
+ }
