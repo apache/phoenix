@@ -61,7 +61,8 @@ public class StatisticsCollectorFactory {
     static {
         DISABLE_STATS.add(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME));
         DISABLE_STATS.add(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_FUNCTION_NAME));
-        DISABLE_STATS.add(TableName.valueOf(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME));
+        DISABLE_STATS.add(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME));
+        DISABLE_STATS.add(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME));
     }
     
     /**

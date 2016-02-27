@@ -85,7 +85,7 @@ public class SequenceRegionObserver extends BaseRegionObserver {
         PInteger.INSTANCE.getCodec().encodeInt(errorCode, errorCodeBuf, 0);
         return  Result.create(Collections.singletonList(
                 (Cell)KeyValueUtil.newKeyValue(row, 
-                        PhoenixDatabaseMetaData.SEQUENCE_FAMILY_BYTES, 
+                        PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES, 
                         QueryConstants.EMPTY_COLUMN_BYTES, timestamp, errorCodeBuf)));
     }
     
@@ -154,7 +154,7 @@ public class SequenceRegionObserver extends BaseRegionObserver {
                 long timestamp = currentValueKV.getTimestamp();
 				Put put = new Put(row, timestamp);
                 
-				int numIncrementKVs = increment.getFamilyCellMap().get(PhoenixDatabaseMetaData.SEQUENCE_FAMILY_BYTES).size();
+				int numIncrementKVs = increment.getFamilyCellMap().get(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES).size();
                 // creates the list of KeyValues used for the Result that will be returned
                 List<Cell> cells = Sequence.getCells(result, numIncrementKVs);
                 
@@ -298,7 +298,7 @@ public class SequenceRegionObserver extends BaseRegionObserver {
 	KeyValue createKeyValue(byte[] key, byte[] cqBytes, long value, long timestamp) {
 		byte[] valueBuffer = new byte[PLong.INSTANCE.getByteSize()];
     PLong.INSTANCE.getCodec().encodeLong(value, valueBuffer, 0);
-		return KeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SEQUENCE_FAMILY_BYTES, cqBytes, timestamp, valueBuffer);
+		return KeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES, cqBytes, timestamp, valueBuffer);
 	}
     
 	/**
@@ -312,7 +312,7 @@ public class SequenceRegionObserver extends BaseRegionObserver {
 	 */
 	private KeyValue createKeyValue(byte[] key, byte[] cqBytes, boolean value, long timestamp) throws IOException {
 		// create new key value for put
-		return KeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SEQUENCE_FAMILY_BYTES, cqBytes, 
+		return KeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES, cqBytes, 
 				timestamp, value ? PDataType.TRUE_BYTES : PDataType.FALSE_BYTES);
 	}
 
@@ -399,7 +399,7 @@ public class SequenceRegionObserver extends BaseRegionObserver {
                     // Timestamp should match exactly, or we may have the wrong sequence
                     if (expectedValue != value || currentValueKV.getTimestamp() != clientTimestamp) {
                         return Result.create(Collections.singletonList(
-                          (Cell)KeyValueUtil.newKeyValue(row, PhoenixDatabaseMetaData.SEQUENCE_FAMILY_BYTES, 
+                          (Cell)KeyValueUtil.newKeyValue(row, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES, 
                             QueryConstants.EMPTY_COLUMN_BYTES, currentValueKV.getTimestamp(), ByteUtil.EMPTY_BYTE_ARRAY)));
                     }
                     m = new Put(row, currentValueKV.getTimestamp());
@@ -427,7 +427,7 @@ public class SequenceRegionObserver extends BaseRegionObserver {
                 // the client cares about is the timestamp, which is the timestamp of
                 // when the mutation was actually performed (useful in the case of .
                 return Result.create(Collections.singletonList(
-                  (Cell)KeyValueUtil.newKeyValue(row, PhoenixDatabaseMetaData.SEQUENCE_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES, serverTimestamp, SUCCESS_VALUE)));
+                  (Cell)KeyValueUtil.newKeyValue(row, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES, serverTimestamp, SUCCESS_VALUE)));
             } finally {
                 region.releaseRowLocks(locks);
             }

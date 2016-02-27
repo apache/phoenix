@@ -171,7 +171,7 @@ public class PhoenixRuntimeTest extends BaseConnectionlessQueryTest {
         Expression e2 = PhoenixRuntime.getTenantIdExpression(conn, PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME);
         assertNotNull(e2);
 
-        Expression e3 = PhoenixRuntime.getTenantIdExpression(conn, PhoenixDatabaseMetaData.SEQUENCE_FULLNAME);
+        Expression e3 = PhoenixRuntime.getTenantIdExpression(conn, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME);
         assertNotNull(e3);
         
         conn.createStatement().execute("CREATE TABLE FOO (k VARCHAR PRIMARY KEY)");

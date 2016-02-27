@@ -107,8 +107,8 @@ public class PhoenixRuntimeIT extends BaseHBaseManagedTimeIT {
         props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, "t1");
         Connection tsconn = DriverManager.getConnection(getUrl(), props);
         tsconn.createStatement().execute("CREATE SEQUENCE s1");
-        Expression e1 = PhoenixRuntime.getTenantIdExpression(tsconn, PhoenixDatabaseMetaData.SEQUENCE_FULLNAME);
-        HTableInterface htable1 = tsconn.unwrap(PhoenixConnection.class).getQueryServices().getTable(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_BYTES);
+        Expression e1 = PhoenixRuntime.getTenantIdExpression(tsconn, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME);
+        HTableInterface htable1 = tsconn.unwrap(PhoenixConnection.class).getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES);
         assertTenantIds(e1, htable1, new FirstKeyOnlyFilter(), new String[] {"", "t1"} );
         
         tsconn.createStatement().execute("CREATE VIEW A.BAR(V1 VARCHAR) AS SELECT * FROM " + tableName);

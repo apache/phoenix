@@ -185,7 +185,7 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
         ResultSet rs = conn2.createStatement().executeQuery("SELECT "
                 + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + ","
                 + PhoenixDatabaseMetaData.SEQUENCE_NAME
-                + " FROM " + PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_ESCAPED);
+                + " FROM " + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE);
         assertFalse("View index sequences should be deleted.", rs.next());
     }
     

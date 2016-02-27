@@ -128,17 +128,17 @@ public class UpgradeUtil {
     }
 
     private static byte[] getSequenceSnapshotName() {
-        return Bytes.toBytes("_BAK_" + PhoenixDatabaseMetaData.SEQUENCE_FULLNAME);
+        return Bytes.toBytes("_BAK_" + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME);
     }
     
     private static void createSequenceSnapshot(HBaseAdmin admin, PhoenixConnection conn) throws SQLException {
         byte[] tableName = getSequenceSnapshotName();
-        HColumnDescriptor columnDesc = new HColumnDescriptor(PhoenixDatabaseMetaData.SEQUENCE_FAMILY_BYTES);
+        HColumnDescriptor columnDesc = new HColumnDescriptor(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES);
         HTableDescriptor desc = new HTableDescriptor(TableName.valueOf(tableName));
         desc.addFamily(columnDesc);
         try {
             admin.createTable(desc);
-            copyTable(conn, PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_BYTES, tableName);
+            copyTable(conn, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES, tableName);
         } catch (IOException e) {
             throw ServerUtil.parseServerException(e);
         }
@@ -146,7 +146,7 @@ public class UpgradeUtil {
     
     private static void restoreSequenceSnapshot(HBaseAdmin admin, PhoenixConnection conn) throws SQLException {
         byte[] tableName = getSequenceSnapshotName();
-        copyTable(conn, tableName, PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_BYTES);
+        copyTable(conn, tableName, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES);
     }
     
     private static void deleteSequenceSnapshot(HBaseAdmin admin) throws SQLException {
@@ -237,11 +237,11 @@ public class UpgradeUtil {
                 return;
             }
             logger.warn("Pre-splitting SYSTEM.SEQUENCE table " + nSaltBuckets + "-ways. This may take some time - please do not close window.");
-            HTableDescriptor desc = admin.getTableDescriptor(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_BYTES);
+            HTableDescriptor desc = admin.getTableDescriptor(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES);
             createSequenceSnapshot(admin, conn);
             snapshotCreated = true;
-            admin.disableTable(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME);
-            admin.deleteTable(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME);
+            admin.disableTable(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME);
+            admin.deleteTable(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME);
             byte[][] splitPoints = SaltingUtil.getSalteByteSplitPoints(nSaltBuckets);
             admin.createTable(desc, splitPoints);
             restoreSequenceSnapshot(admin, conn);
@@ -272,7 +272,7 @@ public class UpgradeUtil {
     public static boolean upgradeSequenceTable(PhoenixConnection conn, int nSaltBuckets, PTable oldTable) throws SQLException {
         logger.info("Upgrading SYSTEM.SEQUENCE table");
 
-        byte[] seqTableKey = SchemaUtil.getTableKey(null, PhoenixDatabaseMetaData.SEQUENCE_SCHEMA_NAME, PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME);
+        byte[] seqTableKey = SchemaUtil.getTableKey(null, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_SCHEMA, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_TABLE);
         HTableInterface sysTable = conn.getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
         try {
             logger.info("Setting SALT_BUCKETS property of SYSTEM.SEQUENCE to " + SaltingUtil.MAX_BUCKET_NUM);
@@ -326,7 +326,7 @@ public class UpgradeUtil {
                 Scan scan = new Scan();
                 scan.setRaw(true);
                 scan.setMaxVersions(MetaDataProtocol.DEFAULT_MAX_META_DATA_VERSIONS);
-                HTableInterface seqTable = conn.getQueryServices().getTable(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_BYTES);
+                HTableInterface seqTable = conn.getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES);
                 try {
                     boolean committed = false;
                     logger.info("Adding salt byte to all SYSTEM.SEQUENCE rows");
