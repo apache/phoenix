@@ -375,7 +375,7 @@ public class MetaDataUtil {
 
     public static void deleteViewIndexSequences(PhoenixConnection connection, PName name) throws SQLException {
         String schemaName = getViewIndexSchemaName(name);
-        connection.createStatement().executeUpdate("DELETE FROM " + PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_ESCAPED + 
+        connection.createStatement().executeUpdate("DELETE FROM " + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE + 
                 " WHERE " + PhoenixDatabaseMetaData.TENANT_ID + " IS NULL AND " + 
                 PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + " = '" + schemaName + "'");
         
