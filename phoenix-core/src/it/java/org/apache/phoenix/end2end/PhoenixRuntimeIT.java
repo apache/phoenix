@@ -133,6 +133,15 @@ public class PhoenixRuntimeIT extends BaseHBaseManagedTimeIT {
         Expression e6 = PhoenixRuntime.getTenantIdExpression(conn, "I2");
         HTableInterface htable6 = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes("I2"));
         assertTenantIds(e6, htable6, new FirstKeyOnlyFilter(), new String[] {"t1", "t2"} );
+        
+        tableName = "BAR_" + (isSalted ? "SALTED" : "UNSALTED");
+        conn.createStatement().execute("CREATE TABLE " + tableName + " (k1 VARCHAR NOT NULL, k2 VARCHAR, CONSTRAINT PK PRIMARY KEY(K1,K2)) " + (isSalted ? "SALT_BUCKETS=3" : ""));
+        conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('t1','x')");
+        conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('t2','y')");
+        Expression e7 = PhoenixRuntime.getFirstPKColumnExpression(conn, tableName);
+        HTableInterface htable7 = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(tableName));
+        assertTenantIds(e7, htable7, new FirstKeyOnlyFilter(), new String[] {"t1", "t2"} );
+        
     }
 
 }
