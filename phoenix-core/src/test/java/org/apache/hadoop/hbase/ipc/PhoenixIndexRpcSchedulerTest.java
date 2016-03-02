@@ -19,8 +19,15 @@ package org.apache.hadoop.hbase.ipc;
 
 import static org.junit.Assert.assertEquals;
 
+import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.net.Socket;
+import java.net.SocketAddress;
+import java.net.SocketOption;
+import java.nio.ByteBuffer;
+import java.nio.channels.SocketChannel;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
 
@@ -90,8 +97,9 @@ public class PhoenixIndexRpcSchedulerTest {
         CallRunner task = Mockito.mock(CallRunner.class);
         RequestHeader header = RequestHeader.newBuilder().setPriority(priority).build();
         RpcServer server = new RpcServer(null, "test-rpcserver", null, isa, conf, scheduler);
+        RpcServer.Connection connection = Mockito.mock(RpcServer.Connection.class);
         RpcServer.Call call =
-                server.new Call(0, null, null, header, null, null, null, null, 10, null);
+                server.new Call(0, null, null, header, null, null, connection, null, 10, null);
         Mockito.when(task.getCall()).thenReturn(call);
 
         scheduler.dispatch(task);
