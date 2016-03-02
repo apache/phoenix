@@ -88,8 +88,9 @@ public class PhoenixIndexRpcSchedulerTest {
         CallRunner task = Mockito.mock(CallRunner.class);
         RequestHeader header = RequestHeader.newBuilder().setPriority(priority).build();
         RpcServer server = new RpcServer(null, "test-rpcserver", null, null, conf, scheduler);
+        RpcServer.Connection connection = Mockito.mock(RpcServer.Connection.class);
         RpcServer.Call call =
-                server.new Call(0, null, null, header, null, null, null, null, 10, null);
+                server.new Call(0, null, null, header, null, null, connection, null, 10, null);
         Mockito.when(task.getCall()).thenReturn(call);
 
         scheduler.dispatch(task);
