@@ -19,15 +19,8 @@ package org.apache.hadoop.hbase.ipc;
 
 import static org.junit.Assert.assertEquals;
 
-import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.net.Socket;
-import java.net.SocketAddress;
-import java.net.SocketOption;
-import java.nio.ByteBuffer;
-import java.nio.channels.SocketChannel;
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
 
