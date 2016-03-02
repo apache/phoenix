@@ -17,10 +17,17 @@
  */
 package org.apache.phoenix.mapreduce;
 
+import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.sql.SQLException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.TreeMap;
 import javax.annotation.Nullable;
 
 import org.apache.hadoop.conf.Configuration;
@@ -40,7 +47,10 @@ import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.util.*;
+import org.apache.phoenix.util.ColumnInfo;
+import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.UpsertExecutor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -54,22 +64,20 @@ import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 
 /**
- * Base class for converting some input source format into {@link KeyValue}s of a target
- * schema. Assumes input format is text-based, with one row per line. Depends on an online cluster
+ * Base class for converting some input source format into {@link ImmutableBytesWritable}s that
+ * contains packed in a single byte array values for all columns.
+ * Assumes input format is text-based, with one row per line. Depends on an online cluster
  * to retrieve {@link ColumnInfo} from the target table.
  */
-public abstract class FormatToKeyValueMapper<RECORD> extends Mapper<LongWritable, Text, TableRowkeyPair,
+public abstract class FormatToBytesWritableMapper<RECORD> extends Mapper<LongWritable, Text, TableRowkeyPair,
         ImmutableBytesWritable> {
 
-    protected static final Logger LOG = LoggerFactory.getLogger(FormatToKeyValueMapper.class);
+    protected static final Logger LOG = LoggerFactory.getLogger(FormatToBytesWritableMapper.class);
 
     protected static final String COUNTER_GROUP_NAME = "Phoenix MapReduce Import";
 
     /** Configuration key for the name of the output table */
     public static final String TABLE_NAME_CONFKEY = "phoenix.mapreduce.import.tablename";
-
-    /** Configuration key for the name of the output index table */
-    public static final String INDEX_TABLE_NAME_CONFKEY = "phoenix.mapreduce.import.indextablename";
 
     /** Configuration key for the columns to be imported */
     public static final String COLUMN_INFO_CONFKEY = "phoenix.mapreduce.import.columninfos";
@@ -79,10 +87,9 @@ public abstract class FormatToKeyValueMapper<RECORD> extends Mapper<LongWritable
 
     /** Configuration key for the table names */
     public static final String TABLE_NAMES_CONFKEY = "phoenix.mapreduce.import.tablenames";
-    public static final String LOGICAL_NAMES_CONFKEY = "phoenix.mapreduce.import.logicalnames";
 
-    /** Configuration key for the table configurations */
-    public static final String TABLE_CONFIG_CONFKEY = "phoenix.mapreduce.import.table.config";
+    /** Configuration key for the table logical names */
+    public static final String LOGICAL_NAMES_CONFKEY = "phoenix.mapreduce.import.logicalnames";
 
     /**
      * Parses a single input line, returning a {@code T}.
@@ -179,7 +186,7 @@ public abstract class FormatToKeyValueMapper<RECORD> extends Mapper<LongWritable
                     }
                 }
             }
-            for(Map.Entry<Integer, List<KeyValue>> rowEntry : map.entrySet()) {
+            for (Map.Entry<Integer, List<KeyValue>> rowEntry : map.entrySet()) {
                 int tableIndex = rowEntry.getKey();
                 List<KeyValue> lkv = rowEntry.getValue();
                 // All KV values combines to a single byte array
@@ -191,19 +198,19 @@ public abstract class FormatToKeyValueMapper<RECORD> extends Mapper<LongWritable
         }
     }
 
-    private List<Map<byte[],Map<byte[], Integer>>> initColumnIndexes() throws SQLException {
+    private List<Map<byte[], Map<byte[], Integer>>> initColumnIndexes() throws SQLException {
         List<Map<byte[], Map<byte[], Integer>>> tableMap = new ArrayList<>();
         int tableIndex;
         for (tableIndex = 0; tableIndex < tableNames.size(); tableIndex++) {
             PTable table = PhoenixRuntime.getTable(conn, logicalNames.get(tableIndex));
             Map<byte[], Map<byte[], Integer>> columnMap = new TreeMap<>(Bytes.BYTES_COMPARATOR);
             List<PColumn> cls = table.getColumns();
-            for(int i = 0; i < cls.size(); i++) {
+            for (int i = 0; i < cls.size(); i++) {
                 PColumn c = cls.get(i);
-                if(c.getFamilyName() == null) continue; // Skip PK column
+                if (c.getFamilyName() == null) continue; // Skip PK column
                 byte[] family = c.getFamilyName().getBytes();
                 byte[] name = c.getName().getBytes();
-                if(!columnMap.containsKey(family)) {
+                if (!columnMap.containsKey(family)) {
                     columnMap.put(family, new TreeMap<byte[], Integer>(Bytes.BYTES_COMPARATOR));
                 }
                 Map<byte[], Integer> qualifier = columnMap.get(family);
@@ -219,17 +226,17 @@ public abstract class FormatToKeyValueMapper<RECORD> extends Mapper<LongWritable
      * the aggregated array and will be restored in Reducer
      *
      * @param tableIndex Table index in tableNames list
-     * @param cell KeyValue for the column
+     * @param cell       KeyValue for the column
      * @return column index for the specified cell or -1 if was not found
      */
     private int findIndex(int tableIndex, Cell cell) {
         Map<byte[], Map<byte[], Integer>> columnMap = columnIndexes.get(tableIndex);
         Map<byte[], Integer> qualifiers = columnMap.get(Bytes.copy(cell.getFamilyArray(),
                 cell.getFamilyOffset(), cell.getFamilyLength()));
-        if(qualifiers!= null) {
+        if (qualifiers != null) {
             Integer result = qualifiers.get(Bytes.copy(cell.getQualifierArray(),
                     cell.getQualifierOffset(), cell.getQualifierLength()));
-            if(result!=null) {
+            if (result != null) {
                 return result;
             }
         }
@@ -239,16 +246,16 @@ public abstract class FormatToKeyValueMapper<RECORD> extends Mapper<LongWritable
     /**
      * Collect all column values for the same rowKey
      *
-     * @param context Current mapper context
+     * @param context    Current mapper context
      * @param tableIndex Table index in tableNames list
-     * @param lkv List of KV values that will be combined in a single ImmutableBytesWritable
+     * @param lkv        List of KV values that will be combined in a single ImmutableBytesWritable
      * @throws IOException
      * @throws InterruptedException
      */
 
     private void writeAggregatedRow(Context context, int tableIndex, List<KeyValue> lkv)
             throws IOException, InterruptedException {
-        TrustedByteArrayOutputStream bos = new TrustedByteArrayOutputStream(1024);
+        ByteArrayOutputStream bos = new ByteArrayOutputStream(1024);
         DataOutputStream outputStream = new DataOutputStream(bos);
         ImmutableBytesWritable outputKey = new ImmutableBytesWritable();
         if (!lkv.isEmpty()) {
@@ -256,7 +263,7 @@ public abstract class FormatToKeyValueMapper<RECORD> extends Mapper<LongWritable
             Cell first = lkv.get(0);
             outputKey.set(first.getRowArray(), first.getRowOffset(), first.getRowLength());
             for (KeyValue cell : lkv) {
-                if(isEmptyCell(cell)) {
+                if (isEmptyCell(cell)) {
                     continue;
                 }
                 int i = findIndex(tableIndex, cell);
@@ -298,7 +305,7 @@ public abstract class FormatToKeyValueMapper<RECORD> extends Mapper<LongWritable
     /**
      * Write the list of to-import columns to a job configuration.
      *
-     * @param conf configuration to be written to
+     * @param conf           configuration to be written to
      * @param columnInfoList list of ColumnInfo objects to be configured for import
      */
     @VisibleForTesting
