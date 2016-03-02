@@ -78,7 +78,7 @@ public class TargetTableRefFunctions {
          }
      };
 
-    public static Function<List<TargetTableRef>,String> LOGICAN_NAMES_TO_JSON =  new Function<List<TargetTableRef>,String>() {
+    public static Function<List<TargetTableRef>,String> LOGICAL_NAMES_TO_JSON =  new Function<List<TargetTableRef>,String>() {
 
         @Override
         public String apply(List<TargetTableRef> input) {

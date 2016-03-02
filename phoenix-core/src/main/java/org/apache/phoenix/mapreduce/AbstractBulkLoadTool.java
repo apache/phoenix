@@ -209,10 +209,10 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
         List<ColumnInfo> importColumns = buildImportColumns(conn, cmdLine, qualifiedTableName);
         Preconditions.checkNotNull(importColumns);
         Preconditions.checkArgument(!importColumns.isEmpty(), "Column info list is empty");
-        FormatToKeyValueMapper.configureColumnInfoList(conf, importColumns);
+        FormatToBytesWritableMapper.configureColumnInfoList(conf, importColumns);
         boolean ignoreInvalidRows = cmdLine.hasOption(IGNORE_ERRORS_OPT.getOpt());
-        conf.setBoolean(FormatToKeyValueMapper.IGNORE_INVALID_ROW_CONFKEY, ignoreInvalidRows);
-        conf.set(FormatToKeyValueMapper.TABLE_NAME_CONFKEY, qualifiedTableName);
+        conf.setBoolean(FormatToBytesWritableMapper.IGNORE_INVALID_ROW_CONFKEY, ignoreInvalidRows);
+        conf.set(FormatToBytesWritableMapper.TABLE_NAME_CONFKEY, qualifiedTableName);
 
         // give subclasses their hook
         configureOptions(cmdLine, importColumns, conf);
@@ -277,10 +277,10 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
         MultiHfileOutputFormat.configureIncrementalLoad(job, tablesToBeLoaded);
 
         final String tableNamesAsJson = TargetTableRefFunctions.NAMES_TO_JSON.apply(tablesToBeLoaded);
-        final String logicalNamesAsJson = TargetTableRefFunctions.LOGICAN_NAMES_TO_JSON.apply(tablesToBeLoaded);
+        final String logicalNamesAsJson = TargetTableRefFunctions.LOGICAL_NAMES_TO_JSON.apply(tablesToBeLoaded);
 
-        job.getConfiguration().set(FormatToKeyValueMapper.TABLE_NAMES_CONFKEY,tableNamesAsJson);
-        job.getConfiguration().set(FormatToKeyValueMapper.LOGICAL_NAMES_CONFKEY,logicalNamesAsJson);
+        job.getConfiguration().set(FormatToBytesWritableMapper.TABLE_NAMES_CONFKEY,tableNamesAsJson);
+        job.getConfiguration().set(FormatToBytesWritableMapper.LOGICAL_NAMES_CONFKEY,logicalNamesAsJson);
 
         // give subclasses their hook
         setupJob(job);
