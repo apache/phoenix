@@ -28,11 +28,11 @@ import java.util.TreeMap;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
+import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.PrefixByteCodec;
 import org.apache.phoenix.util.PrefixByteDecoder;
 import org.apache.phoenix.util.SizedUtil;
 
-import com.google.common.io.Closeables;
 import com.sun.istack.NotNull;
  
  /**
