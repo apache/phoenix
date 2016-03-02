@@ -37,7 +37,7 @@ import com.google.common.base.Preconditions;
  * extracting the created KeyValues and rolling back the statement execution before it is
  * committed to HBase.
  */
-public class JsonToKeyValueMapper extends FormatToKeyValueMapper<Map<?, ?>> {
+public class JsonToKeyValueMapper extends FormatToBytesWritableMapper<Map<?, ?>> {
 
     private LineParser<Map<?, ?>> lineParser;
 

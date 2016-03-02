@@ -41,7 +41,7 @@ import com.google.common.collect.Iterables;
  * extracting the created KeyValues and rolling back the statement execution before it is
  * committed to HBase.
  */
-public class CsvToKeyValueMapper extends FormatToKeyValueMapper<CSVRecord> {
+public class CsvToKeyValueMapper extends FormatToBytesWritableMapper<CSVRecord> {
 
     /** Configuration key for the field delimiter for input csv records */
     public static final String FIELD_DELIMITER_CONFKEY = "phoenix.mapreduce.import.fielddelimiter";

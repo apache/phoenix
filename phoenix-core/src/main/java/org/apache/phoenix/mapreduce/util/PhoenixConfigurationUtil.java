@@ -36,7 +36,7 @@ import org.apache.hadoop.mapreduce.lib.db.DBInputFormat.NullDBWritable;
 import org.apache.hadoop.mapreduce.lib.db.DBWritable;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.mapreduce.FormatToKeyValueMapper;
+import org.apache.phoenix.mapreduce.FormatToBytesWritableMapper;
 import org.apache.phoenix.mapreduce.ImportPreUpsertKeyValueProcessor;
 import org.apache.phoenix.mapreduce.PhoenixInputFormat;
 import org.apache.phoenix.util.ColumnInfo;
@@ -418,7 +418,7 @@ public final class PhoenixConfigurationUtil {
         Class<? extends ImportPreUpsertKeyValueProcessor> processorClass = null;
         try {
             processorClass = conf.getClass(
-                    UPSERT_HOOK_CLASS_CONFKEY, FormatToKeyValueMapper.DefaultImportPreUpsertKeyValueProcessor.class,
+                    UPSERT_HOOK_CLASS_CONFKEY, FormatToBytesWritableMapper.DefaultImportPreUpsertKeyValueProcessor.class,
                     ImportPreUpsertKeyValueProcessor.class);
         } catch (Exception e) {
             throw new IllegalStateException("Couldn't load upsert hook class", e);
