@@ -882,6 +882,13 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             }
         }
         buf.append(getName()).append(" ").append(size()).append("-WAY ");
+        try {
+            if (plan.useRoundRobinIterator()) {
+                buf.append("ROUND ROBIN ");
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
         explain(buf.toString(),planSteps);
     }
 
