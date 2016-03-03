@@ -470,14 +470,6 @@ public class IndexHalfStoreFileReader extends StoreFile.Reader {
     }
 
     @Override
-    public byte[] getLastKey() {
-        // This method won't get used for the index region. There is no need to call
-        // getClosestRowBefore on the index table. Also this is a split region. Can not be further
-        // split
-        throw new UnsupportedOperationException("Method is not implemented!");
-    }
-
-    @Override
     public byte[] midkey() throws IOException {
         // Returns null to indicate file is not splitable.
         return null;
