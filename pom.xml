@@ -106,7 +106,7 @@
     <netty.version>3.6.6.Final</netty.version>
     <commons-codec.version>1.7</commons-codec.version>
     <htrace.version>2.04</htrace.version>
-    <collections.version>3.2.1</collections.version>
+    <collections.version>3.2.2</collections.version>
     <!-- Do not change jodatime.version until HBASE-15199 is fixed -->
     <jodatime.version>1.6</jodatime.version>
     <joni.version>2.1.2</joni.version>
