@@ -74,9 +74,10 @@ public class UnionCompiler {
             ColumnProjector colProj = plan.getProjector().getColumnProjector(i);
             Expression sourceExpression = colProj.getExpression();
             String name = selectNodes == null ? colProj.getName() : selectNodes.get(i).getAlias();
+            //TODO: samarth confirm this is the right change
             PColumnImpl projectedColumn = new PColumnImpl(PNameFactory.newName(name), UNION_FAMILY_NAME,
                     sourceExpression.getDataType(), sourceExpression.getMaxLength(), sourceExpression.getScale(), sourceExpression.isNullable(),
-                    i, sourceExpression.getSortOrder(), 500, null, false, sourceExpression.toString(), false, false);
+                    i, sourceExpression.getSortOrder(), 500, null, false, sourceExpression.toString(), false, false, null);
             projectedColumns.add(projectedColumn);
         }
         Long scn = statement.getConnection().getSCN();

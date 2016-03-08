@@ -137,6 +137,10 @@ public class AggregateResultScannerTest extends BaseConnectionlessQueryTest {
 			public boolean isDynamic() {
 				return false;
 			}
+            @Override
+            public Integer getColumnQualifier() {
+                return null;
+            }
         })), null);
         aggregationManager.setAggregators(new ClientAggregators(Collections.<SingleAggregateFunction>singletonList(func), 1));
         ResultIterators iterators = new ResultIterators() {
