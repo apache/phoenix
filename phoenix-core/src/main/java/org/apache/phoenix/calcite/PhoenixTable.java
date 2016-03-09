@@ -94,15 +94,13 @@ public class PhoenixTable extends AbstractTable implements TranslatableTable {
       }
       this.pkBitSet = ImmutableBitSet.of(pkPositions);
       this.collation = RelCollationTraitDef.INSTANCE.canonize(RelCollations.of(fieldCollations));
-      long rowCount = 0;
-      long byteCount = 0;
       try {
           PhoenixStatement stmt = new PhoenixStatement(pc);
           TableRef tableRef = new TableRef(CalciteUtils.createTempAlias(), pTable, HConstants.LATEST_TIMESTAMP, false);
           ColumnResolver resolver = FromCompiler.getResolver(tableRef);
           StatementContext context = new StatementContext(stmt, resolver, new Scan(), new SequenceManager(stmt));
           Pair<Long, Long> estimatedCount = BaseResultIterators.getEstimatedCount(context, pTable);
-          if (estimatedCount != null) {
+          if (estimatedCount.getFirst() != null) {
               rowCount = estimatedCount.getFirst();
               byteCount = estimatedCount.getSecond();
           } else {
@@ -126,8 +124,6 @@ public class PhoenixTable extends AbstractTable implements TranslatableTable {
       } catch (SQLException | IOException e) {
           throw new RuntimeException(e);
       }
-      this.byteCount = byteCount;
-      this.rowCount = rowCount;
     }
     
     public PTable getTable() {
