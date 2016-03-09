@@ -263,7 +263,7 @@ public class WriteWorkload implements Workload {
                             < maxDuration); i--) {
                         
                     	stmt = buildStatement(scenario, columns, stmt, simpleDateFormat);
-                    	//System.out.print(specificSql);
+                    	System.out.print(stmt);
                     	stmt.addBatch();
                         //rowsCreated += stmt.executeUpdate();
                         if ((i % getBatchSize()) == 0) {
@@ -320,7 +320,7 @@ public class WriteWorkload implements Workload {
             PreparedStatement statement, SimpleDateFormat simpleDateFormat) throws Exception {
         int count = 1;
         for (Column column : columns) {
-        	//System.out.print("Column is " + column.getName());
+        	System.out.print("Column is " + column.getName());
             DataValue dataValue = getRulesApplier().getDataForRule(scenario, column);
             switch (column.getType()) {
             case VARCHAR:
@@ -331,6 +331,7 @@ public class WriteWorkload implements Workload {
                 }
                 break;
             case CHAR:
+            	System.out.print("Data value "+ dataValue.getValue());
                 if (dataValue.getValue().equals("")) {
                     statement.setNull(count, Types.CHAR);
                 } else {
