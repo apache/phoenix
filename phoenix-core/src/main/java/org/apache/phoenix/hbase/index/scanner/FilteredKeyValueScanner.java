@@ -19,11 +19,10 @@
 package org.apache.phoenix.hbase.index.scanner;
 
 import java.io.IOException;
-import java.util.SortedSet;
 
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValueUtil;
-import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.Filter.ReturnCode;
 import org.apache.hadoop.hbase.regionserver.KeyValueScanner;
@@ -34,7 +33,7 @@ import org.apache.phoenix.hbase.index.covered.KeyValueStore;
  * here because we are only concerned with a single MemStore for the index; we don't need to worry about multiple column
  * families or minimizing seeking through file - we just want to iterate the kvs quickly, in-memory.
  */
-public class FilteredKeyValueScanner implements KeyValueScanner {
+public class FilteredKeyValueScanner implements Scanner {
 
     private KeyValueScanner delegate;
     private Filter filter;
@@ -49,7 +48,7 @@ public class FilteredKeyValueScanner implements KeyValueScanner {
     }
 
     @Override
-    public KeyValue peek() {
+    public Cell peek() {
         return delegate.peek();
     }
 
@@ -61,16 +60,16 @@ public class FilteredKeyValueScanner implements KeyValueScanner {
      *         filters.
      */
     @Override
-    public KeyValue next() throws IOException {
+    public Cell next() throws IOException {
         seekToNextUnfilteredKeyValue();
         return delegate.next();
     }
 
     @Override
-    public boolean seek(KeyValue key) throws IOException {
+    public boolean seek(Cell key) throws IOException {
         if (filter.filterAllRemaining()) { return false; }
         // see if we can seek to the next key
-        if (!delegate.seek(key)) { return false; }
+        if (!delegate.seek(KeyValueUtil.ensureKeyValue(key))) { return false; }
 
         return seekToNextUnfilteredKeyValue();
     }
@@ -102,41 +101,9 @@ public class FilteredKeyValueScanner implements KeyValueScanner {
         }
     }
 
-    @Override
-    public boolean reseek(KeyValue key) throws IOException {
-        this.delegate.reseek(key);
+    public boolean reseek(Cell key) throws IOException {
+        this.delegate.reseek(KeyValueUtil.ensureKeyValue(key));
         return this.seekToNextUnfilteredKeyValue();
-    }
-
-    @Override
-    public boolean requestSeek(KeyValue kv, boolean forward, boolean useBloom) throws IOException {
-        return this.reseek(kv);
-    }
-
-    @Override
-    public boolean isFileScanner() {
-        return false;
-    }
-
-    @Override
-    public long getSequenceID() {
-        return this.delegate.getSequenceID();
-    }
-
-    @Override
-    public boolean shouldUseScanner(Scan scan, SortedSet<byte[]> columns, long oldestUnexpiredTS) {
-        throw new UnsupportedOperationException(this.getClass().getName()
-                + " doesn't support checking to see if it should use a scanner!");
-    }
-
-    @Override
-    public boolean realSeekDone() {
-        return this.delegate.realSeekDone();
-    }
-
-    @Override
-    public void enforceSeek() throws IOException {
-        this.delegate.enforceSeek();
     }
 
     @Override
@@ -144,25 +111,4 @@ public class FilteredKeyValueScanner implements KeyValueScanner {
         this.delegate.close();
     }
 
-    @Override
-    public boolean backwardSeek(KeyValue arg0) throws IOException {
-        return this.delegate.backwardSeek(arg0);
-    }
-
-    @Override
-    public boolean seekToLastRow() throws IOException {
-        return this.delegate.seekToLastRow();
-    }
-
-    @Override
-    public boolean seekToPreviousRow(KeyValue arg0) throws IOException {
-        return this.delegate.seekToPreviousRow(arg0);
-    }
-
-    // Added for compatibility with HBASE-13109
-    // Once we drop support for older versions, add an @override annotation here
-    // and figure out how to get the next indexed key
-    public byte[] getNextIndexedKey() {
-        return null; // indicate that we cannot use the optimization
-    }
 }

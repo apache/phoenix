@@ -127,7 +127,7 @@ public class ScannerBuilder {
     return new Scanner() {
 
       @Override
-      public KeyValue next() {
+      public Cell next() {
         try {
           return kvScanner.next();
         } catch (IOException e) {
@@ -139,7 +139,7 @@ public class ScannerBuilder {
       public boolean seek(Cell next) throws IOException {
         // check to see if the next kv is after the current key, in which case we can use reseek,
         // which will be more efficient
-        KeyValue peek = kvScanner.peek();
+        Cell peek = kvScanner.peek();
         // there is another value and its before the requested one - we can do a reseek!
         if (peek != null) {
           int compare = KeyValue.COMPARATOR.compare(peek, next);
@@ -154,7 +154,7 @@ public class ScannerBuilder {
       }
 
       @Override
-      public KeyValue peek() throws IOException {
+      public Cell peek() throws IOException {
         return kvScanner.peek();
       }
 
