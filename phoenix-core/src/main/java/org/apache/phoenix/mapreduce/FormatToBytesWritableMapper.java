@@ -126,6 +126,9 @@ public abstract class FormatToBytesWritableMapper<RECORD> extends Mapper<LongWri
 
         try {
             conn = (PhoenixConnection) QueryUtil.getConnection(clientInfos, conf);
+            // We are dependent on rolling back before performing commits, so we need to be sure
+            // that auto-commit is not turned on
+            conn.setAutoCommit(false);
 
             final String tableNamesConf = conf.get(TABLE_NAMES_CONFKEY);
             final String logicalNamesConf = conf.get(LOGICAL_NAMES_CONFKEY);
