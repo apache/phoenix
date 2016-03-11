@@ -56,6 +56,7 @@ import org.apache.phoenix.schema.ExecuteQueryNotApplicableException;
 import org.apache.phoenix.schema.ExecuteUpdateNotApplicableException;
 import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.SQLCloseable;
 
 /**
@@ -439,7 +440,11 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
     public void setObject(int parameterIndex, Object o, int targetSqlType) throws SQLException {
         PDataType targetType = PDataType.fromTypeId(targetSqlType);
         PDataType sourceType = PDataType.fromLiteral(o);
-        o = targetType.toObject(o, sourceType);
+        if (sourceType == PVarchar.INSTANCE) {
+            o = targetType.toObject((String) o);
+        } else {
+            o = targetType.toObject(o, sourceType);
+        }
         setParameter(parameterIndex, o);
     }
 
