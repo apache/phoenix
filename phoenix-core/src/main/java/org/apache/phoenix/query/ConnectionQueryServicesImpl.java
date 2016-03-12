@@ -575,7 +575,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
     }
     
-    @Override
     public PMetaData updateResolvedTimestamp(PTable table, long resolvedTime) throws SQLException {
     	synchronized (latestMetaDataLock) {
             throwConnectionClosedIfNullMetaData();

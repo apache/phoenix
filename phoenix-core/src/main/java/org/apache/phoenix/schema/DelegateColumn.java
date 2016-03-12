@@ -90,9 +90,4 @@ public class DelegateColumn extends DelegateDatum implements PColumn {
 	public boolean isDynamic() {
 		return getDelegate().isDynamic();
 	}
-
-    @Override
-    public Integer getColumnQualifier() {
-        return getDelegate().getColumnQualifier();
-    }
 }

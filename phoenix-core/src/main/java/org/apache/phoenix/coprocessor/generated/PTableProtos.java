@@ -269,16 +269,6 @@ public final class PTableProtos {
      * <code>optional bool isDynamic = 14;</code>
      */
     boolean getIsDynamic();
-
-    // optional int32 columnQualifier = 15;
-    /**
-     * <code>optional int32 columnQualifier = 15;</code>
-     */
-    boolean hasColumnQualifier();
-    /**
-     * <code>optional int32 columnQualifier = 15;</code>
-     */
-    int getColumnQualifier();
   }
   /**
    * Protobuf type {@code PColumn}
@@ -399,11 +389,6 @@ public final class PTableProtos {
             case 112: {
               bitField0_ |= 0x00002000;
               isDynamic_ = input.readBool();
-              break;
-            }
-            case 120: {
-              bitField0_ |= 0x00004000;
-              columnQualifier_ = input.readInt32();
               break;
             }
           }
@@ -724,22 +709,6 @@ public final class PTableProtos {
       return isDynamic_;
     }
 
-    // optional int32 columnQualifier = 15;
-    public static final int COLUMNQUALIFIER_FIELD_NUMBER = 15;
-    private int columnQualifier_;
-    /**
-     * <code>optional int32 columnQualifier = 15;</code>
-     */
-    public boolean hasColumnQualifier() {
-      return ((bitField0_ & 0x00004000) == 0x00004000);
-    }
-    /**
-     * <code>optional int32 columnQualifier = 15;</code>
-     */
-    public int getColumnQualifier() {
-      return columnQualifier_;
-    }
-
     private void initFields() {
       columnNameBytes_ = com.google.protobuf.ByteString.EMPTY;
       familyNameBytes_ = com.google.protobuf.ByteString.EMPTY;
@@ -755,7 +724,6 @@ public final class PTableProtos {
       expression_ = "";
       isRowTimestamp_ = false;
       isDynamic_ = false;
-      columnQualifier_ = 0;
     }
     private byte memoizedIsInitialized = -1;
     public final boolean isInitialized() {
@@ -831,9 +799,6 @@ public final class PTableProtos {
       if (((bitField0_ & 0x00002000) == 0x00002000)) {
         output.writeBool(14, isDynamic_);
       }
-      if (((bitField0_ & 0x00004000) == 0x00004000)) {
-        output.writeInt32(15, columnQualifier_);
-      }
       getUnknownFields().writeTo(output);
     }
 
@@ -898,10 +863,6 @@ public final class PTableProtos {
       if (((bitField0_ & 0x00002000) == 0x00002000)) {
         size += com.google.protobuf.CodedOutputStream
           .computeBoolSize(14, isDynamic_);
-      }
-      if (((bitField0_ & 0x00004000) == 0x00004000)) {
-        size += com.google.protobuf.CodedOutputStream
-          .computeInt32Size(15, columnQualifier_);
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSerializedSize = size;
@@ -996,11 +957,6 @@ public final class PTableProtos {
         result = result && (getIsDynamic()
             == other.getIsDynamic());
       }
-      result = result && (hasColumnQualifier() == other.hasColumnQualifier());
-      if (hasColumnQualifier()) {
-        result = result && (getColumnQualifier()
-            == other.getColumnQualifier());
-      }
       result = result &&
           getUnknownFields().equals(other.getUnknownFields());
       return result;
@@ -1069,10 +1025,6 @@ public final class PTableProtos {
       if (hasIsDynamic()) {
         hash = (37 * hash) + ISDYNAMIC_FIELD_NUMBER;
         hash = (53 * hash) + hashBoolean(getIsDynamic());
-      }
-      if (hasColumnQualifier()) {
-        hash = (37 * hash) + COLUMNQUALIFIER_FIELD_NUMBER;
-        hash = (53 * hash) + getColumnQualifier();
       }
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
@@ -1211,8 +1163,6 @@ public final class PTableProtos {
         bitField0_ = (bitField0_ & ~0x00001000);
         isDynamic_ = false;
         bitField0_ = (bitField0_ & ~0x00002000);
-        columnQualifier_ = 0;
-        bitField0_ = (bitField0_ & ~0x00004000);
         return this;
       }
 
@@ -1297,10 +1247,6 @@ public final class PTableProtos {
           to_bitField0_ |= 0x00002000;
         }
         result.isDynamic_ = isDynamic_;
-        if (((from_bitField0_ & 0x00004000) == 0x00004000)) {
-          to_bitField0_ |= 0x00004000;
-        }
-        result.columnQualifier_ = columnQualifier_;
         result.bitField0_ = to_bitField0_;
         onBuilt();
         return result;
@@ -1362,9 +1308,6 @@ public final class PTableProtos {
         }
         if (other.hasIsDynamic()) {
           setIsDynamic(other.getIsDynamic());
-        }
-        if (other.hasColumnQualifier()) {
-          setColumnQualifier(other.getColumnQualifier());
         }
         this.mergeUnknownFields(other.getUnknownFields());
         return this;
@@ -1962,39 +1905,6 @@ public final class PTableProtos {
       public Builder clearIsDynamic() {
         bitField0_ = (bitField0_ & ~0x00002000);
         isDynamic_ = false;
-        onChanged();
-        return this;
-      }
-
-      // optional int32 columnQualifier = 15;
-      private int columnQualifier_ ;
-      /**
-       * <code>optional int32 columnQualifier = 15;</code>
-       */
-      public boolean hasColumnQualifier() {
-        return ((bitField0_ & 0x00004000) == 0x00004000);
-      }
-      /**
-       * <code>optional int32 columnQualifier = 15;</code>
-       */
-      public int getColumnQualifier() {
-        return columnQualifier_;
-      }
-      /**
-       * <code>optional int32 columnQualifier = 15;</code>
-       */
-      public Builder setColumnQualifier(int value) {
-        bitField0_ |= 0x00004000;
-        columnQualifier_ = value;
-        onChanged();
-        return this;
-      }
-      /**
-       * <code>optional int32 columnQualifier = 15;</code>
-       */
-      public Builder clearColumnQualifier() {
-        bitField0_ = (bitField0_ & ~0x00004000);
-        columnQualifier_ = 0;
         onChanged();
         return this;
       }
@@ -7269,7 +7179,7 @@ public final class PTableProtos {
       descriptor;
   static {
     java.lang.String[] descriptorData = {
-      "\n\014PTable.proto\032\021PGuidePosts.proto\"\277\002\n\007PC" +
+      "\n\014PTable.proto\032\021PGuidePosts.proto\"\246\002\n\007PC" +
       "olumn\022\027\n\017columnNameBytes\030\001 \002(\014\022\027\n\017family" +
       "NameBytes\030\002 \001(\014\022\020\n\010dataType\030\003 \002(\t\022\021\n\tmax" +
       "Length\030\004 \001(\005\022\r\n\005scale\030\005 \001(\005\022\020\n\010nullable\030" +
@@ -7277,33 +7187,32 @@ public final class PTableProtos {
       "(\005\022\021\n\tarraySize\030\t \001(\005\022\024\n\014viewConstant\030\n " +
       "\001(\014\022\026\n\016viewReferenced\030\013 \001(\010\022\022\n\nexpressio" +
       "n\030\014 \001(\t\022\026\n\016isRowTimestamp\030\r \001(\010\022\021\n\tisDyn" +
-      "amic\030\016 \001(\010\022\027\n\017columnQualifier\030\017 \001(\005\"\232\001\n\013" +
-      "PTableStats\022\013\n\003key\030\001 \002(\014\022\016\n\006values\030\002 \003(\014",
-      "\022\033\n\023guidePostsByteCount\030\003 \001(\003\022\025\n\rkeyByte" +
-      "sCount\030\004 \001(\003\022\027\n\017guidePostsCount\030\005 \001(\005\022!\n" +
-      "\013pGuidePosts\030\006 \001(\0132\014.PGuidePosts\"\336\005\n\006PTa" +
-      "ble\022\027\n\017schemaNameBytes\030\001 \002(\014\022\026\n\016tableNam" +
-      "eBytes\030\002 \002(\014\022\036\n\ttableType\030\003 \002(\0162\013.PTable" +
-      "Type\022\022\n\nindexState\030\004 \001(\t\022\026\n\016sequenceNumb" +
-      "er\030\005 \002(\003\022\021\n\ttimeStamp\030\006 \002(\003\022\023\n\013pkNameByt" +
-      "es\030\007 \001(\014\022\021\n\tbucketNum\030\010 \002(\005\022\031\n\007columns\030\t" +
-      " \003(\0132\010.PColumn\022\030\n\007indexes\030\n \003(\0132\007.PTable" +
-      "\022\027\n\017isImmutableRows\030\013 \002(\010\022 \n\nguidePosts\030",
-      "\014 \003(\0132\014.PTableStats\022\032\n\022dataTableNameByte" +
-      "s\030\r \001(\014\022\031\n\021defaultFamilyName\030\016 \001(\014\022\022\n\ndi" +
-      "sableWAL\030\017 \002(\010\022\023\n\013multiTenant\030\020 \002(\010\022\020\n\010v" +
-      "iewType\030\021 \001(\014\022\025\n\rviewStatement\030\022 \001(\014\022\025\n\r" +
-      "physicalNames\030\023 \003(\014\022\020\n\010tenantId\030\024 \001(\014\022\023\n" +
-      "\013viewIndexId\030\025 \001(\005\022\021\n\tindexType\030\026 \001(\014\022\026\n" +
-      "\016statsTimeStamp\030\027 \001(\003\022\022\n\nstoreNulls\030\030 \001(" +
-      "\010\022\027\n\017baseColumnCount\030\031 \001(\005\022\036\n\026rowKeyOrde" +
-      "rOptimizable\030\032 \001(\010\022\025\n\rtransactional\030\033 \001(" +
-      "\010\022\034\n\024updateCacheFrequency\030\034 \001(\003\022\035\n\025index",
-      "DisableTimestamp\030\035 \001(\003\022\031\n\021isNamespaceMap" +
-      "ped\030\036 \001(\010*A\n\nPTableType\022\n\n\006SYSTEM\020\000\022\010\n\004U" +
-      "SER\020\001\022\010\n\004VIEW\020\002\022\t\n\005INDEX\020\003\022\010\n\004JOIN\020\004B@\n(" +
-      "org.apache.phoenix.coprocessor.generated" +
-      "B\014PTableProtosH\001\210\001\001\240\001\001"
+      "amic\030\016 \001(\010\"\232\001\n\013PTableStats\022\013\n\003key\030\001 \002(\014\022" +
+      "\016\n\006values\030\002 \003(\014\022\033\n\023guidePostsByteCount\030\003",
+      " \001(\003\022\025\n\rkeyBytesCount\030\004 \001(\003\022\027\n\017guidePost" +
+      "sCount\030\005 \001(\005\022!\n\013pGuidePosts\030\006 \001(\0132\014.PGui" +
+      "dePosts\"\336\005\n\006PTable\022\027\n\017schemaNameBytes\030\001 " +
+      "\002(\014\022\026\n\016tableNameBytes\030\002 \002(\014\022\036\n\ttableType" +
+      "\030\003 \002(\0162\013.PTableType\022\022\n\nindexState\030\004 \001(\t\022" +
+      "\026\n\016sequenceNumber\030\005 \002(\003\022\021\n\ttimeStamp\030\006 \002" +
+      "(\003\022\023\n\013pkNameBytes\030\007 \001(\014\022\021\n\tbucketNum\030\010 \002" +
+      "(\005\022\031\n\007columns\030\t \003(\0132\010.PColumn\022\030\n\007indexes" +
+      "\030\n \003(\0132\007.PTable\022\027\n\017isImmutableRows\030\013 \002(\010" +
+      "\022 \n\nguidePosts\030\014 \003(\0132\014.PTableStats\022\032\n\022da",
+      "taTableNameBytes\030\r \001(\014\022\031\n\021defaultFamilyN" +
+      "ame\030\016 \001(\014\022\022\n\ndisableWAL\030\017 \002(\010\022\023\n\013multiTe" +
+      "nant\030\020 \002(\010\022\020\n\010viewType\030\021 \001(\014\022\025\n\rviewStat" +
+      "ement\030\022 \001(\014\022\025\n\rphysicalNames\030\023 \003(\014\022\020\n\010te" +
+      "nantId\030\024 \001(\014\022\023\n\013viewIndexId\030\025 \001(\005\022\021\n\tind" +
+      "exType\030\026 \001(\014\022\026\n\016statsTimeStamp\030\027 \001(\003\022\022\n\n" +
+      "storeNulls\030\030 \001(\010\022\027\n\017baseColumnCount\030\031 \001(" +
+      "\005\022\036\n\026rowKeyOrderOptimizable\030\032 \001(\010\022\025\n\rtra" +
+      "nsactional\030\033 \001(\010\022\034\n\024updateCacheFrequency" +
+      "\030\034 \001(\003\022\035\n\025indexDisableTimestamp\030\035 \001(\003\022\031\n",
+      "\021isNamespaceMapped\030\036 \001(\010*A\n\nPTableType\022\n" +
+      "\n\006SYSTEM\020\000\022\010\n\004USER\020\001\022\010\n\004VIEW\020\002\022\t\n\005INDEX\020" +
+      "\003\022\010\n\004JOIN\020\004B@\n(org.apache.phoenix.coproc" +
+      "essor.generatedB\014PTableProtosH\001\210\001\001\240\001\001"
     };
     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
       new com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner() {
@@ -7315,7 +7224,7 @@ public final class PTableProtos {
           internal_static_PColumn_fieldAccessorTable = new
             com.google.protobuf.GeneratedMessage.FieldAccessorTable(
               internal_static_PColumn_descriptor,
-              new java.lang.String[] { "ColumnNameBytes", "FamilyNameBytes", "DataType", "MaxLength", "Scale", "Nullable", "Position", "SortOrder", "ArraySize", "ViewConstant", "ViewReferenced", "Expression", "IsRowTimestamp", "IsDynamic", "ColumnQualifier", });
+              new java.lang.String[] { "ColumnNameBytes", "FamilyNameBytes", "DataType", "MaxLength", "Scale", "Nullable", "Position", "SortOrder", "ArraySize", "ViewConstant", "ViewReferenced", "Expression", "IsRowTimestamp", "IsDynamic", });
           internal_static_PTableStats_descriptor =
             getDescriptor().getMessageTypes().get(1);
           internal_static_PTableStats_fieldAccessorTable = new

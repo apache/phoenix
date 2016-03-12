@@ -1017,17 +1017,4 @@ public class SchemaUtil {
                 : physicalTableName;
     }
     
-    
-    /**
-     * Return a map of column family -> next column qualifier number to use.
-     */
-    public static Map<String, Integer> getNextColumnQualifiers(PTable table) {
-        Map<String, Integer> map = Maps.newHashMapWithExpectedSize(table.getColumns().size());
-        for (PColumnFamily f : table.getColumnFamilies()) {
-            final int size = f.getColumns().size();
-            int nextColumnQualifier = size == 0 ? 0 : size;
-            map.put(f.getName().getString(), nextColumnQualifier);
-        }
-        return map;
-    }
 }
