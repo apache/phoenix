@@ -144,13 +144,13 @@ public class ScannerBuilder {
         if (peek != null) {
           int compare = KeyValue.COMPARATOR.compare(peek, next);
           if (compare < 0) {
-            return kvScanner.reseek(KeyValueUtil.ensureKeyValue(next));
+            return kvScanner.reseek(next);
           } else if (compare == 0) {
             // we are already at the given key!
             return true;
           }
         }
-        return kvScanner.seek(KeyValueUtil.ensureKeyValue(next));
+        return kvScanner.seek(next);
       }
 
       @Override
