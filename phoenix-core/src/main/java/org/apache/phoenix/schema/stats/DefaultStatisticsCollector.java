@@ -166,6 +166,7 @@ class DefaultStatisticsCollector implements StatisticsCollector {
     @Override
     public void collectStatistics(final List<Cell> results) {
         Map<ImmutableBytesPtr, Boolean> famMap = Maps.newHashMap();
+        boolean incrementRow = true;
         for (Cell cell : results) {
             KeyValue kv = KeyValueUtil.ensureKeyValue(cell);
             maxTimeStamp = Math.max(maxTimeStamp, kv.getTimestamp());
@@ -185,7 +186,10 @@ class DefaultStatisticsCollector implements StatisticsCollector {
                 }
             } else {
                 gps = cachedGps;
-                cachedGps.getSecond().incrementRowCount();
+                if (incrementRow) {
+                    cachedGps.getSecond().incrementRowCount();
+                    incrementRow = false;
+                }
             }
             int kvLength = kv.getLength();
             long byteCount = gps.getFirst() + kvLength;
