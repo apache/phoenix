@@ -22,6 +22,7 @@ import java.sql.ParameterMetaData;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -233,18 +234,18 @@ public class DeleteCompiler {
         
     }
     
-    private Set<PTable> getNonDisabledImmutableIndexes(TableRef tableRef) {
+    private Map<PTableKey, PTable> getNonDisabledImmutableIndexes(TableRef tableRef) {
         PTable table = tableRef.getTable();
         if (table.isImmutableRows() && !table.getIndexes().isEmpty()) {
-            Set<PTable> nonDisabledIndexes = Sets.newHashSetWithExpectedSize(table.getIndexes().size());
+            Map<PTableKey, PTable> nonDisabledIndexes = new HashMap<PTableKey, PTable>(table.getIndexes().size());
             for (PTable index : table.getIndexes()) {
                 if (index.getIndexState() != PIndexState.DISABLE) {
-                    nonDisabledIndexes.add(index);
+                    nonDisabledIndexes.put(index.getKey(), index);
                 }
             }
             return nonDisabledIndexes;
         }
-        return Collections.emptySet();
+        return Collections.emptyMap();
     }
     
     private class MultiDeleteMutationPlan implements MutationPlan {
@@ -312,8 +313,8 @@ public class DeleteCompiler {
         boolean runOnServer = false;
         SelectStatement select = null;
         ColumnResolver resolverToBe = null;
-        Set<PTable> immutableIndex = Collections.emptySet();
-        DeletingParallelIteratorFactory parallelIteratorFactory = null;
+        Map<PTableKey, PTable> immutableIndex = Collections.emptyMap();
+        DeletingParallelIteratorFactory parallelIteratorFactory;
         QueryPlan dataPlanToBe = null;
         while (true) {
             try {
@@ -406,7 +407,7 @@ public class DeleteCompiler {
                 PTable table = plan.getTableRef().getTable();
                 if (table.getType() == PTableType.INDEX) { // index plans
                     tableRefs[i++] = plan.getTableRef();
-                    immutableIndex.remove(table);
+                    immutableIndex.remove(table.getKey());
                 } else { // data plan
                     /*
                      * If we have immutable indexes that we need to maintain, don't execute the data plan
@@ -586,12 +587,7 @@ public class DeleteCompiler {
                 });
             } else {
                 final boolean deleteFromImmutableIndexToo = hasImmutableIndexes && !plan.getTableRef().equals(tableRef);
-                if (parallelIteratorFactory != null) {
-                    parallelIteratorFactory.setRowProjector(plan.getProjector());
-                    parallelIteratorFactory.setTargetTableRef(tableRef);
-                    parallelIteratorFactory.setSourceTableRef(plan.getTableRef());
-                    parallelIteratorFactory.setIndexTargetTableRef(deleteFromImmutableIndexToo ? plan.getTableRef() : null);
-                }
+                final DeletingParallelIteratorFactory parallelIteratorFactory2 = parallelIteratorFactory;
                 mutationPlans.add( new MutationPlan() {
                     @Override
                     public ParameterMetaData getParameterMetaData() {
@@ -625,6 +621,12 @@ public class DeleteCompiler {
                             if (!hasLimit) {
                                 Tuple tuple;
                                 long totalRowCount = 0;
+                                if (parallelIteratorFactory2 != null) {
+                                    parallelIteratorFactory2.setRowProjector(plan.getProjector());
+                                    parallelIteratorFactory2.setTargetTableRef(tableRef);
+                                    parallelIteratorFactory2.setSourceTableRef(plan.getTableRef());
+                                    parallelIteratorFactory2.setIndexTargetTableRef(deleteFromImmutableIndexToo ? plan.getTableRef() : null);
+                                }
                                 while ((tuple=iterator.next()) != null) {// Runs query
                                     Cell kv = tuple.getValue(0);
                                     totalRowCount += PLong.INSTANCE.getCodec().decodeLong(kv.getValueArray(), kv.getValueOffset(), SortOrder.getDefault());

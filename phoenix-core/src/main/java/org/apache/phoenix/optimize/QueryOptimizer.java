@@ -153,7 +153,7 @@ public class QueryOptimizer {
             }
         }
         
-        return hintedPlan == null ? orderPlansBestToWorst(select, plans) : plans;
+        return hintedPlan == null ? orderPlansBestToWorst(select, plans, stopAtBestPlan) : plans;
     }
     
     private static QueryPlan getHintedQueryPlan(PhoenixStatement statement, SelectStatement select, List<PTable> indexes, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory, List<QueryPlan> plans) throws SQLException {
@@ -319,7 +319,7 @@ public class QueryOptimizer {
      * @param plans the list of candidate plans
      * @return list of plans ordered from best to worst.
      */
-    private List<QueryPlan> orderPlansBestToWorst(SelectStatement select, List<QueryPlan> plans) {
+    private List<QueryPlan> orderPlansBestToWorst(SelectStatement select, List<QueryPlan> plans, boolean stopAtBestPlan) {
         final QueryPlan dataPlan = plans.get(0);
         if (plans.size() == 1) {
             return plans;
@@ -330,10 +330,14 @@ public class QueryOptimizer {
          * keys), then favor those first.
          */
         List<QueryPlan> candidates = Lists.newArrayListWithExpectedSize(plans.size());
-        for (QueryPlan plan : plans) {
-            if (plan.getContext().getScanRanges().isPointLookup()) {
-                candidates.add(plan);
+        if (stopAtBestPlan) { // If we're stopping at the best plan, only consider point lookups if there are any
+            for (QueryPlan plan : plans) {
+                if (plan.getContext().getScanRanges().isPointLookup()) {
+                    candidates.add(plan);
+                }
             }
+        } else {
+            candidates.addAll(plans);
         }
         /**
          * If we have a plan(s) that removes the order by, choose from among these,
