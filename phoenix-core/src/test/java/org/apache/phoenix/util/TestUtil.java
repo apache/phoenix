@@ -257,11 +257,11 @@ public class TestUtil {
     }
 
     public static Expression constantComparison(CompareOp op, PColumn c, Object o) {
-        return  new ComparisonExpression(Arrays.<Expression>asList(new KeyValueColumnExpression(c), LiteralExpression.newConstant(o)), op);
+        return  new ComparisonExpression(Arrays.<Expression>asList(new KeyValueColumnExpression(c, true), LiteralExpression.newConstant(o)), op);
     }
 
     public static Expression kvColumn(PColumn c) {
-        return new KeyValueColumnExpression(c);
+        return new KeyValueColumnExpression(c, true);
     }
 
     public static Expression pkColumn(PColumn c, List<PColumn> columns) {

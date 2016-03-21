@@ -231,6 +231,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         byte[] deleteCQ = null;
         byte[] deleteCF = null;
         byte[] emptyCF = null;
+        byte[] emptyKVQualifier = null;
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         if (upsertSelectTable != null) {
             isUpsert = true;
@@ -245,6 +246,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                 deleteCQ = scan.getAttribute(BaseScannerRegionObserver.DELETE_CQ);
             }
             emptyCF = scan.getAttribute(BaseScannerRegionObserver.EMPTY_CF);
+            emptyKVQualifier = scan.getAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER);
         }
         TupleProjector tupleProjector = null;
         HRegion dataRegion = null;
@@ -495,8 +497,10 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                     if (!timeStamps.contains(kvts)) {
                                         Put put = new Put(kv.getRowArray(), kv.getRowOffset(),
                                             kv.getRowLength());
-                                        put.add(emptyCF, QueryConstants.EMPTY_COLUMN_BYTES, kvts,
-                                            ByteUtil.EMPTY_BYTE_ARRAY);
+                                        // FIXME: Use the right byte array value. Transactional tables can't
+                                        // have empty byte arrays since Tephra seems them as delete markers.
+                                        put.add(emptyCF, emptyKVQualifier != null ? emptyKVQualifier
+                                                : QueryConstants.EMPTY_COLUMN_BYTES, kvts, ByteUtil.EMPTY_BYTE_ARRAY);
                                         mutations.add(put);
                                     }
                                 }

@@ -281,7 +281,7 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
         final String tableNamesAsJson = TargetTableRefFunctions.NAMES_TO_JSON.apply(tablesToBeLoaded);
         final String logicalNamesAsJson = TargetTableRefFunctions.LOGICAL_NAMES_TO_JSON.apply(tablesToBeLoaded);
 
-        job.getConfiguration().set(FormatToBytesWritableMapper.TABLE_NAMES_CONFKEY,tableNamesAsJson);
+        job.getConfiguration().set(FormatToBytesWritableMapper.PHYSICAL_TABLE_NAMES_CONFKEY,tableNamesAsJson);
         job.getConfiguration().set(FormatToBytesWritableMapper.LOGICAL_NAMES_CONFKEY,logicalNamesAsJson);
 
         // give subclasses their hook

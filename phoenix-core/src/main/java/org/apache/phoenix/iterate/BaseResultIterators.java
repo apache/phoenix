@@ -205,7 +205,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                             // Project empty key value unless the column family containing it has
                             // been projected in its entirety.
                             if (!familyMap.containsKey(ecf) || familyMap.get(ecf) != null) {
-                                scan.addColumn(ecf, QueryConstants.EMPTY_COLUMN_BYTES);
+                                scan.addColumn(ecf, SchemaUtil.getEmptyKeyValueInfo(table).getFirst());
                             }
                         }
                     }
@@ -302,6 +302,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                         if (whereCol.getSecond() == null) {
                             scan.addFamily(family);                            
                         } else {
+                            //TODO: samarth confirm this
                             scan.addColumn(family, whereCol.getSecond());
                         }
                     }
@@ -326,7 +327,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             // the ExplicitColumnTracker not to be used, though.
             if (!statement.isAggregate() && filteredColumnNotInProjection) {
                 ScanUtil.andFilterAtEnd(scan, new ColumnProjectionFilter(SchemaUtil.getEmptyColumnFamily(table),
-                        columnsTracker, conditionOnlyCfs));
+                        columnsTracker, conditionOnlyCfs, SchemaUtil.usesEncodedColumnNames(table)));
             }
         }
     }

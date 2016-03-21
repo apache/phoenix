@@ -80,6 +80,7 @@ public class SequenceRegionObserver extends BaseRegionObserver {
     public static final String NUM_TO_ALLOCATE = "NUM_TO_ALLOCATE";
     private static final byte[] SUCCESS_VALUE = PInteger.INSTANCE.toBytes(Integer.valueOf(Sequence.SUCCESS));
     
+    //TODO: samarth verify that it is ok to send non-encoded empty column here. Probably is.
     private static Result getErrorResult(byte[] row, long timestamp, int errorCode) {
         byte[] errorCodeBuf = new byte[PInteger.INSTANCE.getByteSize()];
         PInteger.INSTANCE.getCodec().encodeInt(errorCode, errorCodeBuf, 0);

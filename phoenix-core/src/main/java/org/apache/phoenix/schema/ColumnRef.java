@@ -45,7 +45,7 @@ public class ColumnRef {
     }
 
     public ColumnRef(TableRef tableRef, String familyName, String columnName) throws MetaDataEntityNotFoundException {
-        this(tableRef, tableRef.getTable().getColumnFamily(familyName).getColumn(columnName).getPosition());
+        this(tableRef, tableRef.getTable().getColumnFamily(familyName).getPColumnForColumnName(columnName).getPosition());
     }
 
     public ColumnRef(TableRef tableRef, int columnPosition) {
@@ -109,7 +109,7 @@ public class ColumnRef {
         	return new ProjectedColumnExpression(column, table, displayName);
         }
        
-        return new KeyValueColumnExpression(column, displayName);
+        return new KeyValueColumnExpression(column, displayName, SchemaUtil.usesEncodedColumnNames(table));
     }
 
     public ColumnRef cloneAtTimestamp(long timestamp) {

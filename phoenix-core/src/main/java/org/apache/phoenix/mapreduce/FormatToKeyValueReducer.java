@@ -80,7 +80,7 @@ public class FormatToKeyValueReducer
         try {
             PhoenixConnection conn = (PhoenixConnection) QueryUtil.getConnection(clientInfos, conf);
             builder = conn.getKeyValueBuilder();
-            final String tableNamesConf = conf.get(FormatToBytesWritableMapper.TABLE_NAMES_CONFKEY);
+            final String tableNamesConf = conf.get(FormatToBytesWritableMapper.PHYSICAL_TABLE_NAMES_CONFKEY);
             final String logicalNamesConf = conf.get(FormatToBytesWritableMapper.LOGICAL_NAMES_CONFKEY);
             tableNames = TargetTableRefFunctions.NAMES_FROM_JSON.apply(tableNamesConf);
             logicalNames = TargetTableRefFunctions.NAMES_FROM_JSON.apply(logicalNamesConf);
@@ -98,16 +98,16 @@ public class FormatToKeyValueReducer
             PTable table = PhoenixRuntime.getTable(conn, tableName);
             emptyFamilyName.add(SchemaUtil.getEmptyColumnFamilyPtr(table));
             List<PColumn> cls = table.getColumns();
-            List<Pair<byte[], byte[]>> list = new ArrayList(cls.size());
+            List<Pair<byte[], byte[]>> list = new ArrayList<>(cls.size());
             for (int i = 0; i < cls.size(); i++) {
                 PColumn c = cls.get(i);
-                if (c.getFamilyName() == null) {
+                if (SchemaUtil.isPKColumn(c)) {
                     list.add(null); // Skip PK column
                     continue;
                 }
                 byte[] family = c.getFamilyName().getBytes();
-                byte[] name = c.getName().getBytes();
-                list.add(new Pair(family, name));
+                byte[] name = SchemaUtil.getColumnQualifier(c, table);
+                list.add(new Pair<>(family, name));
             }
             columnIndexes.add(list);
         }

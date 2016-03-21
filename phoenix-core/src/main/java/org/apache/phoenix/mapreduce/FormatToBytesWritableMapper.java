@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.TreeMap;
+
 import javax.annotation.Nullable;
 
 import org.apache.hadoop.conf.Configuration;
@@ -44,12 +45,12 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.bulkload.TableRowkeyPair;
 import org.apache.phoenix.mapreduce.bulkload.TargetTableRefFunctions;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
-import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.ColumnInfo;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.UpsertExecutor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -86,7 +87,7 @@ public abstract class FormatToBytesWritableMapper<RECORD> extends Mapper<LongWri
     public static final String IGNORE_INVALID_ROW_CONFKEY = "phoenix.mapreduce.import.ignoreinvalidrow";
 
     /** Configuration key for the table names */
-    public static final String TABLE_NAMES_CONFKEY = "phoenix.mapreduce.import.tablenames";
+    public static final String PHYSICAL_TABLE_NAMES_CONFKEY = "phoenix.mapreduce.import.tablenames";
 
     /** Configuration key for the table logical names */
     public static final String LOGICAL_NAMES_CONFKEY = "phoenix.mapreduce.import.logicalnames";
@@ -101,8 +102,9 @@ public abstract class FormatToBytesWritableMapper<RECORD> extends Mapper<LongWri
     protected PhoenixConnection conn;
     protected UpsertExecutor<RECORD, ?> upsertExecutor;
     protected ImportPreUpsertKeyValueProcessor preUpdateProcessor;
-    protected List<String> tableNames;
-    protected List<String> logicalNames;
+    //TODO: merge physicalTableNames and logicalNames into some associative data structure since they are 1:1.
+    protected List<String> physicalTableNames;
+    protected List<Pair<String, byte[]>> logicalTables; // List of pairs of a table's logical name and the empty key value's qualifier used for it.
     protected MapperUpsertListener<RECORD> upsertListener;
 
     /*
@@ -130,11 +132,14 @@ public abstract class FormatToBytesWritableMapper<RECORD> extends Mapper<LongWri
             // that auto-commit is not turned on
             conn.setAutoCommit(false);
 
-            final String tableNamesConf = conf.get(TABLE_NAMES_CONFKEY);
+            final String tableNamesConf = conf.get(PHYSICAL_TABLE_NAMES_CONFKEY);
             final String logicalNamesConf = conf.get(LOGICAL_NAMES_CONFKEY);
-            tableNames = TargetTableRefFunctions.NAMES_FROM_JSON.apply(tableNamesConf);
-            logicalNames = TargetTableRefFunctions.NAMES_FROM_JSON.apply(logicalNamesConf);
-
+            physicalTableNames = TargetTableRefFunctions.NAMES_FROM_JSON.apply(tableNamesConf);
+            List<String> logicalTableNames = TargetTableRefFunctions.NAMES_FROM_JSON.apply(logicalNamesConf);
+            for (String logicalTableName : logicalTableNames) {
+                PTable table = PhoenixRuntime.getTable(conn, logicalTableName);
+                logicalTables.add(new Pair<>(logicalTableName, SchemaUtil.getEmptyKeyValueInfo(table).getFirst()));
+            }
             columnIndexes = initColumnIndexes();
         } catch (SQLException | ClassNotFoundException e) {
             throw new RuntimeException(e);
@@ -146,7 +151,6 @@ public abstract class FormatToBytesWritableMapper<RECORD> extends Mapper<LongWri
         preUpdateProcessor = PhoenixConfigurationUtil.loadPreUpsertProcessor(conf);
     }
 
-    @SuppressWarnings("deprecation")
     @Override
     protected void map(LongWritable key, Text value, Context context) throws IOException,
             InterruptedException {
@@ -176,8 +180,8 @@ public abstract class FormatToBytesWritableMapper<RECORD> extends Mapper<LongWri
                 keyValueList = preUpdateProcessor.preUpsert(kvPair.getFirst(), keyValueList);
                 byte[] first = kvPair.getFirst();
                 // Create a list of KV for each table
-                for (int i = 0; i < tableNames.size(); i++) {
-                    if (Bytes.compareTo(Bytes.toBytes(tableNames.get(i)), first) == 0) {
+                for (int i = 0; i < physicalTableNames.size(); i++) {
+                    if (Bytes.compareTo(Bytes.toBytes(physicalTableNames.get(i)), first) == 0) {
                         if (!map.containsKey(i)) {
                             map.put(i, new ArrayList<KeyValue>());
                         }
@@ -204,8 +208,8 @@ public abstract class FormatToBytesWritableMapper<RECORD> extends Mapper<LongWri
     private List<Map<byte[], Map<byte[], Integer>>> initColumnIndexes() throws SQLException {
         List<Map<byte[], Map<byte[], Integer>>> tableMap = new ArrayList<>();
         int tableIndex;
-        for (tableIndex = 0; tableIndex < tableNames.size(); tableIndex++) {
-            PTable table = PhoenixRuntime.getTable(conn, logicalNames.get(tableIndex));
+        for (tableIndex = 0; tableIndex < physicalTableNames.size(); tableIndex++) {
+            PTable table = PhoenixRuntime.getTable(conn, logicalTables.get(tableIndex).getFirst());
             Map<byte[], Map<byte[], Integer>> columnMap = new TreeMap<>(Bytes.BYTES_COMPARATOR);
             List<PColumn> cls = table.getColumns();
             for (int i = 0; i < cls.size(); i++) {
@@ -250,7 +254,7 @@ public abstract class FormatToBytesWritableMapper<RECORD> extends Mapper<LongWri
      * Collect all column values for the same rowKey
      *
      * @param context    Current mapper context
-     * @param tableIndex Table index in tableNames list
+     * @param tableIndex Table index in tableNames or logicalTables list
      * @param lkv        List of KV values that will be combined in a single ImmutableBytesWritable
      * @throws IOException
      * @throws InterruptedException
@@ -261,12 +265,14 @@ public abstract class FormatToBytesWritableMapper<RECORD> extends Mapper<LongWri
         ByteArrayOutputStream bos = new ByteArrayOutputStream(1024);
         DataOutputStream outputStream = new DataOutputStream(bos);
         ImmutableBytesWritable outputKey = new ImmutableBytesWritable();
+        String tableName = physicalTableNames.get(tableIndex);
+        Pair<String, byte[]> logicalTable = logicalTables.get(tableIndex);
         if (!lkv.isEmpty()) {
             // All Key Values for the same row are supposed to be the same, so init rowKey only once
             Cell first = lkv.get(0);
             outputKey.set(first.getRowArray(), first.getRowOffset(), first.getRowLength());
             for (KeyValue cell : lkv) {
-                if (isEmptyCell(cell)) {
+                if (isEmptyCell(cell, logicalTable.getSecond())) {
                     continue;
                 }
                 int i = findIndex(tableIndex, cell);
@@ -281,13 +287,13 @@ public abstract class FormatToBytesWritableMapper<RECORD> extends Mapper<LongWri
         }
         ImmutableBytesWritable aggregatedArray = new ImmutableBytesWritable(bos.toByteArray());
         outputStream.close();
-        context.write(new TableRowkeyPair(tableNames.get(tableIndex), outputKey), aggregatedArray);
+        context.write(new TableRowkeyPair(tableName, outputKey), aggregatedArray);
     }
 
-    protected boolean isEmptyCell(KeyValue cell) {
+    protected boolean isEmptyCell(KeyValue cell, byte[] emptyKVQualifier) {
         if (Bytes.compareTo(cell.getQualifierArray(), cell.getQualifierOffset(),
-                cell.getQualifierLength(), QueryConstants.EMPTY_COLUMN_BYTES, 0,
-                QueryConstants.EMPTY_COLUMN_BYTES.length) != 0)
+                cell.getQualifierLength(), emptyKVQualifier, 0,
+                emptyKVQualifier.length) != 0)
             return false;
         else
             return true;
