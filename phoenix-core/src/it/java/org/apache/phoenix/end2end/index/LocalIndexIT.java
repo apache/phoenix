@@ -847,6 +847,7 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
         createBaseTable(tableName, 3, null);
         Properties props = new Properties();
         props.setProperty(QueryServices.SCAN_RESULT_CHUNK_SIZE, "2");
+        props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(isNamespaceMapped));
         Connection conn1 = DriverManager.getConnection(getUrl(), props);
         try{
             String[] strings = {"a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z"};

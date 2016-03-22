@@ -216,7 +216,6 @@ import co.cask.tephra.distributed.PooledClientProvider;
 import co.cask.tephra.distributed.TransactionServiceClient;
 import co.cask.tephra.zookeeper.TephraZKClientService;
 
-
 public class ConnectionQueryServicesImpl extends DelegateQueryServices implements ConnectionQueryServices {
     private static final Logger logger = LoggerFactory.getLogger(ConnectionQueryServicesImpl.class);
     private static final int INITIAL_CHILD_SERVICES_CAPACITY = 100;
@@ -2346,10 +2345,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             String globalUrl = JDBCUtil.removeProperty(url, PhoenixRuntime.TENANT_ID_ATTRIB);
                             metaConnection = new PhoenixConnection(
                                     ConnectionQueryServicesImpl.this, globalUrl, scnProps, newEmptyMetaData());
-                            // TODO: handle system table migration also if a new flag for system table migration is enabled
-                            // if (SchemaUtil.isNamespaceMappingEnabled(ConnectionQueryServicesImpl.this.getProps())) {
-                            // ensureSystemTablesUpgraded(ConnectionQueryServicesImpl.this.getProps());
-                            // }
+                            
+                            if (SchemaUtil.isNamespaceMappingEnabled(PTableType.SYSTEM,
+                                    ConnectionQueryServicesImpl.this.getProps())) {
+                                ensureSystemTablesUpgraded(ConnectionQueryServicesImpl.this.getProps());
+                            }
                             try {
                                 metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_TABLE_METADATA);
 
@@ -2585,7 +2585,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     try (HBaseAdmin admin = getAdmin()) {
                         ensureNamespaceCreated(QueryConstants.SYSTEM_SCHEMA_NAME);
                         List<HTableDescriptor> tables = Arrays
-                                .asList(admin.listTables(QueryConstants.SYSTEM_SCHEMA_NAME + ".*", false));
+                                .asList(admin.listTables(QueryConstants.SYSTEM_SCHEMA_NAME + "\\..*", false));
                         if (tables.size() == 0) { return; }
                         metatable = getTable(SchemaUtil
                                 .getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, props).getName());

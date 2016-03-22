@@ -53,7 +53,6 @@ public class ViewIndexIT extends BaseHBaseManagedTimeIT {
     private String schemaName="TEST";
     private boolean isNamespaceMapped;
     private String tableName = schemaName + ".T";
-    private String indexTableName = schemaName + ".I";
     private String indexName = "I";
     private String viewIndexPhysicalTableName;
     private TableName physicalTableName;

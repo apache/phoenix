@@ -436,19 +436,24 @@ public class SchemaUtil {
     }
 
     public static boolean isMetaTable(byte[] tableName) {
-        return Bytes.compareTo(tableName, SYSTEM_CATALOG_NAME_BYTES) == 0;
+        return Bytes.compareTo(tableName, SYSTEM_CATALOG_NAME_BYTES) == 0 || Bytes.compareTo(tableName,
+                SchemaUtil.getPhysicalTableName(SYSTEM_CATALOG_NAME_BYTES, true).getName()) == 0;
     }
 
     public static boolean isFunctionTable(byte[] tableName) {
-        return Bytes.compareTo(tableName, SYSTEM_FUNCTION_NAME_BYTES) == 0;
+        return Bytes.compareTo(tableName, SYSTEM_FUNCTION_NAME_BYTES) == 0 || Bytes.compareTo(tableName,
+                SchemaUtil.getPhysicalTableName(SYSTEM_FUNCTION_NAME_BYTES, true).getName()) == 0;
     }
 
     public static boolean isStatsTable(byte[] tableName) {
-        return Bytes.compareTo(tableName, SYSTEM_STATS_NAME_BYTES) == 0;
+        return Bytes.compareTo(tableName, SYSTEM_STATS_NAME_BYTES) == 0 || Bytes.compareTo(tableName,
+                SchemaUtil.getPhysicalTableName(SYSTEM_STATS_NAME_BYTES, true).getName()) == 0;
     }
-    
+
     public static boolean isSequenceTable(byte[] tableName) {
-        return Bytes.compareTo(tableName, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES) == 0;
+        return Bytes.compareTo(tableName, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES) == 0
+                || Bytes.compareTo(tableName, SchemaUtil
+                        .getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES, true).getName()) == 0;
     }
 
     public static boolean isSequenceTable(PTable table) {
@@ -616,7 +621,8 @@ public class SchemaUtil {
         }
         int index = indexOf(tableName, QueryConstants.NAME_SEPARATOR_BYTE);
         if (index < 0) {
-            return StringUtil.EMPTY_STRING; 
+            index = indexOf(tableName, QueryConstants.NAMESPACE_SEPARATOR_BYTE);
+            if (index < 0) { return StringUtil.EMPTY_STRING; }
         }
         return Bytes.toString(tableName, 0, index);
     }
@@ -627,7 +633,8 @@ public class SchemaUtil {
         }
         int index = indexOf(tableName, QueryConstants.NAME_SEPARATOR_BYTE);
         if (index < 0) {
-            return Bytes.toString(tableName); 
+            index = indexOf(tableName, QueryConstants.NAMESPACE_SEPARATOR_BYTE);
+            if (index < 0) { return Bytes.toString(tableName); }
         }
         return Bytes.toString(tableName, index+1, tableName.length - index - 1);
     }
@@ -985,7 +992,9 @@ public class SchemaUtil {
     public static boolean isNamespaceMappingEnabled(PTableType type, ReadOnlyProps readOnlyProps) {
         return readOnlyProps.getBoolean(QueryServices.IS_NAMESPACE_MAPPING_ENABLED,
                 QueryServicesOptions.DEFAULT_IS_NAMESPACE_MAPPING_ENABLED)
-                && (type != null && !PTableType.SYSTEM.equals(type));
+                && (type == null || !PTableType.SYSTEM.equals(type)
+                        || readOnlyProps.getBoolean(QueryServices.IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE,
+                                QueryServicesOptions.DEFAULT_IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE));
     }
 
     public static byte[] getParentTableNameFromIndexTable(byte[] physicalTableName, String indexPrefix) {

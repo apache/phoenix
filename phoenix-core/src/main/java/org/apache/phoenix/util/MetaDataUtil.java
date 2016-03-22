@@ -286,7 +286,7 @@ public class MetaDataUtil {
     }
 
     public static String getViewIndexTableName(String tableName) {
-        return getIndexPhysicalName(tableName, VIEW_INDEX_TABLE_PREFIX);
+        return VIEW_INDEX_TABLE_PREFIX + tableName;
     }
 
     public static String getViewIndexSchemaName(String schemaName) {
@@ -313,7 +313,7 @@ public class MetaDataUtil {
     }
 
     public static String getLocalIndexTableName(String tableName) {
-        return getIndexPhysicalName(tableName, LOCAL_INDEX_TABLE_PREFIX);
+        return LOCAL_INDEX_TABLE_PREFIX + tableName;
     }
 
     public static String getLocalIndexSchemaName(String schemaName) {

@@ -1103,7 +1103,7 @@ public class UpgradeUtil {
     private static boolean isInvalidTableToUpgrade(PTable table) throws SQLException {
         return (table.getType() != PTableType.TABLE || // Must be a table
             table.getTenantId() != null || // Must be global
-            !table.getPhysicalName().equals(table.getName())); // Must be the physical table
+            !table.getPhoenixPhysicalName().equals(table.getName())); // Must be the physical table
     }
     /**
      * Upgrade tables and their indexes due to a bug causing descending row keys to have a row key that

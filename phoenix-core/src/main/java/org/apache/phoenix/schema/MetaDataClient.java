@@ -901,18 +901,26 @@ public class MetaDataClient {
             // then analyze all of those indexes too.
             if (table.getType() != PTableType.VIEW) {
                 List<PName> names = Lists.newArrayListWithExpectedSize(2);
+                final List<PName> physicalNames = Lists.newArrayListWithExpectedSize(2);
                 if (table.isMultiTenant() || MetaDataUtil.hasViewIndexTable(connection, table.getPhysicalName())) {
-                    names.add(PNameFactory.newName(MetaDataUtil.getViewIndexPhysicalName(table.getPhysicalName().getBytes())));
+                    names.add(PNameFactory.newName(SchemaUtil.getTableName(
+                            MetaDataUtil.getViewIndexSchemaName(table.getSchemaName().getString()),
+                            MetaDataUtil.getViewIndexTableName(table.getTableName().getString()))));
+                    physicalNames.add(PNameFactory.newName(MetaDataUtil.getViewIndexPhysicalName(table.getPhysicalName().getBytes())));
                 }
                 if (MetaDataUtil.hasLocalIndexTable(connection, table.getPhysicalName())) {
-                    names.add(PNameFactory.newName(MetaDataUtil.getLocalIndexTableName(table.getPhysicalName().getString())));
+                    names.add(PNameFactory.newName(SchemaUtil.getTableName(
+                            MetaDataUtil.getLocalIndexSchemaName(table.getSchemaName().getString()),
+                            MetaDataUtil.getLocalIndexTableName(table.getTableName().getString()))));
+                    physicalNames.add(PNameFactory.newName(MetaDataUtil.getViewIndexPhysicalName(table.getPhysicalName().getBytes())));
                 }
-
+                int i = 0;
                 for (final PName name : names) {
+                    final int index = i++;
                     PTable indexLogicalTable = new DelegateTable(table) {
                         @Override
                         public PName getPhysicalName() {
-                            return name;
+                            return physicalNames.get(index);
                         }
                         @Override
                         public PTableStats getTableStats() {
@@ -2439,7 +2447,7 @@ public class MetaDataClient {
         try {
             StringBuilder buf = new StringBuilder("DELETE FROM SYSTEM.STATS WHERE PHYSICAL_NAME IN (");
             for (TableRef ref : tableRefs) {
-                buf.append("'" + ref.getTable().getName().getString() + "',");
+                buf.append("'" + ref.getTable().getPhysicalName().getString() + "',");
             }
             buf.setCharAt(buf.length() - 1, ')');
             conn.createStatement().execute(buf.toString());

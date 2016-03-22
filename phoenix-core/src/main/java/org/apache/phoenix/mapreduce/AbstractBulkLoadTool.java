@@ -43,6 +43,7 @@ import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.mapreduce.LoadIncrementalHFiles;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
@@ -395,8 +396,8 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
         for(PTable indexTable : table.getIndexes()){
             if (indexTable.getIndexType() == PTable.IndexType.LOCAL) {
                 indexTables.add(new TargetTableRef(getQualifiedTableName(schemaName, indexTable
-                        .getTableName().getString()), MetaDataUtil
-                        .getLocalIndexTableName(qualifiedTableName)));
+                        .getTableName().getString()), Bytes.toString(MetaDataUtil
+                        .getLocalIndexPhysicalName(qualifiedTableName.getBytes()))));
             } else {
                 indexTables.add(new TargetTableRef(getQualifiedTableName(schemaName,
                         indexTable.getTableName().getString())));

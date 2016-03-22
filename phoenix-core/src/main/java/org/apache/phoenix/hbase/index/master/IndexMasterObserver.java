@@ -88,7 +88,8 @@ public class IndexMasterObserver extends BaseMasterObserver {
             RegionStates regionStates = am.getRegionStates();
             String tableName = region.getTable().getNameAsString();
             String correspondingTable = MetaDataUtil.isLocalIndex(region.getTable().getNameAsString())
-                    ? MetaDataUtil.getUserTableName(tableName) : MetaDataUtil.getLocalIndexTableName(tableName);
+                    ? MetaDataUtil.getUserTableName(tableName)
+                    : Bytes.toString(MetaDataUtil.getLocalIndexPhysicalName(tableName.getBytes()));
             List<HRegionInfo> regions =
                     regionStates.getRegionsOfTable(TableName.valueOf(correspondingTable));
             for (HRegionInfo hri : regions) {

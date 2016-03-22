@@ -190,13 +190,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
 
         rs = dbmd.getSchemas(null, null);
         assertTrue(rs.next());
-        assertEquals(rs.getString("TABLE_SCHEM"),null);
-        assertEquals(rs.getString("TABLE_CATALOG"),null);
-        assertTrue(rs.next());
         assertEquals(rs.getString("TABLE_SCHEM"),CUSTOM_ENTITY_DATA_SCHEMA_NAME);
-        assertEquals(rs.getString("TABLE_CATALOG"),null);
-        assertTrue(rs.next());
-        assertEquals(rs.getString("TABLE_SCHEM"),PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA);
         assertEquals(rs.getString("TABLE_CATALOG"),null);
         assertFalse(rs.next());
     }

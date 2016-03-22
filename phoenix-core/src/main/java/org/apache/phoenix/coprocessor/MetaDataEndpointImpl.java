@@ -923,7 +923,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 stats = StatisticsUtil.readStatistics(statsHTable, physicalTableName.getBytes(), clientTimeStamp);
                 timeStamp = Math.max(timeStamp, stats.getTimestamp());
             } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
-                logger.warn(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME + " not online yet?");
+                logger.warn(SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES,
+                        env.getConfiguration()) + " not online yet?");
             } finally {
                 if (statsHTable != null) statsHTable.close();
             }
@@ -1677,8 +1678,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             }
 
             if (tableType != PTableType.VIEW) { // Add to list of HTables to delete, unless it's a view
-                tableNamesToDelete
-                        .add(SchemaUtil.getPhysicalTableName(table.getName().getBytes(), table.isNamespaceMapped()).getName());
+                tableNamesToDelete.add(table.getPhysicalName().getBytes());
             }
             invalidateList.add(cacheKey);
             byte[][] rowKeyMetaData = new byte[5][];

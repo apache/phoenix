@@ -43,6 +43,7 @@ import org.apache.hadoop.hbase.mapreduce.HFileOutputFormat;
 import org.apache.hadoop.hbase.mapreduce.LoadIncrementalHFiles;
 import org.apache.hadoop.hbase.mapreduce.TableMapReduceUtil;
 import org.apache.hadoop.hbase.mapreduce.TableOutputFormat;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapreduce.Job;
@@ -204,7 +205,7 @@ public class IndexTool extends Configured implements Tool {
             // computed from the qDataTable name.
             String physicalIndexTable = qIndexTable;
             if (IndexType.LOCAL.equals(pindexTable.getIndexType())) {
-                physicalIndexTable = MetaDataUtil.getLocalIndexTableName(qDataTable);
+                physicalIndexTable = Bytes.toString(MetaDataUtil.getLocalIndexPhysicalName(qDataTable.getBytes()));
             }
 
             final PhoenixConnection pConnection = connection.unwrap(PhoenixConnection.class);

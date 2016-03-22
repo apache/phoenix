@@ -170,7 +170,9 @@ public class FromCompiler {
             // A tenant-specific connection may not create a mapped VIEW.
             if (connection.getTenantId() == null && statement.getTableType() == PTableType.VIEW) {
                 ConnectionQueryServices services = connection.getQueryServices();
-                byte[] fullTableName = SchemaUtil.getTableNameAsBytes(baseTable.getSchemaName(), baseTable.getTableName());
+                byte[] fullTableName = SchemaUtil.getPhysicalName(
+                        SchemaUtil.getTableNameAsBytes(baseTable.getSchemaName(), baseTable.getTableName()),
+                        connection.getQueryServices().getProps()).getName();
                 HTableInterface htable = null;
                 try {
                     htable = services.getTable(fullTableName);

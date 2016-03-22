@@ -52,6 +52,7 @@ import org.apache.phoenix.iterate.DelegateResultIterator;
 import org.apache.phoenix.iterate.MaterializedResultIterator;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable.LinkType;
@@ -917,10 +918,10 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
                 TENANT_ID + " " + TABLE_CATALOG +
                 " from " + SYSTEM_CATALOG + " " + SYSTEM_CATALOG_ALIAS +
                 " where " + COLUMN_NAME + " is null");
-        this.addTenantIdFilter(buf, catalog);
         if (schemaPattern != null) {
             buf.append(" and " + TABLE_SCHEM + " like '" + StringUtil.escapeStringConstant(schemaPattern) + "'");
         }
+        buf.append(" and " + TABLE_NAME + " = '" + MetaDataClient.EMPTY_TABLE + "'");
         Statement stmt = connection.createStatement();
         return stmt.executeQuery(buf.toString());
     }
