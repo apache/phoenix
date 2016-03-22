@@ -71,4 +71,10 @@ public class DeleteStatement extends DMLStatement implements FilterableStatement
     public Operation getOperation() {
         return Operation.DELETE;
     }
+
+    @Override
+    public OffsetNode getOffset() {
+        return null;
+    }
+
 }

@@ -187,6 +187,11 @@ public class SortMergeJoinPlan implements QueryPlan {
     }
 
     @Override
+    public Integer getOffset() {
+        return null;
+    }
+
+    @Override
     public OrderBy getOrderBy() {
         return null;
     }

@@ -15,16 +15,30 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.parse;
+package org.apache.phoenix.iterate;
 
 import java.util.List;
 
-public interface FilterableStatement extends BindableStatement {
-    public HintNode getHint();
-    public ParseNode getWhere();
-    public boolean isDistinct();
-    public boolean isAggregate();
-    public List<OrderByNode> getOrderBy();
-    public LimitNode getLimit();
-    public OffsetNode getOffset();
+import org.apache.hadoop.hbase.client.Scan;
+import org.apache.phoenix.compile.QueryPlan;
+
+/**
+ * Default implementation that creates a scan group if a plan is row key ordered (which requires a merge sort),
+ * or if a scan crosses a region boundary and the table is salted or a local index.   
+ */
+public class OffsetScanGrouper implements ParallelScanGrouper {
+	
+	private static final OffsetScanGrouper INSTANCE = new OffsetScanGrouper();
+
+    public static OffsetScanGrouper getInstance() {
+        return INSTANCE;
+    }
+    
+    private OffsetScanGrouper() {}
+
+	@Override
+	public boolean shouldStartNewScan(QueryPlan plan, List<Scan> scans, byte[] startKey, boolean crossedRegionBoundary) {
+		return false;
+    }
+
 }

@@ -62,6 +62,7 @@ import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
+import org.apache.phoenix.execute.ScanPlan;
 import org.apache.phoenix.filter.ColumnProjectionFilter;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
@@ -152,7 +153,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         return true;
     }
     
-    private static void initializeScan(QueryPlan plan, Integer perScanLimit) {
+    private static void initializeScan(QueryPlan plan, Integer perScanLimit, Integer offset) {
         StatementContext context = plan.getContext();
         TableRef tableRef = plan.getTableRef();
         PTable table = tableRef.getTable();
@@ -217,6 +218,10 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
 
             if (perScanLimit != null) {
                 ScanUtil.andFilterAtEnd(scan, new PageFilter(perScanLimit));
+            }
+            
+            if(offset!=null){
+                ScanUtil.addOffsetAttribute(scan, offset);
             }
 
             if (optimizeProjection) {
@@ -326,8 +331,9 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         }
     }
     
-    public BaseResultIterators(QueryPlan plan, Integer perScanLimit, ParallelScanGrouper scanGrouper) throws SQLException {
-        super(plan.getContext(), plan.getTableRef(), plan.getGroupBy(), plan.getOrderBy(), plan.getStatement().getHint(), plan.getLimit());
+    public BaseResultIterators(QueryPlan plan, Integer perScanLimit, Integer offset, ParallelScanGrouper scanGrouper) throws SQLException {
+        super(plan.getContext(), plan.getTableRef(), plan.getGroupBy(), plan.getOrderBy(),
+                plan.getStatement().getHint(), plan.getLimit(), plan instanceof ScanPlan ? plan.getOffset() : null);
         this.plan = plan;
         this.scanGrouper = scanGrouper;
         StatementContext context = plan.getContext();
@@ -341,7 +347,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         // Used to tie all the scans together during logging
         scanId = UUID.randomUUID().toString();
         
-        initializeScan(plan, perScanLimit);
+        initializeScan(plan, perScanLimit, offset);
         
         this.scans = getParallelScans();
         List<KeyRange> splitRanges = Lists.newArrayListWithExpectedSize(scans.size() * ESTIMATED_GUIDEPOSTS_PER_REGION);

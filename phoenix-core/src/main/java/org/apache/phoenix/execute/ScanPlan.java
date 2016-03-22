@@ -37,6 +37,8 @@ import org.apache.phoenix.iterate.ConcatResultIterator;
 import org.apache.phoenix.iterate.LimitingResultIterator;
 import org.apache.phoenix.iterate.MergeSortRowKeyResultIterator;
 import org.apache.phoenix.iterate.MergeSortTopNResultIterator;
+import org.apache.phoenix.iterate.OffsetResultIterator;
+import org.apache.phoenix.iterate.OffsetScanGrouper;
 import org.apache.phoenix.iterate.ParallelIteratorFactory;
 import org.apache.phoenix.iterate.ParallelIterators;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
@@ -45,6 +47,7 @@ import org.apache.phoenix.iterate.RoundRobinResultIterator;
 import org.apache.phoenix.iterate.SequenceResultIterator;
 import org.apache.phoenix.iterate.SerialIterators;
 import org.apache.phoenix.iterate.SpoolingResultIterator;
+import org.apache.phoenix.iterate.TableSerialIterators;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.query.ConnectionQueryServices;
@@ -79,14 +82,14 @@ public class ScanPlan extends BaseQueryPlan {
     private List<List<Scan>> scans;
     private boolean allowPageFilter;
     
-    public ScanPlan(StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector, Integer limit, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory, boolean allowPageFilter) throws SQLException {
-        this(context, statement, table, projector, limit, orderBy, parallelIteratorFactory, allowPageFilter, null);
+    public ScanPlan(StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector, Integer limit, Integer offset, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory, boolean allowPageFilter) throws SQLException {
+        this(context, statement, table, projector, limit, offset, orderBy, parallelIteratorFactory, allowPageFilter, null);
     }
     
-    private ScanPlan(StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector, Integer limit, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory, boolean allowPageFilter, Expression dynamicFilter) throws SQLException {
-        super(context, statement, table, projector, context.getBindManager().getParameterMetaData(), limit, orderBy, GroupBy.EMPTY_GROUP_BY,
+    private ScanPlan(StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector, Integer limit, Integer offset, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory, boolean allowPageFilter, Expression dynamicFilter) throws SQLException {
+        super(context, statement, table, projector, context.getBindManager().getParameterMetaData(), limit,offset, orderBy, GroupBy.EMPTY_GROUP_BY,
                 parallelIteratorFactory != null ? parallelIteratorFactory :
-                        buildResultIteratorFactory(context, statement, table, orderBy, limit, allowPageFilter), dynamicFilter);
+                        buildResultIteratorFactory(context, statement, table, orderBy, limit, offset, allowPageFilter), dynamicFilter);
         this.allowPageFilter = allowPageFilter;
         if (!orderBy.getOrderByExpressions().isEmpty()) { // TopN
             int thresholdBytes = context.getConnection().getQueryServices().getProps().getInt(
@@ -96,7 +99,7 @@ public class ScanPlan extends BaseQueryPlan {
     }
 
     private static boolean isSerial(StatementContext context, FilterableStatement statement,
-            TableRef tableRef, OrderBy orderBy, Integer limit, boolean allowPageFilter) throws SQLException {
+            TableRef tableRef, OrderBy orderBy, Integer limit, Integer offset, boolean allowPageFilter) throws SQLException {
         if (statement.getHint().hasHint(HintNode.Hint.SERIAL)) {
             return true;
         }
@@ -142,13 +145,11 @@ public class ScanPlan extends BaseQueryPlan {
     }
     
     private static ParallelIteratorFactory buildResultIteratorFactory(StatementContext context, FilterableStatement statement,
-            TableRef table, OrderBy orderBy, Integer limit, boolean allowPageFilter) throws SQLException {
+            TableRef table, OrderBy orderBy, Integer limit,Integer offset, boolean allowPageFilter) throws SQLException {
 
-        if (isSerial(context, statement, table, orderBy, limit, allowPageFilter)
-                || ScanUtil.isRoundRobinPossible(orderBy, context)
-                || ScanUtil.isPacingScannersPossible(context)) {
-            return ParallelIteratorFactory.NOOP_FACTORY;
-        }
+        if ((isSerial(context, statement, table, orderBy, limit, offset, allowPageFilter)
+                || ScanUtil.isRoundRobinPossible(orderBy, context) || ScanUtil.isPacingScannersPossible(context))
+                && offset == null) { return ParallelIteratorFactory.NOOP_FACTORY; }
         ParallelIteratorFactory spoolingResultIteratorFactory =
                 new SpoolingResultIterator.SpoolingResultIteratorFactory(
                         context.getConnection().getQueryServices());
@@ -193,21 +194,32 @@ public class ScanPlan extends BaseQueryPlan {
          * limit is provided, run query serially.
          */
         boolean isOrdered = !orderBy.getOrderByExpressions().isEmpty();
-        boolean isSerial = isSerial(context, statement, tableRef, orderBy, limit, allowPageFilter);
+        boolean isSerial = isSerial(context, statement, tableRef, orderBy, limit, offset, allowPageFilter);
         Integer perScanLimit = !allowPageFilter || isOrdered ? null : limit;
+        if (perScanLimit != null) {
+            perScanLimit += (offset == null ? 0 : offset);
+        }
+		boolean hasOffset = offset != null;
         BaseResultIterators iterators;
-        if (isSerial) {
-        	iterators = new SerialIterators(this, perScanLimit, parallelIteratorFactory, scanGrouper);
+        if (hasOffset && !isOrdered) {
+            iterators = new TableSerialIterators(this, perScanLimit, offset, parallelIteratorFactory,
+                    OffsetScanGrouper.getInstance());
+        } else if (isSerial) {
+            iterators = new SerialIterators(this, perScanLimit, null, parallelIteratorFactory, scanGrouper);
         } else {
-        	iterators = new ParallelIterators(this, perScanLimit, parallelIteratorFactory, scanGrouper);
+            iterators = new ParallelIterators(this, perScanLimit, parallelIteratorFactory, scanGrouper);
         }
         splits = iterators.getSplits();
         scans = iterators.getScans();
         estimatedSize = iterators.getEstimatedByteCount();
         estimatedRows = iterators.getEstimatedRowCount();
-        
-        if (isOrdered) {
-            scanner = new MergeSortTopNResultIterator(iterators, limit, orderBy.getOrderByExpressions());
+        if (hasOffset && !isOrdered) {
+            scanner = new ConcatResultIterator(iterators);
+            if (limit != null) {
+                scanner = new LimitingResultIterator(scanner, limit);
+            }
+        } else if (isOrdered) {
+            scanner = new MergeSortTopNResultIterator(iterators, limit, offset, orderBy.getOrderByExpressions());
         } else {
             if ((isSalted || table.getIndexType() == IndexType.LOCAL) && ScanUtil.shouldRowsBeInRowKeyOrder(orderBy, context)) {
                 /*
@@ -225,6 +237,9 @@ public class ScanPlan extends BaseQueryPlan {
                 scanner = new RoundRobinResultIterator(iterators, this);
             } else {
                 scanner = new ConcatResultIterator(iterators);
+            }
+            if (offset != null) {
+                scanner = new OffsetResultIterator(scanner, offset);
             }
             if (limit != null) {
                 scanner = new LimitingResultIterator(scanner, limit);

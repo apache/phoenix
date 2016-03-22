@@ -23,26 +23,24 @@ import java.util.List;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 /**
- * 
  * Iterates through tuples up to a limit
  *
- * 
  * @since 1.2
  */
-public class LimitingResultIterator extends DelegateResultIterator {
+public class OffsetResultIterator extends DelegateResultIterator {
     private int rowCount;
-    private final int limit;
-    
-    public LimitingResultIterator(ResultIterator delegate, int limit) {
+    private int offset;
+
+    public OffsetResultIterator(ResultIterator delegate, Integer offset) {
         super(delegate);
-        this.limit = limit;
+        this.offset = offset == null ? -1 : offset;
     }
 
     @Override
     public Tuple next() throws SQLException {
-        if (rowCount++ >= limit) {
-            close(); // Free resources early
-            return null;
+        while (rowCount < offset) {
+            if (super.next() == null) { return null; }
+            rowCount++;
         }
         return super.next();
     }
@@ -50,12 +48,15 @@ public class LimitingResultIterator extends DelegateResultIterator {
     @Override
     public void explain(List<String> planSteps) {
         super.explain(planSteps);
-            planSteps.add("CLIENT " + limit + " ROW LIMIT");
+        planSteps.add("CLIENT OFFSET " + offset);
     }
 
-	@Override
-	public String toString() {
-		return "LimitingResultIterator [rowCount=" + rowCount + ", limit="
-				+ limit + "]";
-	}
+    @Override
+    public String toString() {
+        return "OffsetResultIterator [rowCount=" + rowCount + ", offset=" + offset + "]";
+    }
+
+    public Integer getUnusedOffset() {
+        return (offset - rowCount) > 0 ? (offset - rowCount) : 0;
+    }
 }

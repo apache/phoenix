@@ -43,15 +43,15 @@ public class LiteralResultIterationPlan extends BaseQueryPlan {
 
     public LiteralResultIterationPlan(StatementContext context, 
             FilterableStatement statement, TableRef tableRef, RowProjector projection, 
-            Integer limit, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory) {
+            Integer limit, Integer offset, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory) {
         this(Collections.<Tuple> singletonList(new SingleKeyValueTuple(KeyValue.LOWESTKEY)), 
-                context, statement, tableRef, projection, limit, orderBy, parallelIteratorFactory);
+                context, statement, tableRef, projection, limit, offset, orderBy, parallelIteratorFactory);
     }
 
     public LiteralResultIterationPlan(Iterable<Tuple> tuples, StatementContext context, 
             FilterableStatement statement, TableRef tableRef, RowProjector projection, 
-            Integer limit, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory) {
-        super(context, statement, tableRef, projection, context.getBindManager().getParameterMetaData(), limit, orderBy, GroupBy.EMPTY_GROUP_BY, parallelIteratorFactory, null);
+            Integer limit, Integer offset, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory) {
+        super(context, statement, tableRef, projection, context.getBindManager().getParameterMetaData(), limit, offset, orderBy, GroupBy.EMPTY_GROUP_BY, parallelIteratorFactory, null);
         this.tuples = tuples;
     }
 
@@ -85,6 +85,9 @@ public class LiteralResultIterationPlan extends BaseQueryPlan {
 
             @Override
             public Tuple next() throws SQLException {
+                while (!this.closed && (offset != null && count++ < offset) && tupleIterator.hasNext()) {
+                    tupleIterator.next();
+                }
                 if (!this.closed 
                         && (limit == null || count++ < limit)
                         && tupleIterator.hasNext()) {

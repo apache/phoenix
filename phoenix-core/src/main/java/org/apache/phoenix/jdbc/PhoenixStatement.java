@@ -110,6 +110,7 @@ import org.apache.phoenix.parse.ListJarsStatement;
 import org.apache.phoenix.parse.LiteralParseNode;
 import org.apache.phoenix.parse.NamedNode;
 import org.apache.phoenix.parse.NamedTableNode;
+import org.apache.phoenix.parse.OffsetNode;
 import org.apache.phoenix.parse.OrderByNode;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.ParseNode;
@@ -372,14 +373,14 @@ public class PhoenixStatement implements Statement, SQLCloseable {
     
     private static class ExecutableSelectStatement extends SelectStatement implements CompilableStatement {
         private ExecutableSelectStatement(TableNode from, HintNode hint, boolean isDistinct, List<AliasedNode> select, ParseNode where,
-                List<ParseNode> groupBy, ParseNode having, List<OrderByNode> orderBy, LimitNode limit, int bindCount, boolean isAggregate, boolean hasSequence, Map<String, UDFParseNode> udfParseNodes) {
-            this(from, hint, isDistinct, select, where, groupBy, having, orderBy, limit, bindCount, isAggregate, hasSequence, Collections.<SelectStatement>emptyList(), udfParseNodes);
+                List<ParseNode> groupBy, ParseNode having, List<OrderByNode> orderBy, LimitNode limit,OffsetNode offset, int bindCount, boolean isAggregate, boolean hasSequence, Map<String, UDFParseNode> udfParseNodes) {
+            this(from, hint, isDistinct, select, where, groupBy, having, orderBy, limit,offset, bindCount, isAggregate, hasSequence, Collections.<SelectStatement>emptyList(), udfParseNodes);
         }
 
         private ExecutableSelectStatement(TableNode from, HintNode hint, boolean isDistinct, List<AliasedNode> select, ParseNode where,
-                List<ParseNode> groupBy, ParseNode having, List<OrderByNode> orderBy, LimitNode limit, int bindCount, boolean isAggregate,
+                List<ParseNode> groupBy, ParseNode having, List<OrderByNode> orderBy, LimitNode limit,OffsetNode offset, int bindCount, boolean isAggregate,
                 boolean hasSequence, List<SelectStatement> selects, Map<String, UDFParseNode> udfParseNodes) {
-            super(from, hint, isDistinct, select, where, groupBy, having, orderBy, limit, bindCount, isAggregate, hasSequence, selects, udfParseNodes);
+            super(from, hint, isDistinct, select, where, groupBy, having, orderBy, limit, offset, bindCount, isAggregate, hasSequence, selects, udfParseNodes);
         }
         
         @SuppressWarnings("unchecked")
@@ -507,6 +508,11 @@ public class PhoenixStatement implements Statement, SQLCloseable {
 
                 @Override
                 public Integer getLimit() {
+                    return null;
+                }
+
+                @Override
+                public Integer getOffset() {
                     return null;
                 }
 
@@ -1053,10 +1059,10 @@ public class PhoenixStatement implements Statement, SQLCloseable {
     protected static class ExecutableNodeFactory extends ParseNodeFactory {
         @Override
         public ExecutableSelectStatement select(TableNode from, HintNode hint, boolean isDistinct, List<AliasedNode> select, ParseNode where,
-                List<ParseNode> groupBy, ParseNode having, List<OrderByNode> orderBy, LimitNode limit, int bindCount, boolean isAggregate,
+                List<ParseNode> groupBy, ParseNode having, List<OrderByNode> orderBy, LimitNode limit, OffsetNode offset, int bindCount, boolean isAggregate,
                 boolean hasSequence, List<SelectStatement> selects, Map<String, UDFParseNode> udfParseNodes) {
             return new ExecutableSelectStatement(from, hint, isDistinct, select, where, groupBy == null ? Collections.<ParseNode>emptyList() : groupBy,
-                    having, orderBy == null ? Collections.<OrderByNode>emptyList() : orderBy, limit, bindCount, isAggregate, hasSequence, selects == null ? Collections.<SelectStatement>emptyList() : selects, udfParseNodes);
+                    having, orderBy == null ? Collections.<OrderByNode>emptyList() : orderBy, limit, offset, bindCount, isAggregate, hasSequence, selects == null ? Collections.<SelectStatement>emptyList() : selects, udfParseNodes);
         }
 
         @Override

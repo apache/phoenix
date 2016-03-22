@@ -40,11 +40,11 @@ public class ReadOnlyIT extends BaseHBaseManagedTimeIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String ddl = "CREATE TABLE test_table " +
-                        "  (row varchar not null, col1 integer" +
-                        "  CONSTRAINT pk PRIMARY KEY (row))\n"; 
+                        "  (r varchar not null, col1 integer" +
+                        "  CONSTRAINT pk PRIMARY KEY (r))\n"; 
         createTestTable(getUrl(), ddl);
 
-        String query = "UPSERT INTO test_table(row, col1) VALUES('row1', 777)";
+        String query = "UPSERT INTO test_table(r, col1) VALUES('row1', 777)";
         PreparedStatement statement = conn.prepareStatement(query);
         statement.executeUpdate();
         conn.commit();
@@ -53,8 +53,8 @@ public class ReadOnlyIT extends BaseHBaseManagedTimeIT {
 		conn.setReadOnly(true);
                 assertTrue(conn.isReadOnly());
 		ddl = "CREATE TABLE test_table2 " +
-				"  (row varchar not null, col1 integer" +
-				"  CONSTRAINT pk PRIMARY KEY (row))\n";
+				"  (r varchar not null, col1 integer" +
+				"  CONSTRAINT pk PRIMARY KEY (r))\n";
 		statement = conn.prepareStatement(ddl);
         	statement.executeUpdate();
         	conn.commit();
@@ -64,7 +64,7 @@ public class ReadOnlyIT extends BaseHBaseManagedTimeIT {
         }
 	  
 	try {  
-                query = "UPSERT INTO test_table(row, col1) VALUES('row1', 888)";
+                query = "UPSERT INTO test_table(r, col1) VALUES('row1', 888)";
                 statement = conn.prepareStatement(query);
                 statement.executeUpdate();
                 conn.commit();
