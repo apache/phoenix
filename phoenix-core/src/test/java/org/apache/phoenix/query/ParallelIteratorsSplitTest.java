@@ -54,6 +54,7 @@ import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.PFunction;
+import org.apache.phoenix.parse.PSchema;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.PDatum;
@@ -347,6 +348,16 @@ public class ParallelIteratorsSplitTest extends BaseConnectionlessQueryTest {
             @Override
             public boolean hasUDFs() {
                 return false;
+            }
+
+            @Override
+            public PSchema resolveSchema(String schemaName) throws SQLException {
+                return null;
+            }
+
+            @Override
+            public List<PSchema> getSchemas() {
+                return null;
             }
         };
         PhoenixConnection connection = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);

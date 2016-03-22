@@ -287,6 +287,10 @@ public class ParseNodeFactory {
         return new CreateTableStatement(tableName, props, columns, pkConstraint, splits, tableType, ifNotExists, baseTableName, tableTypeIdNode, bindCount);
     }
 
+    public CreateSchemaStatement createSchema(String schemaName, boolean ifNotExists) {
+        return new CreateSchemaStatement(schemaName, ifNotExists);
+    }
+
     public CreateIndexStatement createIndex(NamedNode indexName, NamedTableNode dataTable, IndexKeyConstraint ikConstraint, List<ColumnName> includeColumns, List<ParseNode> splits, ListMultimap<String,Pair<String,Object>> props, boolean ifNotExists, IndexType indexType,boolean async, int bindCount, Map<String, UDFParseNode> udfParseNodes) {
         return new CreateIndexStatement(indexName, dataTable, ikConstraint, includeColumns, splits, props, ifNotExists, indexType, async, bindCount, udfParseNodes);
     }
@@ -826,5 +830,13 @@ public class ParseNodeFactory {
 
     public LimitNode limit(LiteralParseNode l) {
         return new LimitNode(l);
+    }
+
+    public DropSchemaStatement dropSchema(String schemaName, boolean ifExists, boolean cascade) {
+        return new DropSchemaStatement(schemaName, ifExists, cascade);
+    }
+
+    public UseSchemaStatement useSchema(String schemaName) {
+        return new UseSchemaStatement(schemaName);
     }
 }

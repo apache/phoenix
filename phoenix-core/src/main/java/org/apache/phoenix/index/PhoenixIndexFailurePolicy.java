@@ -139,7 +139,7 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
             }
 
             // its a local index table, so we need to convert it to the index table names we should disable
-            if (ref.getTableName().startsWith(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX)) {
+            if (MetaDataUtil.isLocalIndex(ref.getTableName())) {
                 for (String tableName : getLocalIndexNames(ref, mutations)) {
                     indexTableNames.put(tableName, minTimeStamp);
                 }

@@ -71,9 +71,7 @@ public class MetaDataUtil {
     private static final Logger logger = LoggerFactory.getLogger(MetaDataUtil.class);
   
     public static final String VIEW_INDEX_TABLE_PREFIX = "_IDX_";
-    public static final byte[] VIEW_INDEX_TABLE_PREFIX_BYTES = Bytes.toBytes(VIEW_INDEX_TABLE_PREFIX);
     public static final String LOCAL_INDEX_TABLE_PREFIX = "_LOCAL_IDX_";
-    public static final byte[] LOCAL_INDEX_TABLE_PREFIX_BYTES = Bytes.toBytes(LOCAL_INDEX_TABLE_PREFIX);
     public static final String VIEW_INDEX_SEQUENCE_PREFIX = "_SEQ_";
     public static final String VIEW_INDEX_SEQUENCE_NAME_PREFIX = "_ID_";
     public static final byte[] VIEW_INDEX_SEQUENCE_PREFIX_BYTES = Bytes.toBytes(VIEW_INDEX_SEQUENCE_PREFIX);
@@ -284,41 +282,66 @@ public class MetaDataUtil {
     }
     
     public static byte[] getViewIndexPhysicalName(byte[] physicalTableName) {
-        return ByteUtil.concat(VIEW_INDEX_TABLE_PREFIX_BYTES, physicalTableName);
+        return getIndexPhysicalName(physicalTableName, VIEW_INDEX_TABLE_PREFIX);
     }
 
     public static String getViewIndexTableName(String tableName) {
-        return VIEW_INDEX_TABLE_PREFIX + tableName;
+        return getIndexPhysicalName(tableName, VIEW_INDEX_TABLE_PREFIX);
     }
 
     public static String getViewIndexSchemaName(String schemaName) {
         return schemaName;
     }
 
+    public static byte[] getIndexPhysicalName(byte[] physicalTableName, String indexPrefix) {
+        return getIndexPhysicalName(Bytes.toString(physicalTableName), indexPrefix).getBytes();
+    }
+
+    public static String getIndexPhysicalName(String physicalTableName, String indexPrefix) {
+        if (physicalTableName.contains(QueryConstants.NAMESPACE_SEPARATOR)) {
+            String schemaName = SchemaUtil.getSchemaNameFromFullName(physicalTableName,
+                    QueryConstants.NAMESPACE_SEPARATOR);
+            String tableName = SchemaUtil.getTableNameFromFullName(physicalTableName,
+                    QueryConstants.NAMESPACE_SEPARATOR);
+            return (schemaName + QueryConstants.NAMESPACE_SEPARATOR + indexPrefix + tableName);
+        }
+        return indexPrefix + physicalTableName;
+    }
+
     public static byte[] getLocalIndexPhysicalName(byte[] physicalTableName) {
-        return ByteUtil.concat(LOCAL_INDEX_TABLE_PREFIX_BYTES, physicalTableName);
+        return getIndexPhysicalName(physicalTableName, LOCAL_INDEX_TABLE_PREFIX);
     }
-    
+
     public static String getLocalIndexTableName(String tableName) {
-        return LOCAL_INDEX_TABLE_PREFIX + tableName;
+        return getIndexPhysicalName(tableName, LOCAL_INDEX_TABLE_PREFIX);
     }
-    
+
     public static String getLocalIndexSchemaName(String schemaName) {
         return schemaName;
     }  
 
     public static String getUserTableName(String localIndexTableName) {
-        String schemaName = SchemaUtil.getSchemaNameFromFullName(localIndexTableName);
-        if(!schemaName.isEmpty()) schemaName = schemaName.substring(LOCAL_INDEX_TABLE_PREFIX.length());
-        String tableName = localIndexTableName.substring((schemaName.isEmpty() ? 0 : (schemaName.length() + QueryConstants.NAME_SEPARATOR.length()))
-            + LOCAL_INDEX_TABLE_PREFIX.length());
-        return SchemaUtil.getTableName(schemaName, tableName);
+        if (localIndexTableName.contains(QueryConstants.NAMESPACE_SEPARATOR)) {
+            String schemaName = SchemaUtil.getSchemaNameFromFullName(localIndexTableName,
+                    QueryConstants.NAMESPACE_SEPARATOR);
+            String tableName = SchemaUtil.getTableNameFromFullName(localIndexTableName,
+                    QueryConstants.NAMESPACE_SEPARATOR);
+            String userTableName = tableName.substring(LOCAL_INDEX_TABLE_PREFIX.length());
+            return (schemaName + QueryConstants.NAMESPACE_SEPARATOR + userTableName);
+        } else {
+            String schemaName = SchemaUtil.getSchemaNameFromFullName(localIndexTableName);
+            if (!schemaName.isEmpty()) schemaName = schemaName.substring(LOCAL_INDEX_TABLE_PREFIX.length());
+            String tableName = localIndexTableName.substring(
+                    (schemaName.isEmpty() ? 0 : (schemaName.length() + QueryConstants.NAME_SEPARATOR.length()))
+                            + LOCAL_INDEX_TABLE_PREFIX.length());
+            return SchemaUtil.getTableName(schemaName, tableName);
+        }
     }
 
     public static String getViewIndexSchemaName(PName physicalName) {
         return VIEW_INDEX_SEQUENCE_PREFIX + physicalName.getString();
     }
-    
+ 
     public static SequenceKey getViewIndexSequenceKey(String tenantId, PName physicalName, int nSaltBuckets) {
         // Create global sequence of the form: <prefixed base table name><tenant id>
         // rather than tenant-specific sequence, as it makes it much easier
@@ -337,15 +360,12 @@ public class MetaDataUtil {
         return VIEW_INDEX_ID_COLUMN_NAME;
     }
 
-    public static boolean hasViewIndexTable(PhoenixConnection connection, PName name) throws SQLException {
-        return hasViewIndexTable(connection, name.getBytes());
+    public static boolean hasViewIndexTable(PhoenixConnection connection, PName physicalName) throws SQLException {
+        return hasViewIndexTable(connection, physicalName.getBytes());
     }
-    
-    public static boolean hasViewIndexTable(PhoenixConnection connection, String schemaName, String tableName) throws SQLException {
-        return hasViewIndexTable(connection, SchemaUtil.getTableNameAsBytes(schemaName, tableName));
-    }
-    
-    public static boolean hasViewIndexTable(PhoenixConnection connection, byte[] physicalTableName) throws SQLException {
+
+    public static boolean hasViewIndexTable(PhoenixConnection connection, byte[] physicalTableName)
+            throws SQLException {
         byte[] physicalIndexName = MetaDataUtil.getViewIndexPhysicalName(physicalTableName);
         try {
             HTableDescriptor desc = connection.getQueryServices().getTableDescriptor(physicalIndexName);
@@ -355,12 +375,8 @@ public class MetaDataUtil {
         }
     }
 
-    public static boolean hasLocalIndexTable(PhoenixConnection connection, PName name) throws SQLException {
-        return hasLocalIndexTable(connection, name.getBytes());
-    }
-
-    public static boolean hasLocalIndexTable(PhoenixConnection connection, String schemaName, String tableName) throws SQLException {
-        return hasLocalIndexTable(connection, SchemaUtil.getTableNameAsBytes(schemaName, tableName));
+    public static boolean hasLocalIndexTable(PhoenixConnection connection, PName physicalName) throws SQLException {
+        return hasLocalIndexTable(connection, physicalName.getBytes());
     }
 
     public static boolean hasLocalIndexTable(PhoenixConnection connection, byte[] physicalTableName) throws SQLException {
@@ -464,5 +480,15 @@ public class MetaDataUtil {
             }
         }
         return null;
+    }
+
+    public static boolean isLocalIndex(String physicalName) {
+        if (physicalName.contains(LOCAL_INDEX_TABLE_PREFIX)) { return true; }
+        return false;
+    }
+
+    public static boolean isViewIndex(String physicalName) {
+        if (physicalName.contains(VIEW_INDEX_TABLE_PREFIX)) { return true; }
+        return false;
     }
 }

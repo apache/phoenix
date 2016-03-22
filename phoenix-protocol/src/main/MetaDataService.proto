@@ -26,6 +26,7 @@ option optimize_for = SPEED;
 
 import "PTable.proto";
 import "PFunction.proto";
+import "PSchema.proto";
 
 enum MutationCode {
   TABLE_ALREADY_EXISTS = 0;
@@ -42,6 +43,11 @@ enum MutationCode {
   FUNCTION_NOT_FOUND = 11;
   NEWER_FUNCTION_FOUND = 12;
   FUNCTION_NOT_IN_REGION = 13;
+  SCHEMA_ALREADY_EXISTS = 14;
+  NEWER_SCHEMA_FOUND = 15;
+  SCHEMA_NOT_FOUND = 16;
+  SCHEMA_NOT_IN_REGION = 17;
+  UNALLOWED_SCHEMA_MUTATION = 18;
 };
 
 message MetaDataResponse {
@@ -53,6 +59,7 @@ message MetaDataResponse {
   optional bytes familyName = 6;
   optional bytes functionName = 7;
   repeated PFunction function = 8;
+  optional PSchema schema = 9;
 }
 
 message GetTableRequest {
@@ -72,6 +79,12 @@ message GetFunctionsRequest {
   optional int32 clientVersion = 5;
 }
 
+message GetSchemaRequest {
+  required string schemaName = 1;
+  required int64 clientTimestamp = 2;
+  optional int32 clientVersion = 3;
+}
+
 // each byte array represents a MutationProto instance
 message CreateTableRequest {
   repeated bytes tableMetadataMutations = 1;
@@ -86,11 +99,23 @@ message CreateFunctionRequest {
   optional int32 clientVersion = 4;
 }
 
+message CreateSchemaRequest {
+  repeated bytes tableMetadataMutations = 1;
+  optional string schemaName = 2;
+  optional int32 clientVersion = 3;
+}
+
 message DropTableRequest {
   repeated bytes tableMetadataMutations = 1;
   required string tableType = 2;
   optional bool cascade = 3;
   optional int32 clientVersion = 4;
+}
+
+message DropSchemaRequest {
+  repeated bytes schemaMetadataMutations = 1;
+  required string schemaName = 2;
+  optional int32 clientVersion = 3;
 }
 
 message AddColumnRequest {
@@ -148,15 +173,24 @@ service MetaDataService {
   rpc getFunctions(GetFunctionsRequest)
     returns (MetaDataResponse);
 
+  rpc getSchema(GetSchemaRequest)
+    returns (MetaDataResponse);
+
   rpc createTable(CreateTableRequest)
     returns (MetaDataResponse);
 
   rpc createFunction(CreateFunctionRequest)
     returns (MetaDataResponse);
-    
+
+  rpc createSchema(CreateSchemaRequest)
+	 returns (MetaDataResponse);
+
   rpc dropTable(DropTableRequest)
     returns (MetaDataResponse);
-    
+
+  rpc dropSchema(DropSchemaRequest)
+    returns (MetaDataResponse);
+
   rpc dropFunction(DropFunctionRequest)
     returns (MetaDataResponse);
 

@@ -825,7 +825,22 @@ public abstract class BaseTest {
 
     protected static void ensureTableCreated(String url, String tableName, byte[][] splits, Long ts) throws SQLException {
         String ddl = tableDDLMap.get(tableName);
+        createSchema(url,tableName);
         createTestTable(url, ddl, splits, ts);
+    }
+
+    public static void createSchema(String url, String tableName) throws SQLException {
+        if (tableName.contains(".")) {
+            String schema = tableName.substring(0, tableName.indexOf("."));
+            if (!schema.equals("")) {
+                Properties props = new Properties();
+                try (Connection conn = DriverManager.getConnection(url, props);) {
+                    conn.createStatement().executeUpdate("CREATE SCHEMA IF NOT EXISTS " + schema);
+                } catch (TableAlreadyExistsException e) {
+                    throw e;
+                }
+            }
+        }
     }
 
     protected static void createTestTable(String url, String ddl) throws SQLException {

@@ -17,18 +17,16 @@
  */
 package org.apache.phoenix.schema;
 
-import org.apache.phoenix.query.QueryConstants;
-
 import com.google.common.base.Preconditions;
 
-public class PTableKey {
+public class PSchemaKey {
     private final PName tenantId;
     private final String name;
-    
-    public PTableKey(PName tenantId, String name) {
+
+    public PSchemaKey(PName tenantId, String name) {
         Preconditions.checkNotNull(name);
         this.tenantId = tenantId;
-        this.name = name.replace(QueryConstants.NAMESPACE_SEPARATOR, QueryConstants.NAME_SEPARATOR);
+        this.name = name;
     }
 
     public PName getTenantId() {
@@ -38,12 +36,12 @@ public class PTableKey {
     public String getName() {
         return name;
     }
-    
+
     @Override
     public String toString() {
         return name + (tenantId == null ? "" : " for " + tenantId.getString());
     }
-    
+
     @Override
     public int hashCode() {
         final int prime = 31;
@@ -58,7 +56,7 @@ public class PTableKey {
         if (this == obj) return true;
         if (obj == null) return false;
         if (getClass() != obj.getClass()) return false;
-        PTableKey other = (PTableKey)obj;
+        PSchemaKey other = (PSchemaKey)obj;
         if (!name.equals(other.name)) return false;
         if (tenantId == null) {
             if (other.tenantId != null) return false;
