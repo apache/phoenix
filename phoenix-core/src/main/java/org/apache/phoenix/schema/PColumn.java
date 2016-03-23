@@ -63,6 +63,8 @@ public interface PColumn extends PDatum {
     
     /**
      * @return name of the HBase column qualifier
+     * TODO: samarth I think we should should change this to return byte[] array.
+     * Then we won't have to worry about calling SchemaUtil... everywhere. I think.
      */
     Integer getColumnQualifier();
 }

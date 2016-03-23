@@ -237,7 +237,6 @@ public interface PTable extends PMetaDataEntity {
      * can be found
      * @throws AmbiguousColumnException if multiple columns are found with the given name
      */
-    //TODO: samarth inspect all the callers of this method.
     PColumn getPColumnForColumnName(String name) throws ColumnNotFoundException, AmbiguousColumnException;
     
     /**

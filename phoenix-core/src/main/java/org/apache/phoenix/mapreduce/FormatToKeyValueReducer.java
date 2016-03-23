@@ -152,6 +152,7 @@ public class FormatToKeyValueReducer
                 }
                 map.add(kv);
             }
+            //FIXME: samarth need to supply the right empty column qualifier here.
             KeyValue empty = builder.buildPut(key.getRowkey(),
                     emptyFamilyName.get(tableIndex),
                     QueryConstants.EMPTY_COLUMN_BYTES_PTR, ByteUtil.EMPTY_BYTE_ARRAY_PTR);

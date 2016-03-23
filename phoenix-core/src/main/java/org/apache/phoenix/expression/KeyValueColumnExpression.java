@@ -41,7 +41,7 @@ import org.apache.phoenix.util.SchemaUtil;
 public class KeyValueColumnExpression extends ColumnExpression {
     private byte[] cf;
     private byte[] cq;
-    private String displayName; // client-side only
+    private String displayName; // client-side only. TODO: samarth see what can you do for encoded column names.
 
     public KeyValueColumnExpression() {
     }

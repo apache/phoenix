@@ -702,7 +702,7 @@ public class ProjectionCompiler {
                      public Void visit(ProjectedColumnExpression expression) {
                          if (expression.getDataType().isArrayType()) {
                              indexProjectedColumns.add(expression);
-                             //TODO: samarth confirm this change that column names 
+                             //TODO: samarth confirm this change is to have encodedColumnNames as false. 
                              KeyValueColumnExpression keyValueColumnExpression = new KeyValueColumnExpression(expression.getColumn(), false);
                              indexKVs.add(keyValueColumnExpression);
                              copyOfChildren.set(0, keyValueColumnExpression);

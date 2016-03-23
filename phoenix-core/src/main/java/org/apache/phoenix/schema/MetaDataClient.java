@@ -1925,19 +1925,16 @@ public class MetaDataClient {
                         nextColumnQualifiers  = SchemaUtil.getNextColumnQualifiers(parent);
                     }
                 }
-            } else if (parent != null && tableType == PTableType.INDEX) {
+            } else {
                 // New indexes on existing tables can have encoded column names. But unfortunately, due to 
                 // backward compatibility reasons, we aren't able to change IndexMaintainer and the state
                 // that is serialized in it. Because of this we are forced to have the indexes inherit the
-                // storage scheme of the parent data tables.
-                storageScheme = parent.getStorageScheme();
+                // storage scheme of the parent data tables. Otherwise, we always attempt to create tables 
+                // with encoded column names.
+                storageScheme = parent != null ? parent.getStorageScheme() : StorageScheme.ENCODED_COLUMN_NAMES;
                 if (storageScheme == StorageScheme.ENCODED_COLUMN_NAMES) {
-                    nextColumnQualifiers  = SchemaUtil.getNextColumnQualifiers(parent);
+                    nextColumnQualifiers  = Maps.newHashMapWithExpectedSize(colDefs.size() - pkColumns.size());
                 }
-            } else {
-                // we always attempt to create tables with encoded column names.
-                storageScheme = StorageScheme.ENCODED_COLUMN_NAMES;
-                nextColumnQualifiers = Maps.newHashMapWithExpectedSize(colDefs.size() - pkColumns.size());
             }
             
             for (ColumnDef colDef : colDefs) {
@@ -3136,8 +3133,8 @@ public class MetaDataClient {
                     Set<ColumnReference> coveredColumns = indexMaintainer.getCoverededColumns();
                     List<PColumn> indexColumnsToDrop = Lists.newArrayListWithExpectedSize(columnRefs.size());
                     for(PColumn columnToDrop : tableColumnsToDrop) {
-                        ColumnReference columnToDropRef = new ColumnReference(columnToDrop.getFamilyName().getBytes(), columnToDrop.getName().getBytes());
                         // if the columns being dropped is indexed and the physical index table is not shared
+                        ColumnReference columnToDropRef = new ColumnReference(columnToDrop.getFamilyName().getBytes(), SchemaUtil.getColumnQualifier(columnToDrop, index));
                         if (indexColumns.contains(columnToDropRef)) {
                             if (index.getViewIndexId()==null) 
                                 indexesToDrop.add(new TableRef(index));

@@ -221,7 +221,6 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
                 Scan scan = new Scan();
                 // Project all mutable columns
                 for (ColumnReference ref : mutableColumns) {
-                    //TODO: samarth confirm this is ok
                     scan.addColumn(ref.getFamily(), ref.getQualifier());
                 }
                 // Indexes inherit the storage scheme of the data table which means all the indexes have the same
