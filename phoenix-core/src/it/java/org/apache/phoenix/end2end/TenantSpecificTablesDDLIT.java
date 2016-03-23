@@ -307,13 +307,12 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
                 assertEquals(CANNOT_DROP_PK.getErrorCode(), expected.getErrorCode());
             }
             
-            // try removing a non-PK col
+            // try removing a non-PK col, which is allowed
             try {
                 conn.createStatement().execute("alter table " + PARENT_TABLE_NAME + " drop column user");
-                fail();
             }
             catch (SQLException expected) {
-                assertEquals(CANNOT_MUTATE_TABLE.getErrorCode(), expected.getErrorCode());
+                fail("We should be able to drop a non pk base table column");
             }
         }
         finally {
