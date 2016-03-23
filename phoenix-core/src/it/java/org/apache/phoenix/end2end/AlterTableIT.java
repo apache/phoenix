@@ -36,7 +36,6 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Collections;
-import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
@@ -44,8 +43,10 @@ import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeepDeletedCells;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.HTableInterface;
-import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.HTable;
+import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.ResultScanner;
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -55,8 +56,6 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TableNotFoundException;
-import org.apache.phoenix.schema.types.PInteger;
-import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -64,8 +63,6 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
-import com.google.common.collect.Lists;
 
 /**
  *
@@ -358,6 +355,13 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         assertIndexExists(conn,true);
 
         // verify data table rows
+        Scan scan = new Scan();
+        HTable table = (HTable) conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(DATA_TABLE_FULL_NAME));
+        ResultScanner results = table.getScanner(scan);
+        for (Result res : results) {
+        	assertNull("Column value was not deleted",res.getValue(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, Bytes.toBytes("V2")));
+        }
+        results.close();
         rs = conn.createStatement().executeQuery(dataTableQuery);
         assertTrue(rs.next());
         assertEquals("a",rs.getString(1));
@@ -366,6 +370,13 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         assertFalse(rs.next());
         
         // verify index table rows
+        scan = new Scan();
+        table = (HTable) conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(INDEX_TABLE_FULL_NAME));
+        results = table.getScanner(scan);
+        for (Result res : results) {
+        	assertNull("Column value was not deleted",res.getValue(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, Bytes.toBytes("0:V2")));
+        }
+        results.close();
         rs = conn.createStatement().executeQuery(indexTableQuery);
         assertTrue(rs.next());
         assertEquals("x",rs.getString(1));
@@ -2204,6 +2215,6 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
 			}
 		}
 	}
-    
+	
 }
  

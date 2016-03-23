@@ -167,6 +167,24 @@ public class PTableImpl implements PTable {
         this.families = families;
         this.physicalNames = Collections.emptyList();
     }
+    
+    public PTableImpl(PName tenantId, PName schemaName, PName tableName, long timestamp, List<PColumnFamily> families, 
+            List<PColumn> columns, List<PName> physicalNames, Short viewIndexId, boolean multiTenant) throws SQLException { // For indexes stored in shared physical tables
+        this.pkColumns = this.allColumns = Collections.emptyList();
+        this.rowKeySchema = RowKeySchema.EMPTY_SCHEMA;
+        this.indexes = Collections.emptyList();
+        this.familyByBytes = Maps.newHashMapWithExpectedSize(families.size());
+        this.familyByString = Maps.newHashMapWithExpectedSize(families.size());
+        for (PColumnFamily family : families) {
+            familyByBytes.put(family.getName().getBytes(), family);
+            familyByString.put(family.getName().getString(), family);
+        }
+        this.families = families;
+        init(tenantId, this.schemaName, this.tableName, PTableType.INDEX, state, timeStamp, sequenceNumber, pkName, bucketNum, columns,
+            PTableStats.EMPTY_STATS, this.schemaName, parentTableName, indexes, isImmutableRows, physicalNames, defaultFamilyName,
+            null, disableWAL, multiTenant, storeNulls, viewType, viewIndexId, indexType, baseColumnCount, rowKeyOrderOptimizable,
+            isTransactional, updateCacheFrequency, indexDisableTimestamp);
+    }
 
     public PTableImpl(long timeStamp) { // For delete marker
         this(timeStamp, false);
