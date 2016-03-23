@@ -111,6 +111,7 @@ import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Properties;
 import java.util.Set;
 
@@ -137,6 +138,7 @@ import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MutationCode;
+import org.apache.phoenix.coprocessor.MetaDataProtocol.SharedTableState;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
@@ -204,6 +206,8 @@ import org.apache.phoenix.util.UpgradeUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import co.cask.tephra.TxConstants;
+
 import com.google.common.base.Objects;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.ListMultimap;
@@ -211,8 +215,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.primitives.Ints;
-
-import co.cask.tephra.TxConstants;
 
 public class MetaDataClient {
     private static final Logger logger = LoggerFactory.getLogger(MetaDataClient.class);
@@ -444,11 +446,11 @@ public class MetaDataClient {
         return currentScn;
     }
     
-    private MetaDataMutationResult updateCache(PName tenantId, String schemaName, String tableName,
+    private MetaDataMutationResult updateCache(PName origTenantId, String schemaName, String tableName,
             boolean alwaysHitServer, Long resolvedTimestamp) throws SQLException { // TODO: pass byte[] herez
         boolean systemTable = SYSTEM_CATALOG_SCHEMA.equals(schemaName);
         // System tables must always have a null tenantId
-        tenantId = systemTable ? null : tenantId;
+        PName tenantId = systemTable ? null : origTenantId;
         PTable table = null;
         PTableRef tableRef = null;
         String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
@@ -535,7 +537,7 @@ public class MetaDataClient {
                     // If table was not found at the current time stamp and we have one cached, remove it.
                     // Otherwise, we're up to date, so there's nothing to do.
                     if (code == MutationCode.TABLE_NOT_FOUND && tryCount + 1 == maxTryCount) {
-                        connection.removeTable(tenantId, fullTableName, table.getParentName() == null ? null : table.getParentName().getString(), table.getTimeStamp());
+                        connection.removeTable(origTenantId, fullTableName, table.getParentName() == null ? null : table.getParentName().getString(), table.getTimeStamp());
                     }
                 }
             }
@@ -3029,12 +3031,18 @@ public class MetaDataClient {
                     List<PColumn> indexColumnsToDrop = Lists.newArrayListWithExpectedSize(columnRefs.size());
                     for(PColumn columnToDrop : tableColumnsToDrop) {
                         ColumnReference columnToDropRef = new ColumnReference(columnToDrop.getFamilyName().getBytes(), columnToDrop.getName().getBytes());
+                        // if the columns being dropped is indexed and the physical index table is not shared
                         if (indexColumns.contains(columnToDropRef)) {
-                            indexesToDrop.add(new TableRef(index));
+                            if (index.getViewIndexId()==null) 
+                                indexesToDrop.add(new TableRef(index));
+                            connection.removeTable(tenantId, SchemaUtil.getTableName(schemaName, index.getName().getString()), index.getParentName() == null ? null : index.getParentName().getString(), index.getTimeStamp());
                         } 
                         else if (coveredColumns.contains(columnToDropRef)) {
                             String indexColumnName = IndexUtil.getIndexColumnName(columnToDrop);
-                            indexColumnsToDrop.add(index.getColumn(indexColumnName));
+                            PColumn indexColumn = index.getColumn(indexColumnName);
+                            indexColumnsToDrop.add(indexColumn);
+                            // add the index column to be dropped so that we actually delete the column values
+                            columnsToDrop.add(new ColumnRef(new TableRef(index), indexColumn.getPosition()));
                         }
                     }
                     if(!indexColumnsToDrop.isEmpty()) {
@@ -3109,11 +3117,53 @@ public class MetaDataClient {
                         // Delete everything in the column. You'll still be able to do queries at earlier timestamps
                         long ts = (scn == null ? result.getMutationTime() : scn);
                         PostDDLCompiler compiler = new PostDDLCompiler(connection);
+                        
                         boolean dropMetaData = connection.getQueryServices().getProps().getBoolean(DROP_METADATA_ATTRIB, DEFAULT_DROP_METADATA);
-                        if(!dropMetaData){
-                            // Drop any index tables that had the dropped column in the PK
-                            connection.getQueryServices().updateData(compiler.compile(indexesToDrop, null, null, Collections.<PColumn>emptyList(), ts));
+                        // if the index is a local index or view index it uses a shared physical table
+                        // so we need to issue deletes markers for all the rows of the index 
+                        final List<TableRef> tableRefsToDrop = Lists.newArrayList();
+                        Map<String, List<TableRef>> tenantIdTableRefMap = Maps.newHashMap();
+                        if (result.getSharedTablesToDelete()!=null) {
+                            for (SharedTableState sharedTableState : result.getSharedTablesToDelete()) { 
+                                PTableImpl viewIndexTable = new PTableImpl(sharedTableState.getTenantId(), 
+                                    sharedTableState.getSchemaName(), sharedTableState.getTableName(), 
+                                    ts, table.getColumnFamilies(), sharedTableState.getColumns(),
+                                    sharedTableState.getPhysicalNames(), sharedTableState.getViewIndexId(), table.isMultiTenant());
+                                TableRef indexTableRef = new TableRef(viewIndexTable);
+                                PName indexTableTenantId = sharedTableState.getTenantId();
+                                if (indexTableTenantId==null) {
+                                    tableRefsToDrop.add(indexTableRef);
+                                }
+                                else {
+                                    if (!tenantIdTableRefMap.containsKey(indexTableTenantId)) {
+                                        tenantIdTableRefMap.put(indexTableTenantId.getString(), Lists.<TableRef>newArrayList());
+                                    }
+                                    tenantIdTableRefMap.get(indexTableTenantId.getString()).add(indexTableRef);
+                                }
+                                
+                            }
                         }
+                        // if dropMetaData is false delete all rows for the indexes (if it was true
+                        // they would have been dropped in ConnectionQueryServices.dropColumn)
+                        if (!dropMetaData) {
+                            tableRefsToDrop.addAll(indexesToDrop);
+                        }
+                        // Drop any index tables that had the dropped column in the PK
+                        connection.getQueryServices().updateData(compiler.compile(tableRefsToDrop, null, null, Collections.<PColumn>emptyList(), ts));
+                        
+                        // Drop any tenant-specific indexes
+                        if (!tenantIdTableRefMap.isEmpty()) {
+                            for (Entry<String, List<TableRef>> entry : tenantIdTableRefMap.entrySet()) {
+                                String indexTenantId = entry.getKey();
+                                Properties props = new Properties(connection.getClientInfo());
+                                props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, indexTenantId);
+                                try (PhoenixConnection tenantConn = DriverManager.getConnection(connection.getURL(), props).unwrap(PhoenixConnection.class)) {
+                                    PostDDLCompiler dropCompiler = new PostDDLCompiler(tenantConn);
+                                    tenantConn.getQueryServices().updateData(dropCompiler.compile(entry.getValue(), null, null, Collections.<PColumn>emptyList(), ts));
+                                }
+                            }
+                        }
+                        
                         // Update empty key value column if necessary
                         for (ColumnRef droppedColumnRef : columnsToDrop) {
                             // Painful, but we need a TableRef with a pre-set timestamp to prevent attempts

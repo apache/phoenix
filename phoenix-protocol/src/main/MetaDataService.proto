@@ -44,6 +44,15 @@ enum MutationCode {
   FUNCTION_NOT_IN_REGION = 13;
 };
 
+message SharedTableState {
+  optional bytes tenantId = 1;
+  required bytes schemaName  = 2;
+  required bytes tableName = 3;
+  repeated PColumn columns = 4;  
+  repeated bytes physicalNames = 5;
+  required int32 viewIndexId = 6;
+}
+
 message MetaDataResponse {
   optional MutationCode returnCode = 1;
   optional int64 mutationTime = 2;
@@ -53,6 +62,7 @@ message MetaDataResponse {
   optional bytes familyName = 6;
   optional bytes functionName = 7;
   repeated PFunction function = 8;
+  repeated SharedTableState sharedTablesToDelete = 9;
 }
 
 message GetTableRequest {
