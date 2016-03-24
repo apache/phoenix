@@ -395,24 +395,10 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
                 // Using KeyValueSchema to set and retrieve the value
                 // collect the first kv to get the row
                 Cell rowKv = result.get(0);
-                for (KeyValueColumnExpression kvExp : arrayKVRefs) {
-                    if (kvExp.evaluate(tuple, ptr)) {
-                        for (int idx = tuple.size() - 1; idx >= 0; idx--) {
-                            Cell kv = tuple.getValue(idx);
-                            if (Bytes.equals(kvExp.getColumnFamily(), 0, kvExp.getColumnFamily().length,
-                                    kv.getFamilyArray(), kv.getFamilyOffset(), kv.getFamilyLength())
-                                && Bytes.equals(kvExp.getColumnQualifier(), 0, kvExp.getColumnQualifier().length,
-                                        kv.getQualifierArray(), kv.getQualifierOffset(), kv.getQualifierLength())) {
-                                // remove the kv that has the full array values.
-                                result.remove(idx);
-                                break;
-                            }
-                        }
-                    }
-                }
                 byte[] value = kvSchema.toBytes(tuple, arrayFuncRefs,
                         kvSchemaBitSet, ptr);
                 // Add a dummy kv with the exact value of the array index
+                // TODO: samarth how does this dummy column qualifier play with encoded column names
                 result.add(new KeyValue(rowKv.getRowArray(), rowKv.getRowOffset(), rowKv.getRowLength(),
                         QueryConstants.ARRAY_VALUE_COLUMN_FAMILY, 0, QueryConstants.ARRAY_VALUE_COLUMN_FAMILY.length,
                         QueryConstants.ARRAY_VALUE_COLUMN_QUALIFIER, 0,

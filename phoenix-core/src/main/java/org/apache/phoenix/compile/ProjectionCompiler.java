@@ -702,8 +702,8 @@ public class ProjectionCompiler {
                      public Void visit(ProjectedColumnExpression expression) {
                          if (expression.getDataType().isArrayType()) {
                              indexProjectedColumns.add(expression);
-                             //TODO: samarth confirm this change is to have encodedColumnNames as false. 
-                             KeyValueColumnExpression keyValueColumnExpression = new KeyValueColumnExpression(expression.getColumn(), false);
+                             PColumn col = expression.getColumn();
+                             KeyValueColumnExpression keyValueColumnExpression = new KeyValueColumnExpression(col, SchemaUtil.hasEncodedColumnName(col));
                              indexKVs.add(keyValueColumnExpression);
                              copyOfChildren.set(0, keyValueColumnExpression);
                              Integer count = arrayExpressionCounts.get(expression);
