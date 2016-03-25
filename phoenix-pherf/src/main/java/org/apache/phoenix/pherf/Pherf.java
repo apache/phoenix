@@ -91,6 +91,7 @@ public class Pherf {
 		options.addOption("useAverageCompareType", false, "Compare results with Average query time instead of default is Minimum query time.");
 		    options.addOption("t", "thin", false, "Use the Phoenix Thin Driver");
 		    options.addOption("s", "server", true, "The URL for the Phoenix QueryServer");
+		    options.addOption("b", "batchApi", false, "Use JDBC Batch API for writes");
     }
 
     private final String zookeeper;
@@ -164,6 +165,11 @@ public class Pherf {
             queryServerUrl = command.getOptionValue("server", "http://localhost:8765");
         } else {
             queryServerUrl = null;
+        }
+
+        if (command.hasOption('b')) {
+          // If the '-b' option was provided, set the system property for WriteWorkload to pick up.
+          System.setProperty(WriteWorkload.USE_BATCH_API_PROPERTY, Boolean.TRUE.toString());
         }
 
         if ((command.hasOption("h") || (args == null || args.length == 0)) && !command
