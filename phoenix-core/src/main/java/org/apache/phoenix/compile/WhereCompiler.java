@@ -56,6 +56,7 @@ import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
@@ -170,7 +171,7 @@ public class WhereCompiler {
             TableRef tableRef = ref.getTableRef();
             if (tableRef.equals(context.getCurrentTable()) && !SchemaUtil.isPKColumn(ref.getColumn())) {
                 // track the where condition columns. Later we need to ensure the Scan in HRS scans these column CFs
-                byte[] cq = SchemaUtil.getColumnQualifier(ref.getColumn(), tableRef.getTable());
+                byte[] cq = EncodedColumnsUtil.getColumnQualifier(ref.getColumn(), tableRef.getTable());
                 context.addWhereCoditionColumn(ref.getColumn().getFamilyName().getBytes(), cq);
             }
             return ref.newColumnExpression(node.isTableNameCaseSensitive(), node.isCaseSensitive());

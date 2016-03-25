@@ -157,7 +157,7 @@ public class SchemaUtil {
     			rowSize += KeyValue.getKeyValueDataStructureSize(keyLength, column.getFamilyName().getBytes().length, column.getName().getBytes().length, valueLength);
     		}
     	}
-    	byte[] emptyKeyValueKV = SchemaUtil.getEmptyKeyValueInfo(table).getFirst();
+    	byte[] emptyKeyValueKV = EncodedColumnsUtil.getEmptyKeyValueInfo(table).getFirst();
     	// Empty key value
     	rowSize += KeyValue.getKeyValueDataStructureSize(keyLength, getEmptyColumnFamily(table).length, emptyKeyValueKV.length, 0);
     	return rowSize;
@@ -1024,14 +1024,22 @@ public class SchemaUtil {
     /**
      * Return a map of column family -> next column qualifier number to use.
      */
-    public static Map<String, Integer> getNextColumnQualifiers(PTable table) {
-        Map<String, Integer> map = Maps.newHashMapWithExpectedSize(table.getColumns().size());
-        for (PColumnFamily f : table.getColumnFamilies()) {
-            final int size = f.getColumns().size();
-            // column qualifiers start with 1.
-            map.put(f.getName().getString(), size + 1);
+    public static Map<String, Integer> getNextEncodedColumnQualifiers(PTable table) {
+        if (EncodedColumnsUtil.usesEncodedColumnNames(table)) {
+            Map<String, Integer> map = Maps.newHashMapWithExpectedSize(table.getColumns().size());
+            int max = 0; 
+            for (PColumnFamily f : table.getColumnFamilies()) {
+                for (PColumn column : f.getColumns()) {
+                    if (column.getEncodedColumnQualifier() > max) {
+                        max = column.getEncodedColumnQualifier();
+                    }
+                }
+                // column qualifiers start with 1.
+                map.put(f.getName().getString(), max + 1);
+            }
+            return map;
         }
-        return map;
+        return null;
     }
     
     public static boolean usesEncodedColumnNames(PTable table) {
@@ -1040,12 +1048,12 @@ public class SchemaUtil {
     
     public static byte[] getColumnQualifier(PColumn column, PTable table) {
       checkArgument(!SchemaUtil.isPKColumn(column), "No column qualifiers for PK columns");
-      return usesEncodedColumnNames(table) ? PInteger.INSTANCE.toBytes(column.getColumnQualifier()) : column.getName().getBytes();
+      return usesEncodedColumnNames(table) ? PInteger.INSTANCE.toBytes(column.getEncodedColumnQualifier()) : column.getName().getBytes();
     }
     
     public static byte[] getColumnQualifier(PColumn column, boolean encodedColumnName) {
         checkArgument(!SchemaUtil.isPKColumn(column), "No column qualifiers for PK columns");
-        return encodedColumnName ? PInteger.INSTANCE.toBytes(column.getColumnQualifier()) : column.getName().getBytes(); 
+        return encodedColumnName ? PInteger.INSTANCE.toBytes(column.getEncodedColumnQualifier()) : column.getName().getBytes(); 
     }
     
     /**
@@ -1069,7 +1077,7 @@ public class SchemaUtil {
     }
     
     public static boolean hasEncodedColumnName(PColumn column){
-        return !SchemaUtil.isPKColumn(column) && column.getColumnQualifier() != null;
+        return !SchemaUtil.isPKColumn(column) && column.getEncodedColumnQualifier() != null;
     }
     
 }

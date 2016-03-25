@@ -50,8 +50,8 @@ import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.ScanUtil;
-import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TransactionUtil;
 
 import com.google.common.collect.Lists;
@@ -214,7 +214,7 @@ public class PostDDLCompiler {
                         ScanUtil.setTimeRange(scan, ts);
                         if (emptyCF != null) {
                             scan.setAttribute(BaseScannerRegionObserver.EMPTY_CF, emptyCF);
-                            scan.setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER, SchemaUtil.getEmptyKeyValueInfo(tableRef.getTable()).getFirst());
+                            scan.setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER, EncodedColumnsUtil.getEmptyKeyValueInfo(tableRef.getTable()).getFirst());
                         }
                         ServerCache cache = null;
                         try {
@@ -238,7 +238,7 @@ public class PostDDLCompiler {
                                     // data empty column family to stay the same, while the index empty column family
                                     // changes.
                                     PColumn column = deleteList.get(0);
-                                    byte[] cq = SchemaUtil.getColumnQualifier(column, tableRef.getTable());
+                                    byte[] cq = EncodedColumnsUtil.getColumnQualifier(column, tableRef.getTable());
                                     if (emptyCF == null) {
                                         scan.addColumn(column.getFamilyName().getBytes(), cq);
                                     }

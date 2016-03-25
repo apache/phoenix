@@ -201,6 +201,7 @@ import org.apache.phoenix.schema.types.PUnsignedLong;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.MetaDataUtil;
@@ -788,10 +789,10 @@ public class MetaDataClient {
         } else {
             colUpsert.setString(18, column.getExpressionStr());
         }
-        if (column.getColumnQualifier() == null) {
+        if (column.getEncodedColumnQualifier() == null) {
             colUpsert.setNull(19, Types.INTEGER);
         } else {
-            colUpsert.setInt(19, column.getColumnQualifier());
+            colUpsert.setInt(19, column.getEncodedColumnQualifier());
         }
         if (colUpsert.getParameterMetaData().getParameterCount() > 19) {
             colUpsert.setBoolean(20, column.isRowTimestamp());
@@ -1908,7 +1909,7 @@ public class MetaDataClient {
             int position = positionOffset;
             
             StorageScheme storageScheme = null;
-            Map<String, Integer> nextColumnQualifiers = null; // this would be null for tables created before phoenix 4.8.
+            Map<String, Integer> nextColumnQualifiers = null; // this would be null for tables created for columns with storage scheme != ENCODED_COLUMN_NAMES
             if (SchemaUtil.isSystemTable(Bytes.toBytes(SchemaUtil.getTableName(schemaName, tableName)))) {
                 // System tables have hard-coded column qualifiers. So we can't use column encoding for them.
                 storageScheme = StorageScheme.NON_ENCODED_COLUMN_NAMES;
@@ -1922,7 +1923,7 @@ public class MetaDataClient {
                     // HTable.
                     storageScheme = parent.getStorageScheme();
                     if (storageScheme == StorageScheme.ENCODED_COLUMN_NAMES) {
-                        nextColumnQualifiers  = SchemaUtil.getNextColumnQualifiers(parent);
+                        nextColumnQualifiers  = SchemaUtil.getNextEncodedColumnQualifiers(parent);
                     }
                 }
             } else {
@@ -2804,7 +2805,7 @@ public class MetaDataClient {
                 List<PColumn> columns = Lists.newArrayListWithExpectedSize(columnDefs.size());
                 Set<String> colFamiliesForPColumnsToBeAdded = new LinkedHashSet<>();
                 Set<String> families = new LinkedHashSet<>();
-                Map<String, Integer> nextColumnQualifiers = SchemaUtil.getNextColumnQualifiers(table);
+                Map<String, Integer> nextColumnQualifiers = SchemaUtil.getNextEncodedColumnQualifiers(table);
                 if (columnDefs.size() > 0 ) {
                     try (PreparedStatement colUpsert = connection.prepareStatement(INSERT_COLUMN_ALTER_TABLE)) {
                         short nextKeySeq = SchemaUtil.getMaxKeySeq(table);
@@ -3133,8 +3134,7 @@ public class MetaDataClient {
                     Set<ColumnReference> coveredColumns = indexMaintainer.getCoverededColumns();
                     List<PColumn> indexColumnsToDrop = Lists.newArrayListWithExpectedSize(columnRefs.size());
                     for(PColumn columnToDrop : tableColumnsToDrop) {
-                        // if the columns being dropped is indexed and the physical index table is not shared
-                        ColumnReference columnToDropRef = new ColumnReference(columnToDrop.getFamilyName().getBytes(), SchemaUtil.getColumnQualifier(columnToDrop, index));
+                        ColumnReference columnToDropRef = new ColumnReference(columnToDrop.getFamilyName().getBytes(), EncodedColumnsUtil.getColumnQualifier(columnToDrop, index));
                         if (indexColumns.contains(columnToDropRef)) {
                             if (index.getViewIndexId()==null) 
                                 indexesToDrop.add(new TableRef(index));

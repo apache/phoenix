@@ -91,6 +91,7 @@ import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PTinyint;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
@@ -717,7 +718,7 @@ public class JoinCompiler {
                 if (columnRef.getTableRef().equals(tableRef)
                         && !SchemaUtil.isPKColumn(columnRef.getColumn())
                         && !(columnRef instanceof LocalIndexColumnRef)) {
-                    scan.addColumn(columnRef.getColumn().getFamilyName().getBytes(), SchemaUtil.getColumnQualifier(columnRef.getColumn(), tableRef.getTable()));
+                    scan.addColumn(columnRef.getColumn().getFamilyName().getBytes(), EncodedColumnsUtil.getColumnQualifier(columnRef.getColumn(), tableRef.getTable()));
                 }
             }
         }

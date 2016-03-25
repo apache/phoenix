@@ -138,7 +138,7 @@ public class AggregateResultScannerTest extends BaseConnectionlessQueryTest {
 				return false;
 			}
             @Override
-            public Integer getColumnQualifier() {
+            public Integer getEncodedColumnQualifier() {
                 return null;
             }
         }, false)), null);

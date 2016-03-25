@@ -21,7 +21,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.SizedUtil;
 
 import com.google.common.base.Preconditions;
@@ -34,7 +34,7 @@ public class PColumnFamilyImpl implements PColumnFamily {
     private final List<PColumn> columns;
     private final Map<String, PColumn> columnNamesByStrings;
     private final Map<byte[], PColumn> columnNamesByBytes;
-    private final Map<byte[], PColumn> columnQualifiersByBytes;
+    private final Map<byte[], PColumn> encodedColumnQualifersByBytes;
     private final int estimatedSize;
 
     @Override
@@ -51,19 +51,18 @@ public class PColumnFamilyImpl implements PColumnFamily {
         this.columns = ImmutableList.copyOf(columns);
         ImmutableMap.Builder<String, PColumn> columnNamesByStringBuilder = ImmutableMap.builder();
         ImmutableSortedMap.Builder<byte[], PColumn> columnNamesByBytesBuilder = ImmutableSortedMap.orderedBy(Bytes.BYTES_COMPARATOR);
-        ImmutableSortedMap.Builder<byte[], PColumn> columnQualifiersByBytesBuilder = ImmutableSortedMap.orderedBy(Bytes.BYTES_COMPARATOR);
+        ImmutableSortedMap.Builder<byte[], PColumn> encodedColumnQualifiersByBytesBuilder = ImmutableSortedMap.orderedBy(Bytes.BYTES_COMPARATOR);
         for (PColumn column : columns) {
             estimatedSize += column.getEstimatedSize();
             columnNamesByBytesBuilder.put(column.getName().getBytes(), column);
             columnNamesByStringBuilder.put(column.getName().getString(), column);
-            // TODO: samarth fix this. projected columns have column family for pk columns which messes up with checks.
-            if (!useEncodedColumnNames || (useEncodedColumnNames && !(column.getColumnQualifier() == null))) {
-                columnQualifiersByBytesBuilder.put(SchemaUtil.getColumnQualifier(column, useEncodedColumnNames), column);
+            if (useEncodedColumnNames && column.getEncodedColumnQualifier() != null) {
+                encodedColumnQualifiersByBytesBuilder.put(EncodedColumnsUtil.getEncodedColumnQualifier(column), column);
             }
         }
         this.columnNamesByBytes = columnNamesByBytesBuilder.build();
         this.columnNamesByStrings = columnNamesByStringBuilder.build();
-        this.columnQualifiersByBytes = useEncodedColumnNames ? columnQualifiersByBytesBuilder.build() : columnNamesByBytes;
+        this.encodedColumnQualifersByBytes =  encodedColumnQualifiersByBytesBuilder.build();
         this.estimatedSize = (int)estimatedSize;
     }
     
@@ -97,9 +96,13 @@ public class PColumnFamilyImpl implements PColumnFamily {
     
     @Override
     public PColumn getPColumnForColumnQualifier(byte[] cq) throws ColumnNotFoundException {
-        PColumn column = columnQualifiersByBytes.get(cq);
+        Preconditions.checkNotNull(cq);
+        PColumn column = encodedColumnQualifersByBytes.get(cq);
         if (column == null) {
-            throw new ColumnNotFoundException(Bytes.toString(cq));
+            // For tables with non-encoded column names, column qualifiers are
+            // column name bytes. Also dynamic columns don't have encoded column
+            // qualifiers. So they could be found in the column name by bytes map.
+            return getPColumnForColumnNameBytes(cq);
         }
         return column;
     }

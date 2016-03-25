@@ -88,6 +88,7 @@ import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.SizedUtil;
@@ -703,7 +704,7 @@ public class ProjectionCompiler {
                          if (expression.getDataType().isArrayType()) {
                              indexProjectedColumns.add(expression);
                              PColumn col = expression.getColumn();
-                             KeyValueColumnExpression keyValueColumnExpression = new KeyValueColumnExpression(col, SchemaUtil.hasEncodedColumnName(col));
+                             KeyValueColumnExpression keyValueColumnExpression = new KeyValueColumnExpression(col, EncodedColumnsUtil.hasEncodedColumnName(col));
                              indexKVs.add(keyValueColumnExpression);
                              copyOfChildren.set(0, keyValueColumnExpression);
                              Integer count = arrayExpressionCounts.get(expression);

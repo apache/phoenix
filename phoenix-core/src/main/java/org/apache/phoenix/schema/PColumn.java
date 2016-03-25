@@ -66,5 +66,5 @@ public interface PColumn extends PDatum {
      * TODO: samarth I think we should should change this to return byte[] array.
      * Then we won't have to worry about calling SchemaUtil... everywhere 
      */
-    Integer getColumnQualifier();
+    Integer getEncodedColumnQualifier();
 }

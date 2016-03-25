@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.schema;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static org.apache.phoenix.hbase.index.util.KeyValueBuilder.addQuietly;
 import static org.apache.phoenix.hbase.index.util.KeyValueBuilder.deleteQuietly;
 import static org.apache.phoenix.schema.SaltingUtil.SALTING_COLUMN;
@@ -66,6 +65,7 @@ import org.apache.phoenix.schema.types.PFloat;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.SizedUtil;
 import org.apache.phoenix.util.StringUtil;
@@ -114,7 +114,7 @@ public class PTableImpl implements PTable {
     private Map<byte[], PColumnFamily> familyByBytes;
     private Map<String, PColumnFamily> familyByString;
     private ListMultimap<String, PColumn> columnsByName;
-    private ListMultimap<Integer, PColumn> kvColumnsByColumnQualifiers;
+    private ListMultimap<Integer, PColumn> kvColumnsByEncodedColumnNames;
     private PName pkName;
     private Integer bucketNum;
     private RowKeySchema rowKeySchema;
@@ -414,7 +414,7 @@ public class PTableImpl implements PTable {
         PColumn[] allColumns;
         
         this.columnsByName = ArrayListMultimap.create(columns.size(), 1);
-        this.kvColumnsByColumnQualifiers = (storageScheme == StorageScheme.ENCODED_COLUMN_NAMES ? ArrayListMultimap.<Integer, PColumn>create(columns.size(), 1) : null);
+        this.kvColumnsByEncodedColumnNames = (storageScheme == StorageScheme.ENCODED_COLUMN_NAMES ? ArrayListMultimap.<Integer, PColumn>create(columns.size(), 1) : null);
         int numPKColumns = 0;
         if (bucketNum != null) {
             // Add salt column to allColumns and pkColumns, but don't add to
@@ -446,12 +446,12 @@ public class PTableImpl implements PTable {
                     }
                 }
             }
-            Integer cq = column.getColumnQualifier();
+            Integer cq = column.getEncodedColumnQualifier();
             //TODO: samarth understand the implication of this.
-            if (kvColumnsByColumnQualifiers != null && cq != null) {
-                if (kvColumnsByColumnQualifiers.put(cq, column)) {
+            if (kvColumnsByEncodedColumnNames != null && cq != null) {
+                if (kvColumnsByEncodedColumnNames.put(cq, column)) {
                     int count = 0;
-                    for (PColumn dupColumn : kvColumnsByColumnQualifiers.get(cq)) {
+                    for (PColumn dupColumn : kvColumnsByEncodedColumnNames.get(cq)) {
                         if (Objects.equal(familyName, dupColumn.getFamilyName())) {
                             count++;
                             if (count > 1) {
@@ -729,12 +729,13 @@ public class PTableImpl implements PTable {
     
     @Override
     public PColumn getPColumnForColumnQualifier(byte[] cq) throws ColumnNotFoundException, AmbiguousColumnException {
-        if (SchemaUtil.usesEncodedColumnNames(this)) {
+        Preconditions.checkNotNull(cq);
+        if (!EncodedColumnsUtil.usesEncodedColumnNames(this)) {
             String columnName = (String)PVarchar.INSTANCE.toObject(cq);
             return getPColumnForColumnName(columnName);
         } else {
             Integer qualifier = (Integer)PInteger.INSTANCE.toObject(cq);
-            List<PColumn> columns = kvColumnsByColumnQualifiers.get(qualifier);
+            List<PColumn> columns = kvColumnsByEncodedColumnNames.get(qualifier);
             int size = columns.size();
             if (size == 0) {
                 //TODO: samarth should we have a column qualifier not found exception?
@@ -810,7 +811,7 @@ public class PTableImpl implements PTable {
                 // Because we cannot enforce a not null constraint on a KV column (since we don't know if the row exists when
                 // we upsert it), se instead add a KV that is always emtpy. This allows us to imitate SQL semantics given the
                 // way HBase works.
-                Pair<byte[], byte[]> emptyKvInfo = SchemaUtil.getEmptyKeyValueInfo(PTableImpl.this);
+                Pair<byte[], byte[]> emptyKvInfo = EncodedColumnsUtil.getEmptyKeyValueInfo(PTableImpl.this);
                 addQuietly(setValues, kvBuilder, kvBuilder.buildPut(keyPtr,
                     SchemaUtil.getEmptyColumnFamilyPtr(PTableImpl.this),
                     new ImmutableBytesPtr(emptyKvInfo.getFirst()), ts,
@@ -849,7 +850,7 @@ public class PTableImpl implements PTable {
             deleteRow = null;
             byte[] family = column.getFamilyName().getBytes();
             byte[] qualifier = getColumnQualifier(column);
-            ImmutableBytesPtr qualifierPtr = getColumnQualifierPtr(column);
+            ImmutableBytesPtr qualifierPtr = new ImmutableBytesPtr(qualifier);
             PDataType type = column.getDataType();
             // Check null, since some types have no byte representation for null
             boolean isNull = type.isNull(byteValue);
@@ -904,24 +905,9 @@ public class PTableImpl implements PTable {
         }
         
         private byte[] getColumnQualifier(PColumn column) {
-            //return column.getName().getBytes();
-            checkArgument(!SchemaUtil.isPKColumn(column), "No column qualifiers for PK columns");
-            boolean tableUsesEncodedColumnNames = SchemaUtil.usesEncodedColumnNames(PTableImpl.this);
-            if (!tableUsesEncodedColumnNames) {
-                return column.getName().getBytes();
-            }
-            return PInteger.INSTANCE.toBytes(column.getColumnQualifier());
+            return EncodedColumnsUtil.getColumnQualifier(column, PTableImpl.this);
         }
         
-        private ImmutableBytesPtr getColumnQualifierPtr(PColumn column) {
-//            return column.getName().getBytesPtr();
-            checkArgument(!SchemaUtil.isPKColumn(column), "No column qualifiers for PK columns");
-            boolean tableUsesEncodedColumnNames = SchemaUtil.usesEncodedColumnNames(PTableImpl.this);
-            if (!tableUsesEncodedColumnNames) {
-                return column.getName().getBytesPtr();
-            }
-            return new ImmutableBytesPtr(PInteger.INSTANCE.toBytes(column.getColumnQualifier()));
-        }
     }
 
     @Override

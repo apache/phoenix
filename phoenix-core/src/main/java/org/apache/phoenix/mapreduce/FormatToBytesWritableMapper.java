@@ -48,9 +48,9 @@ import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.ColumnInfo;
+import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
-import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.UpsertExecutor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -138,7 +138,7 @@ public abstract class FormatToBytesWritableMapper<RECORD> extends Mapper<LongWri
             List<String> logicalTableNames = TargetTableRefFunctions.NAMES_FROM_JSON.apply(logicalNamesConf);
             for (String logicalTableName : logicalTableNames) {
                 PTable table = PhoenixRuntime.getTable(conn, logicalTableName);
-                logicalTables.add(new Pair<>(logicalTableName, SchemaUtil.getEmptyKeyValueInfo(table).getFirst()));
+                logicalTables.add(new Pair<>(logicalTableName, EncodedColumnsUtil.getEmptyKeyValueInfo(table).getFirst()));
             }
             columnIndexes = initColumnIndexes();
         } catch (SQLException | ClassNotFoundException e) {

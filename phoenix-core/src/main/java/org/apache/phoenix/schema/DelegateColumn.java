@@ -92,7 +92,7 @@ public class DelegateColumn extends DelegateDatum implements PColumn {
 	}
 
     @Override
-    public Integer getColumnQualifier() {
-        return getDelegate().getColumnQualifier();
+    public Integer getEncodedColumnQualifier() {
+        return getDelegate().getEncodedColumnQualifier();
     }
 }

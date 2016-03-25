@@ -40,7 +40,7 @@ import org.apache.hadoop.hbase.util.Writables;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
-import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.EncodedColumnsUtil;
 
 /**
  * When selecting specific columns in a SELECT query, this filter passes only selected columns
@@ -67,7 +67,7 @@ public class ColumnProjectionFilter extends FilterBase implements Writable {
         this.columnsTracker = columnsTracker;
         this.conditionOnlyCfs = conditionOnlyCfs;
         this.usesEncodedColumnNames = usesEncodedColumnNames;
-        this.emptyKVQualifier = SchemaUtil.getEmptyKeyValueInfo(usesEncodedColumnNames).getFirst();
+        this.emptyKVQualifier = EncodedColumnsUtil.getEmptyKeyValueInfo(usesEncodedColumnNames).getFirst();
     }
 
     @Override
@@ -92,7 +92,7 @@ public class ColumnProjectionFilter extends FilterBase implements Writable {
         }
         int conditionOnlyCfsSize = WritableUtils.readVInt(input);
         usesEncodedColumnNames = conditionOnlyCfsSize > 0;
-        emptyKVQualifier = SchemaUtil.getEmptyKeyValueInfo(usesEncodedColumnNames).getFirst();
+        emptyKVQualifier = EncodedColumnsUtil.getEmptyKeyValueInfo(usesEncodedColumnNames).getFirst();
         conditionOnlyCfsSize = Math.abs(conditionOnlyCfsSize) - 1; // restore to the actual value.
         this.conditionOnlyCfs = new TreeSet<byte[]>(Bytes.BYTES_COMPARATOR);
         while (conditionOnlyCfsSize > 0) {

@@ -69,12 +69,12 @@ import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.trace.TracingIterator;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.ScanUtil;
-import org.apache.phoenix.util.SchemaUtil;
 import org.cloudera.htrace.TraceScope;
 
 import com.google.common.collect.ImmutableSet;
@@ -413,7 +413,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
             WritableUtils.writeVInt(output, dataColumns.size());
             for (PColumn column : dataColumns) {
                 Bytes.writeByteArray(output, column.getFamilyName().getBytes());
-                Bytes.writeByteArray(output, SchemaUtil.getColumnQualifier(column, dataTable));
+                Bytes.writeByteArray(output, EncodedColumnsUtil.getColumnQualifier(column, dataTable));
             }
             scan.setAttribute(BaseScannerRegionObserver.DATA_TABLE_COLUMNS_TO_JOIN, stream.toByteArray());
         } catch (IOException e) {

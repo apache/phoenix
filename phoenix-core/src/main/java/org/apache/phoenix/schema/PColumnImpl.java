@@ -58,7 +58,7 @@ public class PColumnImpl implements PColumn {
 
     public PColumnImpl(PColumn column, int position) {
         this(column.getName(), column.getFamilyName(), column.getDataType(), column.getMaxLength(),
-                column.getScale(), column.isNullable(), position, column.getSortOrder(), column.getArraySize(), column.getViewConstant(), column.isViewReferenced(), column.getExpressionStr(), column.isRowTimestamp(), column.isDynamic(), column.getColumnQualifier());
+                column.getScale(), column.isNullable(), position, column.getSortOrder(), column.getArraySize(), column.getViewConstant(), column.isViewReferenced(), column.getExpressionStr(), column.isRowTimestamp(), column.isDynamic(), column.getEncodedColumnQualifier());
     }
 
     private void init(PName name,
@@ -209,7 +209,7 @@ public class PColumnImpl implements PColumn {
     }
     
     @Override
-    public Integer getColumnQualifier() {
+    public Integer getEncodedColumnQualifier() {
         return columnQualifier;
     }
 
@@ -294,8 +294,8 @@ public class PColumnImpl implements PColumn {
             builder.setExpression(column.getExpressionStr());
         }
         builder.setIsRowTimestamp(column.isRowTimestamp());
-        if (column.getColumnQualifier() != null) {
-            builder.setColumnQualifier(column.getColumnQualifier());
+        if (column.getEncodedColumnQualifier() != null) {
+            builder.setColumnQualifier(column.getEncodedColumnQualifier());
         }
         return builder.build();
     }

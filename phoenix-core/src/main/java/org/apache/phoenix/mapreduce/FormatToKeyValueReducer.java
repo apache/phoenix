@@ -44,6 +44,7 @@ import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.Closeables;
+import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -106,7 +107,7 @@ public class FormatToKeyValueReducer
                     continue;
                 }
                 byte[] family = c.getFamilyName().getBytes();
-                byte[] name = SchemaUtil.getColumnQualifier(c, table);
+                byte[] name = EncodedColumnsUtil.getColumnQualifier(c, table);
                 list.add(new Pair<>(family, name));
             }
             columnIndexes.add(list);
