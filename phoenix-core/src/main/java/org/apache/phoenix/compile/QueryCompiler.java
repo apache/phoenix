@@ -72,6 +72,7 @@ import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ScanUtil;
 
 import com.google.common.collect.Lists;
@@ -334,7 +335,7 @@ public class QueryCompiler {
                 offset = plan.getOffset();
             }
             HashJoinInfo joinInfo = new HashJoinInfo(projectedTable, joinIds, joinExpressions, joinTypes,
-                    starJoinVector, tables, fieldPositions, postJoinFilterExpression, limit, offset);
+                    starJoinVector, tables, fieldPositions, postJoinFilterExpression, QueryUtil.getOffsetLimit(limit, offset));
             return HashJoinPlan.create(joinTable.getStatement(), plan, joinInfo, hashPlans);
         }
 
@@ -392,7 +393,7 @@ public class QueryCompiler {
             }
             HashJoinInfo joinInfo = new HashJoinInfo(projectedTable, joinIds, new List[] { joinExpressions },
                     new JoinType[] { type == JoinType.Right ? JoinType.Left : type }, new boolean[] { true },
-                    new PTable[] { lhsTable }, new int[] { fieldPosition }, postJoinFilterExpression, limit, offset);
+                    new PTable[] { lhsTable }, new int[] { fieldPosition }, postJoinFilterExpression,  QueryUtil.getOffsetLimit(limit, offset));
             Pair<Expression, Expression> keyRangeExpressions = new Pair<Expression, Expression>(null, null);
             getKeyExpressionCombinations(keyRangeExpressions, context, joinTable.getStatement(), rhsTableRef, type, joinExpressions, hashExpressions);
             return HashJoinPlan.create(joinTable.getStatement(), rhsPlan, joinInfo, new HashSubPlan[] {new HashSubPlan(0, lhsPlan, hashExpressions, false, keyRangeExpressions.getFirst(), keyRangeExpressions.getSecond())});
@@ -566,7 +567,7 @@ public class QueryCompiler {
             int maxRows = statement.getMaxRows();
             if (maxRows > 0) {
                 if (limit != null) {
-                    limit = Math.min(limit, maxRows - offset);
+                    limit = Math.min(limit, maxRows);
                 } else {
                     limit = maxRows;
                 }

@@ -50,11 +50,10 @@ public class HashJoinInfo {
     private int[] fieldPositions;
     private Expression postJoinFilterExpression;
     private Integer limit;
-    private Integer offset;
     private boolean forceProjection; // always true now, but for backward compatibility.
     
-    public HashJoinInfo(PTable joinedTable, ImmutableBytesPtr[] joinIds, List<Expression>[] joinExpressions, JoinType[] joinTypes, boolean[] earlyEvaluation, PTable[] tables, int[] fieldPositions, Expression postJoinFilterExpression, Integer limit, Integer offset) {
-    	this(buildSchema(joinedTable), joinIds, joinExpressions, joinTypes, earlyEvaluation, buildSchemas(tables), fieldPositions, postJoinFilterExpression, limit, offset, true);
+    public HashJoinInfo(PTable joinedTable, ImmutableBytesPtr[] joinIds, List<Expression>[] joinExpressions, JoinType[] joinTypes, boolean[] earlyEvaluation, PTable[] tables, int[] fieldPositions, Expression postJoinFilterExpression, Integer limit) {
+    	this(buildSchema(joinedTable), joinIds, joinExpressions, joinTypes, earlyEvaluation, buildSchemas(tables), fieldPositions, postJoinFilterExpression, limit, true);
     }
 
     private static KeyValueSchema[] buildSchemas(PTable[] tables) {
@@ -77,7 +76,7 @@ public class HashJoinInfo {
         return builder.build();
     }
 
-    private HashJoinInfo(KeyValueSchema joinedSchema, ImmutableBytesPtr[] joinIds, List<Expression>[] joinExpressions, JoinType[] joinTypes, boolean[] earlyEvaluation, KeyValueSchema[] schemas, int[] fieldPositions, Expression postJoinFilterExpression, Integer limit, Integer offset, boolean forceProjection) {
+    private HashJoinInfo(KeyValueSchema joinedSchema, ImmutableBytesPtr[] joinIds, List<Expression>[] joinExpressions, JoinType[] joinTypes, boolean[] earlyEvaluation, KeyValueSchema[] schemas, int[] fieldPositions, Expression postJoinFilterExpression, Integer limit, boolean forceProjection) {
     	this.joinedSchema = joinedSchema;
     	this.joinIds = joinIds;
         this.joinExpressions = joinExpressions;
@@ -87,7 +86,6 @@ public class HashJoinInfo {
         this.fieldPositions = fieldPositions;
         this.postJoinFilterExpression = postJoinFilterExpression;
         this.limit = limit;
-        this.offset = offset;
         this.forceProjection = forceProjection;
     }
 
@@ -157,7 +155,6 @@ public class HashJoinInfo {
                 WritableUtils.writeVInt(output, -1);
             }
             WritableUtils.writeVInt(output, joinInfo.limit == null ? -1 : joinInfo.limit);
-            WritableUtils.writeVInt(output, joinInfo.offset == null ? -1 : joinInfo.offset);
             output.writeBoolean(joinInfo.forceProjection);
             scan.setAttribute(HASH_JOIN, stream.toByteArray());
         } catch (IOException e) {
@@ -215,7 +212,6 @@ public class HashJoinInfo {
                 postJoinFilterExpression.readFields(input);
             }
             int limit = -1;
-            int offset = -1;
             boolean forceProjection = false;
             // Read these and ignore if we don't find them as they were not
             // present in Apache Phoenix 3.0.0 release. This allows a newer
@@ -223,11 +219,10 @@ public class HashJoinInfo {
             // both to be upgraded in lock step.
             try {
                 limit = WritableUtils.readVInt(input);
-                offset = WritableUtils.readVInt(input);
                 forceProjection = input.readBoolean();
             } catch (EOFException ignore) {
             }
-            return new HashJoinInfo(joinedSchema, joinIds, joinExpressions, joinTypes, earlyEvaluation, schemas, fieldPositions, postJoinFilterExpression, limit >= 0 ? limit : null, offset >= 0 ? offset : null, forceProjection);
+            return new HashJoinInfo(joinedSchema, joinIds, joinExpressions, joinTypes, earlyEvaluation, schemas, fieldPositions, postJoinFilterExpression, limit >= 0 ? limit : null,  forceProjection);
         } catch (IOException e) {
             throw new RuntimeException(e);
         } finally {

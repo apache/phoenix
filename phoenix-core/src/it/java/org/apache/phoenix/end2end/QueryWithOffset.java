@@ -167,4 +167,5 @@ public class QueryWithOffset extends BaseOwnClusterHBaseManagedTimeIT {
                 + "\"=" + Long.toString(100);
         conn.createStatement().execute(query);
     }
+
 }

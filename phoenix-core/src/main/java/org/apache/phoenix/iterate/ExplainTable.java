@@ -157,10 +157,13 @@ public abstract class ExplainTable {
         if (!orderBy.getOrderByExpressions().isEmpty() && groupBy.isEmpty()) { // with GROUP BY, sort happens client-side
             planSteps.add("    SERVER" + (limit == null ? "" : " TOP " + limit + " ROW" + (limit == 1 ? "" : "S"))
                     + " SORTED BY " + orderBy.getOrderByExpressions().toString());
-        } else if (offset != null) {
-            planSteps.add("    SERVER OFFSET " + offset);
-        } else if (pageFilter != null) {
-            planSteps.add("    SERVER " + pageFilter.getPageSize() + " ROW LIMIT");
+        } else {
+            if (offset != null) {
+                planSteps.add("    SERVER OFFSET " + offset);
+            }
+            if (pageFilter != null) {
+                planSteps.add("    SERVER " + pageFilter.getPageSize() + " ROW LIMIT");
+            }
         }
         Integer groupByLimit = null;
         byte[] groupByLimitBytes = scan.getAttribute(BaseScannerRegionObserver.GROUP_BY_LIMIT);

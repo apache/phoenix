@@ -157,6 +157,9 @@ public class SelectStatement implements FilterableStatement {
         if (limit != null) {
             buf.append(" LIMIT " + limit.toString());
         }
+        if (offset != null) {
+            buf.append(" OFFSET " + offset.toString());
+        }
     }    
 
     

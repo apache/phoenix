@@ -60,10 +60,13 @@ public class ClientScanPlan extends ClientProcessingPlan {
                     QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB, QueryServicesOptions.DEFAULT_SPOOL_THRESHOLD_BYTES);
             iterator = new OrderedResultIterator(iterator, orderBy.getOrderByExpressions(), thresholdBytes, limit,
                     offset, projector.getEstimatedRowByteSize());
-        } else if (offset != null) {
-            iterator = new OffsetResultIterator(iterator, offset);
-        } else if (limit != null) {
-            iterator = new LimitingResultIterator(iterator, limit);
+        } else {
+            if (offset != null) {
+                iterator = new OffsetResultIterator(iterator, offset);
+            }
+            if (limit != null) {
+                iterator = new LimitingResultIterator(iterator, limit);
+            }
         }
         
         if (context.getSequenceManager().getSequenceCount() > 0) {
@@ -83,13 +86,15 @@ public class ClientScanPlan extends ClientProcessingPlan {
             if (offset != null) {
                 planSteps.add("CLIENT OFFSET " + offset);
             }
-            planSteps.add("CLIENT" + (offset == null ? "" : " OFFSET " + offset)
-                    + (limit == null ? "" : " TOP " + limit + " ROW" + (limit == 1 ? "" : "S")) + " SORTED BY "
-                    + orderBy.getOrderByExpressions().toString());
-        } else if (offset != null) {
-            planSteps.add("CLIENT OFFSET " + offset);
-        } else if (limit != null) {
-            planSteps.add("CLIENT " + limit + " ROW LIMIT");
+            planSteps.add("CLIENT" + (limit == null ? "" : " TOP " + limit + " ROW" + (limit == 1 ? "" : "S"))
+                    + " SORTED BY " + orderBy.getOrderByExpressions().toString());
+        } else {
+            if (offset != null) {
+                planSteps.add("CLIENT OFFSET " + offset);
+            }
+            if (limit != null) {
+                planSteps.add("CLIENT " + limit + " ROW LIMIT");
+            }
         }
         if (context.getSequenceManager().getSequenceCount() > 0) {
             int nSequences = context.getSequenceManager().getSequenceCount();

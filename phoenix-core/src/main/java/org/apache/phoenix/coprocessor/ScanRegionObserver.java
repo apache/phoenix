@@ -230,7 +230,8 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
         }
         if (scanOffset != null) {
             innerScanner = getOffsetScanner(c, innerScanner,
-                    new OffsetResultIterator(new RegionScannerResultIterator(innerScanner), scanOffset));
+                    new OffsetResultIterator(new RegionScannerResultIterator(innerScanner), scanOffset),
+                    scan.getAttribute(QueryConstants.LAST_SCAN) == null ? false : true);
         }
         final OrderedResultIterator iterator = deserializeFromScan(scan,innerScanner);
         if (iterator == null) {
@@ -241,7 +242,7 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
     }
 
     private RegionScanner getOffsetScanner(final ObserverContext<RegionCoprocessorEnvironment> c, final RegionScanner s,
-            final OffsetResultIterator iterator) throws IOException {
+            final OffsetResultIterator iterator, final boolean isLastScan) throws IOException {
         final Tuple firstTuple;
         final Region region = c.getEnvironment().getRegion();
         region.startRegionOperation();
@@ -251,7 +252,7 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
             // the topN rows, so we no longer need to start/stop a region
             // operation.
             Tuple tuple = iterator.next();
-            if (tuple == null) {
+            if (tuple == null && !isLastScan) {
                 List<KeyValue> kvList = new ArrayList<KeyValue>(1);
                 KeyValue kv = new KeyValue(QueryConstants.offsetRowKeyBytes, QueryConstants.OFFSET_FAMILY,
                         QueryConstants.OFFSET_COLUMN, Bytes.toBytes(iterator.getUnusedOffset()));

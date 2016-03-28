@@ -190,6 +190,13 @@ public class SubselectRewriter extends ParseNodeRewriter {
             }
         }
         
+        OffsetNode offset = select.getOffset();
+        if (offsetRewrite != null || (limitRewrite != null & offset != null)) {
+            return select;
+        } else {
+            offsetRewrite = offset;
+        }
+        
         LimitNode limit = select.getLimit();
         if (limit != null) {
             if (limitRewrite == null) {
@@ -199,20 +206,6 @@ public class SubselectRewriter extends ParseNodeRewriter {
                 Integer limitValueSubselect = LimitCompiler.compile(null, subselect);
                 if (limitValue != null && limitValueSubselect != null) {
                     limitRewrite = limitValue < limitValueSubselect ? limit : limitRewrite;
-                } else {
-                    return select;
-                }
-            }
-        }
-        OffsetNode offset = select.getOffset();
-        if (offset != null) {
-            if (offsetRewrite == null) {
-                offsetRewrite = offset;
-            } else {
-                Integer offsetValue = OffsetCompiler.compile(null, select);
-                Integer offsetValueSubselect = OffsetCompiler.compile(null, subselect);
-                if (offsetValue != null && offsetValueSubselect != null) {
-                    offsetRewrite = offsetValue < offsetValueSubselect ? offset : offsetRewrite;
                 } else {
                     return select;
                 }

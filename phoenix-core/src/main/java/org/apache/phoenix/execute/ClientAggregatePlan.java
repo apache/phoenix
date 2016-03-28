@@ -155,6 +155,9 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
         if (statement.isDistinct() && statement.isAggregate()) {
             planSteps.add("CLIENT DISTINCT ON " + projector.toString());
         }
+        if (offset != null) {
+            planSteps.add("CLIENT OFFSET " + offset);
+        }
         if (orderBy.getOrderByExpressions().isEmpty()) {
             if (limit != null) {
                 planSteps.add("CLIENT " + limit + " ROW LIMIT");

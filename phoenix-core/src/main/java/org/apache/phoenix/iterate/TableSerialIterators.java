@@ -27,11 +27,13 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.job.JobManager.JobCallable;
 import org.apache.phoenix.monitoring.TaskExecutionMetricsHolder;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.ScanUtil;
 
@@ -74,6 +76,7 @@ public class TableSerialIterators extends BaseResultIterators {
         Scan firstScan = nestedScans.get(0).get(0);
         List<Scan> lastScans = nestedScans.get(nestedScans.size() - 1);
         Scan lastScan = lastScans.get(lastScans.size() - 1);
+        lastScan.setAttribute(QueryConstants.LAST_SCAN, Bytes.toBytes(Boolean.TRUE));
         final Scan overallScan = ScanUtil.newScan(firstScan);
         overallScan.setStopRow(lastScan.getStopRow());
 

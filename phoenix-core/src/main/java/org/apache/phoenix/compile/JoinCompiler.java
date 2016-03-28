@@ -1073,7 +1073,8 @@ public class JoinCompiler {
                 && !select.isAggregate()
                 && !select.isDistinct()
                 && !(select.getFrom() instanceof DerivedTableNode)
-                && select.getLimit() == null;
+                && select.getLimit() == null
+                && select.getOffset() == null;
     }
 
     private static ParseNode combine(List<ParseNode> nodes) {
