@@ -22,7 +22,6 @@ import java.io.IOException;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.Filter.ReturnCode;
 import org.apache.hadoop.hbase.regionserver.KeyValueScanner;
@@ -33,22 +32,22 @@ import org.apache.phoenix.hbase.index.covered.KeyValueStore;
  * here because we are only concerned with a single MemStore for the index; we don't need to worry about multiple column
  * families or minimizing seeking through file - we just want to iterate the kvs quickly, in-memory.
  */
-public class FilteredKeyValueScanner implements Scanner {
+public class FilteredKeyValueScanner implements ReseekableScanner {
 
-    private KeyValueScanner delegate;
+    private ReseekableScanner delegate;
     private Filter filter;
 
     public FilteredKeyValueScanner(Filter filter, KeyValueStore store) {
         this(filter, store.getScanner());
     }
 
-    private FilteredKeyValueScanner(Filter filter, KeyValueScanner delegate) {
+    private FilteredKeyValueScanner(Filter filter, ReseekableScanner delegate) {
         this.delegate = delegate;
         this.filter = filter;
     }
 
     @Override
-    public Cell peek() {
+    public Cell peek() throws IOException {
         return delegate.peek();
     }
 
@@ -95,11 +94,12 @@ public class FilteredKeyValueScanner implements Scanner {
                 break;
             // use a seek hint to find out where we should go
             case SEEK_NEXT_USING_HINT:
-                delegate.seek(KeyValueUtil.ensureKeyValue(filter.getNextCellHint(peeked)));
+                delegate.seek(filter.getNextCellHint(peeked));
             }
         }
     }
 
+    @Override
     public boolean reseek(Cell key) throws IOException {
         this.delegate.reseek(key);
         return this.seekToNextUnfilteredKeyValue();
@@ -107,7 +107,7 @@ public class FilteredKeyValueScanner implements Scanner {
 
 
     @Override
-    public void close() {
+    public void close() throws IOException {
         this.delegate.close();
     }
 

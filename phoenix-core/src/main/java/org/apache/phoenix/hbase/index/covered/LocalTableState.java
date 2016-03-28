@@ -194,33 +194,6 @@ public class LocalTableState implements TableState {
         return this.update.getRow();
     }
 
-    public Result getCurrentRowState() {
-        KeyValueScanner scanner = this.memstore.getScanner();
-        List<Cell> kvs = new ArrayList<Cell>();
-        while (scanner.peek() != null) {
-            try {
-                kvs.add(scanner.next());
-            } catch (IOException e) {
-                // this should never happen - something has gone terribly arwy if it has
-                throw new RuntimeException("Local MemStore threw IOException!");
-            }
-        }
-        return Result.create(kvs);
-    }
-
-    /**
-     * Helper to add a {@link Mutation} to the values stored for the current row
-     * 
-     * @param pendingUpdate
-     *            update to apply
-     */
-    public void addUpdateForTesting(Mutation pendingUpdate) {
-        for (Map.Entry<byte[], List<Cell>> e : pendingUpdate.getFamilyCellMap().entrySet()) {
-        	List<KeyValue> edits = KeyValueUtil.ensureKeyValues(e.getValue());
-            addUpdate(edits);
-        }
-    }
-
     /**
      * @param hints
      */
