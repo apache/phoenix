@@ -220,17 +220,16 @@ public class IndexMemStore implements KeyValueStore {
 
       // kvset and snapshot will never be null.
       // if tailSet can't find anything, SortedSet is empty (not null).
-      KeyValue kv = KeyValueUtil.ensureKeyValue(key);
-      kvsetIt = kvsetAtCreation.tailSet(kv).iterator();
+      kvsetIt = kvsetAtCreation.tailSet(KeyValueUtil.ensureKeyValue(key)).iterator();
       kvsetItRow = null;
 
-      return seekInSubLists(kv);
+      return seekInSubLists();
     }
 
     /**
      * (Re)initialize the iterators after a seek or a reseek.
      */
-    private synchronized boolean seekInSubLists(KeyValue key) {
+    private synchronized boolean seekInSubLists() {
       nextRow = getNext(kvsetIt);
       return nextRow != null;
     }
@@ -252,9 +251,8 @@ public class IndexMemStore implements KeyValueStore {
        * we iterated to and restore the reseeked set to at least that point.
        */
 
-      KeyValue kv = KeyValueUtil.ensureKeyValue(key);
-      kvsetIt = kvsetAtCreation.tailSet(getHighest(kv, kvsetItRow)).iterator();
-      return seekInSubLists(kv);
+      kvsetIt = kvsetAtCreation.tailSet(getHighest(KeyValueUtil.ensureKeyValue(key), kvsetItRow)).iterator();
+      return seekInSubLists();
     }
 
     /*
