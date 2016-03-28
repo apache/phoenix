@@ -54,8 +54,8 @@
 
   <dependencies>
     <dependency>
-      <groupId>org.apache.calcite</groupId>
-      <artifactId>calcite-avatica</artifactId>
+      <groupId>org.apache.calcite.avatica</groupId>
+      <artifactId>avatica</artifactId>
     </dependency>
     <dependency>
       <!-- a dependency for the thin-client uberjar -->
