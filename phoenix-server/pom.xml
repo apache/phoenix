@@ -66,14 +66,14 @@
       <artifactId>phoenix-server-client</artifactId>
     </dependency>
     <dependency>
-      <groupId>org.apache.calcite</groupId>
-      <artifactId>calcite-avatica</artifactId>
-      <version>${calcite.version}</version>
+      <groupId>org.apache.calcite.avatica</groupId>
+      <artifactId>avatica</artifactId>
+      <version>${avatica.version}</version>
     </dependency>
     <dependency>
-      <groupId>org.apache.calcite</groupId>
-      <artifactId>calcite-avatica-server</artifactId>
-      <version>${calcite.version}</version>
+      <groupId>org.apache.calcite.avatica</groupId>
+      <artifactId>avatica-server</artifactId>
+      <version>${avatica.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.phoenix</groupId>
