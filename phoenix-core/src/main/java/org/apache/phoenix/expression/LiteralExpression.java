@@ -25,6 +25,7 @@ import java.sql.SQLException;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
+import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.tuple.Tuple;
@@ -182,16 +183,11 @@ public class LiteralExpression extends BaseTerminalExpression {
             return getBooleanLiteralExpression((Boolean)value, determinism);
         }
         PDataType actualType = PDataType.fromLiteral(value);
-        // For array we should check individual element in it?
-        // It would be costly though!!!!!
-        // UpsertStatement can try to cast varchar to date type but PVarchar can't CoercibleTo Date or Timestamp
-        // otherwise TO_NUMBER like functions will fail
-        if (!actualType.isCoercibleTo(type, value) &&
-                (!actualType.equals(PVarchar.INSTANCE) ||
-                        !(type.equals(PDate.INSTANCE) || type.equals(PTimestamp.INSTANCE) || type.equals(PTime.INSTANCE)))) {
+        try {
+            value = type.toObject(value, actualType);
+        } catch (IllegalDataException e) {
             throw TypeMismatchException.newException(type, actualType, value.toString());
         }
-        value = type.toObject(value, actualType);
         byte[] b = type.isArrayType() ? ((PArrayDataType)type).toBytes(value, PArrayDataType.arrayBaseType(type), sortOrder, rowKeyOrderOptimizable) :
                 type.toBytes(value, sortOrder);
         if (type == PVarchar.INSTANCE || type == PChar.INSTANCE) {
