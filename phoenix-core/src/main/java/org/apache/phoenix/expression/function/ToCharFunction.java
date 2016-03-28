@@ -57,10 +57,6 @@ public class ToCharFunction extends ScalarFunction {
     public ToCharFunction() {
     }
 
-    public ToCharFunction(List<Expression> children) throws  SQLException {
-        this(children, null, null, null);
-    }
-
     public ToCharFunction(List<Expression> children, FunctionArgumentType type, String formatString, Format formatter) throws SQLException {
         super(children.subList(0, 1));
         Preconditions.checkNotNull(formatString);
@@ -69,6 +65,15 @@ public class ToCharFunction extends ScalarFunction {
         this.type = type;
         this.formatString = formatString;
         this.formatter = formatter;
+    }
+    
+    @Override
+    public ToCharFunction clone(List<Expression> children) {
+    	try {
+            return new ToCharFunction(children, type, formatString, formatter);
+        } catch (Exception e) {
+            throw new RuntimeException(e); // Impossible, since it was originally constructed this way
+        }
     }
     
     @Override
