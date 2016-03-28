@@ -513,6 +513,26 @@ public class DateTimeIT extends BaseHBaseManagedTimeIT {
     }
 
     @Test
+    public void testUnsignedTimeDateWithLiteral() throws Exception {
+        String ddl =
+                "CREATE TABLE IF NOT EXISTS UT (k1 INTEGER NOT NULL," +
+                        "unsignedDates UNSIGNED_DATE, unsignedTimestamps UNSIGNED_TIMESTAMP, unsignedTimes UNSIGNED_TIME CONSTRAINT pk PRIMARY KEY (k1))";
+        conn.createStatement().execute(ddl);
+        String dml = "UPSERT INTO UT VALUES (1, " +
+                "'2010-06-20 12:00:00', '2012-07-28 12:00:00', '2015-12-25 12:00:00')";
+        conn.createStatement().execute(dml);
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery("SELECT k1, unsignedDates, " +
+                "unsignedTimestamps, unsignedTimes FROM UT where k1 = 1");
+        assertTrue(rs.next());
+        assertEquals(DateUtil.parseDate("2010-06-20 12:00:00"), rs.getDate(2));
+        assertEquals(DateUtil.parseTimestamp("2012-07-28 12:00:00"), rs.getTimestamp(3));
+        assertEquals(DateUtil.parseTime("2015-12-25 12:00:00"), rs.getTime(4));
+        assertFalse(rs.next());
+    }
+
+    @Test
     public void testSecondFuncAgainstColumns() throws Exception {
         String ddl =
                 "CREATE TABLE IF NOT EXISTS T1 (k1 INTEGER NOT NULL, dates DATE, timestamps TIMESTAMP, times TIME, " +
