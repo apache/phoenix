@@ -45,7 +45,7 @@
       <includes>
         <include>org.apache.phoenix:phoenix-server</include>
         <include>org.apache.phoenix:phoenix-server-client</include>
-        <include>org.apache.calcite:*</include>
+        <include>org.apache.calcite.avatica:*</include>
       </includes>
     </dependencySet>
   </dependencySets>
