@@ -20,11 +20,11 @@ package org.apache.phoenix.util;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_FAMILY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PARENT_TENANT_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SEQ_NUM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
 import static org.apache.phoenix.schema.types.PDataType.ARRAY_TYPE_SUFFIX;
 
@@ -97,7 +97,6 @@ import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PVarchar;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Splitter;
@@ -196,12 +195,15 @@ public class PhoenixRuntime {
             TABLE_NAME + "," +
             COLUMN_FAMILY + "," +
             LINK_TYPE + "," +
-            PARENT_TENANT_ID + " " + PVarchar.INSTANCE.getSqlTypeName() + // Dynamic column for now to prevent schema change
-            ") VALUES (?, ?, ?, ?, ?, ?)";
+            TABLE_SEQ_NUM +
+            ") SELECT " + TENANT_ID + "," + TABLE_SCHEM + "," + TABLE_NAME + ",'%s' AS "
+            + COLUMN_FAMILY + " ," + LINK_TYPE + "," + TABLE_SEQ_NUM + " FROM " + SYSTEM_CATALOG_SCHEMA + ".\""
+            + SYSTEM_CATALOG_TABLE + "\" WHERE  " + COLUMN_FAMILY + "=? AND " + LINK_TYPE + " = "
+            + LinkType.PHYSICAL_TABLE.getSerializedValue();
+
     private static final String DELETE_LINK = "DELETE FROM " + SYSTEM_CATALOG_SCHEMA + "." + SYSTEM_CATALOG_TABLE
-            + " WHERE " + TENANT_ID + "='?' " + TABLE_SCHEM + "='?' AND " + TABLE_NAME + "='?' AND " + COLUMN_FAMILY
-            + "='?'";
-            
+            + " WHERE " + COLUMN_FAMILY + "=? AND " + LINK_TYPE + " = " + LinkType.PHYSICAL_TABLE.getSerializedValue();
+
     /**
      * Use this as the zookeeper quorum name to have a connection-less connection. This enables
      * Phoenix-compatible HFiles to be created in a map/reduce job by creating tables,
@@ -276,42 +278,21 @@ public class PhoenixRuntime {
                     table = result.getTable();
                     // check whether table is properly upgraded before upgrading indexes
                     if (table.isNamespaceMapped()) {
+                        // TODO: Identify all views and Update too
+                        conn.commit();
                         for (PTable index : table.getIndexes()) {
                             String srcTableName = index.getPhysicalName().getString();
                             String destTableName = null;
                             String phoenixTableName = index.getName().getString();
                             boolean updateLink = false;
-                            PreparedStatement linkStatement = conn.prepareStatement(UPDATE_LINK);
-                            PreparedStatement deleteLinkStatement = conn.prepareStatement(DELETE_LINK);
-                            linkStatement.setString(1,
-                                    index.getTenantId() == null ? null : index.getTenantId().getString());
-                            deleteLinkStatement.setString(1,
-                                    index.getTenantId() == null ? null : index.getTenantId().getString());
-                            linkStatement.setString(2,
-                                    index.getSchemaName() == null ? null : index.getSchemaName().getString());
-                            deleteLinkStatement.setString(2,
-                                    index.getSchemaName() == null ? null : index.getSchemaName().getString());
-                            linkStatement.setString(3, index.getTableName().getString());
-                            deleteLinkStatement.setString(3, index.getTableName().getString());
-                            
-                            
-                            
                             if (srcTableName.startsWith(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX)) {
-                                // TODO: need to handle local index properly, descriptor needs to be updated parent
-                                // table property and
-
+                                // TODO: need to update parent table name local index descriptor
                                 destTableName = Bytes.toString(
                                         MetaDataUtil.getLocalIndexPhysicalName(newPhysicalTablename.getBytes()));
-                                
-                                linkStatement.setString(4, destTableName);
-                                deleteLinkStatement.setString(4, index.getPhysicalName().getString());
-                                linkStatement.setByte(5, LinkType.INDEX_TABLE.getSerializedValue());
-                                linkStatement.setLong(6, index.getSequenceNumber());
                                 updateLink = true;
                             } else if (srcTableName.startsWith(MetaDataUtil.VIEW_INDEX_TABLE_PREFIX)) {
                                 destTableName = Bytes.toString(
                                         MetaDataUtil.getViewIndexPhysicalName(newPhysicalTablename.getBytes()));
-                                linkStatement.setString(4, destTableName);
                                 updateLink = true;
                             } else {
                                 destTableName = SchemaUtil
@@ -319,15 +300,19 @@ public class PhoenixRuntime {
                                         .getNameAsString();
                             }
                             if (updateLink) {
-                                deleteLinkStatement.execute();
-                                linkStatement.execute();
+                                PreparedStatement deleteLinkStatment = conn.prepareStatement(DELETE_LINK);
+                                deleteLinkStatment.setString(1, srcTableName);
+                                PreparedStatement updateLinkStatment = conn
+                                        .prepareStatement(String.format(UPDATE_LINK, destTableName));
+                                updateLinkStatment.setString(1, srcTableName);
+                                deleteLinkStatment.execute();
+                                updateLinkStatment.execute();
                                 conn.commit();
                             }
-                            
                             UpgradeUtil.upgradeTable(admin, metatable, srcTableName, destTableName, readOnlyProps,
                                     HConstants.LATEST_TIMESTAMP, phoenixTableName, index.getType());
-
                         }
+
                     } else {
                         throw new RuntimeException(
                                 "Error: problem occured during upgrade. Table is not upgraded successfully");
