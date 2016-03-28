@@ -17,24 +17,23 @@
  */
 package org.apache.phoenix.hbase.index.covered.data;
 
-import java.io.IOException;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.SortedSet;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.KVComparator;
+import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.regionserver.IndexKeyValueSkipListSet;
-import org.apache.hadoop.hbase.regionserver.KeyValueScanner;
 import org.apache.hadoop.hbase.regionserver.MemStore;
-import org.apache.hadoop.hbase.regionserver.NonLazyKeyValueScanner;
 import org.apache.hadoop.hbase.util.Bytes;
-
 import org.apache.phoenix.hbase.index.covered.KeyValueStore;
 import org.apache.phoenix.hbase.index.covered.LocalTableState;
+import org.apache.phoenix.hbase.index.scanner.ReseekableScanner;
 
 /**
  * Like the HBase {@link MemStore}, but without all that extra work around maintaining snapshots and
@@ -53,7 +52,7 @@ import org.apache.phoenix.hbase.index.covered.LocalTableState;
  *  <li>ignoring memstore timestamps in favor of deciding when we want to overwrite keys based on how
  *    we obtain them</li>
  *   <li>ignoring time range updates (so 
- *    {@link KeyValueScanner#shouldUseScanner(Scan, SortedSet, long)} isn't supported from 
+ *    {@link ReseekableScanner#shouldUseScanner(Scan, SortedSet, long)} isn't supported from
  *    {@link #getScanner()}).</li>
  * </ol>
  * <p>
@@ -156,19 +155,19 @@ public class IndexMemStore implements KeyValueStore {
   }
 
   @Override
-  public KeyValueScanner getScanner() {
+  public ReseekableScanner getScanner() {
     return new MemStoreScanner();
   }
   
   /*
-   * MemStoreScanner implements the KeyValueScanner. It lets the caller scan the contents of a
+   * MemStoreScanner implements the ReseekableScanner. It lets the caller scan the contents of a
    * memstore -- both current map and snapshot. This behaves as if it were a real scanner but does
    * not maintain position.
    */
   // This class is adapted from org.apache.hadoop.hbase.MemStore.MemStoreScanner, HBase 0.94.12
   // It does basically the same thing as the MemStoreScanner, but it only keeps track of a single
   // set, rather than a primary and a secondary set of KeyValues.
-  protected class MemStoreScanner extends NonLazyKeyValueScanner {
+  protected class MemStoreScanner implements ReseekableScanner {
     // Next row information for the set
     private KeyValue nextRow = null;
 
@@ -213,7 +212,7 @@ public class IndexMemStore implements KeyValueStore {
      * @return false if the key is null or if there is no data
      */
     @Override
-    public synchronized boolean seek(KeyValue key) {
+    public synchronized boolean seek(Cell key) {
       if (key == null) {
         close();
         return false;
@@ -221,10 +220,11 @@ public class IndexMemStore implements KeyValueStore {
 
       // kvset and snapshot will never be null.
       // if tailSet can't find anything, SortedSet is empty (not null).
-      kvsetIt = kvsetAtCreation.tailSet(key).iterator();
+      KeyValue kv = KeyValueUtil.ensureKeyValue(key);
+      kvsetIt = kvsetAtCreation.tailSet(kv).iterator();
       kvsetItRow = null;
 
-      return seekInSubLists(key);
+      return seekInSubLists(kv);
     }
 
     /**
@@ -241,7 +241,7 @@ public class IndexMemStore implements KeyValueStore {
      * @return true if there is at least one KV to read, false otherwise
      */
     @Override
-    public synchronized boolean reseek(KeyValue key) {
+    public synchronized boolean reseek(Cell key) {
       /*
        * See HBASE-4195 & HBASE-3855 & HBASE-6591 for the background on this implementation. This
        * code is executed concurrently with flush and puts, without locks. Two points must be known
@@ -252,8 +252,9 @@ public class IndexMemStore implements KeyValueStore {
        * we iterated to and restore the reseeked set to at least that point.
        */
 
-      kvsetIt = kvsetAtCreation.tailSet(getHighest(key, kvsetItRow)).iterator();
-      return seekInSubLists(key);
+      KeyValue kv = KeyValueUtil.ensureKeyValue(key);
+      kvsetIt = kvsetAtCreation.tailSet(getHighest(kv, kvsetItRow)).iterator();
+      return seekInSubLists(kv);
     }
 
     /*
@@ -273,7 +274,6 @@ public class IndexMemStore implements KeyValueStore {
 
     @Override
     public synchronized KeyValue peek() {
-      // DebugPrint.println(" MS@" + hashCode() + " peek = " + getLowest());
       return nextRow;
     }
 
@@ -296,36 +296,6 @@ public class IndexMemStore implements KeyValueStore {
       this.nextRow = null;
       this.kvsetIt = null;
       this.kvsetItRow = null;
-    }
-
-    /**
-     * MemStoreScanner returns max value as sequence id because it will always have the latest data
-     * among all files.
-     */
-    @Override
-    public long getSequenceID() {
-      return Long.MAX_VALUE;
-    }
-    
-    @Override
-    public boolean shouldUseScanner(Scan scan, SortedSet<byte[]> columns, long oldestUnexpiredTS) {
-      throw new UnsupportedOperationException(this.getClass().getName()
-          + " doesn't support checking to see if it should use a scanner!");
-    }
-
-    @Override
-    public boolean backwardSeek(KeyValue arg0) throws IOException {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public boolean seekToLastRow() throws IOException {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public boolean seekToPreviousRow(KeyValue arg0) throws IOException {
-        throw new UnsupportedOperationException();
     }
   }
 }

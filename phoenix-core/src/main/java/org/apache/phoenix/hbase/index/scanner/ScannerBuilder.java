@@ -159,7 +159,7 @@ public class ScannerBuilder {
       }
 
       @Override
-      public void close() {
+      public void close() throws IOException {
         kvScanner.close();
       }
     };
